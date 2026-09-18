@@ -17,6 +17,8 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
+    @State private var playedNUXRevealGeneration: Int?
+    @State private var didInterruptNUXReveal = false
     @State private var selectedSurface: FeedSurface
     @State private var hasMountedPeopleSurface: Bool
     @State private var peopleQuery = ""
@@ -314,6 +316,35 @@ struct FeedScreen: View {
                 )
             }
             .accessibilityIdentifier("feed.places.scroll")
+            .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                didInterruptNUXReveal = true
+                walkthroughs.isRevealingFeed = false
+            })
+            .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(page?.activity.count ?? 0)-\(walkthroughs.reviewPlaybackGeneration)") {
+                guard walkthroughs.currentStep?.target == .feedActivity,
+                      NUXFeedRevealPolicy.isEnabled,
+                      playedNUXRevealGeneration != walkthroughs.reviewPlaybackGeneration,
+                      !reduceMotion, !UIAccessibility.isVoiceOverRunning,
+                      !ProcessInfo.processInfo.arguments.contains("-WanderDisableFeedReveal") else { return }
+                let ids = Array(FeedPresentation.groupedActivity(page?.activity ?? []).prefix(20).map(\.id))
+                guard ids.count > 1 else { return }
+                playedNUXRevealGeneration = walkthroughs.reviewPlaybackGeneration
+                didInterruptNUXReveal = false
+                walkthroughs.isRevealingFeed = true
+                defer { walkthroughs.isRevealingFeed = false }
+                for (index, id) in ids.enumerated() {
+                    guard !Task.isCancelled, !didInterruptNUXReveal,
+                          walkthroughs.currentStep?.target == .feedActivity else { return }
+                    let progress = Double(index) / Double(max(1, ids.count - 1))
+                    let duration = 0.09 + 0.36 * progress * progress
+                    withAnimation(.easeInOut(duration: duration)) { proxy.scrollTo(id, anchor: .top) }
+                    try? await Task.sleep(for: .seconds(duration + 0.04))
+                }
+                guard !Task.isCancelled, !didInterruptNUXReveal else { return }
+                withAnimation(.easeInOut(duration: 0.7)) { proxy.scrollTo(ids[0], anchor: .top) }
+                try? await Task.sleep(for: .milliseconds(800))
+            }
+            .onDisappear { walkthroughs.isRevealingFeed = false }
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await refresh()

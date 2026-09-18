@@ -30,6 +30,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case addSearch
     case addPlace
     case addImport
+    case addNearby
     case addClose
     case saveStatus
     case saveContinue
@@ -55,6 +56,9 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case feedSearchResultsBack
     case placeRatings
     case placeActions
+    case placeSaveActions
+    case placeCheckIn
+    case placeWanna
     case placeHistory
     case listsCreate
     case listsScope
@@ -131,12 +135,21 @@ enum FirstVisitWalkthroughContent {
     static var holdsAutomaticAdvanceForCapture: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-WanderHoldWalkthroughStep")
+            || (ProcessInfo.processInfo.arguments.contains("-WanderNUXReview")
+                && UserDefaults.standard.bool(forKey: "nux.review.manual"))
         #else
         false
         #endif
     }
     static let contextualAutoAdvanceMilliseconds = 5_000
-    static let finaleAutoAdvanceMilliseconds = 6_000
+    static var finaleAutoAdvanceMilliseconds: Int {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFinaleFourSeconds")
+            || (ProcessInfo.processInfo.arguments.contains("-WanderNUXReview")
+                && UserDefaults.standard.integer(forKey: "nux.review.finaleSeconds") == 4) { return 4_000 }
+        #endif
+        return 6_000
+    }
     static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
     static let profileAutoAdvanceDelayMilliseconds = 2_200
     static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
@@ -150,7 +163,7 @@ enum FirstVisitWalkthroughContent {
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
-            overview(.mapFeatured, "A place to start", "Featured brings together places chosen for you from check-ins, taste, and your network"),
+            overview(.mapFeatured, "A place to start", "Discover places through your people and the Astir community"),
             overview(.mapFriends, "See where your people go", "Friends shows places saved by the people you follow", theme: .social),
             overview(.mapMoreFilters, "Make the map your own", "Filter by category, people, Check Ins, or Wanna Go"),
             overview(.mapSearch, "Find the place you have in mind", "Search for a place—or places from your people"),
@@ -171,7 +184,7 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .add: [
-            context(.add, .addImport, "Bring saves with you", "Import places and lists from another app here", theme: .save)
+            context(.add, .addNearby, "Nearby places", "Your nearby places will show up here", theme: .save)
         ],
         .saveFlow: [
             step(
@@ -245,7 +258,7 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .feed: [
-            context(.feed, .feedActivity, "See what your people are discovering", "Explore check-ins from people you follow. Like, comment, or share", theme: .social)
+            context(.feed, .feedActivity, "See what your people are discovering", "See what your people are discovering. Visit People to find and follow more of your circle.", theme: .social)
         ],
         .feedSearch: [
             step(
@@ -277,14 +290,14 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .lists: [
-            context(.lists, .listsScope, "Every kind of plan, one tap away", "My Lists keeps your plans, Friends shows shared lists, and Collabs keeps shared planning together", theme: .lists)
+            context(.lists, .listsScope, "Good places, better together", "Share recommendations. Organize your own places. Keep imports from other apps together.", theme: .lists)
         ],
         .listDetail: [],
         .listEditor: [],
         .events: [],
         .profile: [],
         .placeDetail: [
-            context(.placeDetail, .placeActions, "Everything you need to go", "Directions, Call, Website, and Reservation appear here whenever a place supports them")
+            context(.placeDetail, .placeSaveActions, "Been there? Or want to go?", "Check In is for places you’ve been. Wanna is for places you want to go.")
         ]
     ]
 
@@ -404,6 +417,7 @@ enum FirstVisitWalkthroughContent {
     static func presentationDelayMilliseconds(for step: WalkthroughStep) -> Int {
         if step.presentationStyle == .finale { return finaleAutoAdvanceMilliseconds }
         if contextualSurfaces.contains(step.surface) { return contextualAutoAdvanceMilliseconds }
+        if step.target == .mapMoreFilters { return 6_000 }
         // Include the filter intro animation in the reading window.
         return automaticReadingDelayMilliseconds(for: step.target)
             + (step.target == .mapFeatured ? 1_250 : 0)
@@ -1004,6 +1018,8 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var tutorialInvitedContactIDs: Set<String> = []
     @Published private(set) var isRequestingContactInvite = false
     @Published private(set) var userActivityGeneration = 0
+    @Published var isRevealingFeed = false
+    @Published private(set) var reviewPlaybackGeneration = 0
     @Published private(set) var isAwaitingEligibilityResolution = false
 
     private(set) var userID: String
@@ -1407,6 +1423,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     func prepareDebugReplay(at target: WalkthroughTargetID) {
         guard isEnabled else { return }
         resetCurrentUser()
+        reviewPlaybackGeneration += 1
         forceActivate(target)
     }
 
@@ -2303,6 +2320,7 @@ extension View {
 }
 
 private struct FirstVisitWalkthroughModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var coordinator: FirstVisitWalkthroughCoordinator
     let surface: WalkthroughSurface
     let externalTargetFrames: [WalkthroughTargetID: CGRect]
@@ -2310,6 +2328,12 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .simultaneousGesture(TapGesture().onEnded {
+                if FirstVisitWalkthroughContent.contextualSurfaces.contains(surface),
+                   coordinator.activeSurface == surface {
+                    coordinator.dismissCurrentContext()
+                }
+            })
             .onAppear { if isActive { coordinator.activate(surface) } }
             .onChange(of: surface) { _, newSurface in
                 if isActive { coordinator.activate(newSurface) }
@@ -2337,7 +2361,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                         ?? anchoredTargetFrames
                     let targetFrame = resolvedWalkthroughFrame(targetFrames)
                     if
-                        isActive, coordinator.activeSurface == surface,
+                        isActive, !coordinator.isRevealingFeed, coordinator.activeSurface == surface,
                         let step = coordinator.currentStep,
                         let targetFrame
                     {
@@ -2353,6 +2377,10 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                     in: proxy
                                 ),
                                 containerSize: proxy.size,
+                                safeTop: proxy.safeAreaInsets.top,
+                                additionalTargets: anchors.spotlights.compactMapValues {
+                                    resolvedWalkthroughFrame(resolvedWalkthroughFrames($0, in: proxy))
+                                },
                                 userActivityGeneration: coordinator.userActivityGeneration,
                                 onDismiss: coordinator.dismissEntireWalkthrough,
                                 onBack: step.allowsBackNavigation && coordinator.canGoBack
@@ -2360,8 +2388,8 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                     : nil,
                                 onNext: coordinator.advancePassiveStep
                             )
-                            .id(step.id)
-                            .transition(.opacity)
+                            .id("\(step.id)-\(coordinator.reviewPlaybackGeneration)")
+                            .transition(reduceMotion ? .identity : NUXCoachMotion.selected.transition)
                         } else {
                             MissingWalkthroughTargetResolver(coordinator: coordinator, step: step)
                         }
@@ -2369,7 +2397,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                         MissingWalkthroughTargetResolver(coordinator: coordinator, step: step)
                     }
                 }
-                .animation(.easeInOut(duration: 0.2), value: coordinator.currentStep?.id)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: coordinator.currentStep?.id)
                 .ignoresSafeArea()
                 .zIndex(1_000)
             }
@@ -2490,6 +2518,7 @@ struct WalkthroughCoachMarkLayout: Equatable {
 private struct FirstVisitWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.scenePhase) private var scenePhase
     @State private var measuredCardSize = CGSize(width: 280, height: 104)
     @State private var hasNarrowedFeaturedSpotlight = false
     @State private var isFeaturedCoachVisible = false
@@ -2501,6 +2530,8 @@ private struct FirstVisitWalkthroughOverlay: View {
     let targetFrames: [CGRect]
     let emphasisFrames: [CGRect]
     let containerSize: CGSize
+    let safeTop: CGFloat
+    let additionalTargets: [WalkthroughTargetID: CGRect]
     let userActivityGeneration: Int
     let onDismiss: () -> Void
     let onBack: (() -> Void)?
@@ -2567,7 +2598,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     }
 
     private var visibleEmphasisFrames: [CGRect] {
-        guard step.allowsTargetInteraction else { return [] }
+        guard step.allowsTargetInteraction, step.presentationStyle != .contextual else { return [] }
         if step.target == .mapFeatured {
             return []
         }
@@ -2600,12 +2631,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     var body: some View {
         ZStack {
             if step.presentationStyle == .finale {
-                WalkthroughFinaleView(
-                    step: step,
-                    containerSize: containerSize,
-                    onDismiss: onDismiss,
-                    onFinish: onNext
-                )
+                NUXConnectionFinale(step: step, size: containerSize, finish: onNext)
             } else {
                 if shouldShowScrim {
                     WalkthroughScrim(
@@ -2633,7 +2659,11 @@ private struct FirstVisitWalkthroughOverlay: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
                 }
 
-                if step.presentationStyle == .coach || step.presentationStyle == .contextual {
+                if step.presentationStyle == .contextual {
+                    NUXGuidanceOverlay(step: step, target: activeTargetFrame,
+                                       additionalTargets: additionalTargets,
+                                       size: containerSize, safeTop: safeTop, next: onNext)
+                } else if step.presentationStyle == .coach {
                     coachMark
                 }
 
@@ -2703,8 +2733,8 @@ private struct FirstVisitWalkthroughOverlay: View {
                 isNextArrowNudging = false
             }
         }
-        .task(id: "automatic-advance-\(step.id)") {
-            guard step.automaticallyAdvances,
+        .task(id: "automatic-advance-\(step.id)-\(scenePhase)-\(reduceMotion)") {
+            guard scenePhase == .active, !reduceMotion, step.automaticallyAdvances,
                   !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
                   !UIAccessibility.isVoiceOverRunning else { return }
             let delay: Int

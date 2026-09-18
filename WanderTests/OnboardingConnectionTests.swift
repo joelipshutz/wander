@@ -147,6 +147,18 @@ final class OnboardingIdentitySubmissionTests: XCTestCase {
         )
     }
 
+    func testAppleIdentityCanContinueWithoutARequiredPhoto() async throws {
+        var writes: [ProfileDetailsUpdate] = []
+        try await OnboardingIdentitySubmission.save(
+            draft: ProfileIdentityDraft(displayName: "", handle: "apple_user", usesAppleSignIn: true),
+            photoData: nil, existingAvatarURL: nil,
+            updateIdentity: { writes.append($0) },
+            uploadPhoto: { _ in XCTFail("An absent optional Apple photo must not be uploaded") }
+        )
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertEqual(writes.first?.displayName, "apple_user")
+    }
+
     func testMissingRequiredPhotoNeverWritesIdentity() async {
         var writes = 0
         do {

@@ -4,6 +4,14 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
+    func testMapDemoContainsBothRingStatesAndCannotAttachToPersistentStore() {
+        let demo = NUXMapDemonstration.places(around: NUXMapDemonstration.center())
+        XCTAssertEqual(demo.count, 8)
+        XCTAssertEqual(Set(demo.map(\.userPlace.status)), [.been, .wannaGo])
+        XCTAssertTrue(demo.allSatisfy { $0.place.sourceProvider == "nux_demo" })
+        XCTAssertTrue(demo.allSatisfy { $0.place.modelContext == nil && $0.userPlace.modelContext == nil })
+    }
+
     func testOverviewEndsOnMapWithoutOpeningOrSavingAPlace() throws {
         let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
@@ -28,17 +36,17 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(store.hasCompletedDeviceFeaturesLesson(for: "ryan"))
     }
 
-    func testOpeningPlusExitsOverviewAndShowsOnlyVoluntaryImportHint() throws {
+    func testOpeningPlusExitsOverviewAndShowsOnlyVoluntaryNearbyHint() throws {
         let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
         coordinator.activate(.map)
         coordinator.finishOverviewForUserNavigation()
         coordinator.transition(to: .add)
         XCTAssertTrue(coordinator.hasCompletedPrimaryJourney)
-        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
+        XCTAssertEqual(coordinator.currentStep?.target, .addNearby)
         coordinator.perform(.addSearch)
-        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
-        coordinator.perform(.addImport)
+        XCTAssertEqual(coordinator.currentStep?.target, .addNearby)
+        coordinator.perform(.addNearby)
         XCTAssertNil(coordinator.currentStep)
         XCTAssertNil(coordinator.requestedSurface)
         XCTAssertNil(coordinator.tutorialCandidate)
@@ -216,7 +224,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(restored.restoreJourneyIfNeeded(), .expired)
         XCTAssertTrue(restored.hasCompletedPrimaryJourney)
         restored.activate(.placeDetail)
-        XCTAssertEqual(restored.currentStep?.target, .placeActions)
+        XCTAssertEqual(restored.currentStep?.target, .placeSaveActions)
         XCTAssertFalse(restored.isPresentingLegacyPlaceWalkthrough)
     }
 

@@ -712,11 +712,13 @@ final class OnboardingUITests: XCTestCase {
             if target == "mapPinLegend" {
                 XCTAssertTrue(app.descendants(matching: .any)["map.walkthrough.pinLegend"].exists)
             }
+            captureNUX("\(target)")
             app.buttons["walkthrough.next.map.\(target)"].tap()
         }
         let ending = app.buttons["walkthrough.next.sendoff.mapSendoff"]
         XCTAssertTrue(ending.waitForExistence(timeout: 8))
         XCTAssertEqual(ending.label, "Skip")
+        captureNUX("N25")
         ending.tap()
         XCTAssertTrue(ending.waitForNonExistence(timeout: 4))
         XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
@@ -741,6 +743,8 @@ final class OnboardingUITests: XCTestCase {
         let coach = app.descendants(matching: .any)["walkthrough.map.mapFeatured"]
         XCTAssertTrue(coach.waitForExistence(timeout: 18))
         let you = app.buttons["map.filter.you"]
+        let ready = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: you)
+        wait(for: [ready], timeout: 4)
         XCTAssertTrue(you.isHittable)
         you.tap()
         XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
@@ -754,11 +758,12 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["walkthrough.map.mapAdd"].waitForExistence(timeout: 18))
         app.buttons["map.headerAdd"].tap()
-        let coach = app.descendants(matching: .any)["walkthrough.add.addImport"]
+        let coach = app.descendants(matching: .any)["walkthrough.add.addNearby"]
         XCTAssertTrue(coach.waitForExistence(timeout: 8))
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addSearch"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"].exists)
-        app.buttons["walkthrough.next.add.addImport"].tap()
+        captureNUX("C01")
+        app.buttons["walkthrough.next.add.addNearby"].tap()
         XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Close add place"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
@@ -770,6 +775,7 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
         let coach = app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
         XCTAssertTrue(coach.waitForExistence(timeout: 18))
+        captureNUX("C02")
         app.buttons["walkthrough.next.feed.feedActivity"].tap()
         XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Feed"].isSelected)
@@ -783,6 +789,7 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
         let coach = app.descendants(matching: .any)["walkthrough.lists.listsScope"]
         XCTAssertTrue(coach.waitForExistence(timeout: 18))
+        captureNUX("C03")
         app.buttons["walkthrough.next.lists.listsScope"].tap()
         XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Lists"].isSelected)
@@ -798,9 +805,31 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Open import form"].exists)
     }
 
+    private func captureNUX(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "NUX-" + name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testNativeCheckInWannaAnnotationLeavesActionsUsable() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXReview", "-WanderHoldWalkthroughStep",
+            "-WanderPlaceProfileSaveTrayV1", "-WanderWalkthroughTarget", "placeSaveActions"]
+        app.launch()
+        let next = app.buttons["walkthrough.next.placeDetail.placeSaveActions"]
+        XCTAssertTrue(next.waitForExistence(timeout: 20))
+        captureNUX("C04")
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isHittable)
+        checkIn.tap()
+        XCTAssertTrue(next.waitForNonExistence(timeout: 3))
+    }
+
     private var nativeOverviewArguments: [String] {
         ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderUseDemoFixtures",
-         "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs"]
+         "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs", "-WanderNUXFeedReveal"]
     }
 
     func testMapMoreSectionsAndResetFollowTheActiveSource() {

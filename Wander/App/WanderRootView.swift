@@ -597,6 +597,18 @@ struct WanderRootView: View {
             surface: walkthroughSurface(for: selectedTab),
             externalTargetFrames: nativeTabItemControlsFrame.map { [.mapTabs: $0] } ?? [:]
         )
+        .overlay(alignment: .bottomTrailing) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-WanderNUXReview"),
+               walkthroughs.activeSurface != .placeDetail {
+                NUXReviewControls { target in
+                    walkthroughs.prepareDebugReplay(at: target)
+                    if let surface = walkthroughs.activeSurface { routeWalkthrough(to: surface) }
+                }
+                .padding(.trailing, 16).padding(.bottom, 94)
+            }
+            #endif
+        }
         .walkthroughLaunchLessonOverlay(
             walkthroughs,
             onOpenImport: presentWalkthroughImportHub

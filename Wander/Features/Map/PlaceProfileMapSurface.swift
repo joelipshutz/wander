@@ -1739,7 +1739,7 @@ private struct PlaceProfileFullView: View {
                 AstirMastheadLockup(presentation: .localizedBlur)
 
                 HStack(spacing: WanderTheme.spacing2) {
-                    if walkthroughs.activeSurface != .placeDetail {
+                    if !walkthroughs.isPresentingLegacyPlaceWalkthrough {
                         Button(action: onBack) {
                             headerNavigationLabel(systemImage: "chevron.left")
                         }
@@ -2426,6 +2426,7 @@ struct PlaceProfileFloatingActions: View {
         .padding(.horizontal, usesCompactLayout ? WanderTheme.spacing6 : WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .contain)
+        .walkthroughTarget(actions.contains { $0.kind == .checkIn } && actions.contains { $0.kind == .wanna } ? .placeSaveActions : nil)
     }
 
     @ViewBuilder
@@ -2493,6 +2494,7 @@ struct PlaceProfileFloatingActions: View {
                 }
             }
             .buttonStyle(.plain)
+            .walkthroughTarget(action.kind == .checkIn ? .placeCheckIn : action.kind == .wanna ? .placeWanna : nil)
             .accessibilityIdentifier("place-profile.floating-action.\(action.kind.rawValue)")
             .accessibilityLabel(action.title)
             .accessibilityAddTraits(action.isSelected ? .isSelected : [])

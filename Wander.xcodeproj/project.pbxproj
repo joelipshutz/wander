@@ -38,6 +38,7 @@
 		11CAC84A6F513A131FA36181 /* WanderDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E635EA909370EB6D597D27AC /* WanderDebugLog.swift */; };
 		127463F7AF39E57A7D6EE9C7 /* AstirLaunchLockupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */; };
 		12E3D915545B913AF7F72F9E /* rec-168-check-in-date-reselection-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */; };
+		131A06FC05C1B798F66EAFF5 /* NUXMapDemonstration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A98D396B7DCEA677956D6B /* NUXMapDemonstration.swift */; };
 		13E38F0F2359AD89CE1F8C7D /* VisibilityPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AFBD6D06D23BC0C007F77C /* VisibilityPolicyTests.swift */; };
 		13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A090198414BF253FB326D960 /* SettingsScreen.swift */; };
 		16C50D466E2E66EA03E038C4 /* ProfileInsightsPresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8BAADA0C34354EB278F466 /* ProfileInsightsPresenterTests.swift */; };
@@ -229,6 +230,7 @@
 		A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */; };
 		A8710E56BE6DB7AA89C9AD66 /* ContactProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5665DF2A481AC9A45CE315E /* ContactProvider.swift */; };
 		A8A8F191163DE3166FE3CEA0 /* rec-253-community-personalized-featured-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 849D2FAFEA465CB5DE06C0C2 /* rec-253-community-personalized-featured-pre.json */; };
+		AA856099538CA7255BEE7132 /* NUXGuidanceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA39074C7BF107BA19FB01C /* NUXGuidanceViews.swift */; };
 		AAB7435F80274F652331795F /* FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA04222274EEE469DC168630 /* FeatureFlags.swift */; };
 		AD4AA98EFE3113857F5A9854 /* MapRegionFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */; };
 		AF13291EF0063A544605486A /* PlaceExternalLinksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E7CF0A6F81DB6C5DAFC4B17 /* PlaceExternalLinksTests.swift */; };
@@ -264,6 +266,7 @@
 		C8BB11723D64693D95477243 /* FutureDateSaveMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */; };
 		C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34977B260344994771BCC93E /* AuthSessionTests.swift */; };
 		C8E9BBDF88A8AFE200137DF5 /* ProfileIdentityHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B329AB5EF1E102B55F0B77C /* ProfileIdentityHeader.swift */; };
+		C9767E94D131A8D5893C786E /* NUXReviewControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DACEBC619F58FD07D19E731 /* NUXReviewControls.swift */; };
 		C9E6447EAE389755DA5BF2DB /* InviteFramework.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C5F62A98A3826F6DD6332C /* InviteFramework.swift */; };
 		CB77D6EE6AB6A8CC004C8947 /* NativeOnboardingFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A963E95AA51DC53770B6037 /* NativeOnboardingFlowUITests.swift */; };
 		CCEC1EF2FAE2A0572AF39550 /* rec-360-active-pin-layering-and-tap-post.png in Resources */ = {isa = PBXBuildFile; fileRef = 1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */; };
@@ -429,6 +432,7 @@
 		1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
 		1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPlaceImportMetadata.swift; sourceTree = "<group>"; };
 		1A903F3FED8370835639C985 /* OnboardingPlacePhotoRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPlacePhotoRepository.swift; sourceTree = "<group>"; };
+		1AA39074C7BF107BA19FB01C /* NUXGuidanceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NUXGuidanceViews.swift; sourceTree = "<group>"; };
 		1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-360-active-pin-layering-and-tap-post.png"; sourceTree = "<group>"; };
 		1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderTheme.swift; sourceTree = "<group>"; };
 		1BE0E4CCA52C155A2EFB2465 /* rec-228-bulk-status-coupling-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-228-bulk-status-coupling-post.png"; sourceTree = "<group>"; };
@@ -453,6 +457,7 @@
 		2B18EB82A28CAB33F19FF520 /* ProfileHeaderMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHeaderMotion.swift; sourceTree = "<group>"; };
 		2B52230604656C6B3B2B22C5 /* OnboardingHotchkissPark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = OnboardingHotchkissPark.jpg; sourceTree = "<group>"; };
 		2D56F3E007FB8CA01FD8B342 /* WanderCheckInControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderCheckInControl.swift; sourceTree = "<group>"; };
+		2DACEBC619F58FD07D19E731 /* NUXReviewControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NUXReviewControls.swift; sourceTree = "<group>"; };
 		2DBA6C3C70A3D6D84F42D735 /* PlaceWannaSaveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceWannaSaveTests.swift; sourceTree = "<group>"; };
 		2EC6DBFE09F2D96DE9F1DD38 /* rec-195-streak-notification-live-entry-gate-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-streak-notification-live-entry-gate-pre.json"; sourceTree = "<group>"; };
 		2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStoreTests.swift; sourceTree = "<group>"; };
@@ -624,6 +629,7 @@
 		B89937E9DB59F5F45ECC5375 /* ProfileSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingsViews.swift; sourceTree = "<group>"; };
 		B8FA25DC61F3557DC6AC60AE /* ContactInviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactInviteSheet.swift; sourceTree = "<group>"; };
 		B94EC4EB0F95294A9F25CFA9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		B9A98D396B7DCEA677956D6B /* NUXMapDemonstration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NUXMapDemonstration.swift; sourceTree = "<group>"; };
 		BC4B12C27D4BFE72E5AC0B2F /* WanderNearbyWidgetSnapshotPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderNearbyWidgetSnapshotPublisher.swift; sourceTree = "<group>"; };
 		BC89180D643319378F13628D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BDE361490EBD29A724E1B3F6 /* YourMapPrototypeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YourMapPrototypeTests.swift; sourceTree = "<group>"; };
@@ -1071,6 +1077,9 @@
 				D3A3B59E94C99CDA86C1B466 /* FirstVisitWalkthrough.swift */,
 				3D96BEEE61A9DCDDE5E75B5A /* LoggedOutCarouselView.swift */,
 				CE476A566487EF780974777A /* NativeOnboardingReviewHost.swift */,
+				1AA39074C7BF107BA19FB01C /* NUXGuidanceViews.swift */,
+				B9A98D396B7DCEA677956D6B /* NUXMapDemonstration.swift */,
+				2DACEBC619F58FD07D19E731 /* NUXReviewControls.swift */,
 				18244466AAA64D03A3B75227 /* OnboardingCommentsCaptureView.swift */,
 				B24481294F2CE0A72FE86C8E /* OnboardingFlapSurface.swift */,
 				DDE82052FB7FADD2A758552E /* OnboardingFlowView.swift */,
@@ -1688,6 +1697,9 @@
 				AD4AA98EFE3113857F5A9854 /* MapRegionFitter.swift in Sources */,
 				BC07AB3F1E3B95100DB6F3F0 /* MapScreen.swift in Sources */,
 				043CC8B7385179F9B10AFF9D /* MapSnapshotCapture.swift in Sources */,
+				AA856099538CA7255BEE7132 /* NUXGuidanceViews.swift in Sources */,
+				131A06FC05C1B798F66EAFF5 /* NUXMapDemonstration.swift in Sources */,
+				C9767E94D131A8D5893C786E /* NUXReviewControls.swift in Sources */,
 				EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */,
 				4DE46077B342944F4CF476BB /* NativeOnboardingReviewHost.swift in Sources */,
 				52D446DE712D614FF29C56D0 /* OnboardingCommentsCaptureView.swift in Sources */,

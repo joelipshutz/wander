@@ -1432,6 +1432,11 @@ struct MapScreen: View {
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
     @State private var mapCardViewerLocation: CLLocation? = nil
+    @State private var nuxDemoPlaces: [VisiblePlace] = []
+    private var isShowingNUXDemo: Bool {
+        (walkthroughs.activeSurface == .map || walkthroughs.activeSurface == .sendoff)
+            && !nuxDemoPlaces.isEmpty
+    }
     @State private var isLocationEducationPresented = false
     @State private var isRequestingLocationPermission = false
     @State private var shouldRecenterAfterLocationSettings = false
@@ -1486,6 +1491,9 @@ struct MapScreen: View {
         followedOwnerIDs: Set<String>,
         tasteSummaries: [PlaceSaveSummary]
     ) -> [VisiblePlace] {
+        if isShowingNUXDemo {
+            return mapFilterState.source == .friends ? Array(nuxDemoPlaces.prefix(5)) : nuxDemoPlaces
+        }
         switch mapFilterState.source {
         case .featured:
             return MapFeaturedSelection.places(
@@ -1533,7 +1541,7 @@ struct MapScreen: View {
 
         return renderProjectionCache.value(
             for: key,
-            partition: mapFilterState.source.rawValue
+            partition: (isShowingNUXDemo ? "nux-demo-" : "live-") + mapFilterState.source.rawValue
         ) {
             let followedOwnerIDs = Set(store.following(of: currentUserID).map(\.id))
             let currentUserPlaces = store.currentUserVisiblePlaces
@@ -2357,6 +2365,30 @@ struct MapScreen: View {
                 handleMapQueryChange()
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { oldTarget, target in
+                if (walkthroughs.activeSurface == .map || walkthroughs.activeSurface == .sendoff) && nuxDemoPlaces.isEmpty {
+                    let center = NUXMapDemonstration.center()
+                    nuxDemoPlaces = NUXMapDemonstration.places(around: center)
+                    requestMapCamera(MKCoordinateRegion(center: center,
+                        span: MKCoordinateSpan(latitudeDelta: 0.016, longitudeDelta: 0.016)))
+                }
+                #if DEBUG
+                if target == .placeSaveActions,
+                   ProcessInfo.processInfo.arguments.contains("-WanderNUXReview") {
+                    if let example = store.visiblePlaces().first(where: {
+                        $0.owner.id != store.currentUser.id && $0.place.canonicalName == "Bar Nido"
+                    }) {
+                        routedVisiblePlace = example
+                        selectVisiblePlace(example)
+                    } else {
+                        selectSearchCandidateFromMapTap(FirstVisitParkSuggestionPolicy.hotchkissPark)
+                    }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        guard walkthroughs.currentStep?.target == .placeSaveActions else { return }
+                        openSelectedPlaceProfile()
+                    }
+                }
+                #endif
                 if oldTarget == .mapMoreFilters, target != .mapMoreFilters {
                     dismissMoreFilters()
                 }
@@ -3007,6 +3039,8 @@ struct MapScreen: View {
     }
 
     private func handleNativeMapAnnotationTap(_ kind: NativeMapAnnotationKind) {
+        // Demo pins teach the legend; they must never become saveable records.
+        guard !isShowingNUXDemo else { return }
         dismissMoreFilters()
         cancelPendingMapTapDismissal()
         nativeMapFeatureSelectionSuppressionUntil = Date.now.addingTimeInterval(
@@ -9721,6 +9755,9 @@ private struct MapMoreFiltersPopover: View {
     let peopleOptions: [MapSocialOwnerOption]
     let dismiss: () -> Void
     @State private var showsAllCategories = false
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.wanderMapAppearance) private var appearance
 
     private let columns = [
@@ -9732,9 +9769,10 @@ private struct MapMoreFiltersPopover: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                header
+                header.id("nux.more.top")
 
                 filterSection(
                     title: "Categories",
@@ -9845,6 +9883,18 @@ private struct MapMoreFiltersPopover: View {
             tone: appearance.neutralGlassTone
         )
         .accessibilityIdentifier("map.moreFilters.popover")
+        .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(scenePhase)") {
+            guard walkthroughs.currentStep?.target == .mapMoreFilters, !reduceMotion,
+                  scenePhase == .active, !UIAccessibility.isVoiceOverRunning,
+                  !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture else { return }
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 1)) { proxy.scrollTo("nux.more.bottom", anchor: .bottom) }
+            try? await Task.sleep(for: .milliseconds(2000))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.65)) { proxy.scrollTo("nux.more.top", anchor: .top) }
+        }
+        }
     }
 
     private var header: some View {

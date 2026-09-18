@@ -696,10 +696,11 @@ struct AddScreen: View {
 
     private var suggestedPlacesCore: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Suggested")
+            Text("Nearby places")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
+                .walkthroughTarget(.addNearby)
 
             searchField
 
