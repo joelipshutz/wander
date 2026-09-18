@@ -1,9 +1,11 @@
-#if DEBUG
 import Foundation
 
 @MainActor
 protocol PlacePlanInvitationRepository {
+    #if DEBUG
     func create(draft: CommonGroundInvitationDraft, previewPNG: Data) async throws -> WanderShareContent
+    #endif
+    func invitation(token: String) async throws -> PlacePlanInvitation?
 }
 
 @MainActor
@@ -17,6 +19,18 @@ final class SupabasePlacePlanInvitationRepository: PlacePlanInvitationRepository
         self.storage = storage
     }
 
+    func invitation(token: String) async throws -> PlacePlanInvitation? {
+        guard PlacePlanInvitation.isValidToken(token) else { return nil }
+        let payload: PlacePlanInvitationPayload? = try await rpc.call("place_plan_preview", params: ["input_token": token])
+        guard let payload else { return nil }
+        guard payload.imagePath.range(of: #"^[A-Za-z0-9_-]+/[a-f0-9-]{36}/preview[.]png$"#, options: .regularExpression) != nil else {
+            throw WanderRemoteError.invalidResponse("invalid_plan_artwork")
+        }
+        let artworkURL = try storage.publicObjectURL(bucket: Self.bucket, path: payload.imagePath, cacheBust: nil)
+        return PlacePlanInvitation(payload: payload, artworkURL: artworkURL)
+    }
+
+    #if DEBUG
     func create(draft: CommonGroundInvitationDraft, previewPNG: Data) async throws -> WanderShareContent {
         guard let placeID = draft.place.photoReference?.placeID, UUID(uuidString: placeID) != nil,
               !draft.place.viewer.id.contains("/"), !draft.place.viewer.id.isEmpty,
@@ -45,8 +59,10 @@ final class SupabasePlacePlanInvitationRepository: PlacePlanInvitationRepository
             throw error
         }
     }
+    #endif
 }
 
+#if DEBUG
 private struct CreatedPlan: Decodable { let token: String }
 private struct CreatePlan: Encodable {
     let input_place_id: String

@@ -24,7 +24,7 @@ enum CommonGroundInvitationSharing {
             CGInvitationLinkPreview(draft: draft, showsViewButton: true, sharePhoto: photo, rendersShareArtwork: draft.place.photoReference != nil)
                 .environment(\.astirBrandMode, brand)
                 .environment(\.dynamicTypeSize, .large)
-                .frame(width: 390)
+                .frame(width: PlacePlanArtworkLayout.width)
         )
         renderer.scale = 2
         guard let png = renderer.uiImage?.pngData() else {

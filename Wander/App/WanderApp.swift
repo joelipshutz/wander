@@ -136,7 +136,11 @@ struct WanderApp: App {
         #endif
         #if DEBUG && targetEnvironment(simulator)
         let backendStore = usesSimulatorTestSession
-            ? WanderBackend(notificationRepository: SimulatorNotificationRepository())
+            ? WanderBackend(
+                notificationRepository: SimulatorNotificationRepository(),
+                placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
+                    ? SimulatorPlacePlanInvitationRepository() : nil
+            )
             : WanderBackend(configuration: configuration, authSession: authStore)
         #else
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)

@@ -286,7 +286,7 @@ struct CGInvitationLinkPreview: View {
                     }
                 }
                     .frame(maxWidth: .infinity)
-                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 144 : 176)
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? 144 : PlacePlanArtworkLayout.photoHeight)
                     .clipped()
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.12), .black.opacity(0.76)],
@@ -306,41 +306,7 @@ struct CGInvitationLinkPreview: View {
                 .padding(18)
             }
 
-            HStack(alignment: .center, spacing: 12) {
-                Image("InvitationAppIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 46, height: 46)
-                    .clipShape(RoundedRectangle(cornerRadius: 11))
-                    .accessibilityLabel("ASTIR")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(draft.linkTitle)
-                        .font(.system(.headline, design: .serif).weight(.semibold))
-                        .foregroundStyle(brand.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("common-ground.invitation.link-title")
-                    Text(draft.linkSubtitle)
-                        .font(AstirTypography.bodySmall)
-                        .foregroundStyle(brand.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("common-ground.invitation.when-value")
-                }
-                .layoutPriority(1)
-                Spacer(minLength: 0)
-                if showsViewButton {
-                    Text("View")
-                        .font(.system(.subheadline, weight: .semibold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .foregroundStyle(brand.accentForeground)
-                        .padding(.horizontal, 19)
-                        .frame(minHeight: 44)
-                        .background(brand.accent, in: Capsule())
-                        .accessibilityIdentifier("common-ground.invitation.view")
-                }
-            }
-            .padding(14)
-            .background(brand.raisedBackground)
+            PlacePlanInvitationCardFooter(title: draft.linkTitle, date: draft.linkSubtitle, showsViewButton: showsViewButton)
         }
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay {
