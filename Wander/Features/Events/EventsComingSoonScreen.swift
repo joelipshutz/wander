@@ -26,13 +26,18 @@ struct EventsComingSoonScreen: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("events.comingSoon")
 
-            EventsNotifyControl(
-                selected: interest.isRegistered,
-                saving: interest.isSaving,
-                enabled: userID != nil,
-                animates: playbackPolicy.shouldPlay,
-                action: { Task { await interest.register(repository: repository) } }
-            )
+            Group {
+                if interest.isRegistered {
+                    EventsWaitlistStatus()
+                } else {
+                    EventsNotifyControl(
+                        saving: interest.isSaving,
+                        enabled: userID != nil,
+                        animates: playbackPolicy.shouldPlay,
+                        action: { Task { await interest.register(repository: repository) } }
+                    )
+                }
+            }
                 .frame(height: 60)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
@@ -221,7 +226,6 @@ private struct EventsVideoSurface: UIViewRepresentable {
 /// A real button with cached, distressed artwork. Core Animation supplies the
 /// occasional tape flicker; no additional video decoder or per-frame SwiftUI work.
 private struct EventsNotifyControl: UIViewRepresentable {
-    let selected: Bool
     let saving: Bool
     let enabled: Bool
     let animates: Bool
@@ -243,11 +247,10 @@ private struct EventsNotifyControl: UIViewRepresentable {
 
     func updateUIView(_ button: EventsNotifyButton, context: Context) {
         context.coordinator.action = action
-        button.isSelected = selected
         button.isEnabled = enabled && !saving
         button.alpha = saving ? 0.65 : 1
-        button.accessibilityValue = saving ? "Saving" : (selected ? "Selected" : "Not selected")
-        button.accessibilityHint = selected ? "You're on the Events launch list." : "Get notified when Events launches."
+        button.accessibilityValue = saving ? "Saving" : nil
+        button.accessibilityHint = "Get notified when Events launches."
         button.updateAnimation(animates && !saving)
     }
 
@@ -269,26 +272,17 @@ private struct EventsNotifyControl: UIViewRepresentable {
         adjustsImageWhenHighlighted = false
         backgroundColor = .clear
         addAction(UIAction { [weak self] _ in
-            guard let self, !self.isSelected else { return }
-            self.tapFeedback.impactOccurred()
+            self?.tapFeedback.impactOccurred()
         }, for: .touchDown)
     }
 
     required init?(coder: NSCoder) { nil }
-
-    override var isSelected: Bool {
-        didSet {
-            accessibilityLabel = isSelected ? "Added to waitlist" : "Keep me posted"
-            accessibilityValue = isSelected ? "Selected" : "Not selected"
-        }
-    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.size != artworkSize else { return }
         artworkSize = bounds.size
         setImage(EventsNotifyArtwork.image(size: bounds.size, selected: false), for: .normal)
-        setImage(EventsNotifyArtwork.image(size: bounds.size, selected: true), for: .selected)
         imageView?.frame = bounds
     }
 
@@ -315,6 +309,37 @@ private struct EventsNotifyControl: UIViewRepresentable {
     }
 }
 
+/// Confirmation is static text, not a disabled button or a selected control state.
+private struct EventsWaitlistStatus: UIViewRepresentable {
+    func makeUIView(context: Context) -> EventsWaitlistStatusView { EventsWaitlistStatusView() }
+    func updateUIView(_ view: EventsWaitlistStatusView, context: Context) {}
+}
+
+@MainActor final class EventsWaitlistStatusView: UIView {
+    private let artwork = UIImageView()
+    private var artworkSize: CGSize = .zero
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = true
+        accessibilityTraits = .staticText
+        accessibilityIdentifier = "events.waitlistStatus"
+        accessibilityLabel = "Added to Wait List"
+        addSubview(artwork)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        artwork.frame = bounds
+        guard bounds.width > 0, bounds.height > 0, bounds.size != artworkSize else { return }
+        artworkSize = bounds.size
+        artwork.image = EventsNotifyArtwork.image(size: bounds.size, selected: true)
+    }
+}
+
 @MainActor enum EventsNotifyArtwork {
     static func image(size: CGSize, selected: Bool) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
@@ -322,17 +347,21 @@ private struct EventsNotifyControl: UIViewRepresentable {
         format.opaque = false
         return UIGraphicsImageRenderer(size: size, format: format).image { renderer in
             let context = renderer.cgContext
+            // Sampled bright ink from the recorded film footer (RGB 191/193/187).
+            // The erosion below brings its midtones down with the film grain.
             let color = selected
-                ? UIColor(red: 0.91, green: 0.90, blue: 0.84, alpha: 1)
+                ? UIColor(red: 191.0 / 255, green: 193.0 / 255, blue: 187.0 / 255, alpha: 1)
                 : UIColor(red: 0.843, green: 0.459, blue: 0.329, alpha: 1)
-            let edge = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
-            let border = UIBezierPath(roundedRect: edge, cornerRadius: 12)
-            color.setStroke()
-            border.lineWidth = 2.2
-            border.stroke()
+            if !selected {
+                let edge = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+                let border = UIBezierPath(roundedRect: edge, cornerRadius: 12)
+                color.setStroke()
+                border.lineWidth = 2.2
+                border.stroke()
+            }
             let font = UIFont(name: "HelveticaNeue-CondensedBlack", size: 27)
                 ?? UIFont.systemFont(ofSize: 25, weight: .black)
-            let text = (selected ? "ADDED TO WAITLIST" : "KEEP ME POSTED") as NSString
+            let text = (selected ? "ADDED TO WAIT LIST" : "KEEP ME POSTED") as NSString
             var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color,
                                                             .kern: 0.6]
             let availableWidth = max(1, size.width - 32)

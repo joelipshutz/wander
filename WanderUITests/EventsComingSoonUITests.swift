@@ -60,17 +60,19 @@ import UIKit
         XCTAssertEqual(button.label, "Keep me posted")
         capture("Events CTA — orange")
         button.tap()
-        let confirmed = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isSelected == true"), object: button
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [confirmed], timeout: 5), .completed)
-        XCTAssertEqual(button.label, "Added to waitlist")
-        capture("Events CTA — white")
+        let status = app.staticTexts["events.waitlistStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "Added to Wait List")
+        XCTAssertFalse(button.exists)
+        status.press(forDuration: 1.5)
+        XCTAssertEqual(status.label, "Added to Wait List")
+        XCTAssertFalse(button.exists)
+        capture("Events confirmation — borderless")
         tabs.buttons["Map"].tap()
         tabs.buttons["Events"].tap()
-        XCTAssertTrue(button.isSelected)
-        XCTAssertEqual(button.label, "Added to waitlist")
-        XCTAssertTrue(button.isHittable)
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.label, "Added to Wait List")
+        XCTAssertFalse(button.exists)
     }
 
     private func verifyTabBarAppearance(isLight: Bool) throws {
