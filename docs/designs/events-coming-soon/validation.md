@@ -2,8 +2,10 @@
 
 The implementation was built through the workspace `ios-work` helper using its
 shared per-checkout cache, two compiler jobs, and serial test execution.
+The final unit run includes current main through `94b6389`; the generated
+Xcode project was regenerated to retain both the Events and Ocean Park files.
 
-- Full `WanderTests`: **2,010 passed, 0 failures**.
+- Full `WanderTests`: **2,016 passed, 0 failures**.
 - New Events lifecycle/media/layout unit tests: **5 passed**, included above.
 - Standard iPhone 17 Pro: **2 Events UI tests passed**, including native tab
   placement, repeated switching through all other tabs, foreground restoration,
@@ -35,12 +37,13 @@ performance baseline or regression threshold was supplied.
 
 | Metric | Mean | Range |
 |---|---:|---:|
-| Cycle clock, including automation | 3.413 s | 3.100–3.675 s |
-| App CPU time during cycle | 0.799 s | 0.764–0.848 s |
-| Peak physical memory | 109.35 MB | 108.38–111.12 MB |
-| Ending physical memory | 106.27 MB | 105.04–108.73 MB |
+| Cycle clock, including automation | 3.531 s | 3.407–3.706 s |
+| App CPU time during cycle | 0.771 s | 0.700–0.849 s |
+| Peak physical memory | 108.84 MB | 107.42–110.71 MB |
+| Ending physical memory | 104.85 MB | 103.53–105.86 MB |
 
-The five ending-memory samples do not trend upward. Separately, the lifecycle
+The five ending-memory samples stayed within a 2.33 MB band; this is not a
+long-term leak test. Separately, the lifecycle
 unit test confirms that twenty exit/reentry cycles create only one player,
 pause its rate immediately on exit/background, and empty the queue on teardown.
 Reduced Motion and inactive selection create no decoder. No per-frame view
