@@ -10,20 +10,21 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
+        let activity = app.cells.matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
         if !activity.waitForExistence(timeout: 5) {
             let more = app.buttons["More"].firstMatch
             if more.exists { more.tap() }
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         activity.tap()
-        XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
+        let countdownAvailable = app.buttons["share-extension-start-import"].waitForExistence(timeout: 5)
         keepScreenshot("Share extension — countdown begins")
         let sharedInboxUnavailable = app.staticTexts["Astir could not access its shared inbox. Check the app and extension App Group signing."]
         if sharedInboxUnavailable.waitForExistence(timeout: 6) {
             keepScreenshot("Share extension — appearance without Simulator App Group signing")
             throw XCTSkip("This Simulator build has no App Group container; durable extension capture requires a signed App Group build.")
         }
+        XCTAssertTrue(countdownAvailable)
         let captured = app.staticTexts["Captured: 1"]
         XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
         XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
@@ -147,14 +148,13 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
         app.launch()
         let action = app.buttons["import.checkin.report-place-1"]
-        for _ in 0..<5 where !action.isHittable { app.swipeUp() }
-        XCTAssertTrue(action.isHittable)
+        scrollToImportControl(action, in: app)
         action.tap()
         XCTAssertEqual(action.value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
         XCTAssertTrue(app.buttons["import.wanna.report-place-2"].isEnabled)
-        app.buttons["import.save"].tap()
-        for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(app.staticTexts["Saved (2)"], in: app)
         XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
         XCTAssertTrue(app.staticTexts["8 places matched and ready"].exists)
     }
@@ -169,12 +169,14 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertEqual(all.value as? String, "Selected")
         XCTAssertEqual(app.buttons["import.wanna.report-place-1"].value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (10)"].exists)
-        app.buttons["import.checkin.report-place-1"].tap()
-        XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
+        let checkIn = app.buttons["import.checkin.report-place-1"]
+        scrollToImportControl(checkIn, in: app)
+        checkIn.tap()
+        XCTAssertEqual(checkIn.value as? String, "Selected")
         XCTAssertTrue(app.buttons["import.save"].isEnabled)
         keepScreenshot("Import report — staged choices")
-        app.buttons["import.save"].tap()
-        for _ in 0..<5 where !app.staticTexts["Saved (10)"].isHittable { app.swipeDown() }
+        saveAndReopenImport(app, expectedBadge: "0")
+        scrollToImportControl(app.staticTexts["Saved (10)"], in: app)
         XCTAssertTrue(app.staticTexts["Saved (10)"].exists)
         XCTAssertFalse(app.buttons["import.save"].exists)
         XCTAssertFalse(app.buttons["import.all.wanna"].exists)
@@ -193,6 +195,179 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["@coffeeguide"].exists)
         keepScreenshot("History — left edge opens the selected post")
+    }
+
+    func testSavedImportKeepsCardLayoutAndSelectionsUntilResaved() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 15))
+
+        let itemID = "report-place-1"
+        let checkIn = app.buttons["import.checkin.\(itemID)"]
+        scrollToImportControl(checkIn, in: app)
+        let readyCard = app.otherElements["import.ready-card.\(itemID)"]
+        let readyHeight = readyCard.frame.height
+        XCTAssertGreaterThan(readyHeight, 100)
+        XCTAssertLessThan(app.staticTexts["Ready to add"].frame.minY, app.staticTexts["Saved (1)"].frame.minY)
+
+        checkIn.tap()
+        let list = app.buttons["import.list.\(itemID)"]
+        list.tap()
+        let listRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(listRow.waitForExistence(timeout: 5))
+        listRow.tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(checkIn.value as? String, "Selected")
+        XCTAssertEqual(list.value as? String, "Selected")
+        saveAndReopenImport(app)
+
+        let savedCard = app.otherElements["import.saved-card.\(itemID)"]
+        let savedCheckIn = app.buttons["import.saved-checkin.\(itemID)"]
+        scrollToImportControl(savedCheckIn, in: app)
+        XCTAssertEqual(savedCard.value as? String, "Saved")
+        XCTAssertEqual(savedCard.frame.height, readyHeight, accuracy: 1)
+        XCTAssertEqual(savedCheckIn.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["import.saved-list.\(itemID)"].value as? String, "Selected")
+        keepScreenshot("Import report — green saved edge and preserved selections")
+
+        let savedWanna = app.buttons["import.saved-wanna.\(itemID)"]
+        savedWanna.tap()
+        XCTAssertTrue(app.alerts["Change to Wanna?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Change to Wanna"].tap()
+        XCTAssertEqual(savedCard.value as? String, "Unsaved changes")
+        XCTAssertEqual(savedWanna.value as? String, "Selected")
+        XCTAssertTrue(app.buttons["import.save"].isEnabled)
+        keepScreenshot("Import report — changed selection removes saved edge")
+        saveAndReopenImport(app)
+        scrollToImportControl(savedWanna, in: app)
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 5))
+        XCTAssertEqual(savedCard.value as? String, "Saved")
+        XCTAssertEqual(savedWanna.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["import.saved-list.\(itemID)"].value as? String, "Selected")
+        keepScreenshot("Import report — resaved Wanna restores green edge")
+    }
+
+    func testListOnlyEditRemovesSavedEdgeUntilSaveAndEmptyReadySectionDisappears() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport", "-WanderImportDarkAppearance"]
+        app.launch()
+        let all = app.buttons["import.all.wanna"]
+        scrollToImportControl(all, in: app)
+        all.tap()
+        saveAndReopenImport(app)
+        XCTAssertTrue(app.staticTexts["Saved (3)"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Ready to add"].exists)
+        XCTAssertFalse(app.buttons["import.all.wanna"].exists)
+        XCTAssertFalse(app.buttons["import.save"].exists)
+
+        let itemID = "report-place-0"
+        let list = app.buttons["import.saved-list.\(itemID)"]
+        scrollToImportControl(list, in: app)
+        let card = app.otherElements["import.saved-card.\(itemID)"]
+        XCTAssertEqual(card.value as? String, "Saved")
+        list.tap()
+        let listRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(listRow.waitForExistence(timeout: 5))
+        listRow.tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(card.value as? String, "Unsaved changes")
+        XCTAssertEqual(list.value as? String, "Selected")
+        saveAndReopenImport(app)
+        scrollToImportControl(list, in: app)
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertEqual(card.value as? String, "Saved")
+        XCTAssertEqual(list.value as? String, "Selected")
+        XCTAssertFalse(app.buttons["import.save"].exists)
+        keepScreenshot("Import report — dark saved list-only edit complete")
+    }
+
+    func testSavedWannaCanBeCancelledThenRemovedAndReselectedAfterReopening() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport"]
+        app.launch()
+        let wanna = app.buttons["import.saved-wanna.report-place-0"]
+        scrollToImportControl(wanna, in: app)
+        let card = app.otherElements["import.saved-card.report-place-0"]
+        wanna.tap()
+        XCTAssertTrue(app.alerts["Remove Wanna?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertEqual(wanna.value as? String, "Selected")
+        XCTAssertEqual(card.value as? String, "Saved")
+        wanna.tap()
+        app.alerts.buttons["Remove Wanna"].tap()
+        XCTAssertEqual(wanna.value as? String, "Not selected")
+        XCTAssertEqual(card.value as? String, "Unsaved changes")
+        keepScreenshot("Import report — confirmed Wanna removal is staged")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(wanna, in: app)
+        XCTAssertEqual(wanna.value as? String, "Not selected")
+        XCTAssertEqual(card.value as? String, "Saved")
+        wanna.tap()
+        XCTAssertEqual(wanna.value as? String, "Selected")
+        XCTAssertEqual(card.value as? String, "Unsaved changes")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(wanna, in: app)
+        XCTAssertEqual(wanna.value as? String, "Selected")
+        XCTAssertEqual(card.value as? String, "Saved")
+    }
+
+    func testSavedCheckInAndListsCanBeRemovedWithConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport"]
+        app.launch()
+        let checkIn = app.buttons["import.checkin.report-place-1"]
+        scrollToImportControl(checkIn, in: app)
+        checkIn.tap()
+        app.buttons["import.list.report-place-1"].tap()
+        let listRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(listRow.waitForExistence(timeout: 5))
+        listRow.tap()
+        app.buttons["Done"].tap()
+        saveAndReopenImport(app, expectedBadge: "1")
+
+        let savedCheckIn = app.buttons["import.saved-checkin.report-place-1"]
+        let savedList = app.buttons["import.saved-list.report-place-1"]
+        scrollToImportControl(savedCheckIn, in: app)
+        savedCheckIn.tap()
+        XCTAssertTrue(app.alerts["Remove Check In?"].waitForExistence(timeout: 5))
+        keepScreenshot("Import report — check-in metadata warning")
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertEqual(savedCheckIn.value as? String, "Selected")
+        savedCheckIn.tap()
+        app.alerts.buttons["Remove Check In"].tap()
+        XCTAssertEqual(savedCheckIn.value as? String, "Not selected")
+        XCTAssertEqual(savedList.value as? String, "Selected")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(savedList, in: app)
+        XCTAssertEqual(savedCheckIn.value as? String, "Not selected")
+        savedList.tap()
+        XCTAssertTrue(app.alerts["Remove from lists?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertEqual(savedList.value as? String, "Selected")
+        savedList.tap()
+        app.alerts.buttons["Remove from lists"].tap()
+        XCTAssertEqual(savedList.value as? String, "Not selected")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(savedList, in: app)
+        XCTAssertEqual(savedCheckIn.value as? String, "Not selected")
+        XCTAssertEqual(savedList.value as? String, "Not selected")
+    }
+
+    private func saveAndReopenImport(_ app: XCUIApplication, expectedBadge: String? = nil) {
+        app.buttons["import.save"].tap()
+        let reopen = app.buttons["import.open-report"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 5), "Save closes the report")
+        if let expectedBadge { XCTAssertEqual(app.staticTexts["import.capture-badge"].label, expectedBadge) }
+        reopen.tap()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 5))
+    }
+
+    private func scrollToImportControl(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<10 where !element.isHittable || element.frame.maxY > app.frame.height - 120 {
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.isHittable)
     }
 
     func testSavedImportPlaceOpensItsProfile() {
@@ -225,8 +400,8 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["import.checkin.report-place-1"].tap()
         XCTAssertEqual(lists.value as? String, "Selected")
         XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
-        app.buttons["import.save"].tap()
-        for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(app.staticTexts["Saved (2)"], in: app)
         XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
     }
 

@@ -13626,7 +13626,7 @@ struct MapPlaceSaveEditor: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
-            if context.showsRemoveControl {
+            if context.showsRemoveControl && presentation != .inlineStaging {
                 removeSaveSection
             }
         }

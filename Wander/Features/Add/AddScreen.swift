@@ -444,12 +444,14 @@ struct AddScreen: View {
             }
             .navigationDestination(isPresented: $showsImportReview) {
                 importCompletionDestination
+                .environment(\.finishPlaceImport, onClose)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsImportInbox) {
                 PlaceImportHistoryScreen(importStore: importStore)
+                    .environment(\.finishPlaceImport, onClose)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)

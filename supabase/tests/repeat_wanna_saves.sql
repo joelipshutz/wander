@@ -221,4 +221,128 @@ begin
 end;
 $test$;
 select 'repeat Wanna create/edit, original history identity, stale retries, parent state, Feed snapshots, privacy, deletion, and grants passed' as result;
+-- REC-540: owner-scoped removals, replacement ordering and stale creates.
+do $remove_test$
+declare
+  owner_id text := 'user_codex_repeat_wanna_owner';
+  stranger_id text := 'user_codex_repeat_wanna_stranger';
+  place_payload jsonb := '{"canonical_name":"Import removal smoke","category":"coffee_tea_sweets","primary_category":"coffee_tea_sweets","latitude":0,"longitude":0,"source_provider":"codex_smoke","source_provider_place_id":"rec540-removal","confidence":1}';
+  parent_id uuid;
+  visit_id uuid := gen_random_uuid();
+  other_visit_id uuid := gen_random_uuid();
+  wanna_id uuid := gen_random_uuid();
+  removal_id uuid := gen_random_uuid();
+  list_id uuid := gen_random_uuid();
+  payload jsonb;
+  result jsonb;
+begin
+  if exists (select 1 from pg_proc where oid='public.delete_own_place_wanna(uuid,uuid,boolean)'::regprocedure
+    and (not prosecdef or provolatile <> 'v' or not ('search_path=pg_catalog, public, app'=any(proconfig))
+      or has_function_privilege('anon', oid, 'execute') or not has_function_privilege('authenticated', oid, 'execute'))) then
+    raise exception 'Wanna deletion RPC security posture changed'; end if;
+  if has_table_privilege('authenticated', 'app.deleted_place_wannas', 'insert')
+    or not (select relrowsecurity from pg_class where oid='app.deleted_place_wannas'::regclass) then
+    raise exception 'Deletion identities must stay private'; end if;
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
+  set local role authenticated;
+  result := public.save_own_place(place_payload,
+    '{"status":"wanna_go","visibility":"self","note":"Remove original metadata","source_type":"manual","nearby_confirmed":false}', '[]');
+  parent_id := (result->>'user_place_id')::uuid;
+  perform public.save_own_check_in(place_payload,
+    jsonb_build_object('id',parent_id,'status','been','visibility','self','source_type','manual','nearby_confirmed',false),
+    '[]', jsonb_build_object('id',visit_id,'visited_at',now(),'note','Keep unrelated visit','attribute_answers','[]'::jsonb));
+  perform public.delete_own_place_wanna(parent_id,removal_id,true);
+  perform public.delete_own_place_wanna(parent_id,removal_id,true);
+  reset role;
+  if not exists(select 1 from public.place_visits where id=visit_id and deleted_at is null and note='Keep unrelated visit')
+    or exists(select 1 from public.user_places where id=parent_id and (deleted_at is not null or historical_wanted_at is not null)) then
+    raise exception 'Removing original Wanna erased an independent check-in or retained original metadata'; end if;
+  payload := jsonb_build_object('id',wanna_id,'occurred_at',now(),'note','Replacement Wanna','visibility','self','attribute_answers','[]'::jsonb);
+  set local role authenticated;
+  perform public.save_own_place_wanna(parent_id,payload);
+  perform public.save_own_check_in(place_payload,
+    jsonb_build_object('id',parent_id,'status','been','visibility','self','source_type','manual','nearby_confirmed',false),
+    '[]', jsonb_build_object('id',other_visit_id,'visited_at',now(),'note','Import check-in','attribute_answers','[]'::jsonb));
+  perform public.delete_own_check_in(other_visit_id);
+  reset role;
+  if not exists(select 1 from public.place_visits where id=visit_id and deleted_at is null) then
+    raise exception 'Import replacement erased another visit'; end if;
+  -- Once the independent visit is removed, the replacement Wanna becomes the summary.
+  set local role authenticated;
+  perform public.delete_own_check_in(visit_id);
+  reset role;
+  if not exists(select 1 from public.user_places where id=parent_id and status='wanna_go'
+    and deleted_at is null and note='Replacement Wanna') then
+    raise exception 'Last visit failed to restore independent Wanna'; end if;
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',stranger_id,'role','authenticated')::text,true);
+  set local role authenticated;
+  begin
+    perform public.delete_own_place_wanna(parent_id,wanna_id,false);
+    raise exception 'stranger-delete-allowed';
+  exception when raise_exception then
+    if sqlerrm <> 'invalid_user_place_identity' then raise; end if;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
+  set local role authenticated;
+  perform public.delete_own_place_wanna(parent_id,wanna_id,false);
+  perform public.delete_own_place_wanna(parent_id,wanna_id,false);
+  reset role;
+  if exists(select 1 from public.feed_events where id=wanna_id)
+    or exists(select 1 from public.user_places where id=parent_id and deleted_at is null) then
+    raise exception 'Removed sole replacement Wanna left a ghost save'; end if;
+  -- Reanimate the container as a new check-in, then deliver an old Wanna create.
+  other_visit_id := gen_random_uuid();
+  set local role authenticated;
+  perform public.save_own_check_in(place_payload,
+    jsonb_build_object('id',parent_id,'status','been','visibility','self','source_type','manual','nearby_confirmed',false),
+    '[]', jsonb_build_object('id',other_visit_id,'visited_at',now(),'note','New check-in','attribute_answers','[]'::jsonb));
+  begin
+    perform public.save_own_place_wanna(parent_id,payload);
+    raise exception 'deleted-wanna-recreated';
+  exception when raise_exception then
+    if sqlerrm <> 'wanna_deleted' then raise; end if;
+  end;
+  reset role;
+  if not exists(select 1 from public.place_visits where id=other_visit_id and deleted_at is null) then
+    raise exception 'Stale Wanna replay erased replacement check-in'; end if;
+  insert into public.place_lists(id, owner_user_id, name, visibility) values(list_id, owner_id, 'Import keep list', 'stealth');
+  insert into public.place_list_items(list_id, place_id, owner_user_place_id, source_user_place_id, added_by_user_id)
+    select list_id, place_id, id, id, owner_id from public.user_places where id=parent_id;
+  set local role authenticated;
+  perform public.delete_own_check_in(other_visit_id);
+  reset role;
+  if not exists(select 1 from public.user_places where id=parent_id and deleted_at is null and status='wanna_go' and note is null)
+    or not exists(select 1 from public.place_list_items where owner_user_place_id=parent_id and deleted_at is null) then
+    raise exception 'Removing last check-in lost its list companion or retained visit metadata'; end if;
+  set local role authenticated;
+  perform public.delete_own_place_wanna(parent_id,gen_random_uuid(),true);
+  reset role;
+  if not exists(select 1 from public.user_places where id=parent_id and deleted_at is null and note is null) then
+    raise exception 'Removing Wanna hid an active list membership'; end if;
+  -- Offline deselect/reselect: the replacement event must be delivered before
+  -- the old original and temporary-container deletions.
+  place_payload := place_payload || '{"source_provider_place_id":"rec540-reselected"}'::jsonb;
+  set local role authenticated;
+  result := public.save_own_place(place_payload,
+    '{"status":"wanna_go","visibility":"self","note":"Old original","source_type":"manual","nearby_confirmed":false}', '[]');
+  parent_id := (result->>'user_place_id')::uuid;
+  wanna_id := gen_random_uuid();
+  payload := jsonb_build_object('id',wanna_id,'occurred_at',now(),'note','Reselected Wanna','visibility','self','attribute_answers','[]'::jsonb);
+  perform public.save_own_place_wanna(parent_id,payload);
+  perform public.delete_own_place_wanna(parent_id,gen_random_uuid(),true);
+  perform public.delete_own_place_wanna(parent_id,gen_random_uuid(),true);
+  reset role;
+  if not exists(select 1 from public.user_places where id=parent_id and deleted_at is null and note='Reselected Wanna')
+    or (select count(*) from public.feed_events where user_place_id=parent_id and event_type='place_want_to_go') <> 1 then
+    raise exception 'Old removal erased or duplicated the reselected Wanna'; end if;
+  set local role authenticated;
+  perform public.delete_own_place_wanna(parent_id,wanna_id,false);
+  reset role;
+  if exists(select 1 from public.user_places where id=parent_id and deleted_at is null) then
+    raise exception 'Temporary bookmark survived final Wanna removal'; end if;
+end;
+$remove_test$;
+select 'import action removal, replacement, ownership, retry and security checks passed' as result;
+
 rollback;

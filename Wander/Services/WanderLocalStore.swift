@@ -5393,7 +5393,8 @@ final class WanderStore: ObservableObject {
         note: String? = nil,
         ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft] = [],
-        visibility: PlaceVisibility? = nil
+        visibility: PlaceVisibility? = nil,
+        preservesPriorWanna: Bool = true
     ) -> LocalPlaceVisit? {
         let userPlace: LocalUserPlace
         if let localUserPlace = currentUserPlace(matching: userPlaceID) {
@@ -5424,7 +5425,7 @@ final class WanderStore: ObservableObject {
             updatedAt: now
         )
 
-        if userPlace.status == .wannaGo {
+        if userPlace.status == .wannaGo && preservesPriorWanna {
             preserveHistoricalWant(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
         }
         userPlace.plannedDate = nil
@@ -6517,7 +6518,7 @@ final class WanderStore: ObservableObject {
         guard userPlace.deletedAt == nil else { return [] }
         let ids = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
         return placeWannaSaves.filter {
-            ids.contains($0.userPlaceID) && $0.ownerID == userPlace.userID
+            ids.contains($0.userPlaceID) && $0.ownerID == userPlace.userID && $0.deletedAt == nil
                 && visibilityPolicy.canSeePlace(
                     viewerID: currentUser.id, ownerID: $0.ownerID, visibility: $0.visibility,
                     relationship: relationship(to: $0.ownerID),
@@ -6546,6 +6547,9 @@ final class WanderStore: ObservableObject {
                                        attributes: attributes, backend: backend)
         }
         if let pending = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
+            guard pending.deletedAt == nil else {
+                return SaveResult(userPlaceID: existing.userPlace.id, syncState: .failed)
+            }
             let synced = pending.isSynced ? true : await syncWannaSave(id: pending.id, backend: backend)
             return SaveResult(userPlaceID: existing.userPlace.id,
                               syncState: synced ? .synced : (backend?.userPlaceRepository == nil ? .pendingCreate : .failed))
@@ -6574,7 +6578,8 @@ final class WanderStore: ObservableObject {
 
     func updateWanna(_ target: PlaceWannaSave, visibility: PlaceVisibility, note: String?,
                      plannedDate: Date?, attributes: [PlaceAttributeDraft]) -> SaveResult? {
-        guard target.ownerID == currentUser.id,
+        guard target.ownerID == currentUser.id, target.deletedAt == nil,
+              !placeWannaSaves.contains(where: { $0.id == target.id && $0.deletedAt != nil }),
               let parent = currentUserVisiblePlaces.first(where: {
                   [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(target.userPlaceID)
               })?.userPlace, parent.deletedAt == nil,
@@ -6606,6 +6611,112 @@ final class WanderStore: ObservableObject {
         return SaveResult(userPlaceID: parent.id, syncState: .pendingUpdate)
     }
 
+    func restoreImportPlaceContainer(userPlaceID: String) -> Bool {
+        guard let parent = userPlaces.first(where: {
+            $0.userID == currentUser.id && [$0.id, $0.localID, $0.serverID].contains(userPlaceID)
+        }), parent.deletedAt != nil else { return false }
+        parent.deletedAt = nil
+        parent.statusRaw = PlaceStatus.wannaGo.rawValue
+        parent.note = nil
+        parent.plannedDate = nil
+        parent.historicalWantNote = nil
+        parent.historicalWantAttributeAnswersJSON = nil
+        parent.historicalWantTagsJSON = nil
+        parent.historicalWantedAt = nil
+        parent.updatedAt = .now
+        parent.localUpdatedAt = .now
+        parent.syncStateRaw = parent.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        persist()
+        return true
+    }
+
+    /// Removes one Wanna action, retaining its parent whenever visits, repeat
+    /// Wannas or list memberships still depend on that place container.
+    @discardableResult
+    func removeImportedWanna(userPlaceID: String, wannaID: String?, isOriginal: Bool? = nil) -> Bool {
+        let parent: LocalUserPlace
+        if let local = userPlaces.first(where: {
+            $0.userID == currentUser.id && [$0.id, $0.localID, $0.serverID].contains(userPlaceID)
+        }) { parent = local }
+        else if let remote = remoteCurrentUserVisiblePlace(matching: userPlaceID) {
+            parent = materializeRemoteCurrentUserPlace(remote)
+        } else { return false }
+        let parentIDs = matchingUserPlaceIDs(parent.id)
+        let index = placeWannaSaves.firstIndex { wanna in
+            wanna.ownerID == currentUser.id && parentIDs.contains(wanna.userPlaceID)
+                && (wannaID.map { wanna.id == $0 } ?? (wanna.isHistoricalOriginal == true))
+        }
+        if let index, placeWannaSaves[index].deletedAt != nil { return true }
+        if wannaID != nil && index == nil && isOriginal != true { return false }
+        let now = Date.now
+        let removedOwnsSummary = index.map { placeWannaSaves[$0].occurredAt == parent.savedAt } ?? false
+        var tombstone = index.map { placeWannaSaves[$0] } ?? PlaceWannaSave(
+            id: wannaID ?? UUID().uuidString.lowercased(), ownerID: currentUser.id,
+            userPlaceID: parent.id, occurredAt: parent.historicalWantedAt ?? parent.savedAt,
+            visibility: parent.visibility, attributeAnswersJSON: "[]", isHistoricalOriginal: true)
+        tombstone.note = nil
+        tombstone.plannedDate = nil
+        tombstone.attributeAnswersJSON = "[]"
+        tombstone.deletedAt = now
+        tombstone.isSynced = false
+        if let index { placeWannaSaves[index] = tombstone } else { placeWannaSaves.append(tombstone) }
+        if tombstone.isHistoricalOriginal == true {
+            parent.historicalWantNote = nil
+            parent.historicalWantAttributeAnswersJSON = nil
+            parent.historicalWantTagsJSON = nil
+            parent.historicalWantedAt = nil
+            if parent.status == .wannaGo {
+                parent.note = nil
+                parent.plannedDate = nil
+                parent.ratingSignal = nil
+                parent.ratingScore = nil
+                replaceAttributes(for: parent.id, with: [], syncState: .pendingUpdate)
+                parent.updatedAt = now
+                parent.localUpdatedAt = now
+                parent.syncStateRaw = parent.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+            }
+        }
+        let hasLists = placeListItems.contains { item in
+            item.deletedAt == nil && (parentIDs.contains(item.ownerUserPlaceID ?? "")
+                || parentIDs.contains(item.sourceUserPlaceID ?? ""))
+        }
+        let hasOtherWannas = placeWannaSaves.contains {
+            parentIDs.contains($0.userPlaceID) && $0.deletedAt == nil && $0.ownerID == currentUser.id
+        }
+        if parent.status == .wannaGo && (tombstone.isHistoricalOriginal == true || removedOwnsSummary) {
+            parent.note = nil
+            parent.plannedDate = nil
+            replaceAttributes(for: parent.id, with: [], syncState: .pendingUpdate)
+            if hasOtherWannas { _ = restoreHistoricalWantAfterLastVisit(parent, at: now) }
+        }
+        if visits(for: parent.id).isEmpty && !hasLists && !hasOtherWannas
+            && (tombstone.isHistoricalOriginal == true || removedOwnsSummary
+                || (parent.status == .been && !parent.hasHistoricalWant)) {
+            deleteUserPlaceAfterLastVisit(parent, at: now)
+            // The narrow Wanna RPC decides whether the remote parent can go.
+            // Never enqueue the broad delete-user-place operation here.
+            parent.syncStateRaw = SyncState.tombstoned.rawValue
+        }
+        objectWillChange.send()
+        persist()
+        return true
+    }
+
+    /// Import undo must deliver only its captured visit deletion. A parent
+    /// tombstone is local projection state, never permission to erase other visits.
+    func deleteImportedVisit(visitID: String) -> Bool {
+        guard let visit = currentUserVisit(matching: visitID) else { return false }
+        let parentID = visit.userPlaceID
+        guard deleteVisit(visitID: visitID) else { return false }
+        if let parent = userPlaces.first(where: {
+            [$0.id, $0.localID, $0.serverID].contains(parentID)
+        }), parent.deletedAt != nil {
+            parent.syncStateRaw = SyncState.tombstoned.rawValue
+            persist()
+        }
+        return true
+    }
+
     func editableLegacyVisit(for userPlaceID: String) -> LocalPlaceVisit? {
         guard let visible = currentUserVisiblePlaces.first(where: {
             [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(userPlaceID)
@@ -6630,6 +6741,7 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func syncPendingWannaSaves(backend: WanderBackend?) async -> Int {
         let pending = placeWannaSaves.filter { !$0.isSynced && $0.ownerID == currentUser.id }
+            .sorted { ($0.deletedAt == nil ? 0 : 1) < ($1.deletedAt == nil ? 0 : 1) }
         var count = 0
         for wanna in pending {
             if await syncWannaSave(id: wanna.id, backend: backend) { count += 1 }
@@ -6646,9 +6758,28 @@ final class WanderStore: ObservableObject {
         // persisted revision before finishing, and never replace it with an old ack.
         while let snapshot = placeWannaSaves.first(where: { $0.id == id }),
               snapshot.ownerID == ownerID, currentUser.id == ownerID, !snapshot.isSynced {
-            guard let parent = currentUserVisiblePlaces.first(where: {
-                [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(snapshot.userPlaceID)
-            })?.userPlace, parent.deletedAt == nil else { return false }
+            let parent: LocalUserPlace
+            if let local = userPlaces.first(where: {
+                $0.userID == ownerID && [$0.id, $0.localID, $0.serverID].contains(snapshot.userPlaceID)
+            }) { parent = local }
+            else if let remote = remoteCurrentUserVisiblePlace(matching: snapshot.userPlaceID) {
+                parent = materializeRemoteCurrentUserPlace(remote)
+            } else { return false }
+            guard parent.deletedAt == nil || snapshot.deletedAt != nil else { return false }
+            let parentIDs = matchingUserPlaceIDs(parent.id)
+            let hasUnsentReplacementWanna = placeWannaSaves.contains {
+                $0.id != snapshot.id && parentIDs.contains($0.userPlaceID)
+                    && $0.ownerID == ownerID && $0.deletedAt == nil && !$0.isSynced
+            }
+            if snapshot.deletedAt != nil && (hasUnsentReplacementWanna
+                || visits(for: parent.id).contains(where: { $0.syncState != .synced })) {
+                // A Wanna-to-Check-In replacement must reach the server before
+                // deleting the Wanna that currently keeps its parent alive.
+                return false
+            }
+            // A parent create may already be in flight. Keep the deletion in
+            // the durable outbox until its remote identity is known.
+            if parent.serverID == nil && snapshot.deletedAt != nil { return false }
             if parent.serverID == nil {
                 _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .failedRetry)
             }
@@ -6657,8 +6788,12 @@ final class WanderStore: ObservableObject {
             var delivered = snapshot
             delivered.userPlaceID = parentID
             do {
-                if delivered.isHistoricalOriginal != true { try await repository.saveWanna(delivered) }
-                if delivered.editedAt != nil { delivered = try await repository.updateWanna(delivered) }
+                if delivered.deletedAt != nil {
+                    try await repository.deleteWanna(delivered)
+                } else {
+                    if delivered.isHistoricalOriginal != true { try await repository.saveWanna(delivered) }
+                    if delivered.editedAt != nil { delivered = try await repository.updateWanna(delivered) }
+                }
                 guard currentUser.id == ownerID,
                       let index = placeWannaSaves.firstIndex(where: { $0.id == id }) else { return false }
                 guard placeWannaSaves[index] == snapshot else { continue }
@@ -6684,10 +6819,10 @@ final class WanderStore: ObservableObject {
             let rows = try await repository.wannaSaves(userPlaceIDs: ids)
             guard currentUser.id == viewerID else { return }
             // Keep pending edits and revisions changed while this read was in flight.
-            placeWannaSaves.removeAll { $0.isSynced && before[$0.id] == $0 }
+            placeWannaSaves.removeAll { $0.isSynced && $0.deletedAt == nil && before[$0.id] == $0 }
             let protectedIDs = Set(placeWannaSaves.map(\.id))
             let pendingHistoricalParents = Set(placeWannaSaves.filter {
-                $0.isHistoricalOriginal == true && !$0.isSynced
+                $0.isHistoricalOriginal == true && (!$0.isSynced || $0.deletedAt != nil)
             }.map(\.userPlaceID))
             placeWannaSaves.append(contentsOf: rows.filter {
                 !protectedIDs.contains($0.id)
@@ -7106,8 +7241,15 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("failed retry candidates count=\(retryableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
+        // Deliver replacement Wannas before deleting their former check-in;
+        // the server can then retain the parent and restore the new action.
+        var wannaCount = await syncPendingWannaSaves(backend: backend)
         _ = await syncPendingVisits(backend: backend)
-        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        if placeWannaSaves.contains(where: { $0.ownerID == currentUser.id && $0.deletedAt != nil && !$0.isSynced }) {
+            let removedWannas = await syncPendingWannaSaves(backend: backend)
+            wannaCount += removedWannas
+            if removedWannas > 0 { _ = await retryPendingVisitDeletes(backend: backend) }
+        }
         return syncedCount + deletedCount + wannaCount
     }
 
@@ -7132,8 +7274,15 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("signed-in backfill candidates count=\(syncableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
+        // Deliver replacement Wannas before deleting their former check-in;
+        // the server can then retain the parent and restore the new action.
+        var wannaCount = await syncPendingWannaSaves(backend: backend)
         _ = await syncPendingVisits(backend: backend)
-        let wannaCount = await syncPendingWannaSaves(backend: backend)
+        if placeWannaSaves.contains(where: { $0.ownerID == currentUser.id && $0.deletedAt != nil && !$0.isSynced }) {
+            let removedWannas = await syncPendingWannaSaves(backend: backend)
+            wannaCount += removedWannas
+            if removedWannas > 0 { _ = await retryPendingVisitDeletes(backend: backend) }
+        }
         return syncedCount + deletedCount + wannaCount
     }
 
@@ -7300,6 +7449,11 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private func hasPendingWanna(for userPlaceID: String) -> Bool {
+        let ids = matchingUserPlaceIDs(userPlaceID)
+        return placeWannaSaves.contains { ids.contains($0.userPlaceID) && !$0.isSynced && $0.ownerID == currentUser.id }
+    }
+
     @discardableResult
     func retryPendingVisitDeletes(backend: WanderBackend?) async -> Int {
         guard let backend else { return 0 }
@@ -7308,6 +7462,7 @@ final class WanderStore: ObservableObject {
                 $0.deletedAt != nil
                     && $0.serverID != nil
                     && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+                    && !hasPendingWanna(for: $0.userPlaceID)
             }
             .map(\.id)
 
@@ -9920,8 +10075,16 @@ final class WanderStore: ObservableObject {
     }
 
     private func restoreHistoricalWantAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) -> Bool {
-        let original = wannaSaves(for: userPlace).first { $0.isHistoricalOriginal == true }
-        guard let wantedAt = original?.occurredAt ?? userPlace.historicalWantedAt else { return false }
+        let wannas = wannaSaves(for: userPlace)
+        let original = wannas.first { $0.isHistoricalOriginal == true }
+            ?? (userPlace.historicalWantedAt == nil ? wannas.first : nil)
+        let parentIDs = matchingUserPlaceIDs(userPlace.id)
+        let hasLists = placeListItems.contains {
+            $0.deletedAt == nil && (parentIDs.contains($0.ownerUserPlaceID ?? "")
+                || parentIDs.contains($0.sourceUserPlaceID ?? ""))
+        }
+        guard let wantedAt = original?.occurredAt ?? userPlace.historicalWantedAt
+            ?? (hasLists ? userPlace.savedAt : nil) else { return false }
 
         let drafts = VisitAttributeAnswers.drafts(
             fromAttributeAnswersJSON: original?.attributeAnswersJSON ?? userPlace.historicalWantAttributeAnswersJSON ?? "[]"
@@ -9998,7 +10161,7 @@ final class WanderStore: ObservableObject {
         }
         for visit in placeVisits where previousIDs.contains(visit.userPlaceID) {
             visit.userPlaceID = canonicalUserPlaceID
-            if visit.backfilledFromUserPlace {
+            if visit.backfilledFromUserPlace && visit.deletedAt == nil {
                 visit.syncStateRaw = syncState.rawValue
                 visit.lastSyncError = error
                 visit.serverUpdatedAt = syncState == .synced ? .now : visit.serverUpdatedAt
