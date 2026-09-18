@@ -516,7 +516,11 @@ struct WanderRootView: View {
                     .tabItem { tabItemLabel(for: .discover) }
                     .tag(WanderTab.discover)
 
-                EventsComingSoonScreen(isSelected: selectedTab == .events && !isPresentingAdd)
+                EventsComingSoonScreen(
+                    isSelected: selectedTab == .events && !isPresentingAdd,
+                    userID: auth.state.session?.userID,
+                    repository: backend.eventsInterestRepository
+                )
                     .tabItem { tabItemLabel(for: .events) }
                     .tag(WanderTab.events)
 
@@ -542,13 +546,13 @@ struct WanderRootView: View {
             }
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
-            .overlay {
-                WanderNativeTabAppearance(colorScheme: systemColorScheme, selection: selectedTab)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
         }
         .tint(astirBrandMode.accent)
+        .background {
+            WanderNativeTabAppearance(selection: selectedTab)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -3218,73 +3222,88 @@ enum WanderTabBarWalkthroughTargetGeometry {
     }
 }
 
-/// Keep navigation in the user's appearance independently of black Events art.
-/// Keep one translucent material beneath the native controls on every tab.
-/// Never paint an opaque capsule over the content beneath Liquid Glass.
-private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
-    let colorScheme: ColorScheme
+/// A single root-owned coordinator configures the native bar across all tabs.
+/// A stable material behind the native bar prevents Liquid Glass from switching
+/// contrast modes when the selected content changes from paper to black film.
+private struct WanderNativeTabAppearance: UIViewRepresentable {
     let selection: WanderTab
 
-    func makeUIViewController(context: Context) -> Controller {
-        let controller = Controller()
-        controller.colorScheme = colorScheme
-        controller.selection = selection
-        return controller
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WanderTabFrameAnchorView {
+        let anchor = WanderTabFrameAnchorView()
+        anchor.isUserInteractionEnabled = false
+        anchor.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: WanderTabFrameAnchorView, _: UITraitCollection) in
+            view.onGeometryChange?(view)
+        }
+        anchor.onGeometryChange = { [weak coordinator = context.coordinator] anchor in
+            coordinator?.apply(from: anchor)
+        }
+        return anchor
     }
 
-    func updateUIViewController(_ controller: Controller, context: Context) {
-        controller.colorScheme = colorScheme
-        controller.selection = selection
-        controller.applyAppearance()
-        controller.scheduleAppearanceAfterSelection()
+    func updateUIView(_ anchor: WanderTabFrameAnchorView, context: Context) {
+        context.coordinator.apply(from: anchor)
+        context.coordinator.afterSelection(from: anchor)
     }
 
-    final class PlateView: UIVisualEffectView {}
+    static func dismantleUIView(_ anchor: WanderTabFrameAnchorView, coordinator: Coordinator) {
+        anchor.onGeometryChange = nil
+        coordinator.detach()
+    }
 
-    final class Controller: UIViewController {
-        var colorScheme: ColorScheme = .light
-        var selection: WanderTab = .map
+    @MainActor final class Coordinator {
+        private weak var bar: UITabBar?
+        private let material = UIVisualEffectView()
         private var selectionUpdate: Task<Void, Never>?
+        private var observations: [NSKeyValueObservation] = []
 
-        func scheduleAppearanceAfterSelection() {
+        init() {
+            material.isUserInteractionEnabled = false
+            material.accessibilityElementsHidden = true
+            material.clipsToBounds = true
+        }
+
+        func afterSelection(from anchor: UIView) {
             selectionUpdate?.cancel()
-            selectionUpdate = Task { @MainActor [weak self] in
+            selectionUpdate = Task { @MainActor [weak self, weak anchor] in
                 await Task.yield()
-                guard !Task.isCancelled else { return }
-                self?.applyAppearance()
+                guard !Task.isCancelled, let anchor else { return }
+                self?.apply(from: anchor)
             }
         }
 
-        override func loadView() {
-            view = UIView()
-            view.isUserInteractionEnabled = false
+        func detach() {
+            selectionUpdate?.cancel()
+            material.removeFromSuperview()
+            observations.removeAll()
+            bar = nil
         }
 
-        override func didMove(toParent parent: UIViewController?) {
-            super.didMove(toParent: parent)
-            applyAppearance()
-        }
-
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            applyAppearance()
-        }
-
-        override func viewDidLayoutSubviews() {
-            super.viewDidLayoutSubviews()
-            applyAppearance()
-        }
-
-        func applyAppearance() {
-            guard let tabs = tabBarController,
-                  tabs.selectedIndex == WanderTab.primaryTabs.firstIndex(of: selection) else { return }
-            let bar = tabs.tabBar
+        func apply(from anchor: UIView) {
+            guard let window = anchor.window,
+                  let bar = WanderNativeTabFrameReader.Coordinator.findTabBar(in: window) else { return }
+            if self.bar !== bar {
+                self.bar = bar
+                observations = [
+                    bar.observe(\.isHidden, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.alpha, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.center, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.bounds, options: [.new]) { [weak self] _, _ in self?.syncGeometry() }
+                ]
+            }
+            if let parent = bar.superview, material.superview !== parent {
+                material.removeFromSuperview()
+                parent.insertSubview(material, belowSubview: bar)
+            }
             bar.accessibilityIdentifier = "main.tabBar"
-            let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
-            if bar.overrideUserInterfaceStyle != style {
-                bar.overrideUserInterfaceStyle = style
+            let style: UIUserInterfaceStyle = window.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+            if bar.overrideUserInterfaceStyle != style { bar.overrideUserInterfaceStyle = style }
+            if material.overrideUserInterfaceStyle != style || material.effect == nil {
+                material.overrideUserInterfaceStyle = style
+                material.effect = UIBlurEffect(style: style == .dark ? .systemThinMaterialDark : .systemThinMaterialLight)
             }
-            let mode: AstirBrandMode = colorScheme == .dark ? .editorial : .editorialLight
+            let mode: AstirBrandMode = style == .dark ? .editorial : .editorialLight
             let traits = UITraitCollection(userInterfaceStyle: style)
             let ink = UIColor(cgColor: UIColor(mode.primaryText).resolvedColor(with: traits).cgColor)
             let accent = UIColor(cgColor: UIColor(mode.accent).resolvedColor(with: traits).cgColor)
@@ -3293,6 +3312,7 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
                 appearance?.stackedLayoutAppearance.selected.iconColor?.isEqual(accent) == true
             }
             let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
             for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
                 item.normal.iconColor = ink
                 item.normal.titleTextAttributes[.foregroundColor] = ink
@@ -3307,29 +3327,23 @@ private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
             }
             bar.unselectedItemTintColor = ink
             bar.tintColor = accent
+            syncGeometry()
+        }
+
+        private func syncGeometry() {
+            guard let bar, let parent = bar.superview else { material.isHidden = true; return }
             guard #available(iOS 26.0, *),
                   let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: WanderTab.primaryTabs),
-                  let first = controls.first else { return }
-            let controlFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
+                  let first = controls.first else { material.isHidden = true; return }
+            let controlsFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
                 $0.union(bar.convert($1.bounds, from: $1))
             }
-            let plateFrame = controlFrame.insetBy(dx: -4, dy: -4).intersection(bar.bounds)
-            guard !plateFrame.isEmpty else { return }
-            let container = view!
-            let plate = container.subviews.compactMap { $0 as? PlateView }.first ?? PlateView()
-            if plate.superview == nil {
-                plate.isUserInteractionEnabled = false
-                plate.accessibilityElementsHidden = true
-                container.addSubview(plate)
-            }
-            plate.frame = container.convert(plateFrame, from: bar)
-            plate.layer.cornerRadius = plateFrame.height / 2
-            plate.clipsToBounds = true
-            if plate.overrideUserInterfaceStyle != style {
-                plate.overrideUserInterfaceStyle = style
-                plate.effect = UIBlurEffect(style: style == .dark ? .systemThinMaterialDark : .systemThinMaterialLight)
-            }
-            plate.isHidden = bar.isHidden
+            let frame = controlsFrame.insetBy(dx: -4, dy: -4).intersection(bar.bounds)
+            guard !frame.isEmpty else { material.isHidden = true; return }
+            material.frame = parent.convert(frame, from: bar)
+            material.layer.cornerRadius = frame.height / 2
+            material.isHidden = bar.isHidden
+            material.alpha = bar.alpha
         }
     }
 }
@@ -3469,7 +3483,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
             }
         }
 
-        private static func findTabBar(in root: UIView) -> UITabBar? {
+        fileprivate static func findTabBar(in root: UIView) -> UITabBar? {
             if let tabBar = root as? UITabBar, !tabBar.isHidden, tabBar.alpha > 0 {
                 return tabBar
             }

@@ -215,6 +215,7 @@ final class WanderBackend: ObservableObject {
     let listSuggestionRepository: (any ListSuggestionRepository)?
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
+    let eventsInterestRepository: (any EventsInterestRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
@@ -262,6 +263,7 @@ final class WanderBackend: ObservableObject {
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
+            self.eventsInterestRepository = SupabaseEventsInterestRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
         } else {
             self.featureFlagRepository = nil
@@ -284,6 +286,7 @@ final class WanderBackend: ObservableObject {
             self.listSuggestionRepository = nil
             self.placePhotoRepository = nil
             self.notificationRepository = nil
+            self.eventsInterestRepository = nil
             self.sharedVisitRepository = nil
         }
     }
@@ -315,6 +318,7 @@ final class WanderBackend: ObservableObject {
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
+        eventsInterestRepository: (any EventsInterestRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
         featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
         placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
@@ -344,6 +348,7 @@ final class WanderBackend: ObservableObject {
         self.listSuggestionRepository = listSuggestionRepository
         self.placePhotoRepository = placePhotoRepository
         self.notificationRepository = notificationRepository
+        self.eventsInterestRepository = eventsInterestRepository
         self.sharedVisitRepository = sharedVisitRepository
     }
 
@@ -369,6 +374,7 @@ final class WanderBackend: ObservableObject {
             || placePhotoRepository != nil
             || notificationRepository != nil
             || sharedVisitRepository != nil
+            || eventsInterestRepository != nil
     }
 
     func socialImportUnderstandingProvider(

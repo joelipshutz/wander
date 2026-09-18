@@ -117,6 +117,11 @@ async function main() {
         console.log("ok - subtype detail answers round-trip, clear, and respect visibility");
         await client.query(readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8"));
         console.log("ok - owner visit details preserve answers without exposing another user’s history");
+        await client.query("savepoint events_interest_smoke");
+        await client.query(readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8"));
+        await client.query("rollback to savepoint events_interest_smoke");
+        await client.query("release savepoint events_interest_smoke");
+        console.log("ok - Events interest persists once per authenticated account and keeps its roster private");
         // Isolate pgTAP's per-transaction plan from the later history suite.
         await client.query("savepoint question_snapshot_smoke");
         try {
@@ -134,6 +139,7 @@ async function main() {
           strangerUserID,
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await client.query("reset role");
         await client.query("savepoint repeat_wanna_smoke");
         try {
           await client.query(transactionBody(
@@ -2579,6 +2585,7 @@ ${migrationPreviewTestSQL}
 
 -- This suite sets the JSON JWT claims, which take precedence over the scalar
 -- claims used below. Restore both its fixtures and session state afterward.
+reset role;
 savepoint repeat_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;
@@ -2587,6 +2594,10 @@ release savepoint repeat_wanna_smoke;
 reset role;
 ${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}
 ${readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8")}
+savepoint events_interest_smoke;
+${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
+rollback to savepoint events_interest_smoke;
+release savepoint events_interest_smoke;
 rollback;
 `;
 }

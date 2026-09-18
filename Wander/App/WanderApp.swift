@@ -139,7 +139,8 @@ struct WanderApp: App {
         let backendStore = usesSimulatorTestSession
             ? WanderBackend(
                 profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
-                notificationRepository: SimulatorNotificationRepository()
+                notificationRepository: SimulatorNotificationRepository(),
+                eventsInterestRepository: SimulatorEventsInterestRepository()
             )
             : WanderBackend(configuration: configuration, authSession: authStore)
         #else
