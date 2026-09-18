@@ -29,6 +29,15 @@ import UIKit
         app.launch()
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        // Accessibility can expose tabs while the launch image is still on
+        // screen. Establish the initial rendered appearance before measuring
+        // transitions; subsequent switches must pass without this wait.
+        let initialAppearance = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+            return isLight ? pixels.luminance > 0.55 : pixels.luminance < 0.45
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [initialAppearance], timeout: 5), .completed)
         capture("\(mode) — Map before Events")
         for (index, label) in ["Map", "Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
             tabs.buttons[label].tap()
@@ -41,7 +50,16 @@ import UIKit
             }
             if index == 1 { capture("\(mode) — Events") }
             if index == 8 { capture("\(mode) — Map after Events") }
-            let luminance = try tabBarLuminance(tabs.screenshot().image)
+            let barPixels = try pixelStats(tabs.screenshot().image)
+            let luminance = barPixels.luminance
+            XCTAssertGreaterThan(barPixels.signalPixels, 30, "The selected tab must keep the coral accent on \(label), step \(index).")
+            let inactive = tabs.buttons[label == "Map" ? "Feed" : "Map"]
+            let inactivePixels = try pixelStats(inactive.screenshot().image)
+            if isLight {
+                XCTAssertGreaterThan(inactivePixels.darkPixels, 30, "Inactive tab ink must contrast with the light bar.")
+            } else {
+                XCTAssertGreaterThan(inactivePixels.lightPixels, 30, "Inactive tab ink must contrast with the dark bar.")
+            }
             if isLight {
                 XCTAssertGreaterThan(luminance, 0.55, "Light bar became dark on \(label), step \(index).")
             } else {
@@ -52,7 +70,7 @@ import UIKit
 
     /// Measure the visible native bar, not a SwiftUI environment value. Cropping
     /// its interior excludes transparent rounded corners and the outer shadow.
-    private func tabBarLuminance(_ image: UIImage) throws -> Double {
+    private func pixelStats(_ image: UIImage) throws -> (luminance: Double, signalPixels: Int, darkPixels: Int, lightPixels: Int) {
         let cgImage = try XCTUnwrap(image.cgImage)
         let width = cgImage.width, height = cgImage.height
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -65,15 +83,22 @@ import UIKit
             ))
             context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
-        var total = 0.0, count = 0
+        var total = 0.0, count = 0, signalPixels = 0, darkPixels = 0, lightPixels = 0
         for y in (height / 5)..<(height * 4 / 5) {
             for x in (width / 10)..<(width * 9 / 10) {
                 let offset = (y * width + x) * 4
-                total += (0.2126 * Double(pixels[offset]) + 0.7152 * Double(pixels[offset + 1]) + 0.0722 * Double(pixels[offset + 2])) / 255
+                let red = Double(pixels[offset]) / 255
+                let green = Double(pixels[offset + 1]) / 255
+                let blue = Double(pixels[offset + 2]) / 255
+                let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+                total += luminance
+                if red > 0.5 && red > green * 1.3 && red > blue * 1.3 { signalPixels += 1 }
+                if luminance < 0.25 { darkPixels += 1 }
+                if luminance > 0.8 { lightPixels += 1 }
                 count += 1
             }
         }
-        return total / Double(count)
+        return (total / Double(count), signalPixels, darkPixels, lightPixels)
     }
 
     func testEventsIsMiddleNativeTabAndRepeatedSwitchesPreserveNavigation() {
@@ -104,6 +129,23 @@ import UIKit
         app.activate()
         XCTAssertTrue(artwork.waitForExistence(timeout: 5))
         capture("Events — after switching and foreground return")
+    }
+
+    func testTabBarHidesAndReturnsWithProfileNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                               "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
+        app.launch()
+        let preview = app.buttons["profile.yourMap.preview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 20))
+        preview.tap()
+        XCTAssertTrue(app.buttons["yourMap.snapshot"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
+        capture("Tab bar hidden — Your Map")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Profile"].isSelected)
+        capture("Tab bar restored — Profile")
     }
 
     func testTabSwitchPerformance() {
