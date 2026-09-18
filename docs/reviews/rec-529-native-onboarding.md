@@ -4,7 +4,32 @@ The review uses production Swift views. The local browser board displays simulat
 recordings and frames beside source copy, with pan/zoom, TV viewing and review notes.
 The implementation remains in draft PR #648 for creative review.
 
-## September 17 native material explorations
+## September 17 typography correction
+
+Joe rejected the pinched letterforms in the first three-finish preview. That pass
+combined Avenir Next Condensed Heavy with an additional horizontal-only squeeze.
+The distortion was in the native renderer; small preview panels made it harder to
+inspect. Commit `7a5125f` removes that transform and restores native bold monospaced
+letterforms. A single font size fits the available width and cap height uniformly.
+All three finishes now share identical font metrics; only their face material varies.
+
+The corrected build and all 22 focused welcome/photo unit checks passed in 2.095s
+(2.105s wall), recorded in `native-natural-type-tests.xcresult`. Routing, copy,
+mechanical flip timing and scene timing are unchanged. Updated recordings belong to
+`native-captures/finishes-natural-type/`; the rejected condensed take is retained in
+the review Archives. The comparison starts with large native views of the lettering;
+Replay switches to complete phone screens. Narrow windows stack all three options
+vertically instead of hiding two in a horizontal strip.
+
+All six replacement recordings reach the real account screen. Main-phone glyphs
+and the shared Station font on compact light/dark screens were visually inspected.
+Browser checks passed for the large letter view, full phone replay, seek/pause,
+focus, fullscreen, keyboard controls, and access to all three options at narrow
+width; no missing assets or JavaScript errors were found. Evidence is
+`native-board-qa/native-natural-type-report.json`. The published comparison uses
+the corrected set; the first condensed take is explicitly archived as rejected.
+
+## Prior native material explorations — typography superseded above
 
 Joe requested a maximum of three native explorations without Higgsfield credits.
 Station, Sculpted, and Graphic share the exact approved words, three-row geometry,
