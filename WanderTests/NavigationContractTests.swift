@@ -1167,6 +1167,16 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileSharePreviewProvidesReusableLocalBitmapData() throws {
+        let image = WanderSharePreviewArtwork.profile
+        XCTAssertTrue(image === WanderSharePreviewArtwork.profile)
+        XCTAssertNotNil(image.cgImage)
+        let data = try XCTUnwrap(image.pngData())
+        XCTAssertNotNil(UIImage(data: data))
+        XCTAssertEqual(image.size, CGSize(width: 96, height: 96))
+    }
+
+    @MainActor
     func testProfileMapImageAttachmentPreparationPreservesPixelsAndHonorsCancellation() async throws {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1

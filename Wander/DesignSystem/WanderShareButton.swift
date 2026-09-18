@@ -297,15 +297,33 @@ enum WanderShareAttachmentStore {
     }
 }
 
+@MainActor
+enum WanderSharePreviewArtwork {
+    // Symbol-backed SwiftUI Images do not supply bitmap data to ShareLink.
+    // Render this small placeholder once, without fetching profile artwork.
+    static let profile: UIImage = {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: CGSize(width: 96, height: 96), format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 96, height: 96))
+            UIImage(systemName: "person.crop.circle.fill")?
+                .withTintColor(.black, renderingMode: .alwaysOriginal)
+                .draw(in: CGRect(x: 16, y: 16, width: 64, height: 64))
+        }
+    }()
+}
+
 struct WanderShareButton<Label: View>: View {
     let content: WanderShareContent
-    private let preview: SharePreview<Never, Never>?
+    private let preview: SharePreview<Image, Never>?
     private let onTap: () -> Void
     private let label: () -> Label
 
     init(
         content: WanderShareContent,
-        preview: SharePreview<Never, Never>? = nil,
+        preview: SharePreview<Image, Never>? = nil,
         onTap: @escaping () -> Void = {},
         @ViewBuilder label: @escaping () -> Label
     ) {

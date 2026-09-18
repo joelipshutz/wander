@@ -452,7 +452,10 @@ struct ProfileOwnerHome: View {
                 ) {
                     WanderShareButton(
                         content: shareContent,
-                        preview: SharePreview(profile.displayName),
+                        preview: SharePreview(
+                            profile.displayName,
+                            image: Image(uiImage: WanderSharePreviewArtwork.profile)
+                        ),
                         onTap: shareAction
                     ) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
