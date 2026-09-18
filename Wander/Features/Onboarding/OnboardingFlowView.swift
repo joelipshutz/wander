@@ -204,6 +204,7 @@ struct OnboardingIdentityView: View {
         Binding(
             get: { handle },
             set: { value in
+                guard value != handle else { return }
                 handle = value
                 hasEditedHandle = true
                 availability = .idle
@@ -245,7 +246,7 @@ struct OnboardingIdentityView: View {
                                         } else {
                                             WanderAvatar(initials: avatarInitials,
                                                 avatarURL: avatarURL, size: 104,
-                                                color: AstirTheme.inkRaised.color)
+                                                color: AstirTheme.signal.color)
                                         }
                                     }
                                     .frame(width: 104, height: 104).clipShape(Circle())

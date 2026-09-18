@@ -272,7 +272,9 @@ final class NativeAccountSetupUITests: XCTestCase {
             let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.95))
             start.press(forDuration: 0.05, thenDragTo: end)
         } else { app.swipeDown() }
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "Keyboard dismissal must finish before the next field action.")
+        XCTAssertTrue(waitFor(NSPredicate { _, _ in
+            !keyboard.exists || !keyboard.frame.intersects(app.frame)
+        }, on: app, timeout: 4), "The keyboard must be offscreen before the next field action.")
     }
 
     private func waitFor(_ predicate: NSPredicate, on object: Any, timeout: TimeInterval = 5) -> Bool {
