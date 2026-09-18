@@ -8,6 +8,7 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case initialPresentation
     case profileSettings
     case sharedProfile
+    case feedPlaceProfile
 }
 
 struct WanderDeepLinkPresentationToken: Hashable, Sendable {
@@ -502,7 +503,15 @@ struct WanderRootView: View {
                 .tabItem { tabItemLabel(for: .map) }
                 .tag(WanderTab.map)
 
-            FeedScreen(onAdd: presentAddSheet)
+            FeedScreen(
+                presentationResetRequest: presentationResetRequest,
+                onPlaceProfilePresentation: handleDeepLinkPresentation,
+                onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
+                onPlaceProfileDidDismiss: {
+                    handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
+                },
+                onAdd: presentAddSheet
+            )
                 .tabItem { tabItemLabel(for: .discover) }
                 .tag(WanderTab.discover)
 
