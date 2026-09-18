@@ -695,33 +695,29 @@ struct SupabaseFeedRepository: FeedRepository {
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         let boundedLimit = min(max(limit, 1), 50)
-        let response: RemoteFollowedFeedPageDTO
-        do {
-            response = try await rpc.call(
-                "followed_feed",
-                params: FollowedFeedParams(
-                    before: before, limit: boundedLimit,
-                    includeFeatured: includesFeaturedPlaces ? nil : false
+        let response = try await followedFeedResponse(before: before, limit: boundedLimit)
+        // Reserve the artwork slot while the separate authorized-media read is
+        // pending. A non-renderable marker prevents the card from starting a
+        // provider-photo fallback that would be replaced by visit media later.
+        let pendingMediaByActivityID = Dictionary(
+            response.activity.map { item in
+                (
+                    item.id.lowercased(),
+                    [RemoteFeedMediaDTO(
+                        id: "pending:\(item.id.lowercased())",
+                        urlString: nil,
+                        storageBucket: nil,
+                        storagePath: nil,
+                        accessibilityLabel: "Activity photo loading"
+                    )]
                 )
-            )
-        } catch {
-            // Rolling deployments may briefly have the old RPC signature.
-            // Never retry auth, transport, or ordinary server failures here.
-            guard !includesFeaturedPlaces,
-                  Self.isMissingActivityOnlyOverload(error)
-            else { throw error }
-            response = try await rpc.call(
-                "followed_feed",
-                params: FollowedFeedParams(before: before, limit: boundedLimit)
-            )
-        }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
         // This projection uses the same server-authorized rows. Media arrives
         // later, so slow storage/signing cannot hold up the first Feed cards.
         let content = try await response.followedFeedPage(
-            mediaByActivityID: Dictionary(
-                response.activity.map { ($0.id.lowercased(), [RemoteFeedMediaDTO]()) },
-                uniquingKeysWith: { first, _ in first }
-            )
+            mediaByActivityID: pendingMediaByActivityID
         )
         try Task.checkCancellation()
         onContent(content)
@@ -730,14 +726,22 @@ struct SupabaseFeedRepository: FeedRepository {
                 UUID(uuidString: item.id)?.uuidString.lowercased()
             })
         ).sorted()
+        guard !activityIDs.isEmpty else {
+            return try await response.followedFeedPage()
+        }
+
         let mediaRows: [RemoteActivityMediaDTO]
-        if activityIDs.isEmpty {
-            mediaRows = []
-        } else {
-            mediaRows = (try? await rpc.call(
+        do {
+            mediaRows = try await rpc.call(
                 "activity_media",
                 params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
-            )) ?? []
+            )
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            // Keep the verified text page and neutral artwork placeholders.
+            // Falling back to an unrelated provider image here would make a
+            // later refresh visibly swap the wrong photo for the visit photo.
+            return content
         }
         let mediaByActivityID = Dictionary(
             mediaRows.map { ($0.activityID.lowercased(), $0.media) },
@@ -749,9 +753,61 @@ struct SupabaseFeedRepository: FeedRepository {
         )
     }
 
+    private func followedFeedResponse(
+        before: String?,
+        limit: Int
+    ) async throws -> RemoteFollowedFeedPageDTO {
+        do {
+            return try await followedFeedResponseAttempt(before: before, limit: limit)
+        } catch {
+            guard Self.isTransientTransportFailure(error) else { throw error }
+            try await Task.sleep(for: .milliseconds(150))
+            try Task.checkCancellation()
+            return try await followedFeedResponseAttempt(before: before, limit: limit)
+        }
+    }
+
+    private func followedFeedResponseAttempt(
+        before: String?,
+        limit: Int
+    ) async throws -> RemoteFollowedFeedPageDTO {
+        do {
+            return try await rpc.call(
+                "followed_feed",
+                params: FollowedFeedParams(
+                    before: before, limit: limit,
+                    includeFeatured: includesFeaturedPlaces ? nil : false
+                )
+            )
+        } catch {
+            // Rolling deployments may briefly have the old RPC signature.
+            // Never use the legacy projection for ordinary transport, auth,
+            // decoding, or server failures.
+            guard !includesFeaturedPlaces,
+                  Self.isMissingActivityOnlyOverload(error)
+            else { throw error }
+            return try await rpc.call(
+                "followed_feed",
+                params: FollowedFeedParams(before: before, limit: limit)
+            )
+        }
+    }
+
     static func isMissingActivityOnlyOverload(_ error: Error) -> Bool {
         guard case WanderRemoteError.invalidResponse(let message) = error else { return false }
         return message.contains("PGRST202") && message.contains("followed_feed")
+    }
+
+    static func isTransientTransportFailure(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return [
+            .timedOut,
+            .networkConnectionLost,
+            .cannotConnectToHost,
+            .cannotFindHost,
+            .dnsLookupFailed,
+            .notConnectedToInternet
+        ].contains(error.code)
     }
 }
 

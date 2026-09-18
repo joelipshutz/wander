@@ -6,6 +6,29 @@ import XCTest
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    func testPostcardArtworkWaitsForVerifiedActivityMedia() {
+        XCTAssertFalse(
+            ActivityPostcardArtworkPolicy.showsPlacePhoto(
+                hasVisiblePlace: true,
+                mediaCount: 1
+            ),
+            "A pending or resolved activity-media item must suppress the unrelated place fallback"
+        )
+        XCTAssertFalse(
+            ActivityPostcardArtworkPolicy.showsDecorativeFallback(
+                hasVisiblePlace: true,
+                mediaCount: 1
+            )
+        )
+        XCTAssertTrue(
+            ActivityPostcardArtworkPolicy.showsPlacePhoto(
+                hasVisiblePlace: true,
+                mediaCount: 0
+            ),
+            "The verified no-activity-photo result may use the place photo"
+        )
+    }
+
     func testShareDestinationTrayUsesTheRequestedOrderAndRoutes() {
         XCTAssertEqual(
             ActivityShareDestination.allCases,
