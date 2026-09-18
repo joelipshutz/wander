@@ -768,11 +768,96 @@ protocol CurrentLocationProviding {
     func currentLocation() async throws -> CLLocation
 }
 
+/// One device-local location, retained after Allow Once expires. Never uploaded or
+/// used as a live location indicator. Only a newer authorized fix replaces it.
+@MainActor
+struct LastSharedLocationStore {
+    static let storageKey = "wander.lastSharedLocation.v1"
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    var location: CLLocation? {
+        guard let record = defaults.array(forKey: Self.storageKey) as? [Double],
+              record.count == 4
+        else { return nil }
+        let location = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: record[0], longitude: record[1]),
+            altitude: 0, horizontalAccuracy: record[2], verticalAccuracy: -1,
+            timestamp: Date(timeIntervalSince1970: record[3])
+        )
+        return Self.isValid(location) ? location : nil
+    }
+
+    func remember(_ newLocation: CLLocation) {
+        guard Self.isValid(newLocation),
+              location.map({ $0.timestamp <= newLocation.timestamp }) ?? true
+        else { return }
+        defaults.set([
+            newLocation.coordinate.latitude, newLocation.coordinate.longitude,
+            newLocation.horizontalAccuracy, newLocation.timestamp.timeIntervalSince1970
+        ], forKey: Self.storageKey)
+    }
+
+    static func isValid(_ location: CLLocation) -> Bool {
+        location.coordinate.latitude.isFinite
+            && location.coordinate.longitude.isFinite
+            && CLLocationCoordinate2DIsValid(location.coordinate)
+            && location.horizontalAccuracy.isFinite
+            && location.horizontalAccuracy >= 0
+            && location.timestamp.timeIntervalSince1970.isFinite
+            && location.timestamp.timeIntervalSinceNow <= 120
+    }
+}
+
+@MainActor
+struct MapLaunchLocationResolver {
+    // Ocean Park neighborhood in Santa Monica, California.
+    static let oceanPark = CLLocationCoordinate2D(latitude: 34.0036, longitude: -118.4808)
+    private let history: LastSharedLocationStore
+    private let provider: any CurrentLocationProviding
+
+    init(
+        history: LastSharedLocationStore = LastSharedLocationStore(),
+        provider: (any CurrentLocationProviding)? = nil
+    ) {
+        self.history = history
+        self.provider = provider ?? CoreLocationProvider(purpose: .map, history: history)
+    }
+
+    var fallbackLocation: CLLocation {
+        history.location ?? CLLocation(
+            latitude: Self.oceanPark.latitude, longitude: Self.oceanPark.longitude
+        )
+    }
+
+    func location() async throws -> CLLocation {
+        do {
+            return try await provider.currentLocation()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            try Task.checkCancellation()
+            return fallbackLocation
+        }
+    }
+}
+
+enum CurrentLocationPurpose {
+    case nearbyPlace
+    /// Launch/search/recenter must never request permission implicitly. Approximate
+    /// location is sufficient for a map, even when it cannot identify a nearby POI.
+    case map
+}
+
 /// The small manager boundary lets tests deliver callbacks without using device location.
 @MainActor
 protocol CurrentLocationManaging: AnyObject {
     var delegate: (any CLLocationManagerDelegate)? { get set }
     var authorizationStatus: CLAuthorizationStatus { get }
+    var accuracyAuthorization: CLAccuracyAuthorization { get }
     var desiredAccuracy: CLLocationAccuracy { get set }
     func requestWhenInUseAuthorization()
     func requestLocation()
@@ -783,13 +868,19 @@ extension CLLocationManager: CurrentLocationManaging {}
 
 @MainActor
 final class CoreLocationProvider: CurrentLocationProviding {
+    private let purpose: CurrentLocationPurpose
+    private let history: LastSharedLocationStore
     private let makeManager: () -> any CurrentLocationManaging
     private let sleep: @MainActor (Duration) async throws -> Void
 
     init(
+        purpose: CurrentLocationPurpose = .nearbyPlace,
+        history: LastSharedLocationStore = LastSharedLocationStore(),
         makeManager: @escaping () -> any CurrentLocationManaging = { CLLocationManager() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
+        self.purpose = purpose
+        self.history = history
         self.makeManager = makeManager
         self.sleep = sleep
     }
@@ -797,8 +888,12 @@ final class CoreLocationProvider: CurrentLocationProviding {
     func currentLocation() async throws -> CLLocation {
         try Task.checkCancellation()
         // Separate ownership prevents overlapping callers from replacing continuations.
-        let request = CurrentLocationRequest(manager: makeManager(), sleep: sleep)
-        return try await request.location()
+        let request = CurrentLocationRequest(
+            manager: makeManager(), purpose: purpose, history: history, sleep: sleep
+        )
+        let location = try await request.location()
+        try Task.checkCancellation()
+        return location
     }
 }
 
@@ -808,13 +903,22 @@ private final class CurrentLocationRequest: NSObject, @preconcurrency CLLocation
     private static let maximumHorizontalAccuracy: CLLocationAccuracy = 300
     private static let attemptTimeout: Duration = .seconds(6)
     private let manager: any CurrentLocationManaging
+    private let purpose: CurrentLocationPurpose
+    private let history: LastSharedLocationStore
     private let sleep: @MainActor (Duration) async throws -> Void
     private var continuation: CheckedContinuation<CLLocation, Error>?
     private var timeoutTask: Task<Void, Never>?
     private var hasStartedAcquisition = false
 
-    init(manager: any CurrentLocationManaging, sleep: @escaping @MainActor (Duration) async throws -> Void) {
+    init(
+        manager: any CurrentLocationManaging,
+        purpose: CurrentLocationPurpose,
+        history: LastSharedLocationStore,
+        sleep: @escaping @MainActor (Duration) async throws -> Void
+    ) {
         self.manager = manager
+        self.purpose = purpose
+        self.history = history
         self.sleep = sleep
         super.init()
     }
@@ -827,7 +931,11 @@ private final class CurrentLocationRequest: NSObject, @preconcurrency CLLocation
                 manager.delegate = self
                 manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
                 if manager.authorizationStatus == .notDetermined {
-                    manager.requestWhenInUseAuthorization()
+                    if purpose == .map {
+                        finish(with: .failure(PlaceResolutionError.locationDenied))
+                    } else {
+                        manager.requestWhenInUseAuthorization()
+                    }
                 } else {
                     handleAuthorization()
                 }
@@ -843,6 +951,9 @@ private final class CurrentLocationRequest: NSObject, @preconcurrency CLLocation
         guard continuation != nil else { return }
         switch manager.authorizationStatus {
         case .notDetermined:
+            if hasStartedAcquisition {
+                finish(with: .failure(PlaceResolutionError.locationDenied))
+            }
             return // The initial delegate callback is not a permission decision.
         case .authorizedAlways, .authorizedWhenInUse:
             guard !hasStartedAcquisition else { return }
@@ -877,8 +988,20 @@ private final class CurrentLocationRequest: NSObject, @preconcurrency CLLocation
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard hasStartedAcquisition,
-              let location = locations
-                .filter({ Self.isUsableLocation($0) })
+              self.manager.authorizationStatus == .authorizedAlways
+                || self.manager.authorizationStatus == .authorizedWhenInUse
+        else { return }
+
+        // A valid approximate share still belongs in Map's fallback even if
+        // the requesting Add flow needs a more precise fix to identify a POI.
+        if let sharedLocation = locations
+            .filter({ isUsableLocation($0, for: .map) })
+            .max(by: { $0.timestamp < $1.timestamp }) {
+            history.remember(sharedLocation)
+        }
+
+        guard let location = locations
+                .filter({ isUsableLocation($0, for: purpose) })
                 .max(by: { $0.timestamp < $1.timestamp })
         else {
             // A one-shot request may return stale/coarse data. Keep the deadline
@@ -905,10 +1028,12 @@ private final class CurrentLocationRequest: NSObject, @preconcurrency CLLocation
         continuation.resume(with: result)
     }
 
-    private static func isUsableLocation(_ location: CLLocation) -> Bool {
-        guard location.horizontalAccuracy >= 0,
-              location.horizontalAccuracy <= maximumHorizontalAccuracy
+    private func isUsableLocation(_ location: CLLocation, for purpose: CurrentLocationPurpose) -> Bool {
+        let allowsApproximateLocation = purpose == .map
+            && manager.accuracyAuthorization == .reducedAccuracy
+        guard LastSharedLocationStore.isValid(location),
+              allowsApproximateLocation || location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
         else { return false }
-        return abs(location.timestamp.timeIntervalSinceNow) <= maximumLocationAge
+        return abs(location.timestamp.timeIntervalSinceNow) <= Self.maximumLocationAge
     }
 }

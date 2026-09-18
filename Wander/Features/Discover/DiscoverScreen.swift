@@ -2257,7 +2257,7 @@ struct PeopleRecommendationCard: View {
             .background(showsFollowing ? brandMode.recessedBackground : brandMode.accent)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             .disabled(showsFollowing)
-            .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: followFeedbackTrigger)
+            .sensoryFeedback(.impact(weight: .medium, intensity: 1), trigger: followFeedbackTrigger)
             .accessibilityLabel(showsFollowing ? "Following \(profile.displayName)" : didFollowFail ? "Couldn't follow \(profile.displayName). Try again" : "Follow \(profile.displayName)")
             .accessibilityIdentifier("people.recommendation.\(profile.id).follow")
         }

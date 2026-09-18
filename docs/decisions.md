@@ -219,11 +219,19 @@ existing horizontal rail margins. Accessibility sizes widen cards to 240 points
 and allow content to grow vertically. Following and retry feedback stays inside
 the button so standard cards do not jump in height.
 
-Tapping Follow gives one light haptic and immediately shows Following while
+Tapping Follow gives one medium-impact haptic and immediately shows Following while
 the request syncs in the background. A pending card uses the same appearance as
 a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
 Failed requests restore the in-button retry action; server completion does not
 generate another haptic.
+
+September 17 device feedback increased that single tap to medium impact at full
+intensity. Feed postcard photos use the existing background image decoder with
+a separate 48 MiB / 24-entry cache. Decode dimensions follow the card's display
+size in 64-pixel buckets, capped at 2,048 pixels. Local visit photos retain
+priority over authorized remote URLs; missing local files fall back remotely.
+A changed source or layout request cannot display an earlier request's image.
+Original upload data and full-screen photo behavior are unchanged.
 
 Featured's views, models, and original database projection remain available.
 `FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
@@ -256,3 +264,25 @@ Do not add a live shader, network dependency, playback UI, or per-frame SwiftUI
 state to this decorative surface. No event data, waitlist, booking, or RSVP
 behavior is implied by the teaser. The source and asset handoff are documented
 in `docs/designs/events-coming-soon/README.md`.
+
+## 2026-09-17 — Map opening location precedence (REC-539)
+
+On ordinary app opening, center Map on a fresh authorized device location. While
+acquiring it, or when permission is unavailable or acquisition fails, use the
+most recently shared location. With no recorded location, center on Ocean Park,
+Santa Monica, California. Saved places and Featured results never choose the
+launch camera. Explicit place navigation and gestures take precedence over a
+late location response.
+
+Retain one timestamped valid location locally on the device, including locations
+obtained through Allow Once. Keep it after temporary permission expires or
+permission is disabled; only a newer authorized fix replaces it. This is a map
+fallback, not a live location indicator or a location history. Do not sync this
+record or put coordinates in analytics. Older installations without a recorded fix
+cannot reconstruct a past one-time share.
+
+Map location acquisition does not prompt for permission on launch. Approximate
+permission is sufficient for centering the map; nearby POI resolution retains
+its stricter accuracy requirement. Cancel obsolete launch requests and retry
+when the app returns from the background or authorization changes. Preserve the
+existing deterministic Los Angeles viewport only for explicit debug fixtures.
