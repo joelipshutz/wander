@@ -3053,6 +3053,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
         app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
         app.launch()
 
         let page = app.descendants(matching: .any)["onboarding.carouselPage"]
@@ -3060,7 +3061,7 @@ final class OnboardingUITests: XCTestCase {
         for index in 1...3 {
             expectation(for: NSPredicate(format: "value == %@", String(index)), evaluatedWith: page)
             waitForExpectations(timeout: 3)
-            XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
+            XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
             XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
             let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             screenshot.name = "REC-447 splash page \(index)"
@@ -3071,30 +3072,105 @@ final class OnboardingUITests: XCTestCase {
             }
         }
         // Manual paging must remain available in both directions.
-        app.swipeRight()
-        expectation(for: NSPredicate(format: "value == %@", "2"), evaluatedWith: page)
-        waitForExpectations(timeout: 3)
+        for index in [2, 1] {
+            app.swipeRight()
+            expectation(for: NSPredicate(format: "value == %@", String(index)), evaluatedWith: page)
+            waitForExpectations(timeout: 3)
+        }
     }
 
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
-        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "2"
+        // The opening takes 17.1 seconds, then both real benefit
+        // pages receive their reading time before the finite flow opens signup.
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
+        // Start the timed observation with the real Play control. Simulator
+        // automation setup can take longer than the opening's reading interval.
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
         app.launch()
 
-        XCTAssertTrue(app.buttons["onboarding.getStarted"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
         let carouselPage = app.descendants(matching: .any)["onboarding.carouselPage"]
-        XCTAssertTrue(carouselPage.waitForExistence(timeout: 2))
-        let startingPage = carouselPage.value as? String ?? ""
-        XCTAssertTrue(["1", "2", "3"].contains(startingPage))
+        XCTAssertTrue(carouselPage.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["onboarding.next"].exists)
+        XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
+        app.buttons["onboarding.pause"].tap()
+        let signupDeadline = Date().addingTimeInterval(39)
         expectation(
-            for: NSPredicate(format: "value != %@", startingPage),
+            for: NSPredicate(format: "value == %@", "2"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 3)
-        XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
+        XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
+        expectation(
+            for: NSPredicate(format: "value == %@", "3"),
+            evaluatedWith: carouselPage
+        )
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
+        XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
+        XCTAssertTrue(app.textFields["auth.email"].waitForExistence(
+            timeout: max(0.1, signupDeadline.timeIntervalSinceNow)
+        ))
+        XCTAssertTrue(app.staticTexts["Create your account"].exists)
+        XCTAssertTrue(app.buttons["auth.continueWithApple"].exists)
+        XCTAssertFalse(carouselPage.exists)
+    }
+
+    func testWelcomeLoginVerificationSurvivesBackground() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
+        app.launch()
+        let login = app.buttons["onboarding.logIn"]
+        XCTAssertTrue(login.waitForExistence(timeout: 8))
+        login.tap()
+        let email = app.textFields["auth.email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 8))
+        email.tap()
+        email.typeText("opening@example.test")
+        let send = app.buttons["auth.continueWithEmail"]
+        if !send.isHittable { app.swipeUp() }
+        send.tap()
+        let code = app.textFields["auth.emailCode"]
+        XCTAssertTrue(code.waitForExistence(timeout: 8))
+        code.tap()
+        code.typeText("123")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(code.waitForExistence(timeout: 8))
+        XCTAssertEqual(code.value as? String, "123")
+        XCTAssertTrue(app.staticTexts["Enter the verification code sent to opening@example.test."].exists)
+        app.buttons["auth.close"].tap()
+        XCTAssertTrue(login.waitForExistence(timeout: 8))
+        login.tap()
+        XCTAssertTrue(email.waitForExistence(timeout: 8))
+        XCTAssertFalse(code.exists)
+    }
+
+    func testWelcomeNextAndLoginOpenActualAuthFlows() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
+        app.launch()
+        let next = app.buttons["onboarding.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        next.tap()
+        next.tap()
+        next.tap()
+        XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["auth.continueWithApple"].exists)
+        XCTAssertTrue(app.staticTexts["Create your account"].exists)
+        app.buttons["auth.close"].tap()
+        XCTAssertTrue(app.buttons["onboarding.logIn"].waitForExistence(timeout: 5))
+        app.buttons["onboarding.logIn"].tap()
+        XCTAssertTrue(app.buttons["auth.usePassword"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Welcome back"].exists)
+        app.buttons["auth.close"].tap()
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
     }
 
     func testLoggedOutLoginExposesAppleGoogleEmailAndPasswordWithoutClerkSheet() {

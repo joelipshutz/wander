@@ -775,15 +775,13 @@ struct FeedScreen: View {
             followingProfileIDs.insert(recommendation.profile.id)
             followFailedProfileIDs.remove(recommendation.profile.id)
             Task { @MainActor in
-                let succeeded = await store.follow(
+                await Task.yield()
+                let succeeded = await store.followRecommendation(
                     userID: recommendation.profile.id,
-                    source: .profile,
                     backend: auth.isSignedIn ? backend : nil
                 )
                 followingProfileIDs.remove(recommendation.profile.id)
-                if succeeded {
-                    await refresh()
-                } else {
+                if !succeeded {
                     followFailedProfileIDs.insert(recommendation.profile.id)
                 }
             }
@@ -1090,9 +1088,9 @@ private struct FeedPeopleSurface: View {
             followFailedProfileIDs.remove(profileID)
 
             Task { @MainActor in
-                let succeeded = await store.follow(
+                await Task.yield()
+                let succeeded = await store.followRecommendation(
                     userID: profileID,
-                    source: .profile,
                     backend: backend
                 )
                 followInFlightProfileIDs.remove(profileID)
