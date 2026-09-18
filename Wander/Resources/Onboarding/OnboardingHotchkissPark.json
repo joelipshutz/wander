@@ -1,0 +1,19 @@
+{
+  "provider": "google_places",
+  "provider_place_id": "ChIJhfviD9W6woAR5UzoGcChwpY",
+  "provider_primary_type": "park",
+  "provider_types": [
+    "park",
+    "tourist_attraction",
+    "point_of_interest",
+    "establishment"
+  ],
+  "width": 3024,
+  "height": 4032,
+  "author_name": "Вікторія Савченко",
+  "author_profile_url": "https://maps.google.com/maps/contrib/104597371845453034945",
+  "author_avatar_url": "https://lh3.googleusercontent.com/a-/ALV-UjWjxnodMGGhQo3M6j57Dp3n6cN4p1JA1XoNoZqVjzIfeKwLADXAVg=s100-p-k-no-mo",
+  "source_photo_url": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sCIHM0ogKEICAgICZ-PqNDg!2e10!4m2!3m1!1s0x80c2bad50fe2fb85:0x96c2a1c019e84ce5",
+  "flag_content_url": "https://www.google.com/local/content/rap/report?postId=!1e10!2sCIHM0ogKEICAgICZ-PqNDg&t=27&cb_client=maps_api_places.places_api&hl=en-US",
+  "photo_url": "bundled://onboarding/hotchkiss-park-2026-09-17"
+}

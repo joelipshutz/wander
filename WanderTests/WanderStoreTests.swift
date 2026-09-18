@@ -9815,6 +9815,64 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Tombstoned Place" }?.userPlace.syncState, .tombstoned)
     }
 
+    func testRecommendationFollowDoesNotPublishGraphUntilAcknowledgedOrRefreshUnrelatedSurfaces() async {
+        let store = makeStore()
+        let repository = FakeFollowRepository()
+        repository.shouldSuspendFollow = true
+        let backend = WanderBackend(followRepository: repository)
+        let task = Task { await store.followRecommendation(userID: "user_sofia", backend: backend) }
+        for _ in 0..<100 where !repository.hasSuspendedFollowRequest { await Task.yield() }
+        XCTAssertTrue(repository.hasSuspendedFollowRequest)
+        XCTAssertFalse(store.viewerFollows("user_sofia"),
+                       "Pending card feedback must not invalidate the shared graph before the network yields")
+        repository.resumeFollow()
+        let acknowledged = await task.value
+        XCTAssertTrue(acknowledged)
+        XCTAssertTrue(store.hasAcknowledgedFollow(to: "user_sofia"))
+        XCTAssertEqual(repository.followedUserIDs, ["user_sofia"])
+        XCTAssertTrue(repository.followingUserIDs.isEmpty, "Follow must not reload the whole graph")
+        XCTAssertTrue(repository.followersUserIDs.isEmpty, "Follow must not reload the whole graph")
+    }
+
+    func testRecommendationFollowFailureLeavesGraphUnchangedAndCanRetry() async {
+        let store = makeStore()
+        let failing = FakeFollowRepository(error: TestError.expected)
+        let failed = await store.followRecommendation(userID: "user_sofia", backend: WanderBackend(followRepository: failing))
+        XCTAssertFalse(failed)
+        XCTAssertFalse(store.viewerFollows("user_sofia"))
+        let retry = FakeFollowRepository()
+        let succeeded = await store.followRecommendation(userID: "user_sofia", backend: WanderBackend(followRepository: retry))
+        XCTAssertTrue(succeeded)
+        XCTAssertTrue(store.hasAcknowledgedFollow(to: "user_sofia"))
+    }
+
+    func testRecommendationFollowDoesNotApplyAcknowledgmentToAnotherAccount() async {
+        let store = makeStore()
+        let repository = FakeFollowRepository()
+        repository.shouldSuspendFollow = true
+        let backend = WanderBackend(followRepository: repository)
+        let task = Task { await store.followRecommendation(userID: "user_sofia", backend: backend) }
+        for _ in 0..<100 where !repository.hasSuspendedFollowRequest { await Task.yield() }
+        XCTAssertTrue(repository.hasSuspendedFollowRequest)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_second", displayName: "Second", handle: "second")))
+        repository.resumeFollow()
+        let acknowledged = await task.value
+        XCTAssertFalse(acknowledged)
+        XCTAssertFalse(store.viewerFollows("user_sofia"))
+    }
+
+    func testRecommendationFollowRejectsBlockedUsersAndDoesNotResubmitAcknowledgedEdges() async {
+        let store = makeStore()
+        let repository = FakeFollowRepository()
+        let backend = WanderBackend(followRepository: repository)
+        store.block(userID: "user_sofia")
+        let blocked = await store.followRecommendation(userID: "user_sofia", backend: backend)
+        let existing = await store.followRecommendation(userID: "user_maya", backend: backend)
+        XCTAssertFalse(blocked)
+        XCTAssertTrue(existing)
+        XCTAssertTrue(repository.followedUserIDs.isEmpty)
+    }
+
     func testRemoteFollowFailureLeavesFailedLocalFollow() async {
         let store = makeStore()
         let followRepository = FakeFollowRepository(error: WanderRemoteError.invalidResponse("network down"))
@@ -12073,6 +12131,9 @@ private final class FakeFollowRepository: FollowRepository {
     private(set) var followingUserIDs: [String] = []
     private(set) var relationshipUserIDs: [String] = []
     var shouldSuspendFollowing = false
+    var shouldSuspendFollow = false
+    private var followContinuation: CheckedContinuation<Void, Never>?
+    var hasSuspendedFollowRequest: Bool { followContinuation != nil }
     private var followingContinuation: CheckedContinuation<[ProfileShell], Error>?
 
     var hasSuspendedFollowingRequest: Bool { followingContinuation != nil }
@@ -12091,6 +12152,9 @@ private final class FakeFollowRepository: FollowRepository {
 
     func follow(userID: String) async throws {
         followedUserIDs.append(userID)
+        if shouldSuspendFollow {
+            await withCheckedContinuation { followContinuation = $0 }
+        }
         if let error {
             throw error
         }
@@ -12126,6 +12190,11 @@ private final class FakeFollowRepository: FollowRepository {
     func resumeFollowing() {
         followingContinuation?.resume(returning: followingResult)
         followingContinuation = nil
+    }
+
+    func resumeFollow() {
+        followContinuation?.resume()
+        followContinuation = nil
     }
 }
 
