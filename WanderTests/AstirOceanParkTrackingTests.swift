@@ -30,7 +30,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
     }
 
     @MainActor
-    func testSchedulerSleepsUntilFirstOnsetAndDoesNotTickDuringQuietHold() async {
+    func testSchedulerStartsAfterThreeSecondsThenUsesRandomIntervalsWithoutIdleTicks() async {
         var time: TimeInterval = 0
         var intervals = [55.0, 65.0, 60.0]
         var sleeps: [TimeInterval] = []
@@ -42,7 +42,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
             now: { time },
             sleep: { delay in
                 sleeps.append(delay)
-                if time > 120 { throw CancellationError() }
+                if time > 123 { throw CancellationError() }
                 time += delay
             },
             update: { frame in
@@ -51,11 +51,12 @@ final class AstirOceanParkTrackingTests: XCTestCase {
                 finalFrame = frame
             }
         )
-        XCTAssertEqual(onsets, [55, 120])
-        XCTAssertEqual(sleeps.first, 55)
+        XCTAssertEqual(onsets, [3, 58, 123])
+        XCTAssertEqual(sleeps.first, 3)
         let longSleeps = sleeps.filter { $0 > 1 }
-        XCTAssertEqual(longSleeps.count, 2)
-        XCTAssertEqual(longSleeps[1], 64.04, accuracy: 0.00001)
+        XCTAssertEqual(longSleeps.count, 3)
+        XCTAssertEqual(longSleeps[1], 54.04, accuracy: 0.00001)
+        XCTAssertEqual(longSleeps[2], 64.04, accuracy: 0.00001)
         XCTAssertNil(finalFrame, "Cancellation restores the original still label.")
     }
 
@@ -118,7 +119,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
         await AstirOceanParkTracking.run(
             nextInterval: { 60 }, now: { time },
             sleep: { delay in
-                if time >= 120 { throw CancellationError() }
+                if time >= 63 { throw CancellationError() }
                 time += delay
             },
             update: { frame in
@@ -131,7 +132,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
                 wasActive = frame != nil
             }
         )
-        XCTAssertEqual(onsets, [60, 120])
+        XCTAssertEqual(onsets, [3, 63])
         XCTAssertLessThan(activeFrames, 10)
     }
 }
