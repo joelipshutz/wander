@@ -4,7 +4,7 @@ import SwiftUI
 /// The scheduler sleeps between episodes; only this label owns frame updates.
 enum AstirOceanParkTracking {
     static let initialDelay: TimeInterval = 3
-    static let interval: ClosedRange<TimeInterval> = 55...65
+    static let interval: ClosedRange<TimeInterval> = 25...30
     static let duration: TimeInterval = 0.96
     static let frameInterval: TimeInterval = 1.0 / 24
 
