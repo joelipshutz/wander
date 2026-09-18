@@ -9,7 +9,7 @@ struct NUXReviewControls: View {
         Menu {
             Menu("Playback · applies on replay") {
                 Toggle("Advance manually", isOn: $manual)
-                Text("Slide/fade · original quote · 5 seconds")
+                Text("Map → your Feed · Next or automatic")
             }
             Menu("Map tour") {
                 scene("M01 · Featured / replay", .mapFeatured)
@@ -18,12 +18,11 @@ struct NUXReviewControls: View {
                 scene("M04 · Search", .mapSearch)
                 scene("M05 · Plus", .mapAdd)
                 scene("M06 · Pin legend", .mapPinLegend)
-                scene("N25 · Map ending", .mapSendoff)
             }
-            Menu("First voluntary visits") {
-                scene("C01 · Nearby Places", .addNearby)
+            Menu("Feed and first-use hints") {
+                scene("C01 · Nearby search", .addNearby)
+                scene("C01 · Import saved places", .addImport)
                 scene("C02 · Feed", .feedActivity)
-                scene("C03 · Lists", .listsScope)
                 scene("C04 · Check In / Wanna", .placeSaveActions)
             }
         } label: {

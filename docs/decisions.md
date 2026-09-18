@@ -21,11 +21,11 @@ direct Log in. Profile setup requires a
 name, available username, and saved photo; its header previews the profile live.
 Following is an explicit action on each person, with search and retry states.
 
-The first-visit tour explains the actual Map controls in order: Featured, Friends,
-More, Search, Plus, then pin meanings. It ends on the usable Map and does not force
-a save. The second-launch import lesson is retired. Short contextual guidance
-appears when an enrolled new user voluntarily opens Plus, Feed, Lists, or a place.
-Established accounts are not newly enrolled by this change.
+The first-visit tour explains Map controls in order: Featured, Friends, More,
+Search, Plus, then pin meanings. It continues directly into the user's current
+Feed and ends at the Feed top without forcing a save. Independent first-use
+annotations remain for Plus and place profiles; Lists and scheduled follow-on
+NUX are retired. Established accounts are not newly enrolled by this change.
 
 The delayed supporting line “Keep track of everywhere you’ve been. Keep up with
 the people you love.” is the current review baseline; supporting-copy alternatives
@@ -37,25 +37,22 @@ recorded in the implementation PR and `docs/reviews/rec-529-native-onboarding.md
 
 ### September 18 post-onboarding NUX selections
 
-Ryan selected slide/fade coaches and the original N25 quote with a five-second
-ending and an Enjoy button. The More highlight follows only the dropdown panel,
-not the source-filter button above it.
+Slide/fade remains selected. The quote/Enjoy ending is removed. After Map rings,
+the app slides into the user's actual current Feed. A people tile stays sharp
+with “Connect with your circle,” then the blur clears and the Feed scrolls to
+center the latest actual activity tile. Its entire bounds—including the footer—
+remain unblurred with “Keep up with their moments.” Both beats have Next and
+finite automatic playback. The page clears and returns to the top to finish.
+Completion is account-scoped and does not repeat on later visits. Missing data
+is not replaced with example content. The old multi-card scroll is not restored.
 
-On the first voluntary place-profile visit, the profile is moderately blurred
-while the real floating Check In/Wanna buttons and static handwritten annotations
-remain sharp. That focus moment lasts 3.5 seconds, has no Next/Skip control,
-then clears before one 1.4-second diagonal bottom-left to top-right glimmer
-crosses each button. It is consumed once for the enrolled account; later place profiles work
-normally. Reduce Motion keeps the timed static explanation and omits the sweep.
-The actual actions remain usable throughout.
-
-The Feed scroll experiment is removed. First entry now uses a stationary
-5.65-second sequence: moderately blur around a real people tile and annotate
-“Connect with your circle,” briefly clear, then refocus on an available recent
-activity tile with “Keep up with the happenings of your people.” Completion is
-account-scoped and persists; later entries do not repeat it. Missing or offscreen
-tiles are skipped without scrolling or inventing content. Starter lists will be
-entered later; this pass must not create them.
+On the first voluntary + opening, guide nearby search and the import entry with
+“Search nearby places” and “Import your saved places from Instagram, TikTok and
+Google Maps.” Normal source actions remain usable. On first place-profile entry,
+keep the 3.5-second moderate blur, static annotations and real floating buttons,
+then one 1.4-second diagonal glimmer. Wanna copy is “Places you wanna go.” No
+Next/Skip on the profile; Reduce Motion omits its sweep. Later visits are normal.
+The More highlight continues to hug only its dropdown. Starter lists are deferred.
 
 ## Astir Events engineering direction (REC-467)
 

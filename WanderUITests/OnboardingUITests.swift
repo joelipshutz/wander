@@ -696,7 +696,7 @@ final class OnboardingUITests: XCTestCase {
 
     func testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving() {
         let app = XCUIApplication()
-        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep"]
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderNUXFeedFixture"]
         app.launch()
         for target in ["mapFeatured", "mapFriends", "mapMoreFilters", "mapSearch", "mapAdd", "mapPinLegend"] {
             let coach = app.descendants(matching: .any)["walkthrough.map.\(target)"]
@@ -715,24 +715,26 @@ final class OnboardingUITests: XCTestCase {
             captureNUX("\(target)")
             app.buttons["walkthrough.next.map.\(target)"].tap()
         }
-        let ending = app.buttons["walkthrough.next.sendoff.mapSendoff"]
-        XCTAssertTrue(ending.waitForExistence(timeout: 8))
-        XCTAssertEqual(ending.label, "Skip")
-        captureNUX("N25")
-        ending.tap()
-        XCTAssertTrue(ending.waitForNonExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
-        XCTAssertTrue(app.buttons["Map"].isSelected)
+        let people = app.staticTexts["walkthrough.feed.feedActivity.circle"]
+        XCTAssertTrue(people.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Feed"].isSelected)
+        XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
+        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForExistence(timeout: 6))
+        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["people.recommendation.user_ryan.profile"].isHittable)
     }
 
-    func testNativeFinaleAutomaticallyReturnsToUsableMap() {
+    func testMapRingsAutomaticallyContinueIntoFeedAndFinishAtTop() {
         let app = XCUIApplication()
-        app.launchArguments = nativeOverviewArguments + ["-WanderWalkthroughTarget", "mapSendoff"]
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "mapPinLegend"]
         app.launch()
-        let ending = app.buttons["walkthrough.next.sendoff.mapSendoff"]
-        XCTAssertTrue(ending.waitForExistence(timeout: 18))
-        XCTAssertTrue(ending.waitForNonExistence(timeout: 9))
-        XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
+        XCTAssertTrue(app.buttons["Feed"].waitForExistence(timeout: 20))
+        let selected = expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: app.buttons["Feed"])
+        wait(for: [selected], timeout: 12)
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
         XCTAssertFalse(app.buttons["Close add place"].exists)
     }
 
@@ -802,7 +804,17 @@ final class OnboardingUITests: XCTestCase {
         captureNUX("C01")
         app.buttons["walkthrough.next.add.addNearby"].tap()
         XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Close add place"].exists)
+        let imports = app.staticTexts["walkthrough.add.addImport"]
+        XCTAssertTrue(imports.waitForExistence(timeout: 5))
+        XCTAssertTrue(imports.label.contains("Instagram, TikTok"))
+        captureNUX("C01-import")
+        app.buttons["walkthrough.next.add.addImport"].tap()
+        XCTAssertTrue(imports.waitForNonExistence(timeout: 3))
+        app.buttons["Close add place"].tap()
+        app.buttons["map.headerAdd"].tap()
+        XCTAssertTrue(app.buttons["Close add place"].waitForExistence(timeout: 5))
+        XCTAssertFalse(coach.exists)
+        XCTAssertFalse(imports.exists)
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
     }
 
@@ -827,7 +839,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.buttons["invite.primaryAction"].exists)
     }
 
-    func testFeedIntroductionFocusesTwoTilesWithoutScrollingAndDoesNotRepeat() {
+    func testFeedIntroductionCentersWholeLatestTileThenReturnsToTopWithoutRepeating() {
         let app = XCUIApplication()
         app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity"]
         app.launch()
@@ -838,9 +850,14 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
-        XCTAssertEqual(app.staticTexts["Recent"].frame.minY, headingY, accuracy: 2,
-                       "The Feed introduction must not move the page.")
+        XCTAssertLessThan(app.staticTexts["Recent"].frame.minY, headingY - 50,
+                          "Only the latest card should be brought into view.")
+        XCTAssertEqual(recent.label, "Keep up with their moments")
+        XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
         XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
+        let returned = expectation(for: NSPredicate(format: "hittable == true"),
+                                   evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
+        wait(for: [returned], timeout: 4)
         XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
         app.buttons["Map"].tap()
         app.buttons["Feed"].tap()
@@ -848,17 +865,13 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(recent.exists)
     }
 
-    func testListsHintEndsOnListsWithoutStartingAnotherTour() {
+    func testListsHasNoNUXAfterThePrimaryTour() {
         let app = XCUIApplication()
-        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "listsScope"]
+        app.launchArguments = nativeOverviewArguments + ["-WanderWalkthroughTarget", "feedActivity"]
         app.launch()
-        let coach = app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-        XCTAssertTrue(coach.waitForExistence(timeout: 18))
-        captureNUX("C03")
-        app.buttons["walkthrough.next.lists.listsScope"].tap()
-        XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Lists"].isSelected)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
+        XCTAssertTrue(app.buttons["Lists"].waitForExistence(timeout: 20))
+        app.buttons["Lists"].tap()
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.lists.listsScope"].exists)
     }
 
     func testRetiredImportLaunchArgumentDoesNotPresentN26() {

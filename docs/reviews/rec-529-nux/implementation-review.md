@@ -118,3 +118,25 @@ the native recommendation cards. Ordinary accounts still use their real
 recommendations. No live follow, save, list or account mutation is introduced.
 C04 uses the same verified implementation with 3.5 seconds of focus and a
 1.4-second button sweep. Analytics events and payloads are unchanged.
+
+
+## Map-to-live-Feed takeover revision
+
+The active primary path is Map → Feed. The quote view and its obsolete finale
+renderer are removed; an old quote checkpoint resumes at Feed. Feed retains
+its existing account-scoped completion key, so completed lessons do not replay.
+Primary completion now occurs at Feed completion, without waiting for a later
+device guide. Lists and scheduled later lessons no longer interrupt normal use.
+
+The Feed spotlight reads anchors from real recommendation and activity views.
+A short scroll request asks the existing ScrollViewReader to center the newest
+actual group; the cutout preserves the entire card bounds, rather than clipping
+its footer at the tab bar. The page clears before each scroll, and completion
+returns to the top. Next cancels the current beat timer and advances one phase;
+VoiceOver keeps a beat until Next. Reduce Motion removes fades and scroll motion.
+No Feed fetch, sort, follow, save or content replacement is introduced by this flow.
+
+The first-use Add lesson now has two native targets: the nearby search field and
+import entry. Both use handwritten annotation/blur and Next. Real source actions
+continue to work. Profile focus/glimmer timing is unchanged, with updated Wanna
+copy. Event names and analytics properties remain unchanged.

@@ -23,10 +23,10 @@ and its broader UI limits are recorded in `docs/reviews/rec-529-native-onboardin
 Contact-to-member matching is not implemented by the current invite provider, so
 the permission purpose must not promise matching. Plans/Events, curated starter
 lists and stone/material icon choices remain
-separate decisions. Ryan selected the existing original finale quote, a five-second
-timeout with Enjoy, and slide/fade motion on September 18. Starter-list entry is
-deferred. The Feed scroll exploration was rejected in favor of a first-entry,
-two-stage blur and annotation sequence on the people and recent activity tiles.
+separate decisions. The latest September 18 direction removes the quote finale and routes Map
+rings directly into a live Feed takeover. Only the latest complete activity card
+is centered between blur annotations; completion returns to Feed top. Slide/fade
+remains selected. Starter-list entry is deferred.
 
 ## Astir Events product and implementation gates (REC-467)
 

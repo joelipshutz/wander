@@ -296,6 +296,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
+    @State private var nuxFeedEntranceProgress: CGFloat = 0
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
@@ -516,6 +517,9 @@ struct WanderRootView: View {
                 },
                 onAdd: presentAddSheet
             )
+                .visualEffect { [nuxFeedEntranceProgress] content, geometry in
+                    content.offset(x: geometry.size.width * nuxFeedEntranceProgress)
+                }
                 .tabItem { tabItemLabel(for: .discover) }
                 .tag(WanderTab.discover)
 
@@ -1195,6 +1199,7 @@ struct WanderRootView: View {
         Binding {
             selectedTab
         } set: { newTab in
+            guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
                 presentAddSheet()
             } else {
@@ -2400,8 +2405,15 @@ struct WanderRootView: View {
                 isPresentingAdd = false
             }
         case .feed:
+            nuxFeedEntranceProgress = selectedTab == .map && !accessibilityReduceMotion ? 1 : 0
             selectedTab = .discover
             isPresentingAdd = false
+            Task { @MainActor in
+                await Task.yield()
+                withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.4)) {
+                    nuxFeedEntranceProgress = 0
+                }
+            }
         case .events:
             selectedTab = .events
             isPresentingAdd = false
@@ -2445,8 +2457,9 @@ struct WanderRootView: View {
             if isPresentingAdd {
                 await Task.yield()
             } else {
-                try? await Task.sleep(for: .milliseconds(220))
+                try? await Task.sleep(for: .milliseconds(surface == .feed ? 450 : 220))
             }
+            guard walkthroughSurface(for: selectedTab) == surface || isPresentingAdd else { return }
             walkthroughs.consumeRequestedSurface(surface)
             walkthroughs.activate(surface)
         }

@@ -305,6 +305,7 @@ struct FeedScreen: View {
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
                 .walkthroughTarget(.feedActivity)
+                .id("nux.feed.top")
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
             .astirScrollTracking(
@@ -321,6 +322,9 @@ struct FeedScreen: View {
                     walkthroughs.dismissCurrentContext()
                 }
             })
+            .onChange(of: walkthroughs.feedIntroductionScrollTarget, initial: true) { _, target in
+                scrollForIntroduction(target, proxy: proxy)
+            }
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await refresh()
@@ -330,6 +334,24 @@ struct FeedScreen: View {
             }
             .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
+                scrollForIntroduction(walkthroughs.feedIntroductionScrollTarget, proxy: proxy)
+            }
+        }
+    }
+
+    private func scrollForIntroduction(_ target: NUXFeedScrollTarget?, proxy: ScrollViewProxy) {
+        guard let target, walkthroughs.currentStep?.target == .feedActivity else { return }
+        switch target {
+        case .top:
+            resetFloatingHeaderScrollTracking(revealHeader: true)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo("nux.feed.top", anchor: .top)
+            }
+        case .recent:
+            guard let id = FeedPresentation.groupedActivity(page?.activity ?? []).first?.id else { return }
+            setFloatingHeaderHidden(true)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo(id, anchor: .center)
             }
         }
     }
@@ -343,6 +365,7 @@ struct FeedScreen: View {
         surface: FeedSurface
     ) {
         guard selectedSurface == surface, !isShowingSearch else { return }
+        if walkthroughs.feedIntroductionScrollTarget == .recent { return }
 
         if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
             lastFeedScrollOffset = scrollOffset

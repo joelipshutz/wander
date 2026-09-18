@@ -700,9 +700,9 @@ struct AddScreen: View {
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
-                .walkthroughTarget(.addNearby)
 
             searchField
+                .walkthroughTarget(.addNearby)
 
             if isLoadingSuggestions {
                 HStack(spacing: WanderTheme.spacing2) {

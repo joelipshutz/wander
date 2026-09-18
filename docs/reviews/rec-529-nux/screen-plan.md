@@ -1,5 +1,14 @@
 # Astir · Post-onboarding NUX plan
 
+> Latest direction: remove the quote screen; Map rings slide into the user's
+> actual Feed. Focus a real people tile, clear, center and fully unblur the latest
+> activity tile with “Keep up with their moments,” then clear and return to Feed
+> top. Both Feed beats have Next. The primary NUX ends there. First + has nearby
+> search and Instagram/TikTok/Google Maps import annotations. First profile keeps
+> its focus/glimmer with “Places you wanna go.” Lists and scheduled later NUX are
+> retired. Earlier alternatives below are historical; see README.md for current flow.
+
+
 **Latest September 18 revision:** remove the Feed scroll experiment. C02 now
 focuses a real people tile (“Connect with your circle”), clears briefly, then
 focuses a visible recent activity tile (“Keep up with the happenings of your

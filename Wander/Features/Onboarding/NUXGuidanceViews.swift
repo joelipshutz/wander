@@ -120,13 +120,17 @@ private struct NUXButtonGlimmer: View {
     }
 }
 
+enum NUXFeedScrollTarget: Equatable {
+    case top, recent
+}
+
 enum NUXFeedIntroductionTiming {
-    static let arrivalMilliseconds = 250
+    static let arrivalMilliseconds = 200
     static let readinessMilliseconds = 350
-    static let focusMilliseconds = 2_400
-    static let clearMilliseconds = 400
-    static let exitMilliseconds = 200
-    static let totalMilliseconds = arrivalMilliseconds + focusMilliseconds * 2 + clearMilliseconds + exitMilliseconds
+    static let focusMilliseconds = 2_200
+    static let clearMilliseconds = 150
+    static let scrollMilliseconds = 350
+    static let totalMilliseconds = arrivalMilliseconds + focusMilliseconds * 2 + clearMilliseconds * 2 + scrollMilliseconds * 2
 }
 
 enum NUXFeedFocus: String, CaseIterable {
@@ -134,36 +138,40 @@ enum NUXFeedFocus: String, CaseIterable {
 
     var target: WalkthroughTargetID { self == .circle ? .feedCircle : .feedRecent }
     var message: String {
-        self == .circle ? "Connect with\nyour circle" : "Keep up with the\nhappenings of your people"
+        self == .circle ? "Connect with\nyour circle" : "Keep up with\ntheir moments"
     }
 
     func visibleFrame(in targets: [WalkthroughTargetID: CGRect], size: CGSize, safeTop: CGFloat) -> CGRect? {
-        guard let target = targets[self.target] else { return nil }
-        // Keep the highlight above the tab bar. A tall recent card may extend
-        // below the viewport; focus its visible part without moving the Feed.
-        let viewport = CGRect(x: 12, y: safeTop + 90, width: max(0, size.width - 24),
-                              height: max(0, size.height - safeTop - 210))
-        let visible = target.intersection(viewport)
-        guard !visible.isNull, visible.width >= 60, visible.height >= 60 else { return nil }
-        return visible
+        guard let target = targets[self.target], target.width >= 60, target.height >= 60 else { return nil }
+        let viewport = CGRect(x: 12, y: safeTop + 70, width: max(0, size.width - 24),
+                              height: max(0, size.height - safeTop - 170))
+        guard target.intersects(viewport) else { return nil }
+        // The recent tile is centered by the real Feed scroll view. Preserve
+        // its entire bounds, including attribution and engagement actions.
+        return target
     }
 }
 
-/// Two stationary first-entry annotations over the actual Feed. The material
-/// samples the live page through a cutout; it does not copy cards or scroll.
+/// A takeover of the current Feed: people, then the complete latest activity,
+/// then back to the top. Only the real scroll view moves; no copied/example card.
 struct NUXFeedIntroduction: View {
+    private enum Phase: String { case arriving, circle, centering, recent, returning, finished }
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brand
     @State private var hasStarted = false
-    @State private var focus: NUXFeedFocus?
+    @State private var phase: Phase = .arriving
     @State private var latestTargets: [WalkthroughTargetID: CGRect] = [:]
     let targets: [WalkthroughTargetID: CGRect]
     let size: CGSize
     let safeTop: CGFloat
+    let scroll: (NUXFeedScrollTarget?) -> Void
     let finish: () -> Void
 
     private var ink: Color { brand.prefersDarkInterface ? .white : .black }
+    private var focus: NUXFeedFocus? {
+        switch phase { case .circle: .circle; case .recent: .recent; default: nil }
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -173,64 +181,93 @@ struct NUXFeedIntroduction: View {
                         NUXFeedSpotlightCutout(frame: frame.insetBy(dx: -3, dy: -3))
                             .fill(.black, style: FillStyle(eoFill: true))
                     }
+                    .allowsHitTesting(false)
                     .accessibilityHidden(true)
                 annotation(focus, frame: frame)
+                    .allowsHitTesting(false)
+                Button("Next", systemImage: "arrow.right") {
+                    move(to: phase == .circle ? .centering : .returning)
+                }
+                .font(.system(.subheadline, weight: .semibold))
+                .foregroundStyle(brand.primaryText)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(.regularMaterial, in: Capsule())
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("walkthrough.next.feed.feedActivity")
+                .position(x: size.width - 62, y: max(82, safeTop + 28))
             }
         }
         .frame(width: size.width, height: size.height)
-        .allowsHitTesting(false)
         .onChange(of: targets, initial: true) { _, value in latestTargets = value }
-        .task(id: scenePhase) {
+        .task(id: "\(phase.rawValue)-\(scenePhase)") {
             guard scenePhase == .active else {
-                if hasStarted { focus = nil; finish() }
+                if hasStarted { scroll(nil); finish() }
                 return
             }
-            guard !hasStarted else { return }
             hasStarted = true
+            let runningPhase = phase
             do {
-                try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.arrivalMilliseconds))
-                // Allow the initial local/remote layout to settle. Missing or
-                // offscreen tiles are skipped; never spotlight a loading shell.
-                for _ in 0..<(NUXFeedIntroductionTiming.readinessMilliseconds / 50) {
-                    if NUXFeedFocus.allCases.allSatisfy({ $0.visibleFrame(in: latestTargets, size: size, safeTop: safeTop) != nil }) { break }
-                    try await Task.sleep(for: .milliseconds(50))
-                }
-                let available = NUXFeedFocus.allCases.filter {
-                    $0.visibleFrame(in: latestTargets, size: size, safeTop: safeTop) != nil
-                }
-                for (index, beat) in available.enumerated() {
-                    setFocus(beat)
-                    if FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture {
-                        #if DEBUG
-                        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedRecent") {
-                            setFocus(available.last)
-                        }
-                        #endif
+                switch runningPhase {
+                case .arriving:
+                    scroll(.top)
+                    try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.arrivalMilliseconds))
+                    try await waitForTarget(.circle)
+                    #if DEBUG
+                    if FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
+                       ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedRecent") {
+                        move(to: .centering)
                         return
                     }
+                    #endif
+                    move(to: frame(for: .circle) == nil ? .centering : .circle)
+                case .circle, .recent:
+                    guard !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
+                          !UIAccessibility.isVoiceOverRunning else { return }
                     try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.focusMilliseconds))
-                    setFocus(nil)
-                    try await Task.sleep(for: .milliseconds(index == available.count - 1
-                        ? NUXFeedIntroductionTiming.exitMilliseconds : NUXFeedIntroductionTiming.clearMilliseconds))
+                    guard phase == runningPhase, !Task.isCancelled else { return }
+                    move(to: runningPhase == .circle ? .centering : .returning)
+                case .centering:
+                    try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.clearMilliseconds))
+                    scroll(.recent)
+                    try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.scrollMilliseconds))
+                    try await waitForTarget(.recent)
+                    move(to: frame(for: .recent) == nil ? .returning : .recent)
+                case .returning:
+                    try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.clearMilliseconds))
+                    scroll(.top)
+                    try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.scrollMilliseconds))
+                    move(to: .finished)
+                case .finished:
+                    scroll(nil)
+                    finish()
                 }
-                finish()
-            } catch {
-                focus = nil
-            }
+            } catch { /* Phase changes cancel only the previous beat's timer. */ }
         }
-        .onDisappear { focus = nil }
+        .onDisappear { scroll(nil) }
     }
 
-    private func setFocus(_ value: NUXFeedFocus?) {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { focus = value }
+    private func frame(for focus: NUXFeedFocus) -> CGRect? {
+        focus.visibleFrame(in: latestTargets, size: size, safeTop: safeTop)
+    }
+
+    private func waitForTarget(_ focus: NUXFeedFocus) async throws {
+        for _ in 0..<(NUXFeedIntroductionTiming.readinessMilliseconds / 50) {
+            if frame(for: focus) != nil { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    private func move(to value: Phase) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) { phase = value }
     }
 
     private func annotation(_ focus: NUXFeedFocus, frame: CGRect) -> some View {
         let beside = focus == .circle && size.width - frame.maxX > 135
         let width = beside ? min(180, size.width - frame.maxX - 24) : min(320, size.width - 40)
         let x = beside ? frame.maxX + 12 + width / 2 : size.width / 2
-        let y = beside ? frame.midY - 12 : max(safeTop + 135, frame.minY - 72)
-        let start = beside ? CGPoint(x: x - width / 2 + 8, y: y + 38) : CGPoint(x: x, y: y + 38)
+        let y = beside ? frame.midY - 12 : max(safeTop + 100, frame.minY - 62)
+        let start = beside ? CGPoint(x: x - width / 2 + 8, y: y + 38) : CGPoint(x: x, y: y + 32)
         let end = beside ? CGPoint(x: frame.maxX + 5, y: frame.midY + 28) : CGPoint(x: frame.midX, y: frame.minY - 8)
         return ZStack(alignment: .topLeading) {
             NUXHandDrawnOval()
@@ -313,13 +350,21 @@ struct NUXGuidanceOverlay: View {
     let next: () -> Void
     var showsNext = true
 
-    private var handwritten: Bool { step.target == .addNearby || step.target == .placeSaveActions }
+    private var handwritten: Bool { step.surface == .add || step.target == .placeSaveActions }
     private var ink: Color { brand.prefersDarkInterface ? .white : .black }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Group {
-                if handwritten {
+                if step.surface == .add {
+                    NUXFeedBackdropBlur()
+                        .mask {
+                            NUXFeedSpotlightCutout(frame: target.insetBy(dx: -3, dy: -3))
+                                .fill(.black, style: FillStyle(eoFill: true))
+                        }
+                        .accessibilityHidden(true)
+                    addAnnotation
+                } else if handwritten {
                     annotations
                 } else {
                     if step.surface == .map, step.target != .mapMoreFilters {
@@ -395,6 +440,32 @@ struct NUXGuidanceOverlay: View {
         .opacity(entered ? 1 : 0)
     }
 
+    private var addAnnotation: some View {
+        let isImport = step.target == .addImport
+        let text = isImport ? "Import your saved places\nfrom Instagram, TikTok\nand Google Maps" : "Search nearby places"
+        let y = max(76, target.minY - (isImport ? 76 : 38))
+        return ZStack(alignment: .topLeading) {
+            NUXHandDrawnOval()
+                .stroke(ink, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                .frame(width: target.width + 10, height: target.height + 10)
+                .position(x: target.midX, y: target.midY)
+                .accessibilityHidden(true)
+            NUXHandDrawnArrow(start: CGPoint(x: size.width / 2, y: y + (isImport ? 44 : 15)),
+                              end: CGPoint(x: target.midX, y: target.minY - 6), bend: 18)
+                .stroke(ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.custom("Noteworthy-Bold", size: 19, relativeTo: .title3))
+                .foregroundStyle(ink)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: size.width - 44)
+                .rotationEffect(.degrees(-2))
+                .position(x: size.width / 2, y: y)
+                .accessibilityIdentifier("walkthrough.\(step.id)")
+        }
+    }
+
     @ViewBuilder
     private var annotations: some View {
         if step.target == .placeSaveActions {
@@ -402,7 +473,7 @@ struct NUXGuidanceOverlay: View {
                 annotation("Places you’ve\nbeen", target: checkIn, side: -1)
             }
             if let wanna = additionalTargets[.placeWanna] {
-                annotation("Places you\nwant to go", target: wanna, side: 1)
+                annotation("Places you\nwanna go", target: wanna, side: 1)
             }
         } else {
             annotation("Your nearby places\nwill show up here", target: target, side: 1)
@@ -476,61 +547,5 @@ struct NUXHandDrawnArrow: Shape {
             path.addLine(to: CGPoint(x: end.x - 10 * cos(angle + offset), y: end.y - 10 * sin(angle + offset)))
         }
         return path
-    }
-}
-
-struct NUXConnectionFinale: View {
-    @Environment(\.astirBrandMode) private var brand
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var visible = false
-    let step: WalkthroughStep
-    let size: CGSize
-    let finish: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Rectangle().fill(.ultraThinMaterial).opacity(0.88)
-            VStack(spacing: 22) {
-                Text("ASTIR")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .tracking(2).foregroundStyle(brand.accentText)
-                Text(step.message)
-                    .font(.system(size: min(30, size.width * 0.075), weight: .medium, design: .serif))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(brand.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Your map is yours now.")
-                    .font(AstirTypography.body)
-                    .foregroundStyle(brand.secondaryText)
-                    .multilineTextAlignment(.center)
-                Button("Enjoy") { finish() }
-                    .font(AstirTypography.control)
-                    .foregroundStyle(brand.accentText)
-                    .frame(minWidth: 100, minHeight: 44)
-                    .accessibilityIdentifier("nux.finale.enjoy")
-            }
-            .frame(width: size.width - 48)
-            .position(x: size.width / 2, y: size.height * 0.45)
-            .opacity(visible ? 1 : 0)
-            .offset(y: visible || reduceMotion ? 0 : 14)
-            Button("Skip", action: finish)
-                .font(.system(.subheadline, weight: .medium))
-                .foregroundStyle(brand.primaryText)
-                .frame(width: 72, height: 44)
-                .padding(.top, 62).padding(.trailing, 16)
-                .accessibilityIdentifier("walkthrough.next.\(step.id)")
-        }
-        .frame(width: size.width, height: size.height)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("walkthrough.\(step.id)")
-        .task(id: "\(scenePhase)-\(reduceMotion)") {
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.5)) { visible = true }
-            guard scenePhase == .active, !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
-                  !UIAccessibility.isVoiceOverRunning, !reduceMotion else { return }
-            try? await Task.sleep(for: .milliseconds(FirstVisitWalkthroughContent.finaleAutoAdvanceMilliseconds))
-            guard !Task.isCancelled else { return }
-            finish()
-        }
     }
 }
