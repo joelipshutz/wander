@@ -24,7 +24,18 @@ passed its unchanged isolated recheck (53.242s). The first automatic attempt
 remained paused after its Play tap. A separate 0.1-second place-category
 performance limit exceeded its threshold under the shared workload (0.1213s,
 then 0.1022s); it remains recorded rather than changing the threshold or claiming
-a clean full suite. Replacement capture checks are in the local task ledger.
+a clean full suite.
+
+Native source `b7ff1f4` has six complete full-phone recordings, all verified
+through account creation. Opening, flutter, final phrase and native benefit
+frames were inspected in each finish and appearance. Shared compact dark/light
+layouts passed visual inspection. The browser preserves the complete phone
+during playback and seeking, and state bookmarks use observed native text.
+All six files played and sought to account creation with no browser errors;
+TV sizing fits all three phones. W00–W02 and the four-state brief are refreshed.
+The local ledger and `native-board-qa/native-full-board-report.json` preserve
+source/media hashes and the full test boundaries. Both owned devices are shut
+down. The previous analog gallery remains archived.
 
 ## September 17 analog flutter refinement
 
