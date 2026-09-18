@@ -3,9 +3,58 @@ import UIKit
 @testable import Wander
 
 final class OnboardingWelcomeTests: XCTestCase {
+    func testLeadFadesBeforeTheFinalFlapsStart() {
+        let content = OnboardingTickerContent(words: ["people", "places"], finalLockup: "a local experiment")
+        let start = OnboardingTickerFrame.wordSeconds + OnboardingTickerFrame.holdSeconds
+        XCTAssertEqual(OnboardingTickerFrame.leadOpacity(elapsed: start - 0.18, content: content), 1, accuracy: 0.00001)
+        XCTAssertEqual(OnboardingTickerFrame.leadOpacity(elapsed: start - 0.09, content: content), 0.5, accuracy: 0.00001)
+        XCTAssertFalse(OnboardingTickerFrame.at(elapsed: start - 0.09, content: content).isTransitioning)
+        XCTAssertEqual(OnboardingTickerFrame.leadOpacity(elapsed: start, content: content), 0)
+        XCTAssertTrue(OnboardingTickerFrame.at(elapsed: start, content: content).isFinalTransition)
+        XCTAssertEqual(OnboardingTickerFrame.leadOpacity(elapsed: 99, content: .init(words: ["people"])), 1)
+    }
+
+    func testEveryFlutterHasExactlyFourHapticTapsIncludingTheFinalPhrase() {
+        let content = OnboardingWelcomeConfiguration.current.ticker!
+        var cursor = OnboardingFlapHapticCursor()
+        var taps = [Int]()
+        for time in stride(from: 0.0, through: OnboardingTickerFrame.totalDuration(for: content), by: 1.0 / 60) {
+            if let tap = cursor.advance(to: time, playing: true, content: content) { taps.append(tap) }
+        }
+        XCTAssertEqual(taps, Array(repeating: [0, 1, 2, 3], count: 4).flatMap { $0 })
+    }
+
+    func testHapticsDoNotCatchUpAfterPauseOrDroppedFrames() {
+        let content = OnboardingTickerContent(words: ["people", "places"])
+        let firstTap = OnboardingTickerFrame.holdSeconds + OnboardingTickerFrame.flipSeconds * 0.1
+        var cursor = OnboardingFlapHapticCursor()
+        XCTAssertNil(cursor.advance(to: firstTap - 0.01, playing: true, content: content))
+        XCTAssertNil(cursor.advance(to: firstTap, playing: false, content: content))
+        XCTAssertNil(cursor.advance(to: firstTap + 0.01, playing: true, content: content))
+        XCTAssertNil(cursor.advance(to: firstTap + 0.8, playing: true, content: content))
+        XCTAssertNil(cursor.advance(to: .infinity, playing: true, content: content))
+        XCTAssertNil(cursor.advance(to: firstTap - 0.01, playing: true, content: content))
+        XCTAssertEqual(cursor.advance(to: firstTap, playing: true, content: content), 0)
+        XCTAssertNil(cursor.advance(to: firstTap, playing: true, content: content), "Repeated frames cannot duplicate a tap.")
+    }
+
+    @MainActor
+    func testHiddenOuterRowsRevealWithoutLeavingStaleLayers() throws {
+        let from = OnboardingBoardCopy.openingRows(word: "places")
+        let to = OnboardingBoardCopy.finalRows("a local experiment")
+        let reused = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 170))
+        reused.update(from: from, to: from, progress: 1, isDark: true, minimumColumns: 10, outerRowsOpacity: 0)
+        let singleRow = try renderedBoard(reused)
+        reused.update(from: from, to: to, progress: 1, isDark: true, minimumColumns: 10, outerRowsOpacity: 1)
+        let fresh = OnboardingFlapSurfaceView(frame: reused.frame)
+        fresh.update(from: to, to: to, progress: 1, isDark: true, minimumColumns: 10)
+        XCTAssertNotEqual(singleRow, try renderedBoard(fresh))
+        XCTAssertEqual(try renderedBoard(reused), try renderedBoard(fresh))
+    }
+
     @MainActor
     func testRetainedFlapsSettleToTheSamePixelsAsAnInitiallyStaticBoard() throws {
-        let from = OnboardingBoardCopy.openingRows(lead: "Connect with your", word: "community")
+        let from = OnboardingBoardCopy.openingRows(word: "community")
         let to = OnboardingBoardCopy.finalRows("a local experiment")
         for finish in OnboardingFlapFinish.allCases {
             let animated = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 127))
@@ -23,7 +72,7 @@ final class OnboardingWelcomeTests: XCTestCase {
 
     @MainActor
     func testRetainedFlapsRebuildTheirFacesWhenAppearanceOrFinishChanges() throws {
-        let rows = OnboardingBoardCopy.openingRows(lead: "Connect with your", word: "people")
+        let rows = OnboardingBoardCopy.openingRows(word: "people")
         let reused = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 127))
         reused.update(from: rows, to: rows, progress: 1, isDark: false)
         let light = try renderedBoard(reused)
@@ -218,19 +267,19 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertFalse(frame.showsFinalLockup)
     }
 
-    func testSplitFlapUsesTwoContinuousPhysicalFlipsAndSettlesOnExactTarget() {
-        let starts = (0..<2).map { index in
-            OnboardingSplitFlapFrame.at(progress: Double(index) / 2, from: "q", to: "z", column: 0)
+    func testSplitFlapUsesSevenContinuousPhysicalFlipsAndSettlesOnExactTarget() {
+        let starts = (0..<7).map { index in
+            OnboardingSplitFlapFrame.at(progress: Double(index) / 7, from: "q", to: "z", column: 0)
         }
         XCTAssertEqual(starts[0].from, "q")
-        XCTAssertEqual(starts[1].to, "z")
+        XCTAssertEqual(starts[6].to, "z")
         XCTAssertTrue(starts.allSatisfy { $0.from != $0.to })
         XCTAssertTrue(starts.allSatisfy { abs($0.progress) < 0.000001 })
         for index in 1..<starts.count {
             XCTAssertEqual(starts[index - 1].to, starts[index].from, "Each flap begins where the previous physical flip ended.")
             XCTAssertTrue("ABCDEFGHIJKLMNOPQRSTUVWXYZ".contains(starts[index].from))
             let almostFinished = OnboardingSplitFlapFrame.at(
-                progress: Double(index) / 2 - 0.00001, from: "q", to: "z", column: 0
+                progress: Double(index) / 7 - 0.00001, from: "q", to: "z", column: 0
             )
             XCTAssertEqual(almostFinished.to, starts[index].from)
             XCTAssertGreaterThan(almostFinished.progress, 0.999)
@@ -241,9 +290,9 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertEqual(settled.progress, 1)
     }
 
-    func testBoardKeepsThreeUniformUppercaseRowsAndMiddleWord() {
-        let opening = OnboardingBoardCopy.openingRows(lead: "Connect with your", word: "loved ones")
-        XCTAssertEqual(opening, ["CONNECT WITH YOUR", "LOVED ONES", ""])
+    func testOpeningBoardContainsOnlyTheWordAndReservesTheFinalRows() {
+        let opening = OnboardingBoardCopy.openingRows(word: "loved ones")
+        XCTAssertEqual(opening, ["", "LOVED ONES", ""])
         let final = OnboardingBoardCopy.finalRows("a local experiment")
         XCTAssertEqual(final, ["A", "LOCAL", "EXPERIMENT"])
         let places = OnboardingBoardCopy.benefitRows( .places)

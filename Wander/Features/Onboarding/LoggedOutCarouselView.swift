@@ -328,6 +328,7 @@ struct OnboardingTickerView: View {
     let isPlaying: Bool
     @State private var startedAt = Date.now
     @State private var elapsedBeforePause = 0.0
+    @State private var flapHaptics = OnboardingFlapHaptics()
     private var animates: Bool { isPlaying && !reduceMotion && !voiceOverEnabled }
 
     var body: some View {
@@ -339,16 +340,30 @@ struct OnboardingTickerView: View {
             let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex] : ""
             let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0] : nil } ?? currentWord
             let finalRows = OnboardingBoardCopy.finalRows(content.finalLockup ?? "a local experiment")
-            let fromRows = frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(lead: content.stableText, word: currentWord)
-            let toRows = frame.isFinalTransition || frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(lead: content.stableText, word: nextWord)
-            let descriptionHasArrived = !descriptionIsDelayed || elapsed >= OnboardingTickerFrame.wordSeconds * 1.5 || reduceMotion || voiceOverEnabled
+            let fromRows = frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(word: currentWord)
+            let toRows = frame.isFinalTransition || frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(word: nextWord)
+            let leadOpacity = OnboardingTickerFrame.leadOpacity(elapsed: readableElapsed, content: content)
+            let outerRowsOpacity = frame.showsFinalLockup ? 1 : (frame.isFinalTransition ? min(1, frame.transitionProgress * 10) : 0)
+            let descriptionHasArrived = !descriptionIsDelayed || elapsed >= OnboardingTickerFrame.descriptionArrivalSeconds || reduceMotion || voiceOverEnabled
             GeometryReader { geometry in
                 let width = min(geometry.size.width - 32, 440)
                 VStack(spacing: 0) {
                     Spacer(minLength: 20)
-                    OnboardingSplitFlapBoard(fromRows: fromRows, toRows: toRows,
-                        progress: frame.isTransitioning ? frame.transitionProgress : 1)
-                        .frame(width: width, height: width * 0.36)
+                    ZStack {
+                        OnboardingSplitFlapBoard(fromRows: fromRows, toRows: toRows,
+                            progress: frame.isTransitioning ? frame.transitionProgress : 1,
+                            minimumColumns: OnboardingBoardCopy.openingColumns,
+                            outerRowsOpacity: outerRowsOpacity, flips: OnboardingSplitFlapFrame.flipCount)
+                        Text(content.stableText)
+                            .font(.custom("AvenirNext-DemiBold", size: 27, relativeTo: .title2))
+                            .foregroundStyle(brandMode.primaryText)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                            .frame(width: width)
+                            .offset(y: -width * 0.16)
+                            .opacity(leadOpacity)
+                            .accessibilityHidden(true)
+                    }
+                        .frame(width: width, height: width * 0.48)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(frame.showsFinalLockup ? (content.finalLockup ?? "") : "\(content.stableText) \(content.words.joined(separator: ", "))")
                         .accessibilityIdentifier("onboarding.ticker")
@@ -367,12 +382,17 @@ struct OnboardingTickerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .onChange(of: elapsed) { _, time in
+                flapHaptics.advance(to: time, playing: animates, content: content)
+            }
         }
         .onAppear { startedAt = .now }
         .onChange(of: animates) { _, playing in
+            flapHaptics.reset()
             if playing { startedAt = .now }
             else { elapsedBeforePause += max(0, Date.now.timeIntervalSince(startedAt)) }
         }
+        .onDisappear { flapHaptics.reset() }
     }
 }
 
@@ -382,11 +402,15 @@ struct OnboardingSplitFlapBoard: View, @MainActor Animatable {
     let fromRows: [String]
     let toRows: [String]
     var progress: Double
+    var minimumColumns: Int = OnboardingBoardCopy.columns
+    var outerRowsOpacity: Double = 1
+    var flips: Int = 2
     var animatableData: Double { get { progress } set { progress = newValue } }
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {
         OnboardingFlapSurface(fromRows: fromRows, toRows: toRows,
-                              progress: progress, isDark: colorScheme == .dark)
+                              progress: progress, isDark: colorScheme == .dark,
+                              minimumColumns: minimumColumns, outerRowsOpacity: outerRowsOpacity, flips: flips)
             .accessibilityHidden(true)
     }
 }

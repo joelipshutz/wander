@@ -28,13 +28,17 @@ struct OnboardingFlapSurface: UIViewRepresentable {
     let progress: Double
     let isDark: Bool
     var finish: OnboardingFlapFinish = .current
+    var minimumColumns: Int = OnboardingBoardCopy.columns
+    var outerRowsOpacity: Double = 1
+    var flips: Int = 2
 
     func makeUIView(context: Context) -> OnboardingFlapSurfaceView {
         OnboardingFlapSurfaceView()
     }
 
     func updateUIView(_ view: OnboardingFlapSurfaceView, context: Context) {
-        view.update(from: fromRows, to: toRows, progress: progress, isDark: isDark, finish: finish)
+        view.update(from: fromRows, to: toRows, progress: progress, isDark: isDark,
+                    finish: finish, minimumColumns: minimumColumns, outerRowsOpacity: outerRowsOpacity, flips: flips)
     }
 }
 
@@ -47,6 +51,8 @@ final class OnboardingFlapSurfaceView: UIView {
     private var isDark = false
     private var finish = OnboardingFlapFinish.station
     private var columns = OnboardingBoardCopy.columns
+    private var outerRowsOpacity = 1.0
+    private var flips = 2
     private var tiles = [OnboardingFlapTile]()
     private var faces = [Character: CGImage]()
     private var faceSize = CGSize.zero
@@ -62,7 +68,8 @@ final class OnboardingFlapSurfaceView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func update(from: [String], to: [String], progress: Double, isDark: Bool,
-                finish: OnboardingFlapFinish = .station) {
+                finish: OnboardingFlapFinish = .station,
+                minimumColumns: Int = OnboardingBoardCopy.columns, outerRowsOpacity: Double = 1, flips: Int = 2) {
         if self.isDark != isDark || self.finish != finish {
             self.isDark = isDark
             self.finish = finish
@@ -70,14 +77,17 @@ final class OnboardingFlapSurfaceView: UIView {
             tiles.forEach { $0.lastFrame = nil }
             setNeedsLayout()
         }
-        if fromRows != from || toRows != to {
+        let newColumns = max(max(1, minimumColumns), (from + to).map(\.count).max() ?? 0)
+        if fromRows != from || toRows != to || columns != newColumns {
             fromRows = from; toRows = to
-            columns = max(OnboardingBoardCopy.columns, (from + to).map(\.count).max() ?? 0)
+            columns = newColumns
             source = (0..<3).flatMap { OnboardingBoardCopy.centered(from.indices.contains($0) ? from[$0] : "", columns: columns) }
             target = (0..<3).flatMap { OnboardingBoardCopy.centered(to.indices.contains($0) ? to[$0] : "", columns: columns) }
             setNeedsLayout()
         }
         self.progress = progress
+        self.flips = flips
+        self.outerRowsOpacity = outerRowsOpacity.isFinite ? min(1, max(0, outerRowsOpacity)) : 0
         render()
     }
 
@@ -122,8 +132,9 @@ final class OnboardingFlapSurfaceView: UIView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for index in tiles.indices {
             let frame = OnboardingSplitFlapFrame.at(progress: progress, from: source[index],
-                                                  to: target[index], column: index % columns)
+                                                  to: target[index], column: index % columns, flips: flips)
             let tile = tiles[index]
+            tile.opacity = index / columns == 1 ? 1 : Float(outerRowsOpacity)
             guard tile.lastFrame != frame else { continue }
             tile.apply(frame, from: face(frame.from), to: face(frame.to))
         }
@@ -199,6 +210,9 @@ private final class OnboardingFlapTile: CALayer {
     let turningLower = CALayer()
     let upperShade = CALayer()
     let lowerShade = CALayer()
+    let axle = CALayer()
+    let leftHinge = CALayer()
+    let rightHinge = CALayer()
     var lastFrame: OnboardingSplitFlapFrame?
 
     override init() {
@@ -212,6 +226,7 @@ private final class OnboardingFlapTile: CALayer {
         turningUpper.addSublayer(upperShade)
         turningLower.addSublayer(lowerShade)
         [upperShade, lowerShade].forEach { $0.backgroundColor = UIColor.black.cgColor }
+        [axle, leftHinge, rightHinge].forEach { addSublayer($0) }
         shadowColor = UIColor.black.cgColor
     }
 
@@ -238,6 +253,16 @@ private final class OnboardingFlapTile: CALayer {
         }
         upperShade.frame = CGRect(origin: .zero, size: half)
         lowerShade.frame = CGRect(origin: .zero, size: half)
+        // The axle and clips are fixed hardware. They never rotate with a leaf.
+        axle.frame = CGRect(x: 0, y: half.height - 0.45, width: size.width, height: 0.9)
+        axle.backgroundColor = UIColor.black.withAlphaComponent(isDark ? 0.95 : 0.5).cgColor
+        for (index, hinge) in [leftHinge, rightHinge].enumerated() {
+            hinge.frame = CGRect(x: index == 0 ? 0 : size.width - 1.6,
+                                 y: half.height - 2.1, width: 1.6, height: 4.2)
+            hinge.cornerRadius = 0.6
+            hinge.backgroundColor = (isDark ? UIColor(white: 0.34, alpha: 1) : UIColor(white: 0.57, alpha: 1)).cgColor
+            hinge.isHidden = finish == .graphic
+        }
         shadowOpacity = finish == .graphic ? 0 : (isDark ? 0.5 : 0.18)
         shadowOffset = CGSize(width: 0, height: finish.depth)
         shadowRadius = finish == .sculpted ? 1 : 0.7
@@ -256,17 +281,43 @@ private final class OnboardingFlapTile: CALayer {
         turningUpper.isHidden = !firstHalf
         turningLower.isHidden = firstHalf
         var perspective = CATransform3DIdentity
-        perspective.m34 = -1 / max(1, bounds.height * 5)
+        perspective.m34 = -1 / max(1, bounds.height * 3.5)
         if firstHalf {
-            let fall = pow(frame.progress * 2, 1.65)
+            let fall = pow(frame.progress * 2, 1.9)
             turningUpper.contents = from
             turningUpper.transform = CATransform3DRotate(perspective, -.pi / 2 * fall, 1, 0, 0)
-            upperShade.opacity = Float(fall * 0.32)
+            upperShade.opacity = Float(fall * 0.55)
         } else {
-            let landing = pow(1 - (frame.progress - 0.5) * 2, 2)
+            let phase = (frame.progress - 0.5) * 2
+            // Strike the lower stop, rebound by a few degrees, then lie flat.
+            let landing = phase < 0.72 ? pow(1 - phase / 0.72, 2)
+                : 0.045 * sin((phase - 0.72) / 0.28 * .pi)
             turningLower.contents = to
             turningLower.transform = CATransform3DRotate(perspective, .pi / 2 * landing, 1, 0, 0)
-            lowerShade.opacity = Float(landing * 0.25)
+            lowerShade.opacity = Float(landing * 0.4)
         }
+    }
+}
+
+@MainActor
+final class OnboardingFlapHaptics {
+    private var cursor = OnboardingFlapHapticCursor()
+    private var generator: UIImpactFeedbackGenerator?
+
+    func advance(to elapsed: Double, playing: Bool, content: OnboardingTickerContent) {
+        guard playing else { reset(); return }
+        if generator == nil {
+            generator = UIImpactFeedbackGenerator(style: .rigid)
+            generator?.prepare()
+        }
+        guard let tap = cursor.advance(to: elapsed, playing: playing, content: content) else { return }
+        let intensities: [CGFloat] = [0.38, 0.52, 0.44, 0.64]
+        generator?.impactOccurred(intensity: intensities[tap])
+        generator?.prepare()
+    }
+
+    func reset() {
+        cursor.reset()
+        generator = nil
     }
 }

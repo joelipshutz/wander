@@ -4,6 +4,48 @@ The review uses production Swift views. The local browser board displays simulat
 recordings and frames beside source copy, with pan/zoom, TV viewing and review notes.
 The implementation remains in draft PR #648 for creative review.
 
+## September 17 analog flutter refinement
+
+The lead-in “Connect with your” is now outside the board. The changing word alone
+occupies one visible row of ten equal-width cells, with natural monospaced Signal
+caps. Space for the final three rows is reserved without showing empty outer rows.
+The lead-in fades in 180ms immediately before A / LOCAL / EXPERIMENT flutters in.
+Seven flips over 1.5s replace two over 0.6s for the opening. Fixed hinge clips, an
+axle, stronger turning-face shading, gravity and a small lower-stop rebound give
+the retained layers a more mechanical motion. Benefit flips retain their separate
+short slide cadence. Supporting copy still enters at 3.6s; the opening ends at
+15.6s. The final phrase settles at 13.2s and holds 2.4s.
+
+Four low-intensity rigid impacts follow the same opening clock. Pausing, leaving,
+backgrounding or accessible static playback resets the haptic cursor. Duplicate
+frames and delayed frames cannot burst/replay old impacts. Simulator recordings
+cannot validate the physical sensation; an iPhone review remains necessary.
+
+One authorized Seedance 2.5 8s motion study was generated. It invented extra rows
+and changed the final wording, so it is retained only as a separate reference.
+No generated video is used in the app. This supersedes the earlier zero-credit
+constraint for the study, while the three native finish options remain the same.
+
+The first boundary test exposed floating subtraction at the exact flip start;
+comparing the absolute start time fixed it. The final focused run passed all 26
+welcome/photo checks. The quick signup-close/login test then exposed a retained carousel finished latch
+when SwiftUI reversed an unfinished slide. A new welcome identity on auth close
+fixes this. All three final UI checks passed (81.760s): automatic progression,
+manual forward/back paging and rapid signup/close/login/close. Evidence:
+`native-analog-final-tests.xcresult` (26 unit passes plus the reproduced close bug)
+and `native-analog-auth-reset-tests.xcresult` (three passing UI flows).
+Native capture and browser evidence are appended at handoff.
+The shared workspace ios-work.py helper owns the reusable build cache; do not
+resume with the older per-task DerivedData commands below.
+
+NUX was re-audited against raw T05/T04 during this pass. Earlier local completion
+labels mixed HTML studies with native implementation: Nearby Places, Check In /
+Wanna handwriting, Lists' three-purpose explanation and the Feed scroll reveal
+remain gaps. The actual existing Plus hint targets imports and the place-profile
+hint targets external actions. The durable transcript-backed spec is
+`onboarding-copy-review/session-2026-09-16/brief/nux-transcript-spec.md` in the
+parent workspace. Preserve these distinctions when resuming the NUX pass.
+
 ## September 17 typography correction
 
 Joe rejected the pinched letterforms in the first three-finish preview. That pass

@@ -1987,7 +1987,7 @@ final class OnboardingUITests: XCTestCase {
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
-        // The split-flap opening takes 12.0 seconds, then both real benefit
+        // The split-flap opening takes 15.6 seconds, then both real benefit
         // pages receive their reading time before the finite flow opens signup.
         app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
@@ -2001,12 +2001,12 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.next"].exists)
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
         app.buttons["onboarding.pause"].tap()
-        let signupDeadline = Date().addingTimeInterval(35)
+        let signupDeadline = Date().addingTimeInterval(39)
         expectation(
             for: NSPredicate(format: "value == %@", "2"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 16)
+        waitForExpectations(timeout: 20)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         expectation(

@@ -109,9 +109,18 @@ struct OnboardingWelcomeConfiguration: Equatable {
 /// The later slide to a different scene belongs to the surrounding composition.
 struct OnboardingTickerFrame: Equatable {
     static let holdSeconds = 1.8
-    static let flipSeconds = 0.6
+    static let flipSeconds = 1.5
     static let wordSeconds = holdSeconds + flipSeconds
     static let finalHoldSeconds = 2.4
+    static let leadFadeSeconds = 0.18
+    static let descriptionArrivalSeconds = 3.6
+
+    static func leadOpacity(elapsed: Double, content: OnboardingTickerContent) -> Double {
+        guard content.finalLockup != nil, !content.words.isEmpty else { return 1 }
+        let end = Double(content.words.count - 1) * wordSeconds + holdSeconds
+        let elapsed = elapsed.isFinite ? max(0, elapsed) : 0
+        return min(1, max(0, (end - elapsed) / leadFadeSeconds))
+    }
 
     let wordIndex: Int
     let nextWordIndex: Int?
@@ -145,14 +154,14 @@ struct OnboardingTickerFrame: Equatable {
             )
         }
         let index = min(lastIndex, Int(elapsed / wordSeconds))
-        let local = elapsed - Double(index) * wordSeconds
-        guard local >= holdSeconds else { return held(wordIndex: index) }
+        let flipStart = Double(index) * wordSeconds + holdSeconds
+        guard elapsed >= flipStart else { return held(wordIndex: index) }
         let isFinal = index == lastIndex
         guard !isFinal || content.finalLockup != nil else { return held(wordIndex: index) }
         return Self(
             wordIndex: index,
             nextWordIndex: isFinal ? nil : index + 1,
-            transitionProgress: min(1, max(0, (local - holdSeconds) / flipSeconds)),
+            transitionProgress: min(1, max(0, (elapsed - flipStart) / flipSeconds)),
             isTransitioning: true,
             isFinalTransition: isFinal,
             showsFinalLockup: false
@@ -168,10 +177,10 @@ struct OnboardingTickerFrame: Equatable {
     }
 }
 
-/// One physical flap within a two-flip letter change. Intermediate letters are
+/// One physical flap within a seven-flip letter change. Intermediate letters are
 /// deterministic so native rendering, scrubbing and tests follow the same path.
 struct OnboardingSplitFlapFrame: Equatable {
-    static let flipCount = 2
+    static let flipCount = 7
     static let columnDelay = 0.012
     static let maximumStaggeredColumn = 12
 
@@ -179,7 +188,7 @@ struct OnboardingSplitFlapFrame: Equatable {
     let to: Character
     let progress: Double
 
-    static func at(progress: Double, from: Character, to: Character, column: Int) -> Self {
+    static func at(progress: Double, from: Character, to: Character, column: Int, flips: Int = flipCount) -> Self {
         guard from != to else { return Self(from: from, to: to, progress: 1) }
         let progress = progress.isFinite ? min(1, max(0, progress)) : 0
         if progress >= 1 { return Self(from: to, to: to, progress: 1) }
@@ -187,23 +196,24 @@ struct OnboardingSplitFlapFrame: Equatable {
         let column = max(0, column)
         let delay = Double(min(maximumStaggeredColumn, column)) * columnDelay
         let local = min(1, max(0, (progress - delay) / (1 - delay)))
-        let glyphs = cycle(from: from, to: to, column: column)
-        let position = local * Double(flipCount)
-        let flip = min(flipCount - 1, Int(position))
+        let count = max(1, min(12, flips))
+        let glyphs = cycle(from: from, to: to, column: column, count: count)
+        let position = local * Double(count)
+        let flip = min(count - 1, Int(position))
         return Self(
             from: glyphs[flip], to: glyphs[flip + 1],
             progress: min(1, max(0, position - Double(flip)))
         )
     }
 
-    private static func cycle(from: Character, to: Character, column: Int) -> [Character] {
+    private static func cycle(from: Character, to: Character, column: Int, count: Int) -> [Character] {
         let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         let scalarSeed = (String(from) + String(to)).unicodeScalars.reduce(0) {
             ($0 + Int($1.value) % alphabet.count) % alphabet.count
         }
         var cursor = (scalarSeed + column % alphabet.count) % alphabet.count
         var glyphs = [from]
-        for _ in 0..<(flipCount - 1) {
+        for _ in 0..<(count - 1) {
             // Every physical flip changes its glyph, including the final one.
             while alphabet[cursor] == glyphs.last || alphabet[cursor] == to {
                 cursor = (cursor + 1) % alphabet.count
@@ -216,11 +226,12 @@ struct OnboardingSplitFlapFrame: Equatable {
     }
 }
 
-/// Copy lines share the same fixed grid across opening, finale and benefits.
+/// Opening reserves the final lockup's space, but only its middle row is visible.
 enum OnboardingBoardCopy {
     static let columns = 17
-    static func openingRows(lead: String, word: String) -> [String] {
-        [lead.uppercased(), word.uppercased(), ""]
+    static let openingColumns = 10
+    static func openingRows(word: String) -> [String] {
+        ["", word.uppercased(), ""]
     }
     static func finalRows(_ phrase: String) -> [String] {
         let words = phrase.uppercased().split(separator: " ").map(String.init)
@@ -233,5 +244,32 @@ enum OnboardingBoardCopy {
         let characters = Array(text.uppercased())
         let spare = max(0, columns - characters.count)
         return Array(repeating: " ", count: spare / 2) + characters + Array(repeating: " ", count: spare - spare / 2)
+    }
+}
+
+/// A bounded tactile phrase, not one impact for every letter on the display.
+/// The cursor follows the same paused clock as the visible flaps. Lost frames
+/// never replay old impacts in a burst, and resuming never replays a prior tap.
+struct OnboardingFlapHapticCursor {
+    static let fractions = [0.10, 0.35, 0.62, 0.89]
+    private var lastElapsed: Double?
+
+    mutating func reset() { lastElapsed = nil }
+
+    mutating func advance(to elapsed: Double, playing: Bool, content: OnboardingTickerContent) -> Int? {
+        guard playing, elapsed.isFinite, elapsed >= 0, !content.words.isEmpty else {
+            reset()
+            return nil
+        }
+        let previous = lastElapsed
+        lastElapsed = elapsed
+        guard let previous, elapsed > previous, elapsed - previous <= 0.12 else { return nil }
+        let frame = OnboardingTickerFrame.at(elapsed: elapsed, content: content)
+        guard frame.isTransitioning else { return nil }
+        let start = Double(frame.wordIndex) * OnboardingTickerFrame.wordSeconds + OnboardingTickerFrame.holdSeconds
+        return Self.fractions.indices.last { index in
+            let time = start + Self.fractions[index] * OnboardingTickerFrame.flipSeconds
+            return previous < time && elapsed >= time
+        }
     }
 }

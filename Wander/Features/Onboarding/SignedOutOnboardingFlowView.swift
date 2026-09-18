@@ -12,6 +12,7 @@ struct SignedOutOnboardingFlowView: View {
     var initialAuthMode: NativeAuthMode? = nil
 
     @State private var appliedInitialMode = false
+    @State private var welcomeGeneration = 0
 
     var body: some View {
         ZStack {
@@ -21,7 +22,13 @@ struct SignedOutOnboardingFlowView: View {
                 NativeAuthFlowView(
                     isDismissable: true,
                     mode: auth.activeNativeAuthMode,
-                    onClose: { auth.nativeAuthDidDismiss() },
+                    onClose: {
+                        // A quick close can reverse the slide before SwiftUI
+                        // removes the old carousel. Its finished latch must not
+                        // survive into the newly interactive welcome screen.
+                        welcomeGeneration += 1
+                        auth.nativeAuthDidDismiss()
+                    },
                     onLogIn: { auth.beginSignIn(mode: .signIn) }
                 )
                 .id(auth.activeNativeAuthMode)
@@ -34,6 +41,7 @@ struct SignedOutOnboardingFlowView: View {
                     logIn: { auth.beginSignIn(mode: .signIn) },
                     configuration: configuration
                 )
+                .id(welcomeGeneration)
                 .transition(reduceMotion ? .opacity : .move(edge: .leading))
                 .zIndex(1)
             }
