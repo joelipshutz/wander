@@ -2238,7 +2238,7 @@ struct MapScreen: View {
                     .accessibilityHidden(compactCardPhase == .hidden)
 
                 if !hasRevealedInitialMap {
-                    OnboardingLaunchView(message: "Loading your map…")
+                    OnboardingLaunchView()
                         .accessibilityIdentifier("map.initialLoading")
                         .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
@@ -2246,6 +2246,7 @@ struct MapScreen: View {
                 }
             }
             .background(astirBrandMode.background)
+            .toolbar(hasRevealedInitialMap ? .visible : .hidden, for: .tabBar)
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
