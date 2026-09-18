@@ -274,12 +274,12 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         let commentButton = app.buttons["Open comments"].firstMatch
         XCTAssertTrue(commentButton.isHittable)
         commentButton.tap()
-        XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.otherElements["comments.activity.postcard"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["Unlike activity"].firstMatch.exists)
         XCTAssertFalse(app.buttons["Open comments"].exists)
         capture("rec-337-comments-postcard")
-        app.navigationBars["comments"].buttons.firstMatch.tap()
+        app.navigationBars.buttons.firstMatch.tap()
 
         let saveButton = app.buttons.matching(
             NSPredicate(format: "label == %@ AND value == %@", "Add to Wanna", "Not in Wanna")

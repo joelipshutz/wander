@@ -9,6 +9,12 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case profileSettings
     case sharedProfile
     case feedPlaceProfile
+    case feedProfile
+    case feedSave
+    case activityPhoto
+    case activityShare
+    case activityReport
+    case activitySave
 }
 
 struct WanderDeepLinkPresentationToken: Hashable, Sendable {
@@ -285,6 +291,17 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
     }
 }
 
+// Keep tab construction out of the root's presentation/observer builder stack.
+// A computed `some View` property is still evaluated eagerly by its caller;
+// this View boundary lets SwiftUI evaluate the large tab subtree separately.
+private struct WanderRootTabContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+    }
+}
+
 @MainActor
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -355,6 +372,9 @@ struct WanderRootView: View {
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var activityNavigation = ActivityNavigationCoordinator()
+    #if DEBUG
+    @State private var seededNotificationFixture = false
+    #endif
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -506,10 +526,10 @@ struct WanderRootView: View {
 
                 FeedScreen(
                     presentationResetRequest: presentationResetRequest,
-                    onPlaceProfilePresentation: handleDeepLinkPresentation,
-                    onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
-                    onPlaceProfileDidDismiss: {
-                        handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
+                    onPresentation: handleDeepLinkPresentation,
+                    onWillDismiss: handleDeepLinkPresentationWillDismiss,
+                    onDidDismiss: { surface in
+                        handleDeepLinkPresentationDismissal(of: surface)
                     },
                     onAdd: presentAddSheet
                 )
@@ -725,7 +745,9 @@ struct WanderRootView: View {
     }
 
     private var presentedRoot: some View {
-        tabRoot
+        WanderRootTabContent {
+            tabRoot
+        }
         .sheet(isPresented: $isPresentingImportHub) {
             NavigationStack {
                 PlaceImportHubScreen(
@@ -877,6 +899,24 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            // A tapped notification must not wait for permission, calendar or
+            // background-maintenance network work on a cold authenticated launch.
+            applyAuthStateIfNeeded(auth.state)
+            #if DEBUG
+            if fixtureMode != .empty, !seededNotificationFixture,
+               ProcessInfo.processInfo.arguments.contains("-WanderNotificationPostUITest") {
+                seededNotificationFixture = true
+                await store.refreshFeedSurface(backend: nil, force: true)
+                WanderAppDelegate.setAuthenticatedSessionActive(userID: store.currentUser.id)
+                _ = WanderAppDelegate.receiveAuthenticatedNotificationUserInfo([
+                    "recme": [
+                        "notification_type": "activity_commented",
+                        "data": ["activity_id": "fixture-feed-maya-been-bar-nido"]
+                    ]
+                ])
+            }
+            #endif
+            drainPendingNotificationResponses()
             if let userID = auth.state.session?.userID {
                 importStore.bind(to: userID)
             }
@@ -1890,11 +1930,14 @@ struct WanderRootView: View {
             return
         }
         if case .activityComments(let activityID) = request.destination {
-            isPresentingAdd = false
-            initialPresentation = nil
-            selectedTab = .discover
-            activityNavigation.openComments(activityID: activityID)
             pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .sharedActivity(activityID: activityID))
+            return
+        }
+
+        if case .checkInComments(let userPlaceID, let visitID) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .checkInActivity(userPlaceID: userPlaceID, visitID: visitID))
             return
         }
 
@@ -1942,7 +1985,7 @@ struct WanderRootView: View {
         case .importReview: .map
         case .list, .listInvite: .lists
         case .place, .sharedVisit, .calendarReservation: .map
-        case .activityComments: .discover
+        case .activityComments, .checkInComments: .discover
         case .discover: .discover
         }
     }
@@ -2568,6 +2611,7 @@ struct WanderRootView: View {
     }
 
     private func activateDeepLink(_ route: WanderDeepLinkRoute) {
+        activityNavigation.reset()
         switch route {
         case .quickCapture:
             selectedTab = .map
@@ -2635,6 +2679,9 @@ struct WanderRootView: View {
         case .sharedActivity(let activityID):
             selectedTab = .discover
             activityNavigation.openComments(activityID: activityID)
+        case .checkInActivity(let userPlaceID, let visitID):
+            selectedTab = .discover
+            activityNavigation.openCheckIn(userPlaceID: userPlaceID, visitID: visitID)
         case .sharedList(let listID):
             selectedTab = .lists
             pushNotifications.route(to: .list(id: listID))

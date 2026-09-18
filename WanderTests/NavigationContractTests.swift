@@ -368,7 +368,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityViews.contains("artworkAction: artworkAction"))
         XCTAssertTrue(activityViews.contains("photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstMediaID)"))
         XCTAssertTrue(activityViews.contains("context.media.count == 1 ? \"Open activity photo\" : \"Open activity photos\""))
-        XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute)"))
+        XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute, onDismiss:"))
         XCTAssertTrue(activityViews.contains("TabView(selection: $selectedMediaID)"))
         XCTAssertTrue(activityViews.contains(".tabViewStyle(.page(indexDisplayMode: .automatic))"))
         XCTAssertTrue(activityViews.contains("WanderGlassActionButton("))
@@ -393,7 +393,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(feed.contains(".navigationDestination(item: commentsRouteBinding)"))
         XCTAssertFalse(feed.contains(".fullScreenCover(item: commentsRouteBinding)"))
-        XCTAssertTrue(activityViews.contains(".navigationTitle(\"comments\")"))
+        XCTAssertTrue(activityViews.contains(".navigationTitle(\"\")"))
         XCTAssertFalse(activityViews.contains(".navigationBarBackButtonHidden(true)"))
         XCTAssertTrue(activityViews.contains(".toolbar(.hidden, for: .tabBar)"))
 
@@ -921,9 +921,9 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss)"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) })"))
         XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
-        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id)"))
+        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id, initial: true)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 
@@ -2723,7 +2723,7 @@ final class NavigationContractTests: XCTestCase {
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
-            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile, onDismiss:"),
             ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
             ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),

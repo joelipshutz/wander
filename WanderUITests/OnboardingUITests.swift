@@ -2128,7 +2128,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(openComments.isHittable)
         openComments.tap()
 
-        XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 4))
 
         let commentsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         commentsScreenshot.name = "Comments native navigation destination"
@@ -2140,7 +2140,7 @@ final class OnboardingUITests: XCTestCase {
         leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
 
         XCTAssertTrue(feedSearch.waitForExistence(timeout: 4))
-        XCTAssertFalse(app.navigationBars["comments"].exists)
+        XCTAssertFalse(app.buttons["activity.comment.send"].exists)
 
         let returnedFeedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         returnedFeedScreenshot.name = "Feed restored after comments back-swipe"

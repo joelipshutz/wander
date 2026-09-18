@@ -1800,7 +1800,11 @@ final class WanderStore: ObservableObject {
 
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
-        else { return existing }
+        else {
+            activityEngagementErrorByID[activityID] = existing == nil
+                ? "This activity is no longer available." : nil
+            return existing
+        }
 
         do {
             let activity = try await retryActivityRead {
@@ -1808,7 +1812,8 @@ final class WanderStore: ObservableObject {
                 return try await repository.activity(id: activityID)
             }
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
-            guard activity.id == activityID, canDisplayActivity(activity) else {
+            guard activity.id == activityID, canDisplayActivity(activity),
+                  activity.activityEngagementContext != nil else {
                 discardCachedActivity(activityID)
                 activityEngagementErrorByID[activityID] = "This activity is no longer available."
                 return nil
@@ -1833,6 +1838,42 @@ final class WanderStore: ObservableObject {
             // read. Transient failures can be retried through the same route.
             discardCachedActivity(activityID)
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return nil
+        }
+    }
+
+    /// Resolve the immutable visit before opening its post. This never fetches
+    /// the whole Feed or guesses from the newest activity at the same place.
+    @MainActor
+    func activity(checkIn target: ActivityCheckInTarget, backend: WanderBackend?) async -> FeedActivity? {
+        let requestUserID = currentUser.id
+        let errorID = target.visitID
+        guard let repository = backend?.activityEngagementRepository else {
+            activityEngagementErrorByID[errorID] = "This activity is no longer available."
+            return nil
+        }
+        do {
+            let matches = try await retryActivityRead {
+                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                return try await repository.placeActivitySummaries(userPlaceIDs: [target.userPlaceID])
+            }
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard let match = matches.first(where: {
+                $0.userPlaceID.caseInsensitiveCompare(target.userPlaceID) == .orderedSame
+                    && $0.visitID?.caseInsensitiveCompare(target.visitID) == .orderedSame
+                    && [.placeBeen, .placeSaved].contains($0.kind)
+            }) else {
+                activityEngagementErrorByID[errorID] = "This activity is no longer available."
+                return nil
+            }
+            let resolved = await activity(id: match.activityID, backend: backend)
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[errorID] = resolved == nil
+                ? activityEngagementErrorByID[match.activityID] : nil
+            return resolved
+        } catch {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[errorID] = remoteErrorMessage(error)
             return nil
         }
     }

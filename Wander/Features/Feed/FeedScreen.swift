@@ -14,6 +14,7 @@ struct FeedScreen: View {
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
+    @State private var presentationGeneration = UUID()
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
@@ -28,21 +29,21 @@ struct FeedScreen: View {
     @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
     private let presentationResetRequest: WanderPresentationResetRequest?
-    private let onPlaceProfilePresentation: (WanderDeepLinkPresentationToken) -> Void
-    private let onPlaceProfileWillDismiss: (WanderDeepLinkPresentationToken) -> Void
-    private let onPlaceProfileDidDismiss: () -> Void
+    private let onPresentation: (WanderDeepLinkPresentationToken) -> Void
+    private let onWillDismiss: (WanderDeepLinkPresentationToken) -> Void
+    private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
 
     init(
         presentationResetRequest: WanderPresentationResetRequest? = nil,
-        onPlaceProfilePresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
-        onPlaceProfileWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
-        onPlaceProfileDidDismiss: @escaping () -> Void = {},
+        onPresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         onAdd: @escaping () -> Void = {}
     ) {
         self.presentationResetRequest = presentationResetRequest
-        self.onPlaceProfilePresentation = onPlaceProfilePresentation
-        self.onPlaceProfileWillDismiss = onPlaceProfileWillDismiss
-        self.onPlaceProfileDidDismiss = onPlaceProfileDidDismiss
+        self.onPresentation = onPresentation
+        self.onWillDismiss = onWillDismiss
+        self.onDidDismiss = onDidDismiss
         self.onAdd = onAdd
         let initialSurface = FeedSurface.resolvedInitialSurface()
         _selectedSurface = State(initialValue: initialSurface)
@@ -141,17 +142,21 @@ struct FeedScreen: View {
                 guard !Task.isCancelled else { return }
                 await refresh(force: false)
             }
-            .fullScreenCover(item: $selectedProfile) { route in
-                ProfileDetailView(profileID: route.id)
-                    .environmentObject(store)
-                    .environmentObject(auth)
-                    .environmentObject(backend)
+            .fullScreenCover(item: $selectedProfile, onDismiss: { onDidDismiss(.feedProfile) }) { route in
+                WanderRootPresentationLifecycle(
+                    surface: .feedProfile, onPresent: onPresentation, onDismiss: onWillDismiss
+                ) {
+                    ProfileDetailView(profileID: route.id)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
             }
-            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss) {
+            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) }) {
                 WanderRootPresentationLifecycle(
                     surface: .feedPlaceProfile,
-                    onPresent: onPlaceProfilePresentation,
-                    onDismiss: onPlaceProfileWillDismiss
+                    onPresent: onPresentation,
+                    onDismiss: onWillDismiss
                 ) {
                     NavigationStack {
                         selectedPlaceDestination
@@ -166,6 +171,7 @@ struct FeedScreen: View {
                     openPlace: openPlace,
                     openList: openListByID
                 )
+                .id(route.id)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
@@ -174,11 +180,16 @@ struct FeedScreen: View {
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
+                onDidDismiss(.feedSave)
             }) { context in
-                MapPlaceSaveFlowSheet(context: context) { submission in
-                    await saveFeedFlowSubmission(submission)
-                } onRemove: { _ in
-                    false
+                WanderRootPresentationLifecycle(
+                    surface: .feedSave, onPresent: onPresentation, onDismiss: onWillDismiss
+                ) {
+                    MapPlaceSaveFlowSheet(context: context) { submission in
+                        await saveFeedFlowSubmission(submission)
+                    } onRemove: { _ in
+                        false
+                    }
                 }
             }
             .alert("Map updated", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
@@ -229,11 +240,23 @@ struct FeedScreen: View {
                     restoreFeedWalkthroughAfterDiscoverDismissal()
                 }
             }
-            .onChange(of: presentationResetRequest?.id) { _, requestID in
+            .onChange(of: presentationResetRequest?.id, initial: true) { _, requestID in
                 guard requestID != nil else { return }
+                presentationGeneration = UUID()
                 selectedPlace = nil
+                selectedProfile = nil
+                placeSaveFlow = nil
+                savedMessage = nil
+                isShowingSearch = false
+                selectedSurface = .places
+                peopleSearchFieldFocused = false
+                resetFloatingHeaderScrollTracking(revealHeader: true)
             }
         }
+        .environment(\.activityPresentationHandoff, ActivityPresentationHandoff(
+            resetID: presentationResetRequest?.id,
+            onPresent: onPresentation, onWillDismiss: onWillDismiss, onDidDismiss: onDidDismiss
+        ))
     }
 
     private var floatingHeader: some View {
@@ -549,17 +572,19 @@ struct FeedScreen: View {
         let allowsCachedContext = !auth.isSignedIn
             || backend.activityEngagementRepository == nil
             || UUID(uuidString: route.activityID) == nil
-        focusedActivityID = route.activityID
-
         if !allowsCachedContext {
             activityNavigation.resolve(requestID: route.id, activity: nil)
         }
 
-        let activity = await store.activity(
-            id: route.activityID,
-            backend: auth.isSignedIn ? backend : nil
-        )
+        let activity: FeedActivity?
+        if let target = route.checkInTarget {
+            activity = await store.activity(checkIn: target, backend: auth.isSignedIn ? backend : nil)
+        } else {
+            activity = await store.activity(id: route.activityID, backend: auth.isSignedIn ? backend : nil)
+        }
         guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+        guard activityNavigation.commentsRoute?.id == route.id else { return }
+        focusedActivityID = activity?.id
         activityNavigation.resolve(
             requestID: route.id,
             activity: activity,
@@ -631,14 +656,20 @@ struct FeedScreen: View {
         }
 
         selectedPlace = nil
+        let generation = presentationGeneration
+        let userID = store.currentUser.id
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled, presentationGeneration == generation,
+                  store.currentUser.id == userID else { return }
             placeSaveFlow = context
         }
     }
 
     @MainActor
     private func saveFeedFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let generation = presentationGeneration
+        let userID = store.currentUser.id
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
@@ -655,7 +686,9 @@ struct FeedScreen: View {
             ) else { return nil }
 
             await refresh()
-            savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            if presentationGeneration == generation, store.currentUser.id == userID {
+                savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            }
             return result
 
         case .addVisit, .editVisit, .editWant:
@@ -673,7 +706,9 @@ struct FeedScreen: View {
                 backend: visitBackend
             )
             await refresh()
-            savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            if presentationGeneration == generation, store.currentUser.id == userID {
+                savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            }
             return result
 
         case .sharedVisit:
