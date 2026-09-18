@@ -4859,7 +4859,7 @@ final class NavigationContractTests: XCTestCase {
             "Wander/Features/Profile/ProfileImportViews.swift": 2,
             "Wander/Features/Profile/ProfileScreen.swift": 1,
             "Wander/Features/Map/PlaceProfileMapSurface.swift": 1,
-            "Wander/Features/Map/MapScreen.swift": 3
+            "Wander/Features/Map/MapScreen.swift": 4
         ]
 
         for (path, expectedCallCount) in directSheetEntryPointCallCounts {
@@ -4913,8 +4913,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
         XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.disabled)"))
         XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.scrolls)"))
-        XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
-        XCTAssertTrue(placeProfile.contains("guard attachedSaveContext?.id == context.id else { return }"))
+        XCTAssertTrue(placeProfile.contains("onClose: closeSave"))
+        XCTAssertTrue(placeProfile.contains("guard effectiveSaveContext.wrappedValue?.id == context.id else { return }"))
         XCTAssertFalse(placeProfile.contains("compactDetent"))
         XCTAssertFalse(placeProfile.contains("presentationBackgroundInteraction"))
 

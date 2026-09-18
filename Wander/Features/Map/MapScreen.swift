@@ -2432,6 +2432,27 @@ struct MapScreen: View {
         .overlay {
             selectedPlaceProfileOverlay
         }
+        // Present from the map's stable SwiftUI root. Presenting inside the
+        // sliding profile's UIHostingController resets nested confirmations.
+        .sheet(item: attachedMapSaveSheetContext) { context in
+            MapPlaceSaveFlowSheet(
+                context: context,
+                draft: attachedSaveDraft,
+                onDraftChange: updateAttachedDraft,
+                onSave: saveMapFlowSubmission,
+                onRemove: removeMapSave,
+                onClose: closeAttachedSaveFlow,
+                onSaveCompleted: { result in
+                    guard attachedMapSaveFlow?.id == context.id else { return }
+                    completeAttachedSaveFlow(result)
+                }
+            )
+            .id(context.id)
+            .accessibilityIdentifier(
+                (attachedSaveDraft?.form.selectedStatus ?? context.initialStatus) == .wannaGo
+                    ? "place-profile.attached-wanna" : "place-profile.attached-check-in"
+            )
+        }
         .sheet(item: $mapActivityEditFlow, onDismiss: {
             store.saveFlowDidDismiss(.saveSheet)
         }) { presentation in
@@ -4065,6 +4086,7 @@ struct MapScreen: View {
                 ),
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
+                presentsAttachedSaveSheet: false,
                 usesInteractiveHorizontalDismissal: true,
                 hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
@@ -4106,6 +4128,7 @@ struct MapScreen: View {
                 ),
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
+                presentsAttachedSaveSheet: false,
                 usesInteractiveHorizontalDismissal: true,
                 hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
@@ -5337,6 +5360,16 @@ struct MapScreen: View {
                 defaultVisibility: defaultVisibility
             )
         }
+    }
+
+    private var attachedMapSaveSheetContext: Binding<MapPlaceSaveContext?> {
+        Binding(
+            get: { attachedMapSaveFlow },
+            set: { context in
+                if let context { attachedMapSaveFlow = context }
+                else { closeAttachedSaveFlow() }
+            }
+        )
     }
 
     private var attachedSaveDraft: PlaceSaveDraft? {
@@ -13216,14 +13249,26 @@ struct MapPlaceSaveEditor: View {
                 sheetEditor
             case .inlineStaging, .inlineSaving:
                 inlineEditor
+                    .sheet(item: $questionPresentation.request) { $0.content }
             }
         }
-        .sheet(item: $questionPresentation.request) { $0.content }
+        .onChange(of: questionPresentation.request?.id) { _, requestID in
+            if requestID != nil, presentation == .sheet {
+                onContentExpansionRequested()
+            }
+        }
         .disabled(editorOwnerID != nil && editorOwnerID != store.currentUser.id)
         .onChange(of: store.currentUser.id, initial: true) { _, _ in
             guard bindEditorOwnerIfNeeded() else { return }
             if selectedStatus == .been { loadPrivateQuestionAnswersIfNeeded() }
         }
+    }
+
+    private var showsQuestionCustomizationPage: Binding<Bool> {
+        Binding(
+            get: { questionPresentation.request != nil },
+            set: { if !$0 { questionPresentation.request = nil } }
+        )
     }
 
     private var sheetEditor: some View {
@@ -13264,6 +13309,11 @@ struct MapPlaceSaveEditor: View {
                 }
                 .task(id: walkthroughAutomationTaskID) {
                     await runWalkthroughAutomationIfNeeded(with: walkthroughScrollProxy)
+                }
+            }
+            .navigationDestination(isPresented: showsQuestionCustomizationPage) {
+                if let request = questionPresentation.request {
+                    request.content.inExistingNavigationStack()
                 }
             }
         }

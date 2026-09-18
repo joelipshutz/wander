@@ -560,6 +560,7 @@ struct CheckInQuestionCustomizationSheet: View {
     @State private var showsCustomEditor = false
     @State private var showsRestoreConfirmation = false
     @State private var changedStealth: [String: Bool] = [:]
+    private var usesOwnNavigationStack = true
 
     init(
         ownerUserID: String,
@@ -583,8 +584,22 @@ struct CheckInQuestionCustomizationSheet: View {
         _configuration = State(initialValue: configuration)
     }
 
+    /// The save sheet already owns a NavigationStack; keep its customization
+    /// flow in that stack so back navigation has a single presentation owner.
+    func inExistingNavigationStack() -> Self {
+        var screen = self
+        screen.usesOwnNavigationStack = false
+        return screen
+    }
+
     var body: some View {
-        NavigationStack { questionList }
+        Group {
+            if usesOwnNavigationStack {
+                NavigationStack { questionList }
+            } else {
+                questionList
+            }
+        }
         .alert("Are you sure?", isPresented: $showsRestoreConfirmation) {
             Button("Yes, restore") { update { $0.restoreSuggestedQuestions(defaultQuestions.map(\.id)) } }
             Button("No, cancel", role: .cancel) {}

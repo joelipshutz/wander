@@ -106,11 +106,13 @@ struct PlaceProfileFullScreen: View {
     let onFloatingAction: ((PlaceProfileSaveAction) -> Void)?
     @Binding private var attachedSaveContext: MapPlaceSaveContext?
     let attachedSaveDraft: PlaceSaveDraft?
+    let presentsAttachedSaveSheet: Bool
     let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let onAttachedClose: @MainActor () -> Void
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -133,6 +135,7 @@ struct PlaceProfileFullScreen: View {
         saveActionSnapshot: PlaceProfileSaveActionSnapshot? = nil,
         attachedSaveContext: Binding<MapPlaceSaveContext?> = .constant(nil),
         attachedSaveDraft: PlaceSaveDraft? = nil,
+        presentsAttachedSaveSheet: Bool = true,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
         hidesTabBar: Bool = true,
@@ -160,6 +163,7 @@ struct PlaceProfileFullScreen: View {
         self.onFloatingAction = onFloatingAction
         _attachedSaveContext = attachedSaveContext
         self.attachedSaveDraft = attachedSaveDraft
+        self.presentsAttachedSaveSheet = presentsAttachedSaveSheet
         self.onAttachedDraftChange = onAttachedDraftChange
         self.onAttachedSave = onAttachedSave
         self.onAttachedRemove = onAttachedRemove
@@ -187,6 +191,57 @@ struct PlaceProfileFullScreen: View {
                     .simultaneousGesture(edgeSwipeBackGesture)
             }
         }
+        // Non-map profiles own their editor here. The map presents from its
+        // SwiftUI root, outside the sliding profile's native hosting controller.
+        .sheet(item: attachedSaveSheetContext) { context in
+            MapPlaceSaveFlowSheet(
+                context: context,
+                draft: resolvedAttachedSaveDraft(for: context),
+                onDraftChange: onAttachedDraftChange,
+                onSave: saveSubmission,
+                onRemove: removeSave,
+                onClose: closeSave,
+                onSaveCompleted: { result in
+                    guard effectiveSaveContext.wrappedValue?.id == context.id else { return }
+                    completeSave(result)
+                }
+            )
+            .id(context.id)
+            .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
+        }
+        .onChange(of: attachedSaveContext?.id) { previousID, currentID in
+            guard !presentsAttachedSaveSheet, previousID != nil, currentID == nil else { return }
+            Task { await refreshHistory() }
+        }
+    }
+
+    private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {
+        Binding(
+            get: { presentsAttachedSaveSheet ? effectiveSaveContext.wrappedValue : nil },
+            set: { nextContext in
+                guard presentsAttachedSaveSheet else { return }
+                if let nextContext {
+                    effectiveSaveContext.wrappedValue = nextContext
+                } else {
+                    closeSave()
+                }
+            }
+        )
+    }
+
+    private func resolvedAttachedSaveDraft(for context: MapPlaceSaveContext) -> PlaceSaveDraft? {
+        guard let liveDraft = placeSaveDraftStore.draft,
+              liveDraft.candidate.id == context.candidate.id
+        else { return attachedSaveDraft }
+        return liveDraft
+    }
+
+    private func saveSheetAccessibilityIdentifier(for context: MapPlaceSaveContext) -> String {
+        let selectedStatus = resolvedAttachedSaveDraft(for: context)?.form.selectedStatus
+            ?? context.initialStatus
+        return selectedStatus == .wannaGo
+            ? "place-profile.attached-wanna"
+            : "place-profile.attached-check-in"
     }
 
     private var profileContent: some View {
@@ -198,7 +253,6 @@ struct PlaceProfileFullScreen: View {
             action: action,
             saveActionSnapshot: saveActionSnapshot,
             attachedSaveContext: effectiveSaveContext,
-            attachedSaveDraft: attachedSaveDraft,
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
@@ -209,12 +263,7 @@ struct PlaceProfileFullScreen: View {
                     localListTarget = .candidate(place.saveCandidate)
                 }
             },
-            onFloatingAction: handleSaveAction,
-            onAttachedDraftChange: onAttachedDraftChange,
-            onAttachedSave: saveSubmission,
-            onAttachedRemove: removeSave,
-            onAttachedClose: closeSave,
-            onAttachedSaveCompleted: completeSave
+            onFloatingAction: handleSaveAction
         )
         .overlay(alignment: .top) {
             if historyRefreshFailed {
@@ -1568,17 +1617,11 @@ private struct PlaceProfileFullView: View {
     let action: PlaceSheetAction
     let saveActionSnapshot: PlaceProfileSaveActionSnapshot?
     @Binding var attachedSaveContext: MapPlaceSaveContext?
-    let attachedSaveDraft: PlaceSaveDraft?
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
-    let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
-    let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
-    let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
-    let onAttachedClose: @MainActor () -> Void
-    let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -1586,7 +1629,6 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
-    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -1597,34 +1639,6 @@ private struct PlaceProfileFullView: View {
     @State private var discoveredReservationAction: PlaceExternalAction?
     @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
     @State private var floatingActivityScrollRequest = 0
-
-    private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {
-        Binding(
-            get: { attachedSaveContext },
-            set: { nextContext in
-                if let nextContext {
-                    attachedSaveContext = nextContext
-                } else {
-                    onAttachedClose()
-                }
-            }
-        )
-    }
-
-    private func resolvedAttachedSaveDraft(for context: MapPlaceSaveContext) -> PlaceSaveDraft? {
-        guard let liveDraft = placeSaveDraftStore.draft,
-              liveDraft.candidate.id == context.candidate.id
-        else { return attachedSaveDraft }
-        return liveDraft
-    }
-
-    private func saveSheetAccessibilityIdentifier(for context: MapPlaceSaveContext) -> String {
-        let selectedStatus = resolvedAttachedSaveDraft(for: context)?.form.selectedStatus
-            ?? context.initialStatus
-        return selectedStatus == .wannaGo
-            ? "place-profile.attached-wanna"
-            : "place-profile.attached-check-in"
-    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -1716,22 +1730,6 @@ private struct PlaceProfileFullView: View {
                     onAction: handleFloatingAction
                 )
             }
-        }
-        .sheet(item: attachedSaveSheetContext) { context in
-            MapPlaceSaveFlowSheet(
-                context: context,
-                draft: resolvedAttachedSaveDraft(for: context),
-                onDraftChange: onAttachedDraftChange,
-                onSave: onAttachedSave,
-                onRemove: onAttachedRemove,
-                onClose: onAttachedClose,
-                onSaveCompleted: { result in
-                    guard attachedSaveContext?.id == context.id else { return }
-                    onAttachedSaveCompleted(result)
-                }
-            )
-            .id(context.id)
-            .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
         }
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()

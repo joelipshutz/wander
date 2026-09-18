@@ -27,6 +27,17 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Removing a question changes future prompts and keeps previous answers."].exists)
         XCTAssertTrue(app.staticTexts["Slashed eye. This symbol means those questions only stay with you"].exists)
         capture("REC-485 restore cancellation preserves customization")
+
+        // Closing and reopening the editor must preserve the saved question order.
+        app.buttons["save.questions.done"].tap()
+        let close = app.buttons["save.close"]
+        reveal(close, in: app, upwards: false)
+        close.tap()
+        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForNonExistence(timeout: 5))
+        openCheckIn(in: app)
+        openCustomize(in: app)
+        XCTAssertEqual(recurringIDs(in: app), previous)
+        app.buttons["save.questions.done"].tap()
     }
 
     func testFreshCheckInStartsBlankAndTappingSelectedAnswerClearsIt() {
@@ -485,7 +496,7 @@ final class CheckInQuestionUITests: XCTestCase {
             let exists = element.exists
             let frame = exists ? element.frame : .zero
             let id = exists ? element.identifier : ""
-            let composerTarget = id == "save.questions.customize" || id == "save.questions.alsoNoted"
+            let composerTarget = id == "save.close" || id == "save.questions.customize" || id == "save.questions.alsoNoted"
                 || id.hasPrefix("save.question.") || id.hasPrefix("save.placeType.")
             let editor = app.scrollViews["save.editorScroll"]
             let composerVisible = editor.exists && editor.isHittable && !app.buttons["save.questions.done"].exists
