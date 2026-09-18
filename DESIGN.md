@@ -190,7 +190,7 @@ typography, glass, selection, and surface styling.
 
 ## Typography
 
-- **Display/Hero:** Native editorial serif for first-run onboarding; Funnel Display direction, or equivalent playful grotesque, for other major empty states and top-level screen headings.
+- **Display/Hero:** Native editorial serif for the stable first-run lead-in; its changing words and benefit phrases use Signal-colored Avenir Next. Funnel Display direction, or equivalent playful grotesque, applies to other major empty states and top-level screen headings.
 - **Body:** Funnel Sans direction, or equivalent legible sans. Use for body, controls, sheets, cards, and settings.
 - **UI/Labels:** Same as body, medium weight.
 - **Data/Tables:** Same as body with tabular numerals where counts or distances align.
@@ -213,7 +213,7 @@ Type scale, iPhone:
 Rules:
 
 - No negative letter spacing.
-- Do not scale fonts with viewport width.
+- Do not scale utility fonts with viewport width. The opening's display copy fits its bounded stage, with the serif lead-in slightly larger than the changing words.
 - Dynamic Type must not break selection rails, controls, or bottom sheets.
 - Reserve display-scale type for true onboarding or major hierarchy moments.
 
@@ -300,7 +300,7 @@ Allowed:
 
 Avoid:
 
-- Cinematic onboarding.
+- Automatic onboarding that cannot be paused or advanced manually.
 - Decorative motion that slows capture.
 - Map movement that disorients users.
 
@@ -621,26 +621,27 @@ Access changed:
 
 ### Authentication Boundary
 
-Logged-out launches first show the three-slide value carousel, then Clerk sign-up
-or log-in. The main app is available only after Clerk confirms an active signed-in
-session and required first-run identity setup is complete.
+Logged-out launches first show the Signal opening, Places, and People scenes,
+then native sign-up or log-in backed by Clerk. The main app is available only
+after Clerk confirms an active signed-in session and required first-run identity
+setup is complete.
 
 Rules:
 
-- Launch and foreground activation show a blocking session-check state until the current Clerk client is authoritatively refreshed.
-- Signed-out sessions show the native Clerk sign-in/sign-up surface without a dismiss path; authenticated tabs and cached profile metadata must not remain visible underneath it.
+- Launch and foreground activation show a blocking session-check state when a Clerk refresh is required. Returning from Mail or an identity provider preserves a pending native account attempt.
+- Signed-out sessions keep authenticated tabs and cached profile metadata hidden. Closing native account entry returns to the welcome flow.
 - Session revocation, account deletion, logout, or an account switch removes the authenticated surface immediately and clears account-scoped presentation, widget, analytics, and person metadata.
 - A cached device profile is never proof of authentication and must not be inherited by a different account.
 - If session verification fails, show a retryable unavailable state instead of entering the app with cached identity state.
 - Contextual auth-gate copy may remain for transitions already in flight, but it cannot provide a path around the root authentication boundary.
-- Do not show the auth sheet before the value carousel has explained the product.
+- Next and Log in remain available throughout the welcome flow; automatic account entry follows its final scene.
 
 ## Onboarding Rules
 
 Flow:
 
-1. Three-slide real-map value carousel: place diary, friends, trusted discovery.
-2. Clerk sign-up or log-in.
+1. Signal opening, then a native Hotchkiss Park preview and an example activity postcard, with Places and People benefit copy.
+2. Native sign-up or log-in backed by Clerk, entered with the same horizontal slide motion; closing it restarts the welcome flow.
 3. Required name and username; profile photo is optional.
 4. Location primer and native request, with one neutral Continue action before the system alert.
 5. Contacts primer and native request, with one neutral Continue action before the system alert.
@@ -655,8 +656,9 @@ Rules:
 - No paywall during first-run onboarding.
 - Native permission prompts only after an explicit neutral Continue/Next CTA.
 - A primer that immediately precedes a native permission request has no close, swipe, or skip path. Denied permissions remain recoverable with an Open Settings action and may then be dismissed.
-- Auto-advance carousel slides every seven seconds, pauses for VoiceOver,
-  Reduce Motion, and backgrounding, and always supports manual paging.
+- The opening holds “Connect with your” above centered COMMUNITY, PEOPLE, PLACES, and LOVED ONES, then fades the lead-in before A / LOCAL / EXPERIMENT slides in. The lead-in is serif and slightly larger; changing text is plain Signal-colored sans serif.
+- Words and complete scenes use the same 1.5-second horizontal slide. The opening runs for 17.1 seconds; Places and People each hold for seven seconds before advancing.
+- Automatic playback pauses for VoiceOver, Reduce Motion, backgrounding, or the pause control. Manual Next, Log in, and swipe paging remain available.
 
 ## Interaction States
 
@@ -706,7 +708,7 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 - No public badges, mayorships, leaderboards, or ranking people. The private
   save streak is limited to a once-daily celebration and a compact Profile row;
   it must not become a persistent app-shell fixture.
-- No auth sheet before the logged-out value carousel.
+- No automatic account presentation before the welcome flow finishes.
 - No early paywall.
 - No generic card-grid marketplace feel.
 

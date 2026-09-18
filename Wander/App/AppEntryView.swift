@@ -7,6 +7,10 @@ import TikTokOpenSDKCore
 struct AppEntryForegroundRefreshPolicy {
     static let graceInterval: TimeInterval = 30
 
+    static func canRefreshEntry(isPresentingNativeAuth: Bool) -> Bool {
+        !isPresentingNativeAuth
+    }
+
     private var backgroundedAtUptime: TimeInterval?
 
     mutating func didEnterBackground(atUptime uptime: TimeInterval) {
@@ -84,11 +88,7 @@ struct AppEntryView: View {
             case .launching:
                 OnboardingLaunchView()
             case .signedOut:
-                LoggedOutCarouselView(analytics: analytics) {
-                    auth.beginSignIn(mode: .signUp)
-                } logIn: {
-                    auth.beginSignIn(mode: .signIn)
-                }
+                SignedOutOnboardingFlowView(analytics: analytics)
             case .onboarding(let session, let step):
                 OnboardingFlowView(
                     session: session,
@@ -159,7 +159,7 @@ struct AppEntryView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: productUpsells.activePresentation?.id)
-        .sheet(isPresented: $auth.isPresentingNativeAuth, onDismiss: {
+        .sheet(isPresented: modalAuthPresentation, onDismiss: {
             auth.nativeAuthDidDismiss()
         }) {
             ClerkNativeAuthView(mode: auth.activeNativeAuthMode)
@@ -194,6 +194,16 @@ struct AppEntryView: View {
                 )
             case .active:
                 guard didFinishInitialResolution else { return }
+                // Returning from Mail or an identity provider must preserve the
+                // inline form and its pending verification attempt. Its auth
+                // provider already observes session changes; re-resolving the
+                // entry coordinator here would replace it with a loading view.
+                guard AppEntryForegroundRefreshPolicy.canRefreshEntry(
+                    isPresentingNativeAuth: auth.isPresentingNativeAuth
+                ) else {
+                    analyticsLifecycle.recordForegroundSession()
+                    return
+                }
                 let shouldRefreshSession = foregroundRefreshPolicy.shouldRefreshSession(
                     atUptime: ProcessInfo.processInfo.systemUptime
                 )
@@ -218,6 +228,20 @@ struct AppEntryView: View {
             guard let url = activity.webpageURL else { return }
             receiveIncomingURL(url)
         }
+    }
+
+    /// Signed-out onboarding owns the native horizontal auth transition.
+    /// Auth gates elsewhere in the app continue to use the existing sheet.
+    private var modalAuthPresentation: Binding<Bool> {
+        Binding(
+            get: {
+                guard case .signedOut = coordinator.state else {
+                    return auth.isPresentingNativeAuth
+                }
+                return false
+            },
+            set: { auth.isPresentingNativeAuth = $0 }
+        )
     }
 
     private func receiveIncomingURL(_ url: URL) {

@@ -186,8 +186,7 @@ struct WanderApp: App {
                     .environmentObject(auth)
                     .astirAdaptiveBrandMode()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
-                LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
-                    .astirAdaptiveBrandMode()
+                SignedOutOnboardingPreview()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
                 mapCaptureRoot
             } else if let commonGroundMockupPage = CommonGroundMockPage.resolved() {
