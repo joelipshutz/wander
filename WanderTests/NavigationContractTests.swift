@@ -256,7 +256,8 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
-        XCTAssertTrue(root.contains("FeedScreen(onAdd: presentAddSheet)"))
+        XCTAssertTrue(root.contains("FeedScreen("))
+        XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
@@ -917,7 +918,9 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss)"))
+        XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
+        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 

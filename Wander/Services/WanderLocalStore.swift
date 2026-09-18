@@ -4703,6 +4703,33 @@ final class WanderStore: ObservableObject {
             .sorted { $0.questionKey < $1.questionKey }
     }
 
+    /// Pending deletion intent wins over remote snapshots. A completed deletion
+    /// only hides older snapshots: saving again can restore the same server ID.
+    func placeProfileVisibleSaves(from saves: [VisiblePlace]) -> [VisiblePlace] {
+        var deletedThroughByID: [String: Date] = [:]
+        for row in userPlaces where row.userID == currentUser.id {
+            guard let deletedAt = row.deletedAt else { continue }
+            let deletionIsComplete = row.syncState == .tombstoned || row.syncState == .synced
+            let cutoff = deletionIsComplete ? deletedAt : Date.distantFuture
+            for id in Self.referenceIDs(for: row).map({ $0.lowercased() }) {
+                deletedThroughByID[id] = max(deletedThroughByID[id] ?? .distantPast, cutoff)
+            }
+        }
+        return saves.filter { visible in
+            guard !isBlockedBetweenCurrentUser(and: visible.owner.id),
+                  visible.userPlace.deletedAt == nil else { return false }
+            guard visible.owner.id == currentUser.id else { return true }
+            let row = visible.userPlace
+            let updatedAt = row.syncState == .synced
+                ? (row.serverUpdatedAt ?? row.updatedAt)
+                : row.localUpdatedAt
+            return Self.referenceIDs(for: row).allSatisfy { id in
+                guard let deletedThrough = deletedThroughByID[id.lowercased()] else { return true }
+                return updatedAt > deletedThrough
+            }
+        }
+    }
+
     func shouldShowLegacyCheckInSummary(for userPlaceID: String) -> Bool {
         !loadedRemotePlaceActivityIDs.contains(userPlaceID.lowercased())
     }
@@ -8734,23 +8761,31 @@ final class WanderStore: ObservableObject {
 
         guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
         loadedRemotePlaceActivityIDs.formUnion(refreshedUserPlaceIDs.map { $0.lowercased() })
+        let refreshedReferenceIDs = refreshedUserPlaceIDs.reduce(into: Set<String>()) {
+            $0.formUnion(matchingUserPlaceIDs($1))
+        }
         let hydratedVisitIDs = Set(hydratedVisits.map(\.visitID))
         let staleVisitIDs = Set<String>(
             placeVisits.compactMap { visit in
-                guard Self.isSyntheticRemoteProfileVisit(visit),
+                guard visit.serverID != nil,
                       visit.syncState == .synced,
-                      refreshedUserPlaceIDs.contains(visit.userPlaceID),
+                      refreshedReferenceIDs.contains(visit.userPlaceID),
                       !hydratedVisitIDs.contains(visit.id)
                 else { return nil }
                 return visit.id
             }
         )
+        let staleVisitReferenceIDs = staleVisitIDs.reduce(into: Set<String>()) {
+            $0.formUnion(matchingVisitIDs($1))
+        }
+        let refreshedPhotoReferenceIDs = refreshedPhotoVisitIDs.reduce(into: Set<String>()) {
+            $0.formUnion(matchingVisitIDs($1))
+        }
         placeVisits.removeAll { staleVisitIDs.contains($0.id) }
 
         for result in hydratedVisits {
             if let existing = placeVisits.first(where: {
-                Self.isSyntheticRemoteProfileVisit($0)
-                    && $0.syncState == .synced
+                $0.syncState == .synced
                     && Self.referenceIDs(for: $0).contains(result.visitID)
             }) {
                 applyRemoteVisitResult(result, to: existing)
@@ -8773,17 +8808,16 @@ final class WanderStore: ObservableObject {
 
         let hydratedPhotoIDs = Set(hydratedPhotos.map(\.photoID))
         visitPhotos.removeAll { photo in
-            Self.isSyntheticRemoteProfilePhoto(photo)
+            photo.serverID != nil
                 && photo.syncState == .synced
-                && (staleVisitIDs.contains(photo.visitID)
-                    || (refreshedPhotoVisitIDs.contains(photo.visitID)
+                && (staleVisitReferenceIDs.contains(photo.visitID)
+                    || (refreshedPhotoReferenceIDs.contains(photo.visitID)
                         && !hydratedPhotoIDs.contains(photo.id)))
         }
 
         for result in hydratedPhotos {
             if let existing = visitPhotos.first(where: {
-                Self.isSyntheticRemoteProfilePhoto($0)
-                    && $0.syncState == .synced
+                $0.syncState == .synced
                     && ($0.id == result.photoID || $0.localID == result.photoID || $0.serverID == result.photoID)
             }) {
                 applyRemotePhotoResult(result, to: existing)
