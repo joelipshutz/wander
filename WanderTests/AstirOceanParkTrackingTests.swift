@@ -32,7 +32,9 @@ final class AstirOceanParkTrackingTests: XCTestCase {
     @MainActor
     func testSchedulerStartsAfterThreeSecondsThenUsesRandomIntervalsWithoutIdleTicks() async {
         var time: TimeInterval = 0
-        var intervals = [55.0, 65.0, 60.0]
+        let cadence = AstirOceanParkTracking.interval
+        XCTAssertEqual(cadence, 25...30)
+        var intervals = [cadence.lowerBound, cadence.upperBound, 27.5]
         var sleeps: [TimeInterval] = []
         var onsets: [TimeInterval] = []
         var wasActive = false
@@ -42,7 +44,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
             now: { time },
             sleep: { delay in
                 sleeps.append(delay)
-                if time > 123 { throw CancellationError() }
+                if time > 58 { throw CancellationError() }
                 time += delay
             },
             update: { frame in
@@ -51,12 +53,12 @@ final class AstirOceanParkTrackingTests: XCTestCase {
                 finalFrame = frame
             }
         )
-        XCTAssertEqual(onsets, [3, 58, 123])
+        XCTAssertEqual(onsets, [3, 28, 58])
         XCTAssertEqual(sleeps.first, 3)
         let longSleeps = sleeps.filter { $0 > 1 }
         XCTAssertEqual(longSleeps.count, 3)
-        XCTAssertEqual(longSleeps[1], 54.04, accuracy: 0.00001)
-        XCTAssertEqual(longSleeps[2], 64.04, accuracy: 0.00001)
+        XCTAssertEqual(longSleeps[1], 24.04, accuracy: 0.00001)
+        XCTAssertEqual(longSleeps[2], 29.04, accuracy: 0.00001)
         XCTAssertNil(finalFrame, "Cancellation restores the original still label.")
     }
 
@@ -103,7 +105,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
     func testCancellationDuringIdleNeverStartsAnEpisode() async {
         var activeFrames = 0
         await AstirOceanParkTracking.run(
-            nextInterval: { 60 },
+            nextInterval: { 27.5 },
             sleep: { _ in throw CancellationError() },
             update: { if $0 != nil { activeFrames += 1 } }
         )
@@ -117,9 +119,9 @@ final class AstirOceanParkTrackingTests: XCTestCase {
         var wasActive = false
         var activeFrames = 0
         await AstirOceanParkTracking.run(
-            nextInterval: { 60 }, now: { time },
+            nextInterval: { 27.5 }, now: { time },
             sleep: { delay in
-                if time >= 63 { throw CancellationError() }
+                if time >= 30.5 { throw CancellationError() }
                 time += delay
             },
             update: { frame in
@@ -132,7 +134,7 @@ final class AstirOceanParkTrackingTests: XCTestCase {
                 wasActive = frame != nil
             }
         )
-        XCTAssertEqual(onsets, [3, 63])
+        XCTAssertEqual(onsets, [3, 30.5])
         XCTAssertLessThan(activeFrames, 10)
     }
 }
