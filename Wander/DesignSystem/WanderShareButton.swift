@@ -205,6 +205,21 @@ enum WanderShareAttachmentStore {
     static let retentionInterval: TimeInterval = 24 * 60 * 60
     private static let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
 
+    /// Encoding and writing are synchronous work. Keep both away from the
+    /// main actor so preparing an attachment cannot interrupt scrolling.
+    static func preparePNG(_ image: UIImage) async -> URL? {
+        guard !Task.isCancelled else { return nil }
+        let fileURL = await Task.detached(priority: .utility) {
+            guard let data = image.pngData() else { return nil as URL? }
+            return try? persistPNG(data)
+        }.value
+        guard !Task.isCancelled else {
+            if let fileURL { await removePreparedPNG(at: fileURL) }
+            return nil
+        }
+        return fileURL
+    }
+
     static func preparePNG(_ data: Data) async -> URL? {
         guard !Task.isCancelled else { return nil }
         let fileURL = await Task.detached(priority: .utility) {
@@ -282,24 +297,56 @@ enum WanderShareAttachmentStore {
     }
 }
 
+@MainActor
+enum WanderSharePreviewArtwork {
+    // Symbol-backed SwiftUI Images do not supply bitmap data to ShareLink.
+    // Render this small placeholder once, without fetching profile artwork.
+    static let profile: UIImage = {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: CGSize(width: 96, height: 96), format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 96, height: 96))
+            UIImage(systemName: "person.crop.circle.fill")?
+                .withTintColor(.black, renderingMode: .alwaysOriginal)
+                .draw(in: CGRect(x: 16, y: 16, width: 64, height: 64))
+        }
+    }()
+}
+
 struct WanderShareButton<Label: View>: View {
     let content: WanderShareContent
+    private let preview: SharePreview<Image, Never>?
     private let onTap: () -> Void
     private let label: () -> Label
 
     init(
         content: WanderShareContent,
+        preview: SharePreview<Image, Never>? = nil,
         onTap: @escaping () -> Void = {},
         @ViewBuilder label: @escaping () -> Label
     ) {
         self.content = content
+        self.preview = preview
         self.onTap = onTap
         self.label = label
     }
 
     @ViewBuilder
     var body: some View {
-        if content.additionalItems.isEmpty {
+        if let preview, content.additionalItems.isEmpty {
+            // Supplying a preview avoids waiting for remote link metadata.
+            // The shared URL, subject, and message remain unchanged.
+            ShareLink(
+                item: content.item,
+                subject: Text(content.subject),
+                message: Text(content.message),
+                preview: preview,
+                label: label
+            )
+            .simultaneousGesture(TapGesture().onEnded { _ in onTap() })
+        } else if content.additionalItems.isEmpty {
             ShareLink(
                 item: content.item,
                 subject: Text(content.subject),
