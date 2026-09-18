@@ -468,6 +468,7 @@ struct SharedVisitInvitationInboxScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @ObservedObject var planInbox: PlacePlanInvitationInbox
+    @ObservedObject var notificationBadge: NotificationBadgeStore
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
     @State private var isRefreshing = false
@@ -477,6 +478,14 @@ struct SharedVisitInvitationInboxScreen: View {
 
     private var plans: [ReceivedPlacePlanInvitation] {
         planInbox.userID == store.currentUser.id ? planInbox.invitations : []
+    }
+
+    private var badgeSnapshot: NotificationBadgeSnapshot {
+        NotificationBadgeSnapshot(
+            userID: store.currentUser.id,
+            plans: plans,
+            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : []
+        )
     }
 
     private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty }
@@ -530,6 +539,9 @@ struct SharedVisitInvitationInboxScreen: View {
         }
         .background(brandMode.background.ignoresSafeArea())
         .foregroundStyle(brandMode.primaryText)
+        .onAppear { notificationBadge.open(badgeSnapshot) }
+        .onChange(of: badgeSnapshot) { _, snapshot in notificationBadge.updateVisibleInbox(snapshot) }
+        .onDisappear { notificationBadge.close() }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }

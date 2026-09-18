@@ -118,6 +118,7 @@ final class ProfilePresentationCache {
 struct ProfileScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var planInbox = PlacePlanInvitationInbox()
+    @StateObject private var notificationBadge = NotificationBadgeStore()
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -310,7 +311,7 @@ struct ProfileScreen: View {
                     }
                 }
                 .navigationDestination(isPresented: $showsVisitInvitations) {
-                    SharedVisitInvitationInboxScreen(planInbox: planInbox) { invitation in
+                    SharedVisitInvitationInboxScreen(planInbox: planInbox, notificationBadge: notificationBadge) { invitation in
                         showsVisitInvitations = false
                         pushNotifications.openSharedVisit(
                             participantID: invitation.participantID,
@@ -376,12 +377,12 @@ struct ProfileScreen: View {
     }
 
     private var sharedVisitInvitationBadgeCount: Int {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-WanderPendingInvitationBadge") {
-            return max(store.sharedVisitInvitations.count, 1)
-        }
-        #endif
-        return store.sharedVisitInvitations.count + planInbox.unreadCount(for: store.currentUser.id)
+        guard auth.isSignedIn else { return 0 }
+        return notificationBadge.count(for: NotificationBadgeSnapshot(
+            userID: store.currentUser.id,
+            plans: planInbox.userID == store.currentUser.id ? planInbox.invitations : [],
+            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : []
+        ))
     }
 
     private func handlePresentationResetRequest(_ request: WanderPresentationResetRequest?) {

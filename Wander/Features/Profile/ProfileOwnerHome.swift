@@ -741,7 +741,11 @@ struct ProfileInvitationBadgeState: Equatable {
     }
 
     var accessibilityValue: String {
-        isVisible ? "\(pendingInvitationCount) pending" : "No pending invitations"
+        switch pendingInvitationCount {
+        case 0: "No new notifications"
+        case 1: "1 new notification"
+        default: "\(pendingInvitationCount) new notifications"
+        }
     }
 }
 
@@ -765,10 +769,14 @@ private struct ProfileInvitationButton: View {
             .accessibilityIdentifier("profile.checkInInvitations")
 
             if badgeState.isVisible {
-                Circle()
-                    .fill(Color(uiColor: .systemRed))
-                    .frame(width: 10, height: 10)
-                    .offset(x: 2, y: -2)
+                Text(pendingInvitationCount.formatted())
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(Color(uiColor: .systemRed), in: Capsule())
+                    .offset(x: 4, y: -3)
                     .zIndex(1)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)

@@ -2,6 +2,48 @@
 import XCTest
 
 @MainActor final class PlacePlanInvitationUITests: XCTestCase {
+    func testBellCountClearsOnInboxVisitWithoutOpeningPlanAndStaysClearAfterRelaunch() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        let arguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                         "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest"]
+        app.launchArguments = arguments + ["-WanderResetNotificationBadge"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
+        app.buttons["Profile"].firstMatch.tap()
+        let bell = app.buttons["profile.checkInInvitations"]
+        XCTAssertTrue(bell.waitForExistence(timeout: 10))
+        let hasOne = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1 new notification"), object: bell)
+        XCTAssertEqual(XCTWaiter.wait(for: [hasOne], timeout: 10), .completed)
+        let before = XCTAttachment(screenshot: app.screenshot())
+        before.name = "rec486-bell-count"
+        before.lifetime = .keepAlways
+        add(before)
+        bell.tap()
+        let row = app.buttons["place-plan.notification.11111111-2222-4333-8444-555555555555"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertEqual(row.value as? String, "Unread")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(bell.waitForExistence(timeout: 10))
+        XCTAssertEqual(bell.value as? String, "No new notifications")
+        let after = XCTAttachment(screenshot: app.screenshot())
+        after.name = "rec486-bell-cleared"
+        after.lifetime = .keepAlways
+        add(after)
+        app.terminate()
+        app.launchArguments = arguments
+        app.launch()
+        XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
+        app.buttons["Profile"].firstMatch.tap()
+        XCTAssertTrue(bell.waitForExistence(timeout: 10))
+        bell.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertEqual(row.value as? String, "Unread", "The plan remains unopened and available")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(bell.waitForExistence(timeout: 10))
+        XCTAssertEqual(bell.value as? String, "No new notifications")
+    }
+
     func testProfileNotificationsKeepReadPlansAvailableToReopen() {
         continueAfterFailure = false
         let app = XCUIApplication()

@@ -5226,12 +5226,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"bell\")"))
         XCTAssertTrue(invitationButton.contains(".accessibilityLabel(\"Notifications\")"))
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
-        XCTAssertTrue(invitationButton.contains("Circle()"))
+        XCTAssertTrue(invitationButton.contains("Capsule()"))
         XCTAssertTrue(invitationButton.contains("Color(uiColor: .systemRed)"))
         XCTAssertTrue(invitationButton.contains(".zIndex(1)"))
         XCTAssertFalse(invitationButton.contains(".stroke("))
         XCTAssertTrue(invitationButton.contains("profile.checkInInvitations"))
-        XCTAssertFalse(invitationButton.contains("Text("))
+        XCTAssertTrue(invitationButton.contains("Text(pendingInvitationCount.formatted())"))
         XCTAssertTrue(screen.contains("sharedVisitInvitationsAction: { showsVisitInvitations = true }"))
         XCTAssertTrue(screen.contains(".navigationDestination(isPresented: $showsVisitInvitations)"))
         XCTAssertTrue(recentActivity.contains("ProfileActivityFilterControl("))
@@ -5254,21 +5254,21 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testProfileInvitationBadgeStateTracksPendingInvitationCount() {
+    func testProfileInvitationBadgeStateDescribesNewNotificationCount() {
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: 0).isVisible)
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 0).accessibilityValue,
-            "No pending invitations"
+            "No new notifications"
         )
 
         XCTAssertTrue(ProfileInvitationBadgeState(pendingInvitationCount: 1).isVisible)
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 1).accessibilityValue,
-            "1 pending"
+            "1 new notification"
         )
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 4).accessibilityValue,
-            "4 pending"
+            "4 new notifications"
         )
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: -1).isVisible)
     }
