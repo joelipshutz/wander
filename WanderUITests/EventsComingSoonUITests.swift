@@ -23,6 +23,9 @@ import XCTest
         for label in ["Map", "Feed", "Lists", "Profile", "Map", "Profile", "Feed", "Lists"] {
             tabs.buttons[label].tap()
             XCTAssertTrue(tabs.buttons[label].isSelected)
+            if label == "Profile" {
+                capture("Events — unselected beside Profile")
+            }
             tabs.buttons["Events"].tap()
             XCTAssertTrue(tabs.buttons["Events"].isSelected)
             XCTAssertTrue(artwork.waitForExistence(timeout: 2))
