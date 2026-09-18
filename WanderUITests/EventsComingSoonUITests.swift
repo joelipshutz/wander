@@ -57,16 +57,19 @@ import UIKit
         XCTAssertTrue(button.isHittable)
         XCTAssertGreaterThanOrEqual(button.frame.height, 44)
         XCTAssertLessThan(button.frame.maxY, tabs.frame.minY)
+        XCTAssertEqual(button.label, "Keep me posted")
         capture("Events CTA — orange")
         button.tap()
         let confirmed = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "isSelected == true"), object: button
         )
         XCTAssertEqual(XCTWaiter.wait(for: [confirmed], timeout: 5), .completed)
+        XCTAssertEqual(button.label, "Added to waitlist")
         capture("Events CTA — white")
         tabs.buttons["Map"].tap()
         tabs.buttons["Events"].tap()
         XCTAssertTrue(button.isSelected)
+        XCTAssertEqual(button.label, "Added to waitlist")
         XCTAssertTrue(button.isHittable)
     }
 
