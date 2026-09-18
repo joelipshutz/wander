@@ -670,7 +670,13 @@ struct WanderRootView: View {
 
     @ViewBuilder
     private func tabItemLabel(for tab: WanderTab) -> some View {
-        if tab == .lists {
+        if tab == .events {
+            Label {
+                Text(tab.title)
+            } icon: {
+                Image(uiImage: EventsTabSymbol.tabImage)
+            }
+        } else if tab == .lists {
             Label {
                 Text(tab.title)
             } icon: {
