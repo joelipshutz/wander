@@ -3702,6 +3702,28 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(ListsScreenScenario.collaboratorsSheet.usesMockData)
     }
 
+    @MainActor
+    func testLiveAndEmptyListsDoNotInitializeTheScenarioCatalog() throws {
+        for scenario in [ListsScreenScenario.live, .empty] {
+            let screen = ListsScreen(scenario: scenario)
+            let fixture = try XCTUnwrap(Mirror(reflecting: screen).children.first {
+                $0.label == "scenarioList"
+            })
+            let value = Mirror(reflecting: fixture.value)
+            XCTAssertEqual(value.displayStyle, .optional)
+            XCTAssertTrue(value.children.isEmpty, "\(scenario) must not construct demo places during app launch")
+        }
+    }
+
+    @MainActor
+    func testExplicitListDetailScenarioRetainsItsFixture() throws {
+        let screen = ListsScreen(scenario: .detail)
+        let fixture = try XCTUnwrap(Mirror(reflecting: screen).children.first {
+            $0.label == "scenarioList"
+        })
+        XCTAssertEqual(Mirror(reflecting: fixture.value).children.count, 1)
+    }
+
     func testVisitFriendMockupsHaveDeterministicLaunchPages() {
         XCTAssertEqual(
             PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitFriendsEditor"]),
