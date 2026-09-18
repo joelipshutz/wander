@@ -2460,6 +2460,27 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(next.waitForExistence(timeout: 5))
     }
 
+    func testFilmExplorationsAutoAdvanceToInteractiveAccount() {
+        for treatment in ["film", "film-type"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+            app.launchEnvironment["WANDER_ONBOARDING_TREATMENT"] = treatment
+            app.launch()
+            XCTAssertTrue(app.buttons["onboarding.next"].waitForExistence(timeout: 10))
+            let email = app.textFields["auth.email"]
+            XCTAssertTrue(email.waitForExistence(timeout: 50))
+            let landed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: email)
+            XCTAssertEqual(XCTWaiter.wait(for: [landed], timeout: 5), .completed)
+            XCTAssertEqual(app.state, .runningForeground)
+            XCTAssertFalse(app.buttons["auth.close"].exists)
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = "\(treatment) automatic playback complete"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            app.terminate()
+        }
+    }
+
     func testFilmExplorationsKeepSignupAndLoginInteractive() {
         func keepScreenshot(_ name: String) {
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

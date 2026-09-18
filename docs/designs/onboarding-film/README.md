@@ -26,7 +26,7 @@ The fixture route uses local test authentication, not a live account.
 from the Coming Soon source archive documented in
 [the Events asset handoff](../events-coming-soon/README.md). No additional
 media generation is used. Its first frame provides the immediate/Reduce Motion
-poster. Screen blending at 48% with slightly stronger contrast keeps background
+poster. Screen blending at 48% keeps background
 wear visible. The field is `#0c1010`; Signal is `#d77554`.
 
 The selected Events 03C renderer supplies the damage cadence, not just its
@@ -45,6 +45,9 @@ The reference was inspected at steady and fault frames. No shader compiler,
 web view or recorded button is used at runtime. The original native views retain
 layout, accessibility and hit areas; decorative drawings do not handle touches.
 A single muted local video layer supplies the original background texture.
+The material-backed masthead stays outside Canvas symbol filtering, and the
+AVPlayer surface has no color-matrix filter. Those combinations triggered an
+iOS Simulator RenderBox crash during live playback despite passing static tests.
 
 Next, Log in, email, code entry and account navigation use the existing actions.
 Automatic progression ends at Create your account, where all film motion holds.

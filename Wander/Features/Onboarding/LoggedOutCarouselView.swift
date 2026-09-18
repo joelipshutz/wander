@@ -58,7 +58,6 @@ struct LoggedOutCarouselView: View {
             VStack(spacing: 0) {
                 HStack {
                     AstirMastheadLockup(isCompact: true)
-                        .onboardingFilmInk()
                     Spacer()
                     if !accessibilityPausesAutoAdvance {
                         Button { isPaused.toggle() } label: {

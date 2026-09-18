@@ -54,7 +54,6 @@ struct SignedOutOnboardingFlowView: View {
             if treatment.isFilm {
                 ZStack {
                     OnboardingFilmTexture(isPlaying: filmIsPlaying && !auth.isPresentingNativeAuth, reduceMotion: reduceMotion)
-                        .contrast(1.18)
                         .blendMode(.screen)
                         .opacity(0.48)
                     OnboardingFilmArtifacts()
