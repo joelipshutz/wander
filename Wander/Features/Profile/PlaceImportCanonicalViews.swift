@@ -78,6 +78,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var pendingStatuses: [String: PlaceStatus] = [:]
     @State private var pendingLists: [String: Set<String>] = [:]
     @State private var didReconcileExisting = false
+    @State private var privateDetailsWarningCount = 0
 
     var body: some View {
         ScrollView {
@@ -136,6 +137,30 @@ struct PlaceImportCanonicalReviewScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
         .interactiveDismissDisabled(isCommitting)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if privateDetailsWarningCount > 0 {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Check-ins saved")
+                            .font(AstirTypography.control)
+                        Spacer(minLength: WanderTheme.spacing2)
+                        Button("Dismiss") { privateDetailsWarningCount = 0 }
+                            .font(AstirTypography.control)
+                            .frame(minHeight: WanderTheme.tapMinimum)
+                    }
+                    Text(privateDetailsWarningCount == 1
+                         ? "One check-in’s private answers couldn’t be stored on this device. The check-in was saved."
+                         : "Private answers for \(privateDetailsWarningCount) check-ins couldn’t be stored on this device. The check-ins were saved.")
+                        .font(AstirTypography.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(brandMode.primaryText)
+                .padding(WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(brandMode.recessedBackground)
+                .accessibilityIdentifier("import.privateDetailsWarning")
+            }
+        }
         .sheet(item: $rescueItem) { item in
             PlaceImportRescueScreen(
                 item: item,
@@ -745,6 +770,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
 
         isCommitting = true
+        privateDetailsWarningCount = 0
         commitTask = Task { @MainActor in
             await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs)
             isCommitting = false
@@ -767,10 +793,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             for item in batchItems where itemIDs.contains(item.id) && item.state != .dismissed {
                 if item.state == .saved {
                     if let submission = stagedDetailSubmissions[item.id] {
-                        guard await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) != nil else {
+                        guard let result = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil) else {
                             showsCommitError = true
                             return
                         }
+                        if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                     }
                     for entry in entries where entry.itemID == item.id {
                         if let id = entry.userPlaceID, let status = pendingStatuses[item.id] {
@@ -814,6 +841,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                         }
                         guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                         result = stagedResult
+                        if result.localDetailsWarning != nil { privateDetailsWarningCount += 1 }
                     } else {
                         result = store.saveImportedCandidate(
                             candidate,
