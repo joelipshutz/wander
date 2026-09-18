@@ -62,16 +62,16 @@ import UIKit
         button.tap()
         let status = app.staticTexts["events.waitlistStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))
-        XCTAssertEqual(status.label, "Added to Wait List")
+        XCTAssertEqual(status.label, "Added to Waitlist")
         XCTAssertFalse(button.exists)
         status.press(forDuration: 1.5)
-        XCTAssertEqual(status.label, "Added to Wait List")
+        XCTAssertEqual(status.label, "Added to Waitlist")
         XCTAssertFalse(button.exists)
         capture("Events confirmation — borderless")
         tabs.buttons["Map"].tap()
         tabs.buttons["Events"].tap()
         XCTAssertTrue(status.waitForExistence(timeout: 5))
-        XCTAssertEqual(status.label, "Added to Wait List")
+        XCTAssertEqual(status.label, "Added to Waitlist")
         XCTAssertFalse(button.exists)
     }
 
