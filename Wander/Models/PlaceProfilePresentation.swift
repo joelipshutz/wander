@@ -317,13 +317,9 @@ enum PlaceProfileAttributePresentation {
     /// Only the catalog's explicit meaning is eligible for matching. Display
     /// text remains separate so an answer such as "No" never matches "outlets".
     static func searchTerms(from attribute: LocalPlaceAttribute) -> [String] {
-        guard attribute.valueType == "single_choice",
-              let question = PlaceCheckInQuestionCatalog.question(id: attribute.questionKey),
-              let data = attribute.valueJSON.data(using: .utf8),
-              let answer = try? JSONDecoder().decode(String.self, from: data)
-        else { return [] }
-
-        return question.searchTerms(for: answer)
+        guard let question = PlaceCheckInQuestionCatalog.question(id: attribute.questionKey),
+              attribute.valueType == question.valueType else { return [] }
+        return question.values(fromJSON: attribute.valueJSON).flatMap(question.searchTerms)
     }
 }
 

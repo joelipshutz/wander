@@ -2,33 +2,33 @@
 
 This inventory covers every selectable place subtype. Each row is the starting set for an optional Check-in: exactly three questions, with no answers selected. People can customize their set. Leaving a question unanswered means unknown; it does not mean “no.”
 
-The catalog has **590 selectable subcategories across 14 categories**, **236 questions available for new selections**, and **51 historical definitions retained for saved answers**. There are 287 definitions in total. The available library has 3 questions with 2 choices, 197 questions with 3 choices, 32 questions with 4 choices, 4 questions with 5 choices. Optional library questions do not lengthen the initial three-question set.
+The catalog has **590 selectable subcategories across 14 categories**, **238 questions available for new selections**, and **51 historical definitions retained for saved answers**. There are 289 definitions in total; **149 available questions use Yes/No**. Meaningful exceptions retain a few choices. Dietary options is multi-select: Vegan, Vegetarian, Gluten free. Nothing is selected by default.
 
-All 277 original definitions were reviewed for practical, concise wording. Ingredient, ordering and browsing-space trivia has been retired from new selections. Existing keys and all of their stored option values remain compatible. The 10 new questions describe new facts; an old Pilates apparatus answer is never converted into an answer about whether someone attended a reformer class.
+All 277 original definitions were reviewed for practical, concise wording. Ingredient, ordering and browsing-space trivia has been retired from new selections. Existing keys and all of their stored option values remain compatible. The 12 newer questions describe new facts; an old Pilates apparatus answer is never converted into an answer about whether someone attended a reformer class.
 
-Questions distinguish a visit from a lasting rule. “Booked ahead” records what the person did. “Booking guidance” records guidance explicitly given by staff or signs. A class being busy describes that visit; it does not establish a fixed class size. Posted dog rules can record leash requirements or no pet dogs. Indoor/outdoor dog access is used for venues with those areas; an outdoor-only route does not receive indoor-access choices. No sign found establishes no permission.
+The binary prompt layer simplifies new inputs while retaining every original option as an accepted historical value. No old answer is converted into Yes or No. Questions distinguish a visit from a lasting rule. “Booked ahead” records what the person did. “Reservation required?” asks about an observed requirement. A class being busy describes that visit; it does not establish a fixed class size. Posted dog rules can record leash requirements or no pet dogs. “Dogs allowed?” is binary for venues, including every coffee, tea and sweets subtype. A Yes does not imply indoor access. Historical inside/outside answers retain their qualified meaning. No sign found establishes no permission.
 
-This table is generated from the Swift catalog definitions and selectable taxonomy. Change the source first, then regenerate. Source files: [taxonomy](../../Wander/Services/WanderPlaceCategory.swift), [catalog contract](../../Wander/Features/Add/PlaceCheckInQuestionCatalog.swift), [core questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreQuestions.swift), [core profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreProfiles.swift), [everyday questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayQuestions.swift), [everyday profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayProfiles.swift).
+This table follows the Swift catalog definitions and selectable taxonomy. Change the source first, then regenerate. Source files: [taxonomy](../../Wander/Services/WanderPlaceCategory.swift), [catalog contract](../../Wander/Features/Add/PlaceCheckInQuestionCatalog.swift), [binary prompts](../../Wander/Features/Add/PlaceCheckInBinaryPrompts.swift), [core questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreQuestions.swift), [core profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+CoreProfiles.swift), [everyday questions](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayQuestions.swift), [everyday profiles](../../Wander/Features/Add/PlaceCheckInQuestionCatalog+EverydayProfiles.swift).
 
 ## Core examples
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
 | Coffee shop | Laptops welcome? | Power outlets? | Dogs allowed? |
-| Cafe | Laptops welcome? | Outdoor seating? | Dogs allowed? |
-| Thai | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
+| Cafe | Laptops welcome? | Power outlets? | Dogs allowed? |
+| Thai | Easy to find parking? | Outdoor seating? | Dietary options? |
 | Pilates studio | Was it a reformer class? | Was the class busy? | Easy to book? |
-| CrossFit gym | Were workout adaptations explained? | Coached WOD or open gym? | Day pass or members only? |
+| CrossFit gym | Were workout adaptations explained? | Coached WOD or open gym? | Day pass available? |
 | Functional fitness studio | Coached circuits or individual training? | Did coaches give technique feedback? | Was it busy? |
 | Volleyball court | Sand, grass or hard court? | Volleyball net ready to use? | Open play or book a court? |
-| Beach tennis | Open play or book a court? | Equipment provided? | Court lights on for evening play? |
-| Beach volleyball | Volleyball net ready to use? | Open play or book a court? | How much shade did you find? |
-| Park | Posted dog rules? | How much shade did you find? | Bathroom access? |
-| Beach | Posted dog rules? | How much shade did you find? | Rinse facilities? |
+| Beach tennis | Open play or book a court? | Equipment available? | Court lights on for evening play? |
+| Beach volleyball | Volleyball net ready to use? | Open play or book a court? | Shaded areas? |
+| Park | Posted dog rules? | Shaded areas? | Bathroom available? |
+| Beach | Posted dog rules? | Shaded areas? | Rinse-off showers? |
 | Surf | Surfboard rental available? | Was it busy? | Posted dog rules? |
-| Surf break | Crowded in the water? | Rinse facilities? | Posted dog rules? |
-| Stadium | Was your seat covered? | Reserved seats or first come? | Bags checked or stored on entry? |
-| Arena | How was the sound from your spot? | Reserved seats or first come? | Bags checked or stored on entry? |
+| Surf break | Crowded in the water? | Rinse-off showers? | Posted dog rules? |
+| Stadium | Was your seat covered? | Reserved seats or first come? | Bag checks on entry? |
+| Arena | Was the sound good? | Reserved seats or first come? | Bag checks on entry? |
 
 Dogs, laptops and outlets lead the coffee-shop set. Pilates asks about reformer class, busyness and booking; CrossFit asks about workout adaptations, coached WOD/open gym and drop-in access. Parks receive dog rules, shade and bathrooms. Rinse facilities remain specific to beaches and surf breaks.
 
@@ -38,99 +38,41 @@ New types have one picker home: Beach tennis, Beach volleyball, Padel court, Cli
 
 Every selectable subtype must have an explicit catalog row. Exhaustive tests enumerate the actual picker and reject missing rows, duplicate scopes, retired defaults or references that do not resolve. A user-written or unrecognized subtype keeps its own name and customization scope and receives a category fallback. Fallback does not count as curation for a new selectable subtype.
 
-For restaurants, the selected Food type can correct a culinary label such as Ramen to Thai. Explicit venue formats such as Taco truck and Food court retain their practical question set when paired with a cuisine; a newly selected venue format takes precedence. Legacy formats such as Buffet and Food truck retain a separate preference scope and use the category fallback if they have no curated row. This resolver changes question context only, not stored category data.
+For restaurants, the selected Food type can correct a culinary label such as Ramen to Thai. Explicit venue formats such as Taco truck and Food court retain their practical question set when paired with a cuisine; a newly selected venue format takes precedence. Legacy formats such as Buffet, Food truck and Fine dining have explicit format profiles while retaining their own preference scope. This resolver changes question context only, not stored category data.
 
 When no subtype is supplied, the category’s normal default subtype is used. Restaurant is an additional category default rather than a picker entry:
 
 | Default | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Restaurant | Dogs allowed? | Outdoor seating? | What booking guidance did staff or signs give? |
+| Restaurant | Easy to find parking? | Outdoor seating? | Dietary options? |
 
 An unrecognized primary category uses Place. These fallback sets also have no selected answers.
 
 | Category fallback | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Restaurants & Food | Dogs allowed? | Outdoor seating? | What booking guidance did staff or signs give? |
+| Restaurants & Food | Easy to find parking? | Outdoor seating? | Dietary options? |
 | Coffee, Tea, & Sweets | Laptops welcome? | Power outlets? | Dogs allowed? |
 | Bars & Nightlife | Easy to have a conversation? | Good alcohol-free options? | Outdoor seating? |
-| Outdoors & Nature | Posted dog rules? | How much shade did you find? | Bathroom access? |
+| Outdoors & Nature | Posted dog rules? | Shaded areas? | Bathroom available? |
 | Things To Do | Entry fee? | How much time would you allow? | Step-free entrance? |
 | Shopping | Dogs allowed? | Help choosing available? | Card, cash or app? |
-| Wellness & Fitness | Step-free entrance? | Long wait? | Bathroom access? |
+| Wellness & Fitness | Step-free entrance? | Long wait? | Bathroom available? |
 | Stays | Quiet room when you rested? | Luggage storage? | Room temperature controls? |
 | Services & Errands | Walk-in or appointment? | Long wait? | Clear prices before paying? |
-| Travel & Transit | Easy to find your way? | Somewhere to sit? | Bathroom access? |
-| Work & Education | How was the Wi-Fi? | Power outlets? | Easy to have a conversation? |
+| Travel & Transit | Easy to find your way? | Somewhere to sit? | Bathroom available? |
+| Work & Education | Did the Wi-Fi work well? | Power outlets? | Easy to have a conversation? |
 | Civic & Faith | How did visitor entry work? | Step-free entrance? | Clear visitor rules? |
 | Areas & Addresses | How did you get around? | Seating without a purchase? | Easy to find your way? |
-| Facilities & Other | Step-free entrance? | Somewhere to sit? | Bathroom access? |
-| Place | Step-free entrance? | Somewhere to sit? | Bathroom access? |
+| Facilities & Other | Step-free entrance? | Somewhere to sit? | Bathroom available? |
+| Place | Step-free entrance? | Somewhere to sit? | Bathroom available? |
 
 ## Shared sets and rationale
 
-There are 57 repeated question sets within categories, treating different order as the same set. Shared defaults reflect overlapping practical needs, not identical places or guaranteed facilities. Broad national cuisine labels do not establish recipes, diet or service. Their defaults ask useful dining questions without manufacturing regional distinctions. Activity and service formats get specialized questions when the type provides that context.
+Split by the experience, not a cuisine name. Italian, Chinese, Thai, ramen and sushi share parking, outdoor seating and dietary options. Vegan restaurants replace the redundant vegan question with gluten-free options; vegetarian restaurants ask about vegan meals. Gluten-free venues ask about clear dietary information. Takeaway formats prioritize waits; food courts prioritize seating and bathrooms; fine dining prioritizes reservations; tabletop cooking prioritizes smoke and reservations.
 
-Cabin, cottage, campground and RV-park defaults also stay consistent when those identical subtypes occur under both Outdoors and Stays. Every repeated within-category set is listed below.
+Coffee shop, cafe and coffee lounge share laptop, outlet and dog questions. All 26 coffee, tea and sweets types include dogs. Park and garden visits can share dog rules, shade and bathrooms; beaches retain rinse-off showers and trails retain terrain. Gym and fitness center share equipment needs, while Pilates, CrossFit, coached circuits and beach courts remain distinct. Hotels, motels and inns share room comfort and luggage needs; hostels retain privacy, lockers and cooking. Rail, subway and bus stations share wayfinding, step-free boarding and bathrooms; exposed bus stops retain shelter. Clothing and shoe shops share trying-on space, staff help and dog access.
 
-| Category | Subcategories sharing a set | Rationale |
-| --- | --- | --- |
-| Areas & Addresses | Condominium complex; Address | Answers describe only the part the person explored, not conditions across the whole district or country. |
-| Areas & Addresses | Locality/city; Region; Country | Answers describe only the part the person explored, not conditions across the whole district or country. |
-| Bars & Nightlife | Club; Disco; Nightclub | Equivalent drinking, listening, dancing or entry needs justify the shared set; actual answers remain optional. |
-| Bars & Nightlife | Jazz club; Live music | Equivalent drinking, listening, dancing or entry needs justify the shared set; actual answers remain optional. |
-| Civic & Faith | Church; Mosque | Visitor logistics are shared; no beliefs, attendance purpose or religious practices are inferred. |
-| Civic & Faith | Synagogue; Place of worship | Visitor logistics are shared; no beliefs, attendance purpose or religious practices are inferred. |
-| Coffee, Tea, & Sweets | Acai; Bakery; Pastry shop | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
-| Coffee, Tea, & Sweets | Coffee shop; Coffee lounge | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
-| Coffee, Tea, & Sweets | Coffee stand; Smoothie shop | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
-| Coffee, Tea, & Sweets | Ice cream; Gelato | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
-| Coffee, Tea, & Sweets | Tea store; Candy store; Chocolate shop; Confectionery | These formats share the selected dog-access, seating, work, dietary or take-home needs without assuming a specific recipe. |
-| Outdoors & Nature | City park; Garden; Fishing pier | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
-| Outdoors & Nature | Hiking area; Trail; Hike | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
-| Outdoors & Nature | Park; Lake | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
-| Outdoors & Nature | Viewpoint; Overlook | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
-| Outdoors & Nature | Wildlife refuge; Botanical garden | These open-air visits share the selected dog-rule, route, shade or rest needs; no facilities are presumed present. |
-| Restaurants & Food | Asian fusion; Mediterranean; Greek; Burgers | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Australian; New Zealand; Fijian; Samoan; Tongan; Chicken | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Bao buns; Taco | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | British; Irish; Bistro | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Californian; Vegan | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Chinese; Cantonese | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Dutch; Belgian | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | German; Austrian; Bavarian; Swiss; American; Canadian | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Gyro; Fish & chips; Hot dogs; Taco stand | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Italian; Steakhouse | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Kebab; Caribbean; Jamaican; Puerto Rican; Dominican; Haitian; Panamanian; Cuban; Hawaiian | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Korean; Pakistani; Sri Lankan; Bangladeshi; Nepalese; Tibetan; Mongolian; Georgian; Armenian; Uzbek; Afghan; Middle Eastern; Lebanese; Persian; Turkish; Israeli; Palestinian; Syrian; Iraqi; Jordanian; Yemeni; Egyptian; Moroccan; Tunisian; Algerian; Ethiopian; Eritrean; Brazilian; Argentinian; Colombian; Chilean; Peruvian; Venezuelan; Ecuadorian; Bolivian; Uruguayan; Salvadoran; Guatemalan; South American; Latin American | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Malaysian; Singaporean; Indonesian; Filipino; Burmese; Cambodian; Laotian; Asian; Salad | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Noodles; Somali; Kenyan; Nigerian; Ghanaian; Senegalese; South African; African; Polish; Ukrainian; Russian; Czech; Slovak; Hungarian; Romanian; Croatian; Serbian; Bosnian; Bulgarian; Albanian; Slovenian; Lithuanian; European; Eastern European; Tex-Mex | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Portuguese; Basque | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Scandinavian; Swedish; Norwegian; Finnish; Danish | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Taco truck; Bagel | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Thai; Indian; North Indian; South Indian; Mexican; Southwestern; Cajun | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Vietnamese; Dumplings; Taiwanese; Burrito; Soup | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Restaurants & Food | Yakiniku; Japanese BBQ | Shared dining logistics or dietary questions remain useful across these labels; the cuisine name does not prove menu contents or access. |
-| Services & Errands | Hair salon; Nail salon | Equivalent appointments or on-site services share scheduling, payment or estimate needs. |
-| Services & Errands | Moving; Electrician; Plumber; Locksmith; Painter | Equivalent appointments or on-site services share scheduling, payment or estimate needs. |
-| Shopping | Art supply store; Craft store | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
-| Shopping | Asian grocery; Beauty supply | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
-| Shopping | Cosmetics store; Cosmetics | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
-| Shopping | General store; Pet store | These stores share the selected access, shopping assistance, fitting or purchase needs; no service is presumed available. |
-| Stays | Airbnb; Vrbo | Equivalent rental formats share practical arrival, kitchen and room questions. |
-| Things To Do | Amusement park; Roller coaster | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
-| Things To Do | Concert hall; Philharmonic hall | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
-| Things To Do | Historical place; Historical landmark | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
-| Things To Do | Plaza; Town square | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
-| Things To Do | Theater; Performing arts theater | Equivalent visitor or audience needs support the shared set; exhibits, access and services are still observed, not assumed. |
-| Travel & Transit | Bus station; Transit station | Equivalent travel or vehicle-purchase settings share arrival and service needs. |
-| Travel & Transit | Car dealer; Truck dealer | Equivalent travel or vehicle-purchase settings share arrival and service needs. |
-| Wellness & Fitness | Dentist; Dental clinic; Ophthalmologist | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
-| Wellness & Fitness | Doctor; Dermatologist; Foot care; Podiatrist; Mental health/therapy | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
-| Wellness & Fitness | Gym; Fitness center | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
-| Wellness & Fitness | Pharmacy; Drugstore | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
-| Wellness & Fitness | Physiotherapist; Physical therapy | Equivalent training or appointment logistics; questions do not claim medical effectiveness or prerequisite skills. |
-| Work & Education | Academic department; Educational institution | Equivalent learning or visitor settings share entry, directions and facility questions. |
-| Work & Education | School; Secondary school | Equivalent learning or visitor settings share entry, directions and facility questions. |
+Question sets can be shared while customization remains account- and subtype-specific. Not useful hides the prompt on future saves and edits without deleting previous answers; Undo reverses it in the current form. Re-add or confirmed Restore revives a prompt. Existing customized lists do not silently change when suggested defaults are revised. Inline eye buttons change Stealth without navigation; private dietary values preserve the whole selection.
 
 ## Complete selectable inventory
 
@@ -138,187 +80,187 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Thai | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| Vietnamese | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
-| Chinese | Dogs allowed? | Good for sharing? | Room for a group? |
-| Korean | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Japanese | Dogs allowed? | Counter seating? | Vegetarian meal options? |
-| Indian | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| Asian fusion | Dogs allowed? | Outdoor seating? | Vegetarian meal options? |
-| Sushi | Dogs allowed? | Counter seating? | What booking guidance did staff or signs give? |
-| Ramen | Dogs allowed? | Vegetarian meal options? | Long wait? |
-| Dumplings | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
-| Bao buns | Dogs allowed? | Vegetarian meal options? | Somewhere to sit? |
-| Noodles | Dogs allowed? | Vegetarian meal options? | Meal or snack? |
-| Dim sum | Dogs allowed? | Good for sharing? | Long wait? |
-| Hot pot | Cook at the table? | Smoky inside? | Vegetarian meal options? |
-| Cantonese | Dogs allowed? | Good for sharing? | Room for a group? |
-| Taiwanese | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
-| Izakaya | Dogs allowed? | Easy to have a conversation? | What booking guidance did staff or signs give? |
-| Yakitori | Dogs allowed? | Counter seating? | Smoky inside? |
-| Yakiniku | Cook at the table? | Smoky inside? | What booking guidance did staff or signs give? |
-| North Indian | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| South Indian | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| Pakistani | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Sri Lankan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Bangladeshi | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Nepalese | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Malaysian | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Singaporean | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Indonesian | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Filipino | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Burmese | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Cambodian | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Laotian | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Asian | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Tibetan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Mongolian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Georgian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Armenian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Uzbek | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Mongolian BBQ | Cook at the table? | Table or counter service? | Clear dietary information? |
-| Korean BBQ | Cook at the table? | Smoky inside? | Room for a group? |
-| Japanese BBQ | Cook at the table? | Smoky inside? | What booking guidance did staff or signs give? |
-| Japanese curry | Dogs allowed? | Could you choose the spice level? | Counter seating? |
-| Tonkatsu | Dogs allowed? | Long wait? | Counter seating? |
-| Afghan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Middle Eastern | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Lebanese | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Persian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Turkish | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Israeli | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Palestinian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Syrian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Iraqi | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Jordanian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Yemeni | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Egyptian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Moroccan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Tunisian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Algerian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Ethiopian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Eritrean | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Somali | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Kenyan | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Nigerian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Ghanaian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Senegalese | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| South African | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| African | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Falafel | Dogs allowed? | Vegan meal options? | Takeaway available? |
-| Gyro | Dogs allowed? | Takeaway available? | Somewhere to sit? |
-| Kebab | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Shawarma | Dogs allowed? | Table or counter service? | Takeaway available? |
-| Halal | Dogs allowed? | Clear halal information? | Room for a group? |
-| Italian | Dogs allowed? | Wine by the glass? | What booking guidance did staff or signs give? |
-| Mediterranean | Dogs allowed? | Vegetarian meal options? | Outdoor seating? |
-| Greek | Dogs allowed? | Vegetarian meal options? | Outdoor seating? |
-| French | Dogs allowed? | Easy to book? | Easy to have a conversation? |
-| Spanish | Dogs allowed? | Good for sharing? | Wine by the glass? |
-| Tapas | Dogs allowed? | Good for sharing? | Counter seating? |
-| Portuguese | Dogs allowed? | Clear dietary information? | What booking guidance did staff or signs give? |
-| Basque | Dogs allowed? | Clear dietary information? | What booking guidance did staff or signs give? |
-| German | Dogs allowed? | Vegetarian meal options? | Room for a group? |
-| Austrian | Dogs allowed? | Vegetarian meal options? | Room for a group? |
-| Bavarian | Dogs allowed? | Vegetarian meal options? | Room for a group? |
-| Swiss | Dogs allowed? | Vegetarian meal options? | Room for a group? |
-| Dutch | Dogs allowed? | Quick lunch or take your time? | Vegetarian meal options? |
-| Belgian | Dogs allowed? | Quick lunch or take your time? | Vegetarian meal options? |
-| British | Dogs allowed? | Quick lunch or take your time? | Easy to have a conversation? |
-| Irish | Dogs allowed? | Quick lunch or take your time? | Easy to have a conversation? |
-| Scandinavian | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
-| Swedish | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
-| Norwegian | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
-| Finnish | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
-| Danish | Dogs allowed? | What booking guidance did staff or signs give? | Vegetarian meal options? |
-| Polish | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Ukrainian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Russian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Czech | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Slovak | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Hungarian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Romanian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Croatian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Serbian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Bosnian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Bulgarian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Albanian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Slovenian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Lithuanian | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| European | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Eastern European | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Pizza | Dogs allowed? | Pizza by the slice? | Outdoor seating? |
-| Fish & chips | Dogs allowed? | Takeaway available? | Somewhere to sit? |
-| Fondue | Dogs allowed? | Good for sharing? | What booking guidance did staff or signs give? |
-| American | Dogs allowed? | Vegetarian meal options? | Room for a group? |
-| Canadian | Dogs allowed? | Vegetarian meal options? | Room for a group? |
-| Mexican | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| Tex-Mex | Dogs allowed? | Meal or snack? | Vegetarian meal options? |
-| Caribbean | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Jamaican | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Puerto Rican | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Dominican | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Haitian | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Panamanian | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Cuban | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Brazilian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Argentinian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Colombian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Chilean | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Peruvian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Venezuelan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Ecuadorian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Bolivian | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Uruguayan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Salvadoran | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Guatemalan | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| South American | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Latin American | Dogs allowed? | Good for sharing? | Vegetarian meal options? |
-| Southwestern | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| Cajun | Dogs allowed? | Could you choose the spice level? | Vegetarian meal options? |
-| Californian | Dogs allowed? | Clear dietary information? | Outdoor seating? |
-| Hawaiian | Dogs allowed? | Meal or snack? | Takeaway available? |
-| Poke | Dogs allowed? | Clear dietary information? | Takeaway available? |
-| Australian | Dogs allowed? | Good for sharing? | Meal or snack? |
-| New Zealand | Dogs allowed? | Good for sharing? | Meal or snack? |
-| Fijian | Dogs allowed? | Good for sharing? | Meal or snack? |
-| Samoan | Dogs allowed? | Good for sharing? | Meal or snack? |
-| Tongan | Dogs allowed? | Good for sharing? | Meal or snack? |
-| Burgers | Dogs allowed? | Vegetarian meal options? | Outdoor seating? |
-| Diner | Dogs allowed? | When is breakfast served? | Counter seating? |
-| Hot dogs | Dogs allowed? | Takeaway available? | Somewhere to sit? |
-| Barbecue | Dogs allowed? | Good for sharing? | Outdoor seating? |
-| Wings | Dogs allowed? | Could you choose the spice level? | Room for a group? |
-| Steakhouse | Dogs allowed? | What booking guidance did staff or signs give? | Wine by the glass? |
-| Bar & grill | Dogs allowed? | Good screens for watching sports? | Outdoor seating? |
-| Taco stand | Dogs allowed? | Takeaway available? | Somewhere to sit? |
-| Taco truck | Dogs allowed? | Long wait? | Somewhere to sit? |
-| Burrito | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
-| Taco | Dogs allowed? | Vegetarian meal options? | Somewhere to sit? |
-| Sandwich | Dogs allowed? | Long wait? | Takeaway available? |
-| Bagel | Dogs allowed? | Long wait? | Somewhere to sit? |
-| Deli | Dogs allowed? | Table or counter service? | Quick lunch or take your time? |
-| Salad | Dogs allowed? | Clear dietary information? | Meal or snack? |
-| Bistro | Dogs allowed? | Quick lunch or take your time? | Easy to have a conversation? |
-| Food court | Dogs allowed? | Somewhere to sit? | Clear dietary information? |
-| Breakfast | Dogs allowed? | When is breakfast served? | Long wait? |
-| Brunch | Dogs allowed? | Long wait? | What booking guidance did staff or signs give? |
-| Soup | Dogs allowed? | Vegetarian meal options? | Takeaway available? |
-| Chicken | Dogs allowed? | Good for sharing? | Meal or snack? |
-| Seafood | Dogs allowed? | What booking guidance did staff or signs give? | Outdoor seating? |
-| Oyster bar | Dogs allowed? | Counter seating? | Wine by the glass? |
-| Vegetarian | Dogs allowed? | Vegan meal options? | Outdoor seating? |
-| Vegan | Dogs allowed? | Clear dietary information? | Outdoor seating? |
-| Gluten-free | Dogs allowed? | Clear gluten-free information? | Outdoor seating? |
-| Snack bar | Dogs allowed? | Somewhere to sit? | Table or counter service? |
-| Gastropub | Dogs allowed? | What kind of beer selection? | Easy to have a conversation? |
+| Thai | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Vietnamese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Chinese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Korean | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Japanese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Indian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Asian fusion | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Sushi | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Ramen | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Dumplings | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bao buns | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Noodles | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Dim sum | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Hot pot | Smoky inside? | Reservation required? | Dietary options? |
+| Cantonese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Taiwanese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Izakaya | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Yakitori | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Yakiniku | Smoky inside? | Reservation required? | Dietary options? |
+| North Indian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| South Indian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Pakistani | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Sri Lankan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bangladeshi | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Nepalese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Malaysian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Singaporean | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Indonesian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Filipino | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Burmese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Cambodian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Laotian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Asian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Tibetan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Mongolian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Georgian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Armenian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Uzbek | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Mongolian BBQ | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Korean BBQ | Smoky inside? | Reservation required? | Dietary options? |
+| Japanese BBQ | Smoky inside? | Reservation required? | Dietary options? |
+| Japanese curry | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Tonkatsu | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Afghan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Middle Eastern | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Lebanese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Persian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Turkish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Israeli | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Palestinian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Syrian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Iraqi | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Jordanian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Yemeni | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Egyptian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Moroccan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Tunisian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Algerian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Ethiopian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Eritrean | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Somali | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Kenyan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Nigerian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Ghanaian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Senegalese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| South African | Easy to find parking? | Outdoor seating? | Dietary options? |
+| African | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Falafel | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Gyro | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Kebab | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Shawarma | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Halal | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Italian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Mediterranean | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Greek | Easy to find parking? | Outdoor seating? | Dietary options? |
+| French | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Spanish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Tapas | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Portuguese | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Basque | Easy to find parking? | Outdoor seating? | Dietary options? |
+| German | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Austrian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bavarian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Swiss | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Dutch | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Belgian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| British | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Irish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Scandinavian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Swedish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Norwegian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Finnish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Danish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Polish | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Ukrainian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Russian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Czech | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Slovak | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Hungarian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Romanian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Croatian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Serbian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bosnian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bulgarian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Albanian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Slovenian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Lithuanian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| European | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Eastern European | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Pizza | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Fish & chips | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Fondue | Easy to find parking? | Outdoor seating? | Dietary options? |
+| American | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Canadian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Mexican | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Tex-Mex | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Caribbean | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Jamaican | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Puerto Rican | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Dominican | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Haitian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Panamanian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Cuban | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Brazilian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Argentinian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Colombian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Chilean | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Peruvian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Venezuelan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Ecuadorian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bolivian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Uruguayan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Salvadoran | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Guatemalan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| South American | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Latin American | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Southwestern | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Cajun | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Californian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Hawaiian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Poke | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Australian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| New Zealand | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Fijian | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Samoan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Tongan | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Burgers | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Diner | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Hot dogs | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Barbecue | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Wings | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Steakhouse | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bar & grill | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Taco stand | Easy to find parking? | Long wait? | Dietary options? |
+| Taco truck | Easy to find parking? | Long wait? | Dietary options? |
+| Burrito | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Taco | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Sandwich | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bagel | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Deli | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Salad | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Bistro | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Food court | Somewhere to sit? | Bathroom available? | Dietary options? |
+| Breakfast | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Brunch | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Soup | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Chicken | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Seafood | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Oyster bar | Easy to find parking? | Outdoor seating? | Dietary options? |
+| Vegetarian | Easy to find parking? | Outdoor seating? | Vegan meal options? |
+| Vegan | Easy to find parking? | Outdoor seating? | Gluten-free options? |
+| Gluten-free | Easy to find parking? | Outdoor seating? | Clear dietary information? |
+| Snack bar | Easy to find parking? | Long wait? | Dietary options? |
+| Gastropub | Easy to find parking? | Outdoor seating? | Dietary options? |
 
 ### Coffee, Tea, & Sweets (26)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
 | Coffee shop | Laptops welcome? | Power outlets? | Dogs allowed? |
-| Cafe | Laptops welcome? | Outdoor seating? | Dogs allowed? |
+| Cafe | Laptops welcome? | Power outlets? | Dogs allowed? |
 | Coffee stand | Long wait? | Milk alternatives? | Dogs allowed? |
 | Coffee lounge | Laptops welcome? | Power outlets? | Dogs allowed? |
 | Roastery | Beans to take home? | Samples or tastings? | Dogs allowed? |
@@ -341,7 +283,7 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Chocolate factory | Guided tours available? | Samples or tastings? | Dogs allowed? |
 | Chocolate lounge | Samples or tastings? | Somewhere to sit? | Dogs allowed? |
 | Confectionery | Dogs allowed? | Samples or tastings? | Gift packaging? |
-| Cat cafe | Entry fee to visit the animals? | Easy to book? | Somewhere to sit? |
+| Cat cafe | Entry fee to visit the animals? | Easy to book? | Dogs allowed? |
 | Dog cafe | Dogs allowed? | Outdoor seating? | Entry fee to visit the animals? |
 
 ### Bars & Nightlife (30)
@@ -361,73 +303,73 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Gastropub | Dogs allowed? | What kind of beer selection? | Easy to have a conversation? |
 | Bar & grill | Dogs allowed? | Good screens for watching sports? | Outdoor seating? |
 | Dance hall | Room to dance? | Live music on your visit? | Coat storage? |
-| Club | Cover charge or ticket? | Room to dance? | Coat storage? |
-| Disco | Cover charge or ticket? | Room to dance? | Coat storage? |
+| Club | Cover charge or ticket required? | Room to dance? | Coat storage? |
+| Disco | Cover charge or ticket required? | Room to dance? | Coat storage? |
 | Lounge | Easy to have a conversation? | Easy to book? | Classic or house cocktails? |
-| Hookah bar | Smoking areas separated? | Smoky inside? | Good alcohol-free options? |
-| Beer garden | Outdoor seating? | How much shade did you find? | Dogs allowed? |
-| Jazz club | Reserved seats or first come? | How was the sound from your spot? | Cover charge or ticket? |
-| Hi-fi lounge | How was the sound from your spot? | Easy to have a conversation? | Easy to book? |
+| Hookah bar | Separate smoking area? | Smoky inside? | Good alcohol-free options? |
+| Beer garden | Outdoor seating? | Shaded areas? | Dogs allowed? |
+| Jazz club | Reserved seats or first come? | Was the sound good? | Cover charge or ticket required? |
+| Hi-fi lounge | Was the sound good? | Easy to have a conversation? | Easy to book? |
 | Brewery | What kind of beer selection? | Samples or tastings? | Dogs allowed? |
 | Brewpub | What kind of beer selection? | Food with drinks? | Dogs allowed? |
 | Winery | Samples or tastings? | Easy to book? | Dogs allowed? |
 | Vineyard | Can you explore the vineyard? | Samples or tastings? | Dogs allowed? |
-| Nightclub | Cover charge or ticket? | Room to dance? | Coat storage? |
+| Nightclub | Cover charge or ticket required? | Room to dance? | Coat storage? |
 | Karaoke | Private rooms or open-stage karaoke? | Easy to book? | Easy to have a conversation? |
-| Live music | How was the sound from your spot? | Reserved seats or first come? | Cover charge or ticket? |
-| Comedy club | Reserved seats or first come? | Clear view from your spot? | Cover charge or ticket? |
-| Casino | Smoking areas separated? | Food with drinks? | Coat storage? |
+| Live music | Was the sound good? | Reserved seats or first come? | Cover charge or ticket required? |
+| Comedy club | Reserved seats or first come? | Clear view from your spot? | Cover charge or ticket required? |
+| Casino | Separate smoking area? | Food with drinks? | Coat storage? |
 | Distillery | Tours or tastings? | Samples or tastings? | Easy to book? |
 
 ### Outdoors & Nature (45)
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Park | Posted dog rules? | How much shade did you find? | Bathroom access? |
-| City park | Posted dog rules? | How much shade did you find? | Somewhere to sit? |
-| State park | Posted dog rules? | Bathroom access? | Entry fee? |
+| Park | Posted dog rules? | Shaded areas? | Bathroom available? |
+| City park | Posted dog rules? | Shaded areas? | Somewhere to sit? |
+| State park | Posted dog rules? | Bathroom available? | Entry fee? |
 | National park | Posted dog rules? | Visitor information available? | Entry fee? |
 | Hiking area | Posted dog rules? | How steep was your route? | Easy to follow the trail? |
 | Trail | Posted dog rules? | How steep was your route? | Easy to follow the trail? |
 | Hike | Posted dog rules? | How steep was your route? | Easy to follow the trail? |
-| Beach | Posted dog rules? | How much shade did you find? | Rinse facilities? |
-| Dog beach | Posted dog rules? | Rinse facilities? | Easy route down to the beach? |
-| Lake | Posted dog rules? | How much shade did you find? | Bathroom access? |
-| River | Posted dog rules? | How could you reach the water? | How much shade did you find? |
+| Beach | Posted dog rules? | Shaded areas? | Rinse-off showers? |
+| Dog beach | Posted dog rules? | Rinse-off showers? | Easy route down to the beach? |
+| Lake | Posted dog rules? | Shaded areas? | Bathroom available? |
+| River | Posted dog rules? | How could you reach the water? | Shaded areas? |
 | Island | Posted dog rules? | Shelter from the weather? | How did you reach the island? |
 | Woods/forest | Posted dog rules? | Easy to follow the trail? | What was the path surface? |
 | Mountain peak | Posted dog rules? | How steep was your route? | Shelter from the weather? |
-| Scenic spot | Posted dog rules? | How far was the walk to the view? | How much shade did you find? |
+| Scenic spot | Posted dog rules? | How far was the walk to the view? | Shaded areas? |
 | Viewpoint | Posted dog rules? | How far was the walk to the view? | Somewhere to sit? |
 | Overlook | Posted dog rules? | How far was the walk to the view? | Somewhere to sit? |
 | Waterfall | Posted dog rules? | How far was the walk to the view? | How steep was your route? |
-| Hot spring | Posted dog rules? | Natural or managed hot pools? | Changing rooms and showers? |
-| Cave | Posted dog rules? | Guided or self-guided cave visit? | What booking guidance did staff or signs give? |
+| Hot spring | Posted dog rules? | Natural or managed hot pools? | Showers available? |
+| Cave | Posted dog rules? | Guided or self-guided cave visit? | Reservation required? |
 | Nature preserve | Posted dog rules? | Easy to follow the trail? | Where could you watch wildlife? |
-| Wildlife refuge | Posted dog rules? | What was the path surface? | How much shade did you find? |
+| Wildlife refuge | Posted dog rules? | What was the path surface? | Shaded areas? |
 | Wildlife park | Posted dog rules? | How spread out were the exhibits? | Entry fee? |
-| Botanical garden | Posted dog rules? | What was the path surface? | How much shade did you find? |
-| Garden | Posted dog rules? | How much shade did you find? | Somewhere to sit? |
-| Picnic area | Posted dog rules? | How much shade did you find? | Picnic spots? |
-| Dog park | Was the play area fenced? | Posted dog rules? | Drinking-water refill? |
-| Playground | Play equipment for which ages? | Was the play area fenced? | How much shade did you find? |
+| Botanical garden | Posted dog rules? | What was the path surface? | Shaded areas? |
+| Garden | Posted dog rules? | Shaded areas? | Bathroom available? |
+| Picnic area | Posted dog rules? | Shaded areas? | Picnic spots? |
+| Dog park | Was the play area fully fenced? | Posted dog rules? | Drinking-water refill? |
+| Playground | Play equipment for which ages? | Was the play area fully fenced? | Shaded areas? |
 | Campground | Posted dog rules? | Campsite toilets? | How did you get a campsite? |
 | RV park | Posted dog rules? | Water or power hookups? | Campsite toilets? |
 | Dispersed camping | Posted dog rules? | Campsite toilets? | Posted vehicle requirements? |
 | Cabin | Dogs allowed? | Guest cooking facilities? | Room temperature controls? |
-| Cottage | Dogs allowed? | Guest cooking facilities? | Where could you park? |
-| Marina | Posted dog rules? | Bathroom access? | Parking on arrival? |
-| Fishing pier | Posted dog rules? | Somewhere to sit? | How much shade did you find? |
-| Fishing pond | Posted dog rules? | Fishing gear provided? | How much shade did you find? |
-| Fishing charter | Fishing gear provided? | Bathroom access? | Easy to book? |
+| Cottage | Dogs allowed? | Guest cooking facilities? | Easy to find parking? |
+| Marina | Posted dog rules? | Bathroom available? | Easy to find parking? |
+| Fishing pier | Posted dog rules? | Somewhere to sit? | Shaded areas? |
+| Fishing pond | Posted dog rules? | Fishing gear available? | Shaded areas? |
+| Fishing charter | Fishing gear available? | Bathroom available? | Easy to book? |
 | Ski resort | Posted dog rules? | Ski rental nearby? | What ski terrain did you find? |
 | Cycling park | Posted dog rules? | Easy or technical riding? | Drinking-water refill? |
 | Skate park | Posted dog rules? | Ramps or street features? | Lit for evening use on your visit? |
 | Off-roading area | Posted dog rules? | Posted vehicle requirements? | Shelter from the weather? |
-| Adventure sports | Guided or self-guided activity? | Equipment provided? | Easy to book? |
+| Adventure sports | Guided or self-guided activity? | Equipment available? | Easy to book? |
 | Surf | Surfboard rental available? | Was it busy? | Posted dog rules? |
-| Surf break | Crowded in the water? | Rinse facilities? | Posted dog rules? |
-| Kayak/canoe rental | Equipment provided? | Easy to book? | Dogs allowed in the rental boats? |
+| Surf break | Crowded in the water? | Rinse-off showers? | Posted dog rules? |
+| Kayak/canoe rental | Equipment available? | Easy to book? | Dogs allowed in the rental boats? |
 
 ### Things To Do (54)
 
@@ -439,54 +381,54 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Historical landmark | Signs explaining the place? | Guided tours available? | Step-free entrance? |
 | Monument | Signs explaining the place? | How far was the walk to the view? | Somewhere to sit? |
 | Sculpture | Signs explaining the place? | Posted photography rules? | Step-free entrance? |
-| Fountain | Somewhere to sit? | How much shade did you find? | Posted photography rules? |
+| Fountain | Somewhere to sit? | Shaded areas? | Posted photography rules? |
 | Castle | Guided tours available? | How steep was your route? | Entry fee? |
-| Plaza | Somewhere to sit? | How much shade did you find? | Bathroom access? |
-| Town square | Somewhere to sit? | How much shade did you find? | Bathroom access? |
-| Visitor center | Visitor information available? | Bathroom access? | Step-free entrance? |
+| Plaza | Somewhere to sit? | Shaded areas? | Bathroom available? |
+| Town square | Somewhere to sit? | Shaded areas? | Bathroom available? |
+| Visitor center | Visitor information available? | Bathroom available? | Step-free entrance? |
 | Museum | Permanent or temporary exhibitions? | How much time would you allow? | Entry fee? |
 | Art museum | Permanent or temporary exhibitions? | Posted photography rules? | Somewhere to sit? |
 | History museum | Signs explaining the place? | Guided tours available? | How much time would you allow? |
 | Art gallery | Permanent or temporary exhibitions? | Posted photography rules? | Entry fee? |
-| Art studio | Art activities or workshops? | Equipment provided? | Booked or walked in? |
+| Art studio | Art activities or workshops? | Equipment available? | Booked or walked in? |
 | Cultural landmark | Signs explaining the place? | Guided tours available? | Posted photography rules? |
 | Cultural center | Art activities or workshops? | Visitor information available? | Entry fee? |
 | Theater | Clear view from your spot? | Reserved seats or first come? | Step-free entrance? |
 | Performing arts theater | Clear view from your spot? | Reserved seats or first come? | Step-free entrance? |
-| Concert hall | How was the sound from your spot? | Reserved seats or first come? | Coat storage? |
-| Opera house | Clear view from your spot? | How was the sound from your spot? | Coat storage? |
-| Philharmonic hall | How was the sound from your spot? | Reserved seats or first come? | Coat storage? |
-| Amphitheater | Clear view from your spot? | How much shade did you find? | Reserved seats or first come? |
-| Auditorium | How was the sound from your spot? | Clear view from your spot? | Step-free entrance? |
+| Concert hall | Was the sound good? | Reserved seats or first come? | Coat storage? |
+| Opera house | Clear view from your spot? | Was the sound good? | Coat storage? |
+| Philharmonic hall | Was the sound good? | Reserved seats or first come? | Coat storage? |
+| Amphitheater | Clear view from your spot? | Shaded areas? | Reserved seats or first come? |
+| Auditorium | Was the sound good? | Clear view from your spot? | Step-free entrance? |
 | Movie theater | Comfortable cinema seats? | Clear view from your spot? | Food sold for the film? |
 | Planetarium | Reserved seats or first come? | Entry fee? | How much time would you allow? |
 | Observation deck | Indoor or outdoor viewing? | Long wait? | How far was the walk to the view? |
 | Aquarium | Hands-on activities? | How spread out were the exhibits? | Entry fee? |
-| Zoo | How spread out were the exhibits? | How much shade did you find? | Bathroom access? |
-| Amusement park | How were the ride queues? | Storage during the activity? | Clear height or age requirements? |
-| Water park | Storage during the activity? | Changing rooms and showers? | Clear height or age requirements? |
-| Ferris wheel | How were the ride queues? | Enclosed or open-air ride? | Entry fee? |
-| Roller coaster | How were the ride queues? | Storage during the activity? | Clear height or age requirements? |
+| Zoo | How spread out were the exhibits? | Shaded areas? | Bathroom available? |
+| Amusement park | Long waits for rides? | Storage during the activity? | Clear height or age requirements? |
+| Water park | Storage during the activity? | Showers available? | Clear height or age requirements? |
+| Ferris wheel | Long waits for rides? | Enclosed or open-air ride? | Entry fee? |
+| Roller coaster | Long waits for rides? | Storage during the activity? | Clear height or age requirements? |
 | Arcade | How did you pay to play? | Walk-in games or book ahead? | Easy to have a conversation? |
-| Bowling | Booked or walked in? | Equipment provided? | How did you pay to play? |
-| Mini golf | How did you pay to play? | How much shade did you find? | Equipment provided? |
-| Billiards | Walk-in games or book ahead? | How did you pay to play? | Equipment provided? |
-| Darts | Equipment provided? | Walk-in games or book ahead? | Room for a group? |
-| Axe throwing | Introduction or lessons offered? | Equipment provided? | Booked or walked in? |
+| Bowling | Booked or walked in? | Equipment available? | How did you pay to play? |
+| Mini golf | How did you pay to play? | Shaded areas? | Equipment available? |
+| Billiards | Walk-in games or book ahead? | How did you pay to play? | Equipment available? |
+| Darts | Equipment available? | Walk-in games or book ahead? | Room for a group? |
+| Axe throwing | Lessons or instruction available? | Equipment available? | Booked or walked in? |
 | Board game lounge | What kind of board games? | How did you pay to play? | Food with drinks? |
-| Go-karting | Clear height or age requirements? | Equipment provided? | How were the ride queues? |
-| Paintball | Equipment provided? | Introduction or lessons offered? | Changing rooms and showers? |
-| Indoor playground | Separate play areas by age? | Somewhere to sit? | Bathroom access? |
+| Go-karting | Clear height or age requirements? | Equipment available? | Long waits for rides? |
+| Paintball | Equipment available? | Lessons or instruction available? | Showers available? |
+| Indoor playground | Separate play areas by age? | Somewhere to sit? | Bathroom available? |
 | Event venue | Flexible event space? | Food or catering options? | Step-free entrance? |
 | Convention center | Easy to find your way? | Phone charging? | Step-free entrance? |
 | Banquet hall | Food or catering options? | Room for a group? | Step-free entrance? |
 | Wedding venue | Flexible event space? | Food or catering options? | Outdoor seating? |
 | Community center | Visitor information available? | Flexible event space? | Step-free entrance? |
-| Internet cafe | How was the Wi-Fi? | Power outlets? | Easy to have a conversation? |
-| Dance hall | Room to dance? | Group or private lessons? | Changing rooms and showers? |
-| Barbecue area | Grills available? | Picnic spots? | How much shade did you find? |
-| Stadium | Was your seat covered? | Reserved seats or first come? | Bags checked or stored on entry? |
-| Arena | How was the sound from your spot? | Reserved seats or first come? | Bags checked or stored on entry? |
+| Internet cafe | Did the Wi-Fi work well? | Power outlets? | Easy to have a conversation? |
+| Dance hall | Room to dance? | Group or private lessons? | Showers available? |
+| Barbecue area | Grills available? | Picnic spots? | Shaded areas? |
+| Stadium | Was your seat covered? | Reserved seats or first come? | Bag checks on entry? |
+| Arena | Was the sound good? | Reserved seats or first come? | Bag checks on entry? |
 
 ### Shopping (47)
 
@@ -494,16 +436,16 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | --- | --- | --- | --- |
 | Store | Dogs allowed? | Help choosing available? | Card, cash or app? |
 | Market | Dogs allowed? | Card, cash or app? | Shelter while waiting? |
-| Shopping mall | Easy to find your way? | Somewhere to sit? | Bathroom access? |
+| Shopping mall | Easy to find your way? | Somewhere to sit? | Bathroom available? |
 | Department store | Easy to find your way? | Somewhere to try things on? | Help choosing available? |
 | General store | Dogs allowed? | Help choosing available? | Clear prices before paying? |
 | Convenience store | Long wait? | Card, cash or app? | Step-free entrance? |
 | Discount store | Step-free entrance? | Clear prices before paying? | Long wait? |
-| Warehouse store | Space to load or unload? | Card, cash or app? | Where could you park? |
+| Warehouse store | Space to load or unload? | Card, cash or app? | Easy to find parking? |
 | Wholesaler | How did visitor entry work? | Space to load or unload? | Clear prices before paying? |
 | Grocery store | Long wait? | Card, cash or app? | Refill your own containers? |
-| Supermarket | Step-free entrance? | Long wait? | Where could you park? |
-| Hypermarket | Easy to find your way? | Where could you park? | Space to load or unload? |
+| Supermarket | Step-free entrance? | Long wait? | Easy to find parking? |
+| Hypermarket | Easy to find your way? | Easy to find parking? | Space to load or unload? |
 | Food store | Help choosing available? | Card, cash or app? | Long wait? |
 | Farmers market | Card, cash or app? | Shelter while waiting? | Seating without a purchase? |
 | Flea market | Dogs allowed? | Card, cash or app? | Seating without a purchase? |
@@ -518,7 +460,7 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Toy store | Step-free entrance? | Gift wrapping offered? | Help choosing available? |
 | Clothing store | Somewhere to try things on? | Help choosing available? | Dogs allowed? |
 | Women's clothing | Somewhere to try things on? | Help choosing available? | Clear prices before paying? |
-| Shoe store | Somewhere to try things on? | Help choosing available? | Long wait? |
+| Shoe store | Somewhere to try things on? | Help choosing available? | Dogs allowed? |
 | Jewelry store | Help choosing available? | Repairs offered? | Walk-in or appointment? |
 | Cosmetics store | Help choosing available? | Testers or samples available? | Clear prices before paying? |
 | Beauty supply | Help choosing available? | Step-free entrance? | Card, cash or app? |
@@ -544,60 +486,60 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Gym | Day pass or members only? | What kind of gym equipment? | Changing rooms and showers? |
-| Fitness center | Day pass or members only? | What kind of gym equipment? | Changing rooms and showers? |
+| Gym | Day pass available? | What kind of gym equipment? | Showers available? |
+| Fitness center | Day pass available? | What kind of gym equipment? | Showers available? |
 | Yoga studio | Slow or energetic yoga? | Was the class busy? | Easy to book? |
 | Pilates studio | Was it a reformer class? | Was the class busy? | Easy to book? |
-| CrossFit gym | Were workout adaptations explained? | Coached WOD or open gym? | Day pass or members only? |
+| CrossFit gym | Were workout adaptations explained? | Coached WOD or open gym? | Day pass available? |
 | Functional fitness studio | Coached circuits or individual training? | Did coaches give technique feedback? | Was it busy? |
-| Wellness studio | Easy to book? | Equipment provided? | Private changing space? |
+| Wellness studio | Easy to book? | Equipment available? | Private changing space? |
 | Wellness center | Walk-in or appointment? | Private changing space? | Step-free entrance? |
-| Sports club | Day pass or members only? | Open play or book a court? | Changing rooms and showers? |
-| Sports complex | Open play or book a court? | Changing rooms and showers? | Visitor information available? |
-| Sports coaching | Did coaches give technique feedback? | Group or private lessons? | Equipment provided? |
-| Sports school | Group or private lessons? | Introduction or lessons offered? | Equipment provided? |
-| Athletic field | Grass or artificial playing surface? | Lit for evening use on your visit? | Bathroom access? |
-| Swimming pool | Lap lanes or open swim? | Indoor or outdoor pool? | Changing rooms and showers? |
+| Sports club | Day pass available? | Open play or book a court? | Showers available? |
+| Sports complex | Open play or book a court? | Showers available? | Visitor information available? |
+| Sports coaching | Did coaches give technique feedback? | Group or private lessons? | Equipment available? |
+| Sports school | Group or private lessons? | Lessons or instruction available? | Equipment available? |
+| Athletic field | Grass or artificial playing surface? | Lit for evening use on your visit? | Bathroom available? |
+| Swimming pool | Lap lanes or open swim? | Indoor or outdoor pool? | Showers available? |
 | Tennis court | What was the tennis court surface? | Open play or book a court? | Court lights on for evening play? |
 | Golf course | Full course or practice facilities? | Club rental available? | Booked or walked in? |
 | Indoor golf | Simulator or indoor practice? | Club rental available? | Booked or walked in? |
-| Ice skating rink | Drop-in or booked skating? | Equipment provided? | Storage during the activity? |
+| Ice skating rink | Drop-in or booked skating? | Equipment available? | Storage during the activity? |
 | Volleyball court | Sand, grass or hard court? | Volleyball net ready to use? | Open play or book a court? |
 | Soccer field | Grass or artificial playing surface? | Goals already set up? | Lit for evening use on your visit? |
 | Basketball court | Full or half basketball court? | Open play or book a court? | Court lights on for evening play? |
-| Pickleball court | Dedicated or shared pickleball courts? | Open play or book a court? | Court lights on for evening play? |
+| Pickleball court | Dedicated pickleball courts? | Open play or book a court? | Court lights on for evening play? |
 | Spa | Walk-in or appointment? | Private changing space? | Dry sauna or steam room? |
-| Massage | Choice of massage style or pressure? | Private appointment space? | Walk-in or appointment? |
-| Massage spa | Choice of massage style or pressure? | Private changing space? | Walk-in or appointment? |
+| Massage | Could you choose the massage pressure? | Private appointment room? | Walk-in or appointment? |
+| Massage spa | Could you choose the massage pressure? | Private changing space? | Walk-in or appointment? |
 | Sauna | Dry sauna or steam room? | Private changing space? | Booked or walked in? |
-| Chiropractor | Walk-in or appointment? | Clear instructions before the visit? | Private appointment space? |
+| Chiropractor | Walk-in or appointment? | Clear instructions before the visit? | Private appointment room? |
 | Dentist | Walk-in or appointment? | Clear instructions before the visit? | Step-free entrance? |
 | Dental clinic | Walk-in or appointment? | Clear instructions before the visit? | Step-free entrance? |
 | Optometrist | Eyewear to try on? | Walk-in or appointment? | Step-free entrance? |
 | Ophthalmologist | Walk-in or appointment? | Clear instructions before the visit? | Step-free entrance? |
 | Eye care center | Eyewear to try on? | Walk-in or appointment? | Long wait? |
-| Doctor | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
-| Dermatologist | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
+| Doctor | Walk-in or appointment? | Private appointment room? | Step-free entrance? |
+| Dermatologist | Walk-in or appointment? | Private appointment room? | Step-free entrance? |
 | Pediatrician | Long wait? | Baby-changing table? | Step-free entrance? |
-| Urgent care | Long wait? | Walk-in or appointment? | Parking on arrival? |
+| Urgent care | Long wait? | Walk-in or appointment? | Easy to find parking? |
 | Medical clinic | Walk-in or appointment? | Long wait? | Step-free entrance? |
-| Medical center | Visitor information available? | Parking on arrival? | Step-free entrance? |
-| Hospital | Visitor information available? | Parking on arrival? | Bathroom access? |
+| Medical center | Visitor information available? | Easy to find parking? | Step-free entrance? |
+| Hospital | Visitor information available? | Easy to find parking? | Bathroom available? |
 | Medical lab | Walk-in or booked lab visit? | Clear instructions before the visit? | Long wait? |
 | Pharmacy | Prescription ready on arrival? | Long wait? | Step-free entrance? |
 | Drugstore | Prescription ready on arrival? | Long wait? | Step-free entrance? |
-| Physiotherapist | Space for guided exercises? | Private appointment space? | Step-free entrance? |
-| Physical therapy | Space for guided exercises? | Private appointment space? | Step-free entrance? |
-| Foot care | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
-| Podiatrist | Walk-in or appointment? | Private appointment space? | Step-free entrance? |
-| Veterinary care | Separate animal waiting areas? | Walk-in or appointment? | Parking on arrival? |
-| Mental health/therapy | Private appointment space? | Walk-in or appointment? | Step-free entrance? |
+| Physiotherapist | Space for guided exercises? | Private appointment room? | Step-free entrance? |
+| Physical therapy | Space for guided exercises? | Private appointment room? | Step-free entrance? |
+| Foot care | Walk-in or appointment? | Private appointment room? | Step-free entrance? |
+| Podiatrist | Walk-in or appointment? | Private appointment room? | Step-free entrance? |
+| Veterinary care | Separate animal waiting areas? | Walk-in or appointment? | Easy to find parking? |
+| Mental health/therapy | Private appointment room? | Walk-in or appointment? | Step-free entrance? |
 | Retreat | Scheduled or flexible retreat? | Clear dietary information? | Step-free entrance? |
-| Beach tennis | Open play or book a court? | Equipment provided? | Court lights on for evening play? |
-| Beach volleyball | Volleyball net ready to use? | Open play or book a court? | How much shade did you find? |
-| Padel court | Open play or book a court? | Indoor or outdoor courts? | Equipment provided? |
-| Climbing gym | Bouldering or ropes? | Equipment provided? | Was it busy? |
-| Surf school | Equipment provided? | Was the class busy? | Easy to book? |
+| Beach tennis | Open play or book a court? | Equipment available? | Court lights on for evening play? |
+| Beach volleyball | Volleyball net ready to use? | Open play or book a court? | Shaded areas? |
+| Padel court | Open play or book a court? | Indoor or outdoor courts? | Equipment available? |
+| Climbing gym | Bouldering or ropes? | Equipment available? | Was it busy? |
+| Surf school | Equipment available? | Was the class busy? | Easy to book? |
 
 ### Stays (18)
 
@@ -605,22 +547,22 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | --- | --- | --- | --- |
 | Hotel | Quiet room when you rested? | Luggage storage? | Room temperature controls? |
 | Resort | Quiet room when you rested? | Breakfast included? | Step-free entrance? |
-| Motel | Quiet room when you rested? | Where could you park? | Room temperature controls? |
+| Motel | Quiet room when you rested? | Luggage storage? | Room temperature controls? |
 | Hostel | Entire place or shared stay? | Lockers available? | Guest cooking facilities? |
-| Inn | Quiet room when you rested? | Breakfast included? | Self check-in or staff welcome? |
+| Inn | Quiet room when you rested? | Luggage storage? | Room temperature controls? |
 | Bed & breakfast | Breakfast included? | Entire place or shared stay? | Self check-in or staff welcome? |
 | Guest house | Entire place or shared stay? | Breakfast included? | Quiet room when you rested? |
 | Private guest room | Entire place or shared stay? | Guest cooking facilities? | Self check-in or staff welcome? |
 | Airbnb | Guest cooking facilities? | Self check-in or staff welcome? | Quiet room when you rested? |
 | Vrbo | Guest cooking facilities? | Self check-in or staff welcome? | Quiet room when you rested? |
 | Extended stay | Guest cooking facilities? | Laundry available? | Somewhere to work? |
-| Cottage | Dogs allowed? | Guest cooking facilities? | Where could you park? |
+| Cottage | Dogs allowed? | Guest cooking facilities? | Easy to find parking? |
 | Cabin | Dogs allowed? | Guest cooking facilities? | Room temperature controls? |
 | Campground | Posted dog rules? | Campsite toilets? | How did you get a campsite? |
 | RV park | Posted dog rules? | Water or power hookups? | Campsite toilets? |
 | Farm-stay | Entire place or shared stay? | Guest cooking facilities? | Dogs allowed? |
-| Japanese inn | Entire place or shared stay? | Breakfast included? | Private or shared changing space? |
-| Mobile home park | Laundry available? | Where could you park? | Entire place or shared stay? |
+| Japanese inn | Entire place or shared stay? | Breakfast included? | Private changing space? |
+| Mobile home park | Laundry available? | Easy to find parking? | Entire place or shared stay? |
 
 ### Services & Errands (49)
 
@@ -646,7 +588,7 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Tailor | Somewhere to try things on? | When was the work ready? | Cost explained before work began? |
 | Courier | Counter or self-service drop-off? | Long wait? | Card, cash or app? |
 | Shipping | Counter or self-service drop-off? | Supplies provided? | Long wait? |
-| Storage | How did visitor entry work? | Space to load or unload? | Where could you park? |
+| Storage | How did visitor entry work? | Space to load or unload? | Easy to find parking? |
 | Moving | Cost explained before work began? | Did the service start on time? | How did you book or contact them? |
 | Electrician | Cost explained before work began? | How did you book or contact them? | Did the service start on time? |
 | Plumber | Cost explained before work began? | How did you book or contact them? | Did the service start on time? |
@@ -657,7 +599,7 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Pet care | Walk-in or appointment? | Counter or self-service drop-off? | Cost explained before work began? |
 | Pet boarding | Booked or walked in? | Counter or self-service drop-off? | Clear visitor rules? |
 | Funeral home | How did visitor entry work? | Somewhere to wait? | Step-free entrance? |
-| Cemetery | Easy to find your way? | Seating without a purchase? | How much shade did you find? |
+| Cemetery | Easy to find your way? | Seating without a purchase? | Shaded areas? |
 | Astrologer | Walk-in or appointment? | Clear prices before paying? | Where did the service happen? |
 | Psychic | Walk-in or appointment? | Clear prices before paying? | Somewhere to wait? |
 | Tour agency | Booked or walked in? | Clear instructions? | How did you book or contact them? |
@@ -668,7 +610,7 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Telecommunications | Long wait? | Walk-in or appointment? | Where did the service happen? |
 | Beauty service | Walk-in or appointment? | Clear prices before paying? | Step-free entrance? |
 | Skin care clinic | Walk-in or appointment? | Clear instructions? | Somewhere to wait? |
-| Tanning studio | Walk-in or appointment? | Private or shared changing space? | Clear prices before paying? |
+| Tanning studio | Walk-in or appointment? | Private changing space? | Clear prices before paying? |
 | Hair salon | Walk-in or appointment? | Long wait? | Card, cash or app? |
 | Barber | Long wait? | Walk-in or appointment? | Clear prices before paying? |
 | Nail salon | Walk-in or appointment? | Long wait? | Card, cash or app? |
@@ -680,19 +622,19 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Airport | Easy to find your way? | How was the Wi-Fi? | Luggage storage? |
+| Airport | Easy to find your way? | Did the Wi-Fi work well? | Luggage storage? |
 | International airport | Luggage storage? | Phone charging? | Showers available? |
-| Airstrip | How did visitor entry work? | Somewhere to wait? | Where could you park? |
+| Airstrip | How did visitor entry work? | Somewhere to wait? | Easy to find parking? |
 | Heliport | How did visitor entry work? | Step-free route to boarding? | Somewhere to wait? |
-| Train station | Easy to find your way? | Step-free route to boarding? | Bathroom access? |
-| Subway station | Step-free route to boarding? | Easy to find your way? | Was it busy? |
+| Train station | Easy to find your way? | Step-free route to boarding? | Bathroom available? |
+| Subway station | Easy to find your way? | Step-free route to boarding? | Bathroom available? |
 | Light rail | Step-free route to boarding? | Shelter while waiting? | Clear instructions? |
 | Tram stop | Shelter while waiting? | Step-free route to boarding? | Somewhere to sit? |
 | Bus stop | Shelter while waiting? | Somewhere to sit? | Clear instructions? |
-| Bus station | Somewhere to wait? | Bathroom access? | Easy to find your way? |
+| Bus station | Easy to find your way? | Step-free route to boarding? | Bathroom available? |
 | Ferry terminal | Step-free route to boarding? | Shelter while waiting? | Somewhere to wait? |
-| Ferry service | Step-free route to boarding? | Somewhere to sit? | Bathroom access? |
-| Transit station | Easy to find your way? | Bathroom access? | Somewhere to wait? |
+| Ferry service | Step-free route to boarding? | Somewhere to sit? | Bathroom available? |
+| Transit station | Easy to find your way? | Bathroom available? | Somewhere to wait? |
 | Transit stop | Shelter while waiting? | Somewhere to sit? | Easy to find your way? |
 | Transit depot | How did visitor entry work? | Easy to find your way? | Somewhere to wait? |
 | Taxi stand | Shelter while waiting? | Long wait? | Card, cash or app? |
@@ -702,19 +644,19 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Parking lot | Card, cash or app? | What was the parking surface? | Easy to find your way? |
 | Parking garage | Card, cash or app? | Step-free entrance? | Easy to find your way? |
 | Park & ride | Card, cash or app? | Shelter while waiting? | Step-free route to boarding? |
-| Gas station | Card, cash or app? | Bathroom access? | Tire air pump? |
+| Gas station | Card, cash or app? | Bathroom available? | Tire air pump? |
 | EV charging | Could you start charging? | Card or app to start charging? | Somewhere to wait? |
 | E-bike charging | Could you start charging? | Card or app to start charging? | Shelter while waiting? |
-| Rest stop | Bathroom access? | Seating without a purchase? | Water refill? |
-| Truck stop | Showers available? | Bathroom access? | Where could you park? |
+| Rest stop | Bathroom available? | Seating without a purchase? | Water refill? |
+| Truck stop | Showers available? | Bathroom available? | Easy to find parking? |
 | Toll station | Card, cash or app? | Clear instructions? | Long wait? |
-| Bridge | What was your walking route like? | Walking path separate from traffic? | How much shade did you find? |
-| Car dealer | Walk-in or appointment? | Help choosing available? | Where could you park? |
+| Bridge | What was your walking route like? | Walking path separate from traffic? | Shaded areas? |
+| Car dealer | Walk-in or appointment? | Help choosing available? | Easy to find parking? |
 | Car rental | Long wait? | How did collection work? | Clear prices before paying? |
 | Car repair | Walk-in or appointment? | Cost explained before work began? | When was the work ready? |
 | Car wash | Self-service or staffed? | Long wait? | Card, cash or app? |
 | Tire shop | Long wait? | Cost explained before work began? | When was the work ready? |
-| Truck dealer | Walk-in or appointment? | Where could you park? | Help choosing available? |
+| Truck dealer | Walk-in or appointment? | Easy to find parking? | Help choosing available? |
 | Transportation service | Booked or walked in? | How did you book or contact them? | Long wait? |
 | Dump station | Card, cash or app? | Clear instructions? | Supplies provided? |
 | RV water refill | Water refill? | Card, cash or app? | Clear instructions? |
@@ -724,13 +666,13 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
 | Co-working space | Day or session pass? | Quiet place to concentrate? | Power outlets? |
-| Business center | Day or session pass? | Separate study or meeting rooms? | How was the Wi-Fi? |
+| Business center | Day or session pass? | Separate study or meeting rooms? | Did the Wi-Fi work well? |
 | Corporate office | How did visitor entry work? | Easy to find your way? | Somewhere to wait? |
-| Manufacturer | How did visitor entry work? | Walk-in or appointment? | Where could you park? |
+| Manufacturer | How did visitor entry work? | Walk-in or appointment? | Easy to find parking? |
 | Supplier | How did visitor entry work? | How did collection work? | Space to load or unload? |
-| Farm | How did visitor entry work? | What was your walking route like? | Where could you park? |
-| Ranch | Clear visitor rules? | What was your walking route like? | Where could you park? |
-| Television studio | How did visitor entry work? | Bags checked or stored on entry? | Clear visitor rules? |
+| Farm | How did visitor entry work? | What was your walking route like? | Easy to find parking? |
+| Ranch | Clear visitor rules? | What was your walking route like? | Easy to find parking? |
+| Television studio | How did visitor entry work? | Bag checks on entry? | Clear visitor rules? |
 | Library | Quiet place to concentrate? | Separate study or meeting rooms? | Visitor printing? |
 | University | Easy to find your way? | How did visitor entry work? | Seating without a purchase? |
 | School | How did visitor entry work? | Easy to find your way? | Walk-in or appointment? |
@@ -739,7 +681,7 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Secondary school | How did visitor entry work? | Walk-in or appointment? | Easy to find your way? |
 | Academic department | Easy to find your way? | How did visitor entry work? | Step-free entrance? |
 | Educational institution | How did visitor entry work? | Step-free entrance? | Easy to find your way? |
-| Research institute | How did visitor entry work? | Walk-in or appointment? | Bags checked or stored on entry? |
+| Research institute | How did visitor entry work? | Walk-in or appointment? | Bag checks on entry? |
 
 ### Civic & Faith (16)
 
@@ -748,8 +690,8 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | City hall | How did visitor entry work? | Easy to find your way? | Step-free entrance? |
 | Government office | Walk-in or appointment? | Long wait? | Easy to find your way? |
 | Local government office | Walk-in or appointment? | Long wait? | Step-free entrance? |
-| Courthouse | Bags checked or stored on entry? | Easy to find your way? | Somewhere to wait? |
-| Embassy | Walk-in or appointment? | Bags checked or stored on entry? | Somewhere to wait? |
+| Courthouse | Bag checks on entry? | Easy to find your way? | Somewhere to wait? |
+| Embassy | Walk-in or appointment? | Bag checks on entry? | Somewhere to wait? |
 | Post office | Long wait? | Counter or self-service drop-off? | Supplies provided? |
 | Police | How did visitor entry work? | Easy to find your way? | Somewhere to wait? |
 | Neighborhood police station | How did visitor entry work? | Somewhere to wait? | Step-free entrance? |
@@ -766,17 +708,17 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
-| Apartment building | Easy to find your way? | Step-free entrance? | Where could you park? |
-| Apartment complex | Easy to find your way? | Where could you park? | What was your walking route like? |
+| Apartment building | Easy to find your way? | Step-free entrance? | Easy to find parking? |
+| Apartment complex | Easy to find your way? | Easy to find parking? | What was your walking route like? |
 | Condominium complex | Easy to find your way? | Step-free entrance? | What was your walking route like? |
 | Housing complex | Easy to find your way? | What was your walking route like? | Seating without a purchase? |
-| Neighborhood | How did you get around? | Seating without a purchase? | How much shade did you find? |
+| Neighborhood | How did you get around? | Seating without a purchase? | Shaded areas? |
 | Locality/city | How did you get around? | What stood out where you explored? | How long did you spend exploring? |
 | Postal area | How did you get around? | Easy to find your way? | How long did you spend exploring? |
 | Town | How did you get around? | What stood out where you explored? | Seating without a purchase? |
 | Region | How did you get around? | How long did you spend exploring? | What stood out where you explored? |
 | Country | What stood out where you explored? | How did you get around? | How long did you spend exploring? |
-| Route/street | What was your walking route like? | Seating without a purchase? | How much shade did you find? |
+| Route/street | What was your walking route like? | Seating without a purchase? | Shaded areas? |
 | Address | Easy to find your way? | Step-free entrance? | What was your walking route like? |
 | Intersection | Marked crossing or bridge? | What was your walking route like? | Easy to find your way? |
 | Landmark | Easy to find your way? | Seating without a purchase? | How long did you spend exploring? |
@@ -787,9 +729,9 @@ Cabin, cottage, campground and RV-park defaults also stay consistent when those 
 | Subcategory | Question 1 | Question 2 | Question 3 |
 | --- | --- | --- | --- |
 | Public bathroom | Toilet fee? | Handwashing facilities? | Step-free entrance? |
-| Public bath | Private or shared changing space? | Lockers available? | Showers available? |
+| Public bath | Private changing space? | Lockers available? | Showers available? |
 | Restroom | Toilet fee? | Handwashing facilities? | Baby-changing table? |
-| Stable | Booked or walked in? | Riding equipment provided? | Clear visitor rules? |
+| Stable | Booked or walked in? | Riding equipment available? | Clear visitor rules? |
 | Generic establishment | How did visitor entry work? | Step-free entrance? | Card, cash or app? |
 | Point of interest | Easy to find your way? | Somewhere to sit? | How long did you spend exploring? |
 | Unknown | Easy to find your way? | How did visitor entry work? | Step-free entrance? |

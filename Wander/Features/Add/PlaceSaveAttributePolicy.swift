@@ -81,8 +81,12 @@ enum PlaceSaveAttributePolicy {
             where PlaceCheckInQuestionCatalog.isDetailQuestion(key) && !SharedCheckInQuestion.isSharedQuestion(key) {
                 guard !privateQuestionIDs.contains(key), let values = answers[key], !values.isEmpty else { continue }
                 if let question = PlaceCheckInQuestionCatalog.question(id: key),
-                   let answer = question.options.first(where: { values.contains($0) }) {
-                    result.append(PlaceAttributeDraft(questionKey: key, valueType: question.valueType, stringValue: answer))
+                   let answer = question.acceptedOptions.first(where: { values.contains($0) }) {
+                    if question.allowsMultipleSelection {
+                        result.append(PlaceAttributeDraft(questionKey: key, valueType: question.valueType, stringValues: question.answerOptions.filter(values.contains)))
+                    } else {
+                        result.append(PlaceAttributeDraft(questionKey: key, valueType: question.valueType, stringValue: answer))
+                    }
                 } else if let original = originalByKey[key] {
                     result.append(original)
                 }

@@ -5,6 +5,53 @@ import XCTest
 final class CheckInQuestionPreferencesTests: XCTestCase {
     private let defaultsIDs = ["place_detail_outlets", "place_detail_noise", "place_detail_seating"]
 
+    func testNotUsefulPersistsPerSubtypeAndOwnerWithoutDeletingHistory() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = CheckInQuestionPreferenceStore(defaults: defaults)
+        var value = configuration(store)
+        try store.savePrivateAnswers(["place_detail_outlets": "Plenty"], ownerUserID: "a", userPlaceID: "place", visitID: "visit")
+        value.hideQuestion(id: "place_detail_outlets")
+        try store.saveConfiguration(value, ownerUserID: "a", subtypeKey: "cafe")
+        let reopened = CheckInQuestionPreferenceStore(defaults: defaults)
+        XCTAssertEqual(configuration(reopened).hiddenQuestionIDs, ["place_detail_outlets"])
+        XCTAssertFalse(configuration(reopened).orderedQuestionIDs.contains("place_detail_outlets"))
+        XCTAssertTrue(configuration(reopened, owner: "b").hiddenQuestionIDs.isEmpty)
+        XCTAssertTrue(configuration(reopened, subtype: "hotel").hiddenQuestionIDs.isEmpty)
+        XCTAssertEqual(try reopened.loadPrivateAnswers(ownerUserID: "a", userPlaceID: "place", visitID: "visit"), ["place_detail_outlets": "Plenty"])
+        value.undoHiddenQuestion(id: "place_detail_outlets", originalIndex: 0)
+        XCTAssertEqual(value.orderedQuestionIDs, defaultsIDs)
+        XCTAssertTrue(value.hiddenQuestionIDs.isEmpty)
+        value.hideQuestion(id: "place_detail_outlets")
+        value.addCatalogQuestion(id: "place_detail_outlets")
+        XCTAssertTrue(value.hiddenQuestionIDs.isEmpty)
+        value.hideQuestion(id: "place_detail_noise")
+        value.restoreSuggestedQuestions(defaultsIDs)
+        XCTAssertTrue(value.hiddenQuestionIDs.isEmpty)
+    }
+
+    func testLegacyPreferencesDecodeWithoutHiddenQuestions() throws {
+        let json = #"{"orderedQuestionIDs":["place_detail_outlets"]}"#
+        let value = try JSONDecoder().decode(CheckInQuestionConfiguration.self, from: Data(json.utf8))
+        XCTAssertTrue(value.hiddenQuestionIDs.isEmpty)
+    }
+
+    func testDietarySelectionsSurvivePrivateStorageAndAudienceConversion() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = CheckInQuestionPreferenceStore(defaults: defaults)
+        let question = try XCTUnwrap(PlaceCheckInQuestionCatalog.question(id: "place_detail_dietary_options"))
+        let selected: Set<String> = ["Vegan", "Gluten free"]
+        let encoded = try XCTUnwrap(question.privateValue(for: selected))
+        try store.savePrivateAnswers([question.id: encoded], ownerUserID: "a", userPlaceID: "place", visitID: "visit")
+        let reopened = try store.loadPrivateAnswers(ownerUserID: "a", userPlaceID: "place", visitID: "visit")
+        XCTAssertEqual(question.selectedValues(fromPrivateValue: try XCTUnwrap(reopened[question.id])), selected)
+        XCTAssertEqual(CheckInQuestionAnswerPolicy.toggling("Vegan", selected: selected, allowsMultipleSelection: true), ["Gluten free"])
+        XCTAssertEqual(CheckInQuestionAnswerPolicy.toggling("Vegetarian", selected: selected, allowsMultipleSelection: true), ["Vegan", "Vegetarian", "Gluten free"])
+        XCTAssertThrowsError(try store.savePrivateAnswers([question.id: "Vegan"], ownerUserID: "a", userPlaceID: "place", visitID: "visit"))
+        XCTAssertThrowsError(try store.savePrivateAnswers([question.id: #"["Vegan","unknown"]"#], ownerUserID: "a", userPlaceID: "place", visitID: "visit"))
+    }
+
     func testUntouchedQuestionsHaveNoAnswersAndPreferencesDoNotWriteOnRead() throws {
         let (defaults, suite) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }

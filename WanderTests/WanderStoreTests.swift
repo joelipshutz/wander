@@ -5831,7 +5831,9 @@ final class WanderStoreTests: XCTestCase {
         let blocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
         let questions = blocks.filter { PlaceCheckInQuestionCatalog.isDetailQuestion($0.key) }
         XCTAssertEqual(questions.count, 3)
-        XCTAssertTrue(questions.allSatisfy { $0.kind == .singleChoice && $0.defaultValues.isEmpty })
+        XCTAssertTrue(questions.allSatisfy { $0.defaultValues.isEmpty })
+        XCTAssertEqual(questions.filter { $0.kind == .singleChoice }.count, 2)
+        XCTAssertEqual(questions.first { $0.kind == .multiTag }?.key, "place_detail_dietary_options")
         XCTAssertFalse(blocks.contains { $0.key == "rating_signal" || $0.key == "occasion" })
         XCTAssertEqual(blocks.last?.key, "restaurant_tags")
     }

@@ -49,6 +49,20 @@ begin
   if not exists (select 1 from public.own_place_visit_details(array[parent_id]) where id = visit_id and attribute_answers = detail_payload - 0)
   then raise exception 'Cleared detail reappeared on visit edit'; end if;
 
+  -- Production iOS multi-select payload: preserve every dietary selection and
+  -- both existing storage contracts, never flatten the array to its first item.
+  detail_payload := detail_payload - 0 || '[{"question_key":"place_detail_dietary_options","value_type":"multi_tag","value":["Vegan","Vegetarian","Gluten free"]},{"question_key":"place_detail_arrival_parking","value_type":"single_choice","value":"Yes"}]'::jsonb;
+  saved := public.save_own_place(place_payload, save_payload, detail_payload);
+  if not exists (select 1 from public.place_attributes where user_place_id = parent_id
+    and question_key = 'place_detail_dietary_options' and value_type = 'multi_tag'
+    and value = '["Vegan","Vegetarian","Gluten free"]'::jsonb)
+  then raise exception 'Dietary multi-select did not round-trip through save_own_place'; end if;
+  saved := public.save_own_check_in(place_payload, save_payload, detail_payload,
+    jsonb_build_object('id', visit_id, 'visited_at', now(), 'rating_score', 4,
+      'attribute_answers', detail_payload), null);
+  if not exists (select 1 from public.own_place_visit_details(array[parent_id]) where id = visit_id and attribute_answers = detail_payload)
+  then raise exception 'Dietary visit lost selections on reopen'; end if;
+
   perform set_config('request.jwt.claim.sub', 'user_codex_supabase_smoke_collab', true);
   -- The broader harness may have already established this synthetic follow.
   -- Do not invoke the existing upsert RPC for a relationship that already exists.

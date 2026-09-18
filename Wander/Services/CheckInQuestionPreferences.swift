@@ -24,16 +24,18 @@ struct CheckInQuestionConfiguration: Codable, Equatable {
     /// Definitions survive removal so historical answers retain their meaning.
     private(set) var customQuestions: [CheckInCustomQuestion]
     private(set) var stealthByQuestionID: [String: Bool]
+    private(set) var hiddenQuestionIDs: Set<String>
 
-    init(orderedQuestionIDs: [String], customQuestions: [CheckInCustomQuestion] = [], stealthByQuestionID: [String: Bool] = [:]) {
+    init(orderedQuestionIDs: [String], customQuestions: [CheckInCustomQuestion] = [], stealthByQuestionID: [String: Bool] = [:], hiddenQuestionIDs: Set<String> = []) {
         var seen = Set<String>()
         self.orderedQuestionIDs = orderedQuestionIDs.filter { seen.insert($0).inserted }
         self.customQuestions = customQuestions
         self.stealthByQuestionID = stealthByQuestionID
+        self.hiddenQuestionIDs = hiddenQuestionIDs
     }
 
     private enum CodingKeys: String, CodingKey {
-        case orderedQuestionIDs, customQuestions, stealthByQuestionID
+        case orderedQuestionIDs, customQuestions, stealthByQuestionID, hiddenQuestionIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -41,6 +43,7 @@ struct CheckInQuestionConfiguration: Codable, Equatable {
         orderedQuestionIDs = try container.decode([String].self, forKey: .orderedQuestionIDs)
         customQuestions = try container.decodeIfPresent([CheckInCustomQuestion].self, forKey: .customQuestions) ?? []
         stealthByQuestionID = try container.decodeIfPresent([String: Bool].self, forKey: .stealthByQuestionID) ?? [:]
+        hiddenQuestionIDs = try container.decodeIfPresent(Set<String>.self, forKey: .hiddenQuestionIDs) ?? []
     }
 
     func isStealth(questionID: String) -> Bool {
@@ -52,6 +55,7 @@ struct CheckInQuestionConfiguration: Codable, Equatable {
     }
 
     mutating func addCatalogQuestion(id: String, stealth: Bool = false) {
+        hiddenQuestionIDs.remove(id)
         guard !orderedQuestionIDs.contains(id) else { return }
         orderedQuestionIDs.append(id)
         setStealth(stealth, questionID: id)
@@ -85,7 +89,19 @@ struct CheckInQuestionConfiguration: Codable, Equatable {
 
     mutating func removeQuestions(at offsets: IndexSet) {
         for index in offsets.sorted(by: >) where orderedQuestionIDs.indices.contains(index) {
-            orderedQuestionIDs.remove(at: index)
+            hiddenQuestionIDs.insert(orderedQuestionIDs.remove(at: index))
+        }
+    }
+
+    mutating func hideQuestion(id: String) {
+        hiddenQuestionIDs.insert(id)
+        orderedQuestionIDs.removeAll { $0 == id }
+    }
+
+    mutating func undoHiddenQuestion(id: String, originalIndex: Int?) {
+        hiddenQuestionIDs.remove(id)
+        if let originalIndex, !orderedQuestionIDs.contains(id) {
+            orderedQuestionIDs.insert(id, at: max(0, min(originalIndex, orderedQuestionIDs.count)))
         }
     }
 
@@ -102,13 +118,16 @@ struct CheckInQuestionConfiguration: Codable, Equatable {
 
     mutating func restoreSuggestedQuestions(_ ids: [String]) {
         var seen = Set<String>()
+        hiddenQuestionIDs.formUnion(orderedQuestionIDs.filter { !ids.contains($0) })
+        hiddenQuestionIDs.subtract(ids)
         orderedQuestionIDs = ids.filter { seen.insert($0).inserted }
     }
 }
 
 enum CheckInQuestionAnswerPolicy {
-    static func toggling(_ option: String, selected: Set<String>) -> Set<String> {
-        selected.contains(option) ? [] : [option]
+    static func toggling(_ option: String, selected: Set<String>, allowsMultipleSelection: Bool = false) -> Set<String> {
+        if allowsMultipleSelection { return selected.symmetricDifference([option]) }
+        return selected.contains(option) ? [] : [option]
     }
 
     static func togglingPrivate(_ value: String, current: String?) -> String? {
@@ -190,7 +209,8 @@ struct CheckInQuestionPreferenceStore {
         account.configurations[subtypeKey] = CheckInQuestionConfiguration(
             orderedQuestionIDs: configuration.orderedQuestionIDs,
             customQuestions: definitions,
-            stealthByQuestionID: configuration.stealthByQuestionID
+            stealthByQuestionID: configuration.stealthByQuestionID,
+            hiddenQuestionIDs: configuration.hiddenQuestionIDs
         )
         try writeAccount(account)
     }
@@ -350,7 +370,7 @@ struct CheckInQuestionPreferenceStore {
         let ownedIDs = Set(account.configurations.values.flatMap(\.customQuestions).map(\.id))
         guard answers.allSatisfy({ id, value in
             if let question = PlaceCheckInQuestionCatalog.question(id: id) {
-                return question.options.contains(value)
+                return !question.selectedValues(fromPrivateValue: value).isEmpty
             }
             return ownedIDs.contains(id) && CheckInCustomQuestion.isCustomID(id) && (value == "yes" || value == "no")
         }) else { throw CheckInQuestionPersistenceError.invalidPrivateAnswer }
@@ -389,7 +409,9 @@ struct CheckInQuestionPreferenceStore {
 
     private func validate(_ configuration: CheckInQuestionConfiguration) throws {
         let customIDs = Set(configuration.customQuestions.map(\.id))
-        guard customIDs.count == configuration.customQuestions.count,
+        guard configuration.hiddenQuestionIDs.isDisjoint(with: configuration.orderedQuestionIDs),
+              configuration.hiddenQuestionIDs.allSatisfy({ $0.hasPrefix("place_detail_") || CheckInCustomQuestion.isCustomID($0) }),
+              customIDs.count == configuration.customQuestions.count,
               Set(configuration.orderedQuestionIDs).count == configuration.orderedQuestionIDs.count,
               configuration.customQuestions.allSatisfy({ question in
                   CheckInCustomQuestion.isCustomID(question.id)

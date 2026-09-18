@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// The save editor owns presentation so scrolling/rebuilding a question panel
+/// cannot dismiss its customization page or native confirmation.
+struct CheckInQuestionCustomizationRequest: Identifiable {
+    let id = UUID()
+    let scopeIdentity: String
+    let content: CheckInQuestionCustomizationSheet
+}
+
 /// Shared by new and edited check-ins. Shared and Stealth answers use separate
 /// bindings; this view never serializes a save.
 struct CheckInQuestionPanel: View {
@@ -16,8 +24,11 @@ struct CheckInQuestionPanel: View {
     @State private var configuration: CheckInQuestionConfiguration
     @State private var loadedScope = ""
     @State private var customDefinitions: [CheckInCustomQuestion] = []
-    @State private var showsCustomization = false
+    @Binding private var customization: CheckInQuestionCustomizationRequest?
     @State private var showsAdditionalQuestions = false
+    @State private var renderedPreferredIDs: [String] = []
+    @State private var dismissedIDs: Set<String> = []
+    @State private var preferenceError: String?
     private let preferenceStore: CheckInQuestionPreferenceStore
 
     init(
@@ -28,6 +39,7 @@ struct CheckInQuestionPanel: View {
         savedCustomQuestions: [CheckInCustomQuestion] = [],
         answers: Binding<[String: Set<String>]>,
         customAnswers: Binding<[String: String]>,
+        customization: Binding<CheckInQuestionCustomizationRequest?>,
         preferenceStore: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
     ) {
         self.ownerUserID = ownerUserID
@@ -37,6 +49,7 @@ struct CheckInQuestionPanel: View {
         self.savedCustomQuestions = savedCustomQuestions
         _answers = answers
         _customAnswers = customAnswers
+        _customization = customization
         self.preferenceStore = preferenceStore
         _configuration = State(initialValue: CheckInQuestionConfiguration(
             orderedQuestionIDs: defaultQuestions.map(\.id)
@@ -46,6 +59,10 @@ struct CheckInQuestionPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             header
+            if let preferenceError {
+                Text(preferenceError).font(AstirTypography.bodySmall)
+                    .foregroundStyle(WanderTheme.stateError.color)
+            }
 
             if preferredQuestions.isEmpty {
                 Text("No recurring questions for this place type. Add any you want in Customize.")
@@ -85,8 +102,12 @@ struct CheckInQuestionPanel: View {
         }
         .foregroundStyle(brandMode.primaryText)
         .onChange(of: scopeIdentity, initial: true) { _, _ in loadConfiguration() }
-        .sheet(isPresented: $showsCustomization) {
-            CheckInQuestionCustomizationSheet(
+    }
+
+    private func presentCustomization() {
+        customization = CheckInQuestionCustomizationRequest(
+            scopeIdentity: scopeIdentity,
+            content: CheckInQuestionCustomizationSheet(
                 ownerUserID: ownerUserID,
                 subtypeKey: subtypeKey,
                 subtypeTitle: subtypeTitle,
@@ -97,9 +118,11 @@ struct CheckInQuestionPanel: View {
                 onStealthChange: transferDraftAnswer
             ) { updated in
                 configuration = updated
+                renderedPreferredIDs = updated.orderedQuestionIDs
+                dismissedIDs = []
                 customDefinitions = preferenceStore.allCustomQuestions(ownerUserID: ownerUserID)
             }
-        }
+        )
     }
 
     private var scopeIdentity: String {
@@ -124,14 +147,15 @@ struct CheckInQuestionPanel: View {
     }
 
     private var sectionTitle: some View {
-        Text("Useful details")
-            .font(AstirTypography.control)
+        Text("useful details")
+            .font(AstirTypography.label)
+            .foregroundStyle(brandMode.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
     }
 
     private var customizeButton: some View {
-        Button { showsCustomization = true } label: {
+        Button(action: presentCustomization) {
             Text("Customize")
                 .font(AstirTypography.control)
                 .frame(minHeight: WanderTheme.tapMinimum)
@@ -150,15 +174,15 @@ struct CheckInQuestionPanel: View {
     }
 
     private var preferredQuestions: [CheckInPresentedQuestion] {
-        currentConfiguration.orderedQuestionIDs.compactMap(presentedQuestion)
+        (loadedScope == scopeIdentity ? renderedPreferredIDs : currentConfiguration.orderedQuestionIDs).compactMap(presentedQuestion)
     }
 
     private var additionalQuestions: [CheckInPresentedQuestion] {
-        let preferred = Set(currentConfiguration.orderedQuestionIDs)
+        let preferred = Set(loadedScope == scopeIdentity ? renderedPreferredIDs : currentConfiguration.orderedQuestionIDs)
         let catalogIDs = answers.keys.filter { !(answers[$0] ?? []).isEmpty }
         let privateIDs = loadedScope == scopeIdentity ? Array(customAnswers.keys) : []
         return Set(catalogIDs + privateIDs)
-            .filter { !preferred.contains($0) }
+            .filter { !preferred.contains($0) && (!currentConfiguration.hiddenQuestionIDs.contains($0) || dismissedIDs.contains($0)) }
             .sorted()
             .compactMap(presentedQuestion)
     }
@@ -169,7 +193,7 @@ struct CheckInQuestionPanel: View {
             return CheckInPresentedQuestion(
                 id: question.id,
                 prompt: question.prompt,
-                options: question.options,
+                options: question.answerOptions,
                 isPrivate: isStealth(questionID: id)
             )
         }
@@ -198,7 +222,7 @@ struct CheckInQuestionPanel: View {
     private func selectedValues(for question: CheckInPresentedQuestion) -> Set<String> {
         let values: Set<String>
         if question.isPrivate, let value = customAnswers[question.id] {
-            values = [value]
+            values = PlaceCheckInQuestionCatalog.question(id: question.id)?.selectedValues(fromPrivateValue: value) ?? [value]
         } else {
             values = answers[question.id] ?? []
         }
@@ -210,14 +234,23 @@ struct CheckInQuestionPanel: View {
         CheckInQuestionAnswerRow(
             question: question,
             selectedValues: selectedValues(for: question),
+            isDismissed: dismissedIDs.contains(question.id),
+            onToggleUseful: { toggleUseful(questionID: question.id) },
             onSelect: { option in
                 let value = CheckInCustomQuestion.isCustomID(question.id) ? option.lowercased() : option
                 if question.isPrivate {
-                    customAnswers[question.id] = customAnswers[question.id] == value ? nil : value
+                    if let catalog = PlaceCheckInQuestionCatalog.question(id: question.id) {
+                        let selected = catalog.selectedValues(fromPrivateValue: customAnswers[question.id] ?? "")
+                        let updated = CheckInQuestionAnswerPolicy.toggling(value, selected: selected, allowsMultipleSelection: catalog.allowsMultipleSelection)
+                        customAnswers[question.id] = catalog.privateValue(for: updated)
+                    } else {
+                        customAnswers[question.id] = customAnswers[question.id] == value ? nil : value
+                    }
                 } else {
                     answers[question.id] = CheckInQuestionAnswerPolicy.toggling(
                         value,
-                        selected: answers[question.id] ?? []
+                        selected: answers[question.id] ?? [],
+                        allowsMultipleSelection: PlaceCheckInQuestionCatalog.question(id: question.id)?.allowsMultipleSelection ?? false
                     )
                 }
             },
@@ -233,17 +266,41 @@ struct CheckInQuestionPanel: View {
 
     private func transferDraftAnswer(questionID: String, stealth: Bool) {
         if stealth {
-            if let value = answers[questionID]?.sorted().first {
-                customAnswers[questionID] = value
+            if let values = answers[questionID], !values.isEmpty {
+                customAnswers[questionID] = PlaceCheckInQuestionCatalog.question(id: questionID)?.privateValue(for: values) ?? values.sorted().first
                 // Explicit empty is needed to clear a previously shared value.
                 answers[questionID] = []
             }
         } else if let value = customAnswers.removeValue(forKey: questionID) {
-            answers[questionID] = [value]
+            answers[questionID] = PlaceCheckInQuestionCatalog.question(id: questionID)?.selectedValues(fromPrivateValue: value) ?? [value]
         }
     }
 
+    private func toggleUseful(questionID: String) {
+        var updated = currentConfiguration
+        let undo = dismissedIDs.contains(questionID)
+        if undo {
+            // Count only currently visible predecessors so multiple removals
+            // can be undone in any order without scrambling the original list.
+            let index = renderedPreferredIDs.firstIndex(of: questionID).map { original in
+                renderedPreferredIDs.prefix(original).filter { updated.orderedQuestionIDs.contains($0) }.count
+            }
+            updated.undoHiddenQuestion(id: questionID, originalIndex: index)
+        } else {
+            updated.hideQuestion(id: questionID)
+        }
+        do {
+            try preferenceStore.saveConfiguration(updated, ownerUserID: ownerUserID, subtypeKey: subtypeKey)
+            configuration = updated
+            if undo { dismissedIDs.remove(questionID) } else { dismissedIDs.insert(questionID) }
+            preferenceError = nil
+        } catch { preferenceError = error.localizedDescription }
+    }
+
     private func loadConfiguration() {
+        // Repeated appearances must not reset the current sheet or Undo state.
+        // A different owner/subtype receives a fresh configuration.
+        guard loadedScope != scopeIdentity else { return }
         configuration = preferenceStore.configuration(
             ownerUserID: ownerUserID,
             subtypeKey: subtypeKey,
@@ -251,7 +308,12 @@ struct CheckInQuestionPanel: View {
         )
         customDefinitions = preferenceStore.allCustomQuestions(ownerUserID: ownerUserID)
         loadedScope = scopeIdentity
-        showsCustomization = false
+        renderedPreferredIDs = configuration.orderedQuestionIDs
+        dismissedIDs = []
+        preferenceError = nil
+        if let customization, customization.scopeIdentity != scopeIdentity {
+            self.customization = nil
+        }
     }
 }
 
@@ -317,8 +379,10 @@ struct CheckInPrivateAnswerSummary: View {
             )
             let customQuestions = store.allCustomQuestions(ownerUserID: ownerUserID)
             rows = answers.compactMap { id, value in
-                if let question = PlaceCheckInQuestionCatalog.question(id: id), question.options.contains(value) {
-                    return PrivateAnswerRow(id: id, prompt: question.prompt, answer: value)
+                if let question = PlaceCheckInQuestionCatalog.question(id: id) {
+                    let selected = question.selectedValues(fromPrivateValue: value)
+                    guard !selected.isEmpty else { return nil }
+                    return PrivateAnswerRow(id: id, prompt: question.prompt, answer: question.acceptedOptions.filter(selected.contains).joined(separator: ", "))
                 }
                 guard let question = customQuestions.first(where: { $0.id == id }), value == "yes" || value == "no" else { return nil }
                 return PrivateAnswerRow(id: id, prompt: question.prompt, answer: value == "yes" ? "Yes" : "No")
@@ -339,6 +403,8 @@ struct CheckInPrivateAnswerSummary: View {
 private struct CheckInQuestionAnswerRow: View {
     let question: CheckInPresentedQuestion
     let selectedValues: Set<String>
+    let isDismissed: Bool
+    let onToggleUseful: () -> Void
     let onSelect: (String) -> Void
     let onClear: () -> Void
     @Environment(\.astirBrandMode) private var brandMode
@@ -361,10 +427,15 @@ private struct CheckInQuestionAnswerRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(question.prompt)
-                .font(AstirTypography.cardTitle)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("save.question.row.\(question.id)")
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 0) { prompt; usefulnessButton }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                    prompt
+                    Spacer(minLength: 0)
+                    usefulnessButton
+                }
+            }
 
             if question.isPrivate {
                 Label("Stealth", systemImage: "eye.slash")
@@ -390,8 +461,11 @@ private struct CheckInQuestionAnswerRow: View {
                     }
                 }
             }
+            .disabled(isDismissed)
+            .saturation(isDismissed ? 0 : 1)
+            .opacity(isDismissed ? 0.4 : 1)
 
-            if !selectedValues.isEmpty {
+            if !selectedValues.isEmpty && !isDismissed {
                 Button("Clear answer", action: onClear)
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.accentText)
@@ -400,6 +474,30 @@ private struct CheckInQuestionAnswerRow: View {
             }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private var prompt: some View {
+        Text(question.prompt)
+            .font(AstirTypography.cardTitle)
+            .foregroundStyle(isDismissed ? brandMode.secondaryText : brandMode.primaryText)
+            .opacity(isDismissed ? 0.5 : 1)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("save.question.row.\(question.id)")
+    }
+
+    private var usefulnessButton: some View {
+        Button(action: onToggleUseful) {
+            Text(isDismissed ? "Undo" : "Not useful")
+                .font(AstirTypography.label)
+                .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
+                .fixedSize(horizontal: true, vertical: false)
+        }
+            .buttonStyle(.plain)
+            .foregroundStyle(brandMode.accentText)
+            .accessibilityLabel("\(isDismissed ? "Undo hiding" : "Not useful:") \(question.prompt)")
+            .accessibilityValue(isDismissed ? "Hidden from future prompts" : "Shown")
+            .accessibilityIdentifier("save.question.useful.\(question.id)")
     }
 
     private func optionButton(_ option: String) -> some View {
@@ -450,7 +548,8 @@ struct CheckInQuestionCustomizationSheet: View {
     @State private var errorMessage: String?
     @State private var showsCatalog = false
     @State private var showsCustomEditor = false
-    @State private var editingQuestionID: String?
+    @State private var showsRestoreConfirmation = false
+    @State private var changedStealth: [String: Bool] = [:]
 
     init(
         ownerUserID: String,
@@ -475,113 +574,113 @@ struct CheckInQuestionCustomizationSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(configuration.orderedQuestionIDs, id: \.self) { id in
-                        Button { editingQuestionID = id } label: {
-                            HStack(spacing: WanderTheme.spacing2) {
-                                Text(prompt(for: id))
-                                    .font(AstirTypography.body)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Spacer(minLength: WanderTheme.spacing1)
-                                Image(systemName: displayedStealth(questionID: id) ? "eye.slash" : "ellipsis")
-                                    .foregroundStyle(brandMode.secondaryText)
-                                    .accessibilityHidden(true)
-                            }
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                            .contentShape(Rectangle())
+        NavigationStack { questionList }
+        .alert("Are you sure?", isPresented: $showsRestoreConfirmation) {
+            Button("Yes, restore") { update { $0.restoreSuggestedQuestions(defaultQuestions.map(\.id)) } }
+            Button("No, cancel", role: .cancel) {}
+        } message: {
+            Text("Replace this list with suggested questions? Your previous answers will be kept.")
+        }
+        .tint(brandMode.accentText)
+    }
+
+    private var questionList: some View {
+        List {
+            Section {
+                ForEach(configuration.orderedQuestionIDs, id: \.self) { id in
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Text(prompt(for: id))
+                            .font(AstirTypography.body)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("save.questions.recurring.\(id)")
+                        Spacer(minLength: WanderTheme.spacing1)
+                        Button { toggleStealth(questionID: id) } label: {
+                            Image(systemName: displayedStealth(questionID: id) ? "eye.slash" : "eye")
+                                .foregroundStyle(displayedStealth(questionID: id) ? brandMode.secondaryText : brandMode.accent)
+                                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .listRowBackground(brandMode.raisedBackground)
-                        .accessibilityLabel(prompt(for: id))
-                        .accessibilityValue(displayedStealth(questionID: id) ? "Stealth" : "Check-in audience")
-                        .accessibilityHint("Change this question’s Stealth setting")
-                        .accessibilityIdentifier("save.questions.recurring.\(id)")
-                    }
-                    .onMove { offsets, destination in
-                        update { $0.moveQuestions(from: offsets, to: destination) }
-                    }
-                    .onDelete { offsets in update { $0.removeQuestions(at: offsets) } }
-                } header: {
-                    Text("For \(subtypeTitle)")
-                } footer: {
-                    Text("Drag to reorder. Removing a question changes future prompts and keeps previous answers.")
-                }
-
-                Section {
-                    // Native NavigationLinks are disabled by active List edit
-                    // mode. Buttons keep navigation available while reordering.
-                    Button { showsCatalog = true } label: {
-                        Label("Add a question", systemImage: "plus")
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                    }
-                    .accessibilityIdentifier("save.questions.addCatalog")
-                    Button { showsCustomEditor = true } label: {
-                        Label("Create your own", systemImage: "square.and.pencil")
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                    }
-                    .accessibilityIdentifier("save.questions.createCustom")
-                }
-                .listRowBackground(brandMode.raisedBackground)
-
-                Section {
-                    Button("Restore suggested questions") {
-                        update { $0.restoreSuggestedQuestions(defaultQuestions.map(\.id)) }
-                    }
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityIdentifier("save.questions.restore")
-                }
-                .listRowBackground(brandMode.raisedBackground)
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(AstirTypography.bodySmall)
-                            .foregroundStyle(WanderTheme.stateError.color)
+                        .accessibilityLabel("Stealth for \(prompt(for: id))")
+                        .accessibilityValue(displayedStealth(questionID: id) ? "On, only you" : "Off, check-in audience")
+                        .accessibilityHint("Toggle who can see this question and answer")
+                        .accessibilityIdentifier("save.questions.stealth.\(id)")
                     }
                     .listRowBackground(brandMode.raisedBackground)
                 }
-            }
-            .environment(\.editMode, .constant(.active))
-            .scrollContentBackground(.hidden)
-            .background(brandMode.background)
-            .foregroundStyle(brandMode.primaryText)
-            .navigationTitle("Customize questions")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.visible, for: .navigationBar)
-            .navigationDestination(isPresented: $showsCatalog) {
-                CheckInAddCatalogQuestionScreen(selectedIDs: Set(configuration.orderedQuestionIDs)) { id, stealth in
-                    var updated = configuration
-                    updated.addCatalogQuestion(id: id, stealth: stealth)
-                    try persist(updated)
-                    onStealthChange?(id, stealth)
+                .onMove { offsets, destination in
+                    update { $0.moveQuestions(from: offsets, to: destination) }
                 }
+                .onDelete { offsets in update { $0.removeQuestions(at: offsets) } }
+            } header: {
+                Text("For \(subtypeTitle)")
+            } footer: {
+                Text("Drag to reorder. Removing a question changes future prompts and keeps previous answers. A grayed out eye means those questions only stay with you.")
             }
-            .navigationDestination(isPresented: $showsCustomEditor) {
-                CheckInCreateCustomQuestionScreen { prompt, stealth in
-                    var updated = configuration
-                    let question = try updated.addCustomQuestion(prompt: prompt, stealth: stealth)
-                    try persist(updated)
-                    onStealthChange?(question.id, stealth)
+
+            Section {
+                // Native NavigationLinks are disabled by active List edit
+                // mode. Buttons keep navigation available while reordering.
+                Button { showsCatalog = true } label: {
+                    Label("Add a question", systemImage: "plus")
+                        .frame(minHeight: WanderTheme.tapMinimum)
                 }
+                .accessibilityIdentifier("save.questions.addCatalog")
+                Button { showsCustomEditor = true } label: {
+                    Label("Create your own", systemImage: "square.and.pencil")
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                }
+                .accessibilityIdentifier("save.questions.createCustom")
             }
-            .navigationDestination(item: $editingQuestionID) { id in
-                CheckInQuestionStealthScreen(prompt: prompt(for: id), stealth: displayedStealth(questionID: id)) { stealth in
-                    var updated = configuration
-                    updated.setStealth(stealth, questionID: id)
-                    try persist(updated)
-                    onStealthChange?(id, stealth)
-                }
+            .listRowBackground(brandMode.raisedBackground)
+
+            Section {
+                Button("Restore suggested questions") { showsRestoreConfirmation = true }
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                .accessibilityIdentifier("save.questions.restore")
             }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("save.questions.done")
+            .listRowBackground(brandMode.raisedBackground)
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(WanderTheme.stateError.color)
                 }
+                .listRowBackground(brandMode.raisedBackground)
             }
         }
-        .tint(brandMode.accentText)
+        .environment(\.editMode, .constant(.active))
+        .scrollContentBackground(.hidden)
+        .background(brandMode.background)
+        .foregroundStyle(brandMode.primaryText)
+        .navigationTitle("Customize questions")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .navigationDestination(isPresented: $showsCatalog) {
+            CheckInAddCatalogQuestionScreen(selectedIDs: Set(configuration.orderedQuestionIDs)) { id, stealth in
+                var updated = configuration
+                updated.addCatalogQuestion(id: id, stealth: stealth)
+                try persist(updated)
+                changedStealth[id] = stealth
+                onStealthChange?(id, stealth)
+            }
+        }
+        .navigationDestination(isPresented: $showsCustomEditor) {
+            CheckInCreateCustomQuestionScreen { prompt, stealth in
+                var updated = configuration
+                let question = try updated.addCustomQuestion(prompt: prompt, stealth: stealth)
+                try persist(updated)
+                changedStealth[question.id] = stealth
+                onStealthChange?(question.id, stealth)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+                .accessibilityIdentifier("save.questions.done")
+            }
+        }
     }
 
     private func prompt(for id: String) -> String {
@@ -591,7 +690,18 @@ struct CheckInQuestionCustomizationSheet: View {
     }
 
     private func displayedStealth(questionID: String) -> Bool {
-        answerStealthOverrides[questionID] ?? configuration.isStealth(questionID: questionID)
+        changedStealth[questionID] ?? answerStealthOverrides[questionID] ?? configuration.isStealth(questionID: questionID)
+    }
+
+    private func toggleStealth(questionID: String) {
+        let stealth = !displayedStealth(questionID: questionID)
+        var updated = configuration
+        updated.setStealth(stealth, questionID: questionID)
+        do {
+            try persist(updated)
+            changedStealth[questionID] = stealth
+            onStealthChange?(questionID, stealth)
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func update(_ mutation: (inout CheckInQuestionConfiguration) -> Void) {
@@ -839,54 +949,5 @@ private struct CheckInQuestionStealthToggle: View {
         .accessibilityLabel("Stealth. \(privacyDescription)")
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityHint(isOn ? "Turn Stealth off" : "Turn Stealth on")
-    }
-}
-
-private struct CheckInQuestionStealthScreen: View {
-    let prompt: String
-    let onChange: (Bool) throws -> Void
-    @State private var stealth: Bool
-    @State private var errorMessage: String?
-    @Environment(\.astirBrandMode) private var brandMode
-
-    init(prompt: String, stealth: Bool, onChange: @escaping (Bool) throws -> Void) {
-        self.prompt = prompt
-        self.onChange = onChange
-        _stealth = State(initialValue: stealth)
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Text(prompt)
-                    .font(AstirTypography.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                CheckInQuestionStealthToggle(isOn: Binding(
-                    get: { stealth },
-                    set: { value in
-                        do {
-                            try onChange(value)
-                            stealth = value
-                            errorMessage = nil
-                        } catch {
-                            errorMessage = error.localizedDescription
-                        }
-                    }
-                ), accessibilityIdentifier: "save.questions.selectedStealth")
-            }
-            .listRowBackground(brandMode.raisedBackground)
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(AstirTypography.bodySmall)
-                    .foregroundStyle(WanderTheme.stateError.color)
-                    .listRowBackground(brandMode.raisedBackground)
-            }
-        }
-        .environment(\.editMode, .constant(.inactive))
-        .scrollContentBackground(.hidden)
-        .background(brandMode.background)
-        .foregroundStyle(brandMode.primaryText)
-        .navigationTitle("Question")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

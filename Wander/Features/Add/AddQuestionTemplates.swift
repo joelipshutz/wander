@@ -68,9 +68,9 @@ enum AddQuestionTemplates {
                 key: $0.id,
                 title: $0.prompt,
                 tag: "optional",
-                kind: .singleChoice,
+                kind: $0.allowsMultipleSelection ? .multiTag : .singleChoice,
                 valueType: $0.valueType,
-                options: $0.options,
+                options: $0.answerOptions,
                 defaultValues: []
             )
         } + [tags]

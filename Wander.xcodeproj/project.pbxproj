@@ -156,6 +156,7 @@
 		7097CD10DE64A2D5F401DC2F /* CoreLocationProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89B71EC80959A49990CF767A /* CoreLocationProviderTests.swift */; };
 		70B6FF7ED9FD6570F2F975DA /* WanderNearbyWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6EA4D0DC023461D682C8A3 /* WanderNearbyWidget.swift */; };
 		72DF41336AAFFA3F9C658D66 /* TikTokOpenShareSDK in Frameworks */ = {isa = PBXBuildFile; productRef = FEB190222523019A1DF721A0 /* TikTokOpenShareSDK */; };
+		737BC9405DD665CF297D9D3F /* PlaceCheckInBinaryPrompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695052B1BCB6ABABC889B87 /* PlaceCheckInBinaryPrompts.swift */; };
 		73924B066BD7D0F8917C6F09 /* WanderPlaceCategoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */; };
 		74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */; };
 		74AAAADD6470333A4F1A1508 /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
@@ -392,6 +393,7 @@
 		04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddCameraPresentationTests.swift; sourceTree = "<group>"; };
 		0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetConstants.swift; sourceTree = "<group>"; };
 		059173381275E3363050A4E1 /* OnboardingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingStateTests.swift; sourceTree = "<group>"; };
+		0695052B1BCB6ABABC889B87 /* PlaceCheckInBinaryPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCheckInBinaryPrompts.swift; sourceTree = "<group>"; };
 		07464EC1C300B7DE2D4DF937 /* ProductUpsellScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductUpsellScreen.swift; sourceTree = "<group>"; };
 		0757A5692D997B5355944002 /* SharedPlaceImportInboxDrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInboxDrainer.swift; sourceTree = "<group>"; };
 		09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-106-manual-place-search-pre.json"; sourceTree = "<group>"; };
@@ -719,6 +721,7 @@
 				A28E93E5F5EB428888C45B36 /* AddQuestionTemplates.swift */,
 				AB7720F9AA05786E6D66C6D1 /* AddScreen.swift */,
 				44E8FD81270D945CFB6C0000 /* CheckInQuestionPanel.swift */,
+				0695052B1BCB6ABABC889B87 /* PlaceCheckInBinaryPrompts.swift */,
 				017799A23EA134B7B0F5198E /* PlaceCheckInObservationProjection.swift */,
 				7B4C8C15B208448AF8473A3D /* PlaceCheckInQuestionCatalog.swift */,
 				01334D3026016C41CA12F59A /* PlaceCheckInQuestionCatalog+CoreProfiles.swift */,
@@ -1663,6 +1666,7 @@
 				540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */,
 				0E63C5812CFBBD3907522CA0 /* PlaceBusinessMetadata.swift in Sources */,
 				ECDD1D96B99E5D8E77B6D14C /* PlaceCardPresentation.swift in Sources */,
+				737BC9405DD665CF297D9D3F /* PlaceCheckInBinaryPrompts.swift in Sources */,
 				D664C4A730B595F9CE1FD422 /* PlaceCheckInObservationProjection.swift in Sources */,
 				3B88341D269A1214AC7BE743 /* PlaceCheckInQuestionCatalog+CoreProfiles.swift in Sources */,
 				FA73A359C2863417D7463D78 /* PlaceCheckInQuestionCatalog+CoreQuestions.swift in Sources */,

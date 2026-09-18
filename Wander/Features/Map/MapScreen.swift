@@ -12722,6 +12722,7 @@ struct MapPlaceSaveEditor: View {
     @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
+    @State private var questionCustomization: CheckInQuestionCustomizationRequest?
     @State private var selectedAnswers: [String: Set<String>]
     @State private var unifiedTags: Set<String>
     @State private var questionBlocksCache: MapPlaceSaveQuestionBlocksCache
@@ -13027,6 +13028,7 @@ struct MapPlaceSaveEditor: View {
                 inlineEditor
             }
         }
+        .sheet(item: $questionCustomization) { $0.content }
         .disabled(editorOwnerID != nil && editorOwnerID != store.currentUser.id)
         .onChange(of: store.currentUser.id, initial: true) { _, _ in
             guard bindEditorOwnerIfNeeded() else { return }
@@ -13466,7 +13468,8 @@ struct MapPlaceSaveEditor: View {
             ),
             savedCustomQuestions: savedCustomQuestions,
             answers: $selectedAnswers,
-            customAnswers: $customQuestionAnswers
+            customAnswers: $customQuestionAnswers,
+            customization: $questionCustomization
         )
         .disabled(!didLoadPrivateAnswers || privateAnswersOwnerID != store.currentUser.id)
         .onChange(of: context.id, initial: true) { _, _ in loadPrivateQuestionAnswersIfNeeded() }
@@ -18071,12 +18074,10 @@ private struct PlaceActivityCard: View {
     private func visitDetailValues(_ visit: LocalPlaceVisit) -> [String] {
         VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: visit.attributeAnswersJSON).compactMap { attribute in
             guard let question = PlaceCheckInQuestionCatalog.question(id: attribute.questionKey),
-                  attribute.valueType == question.valueType,
-                  let data = attribute.valueJSON.data(using: .utf8),
-                  let value = try? JSONDecoder().decode(String.self, from: data),
-                  question.options.contains(value)
-            else { return nil }
-            return "\(question.displayLabel): \(value)"
+                  attribute.valueType == question.valueType else { return nil }
+            let values = question.values(fromJSON: attribute.valueJSON)
+            guard !values.isEmpty else { return nil }
+            return "\(question.displayLabel): \(values.joined(separator: ", "))"
         }
     }
 

@@ -3,6 +3,15 @@ import XCTest
 
 @MainActor
 final class PlaceCheckInDetailPresentationTests: XCTestCase {
+    func testDietaryArrayDisplaysAndIndexesOnlyExplicitSelections() {
+        let value = LocalPlaceAttribute(localID: "diet", userPlaceID: "save", questionKey: "place_detail_dietary_options", valueType: "multi_tag", valueJSON: #"["Vegan","Gluten free"]"#)
+        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: value), ["Dietary options: Vegan", "Dietary options: Gluten free"])
+        XCTAssertEqual(PlaceProfileAttributePresentation.searchTerms(from: value), ["vegan options", "gluten free options"])
+        XCTAssertTrue(PlaceProfileTagParser.tags(from: value).isEmpty)
+        value.valueJSON = #""Vegan""#
+        XCTAssertTrue(PlaceProfileAttributePresentation.searchTerms(from: value).isEmpty)
+    }
+
     func testAnswersKeepTheirQuestionOnReadSurfaces() {
         let outlets = attribute(key: "place_detail_outlets", answer: "None found")
         let binary = attribute(key: "place_detail_everyday_quiet_work", answer: "No")

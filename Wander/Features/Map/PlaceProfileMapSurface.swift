@@ -321,9 +321,25 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
     }
 }
 
+/// Publish updates through a stable hosting root. Replacing the controller's
+/// root view during native presentation can reconstruct its save-sheet state.
+@MainActor
+private final class PlaceProfileHostedContentState<Content: View>: ObservableObject {
+    @Published var content: Content
+
+    init(content: Content) { self.content = content }
+}
+
+private struct PlaceProfileHostedContent<Content: View>: View {
+    @ObservedObject var state: PlaceProfileHostedContentState<Content>
+
+    var body: some View { state.content }
+}
+
 @MainActor
 final class PlaceProfileSlidingHostingController<Content: View>: UIViewController {
-    private let hostingController: UIHostingController<Content>
+    private let contentState: PlaceProfileHostedContentState<Content>
+    private let hostingController: UIHostingController<PlaceProfileHostedContent<Content>>
     private var hostingConstraints: [NSLayoutConstraint] = []
     private var animator: UIViewPropertyAnimator?
     private var pendingRootView: Content?
@@ -338,7 +354,9 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         isAccessibilityModal: Bool = true,
         onTransitionCompleted: @escaping @MainActor (Bool) -> Void
     ) {
-        hostingController = UIHostingController(rootView: rootView)
+        let contentState = PlaceProfileHostedContentState(content: rootView)
+        self.contentState = contentState
+        hostingController = UIHostingController(rootView: PlaceProfileHostedContent(state: contentState))
         self.isPresented = isPresented
         self.isAccessibilityModal = isAccessibilityModal
         self.onTransitionCompleted = onTransitionCompleted
@@ -379,7 +397,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         if animator != nil {
             pendingRootView = rootView
         } else {
-            hostingController.rootView = rootView
+            contentState.content = rootView
         }
     }
 
@@ -446,7 +464,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
             }
             if let pendingRootView {
                 self.pendingRootView = nil
-                hostingController.rootView = pendingRootView
+                contentState.content = pendingRootView
             }
             onTransitionCompleted(isPresented)
         }

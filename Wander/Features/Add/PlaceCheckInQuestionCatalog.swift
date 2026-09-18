@@ -5,11 +5,39 @@ import Foundation
 struct PlaceCheckInQuestion: Identifiable, Equatable, Sendable {
     let id: String
     let displayLabel: String
-    let prompt: String
+    private let originalPrompt: String
     let options: [String]
     private let searchableAnswers: [String: [String]]
 
-    var valueType: String { "single_choice" }
+    var prompt: String { PlaceCheckInBinaryPrompts.specs[id]?.prompt ?? originalPrompt }
+    var answerOptions: [String] { PlaceCheckInBinaryPrompts.specs[id] == nil ? options : ["Yes", "No"] }
+    var acceptedOptions: [String] { answerOptions + options.filter { !answerOptions.contains($0) } }
+    var allowsMultipleSelection: Bool { id == "place_detail_dietary_options" }
+    var valueType: String { allowsMultipleSelection ? "multi_tag" : "single_choice" }
+
+    func selectedValues(fromPrivateValue value: String) -> Set<String> {
+        guard allowsMultipleSelection else { return acceptedOptions.contains(value) ? [value] : [] }
+        guard let data = value.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data),
+              values.allSatisfy(acceptedOptions.contains) else { return [] }
+        return Set(values)
+    }
+
+    func privateValue(for values: Set<String>) -> String? {
+        let valid = acceptedOptions.filter(values.contains)
+        guard !valid.isEmpty else { return nil }
+        guard allowsMultipleSelection else { return valid.first }
+        guard let data = try? JSONEncoder().encode(valid) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func values(fromJSON json: String) -> [String] {
+        guard let data = json.data(using: .utf8) else { return [] }
+        let values: [String]
+        if allowsMultipleSelection { values = (try? JSONDecoder().decode([String].self, from: data)) ?? [] }
+        else { values = (try? JSONDecoder().decode(String.self, from: data)).map { [$0] } ?? [] }
+        return values.filter(acceptedOptions.contains)
+    }
 
     init(
         id: String,
@@ -20,7 +48,7 @@ struct PlaceCheckInQuestion: Identifiable, Equatable, Sendable {
     ) {
         self.id = id
         self.displayLabel = displayLabel
-        self.prompt = prompt
+        self.originalPrompt = prompt
         self.options = options
         self.searchableAnswers = searchableAnswers
     }
@@ -28,7 +56,11 @@ struct PlaceCheckInQuestion: Identifiable, Equatable, Sendable {
     /// Search gets only deliberately supported positive/qualified evidence.
     /// Unknown values and negative observations must not match an amenity.
     func searchTerms(for answer: String) -> [String] {
-        guard options.contains(answer) else { return [] }
+        guard acceptedOptions.contains(answer) else { return [] }
+        if PlaceCheckInBinaryPrompts.specs[id] != nil {
+            if answer == "Yes" { return PlaceCheckInBinaryPrompts.specs[id]?.positiveTerms ?? [] }
+            if answer == "No" { return [] }
+        }
         return searchableAnswers[answer] ?? []
     }
 }
@@ -41,7 +73,10 @@ struct PlaceCheckInQuestionProfile: Equatable, Sendable {
 
 enum PlaceCheckInQuestionCatalog {
     static let keyPrefix = "place_detail_"
-    static let allQuestions = coreQuestions + everydayQuestions
+    static let allQuestions = coreQuestions + everydayQuestions + [
+        PlaceCheckInQuestion(id: "place_detail_dietary_options", displayLabel: "Dietary options", prompt: "Dietary options?", options: ["Vegan", "Vegetarian", "Gluten free"], searchableAnswers: ["Vegan": ["vegan options"], "Vegetarian": ["vegetarian options"], "Gluten free": ["gluten free options"]]),
+        PlaceCheckInQuestion(id: "place_detail_gluten_free_options", displayLabel: "Gluten-free options", prompt: "Gluten-free options?", options: ["Yes", "No"], searchableAnswers: ["Yes": ["gluten free options"]])
+    ]
     static let profiles = coreProfiles + everydayProfiles
 
     /// Historical answers keep their original definitions and option values.
@@ -106,7 +141,7 @@ enum PlaceCheckInQuestionCatalog {
     /// Category fallbacks are used only for a user-written/unknown subtype.
     /// Known selectable subtypes must have an explicit profile above.
     static let defaultQuestionIDs: [String: [String]] = [
-        "restaurants_food": ["dog_access", "outdoor_seating", "booking_policy"],
+        "restaurants_food": ["arrival_parking", "outdoor_seating", "dietary_options"],
         "coffee_tea_sweets": ["laptop", "outlets", "dog_access"],
         "bars_nightlife": ["noise", "alcohol_free", "outdoor_seating"],
         "outdoors_nature": ["leash", "shade", "restroom"],

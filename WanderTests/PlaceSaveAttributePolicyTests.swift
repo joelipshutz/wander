@@ -2,6 +2,20 @@ import XCTest
 @testable import Wander
 
 final class PlaceSaveAttributePolicyTests: XCTestCase {
+    func testDietaryMultiSelectUsesExistingArrayContractAndHonorsStealth() throws {
+        let question = try XCTUnwrap(PlaceCheckInQuestionCatalog.question(id: "place_detail_dietary_options"))
+        let selected: Set<String> = ["Vegan", "Vegetarian", "Gluten free"]
+        let saved = PlaceSaveAttributePolicy.attributes(original: [], answers: [question.id: selected], tags: [], tagKey: "food_tags", status: .been)
+        let attribute = try XCTUnwrap(saved.first)
+        XCTAssertEqual(attribute.valueType, "multi_tag")
+        XCTAssertEqual(Set(question.values(fromJSON: attribute.valueJSON)), selected)
+        XCTAssertEqual(saved.count, 1)
+        XCTAssertEqual(PlaceSaveAttributePolicy.attributes(original: saved, answers: [:], tags: [], tagKey: "food_tags", status: .been), saved)
+        XCTAssertTrue(PlaceSaveAttributePolicy.attributes(original: saved, answers: [question.id: selected], tags: [], tagKey: "food_tags", status: .been, privateQuestionIDs: [question.id]).isEmpty)
+        let restored = question.selectedValues(fromPrivateValue: try XCTUnwrap(question.privateValue(for: selected)))
+        XCTAssertEqual(PlaceSaveAttributePolicy.attributes(original: [], answers: [question.id: restored], tags: [], tagKey: "food_tags", status: .been), saved)
+    }
+
     func testEditingPreservesUnknownTypedPayloadAndPersonalLabelIdentity() {
         let unknown = PlaceAttributeDraft(questionKey: "future_detail", valueType: "text", valueJSON: "{\"nested\":[1,true]}")
         let labels = PlaceAttributeDraft(questionKey: "personal_labels", valueType: "personal_label", stringValues: ["Favorite", "Remove me"])
