@@ -2989,11 +2989,14 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["auth.continueWithApple"].exists)
         XCTAssertTrue(app.staticTexts["Create your account"].exists)
-        app.buttons["auth.close"].tap()
-        XCTAssertTrue(app.buttons["onboarding.logIn"].waitForExistence(timeout: 5))
-        app.buttons["onboarding.logIn"].tap()
+        XCTAssertFalse(app.buttons["auth.close"].exists)
+        let login = app.buttons["auth.logIn"]
+        XCTAssertTrue(login.exists)
+        if !login.isHittable { app.swipeUp() }
+        login.tap()
         XCTAssertTrue(app.buttons["auth.usePassword"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Welcome back"].exists)
+        XCTAssertTrue(app.buttons["auth.close"].exists)
         app.buttons["auth.close"].tap()
         XCTAssertTrue(next.waitForExistence(timeout: 5))
     }
