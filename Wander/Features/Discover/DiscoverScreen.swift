@@ -2196,6 +2196,7 @@ private extension View {
 struct PeopleRecommendationCard: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var followFeedbackTrigger = 0
     let recommendation: DiscoverPeopleRecommendation
     let isFollowing: Bool
     let isFollowInFlight: Bool
@@ -2204,6 +2205,7 @@ struct PeopleRecommendationCard: View {
     let follow: () -> Void
 
     private var profile: ProfileShell { recommendation.profile }
+    private var showsFollowing: Bool { isFollowing || isFollowInFlight }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2242,24 +2244,21 @@ struct PeopleRecommendationCard: View {
 
             Spacer(minLength: 10)
 
-            Button(action: follow) {
-                Group {
-                    if isFollowInFlight && !isFollowing {
-                        ProgressView()
-                            .tint(brandMode.accentForeground)
-                    } else {
-                        Text(isFollowing ? "Following" : didFollowFail ? "Try again" : "Follow")
-                    }
-                }
+            Button {
+                followFeedbackTrigger += 1
+                follow()
+            } label: {
+                Text(showsFollowing ? "Following" : didFollowFail ? "Try again" : "Follow")
                 .font(AstirTypography.label)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
-            .background(isFollowing ? brandMode.recessedBackground : brandMode.accent)
+            .foregroundStyle(showsFollowing ? brandMode.primaryText : brandMode.accentForeground)
+            .background(showsFollowing ? brandMode.recessedBackground : brandMode.accent)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-            .disabled(isFollowing || isFollowInFlight)
-            .accessibilityLabel(isFollowInFlight ? "Following \(profile.displayName)" : (isFollowing ? "Following \(profile.displayName)" : didFollowFail ? "Couldn't follow \(profile.displayName). Try again" : "Follow \(profile.displayName)"))
+            .disabled(showsFollowing)
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: followFeedbackTrigger)
+            .accessibilityLabel(showsFollowing ? "Following \(profile.displayName)" : didFollowFail ? "Couldn't follow \(profile.displayName). Try again" : "Follow \(profile.displayName)")
             .accessibilityIdentifier("people.recommendation.\(profile.id).follow")
         }
         .padding(WanderTheme.spacing3)

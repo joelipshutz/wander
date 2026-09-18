@@ -206,6 +206,12 @@ existing horizontal rail margins. Accessibility sizes widen cards to 240 points
 and allow content to grow vertically. Following and retry feedback stays inside
 the button so standard cards do not jump in height.
 
+Tapping Follow gives one light haptic and immediately shows Following while
+the request syncs in the background. A pending card uses the same appearance as
+a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
+Failed requests restore the in-button retry action; server completion does not
+generate another haptic.
+
 Featured's views, models, and original database projection remain available.
 `FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
 request contract; restoring it uses the original RPC. The additive
@@ -219,3 +225,21 @@ visible during refresh; authorized text can render before media. No new disk
 cache of social content is introduced. Clients fall back to the original RPC
 only when the new overload is absent from the API schema, allowing either
 deployment order without retrying ordinary network or authorization failures.
+
+## 2026-09-17 — Bundled Events coming-soon motion (REC-528)
+
+The temporary Events preview is the middle of five native tabs: Map, Feed,
+Events, Lists, Profile. Add remains a modal action. Events presents the approved
+03C VHS composition on a dark background in both appearance modes: COMING /
+SOON, a worn vertical bar, and AN / OCEAN PARK / EXPERIMENT on three lines.
+The faded signal-orange hue stays fixed; sparse speckles and intermittent
+tracking failures replace most continuous sideways jitter. This supersedes the
+older static Astir lockup and waitlist exploration.
+
+Ship a small, silent recording and its still in the app bundle. A native video
+layer uses the still immediately, reuses the local player between visits, and
+pauses off the tab or outside the active scene. Reduce Motion shows the still.
+Do not add a live shader, network dependency, playback UI, or per-frame SwiftUI
+state to this decorative surface. No event data, waitlist, booking, or RSVP
+behavior is implied by the teaser. The source and asset handoff are documented
+in `docs/designs/events-coming-soon/README.md`.

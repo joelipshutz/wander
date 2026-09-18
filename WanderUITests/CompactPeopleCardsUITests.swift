@@ -2,6 +2,29 @@ import XCTest
 
 final class CompactPeopleCardsUITests: XCTestCase {
     @MainActor
+    func testFollowShowsFollowingBeforeRequestCompletesAndRecoversOnFailure() {
+        let app = launch(delayedFollow: true)
+        let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
+        let profile = app.buttons["people.recommendation.user_compact_alex.profile"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 15))
+        follow.tap()
+
+        XCTAssertEqual(follow.label, "Following Alex Rivera")
+        XCTAssertFalse(follow.descendants(matching: .activityIndicator).firstMatch.exists)
+        XCTAssertFalse(follow.isEnabled, "A pending follow must not submit duplicate requests")
+        XCTAssertTrue(profile.isHittable, "The profile remains available during the request")
+        capture("compact-people-instant-follow")
+
+        let failed = NSPredicate(format: "label CONTAINS %@", "Couldn't follow")
+        expectation(for: failed, evaluatedWith: follow)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(follow.isEnabled)
+        follow.tap()
+        XCTAssertEqual(follow.label, "Following Alex Rivera")
+        XCTAssertFalse(follow.descendants(matching: .activityIndicator).firstMatch.exists)
+    }
+
+    @MainActor
     func testPeopleReplaceFeaturedAndFollowFailureCanRetry() {
         let app = launch()
         XCTAssertTrue(app.staticTexts["People worth following"].waitForExistence(timeout: 15))
@@ -40,13 +63,16 @@ final class CompactPeopleCardsUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(largeText: Bool = false) -> XCUIApplication {
+    private func launch(largeText: Bool = false, delayedFollow: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderMapCapture", "-WanderUseStorefrontFixtures",
             "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
             "-WanderCompactPeopleUITest", "-WanderInitialTab", "discover"]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        }
+        if delayedFollow {
+            app.launchArguments.append("-WanderDelayedFollowUITest")
         }
         app.launch()
         return app

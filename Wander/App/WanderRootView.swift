@@ -8,6 +8,7 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case initialPresentation
     case profileSettings
     case sharedProfile
+    case feedPlaceProfile
 }
 
 struct WanderDeepLinkPresentationToken: Hashable, Sendable {
@@ -482,6 +483,10 @@ struct WanderRootView: View {
         systemColorScheme == .dark ? .editorial : .editorialLight
     }
 
+    private var tabBarBrandMode: AstirBrandMode {
+        selectedTab == .events ? .editorial : astirBrandMode
+    }
+
     private var mapAppearanceColorScheme: ColorScheme {
         selectedTab == .map && store.isDarkMapEnabled && !isPresentingAdd
             ? .dark
@@ -502,9 +507,21 @@ struct WanderRootView: View {
                 .tabItem { tabItemLabel(for: .map) }
                 .tag(WanderTab.map)
 
-            FeedScreen(onAdd: presentAddSheet)
+            FeedScreen(
+                presentationResetRequest: presentationResetRequest,
+                onPlaceProfilePresentation: handleDeepLinkPresentation,
+                onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
+                onPlaceProfileDidDismiss: {
+                    handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
+                },
+                onAdd: presentAddSheet
+            )
                 .tabItem { tabItemLabel(for: .discover) }
                 .tag(WanderTab.discover)
+
+            EventsComingSoonScreen(isSelected: selectedTab == .events && !isPresentingAdd)
+                .tabItem { tabItemLabel(for: .events) }
+                .tag(WanderTab.events)
 
             ListsScreen()
                 .tabItem { tabItemLabel(for: .lists) }
@@ -526,10 +543,11 @@ struct WanderRootView: View {
                 .tabItem { tabItemLabel(for: .profile) }
                 .tag(WanderTab.profile)
         }
-        .tint(astirBrandMode.accent)
-        .toolbarBackground(astirBrandMode.background, for: .tabBar)
+        .preferredColorScheme(selectedTab == .events ? .dark : nil)
+        .tint(tabBarBrandMode.accent)
+        .toolbarBackground(tabBarBrandMode.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
-        .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
+        .toolbarColorScheme(tabBarBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -2361,6 +2379,9 @@ struct WanderRootView: View {
         case .feed:
             selectedTab = .discover
             isPresentingAdd = false
+        case .events:
+            selectedTab = .events
+            isPresentingAdd = false
         case .lists:
             selectedTab = .lists
             isPresentingAdd = false
@@ -2419,6 +2440,8 @@ struct WanderRootView: View {
             }
         case .discover:
             .feed
+        case .events:
+            .events
         case .lists:
             .lists
         case .profile:
@@ -3362,16 +3385,18 @@ enum WanderTab: String, CaseIterable, Hashable {
     case map
     case discover
     case add
+    case events
     case lists
     case profile
 
-    static let primaryTabs: [WanderTab] = [.map, .discover, .lists, .profile]
+    static let primaryTabs: [WanderTab] = [.map, .discover, .events, .lists, .profile]
 
     var title: String {
         switch self {
         case .map: "Map"
         case .discover: "Feed"
         case .add: "Add"
+        case .events: "Events"
         case .lists: "Lists"
         case .profile: "Profile"
         }
@@ -3382,6 +3407,7 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .map: "map"
         case .discover: "newspaper"
         case .add: "plus"
+        case .events: "sparkles"
         case .lists: PlaceListSymbol.systemImage
         case .profile: "person.crop.circle"
         }

@@ -1268,10 +1268,29 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_include_featured"] as? Bool, false)
     }
 
+    func testFeedRPCsUseShortFirstPaintDeadlines() {
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "followed_feed"), 1.5)
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "activity_media"), 1)
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "discover_profile_recommendations"), 1.5)
+        XCTAssertGreaterThan(WanderSupabaseClient.rpcTimeout(for: "profile_detail"), 1.5)
+    }
+
+    func testFeedRetriesOneTransientTransportFailure() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data(
+            #"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8
+        )
+        rpc.errors = [URLError(.timedOut)]
+
+        _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+
+        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "followed_feed"])
+    }
+
     func testFeedFallsBackOnlyWhenActivityOnlyRPCIsNotDeployed() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
-        rpc.errors = [.invalidResponse("RPC followed_feed failed with 404: {\"code\":\"PGRST202\"}")]
+        rpc.errors = [WanderRemoteError.invalidResponse("RPC followed_feed failed with 404: {\"code\":\"PGRST202\"}")]
         let repository = SupabaseFeedRepository(rpc: rpc)
         _ = try await repository.followedFeed(before: "cursor", limit: 25)
         XCTAssertEqual(rpc.calls.count, 2)
@@ -1283,7 +1302,10 @@ final class RemoteRepositoryTests: XCTestCase {
 
     func testFeedPropagatesFailureOfTheLegacyFallbackWithoutRetryingAgain() async {
         let rpc = RecordingRPC()
-        rpc.errors = [.invalidResponse("RPC followed_feed failed: PGRST202"), .notAuthenticated]
+        rpc.errors = [
+            WanderRemoteError.invalidResponse("RPC followed_feed failed: PGRST202"),
+            WanderRemoteError.notAuthenticated,
+        ]
         do {
             _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
             XCTFail("Expected the legacy failure")
@@ -1419,7 +1441,8 @@ final class RemoteRepositoryTests: XCTestCase {
             let elapsed = start.duration(to: .now).components
             firstContentMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
             XCTAssertEqual(content.activity.map(\.id), [activityID])
-            XCTAssertTrue(content.activity[0].media.isEmpty)
+            XCTAssertEqual(content.activity[0].media.map(\.id), ["pending:\(activityID)"])
+            XCTAssertNil(content.activity[0].media[0].urlString)
             XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
             XCTAssertTrue(storage.signedURLs.isEmpty)
         }
@@ -1440,6 +1463,43 @@ final class RemoteRepositoryTests: XCTestCase {
             storage.signedURLs,
             [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
         )
+    }
+
+    func testFeedKeepsNeutralArtworkWhenMediaLookupFails() async throws {
+        let rpc = RecordingRPC()
+        let activityID = "40000000-0000-0000-0000-000000000386"
+        rpc.responses["followed_feed"] = Data("""
+        {
+          "activity": [{
+            "id": "\(activityID)",
+            "event_type": "place_been",
+            "occurred_at": "2026-08-30T20:00:00Z",
+            "actor": {
+              "id": "user_ryan",
+              "handle": "ryan",
+              "display_name": "Ryan",
+              "avatar_url": null,
+              "relationship": "follower"
+            },
+            "place": null,
+            "list": null,
+            "note": "Dudley Market",
+            "rating": null,
+            "media": []
+          }],
+          "featured_places": [],
+          "next_cursor": null,
+          "fetched_at": "2026-08-30T20:01:00Z"
+        }
+        """.utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25) { content in
+            XCTAssertEqual(content.activity[0].media.map(\.id), ["pending:\(activityID)"])
+        }
+
+        XCTAssertEqual(page.activity[0].media.map(\.id), ["pending:\(activityID)"])
+        XCTAssertNil(page.activity[0].media[0].urlString)
     }
 
     func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
@@ -5231,7 +5291,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
 
     var responses: [String: Data] = [:]
     var delays: [String: Duration] = [:]
-    var errors: [WanderRemoteError] = []
+    var errors: [Error] = []
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
 
