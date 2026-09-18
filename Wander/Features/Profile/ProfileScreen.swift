@@ -300,8 +300,12 @@ struct ProfileScreen: View {
                         .environmentObject(backend)
                 }
                 .navigationDestination(isPresented: $showsYourMapPrototype) {
-                    YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
-                    .toolbar(.hidden, for: .tabBar)
+                    // SwiftUI also evaluates inactive destinations. Keep the
+                    // map projection out of Profile and Settings updates.
+                    if showsYourMapPrototype {
+                        YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
+                            .toolbar(.hidden, for: .tabBar)
+                    }
                 }
                 .navigationDestination(isPresented: $showsVisitInvitations) {
                     SharedVisitInvitationInboxScreen { invitation in
@@ -917,12 +921,15 @@ struct ProfileDetailView: View {
                     .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsYourMapPrototype) {
-                YourMapPrototypeScreen(
-                    dataset: yourMapPrototypeDataset,
-                    viewerID: store.currentUser.id,
-                    mapTitle: profileMapTitle,
-                    pinOwnership: .social
-                )
+                // Avoid projecting the member's full map until it is opened.
+                if showsYourMapPrototype {
+                    YourMapPrototypeScreen(
+                        dataset: yourMapPrototypeDataset,
+                        viewerID: store.currentUser.id,
+                        mapTitle: profileMapTitle,
+                        pinOwnership: .social
+                    )
+                }
             }
             .sheet(item: $socialGraphTab) { tab in
                 ProfileSocialGraphScreen(profileID: profileID, initialTab: tab, onFindFriends: {})
