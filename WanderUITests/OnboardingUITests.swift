@@ -10,7 +10,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
+        let activity = app.cells.matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
         if !activity.waitForExistence(timeout: 5) {
             let more = app.buttons["More"].firstMatch
             if more.exists { more.tap() }
