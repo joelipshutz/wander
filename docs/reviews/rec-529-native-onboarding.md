@@ -4,6 +4,28 @@ The review uses production Swift views. The local browser board displays simulat
 recordings and frames beside source copy, with pan/zoom, TV viewing and review notes.
 The implementation remains in draft PR #648 for creative review.
 
+## September 17 full-screen, eight-turn refinement
+
+All three native finishes now retain three visible rows of ten cells during the
+opening. All opening and benefit faces contrast with the app appearance: black
+on the light screen, white/off-white on the dark screen, with Signal letters
+in both. The changing word sits in the middle row and the external lead-in has
+its own reserved space above the board. Blank outer faces stay visible between
+changes. Every cell makes eight physical turns over the same 1.5-second flutter,
+including repeated letters and blanks; all settle to the exact target faces.
+The natural font metrics, four haptic impacts, quick lead-in fade, 15.6-second
+opening and subsequent native slides retain their existing timing.
+
+The review player defaults to complete phone recordings, preserving top/bottom
+content during playback, scrubbing and state selection. The previous analog
+recordings are archived separately. All 25 welcome unit checks and 147 navigation contract checks passed in the
+broad run. Manual paging and account entry/close passed; automatic progression
+passed its unchanged isolated recheck (53.242s). The first automatic attempt
+remained paused after its Play tap. A separate 0.1-second place-category
+performance limit exceeded its threshold under the shared workload (0.1213s,
+then 0.1022s); it remains recorded rather than changing the threshold or claiming
+a clean full suite. Replacement capture checks are in the local task ledger.
+
 ## September 17 analog flutter refinement
 
 The lead-in “Connect with your” is now outside the board. The changing word alone

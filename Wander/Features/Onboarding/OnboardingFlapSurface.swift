@@ -29,7 +29,6 @@ struct OnboardingFlapSurface: UIViewRepresentable {
     let isDark: Bool
     var finish: OnboardingFlapFinish = .current
     var minimumColumns: Int = OnboardingBoardCopy.columns
-    var outerRowsOpacity: Double = 1
     var flips: Int = 2
 
     func makeUIView(context: Context) -> OnboardingFlapSurfaceView {
@@ -38,7 +37,7 @@ struct OnboardingFlapSurface: UIViewRepresentable {
 
     func updateUIView(_ view: OnboardingFlapSurfaceView, context: Context) {
         view.update(from: fromRows, to: toRows, progress: progress, isDark: isDark,
-                    finish: finish, minimumColumns: minimumColumns, outerRowsOpacity: outerRowsOpacity, flips: flips)
+                    finish: finish, minimumColumns: minimumColumns, flips: flips)
     }
 }
 
@@ -51,7 +50,6 @@ final class OnboardingFlapSurfaceView: UIView {
     private var isDark = false
     private var finish = OnboardingFlapFinish.station
     private var columns = OnboardingBoardCopy.columns
-    private var outerRowsOpacity = 1.0
     private var flips = 2
     private var tiles = [OnboardingFlapTile]()
     private var faces = [Character: CGImage]()
@@ -69,7 +67,7 @@ final class OnboardingFlapSurfaceView: UIView {
 
     func update(from: [String], to: [String], progress: Double, isDark: Bool,
                 finish: OnboardingFlapFinish = .station,
-                minimumColumns: Int = OnboardingBoardCopy.columns, outerRowsOpacity: Double = 1, flips: Int = 2) {
+                minimumColumns: Int = OnboardingBoardCopy.columns, flips: Int = 2) {
         if self.isDark != isDark || self.finish != finish {
             self.isDark = isDark
             self.finish = finish
@@ -87,7 +85,6 @@ final class OnboardingFlapSurfaceView: UIView {
         }
         self.progress = progress
         self.flips = flips
-        self.outerRowsOpacity = outerRowsOpacity.isFinite ? min(1, max(0, outerRowsOpacity)) : 0
         render()
     }
 
@@ -134,7 +131,6 @@ final class OnboardingFlapSurfaceView: UIView {
             let frame = OnboardingSplitFlapFrame.at(progress: progress, from: source[index],
                                                   to: target[index], column: index % columns, flips: flips)
             let tile = tiles[index]
-            tile.opacity = index / columns == 1 ? 1 : Float(outerRowsOpacity)
             guard tile.lastFrame != frame else { continue }
             tile.apply(frame, from: face(frame.from), to: face(frame.to))
         }
@@ -143,22 +139,24 @@ final class OnboardingFlapSurfaceView: UIView {
 
     private func face(_ character: Character) -> CGImage {
         if let cached = faces[character] { return cached }
+        // Flap faces contrast with the surrounding app appearance.
+        let usesDarkFaces = !isDark
         let format = UIGraphicsImageRendererFormat()
         format.scale = renderedScale
         let image = UIGraphicsImageRenderer(size: faceSize, format: format).image { renderer in
             let cg = renderer.cgContext
             let rect = CGRect(origin: .zero, size: faceSize)
-            var colors: [UIColor] = isDark
-                ? [UIColor(red: 0.17, green: 0.19, blue: 0.17, alpha: 1),
-                   UIColor(red: 0.095, green: 0.11, blue: 0.095, alpha: 1)]
+            var colors: [UIColor] = usesDarkFaces
+                ? [UIColor(white: 0.115, alpha: 1),
+                   UIColor(white: 0.055, alpha: 1)]
                 : [.white, UIColor(red: 0.95, green: 0.945, blue: 0.925, alpha: 1)]
             if finish == .graphic {
-                let matte = isDark ? UIColor(red: 0.12, green: 0.135, blue: 0.12, alpha: 1) : UIColor.white
+                let matte = usesDarkFaces ? UIColor(white: 0.07, alpha: 1) : UIColor.white
                 colors = [matte, matte]
             } else if finish == .sculpted {
-                colors = isDark
-                    ? [UIColor(red: 0.22, green: 0.24, blue: 0.215, alpha: 1),
-                       UIColor(red: 0.075, green: 0.095, blue: 0.075, alpha: 1)]
+                colors = usesDarkFaces
+                    ? [UIColor(white: 0.16, alpha: 1),
+                       UIColor(white: 0.025, alpha: 1)]
                     : [.white, UIColor(red: 0.90, green: 0.895, blue: 0.875, alpha: 1)]
             }
             let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -183,19 +181,19 @@ final class OnboardingFlapSurfaceView: UIView {
             cg.translateBy(x: rect.midX, y: 0)
             if finish != .graphic {
                 cg.setShadow(offset: CGSize(width: 0, height: finish == .sculpted ? 1 : 0.55), blur: 0,
-                             color: UIColor.black.withAlphaComponent(isDark ? 0.40 : 0.13).cgColor)
+                             color: UIColor.black.withAlphaComponent(usesDarkFaces ? 0.40 : 0.13).cgColor)
             }
             text.draw(in: CGRect(x: -width / 2, y: y, width: width + 1, height: textHeight), withAttributes: attributes)
             cg.restoreGState()
 
             // The small bevels and center cut belong to the physical face, so
             // they travel with it and do not require live shadow rendering.
-            cg.setStrokeColor(UIColor.white.withAlphaComponent(isDark ? 0.13 : 0.9).cgColor)
+            cg.setStrokeColor(UIColor.white.withAlphaComponent(usesDarkFaces ? 0.13 : 0.9).cgColor)
             cg.setLineWidth(finish == .sculpted ? 1.1 : 0.6)
             cg.move(to: CGPoint(x: 1, y: 0.5)); cg.addLine(to: CGPoint(x: rect.width - 1, y: 0.5)); cg.strokePath()
-            cg.setFillColor(UIColor.black.withAlphaComponent(isDark ? 0.85 : 0.25).cgColor)
+            cg.setFillColor(UIColor.black.withAlphaComponent(usesDarkFaces ? 0.85 : 0.25).cgColor)
             cg.fill(CGRect(x: 0, y: rect.midY - 0.5, width: rect.width, height: 1))
-            cg.setFillColor(UIColor.white.withAlphaComponent(isDark ? 0.11 : 0.8).cgColor)
+            cg.setFillColor(UIColor.white.withAlphaComponent(usesDarkFaces ? 0.11 : 0.8).cgColor)
             cg.fill(CGRect(x: 0, y: rect.midY + 0.5, width: rect.width, height: 0.45))
         }.cgImage!
         faces[character] = image
@@ -234,6 +232,7 @@ private final class OnboardingFlapTile: CALayer {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func arrange(size: CGSize, scale: CGFloat, isDark: Bool, finish: OnboardingFlapFinish) {
+        let usesDarkFaces = !isDark
         let half = CGSize(width: size.width, height: size.height / 2)
         for face in [upper, lower, turningUpper, turningLower] {
             face.bounds = CGRect(origin: .zero, size: half)
@@ -255,12 +254,12 @@ private final class OnboardingFlapTile: CALayer {
         lowerShade.frame = CGRect(origin: .zero, size: half)
         // The axle and clips are fixed hardware. They never rotate with a leaf.
         axle.frame = CGRect(x: 0, y: half.height - 0.45, width: size.width, height: 0.9)
-        axle.backgroundColor = UIColor.black.withAlphaComponent(isDark ? 0.95 : 0.5).cgColor
+        axle.backgroundColor = UIColor.black.withAlphaComponent(usesDarkFaces ? 0.95 : 0.5).cgColor
         for (index, hinge) in [leftHinge, rightHinge].enumerated() {
             hinge.frame = CGRect(x: index == 0 ? 0 : size.width - 1.6,
                                  y: half.height - 2.1, width: 1.6, height: 4.2)
             hinge.cornerRadius = 0.6
-            hinge.backgroundColor = (isDark ? UIColor(white: 0.34, alpha: 1) : UIColor(white: 0.57, alpha: 1)).cgColor
+            hinge.backgroundColor = (usesDarkFaces ? UIColor(white: 0.34, alpha: 1) : UIColor(white: 0.57, alpha: 1)).cgColor
             hinge.isHidden = finish == .graphic
         }
         shadowOpacity = finish == .graphic ? 0 : (isDark ? 0.5 : 0.18)
@@ -271,7 +270,7 @@ private final class OnboardingFlapTile: CALayer {
 
     func apply(_ frame: OnboardingSplitFlapFrame, from: CGImage, to: CGImage) {
         lastFrame = frame
-        if frame.from == frame.to || frame.progress >= 1 {
+        if frame.progress >= 1 {
             upper.contents = to; lower.contents = to
             turningUpper.isHidden = true; turningLower.isHidden = true
             return

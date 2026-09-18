@@ -343,27 +343,26 @@ struct OnboardingTickerView: View {
             let fromRows = frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(word: currentWord)
             let toRows = frame.isFinalTransition || frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(word: nextWord)
             let leadOpacity = OnboardingTickerFrame.leadOpacity(elapsed: readableElapsed, content: content)
-            let outerRowsOpacity = frame.showsFinalLockup ? 1 : (frame.isFinalTransition ? min(1, frame.transitionProgress * 10) : 0)
             let descriptionHasArrived = !descriptionIsDelayed || elapsed >= OnboardingTickerFrame.descriptionArrivalSeconds || reduceMotion || voiceOverEnabled
             GeometryReader { geometry in
                 let width = min(geometry.size.width - 32, 440)
                 VStack(spacing: 0) {
                     Spacer(minLength: 20)
-                    ZStack {
-                        OnboardingSplitFlapBoard(fromRows: fromRows, toRows: toRows,
-                            progress: frame.isTransitioning ? frame.transitionProgress : 1,
-                            minimumColumns: OnboardingBoardCopy.openingColumns,
-                            outerRowsOpacity: outerRowsOpacity, flips: OnboardingSplitFlapFrame.flipCount)
+                    VStack(spacing: 16) {
                         Text(content.stableText)
                             .font(.custom("AvenirNext-DemiBold", size: 27, relativeTo: .title2))
                             .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1).minimumScaleFactor(0.7)
                             .frame(width: width)
-                            .offset(y: -width * 0.16)
                             .opacity(leadOpacity)
                             .accessibilityHidden(true)
+                        OnboardingSplitFlapBoard(fromRows: fromRows, toRows: toRows,
+                            progress: frame.isTransitioning ? frame.transitionProgress : 1,
+                            minimumColumns: OnboardingBoardCopy.openingColumns,
+                            flips: OnboardingSplitFlapFrame.flipCount)
+                            .frame(width: width, height: width * 0.48)
                     }
-                        .frame(width: width, height: width * 0.48)
+                        .frame(width: width)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(frame.showsFinalLockup ? (content.finalLockup ?? "") : "\(content.stableText) \(content.words.joined(separator: ", "))")
                         .accessibilityIdentifier("onboarding.ticker")
@@ -403,14 +402,13 @@ struct OnboardingSplitFlapBoard: View, @MainActor Animatable {
     let toRows: [String]
     var progress: Double
     var minimumColumns: Int = OnboardingBoardCopy.columns
-    var outerRowsOpacity: Double = 1
     var flips: Int = 2
     var animatableData: Double { get { progress } set { progress = newValue } }
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {
         OnboardingFlapSurface(fromRows: fromRows, toRows: toRows,
                               progress: progress, isDark: colorScheme == .dark,
-                              minimumColumns: minimumColumns, outerRowsOpacity: outerRowsOpacity, flips: flips)
+                              minimumColumns: minimumColumns, flips: flips)
             .accessibilityHidden(true)
     }
 }

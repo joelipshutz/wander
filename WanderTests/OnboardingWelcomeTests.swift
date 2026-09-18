@@ -39,17 +39,41 @@ final class OnboardingWelcomeTests: XCTestCase {
     }
 
     @MainActor
-    func testHiddenOuterRowsRevealWithoutLeavingStaleLayers() throws {
-        let from = OnboardingBoardCopy.openingRows(word: "places")
-        let to = OnboardingBoardCopy.finalRows("a local experiment")
-        let reused = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 170))
-        reused.update(from: from, to: from, progress: 1, isDark: true, minimumColumns: 10, outerRowsOpacity: 0)
-        let singleRow = try renderedBoard(reused)
-        reused.update(from: from, to: to, progress: 1, isDark: true, minimumColumns: 10, outerRowsOpacity: 1)
-        let fresh = OnboardingFlapSurfaceView(frame: reused.frame)
-        fresh.update(from: to, to: to, progress: 1, isDark: true, minimumColumns: 10)
-        XCTAssertNotEqual(singleRow, try renderedBoard(fresh))
-        XCTAssertEqual(try renderedBoard(reused), try renderedBoard(fresh))
+    func testBlankRowsVisiblyTurnAndSettleBackToTheirOriginalFaces() throws {
+        let rows = ["", "PEOPLE", ""]
+        for finish in OnboardingFlapFinish.allCases {
+            let view = OnboardingFlapSurfaceView(frame: CGRect(x: 0, y: 0, width: 354, height: 170))
+            view.update(from: rows, to: rows, progress: 1, isDark: true, finish: finish, minimumColumns: 10, flips: 8)
+            let held = try renderedBoard(view)
+            view.update(from: rows, to: rows, progress: 0.41, isDark: true, finish: finish, minimumColumns: 10, flips: 8)
+            XCTAssertNotEqual(try renderedBoard(view), held, "Identical words and blank rows still turn: \(finish)")
+            view.update(from: rows, to: rows, progress: 1, isDark: true, finish: finish, minimumColumns: 10, flips: 8)
+            XCTAssertEqual(try renderedBoard(view), held, "Every row settles back without stale halves: \(finish)")
+        }
+    }
+
+    func testEveryOpeningCellIncludingBlanksRunsEightFlips() {
+        let source = OnboardingBoardCopy.openingRows(word: "people").flatMap { OnboardingBoardCopy.centered($0, columns: 10) }
+        let target = OnboardingBoardCopy.openingRows(word: "places").flatMap { OnboardingBoardCopy.centered($0, columns: 10) }
+        XCTAssertEqual(source.count, 30)
+        for index in source.indices {
+            let column = index % 10
+            let delay = Double(column) * OnboardingSplitFlapFrame.columnDelay
+            var previous: OnboardingSplitFlapFrame?
+            for flip in 0..<8 {
+                let local = (Double(flip) + 0.5) / 8
+                let frame = OnboardingSplitFlapFrame.at(progress: delay + (1 - delay) * local,
+                    from: source[index], to: target[index], column: column)
+                XCTAssertNotEqual(frame.from, frame.to, "Cell \(index), flip \(flip) must travel even if its final letter is unchanged.")
+                XCTAssertEqual(frame.progress, 0.5, accuracy: 0.000001)
+                if let previous { XCTAssertEqual(previous.to, frame.from) }
+                previous = frame
+            }
+            XCTAssertEqual(previous?.to, target[index])
+            let settled = OnboardingSplitFlapFrame.at(progress: 1, from: source[index], to: target[index], column: column)
+            XCTAssertEqual(settled.from, target[index])
+            XCTAssertEqual(settled.to, target[index])
+        }
     }
 
     @MainActor
@@ -267,19 +291,19 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertFalse(frame.showsFinalLockup)
     }
 
-    func testSplitFlapUsesSevenContinuousPhysicalFlipsAndSettlesOnExactTarget() {
-        let starts = (0..<7).map { index in
-            OnboardingSplitFlapFrame.at(progress: Double(index) / 7, from: "q", to: "z", column: 0)
+    func testSplitFlapUsesEightContinuousPhysicalFlipsAndSettlesOnExactTarget() {
+        let starts = (0..<8).map { index in
+            OnboardingSplitFlapFrame.at(progress: Double(index) / 8, from: "q", to: "z", column: 0)
         }
         XCTAssertEqual(starts[0].from, "q")
-        XCTAssertEqual(starts[6].to, "z")
+        XCTAssertEqual(starts[7].to, "z")
         XCTAssertTrue(starts.allSatisfy { $0.from != $0.to })
         XCTAssertTrue(starts.allSatisfy { abs($0.progress) < 0.000001 })
         for index in 1..<starts.count {
             XCTAssertEqual(starts[index - 1].to, starts[index].from, "Each flap begins where the previous physical flip ended.")
             XCTAssertTrue("ABCDEFGHIJKLMNOPQRSTUVWXYZ".contains(starts[index].from))
             let almostFinished = OnboardingSplitFlapFrame.at(
-                progress: Double(index) / 7 - 0.00001, from: "q", to: "z", column: 0
+                progress: Double(index) / 8 - 0.00001, from: "q", to: "z", column: 0
             )
             XCTAssertEqual(almostFinished.to, starts[index].from)
             XCTAssertGreaterThan(almostFinished.progress, 0.999)
@@ -330,7 +354,7 @@ final class OnboardingWelcomeTests: XCTestCase {
         )
     }
 
-    func testSplitFlapClockBoundsInputAndLeavesUnchangedGlyphsFixed() {
+    func testSplitFlapClockBoundsInputAndReturnsUnchangedGlyphsAfterFlutter() {
         for progress in [-1.0, Double.nan, Double.infinity, -Double.infinity] {
             let frame = OnboardingSplitFlapFrame.at(progress: progress, from: "é", to: "a", column: 2)
             XCTAssertEqual(frame.from, "é")
@@ -340,12 +364,15 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertEqual(late.from, "é")
         XCTAssertEqual(late.to, "é")
         XCTAssertEqual(late.progress, 1)
-        for progress in [0.0, 0.3, 1] {
-            let fixed = OnboardingSplitFlapFrame.at(progress: progress, from: " ", to: " ", column: 2)
-            XCTAssertEqual(fixed.from, " ")
-            XCTAssertEqual(fixed.to, " ")
-            XCTAssertEqual(fixed.progress, 1)
-        }
+        let blankStart = OnboardingSplitFlapFrame.at(progress: 0, from: " ", to: " ", column: 2)
+        XCTAssertEqual(blankStart.from, " ")
+        XCTAssertEqual(blankStart.progress, 0)
+        let blankMoving = OnboardingSplitFlapFrame.at(progress: 0.3, from: " ", to: " ", column: 2)
+        XCTAssertNotEqual(blankMoving.from, blankMoving.to)
+        let blankEnd = OnboardingSplitFlapFrame.at(progress: 1, from: " ", to: " ", column: 2)
+        XCTAssertEqual(blankEnd.from, " ")
+        XCTAssertEqual(blankEnd.to, " ")
+        XCTAssertEqual(blankEnd.progress, 1)
     }
 
     func testDifferentWordLengthsFlipSurplusLettersToBlanksAndCanClearWholeWord() {

@@ -177,10 +177,10 @@ struct OnboardingTickerFrame: Equatable {
     }
 }
 
-/// One physical flap within a seven-flip letter change. Intermediate letters are
+/// One physical flap within an eight-flip letter change. Intermediate letters are
 /// deterministic so native rendering, scrubbing and tests follow the same path.
 struct OnboardingSplitFlapFrame: Equatable {
-    static let flipCount = 7
+    static let flipCount = 8
     static let columnDelay = 0.012
     static let maximumStaggeredColumn = 12
 
@@ -189,7 +189,6 @@ struct OnboardingSplitFlapFrame: Equatable {
     let progress: Double
 
     static func at(progress: Double, from: Character, to: Character, column: Int, flips: Int = flipCount) -> Self {
-        guard from != to else { return Self(from: from, to: to, progress: 1) }
         let progress = progress.isFinite ? min(1, max(0, progress)) : 0
         if progress >= 1 { return Self(from: to, to: to, progress: 1) }
 
@@ -226,7 +225,8 @@ struct OnboardingSplitFlapFrame: Equatable {
     }
 }
 
-/// Opening reserves the final lockup's space, but only its middle row is visible.
+/// Three visible rows persist; only the middle row contains a held opening word.
+/// Every cell participates in a change, including blanks and repeated letters.
 enum OnboardingBoardCopy {
     static let columns = 17
     static let openingColumns = 10
