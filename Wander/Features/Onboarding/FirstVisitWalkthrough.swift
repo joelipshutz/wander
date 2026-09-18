@@ -8,6 +8,7 @@ enum WalkthroughSurface: String, CaseIterable, Codable, Sendable {
     case saveFlow
     case feed
     case feedSearch
+    case events
     case lists
     case listDetail
     case listEditor
@@ -133,6 +134,7 @@ enum FirstVisitWalkthroughContent {
         .placeDetail,
         .feed,
         .feedSearch,
+        .events,
         .lists,
         .listDetail,
         .listEditor,
@@ -339,6 +341,7 @@ enum FirstVisitWalkthroughContent {
         ],
         .listDetail: [],
         .listEditor: [],
+        .events: [],
         .profile: [],
         .placeDetail: [
             step(
@@ -392,7 +395,7 @@ enum FirstVisitWalkthroughContent {
             .map,
             .mapTabs,
             "Your places, all connected",
-            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember.",
+            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember. Events is coming soon.",
             advance: .next,
             coachTheme: .map
         ),
@@ -1674,6 +1677,8 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             .map
         case .feed:
             .lists
+        case .events:
+            .sendoff
         case .listEditor:
             .lists
         case .listDetail:
