@@ -45,9 +45,12 @@ struct LoggedOutCarouselView: View {
         #endif
         return reduceMotion || voiceOverEnabled
     }
-    private var isPlaying: Bool {
-        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish && previousSelection == nil
+    // Reading holds wait for a slide to land. Film keeps running across the
+    // handoff so the incoming scene never becomes a clean, frozen frame.
+    private var motionIsPlaying: Bool {
+        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish
     }
+    private var isPlaying: Bool { motionIsPlaying && previousSelection == nil }
     private var step: OnboardingWelcomeStep { configuration.steps[selection] }
     private var previousStep: OnboardingWelcomeStep? { previousSelection.map { configuration.steps[$0] } }
 
@@ -126,7 +129,7 @@ struct LoggedOutCarouselView: View {
                 .padding(.horizontal, WanderTheme.spacing4).padding(.bottom, WanderTheme.spacing2)
             }
         }
-        .preference(key: OnboardingMotionPreferenceKey.self, value: isPlaying)
+        .preference(key: OnboardingMotionPreferenceKey.self, value: motionIsPlaying)
         .onAppear { trackViewed() }
         .onChange(of: selection) { _, _ in autoAdvanceGeneration += 1; trackViewed() }
         .task(id: slideGeneration) {

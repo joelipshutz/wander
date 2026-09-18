@@ -2492,12 +2492,15 @@ final class OnboardingUITests: XCTestCase {
             let app = XCUIApplication()
             app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
             app.launchEnvironment["WANDER_ONBOARDING_TREATMENT"] = treatment
-            app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
             app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
             app.launch()
             let next = app.buttons["onboarding.next"]
             XCTAssertTrue(next.waitForExistence(timeout: 10))
             keepScreenshot("\(treatment) — opening")
+            // Move toward Places with the film running, then interrupt the
+            // handoff through the persistent login action.
+            next.tap()
+            XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
             app.buttons["onboarding.logIn"].tap()
             XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
             app.buttons["auth.close"].tap()

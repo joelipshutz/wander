@@ -50,10 +50,14 @@ AVPlayer surface has no color-matrix filter. Those combinations triggered an
 iOS Simulator RenderBox crash during live playback despite passing static tests.
 
 Next, Log in, email, code entry and account navigation use the existing actions.
+The film's playback state is independent of the carousel reading timer. Reading
+holds pause during a scene slide; texture, ink faults and registration slips
+continue through opening-to-Places and Places-to-People on both retained scenes.
 Automatic progression ends at Create your account, where all film motion holds.
 There is no signup close button. Pause, backgrounding, Reduce Motion and view
 removal stop decorative playback; teardown releases the queue and looper.
 Reduce Motion selects undistorted static ink even when toggled during a fault.
 
-This is an exploration for comparison, not a selected production replacement.
+Joe preferred C and requested preserving this as an archived exploration.
+It remains separate from the approved production opening; no merge is implied.
 The post-authentication setup and post-onboarding NUX are outside this change.
