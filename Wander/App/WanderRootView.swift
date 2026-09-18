@@ -483,10 +483,6 @@ struct WanderRootView: View {
         systemColorScheme == .dark ? .editorial : .editorialLight
     }
 
-    private var tabBarBrandMode: AstirBrandMode {
-        selectedTab == .events ? .editorial : astirBrandMode
-    }
-
     private var mapAppearanceColorScheme: ColorScheme {
         selectedTab == .map && store.isDarkMapEnabled && !isPresentingAdd
             ? .dark
@@ -495,59 +491,65 @@ struct WanderRootView: View {
 
     private var tabRoot: some View {
         TabView(selection: tabSelection) {
-            MapScreen(
-                defaultSource: store.defaultMapFilter,
-                isMapTabActive: selectedTab == .map,
-                isAddPresented: isPresentingAdd,
-                presentationResetRequest: presentationResetRequest,
-                searchLaunchRequest: mapSearchLaunchRequest,
-                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
-                onAdd: presentAddSheet
-            )
-                .tabItem { tabItemLabel(for: .map) }
-                .tag(WanderTab.map)
+            Group {
+                MapScreen(
+                    defaultSource: store.defaultMapFilter,
+                    isMapTabActive: selectedTab == .map,
+                    isAddPresented: isPresentingAdd,
+                    presentationResetRequest: presentationResetRequest,
+                    searchLaunchRequest: mapSearchLaunchRequest,
+                    onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                    onAdd: presentAddSheet
+                )
+                    .tabItem { tabItemLabel(for: .map) }
+                    .tag(WanderTab.map)
 
-            FeedScreen(
-                presentationResetRequest: presentationResetRequest,
-                onPlaceProfilePresentation: handleDeepLinkPresentation,
-                onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
-                onPlaceProfileDidDismiss: {
-                    handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
-                },
-                onAdd: presentAddSheet
-            )
-                .tabItem { tabItemLabel(for: .discover) }
-                .tag(WanderTab.discover)
+                FeedScreen(
+                    presentationResetRequest: presentationResetRequest,
+                    onPlaceProfilePresentation: handleDeepLinkPresentation,
+                    onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
+                    onPlaceProfileDidDismiss: {
+                        handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
+                    },
+                    onAdd: presentAddSheet
+                )
+                    .tabItem { tabItemLabel(for: .discover) }
+                    .tag(WanderTab.discover)
 
-            EventsComingSoonScreen(isSelected: selectedTab == .events && !isPresentingAdd)
-                .tabItem { tabItemLabel(for: .events) }
-                .tag(WanderTab.events)
+                EventsComingSoonScreen(isSelected: selectedTab == .events && !isPresentingAdd)
+                    .tabItem { tabItemLabel(for: .events) }
+                    .tag(WanderTab.events)
 
-            ListsScreen()
-                .tabItem { tabItemLabel(for: .lists) }
-                .tag(WanderTab.lists)
+                ListsScreen()
+                    .tabItem { tabItemLabel(for: .lists) }
+                    .tag(WanderTab.lists)
 
-            ProfileScreen(
-                visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
-                presentationResetRequest: presentationResetRequest,
-                calendarLaunchRequest: profileCalendarLaunchRequest,
-                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
-                onSettingsPresentation: handleDeepLinkPresentation,
-                onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
-                onSettingsDidDismiss: {
-                    handleDeepLinkPresentationDismissal(of: .profileSettings)
+                ProfileScreen(
+                    visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
+                    presentationResetRequest: presentationResetRequest,
+                    calendarLaunchRequest: profileCalendarLaunchRequest,
+                    onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
+                    onSettingsPresentation: handleDeepLinkPresentation,
+                    onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
+                    onSettingsDidDismiss: {
+                        handleDeepLinkPresentationDismissal(of: .profileSettings)
+                    }
+                ) {
+                    selectedTab = .discover
                 }
-            ) {
-                selectedTab = .discover
+                    .tabItem { tabItemLabel(for: .profile) }
+                    .tag(WanderTab.profile)
             }
-                .tabItem { tabItemLabel(for: .profile) }
-                .tag(WanderTab.profile)
+            .toolbarBackground(astirBrandMode.background, for: .tabBar)
+            .toolbarBackground(.visible, for: .tabBar)
+            .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
+            .overlay {
+                WanderNativeTabAppearance(colorScheme: systemColorScheme, selection: selectedTab)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
-        .preferredColorScheme(selectedTab == .events ? .dark : nil)
-        .tint(tabBarBrandMode.accent)
-        .toolbarBackground(tabBarBrandMode.background, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
-        .toolbarColorScheme(tabBarBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
+        .tint(astirBrandMode.accent)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -3217,6 +3219,119 @@ enum WanderTabBarWalkthroughTargetGeometry {
     }
 }
 
+/// Keep navigation in the user's appearance independently of black Events art.
+/// Give Liquid Glass a stable surface to sample without changing the artwork
+/// geometry or replacing the system controls.
+private struct WanderNativeTabAppearance: UIViewControllerRepresentable {
+    let colorScheme: ColorScheme
+    let selection: WanderTab
+
+    func makeUIViewController(context: Context) -> Controller {
+        let controller = Controller()
+        controller.colorScheme = colorScheme
+        controller.selection = selection
+        return controller
+    }
+
+    func updateUIViewController(_ controller: Controller, context: Context) {
+        controller.colorScheme = colorScheme
+        controller.selection = selection
+        controller.applyAppearance()
+        controller.scheduleAppearanceAfterSelection()
+    }
+
+    final class PlateView: UIView {}
+
+    final class Controller: UIViewController {
+        var colorScheme: ColorScheme = .light
+        var selection: WanderTab = .map
+        private var selectionUpdate: Task<Void, Never>?
+
+        func scheduleAppearanceAfterSelection() {
+            selectionUpdate?.cancel()
+            selectionUpdate = Task { @MainActor [weak self] in
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                self?.applyAppearance()
+            }
+        }
+
+        override func loadView() {
+            view = UIView()
+            view.isUserInteractionEnabled = false
+        }
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            applyAppearance()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            applyAppearance()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            applyAppearance()
+        }
+
+        func applyAppearance() {
+            guard let tabs = tabBarController,
+                  tabs.selectedIndex == WanderTab.primaryTabs.firstIndex(of: selection) else { return }
+            let bar = tabs.tabBar
+            bar.accessibilityIdentifier = "main.tabBar"
+            let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+            if bar.overrideUserInterfaceStyle != style {
+                bar.overrideUserInterfaceStyle = style
+            }
+            let mode: AstirBrandMode = colorScheme == .dark ? .editorial : .editorialLight
+            let traits = UITraitCollection(userInterfaceStyle: style)
+            let background = UIColor(cgColor: UIColor(mode.background).resolvedColor(with: traits).cgColor)
+            let ink = UIColor(cgColor: UIColor(mode.primaryText).resolvedColor(with: traits).cgColor)
+            let accent = UIColor(cgColor: UIColor(mode.accent).resolvedColor(with: traits).cgColor)
+            func matches(_ appearance: UITabBarAppearance?) -> Bool {
+                appearance?.stackedLayoutAppearance.normal.iconColor?.isEqual(ink) == true &&
+                appearance?.stackedLayoutAppearance.selected.iconColor?.isEqual(accent) == true
+            }
+            let appearance = UITabBarAppearance()
+            for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
+                item.normal.iconColor = ink
+                item.normal.titleTextAttributes[.foregroundColor] = ink
+                item.selected.iconColor = accent
+                item.selected.titleTextAttributes[.foregroundColor] = accent
+            }
+            if !matches(bar.standardAppearance) { bar.standardAppearance = appearance }
+            if !matches(bar.scrollEdgeAppearance) { bar.scrollEdgeAppearance = appearance }
+            for item in bar.items ?? [] {
+                if !matches(item.standardAppearance) { item.standardAppearance = appearance }
+                if !matches(item.scrollEdgeAppearance) { item.scrollEdgeAppearance = appearance }
+            }
+            bar.unselectedItemTintColor = ink
+            bar.tintColor = accent
+            guard #available(iOS 26.0, *),
+                  let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: WanderTab.primaryTabs),
+                  let first = controls.first else { return }
+            let controlFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
+                $0.union(bar.convert($1.bounds, from: $1))
+            }
+            let plateFrame = controlFrame.insetBy(dx: -4, dy: -4).intersection(bar.bounds)
+            guard !plateFrame.isEmpty else { return }
+            let container = view!
+            let plate = container.subviews.compactMap { $0 as? PlateView }.first ?? PlateView()
+            if plate.superview == nil {
+                plate.isUserInteractionEnabled = false
+                plate.accessibilityElementsHidden = true
+                container.addSubview(plate)
+            }
+            plate.frame = container.convert(plateFrame, from: bar)
+            plate.layer.cornerRadius = plateFrame.height / 2
+            plate.backgroundColor = background
+            plate.isHidden = bar.isHidden
+        }
+    }
+}
+
 private struct WanderNativeTabFrameReader: UIViewRepresentable {
     let tabs: [WanderTab]
     let onItemControlsFrameChange: (CGRect?) -> Void
@@ -3317,7 +3432,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
             }
         }
 
-        private static func itemControls(
+        fileprivate static func itemControls(
             in tabBar: UITabBar,
             tabs: [WanderTab]
         ) -> [UIControl]? {
