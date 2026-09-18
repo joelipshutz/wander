@@ -17,13 +17,14 @@ final class ImportFormRefinementUITests: XCTestCase {
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         activity.tap()
-        XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
+        let countdownAvailable = app.buttons["share-extension-start-import"].waitForExistence(timeout: 5)
         keepScreenshot("Share extension — countdown begins")
         let sharedInboxUnavailable = app.staticTexts["Astir could not access its shared inbox. Check the app and extension App Group signing."]
         if sharedInboxUnavailable.waitForExistence(timeout: 6) {
             keepScreenshot("Share extension — appearance without Simulator App Group signing")
             throw XCTSkip("This Simulator build has no App Group container; durable extension capture requires a signed App Group build.")
         }
+        XCTAssertTrue(countdownAvailable)
         let captured = app.staticTexts["Captured: 1"]
         XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
         XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
@@ -147,8 +148,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
         app.launch()
         let action = app.buttons["import.checkin.report-place-1"]
-        for _ in 0..<5 where !action.isHittable { app.swipeUp() }
-        XCTAssertTrue(action.isHittable)
+        scrollToImportControl(action, in: app)
         action.tap()
         XCTAssertEqual(action.value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
@@ -169,8 +169,10 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertEqual(all.value as? String, "Selected")
         XCTAssertEqual(app.buttons["import.wanna.report-place-1"].value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (10)"].exists)
-        app.buttons["import.checkin.report-place-1"].tap()
-        XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
+        let checkIn = app.buttons["import.checkin.report-place-1"]
+        scrollToImportControl(checkIn, in: app)
+        checkIn.tap()
+        XCTAssertEqual(checkIn.value as? String, "Selected")
         XCTAssertTrue(app.buttons["import.save"].isEnabled)
         keepScreenshot("Import report — staged choices")
         saveAndReopenImport(app, expectedBadge: "0")
