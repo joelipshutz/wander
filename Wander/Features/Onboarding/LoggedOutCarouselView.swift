@@ -105,7 +105,8 @@ struct LoggedOutCarouselView: View {
                         moveTo(selection + (drag.translation.width < 0 ? 1 : -1), source: "swipe")
                     })
                 }
-                HStack(spacing: 7) {
+                .onboardingFilmSurface()
+                .accessibilityLabel("What you can do with Astir")                HStack(spacing: 7) {
                     ForEach(configuration.steps.indices, id: \.self) { index in
                         Capsule().fill(index == selection ? brandMode.primaryText : brandMode.secondaryText.opacity(0.4))
                             .frame(width: index == selection ? 24 : 7, height: 7)
@@ -397,7 +398,7 @@ struct OnboardingTickerView: View {
                             .frame(width: width, height: width * 0.50)
                             .overlay {
                                 Text(content.stableText)
-                                    .font(treatment.headline(size: width * 0.108,
+                                    .font(treatment.leadFont(size: width * 0.108,
                                         approved: .system(size: width * 0.108, weight: .semibold, design: .serif)))
                                     .foregroundStyle(brandMode.primaryText)
                                     .lineLimit(1)

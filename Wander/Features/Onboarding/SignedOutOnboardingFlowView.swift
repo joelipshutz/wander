@@ -52,12 +52,16 @@ struct SignedOutOnboardingFlowView: View {
         }
         .overlay {
             if treatment.isFilm {
-                OnboardingFilmTexture(isPlaying: filmIsPlaying && !auth.isPresentingNativeAuth, reduceMotion: reduceMotion)
-                    .ignoresSafeArea()
-                    .blendMode(.screen)
-                    .opacity(0.42)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                ZStack {
+                    OnboardingFilmTexture(isPlaying: filmIsPlaying && !auth.isPresentingNativeAuth, reduceMotion: reduceMotion)
+                        .contrast(1.18)
+                        .blendMode(.screen)
+                        .opacity(0.48)
+                    OnboardingFilmArtifacts()
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
         }
         .environment(\.onboardingVisualTreatment, treatment)
