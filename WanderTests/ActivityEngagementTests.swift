@@ -863,6 +863,7 @@ final class ActivityEngagementTests: XCTestCase {
             id: exactActivityID,
             kind: .placeBeen,
             actor: actor,
+            place: privacyActivity(ownerID: actor.id, visibility: .followers).place,
             occurredAt: Date(timeIntervalSince1970: 100)
         )
         let refreshedActivity = FeedActivity(
@@ -924,6 +925,7 @@ final class ActivityEngagementTests: XCTestCase {
                 bio: nil,
                 relationship: .follower
             ),
+            place: privacyActivity(ownerID: "user_friend", visibility: .followers).place,
             occurredAt: .now
         )
         let repository = ActivityEngagementRepositoryStub(
@@ -954,10 +956,12 @@ final class ActivityEngagementTests: XCTestCase {
             bio: nil,
             relationship: .follower
         )
+        let place = privacyActivity(ownerID: actor.id, visibility: .followers).place
         let cachedActivity = FeedActivity(
             id: activityID,
             kind: .placeBeen,
             actor: actor,
+            place: place,
             occurredAt: .now,
             note: "A cached note",
             media: []
@@ -966,6 +970,7 @@ final class ActivityEngagementTests: XCTestCase {
             id: activityID,
             kind: .placeBeen,
             actor: actor,
+            place: place,
             occurredAt: cachedActivity.occurredAt,
             note: cachedActivity.note,
             media: [

@@ -2,6 +2,26 @@ import XCTest
 
 final class FeedActivityGroupingUITests: XCTestCase {
     @MainActor
+    func testAuthenticatedRootSurvivesRepeatedColdLaunches() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover"
+        ]
+        for _ in 0..<3 {
+            app.launch()
+            XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 20))
+            let exited = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in app.state != .runningForeground },
+                object: nil
+            )
+            exited.isInverted = true
+            XCTAssertEqual(XCTWaiter.wait(for: [exited], timeout: 3), .completed)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testCombinedActivityExpandsInOrderCollapsesAndOpensOriginalPost() {
         let app = XCUIApplication()
         app.launchArguments = [

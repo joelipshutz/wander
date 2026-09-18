@@ -291,6 +291,17 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
     }
 }
 
+// Keep tab construction out of the root's presentation/observer builder stack.
+// A computed `some View` property is still evaluated eagerly by its caller;
+// this View boundary lets SwiftUI evaluate the large tab subtree separately.
+private struct WanderRootTabContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+    }
+}
+
 @MainActor
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -731,7 +742,9 @@ struct WanderRootView: View {
     }
 
     private var presentedRoot: some View {
-        tabRoot
+        WanderRootTabContent {
+            tabRoot
+        }
         .sheet(isPresented: $isPresentingImportHub) {
             NavigationStack {
                 PlaceImportHubScreen(

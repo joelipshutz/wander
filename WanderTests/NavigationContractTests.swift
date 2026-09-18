@@ -923,7 +923,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
         XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) })"))
         XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
-        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id)"))
+        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id, initial: true)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 
@@ -2723,7 +2723,7 @@ final class NavigationContractTests: XCTestCase {
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
-            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile, onDismiss:"),
             ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
             ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),

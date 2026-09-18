@@ -1437,7 +1437,6 @@ struct ActivityCommentsRouteScreen: View {
             guard scenePhase == .active else { return }
             await retry()
         }
-        .accessibilityIdentifier("activity.post.screen")
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .tint(brandMode.accent)
