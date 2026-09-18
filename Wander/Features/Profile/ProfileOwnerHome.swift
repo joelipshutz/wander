@@ -450,7 +450,11 @@ struct ProfileOwnerHome: View {
                     displayName: profile.displayName,
                     handle: profile.handle
                 ) {
-                    WanderShareButton(content: shareContent, onTap: shareAction) {
+                    WanderShareButton(
+                        content: shareContent,
+                        preview: SharePreview(profile.displayName),
+                        onTap: shareAction
+                    ) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
@@ -1605,10 +1609,7 @@ private struct ProfileYourMapPreview: View {
                     .foregroundStyle(brandMode.accentText)
                 }
 
-                ProfileMapSnapshotView(
-                    points: insights.mapPoints,
-                    shareImageFileURL: .constant(nil)
-                )
+                ProfileMapSnapshotView(points: insights.mapPoints)
                 .frame(height: 178)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
@@ -1807,7 +1808,7 @@ private struct ProfileMapSummaryPicker: View {
 private struct ProfileMapSnapshotView: View {
     @Environment(\.astirBrandMode) private var brandMode
     let points: [ProfileMapPoint]
-    @Binding var shareImageFileURL: URL?
+    var shareImageFileURL: Binding<URL?>? = nil
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @State private var renderedSnapshot: ProfileMapRenderedSnapshot?
@@ -1838,18 +1839,22 @@ private struct ProfileMapSnapshotView: View {
             }
             .clipped()
             .task(id: request.cacheKey) {
-                shareImageFileURL = nil
+                shareImageFileURL?.wrappedValue = nil
                 guard request.isRenderable else { return }
                 guard let image = await ProfileMapSnapshotCache.shared.image(for: request) else { return }
                 guard !Task.isCancelled else { return }
                 renderedSnapshot = ProfileMapRenderedSnapshot(key: request.cacheKey, image: image)
 
-                guard let pngData = image.pngData(),
-                      let imageFileURL = await WanderShareAttachmentStore.preparePNG(pngData),
-                      !Task.isCancelled,
-                      renderedSnapshot?.key == request.cacheKey
+                // The home preview only displays an image. Only the sharing
+                // surface needs a file, even when the image was cached.
+                guard let shareImageFileURL,
+                      let imageFileURL = await WanderShareAttachmentStore.preparePNG(image)
                 else { return }
-                shareImageFileURL = imageFileURL
+                guard !Task.isCancelled, renderedSnapshot?.key == request.cacheKey else {
+                    await WanderShareAttachmentStore.removePreparedPNG(at: imageFileURL)
+                    return
+                }
+                shareImageFileURL.wrappedValue = imageFileURL
             }
         }
     }
@@ -2090,8 +2095,7 @@ private struct ProfileMapSummaryShareButton: View {
             )
             guard let image = await ProfileMapSnapshotCache.shared.image(for: request),
                   !Task.isCancelled,
-                  let pngData = image.pngData(),
-                  let imageFileURL = await WanderShareAttachmentStore.preparePNG(pngData),
+                  let imageFileURL = await WanderShareAttachmentStore.preparePNG(image),
                   !Task.isCancelled,
                   let content = WanderShareContent.profileMap(
                     serverID: profile.serverID,
