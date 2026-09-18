@@ -34,7 +34,15 @@ fixes this. All three final UI checks passed (81.760s): automatic progression,
 manual forward/back paging and rapid signup/close/login/close. Evidence:
 `native-analog-final-tests.xcresult` (26 unit passes plus the reproduced close bug)
 and `native-analog-auth-reset-tests.xcresult` (three passing UI flows).
-Native capture and browser evidence are appended at handoff.
+Source `39214cb` now has six published raw native recordings, each verified through
+account creation in native and browser checks. Shared compact light/dark lettering
+was inspected. The review supports word/fade/final/slide controls, dark/light,
+play/pause/seek, focus and narrow stacking; no browser errors were observed.
+Evidence: `native-board-qa/native-analog-report.json`. Both capture simulators are
+shut down. The first Graphic dark take stopped on People and is preserved as an
+incomplete take; a replacement reaches account creation. Its original stall cause
+is not established. No physical-device smoothness claim follows from this.
+The prior natural-type gallery is preserved in Archives.
 The shared workspace ios-work.py helper owns the reusable build cache; do not
 resume with the older per-task DerivedData commands below.
 
