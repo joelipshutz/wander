@@ -4906,7 +4906,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sheetWrapper.contains("[Self.compactDetent, .large]"))
         XCTAssertTrue(sheetWrapper.contains("selection: $selectedDetent"))
         XCTAssertTrue(sheetWrapper.contains(".presentationDragIndicator(.visible)"))
-        XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
+        XCTAssertTrue(sheetWrapper.contains(".presentationBackgroundInteraction(.disabled)"))
         XCTAssertTrue(sheetWrapper.contains(".presentationContentInteraction(.scrolls)"))
         XCTAssertTrue(placeProfile.contains("onClose: onAttachedClose"))
         XCTAssertTrue(placeProfile.contains("guard attachedSaveContext?.id == context.id else { return }"))

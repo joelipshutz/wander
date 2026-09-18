@@ -8,6 +8,13 @@ struct CheckInQuestionCustomizationRequest: Identifiable {
     let content: CheckInQuestionCustomizationSheet
 }
 
+/// Keep native presentation in a stable observable owner. Publishing the request
+/// makes it an explicit editor dependency while nested confirmations are open.
+@MainActor
+final class CheckInQuestionPresentation: ObservableObject {
+    @Published var request: CheckInQuestionCustomizationRequest?
+}
+
 /// Shared by new and edited check-ins. Shared and Stealth answers use separate
 /// bindings; this view never serializes a save.
 struct CheckInQuestionPanel: View {

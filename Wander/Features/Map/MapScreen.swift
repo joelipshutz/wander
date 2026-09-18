@@ -12733,9 +12733,7 @@ struct MapPlaceSaveFlowSheet: View {
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(WanderTheme.radiusSheet)
         .presentationBackground(astirBrandMode.background)
-        // Preserve the compact presenter while Customize opens its own sheet
-        // and Restore confirmation; disabling it can dismiss the nested flow.
-        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
+        .presentationBackgroundInteraction(.disabled)
         // Form swipes scroll immediately at either detent. Native resize-first
         // gestures can consume short swipes and spring back to the compact height.
         // The grabber and explicit content expansion still resize the sheet.
@@ -12828,7 +12826,7 @@ struct MapPlaceSaveEditor: View {
     @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
-    @State private var questionCustomization: CheckInQuestionCustomizationRequest?
+    @StateObject private var questionPresentation = CheckInQuestionPresentation()
     @State private var selectedAnswers: [String: Set<String>]
     @State private var unifiedTags: Set<String>
     @State private var questionBlocksCache: MapPlaceSaveQuestionBlocksCache
@@ -13135,7 +13133,7 @@ struct MapPlaceSaveEditor: View {
                 inlineEditor
             }
         }
-        .sheet(item: $questionCustomization) { $0.content }
+        .sheet(item: $questionPresentation.request) { $0.content }
         .disabled(editorOwnerID != nil && editorOwnerID != store.currentUser.id)
         .onChange(of: store.currentUser.id, initial: true) { _, _ in
             guard bindEditorOwnerIfNeeded() else { return }
@@ -13187,6 +13185,7 @@ struct MapPlaceSaveEditor: View {
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
         .interactiveDismissDisabled(
             walkthroughs.activeSurface == .saveFlow || isSaving || isRemoving
+                || questionPresentation.request != nil
         )
         .modifier(MapPlaceSaveEditorLifecycleModifier(
             context: context,
@@ -13576,7 +13575,7 @@ struct MapPlaceSaveEditor: View {
             savedCustomQuestions: savedCustomQuestions,
             answers: $selectedAnswers,
             customAnswers: $customQuestionAnswers,
-            customization: $questionCustomization
+            customization: $questionPresentation.request
         )
         .disabled(!didLoadPrivateAnswers || privateAnswersOwnerID != store.currentUser.id)
         .onChange(of: context.id, initial: true) { _, _ in loadPrivateQuestionAnswersIfNeeded() }
