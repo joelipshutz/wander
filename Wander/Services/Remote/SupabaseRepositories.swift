@@ -951,6 +951,12 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
         return row.model
     }
 
+    func deleteWanna(_ wanna: PlaceWannaSave) async throws {
+        let _: Bool = try await rpc.call("delete_own_place_wanna", params: DeleteOwnPlaceWannaParams(
+            inputUserPlaceID: wanna.userPlaceID, inputWannaID: wanna.id,
+            inputHistoricalOriginal: wanna.isHistoricalOriginal == true))
+    }
+
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
         let rows: [RemoteWannaSaveDTO] = try await rpc.call(
             "visible_place_wannas", params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
@@ -4253,6 +4259,17 @@ private struct SaveOwnPlaceResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
+    }
+}
+
+private struct DeleteOwnPlaceWannaParams: Encodable {
+    let inputUserPlaceID: String
+    let inputWannaID: String
+    let inputHistoricalOriginal: Bool
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceID = "input_user_place_id"
+        case inputWannaID = "input_wanna_id"
+        case inputHistoricalOriginal = "input_historical_original"
     }
 }
 

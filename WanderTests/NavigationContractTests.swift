@@ -2278,7 +2278,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(review.contains("importStore.markReviewOpened(batchIDs: batchIDs)"))
         let report = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportReportScreen: View {")
             .last?.components(separatedBy: "private func sourceLinkCard").first)
-        XCTAssertTrue(report.contains("PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: {})"))
+        XCTAssertTrue(report.contains("PlaceImportCanonicalReviewScreen(importStore: importStore, batchIDs: [batchID], onDone: onDone)"))
         let history = try XCTUnwrap(views.components(separatedBy: "struct PlaceImportHistoryScreen: View {")
             .last?.components(separatedBy: "struct PlaceImportHistoryDestination").first)
         XCTAssertFalse(history.contains("markReviewOpened"))
@@ -2348,7 +2348,7 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private struct PlaceImportHistoryTile: View {").first
         )
 
-        XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID)"))
+        XCTAssertTrue(destination.contains("PlaceImportReportScreen(importStore: importStore, batchID: batchID, onDone: { dismiss() })"))
         XCTAssertTrue(views.contains("PlaceImportHistoryPresentation.remainingPlaces(items: items)"))
         XCTAssertTrue(views.contains("PlaceImportReportScreen(importStore: importStore, batchID: batch.id, savedOnly: true,"))
         XCTAssertFalse(views.contains("Review and add places"))
