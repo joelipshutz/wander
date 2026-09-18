@@ -149,7 +149,7 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testNavigationModelRetainsAddRouteWhileHeaderExperimentOwnsVisibleEntryPoint() throws {
-        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
+        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .events, .lists, .profile])
 
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
@@ -159,9 +159,10 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testPrimaryTabsUsePaperListsIconAndSystemSelectionFeedback() throws {
-        XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
+        XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .events, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
+        XCTAssertEqual(WanderTab.events.systemImage, "sparkles")
         XCTAssertEqual(WanderTab.lists.systemImage, PlaceListSymbol.systemImage)
         XCTAssertEqual(WanderTab.profile.systemImage, "person.crop.circle")
 
@@ -171,7 +172,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains(".toolbar(.hidden, for: .tabBar)"))
         XCTAssertFalse(root.contains("WanderPrimaryTabBar"))
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
-        XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
+        XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 5)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
         XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
@@ -3140,6 +3141,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.notificationTab(for: .discover), .discover)
     }
 
+    func testEventsComingSoonIsALocalNonInteractiveRecording() throws {
+        let events = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Events/EventsComingSoonScreen.swift"
+            )
+        )
+        XCTAssertTrue(events.contains("Coming soon. An Ocean Park experiment."))
+        XCTAssertTrue(events.contains("AVPlayerLayer()"))
+        XCTAssertTrue(events.contains("Bundle.main.url(forResource:"))
+        XCTAssertTrue(events.contains("isUserInteractionEnabled = false"))
+        XCTAssertFalse(events.contains("AVPlayerViewController"))
+        XCTAssertFalse(events.contains("https://"))
+        XCTAssertFalse(events.contains("isOnWaitlist"))
+    }
+
     @MainActor
     func testRootViewCanResolveInitialTabForVisualQA() {
         XCTAssertEqual(
@@ -3149,6 +3165,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "lists"]),
             .lists
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "events"]),
+            .events
         )
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "add"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "nope"]), .map)
@@ -3261,8 +3281,9 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(root.contains("@Environment(\\.colorScheme) private var systemColorScheme"))
         XCTAssertTrue(root.contains("systemColorScheme == .dark ? .editorial : .editorialLight"))
-        XCTAssertTrue(root.contains(".toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)"))
-        XCTAssertTrue(root.contains(".toolbarBackground(astirBrandMode.background, for: .tabBar)"))
+        XCTAssertTrue(root.contains(".toolbarColorScheme(tabBarBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)"))
+        XCTAssertTrue(root.contains(".toolbarBackground(tabBarBrandMode.background, for: .tabBar)"))
+        XCTAssertTrue(root.contains(".preferredColorScheme(selectedTab == .events ? .dark : nil)"))
         XCTAssertFalse(root.contains(".preferredColorScheme(.light)"))
         XCTAssertFalse(root.contains(".preferredColorScheme(mapAppearanceColorScheme)"))
 

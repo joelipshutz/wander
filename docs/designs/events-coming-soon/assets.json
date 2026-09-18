@@ -1,0 +1,14 @@
+{
+  "events-coming-soon.mp4": {
+    "bytes": 2253389,
+    "sha256": "03ad72d7c94b9abc4f0ba822137a1175d5af74e973063e8905c244a9946201e3"
+  },
+  "events-coming-soon.jpg": {
+    "bytes": 368436,
+    "sha256": "33bef9297d6d99c049829f873ece4c371ddc1230aedc71a3e72ba600b54e83ce"
+  },
+  "astir-coming-soon-03c-reel.mp4": {
+    "bytes": 14120715,
+    "sha256": "658c787cd681de061f10b011d8030168bd32c49ddd19d8aa3349b7c3076eca18"
+  }
+}
