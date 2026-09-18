@@ -4,13 +4,73 @@ import XCTest
 @MainActor final class EventsInterestTests: XCTestCase {
     private let saved = EventsInterest(createdAt: Date(timeIntervalSince1970: 1789724400))
 
+    func testConfirmedSignupIsAvailableBeforeColdStartLoadAndWorksOffline() async {
+        let suite = "EventsInterestTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let repository = InterestRepositoryDouble()
+        let first = EventsInterestModel(cache: EventsInterestCache(defaults: defaults))
+        await first.load(userID: "owner", repository: repository)
+        await first.register(repository: repository)
+
+        let reopened = EventsInterestModel(cache: EventsInterestCache(defaults: UserDefaults(suiteName: suite)!))
+        XCTAssertEqual(reopened.presentation(for: "owner"), .registered)
+        XCTAssertEqual(reopened.presentation(for: "other"), .unknown)
+        XCTAssertEqual(reopened.presentation(for: nil), .unknown)
+        repository.shouldFail = true
+        let reads = repository.reads
+        await reopened.load(userID: "owner", repository: repository)
+        XCTAssertTrue(reopened.isRegistered)
+        XCTAssertEqual(repository.reads, reads, "Confirmed signup must not wait for the server")
+        await reopened.load(userID: "other", repository: repository)
+        XCTAssertEqual(reopened.presentation(for: "other"), .unknown)
+        XCTAssertFalse(reopened.isRegistered)
+        XCTAssertEqual(reopened.presentation(for: "owner"), .registered)
+    }
+
+    func testUnknownStateStaysBlankUntilReadCompletesAndHydrationIsCached() async {
+        let suite = "EventsInterestTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let repository = InterestRepositoryDouble()
+        repository.suspendRead = true
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: defaults))
+        XCTAssertEqual(model.presentation(for: "owner"), .unknown)
+        let read = Task { await model.load(userID: "owner", repository: repository) }
+        await repository.waitForRead()
+        XCTAssertEqual(model.presentation(for: "owner"), .unknown)
+        repository.readContinuation?.resume(returning: saved)
+        await read.value
+        let cold = EventsInterestModel(cache: EventsInterestCache(defaults: defaults))
+        XCTAssertEqual(cold.presentation(for: "owner"), .registered)
+    }
+
+    func testFailedReadsAndWritesNeverCacheConfirmation() async {
+        let suite = "EventsInterestTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let cache = EventsInterestCache(defaults: defaults)
+        let model = EventsInterestModel(cache: cache)
+        let repository = InterestRepositoryDouble()
+        repository.shouldFail = true
+        await model.load(userID: "owner", repository: repository)
+        XCTAssertEqual(model.presentation(for: "owner"), .unknown)
+        await model.register(repository: repository)
+        XCTAssertNil(cache.interest(for: "owner"))
+        repository.shouldFail = false
+        await model.load(userID: "owner", repository: repository)
+        XCTAssertEqual(model.presentation(for: "owner"), .available)
+        XCTAssertEqual(model.presentation(for: "other"), .unknown)
+        XCTAssertNil(cache.interest(for: "owner"))
+    }
+
     func testConfirmedRegistrationRestoresIntoNewScreenModel() async {
         let repository = InterestRepositoryDouble()
         repository.saved = saved
-        let first = EventsInterestModel()
+        let first = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await first.load(userID: "owner", repository: repository)
         XCTAssertTrue(first.isRegistered)
-        let reopened = EventsInterestModel()
+        let reopened = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await reopened.load(userID: "owner", repository: repository)
         XCTAssertEqual(reopened.interest, saved)
         await reopened.register(repository: repository)
@@ -19,7 +79,7 @@ import XCTest
 
     func testWhiteStateWaitsForServerAndRapidTapsOnlyWriteOnce() async {
         let repository = InterestRepositoryDouble()
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await model.load(userID: "owner", repository: repository)
         repository.suspendWrite = true
         let pending = Task { await model.register(repository: repository) }
@@ -36,7 +96,7 @@ import XCTest
 
     func testFailedSaveStaysOrangeAndCanRetry() async {
         let repository = InterestRepositoryDouble()
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await model.load(userID: "owner", repository: repository)
         repository.shouldFail = true
         await model.register(repository: repository)
@@ -53,7 +113,7 @@ import XCTest
     func testDelayedReadCannotUndoConfirmedTap() async {
         let repository = InterestRepositoryDouble()
         repository.suspendRead = true
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         let read = Task { await model.load(userID: "owner", repository: repository) }
         await repository.waitForRead()
         await model.register(repository: repository)
@@ -66,7 +126,7 @@ import XCTest
     func testAccountSwitchDiscardsOldRead() async {
         let old = InterestRepositoryDouble()
         old.suspendRead = true
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         let read = Task { await model.load(userID: "first", repository: old) }
         await old.waitForRead()
         await model.load(userID: "second", repository: InterestRepositoryDouble())
@@ -77,7 +137,7 @@ import XCTest
 
     func testSignOutDiscardsOldWriteAndPreventsNewWrites() async {
         let repository = InterestRepositoryDouble()
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await model.load(userID: "owner", repository: repository)
         repository.suspendWrite = true
         let write = Task { await model.register(repository: repository) }
@@ -94,7 +154,7 @@ import XCTest
     func testFailedHydrationStillAllowsIdempotentRegistration() async {
         let repository = InterestRepositoryDouble()
         repository.shouldFail = true
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await model.load(userID: "owner", repository: repository)
         XCTAssertFalse(model.isLoading)
         repository.shouldFail = false
@@ -103,7 +163,7 @@ import XCTest
     }
 
     func testUnconfiguredBackendDoesNotPretendItSaved() async {
-        let model = EventsInterestModel()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
         await model.load(userID: "owner", repository: nil)
         await model.register(repository: nil)
         XCTAssertFalse(model.isRegistered)
@@ -140,10 +200,12 @@ import XCTest
     var suspendRead = false
     var suspendWrite = false
     var writes = 0
+    var reads = 0
     var readContinuation: CheckedContinuation<EventsInterest?, Error>?
     var writeContinuation: CheckedContinuation<EventsInterest, Error>?
 
     func currentInterest() async throws -> EventsInterest? {
+        reads += 1
         if shouldFail { throw URLError(.notConnectedToInternet) }
         if suspendRead {
             return try await withCheckedThrowingContinuation { readContinuation = $0 }

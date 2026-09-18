@@ -27,9 +27,9 @@ struct EventsComingSoonScreen: View {
                 .accessibilityIdentifier("events.comingSoon")
 
             Group {
-                if interest.isRegistered {
+                if interest.presentation(for: userID) == .registered {
                     EventsWaitlistStatus()
-                } else {
+                } else if interest.presentation(for: userID) == .available {
                     EventsNotifyControl(
                         saving: interest.isSaving,
                         enabled: userID != nil,
