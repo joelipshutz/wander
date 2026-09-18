@@ -43,13 +43,18 @@ not the source-filter button above it.
 
 On the first voluntary place-profile visit, the profile is moderately blurred
 while the real floating Check In/Wanna buttons and static handwritten annotations
-remain sharp. That focus moment lasts three seconds, has no Next/Skip control,
-then clears before one diagonal bottom-left to top-right glimmer crosses each
-button. It is consumed once for the enrolled account; later place profiles work
+remain sharp. That focus moment lasts 3.5 seconds, has no Next/Skip control,
+then clears before one 1.4-second diagonal bottom-left to top-right glimmer
+crosses each button. It is consumed once for the enrolled account; later place profiles work
 normally. Reduce Motion keeps the timed static explanation and omits the sweep.
 The actual actions remain usable throughout.
 
-The optional Feed reveal still requires visual review. Starter lists will be
+The Feed scroll experiment is removed. First entry now uses a stationary
+5.65-second sequence: moderately blur around a real people tile and annotate
+“Connect with your circle,” briefly clear, then refocus on an available recent
+activity tile with “Keep up with the happenings of your people.” Completion is
+account-scoped and persists; later entries do not repeat it. Missing or offscreen
+tiles are skipped without scrolling or inventing content. Starter lists will be
 entered later; this pass must not create them.
 
 ## Astir Events engineering direction (REC-467)

@@ -47,6 +47,8 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case saveSubmit
     case saveReview
     case feedActivity
+    case feedCircle
+    case feedRecent
     case feedSurfaceSwitch
     case feedPeopleSearch
     case feedInvite
@@ -251,7 +253,7 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .feed: [
-            context(.feed, .feedActivity, "See what your people are discovering", "See what your people are discovering. Visit People to find and follow more of your circle.", theme: .social)
+            context(.feed, .feedActivity, "Connect with your circle", "Keep up with the happenings of your people", theme: .social)
         ],
         .feedSearch: [
             step(
@@ -410,6 +412,7 @@ enum FirstVisitWalkthroughContent {
     static func presentationDelayMilliseconds(for step: WalkthroughStep) -> Int {
         if step.presentationStyle == .finale { return finaleAutoAdvanceMilliseconds }
         if step.target == .placeSaveActions { return NUXPlaceIntroductionTiming.focusMilliseconds }
+        if step.target == .feedActivity { return NUXFeedIntroductionTiming.totalMilliseconds }
         if contextualSurfaces.contains(step.surface) { return contextualAutoAdvanceMilliseconds }
         if step.target == .mapMoreFilters { return 6_000 }
         // Include the filter intro animation in the reading window.
@@ -1012,7 +1015,6 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var tutorialInvitedContactIDs: Set<String> = []
     @Published private(set) var isRequestingContactInvite = false
     @Published private(set) var userActivityGeneration = 0
-    @Published var isRevealingFeed = false
     @Published private(set) var reviewPlaybackGeneration = 0
     @Published private(set) var isAwaitingEligibilityResolution = false
 
@@ -2367,7 +2369,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                         ?? anchoredTargetFrames
                     let targetFrame = resolvedWalkthroughFrame(targetFrames)
                     if
-                        isActive, !coordinator.isRevealingFeed, coordinator.activeSurface == surface,
+                        isActive, coordinator.activeSurface == surface,
                         let step = coordinator.currentStep,
                         let targetFrame
                     {
@@ -2396,7 +2398,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                 onNext: { coordinator.advancePassiveStep(ifCurrentStepID: step.id) }
                             )
                             .id("\(step.id)-\(coordinator.reviewPlaybackGeneration)")
-                            .transition(reduceMotion ? .identity : NUXCoachMotion.selected.transition)
+                            .transition(reduceMotion ? .identity : step.target == .feedActivity ? .opacity : NUXCoachMotion.selected.transition)
                         } else {
                             MissingWalkthroughTargetResolver(coordinator: coordinator, step: step)
                         }
@@ -2643,6 +2645,8 @@ private struct FirstVisitWalkthroughOverlay: View {
                                            additionalTargets: additionalTargets, size: containerSize,
                                            safeTop: safeTop, isFocused: $placeIntroductionIsFocused,
                                            finish: onNext)
+            } else if step.target == .feedActivity {
+                NUXFeedIntroduction(targets: additionalTargets, size: containerSize, safeTop: safeTop, finish: onNext)
             } else if step.presentationStyle == .finale {
                 NUXConnectionFinale(step: step, size: containerSize, finish: onNext)
             } else {
@@ -2747,7 +2751,7 @@ private struct FirstVisitWalkthroughOverlay: View {
             }
         }
         .task(id: "automatic-advance-\(step.id)-\(scenePhase)-\(reduceMotion)") {
-            guard step.target != .placeSaveActions,
+            guard step.target != .placeSaveActions, step.target != .feedActivity,
                   scenePhase == .active, !reduceMotion, step.automaticallyAdvances,
                   !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
                   !UIAccessibility.isVoiceOverRunning else { return }

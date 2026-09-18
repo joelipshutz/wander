@@ -329,7 +329,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.activate(.placeDetail)
         let step = try XCTUnwrap(coordinator.currentStep)
         XCTAssertEqual(step.target, .placeSaveActions)
-        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step), 3_000)
+        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step), 3_500)
+        XCTAssertEqual(NUXPlaceIntroductionTiming.glimmerMilliseconds, 1_400)
         coordinator.advancePassiveStep(ifCurrentStepID: step.id)
         coordinator.activate(.placeDetail)
         XCTAssertNil(coordinator.currentStep)
@@ -337,6 +338,35 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         relaunched.activate(.placeDetail)
         XCTAssertNil(relaunched.currentStep)
         XCTAssertEqual(NUXCoachMotion.selected, .slide)
+    }
+
+    func testFeedIntroductionIsOneSequenceAndStaysConsumedAcrossVisitsAndRelaunch() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        store.enrollContextualHints(for: "new-user")
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "new-user", store: store)
+        coordinator.activate(.feed)
+        let step = try XCTUnwrap(coordinator.currentStep)
+        XCTAssertEqual(step.target, .feedActivity)
+        XCTAssertEqual(FirstVisitWalkthroughContent.stepsBySurface[.feed]?.count, 1)
+        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step), 5_650)
+        XCTAssertEqual(NUXFeedIntroductionTiming.totalMilliseconds + NUXFeedIntroductionTiming.readinessMilliseconds, 6_000)
+        coordinator.advancePassiveStep(ifCurrentStepID: step.id)
+        coordinator.activate(.feed)
+        XCTAssertNil(coordinator.currentStep)
+        let relaunched = FirstVisitWalkthroughCoordinator(userID: "new-user", store: FirstVisitWalkthroughStore(defaults: defaults))
+        relaunched.activate(.feed)
+        XCTAssertNil(relaunched.currentStep)
+    }
+
+    func testFeedFocusUsesOnlyAvailableVisibleTilesAndClipsTallCardsAboveTabBar() throws {
+        let size = CGSize(width: 393, height: 852)
+        XCTAssertNil(NUXFeedFocus.circle.visibleFrame(in: [:], size: size, safeTop: 59))
+        XCTAssertNil(NUXFeedFocus.circle.visibleFrame(in: [.feedCircle: CGRect(x: 420, y: 200, width: 184, height: 188)], size: size, safeTop: 59))
+        let card = try XCTUnwrap(NUXFeedFocus.recent.visibleFrame(
+            in: [.feedRecent: CGRect(x: 16, y: 500, width: 361, height: 600)], size: size, safeTop: 59))
+        XCTAssertEqual(card.minY, 500)
+        XCTAssertEqual(card.maxY, size.height - 120)
     }
 
     func testEveryMapSourceRegistersItsOwnWalkthroughTarget() {

@@ -98,3 +98,23 @@ alone supplies the target rectangle. The trim is rendered directly on the panel
 with its exact bounds and corner radius, so it also stays aligned during the
 opening animation. Starter-list entry remains deferred by request. The optional
 Feed reveal has its own native recording in the local review index.
+
+## Feed focus revision
+
+The scroll reveal and its coordinator state/opt-in policy are removed. Feed
+registers the first real people card and first recent activity card as separate
+anchors. A native material overlay with a transparent cutout softens the rest
+of the actual page, including its header and tab bar, without duplicating the
+card or moving the scroll view. Two 2.4-second annotations are separated by a
+400 ms clear interval; arrival and exit total 450 ms, for a 5.65-second sequence.
+Initial layout has a bounded 350 ms readiness wait, keeping the maximum at six seconds. Missing or offscreen
+cards are skipped and cannot leave the lesson stuck. User interaction, navigation
+and backgrounding consume/clear the existing account-scoped contextual lesson.
+Reduce Motion removes fades and retains the automatic finite sequence.
+
+The explicit DEBUG `-WanderNUXFeedFixture` capture argument, combined with
+`-WanderUseDemoFixtures`, presents existing Ryan/Maya local fixture profiles in
+the native recommendation cards. Ordinary accounts still use their real
+recommendations. No live follow, save, list or account mutation is introduced.
+C04 uses the same verified implementation with 3.5 seconds of focus and a
+1.4-second button sweep. Analytics events and payloads are unchanged.

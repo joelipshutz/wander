@@ -40,15 +40,3 @@ struct NUXReviewControls: View {
     }
 }
 #endif
-
-/// Kept opt-in while the Feed scroll treatment is being evaluated.
-enum NUXFeedRevealPolicy {
-    static var isEnabled: Bool {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        return args.contains("-WanderNUXReview") || args.contains("-WanderNUXFeedReveal")
-        #else
-        return false
-        #endif
-    }
-}

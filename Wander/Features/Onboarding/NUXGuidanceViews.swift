@@ -17,8 +17,8 @@ enum NUXCoachMotion: String, CaseIterable {
 
 enum NUXPlaceIntroductionTiming {
     static let arrivalMilliseconds = 450
-    static let focusMilliseconds = 3_000
-    static let glimmerMilliseconds = 900
+    static let focusMilliseconds = 3_500
+    static let glimmerMilliseconds = 1_400
     static let blurRadius: CGFloat = 6
 }
 
@@ -33,7 +33,7 @@ extension EnvironmentValues {
     }
 }
 
-/// A single first-visit moment: arrive, soften the actual page for three
+/// A single first-visit moment: arrive, soften the actual page for 3.5
 /// seconds, then sweep the two still-live native buttons once. No Next/Skip.
 struct NUXPlaceActionIntroduction: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -117,6 +117,184 @@ private struct NUXButtonGlimmer: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: PlaceProfileFloatingActions.compactCornerRadius))
         .accessibilityHidden(true)
+    }
+}
+
+enum NUXFeedIntroductionTiming {
+    static let arrivalMilliseconds = 250
+    static let readinessMilliseconds = 350
+    static let focusMilliseconds = 2_400
+    static let clearMilliseconds = 400
+    static let exitMilliseconds = 200
+    static let totalMilliseconds = arrivalMilliseconds + focusMilliseconds * 2 + clearMilliseconds + exitMilliseconds
+}
+
+enum NUXFeedFocus: String, CaseIterable {
+    case circle, recent
+
+    var target: WalkthroughTargetID { self == .circle ? .feedCircle : .feedRecent }
+    var message: String {
+        self == .circle ? "Connect with\nyour circle" : "Keep up with the\nhappenings of your people"
+    }
+
+    func visibleFrame(in targets: [WalkthroughTargetID: CGRect], size: CGSize, safeTop: CGFloat) -> CGRect? {
+        guard let target = targets[self.target] else { return nil }
+        // Keep the highlight above the tab bar. A tall recent card may extend
+        // below the viewport; focus its visible part without moving the Feed.
+        let viewport = CGRect(x: 12, y: safeTop + 90, width: max(0, size.width - 24),
+                              height: max(0, size.height - safeTop - 210))
+        let visible = target.intersection(viewport)
+        guard !visible.isNull, visible.width >= 60, visible.height >= 60 else { return nil }
+        return visible
+    }
+}
+
+/// Two stationary first-entry annotations over the actual Feed. The material
+/// samples the live page through a cutout; it does not copy cards or scroll.
+struct NUXFeedIntroduction: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.astirBrandMode) private var brand
+    @State private var hasStarted = false
+    @State private var focus: NUXFeedFocus?
+    @State private var latestTargets: [WalkthroughTargetID: CGRect] = [:]
+    let targets: [WalkthroughTargetID: CGRect]
+    let size: CGSize
+    let safeTop: CGFloat
+    let finish: () -> Void
+
+    private var ink: Color { brand.prefersDarkInterface ? .white : .black }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if let focus, let frame = focus.visibleFrame(in: latestTargets, size: size, safeTop: safeTop) {
+                NUXFeedBackdropBlur()
+                    .mask {
+                        NUXFeedSpotlightCutout(frame: frame.insetBy(dx: -3, dy: -3))
+                            .fill(.black, style: FillStyle(eoFill: true))
+                    }
+                    .accessibilityHidden(true)
+                annotation(focus, frame: frame)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+        .onChange(of: targets, initial: true) { _, value in latestTargets = value }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else {
+                if hasStarted { focus = nil; finish() }
+                return
+            }
+            guard !hasStarted else { return }
+            hasStarted = true
+            do {
+                try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.arrivalMilliseconds))
+                // Allow the initial local/remote layout to settle. Missing or
+                // offscreen tiles are skipped; never spotlight a loading shell.
+                for _ in 0..<(NUXFeedIntroductionTiming.readinessMilliseconds / 50) {
+                    if NUXFeedFocus.allCases.allSatisfy({ $0.visibleFrame(in: latestTargets, size: size, safeTop: safeTop) != nil }) { break }
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                let available = NUXFeedFocus.allCases.filter {
+                    $0.visibleFrame(in: latestTargets, size: size, safeTop: safeTop) != nil
+                }
+                for (index, beat) in available.enumerated() {
+                    setFocus(beat)
+                    if FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture {
+                        #if DEBUG
+                        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedRecent") {
+                            setFocus(available.last)
+                        }
+                        #endif
+                        return
+                    }
+                    try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.focusMilliseconds))
+                    setFocus(nil)
+                    try await Task.sleep(for: .milliseconds(index == available.count - 1
+                        ? NUXFeedIntroductionTiming.exitMilliseconds : NUXFeedIntroductionTiming.clearMilliseconds))
+                }
+                finish()
+            } catch {
+                focus = nil
+            }
+        }
+        .onDisappear { focus = nil }
+    }
+
+    private func setFocus(_ value: NUXFeedFocus?) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { focus = value }
+    }
+
+    private func annotation(_ focus: NUXFeedFocus, frame: CGRect) -> some View {
+        let beside = focus == .circle && size.width - frame.maxX > 135
+        let width = beside ? min(180, size.width - frame.maxX - 24) : min(320, size.width - 40)
+        let x = beside ? frame.maxX + 12 + width / 2 : size.width / 2
+        let y = beside ? frame.midY - 12 : max(safeTop + 135, frame.minY - 72)
+        let start = beside ? CGPoint(x: x - width / 2 + 8, y: y + 38) : CGPoint(x: x, y: y + 38)
+        let end = beside ? CGPoint(x: frame.maxX + 5, y: frame.midY + 28) : CGPoint(x: frame.midX, y: frame.minY - 8)
+        return ZStack(alignment: .topLeading) {
+            NUXHandDrawnOval()
+                .stroke(ink, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                .frame(width: frame.width + 12, height: frame.height + 12)
+                .position(x: frame.midX, y: frame.midY)
+                .accessibilityHidden(true)
+            NUXHandDrawnArrow(start: start, end: end, bend: beside ? -12 : 20)
+                .stroke(ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .accessibilityHidden(true)
+            Text(focus.message)
+                .font(.custom("Noteworthy-Bold", size: 20, relativeTo: .title3))
+                .foregroundStyle(ink)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: width)
+                .rotationEffect(.degrees(-3))
+                .position(x: x, y: y)
+                .accessibilityLabel(focus.message.replacingOccurrences(of: "\n", with: " "))
+                .accessibilityIdentifier("walkthrough.feed.feedActivity.\(focus.rawValue)")
+        }
+        .shadow(color: brand.background.opacity(0.95), radius: 2)
+    }
+}
+
+private struct NUXFeedSpotlightCutout: Shape {
+    let frame: CGRect
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path(rect)
+        path.addRoundedRect(in: frame, cornerSize: CGSize(width: 20, height: 20))
+        return path
+    }
+}
+
+/// Keep effect-view alpha at one: reducing alpha washes out the page instead
+/// of producing the intended moderate backdrop blur.
+private struct NUXFeedBackdropBlur: UIViewRepresentable {
+    final class Coordinator {
+        var animator: UIViewPropertyAnimator?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let view = UIVisualEffectView(effect: nil)
+        view.isUserInteractionEnabled = false
+        let animator = UIViewPropertyAnimator(duration: 1, curve: .linear) {
+            view.effect = UIBlurEffect(style: .systemUltraThinMaterial)
+        }
+        animator.pausesOnCompletion = true
+        animator.fractionComplete = 0.35
+        // Retain the interpolation while this short-lived spotlight is visible.
+        // Finishing at .current resets UIKit's backdrop effect to no blur.
+        context.coordinator.animator = animator
+        return view
+    }
+
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: UIVisualEffectView, coordinator: Coordinator) {
+        coordinator.animator?.stopAnimation(true)
+        coordinator.animator = nil
+        uiView.effect = nil
     }
 }
 

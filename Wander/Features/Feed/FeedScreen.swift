@@ -18,8 +18,6 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
-    @State private var playedNUXRevealGeneration: Int?
-    @State private var didInterruptNUXReveal = false
     @State private var selectedSurface: FeedSurface
     @State private var hasMountedPeopleSurface: Bool
     @State private var peopleQuery = ""
@@ -306,7 +304,7 @@ struct FeedScreen: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
-                .id("nux.feed.top")
+                .walkthroughTarget(.feedActivity)
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
             .astirScrollTracking(
@@ -319,37 +317,10 @@ struct FeedScreen: View {
             }
             .accessibilityIdentifier("feed.places.scroll")
             .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
-                didInterruptNUXReveal = true
-                walkthroughs.isRevealingFeed = false
-            })
-            .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(page?.activity.count ?? 0)-\(walkthroughs.reviewPlaybackGeneration)-\(scenePhase)-\(reduceMotion)") {
-                guard scenePhase == .active,
-                      walkthroughs.currentStep?.target == .feedActivity,
-                      NUXFeedRevealPolicy.isEnabled,
-                      playedNUXRevealGeneration != walkthroughs.reviewPlaybackGeneration,
-                      !reduceMotion, !UIAccessibility.isVoiceOverRunning,
-                      !ProcessInfo.processInfo.arguments.contains("-WanderDisableFeedReveal") else { return }
-                let ids = Array(FeedPresentation.groupedActivity(page?.activity ?? []).prefix(20).map(\.id))
-                guard ids.count > 1 else { return }
-                playedNUXRevealGeneration = walkthroughs.reviewPlaybackGeneration
-                didInterruptNUXReveal = false
-                walkthroughs.isRevealingFeed = true
-                defer { walkthroughs.isRevealingFeed = false }
-                for (index, id) in ids.enumerated() {
-                    guard !Task.isCancelled, !didInterruptNUXReveal,
-                          walkthroughs.currentStep?.target == .feedActivity else { return }
-                    let progress = Double(index) / Double(max(1, ids.count - 1))
-                    let duration = 0.09 + 0.36 * progress * progress
-                    withAnimation(.easeInOut(duration: duration)) { proxy.scrollTo(id, anchor: .top) }
-                    try? await Task.sleep(for: .seconds(duration + 0.04))
+                if walkthroughs.currentStep?.target == .feedActivity {
+                    walkthroughs.dismissCurrentContext()
                 }
-                guard !Task.isCancelled, !didInterruptNUXReveal else { return }
-                // Return to the full content inset, not the first card beneath
-                // the floating header, so the settled Feed stays readable.
-                withAnimation(.easeInOut(duration: 0.7)) { proxy.scrollTo("nux.feed.top", anchor: .top) }
-                try? await Task.sleep(for: .milliseconds(800))
-            }
-            .onDisappear { walkthroughs.isRevealingFeed = false }
+            })
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await refresh()
@@ -510,38 +481,55 @@ struct FeedScreen: View {
                 openProfile: openProfile,
                 follow: follow
             )
-            .walkthroughTarget(.feedActivity)
 
         }
     }
 
+    private var feedPeopleRecommendations: [DiscoverPeopleRecommendation] {
+        #if DEBUG
+        // Explicit, local-only review fixture; use the existing native cards.
+        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedFixture"),
+           ProcessInfo.processInfo.arguments.contains("-WanderUseDemoFixtures") {
+            return ["user_ryan", "user_maya"].enumerated().compactMap { index, id in
+                guard let profile = store.profile(for: id) else { return nil }
+                return DiscoverPeopleRecommendation(profile: store.shell(for: profile),
+                                                    reason: .sharedFollows(3), rank: index)
+            }
+        }
+        #endif
+        return store.visibleDiscoverPeopleRecommendations
+    }
+
     @ViewBuilder
     private var peopleRail: some View {
-        switch store.discoverPeopleRecommendationsState {
-        case .loaded where !store.visibleDiscoverPeopleRecommendations.isEmpty:
+        if !feedPeopleRecommendations.isEmpty {
             PeopleRecommendationShelf(
-                recommendations: store.visibleDiscoverPeopleRecommendations,
+                recommendations: feedPeopleRecommendations,
                 isFollowing: { store.hasAcknowledgedFollow(to: $0) },
                 isFollowInFlight: { followingProfileIDs.contains($0) },
                 didFollowFail: { followFailedProfileIDs.contains($0) },
                 open: { openProfile($0.profile) },
-                follow: follow
+                follow: follow,
+                walkthroughProfileID: feedPeopleRecommendations.first?.id
             )
-        case .idle, .loading:
-            if auth.isSignedIn {
-                PeopleRecommendationLoadingShelf()
-            }
-        case .failed:
-            FeedRetryRow(
-                title: "Suggestions couldn't load",
-                subtitle: "Your feed can still load below.",
-                actionTitle: "Try again",
-                retry: {
-                    await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+        } else {
+            switch store.discoverPeopleRecommendationsState {
+            case .idle, .loading:
+                if auth.isSignedIn {
+                    PeopleRecommendationLoadingShelf()
                 }
-            )
-        case .loaded:
-            EmptyView()
+            case .failed:
+                FeedRetryRow(
+                    title: "Suggestions couldn't load",
+                    subtitle: "Your feed can still load below.",
+                    actionTitle: "Try again",
+                    retry: {
+                        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+                    }
+                )
+            case .loaded:
+                EmptyView()
+            }
         }
     }
 
@@ -1644,7 +1632,7 @@ private struct FeedActivityList: View {
                 )
                 .id(group.id)
                 .walkthroughTarget(
-                    group.id == groups.first?.id ? .feedActivity : nil
+                    group.id == groups.first?.id ? .feedRecent : nil
                 )
             }
         }

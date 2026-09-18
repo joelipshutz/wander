@@ -808,20 +808,44 @@ final class OnboardingUITests: XCTestCase {
 
     func testFeedHintEndsOnFeedWithoutOpeningDiscoverOrInvites() {
         let app = XCUIApplication()
-        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "feedActivity"]
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity"]
         app.launch()
-        let coach = app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
-        XCTAssertTrue(coach.waitForExistence(timeout: 18))
-        captureNUX("C02")
-        let recent = app.staticTexts["Recent"]
-        let switcher = app.descendants(matching: .any)["feed.surfaceSwitch"]
-        XCTAssertGreaterThanOrEqual(recent.frame.minY, switcher.frame.maxY,
-                                    "The reveal must return above the first card, clear of the floating header.")
-        app.buttons["walkthrough.next.feed.feedActivity"].tap()
-        XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
+        let annotation = app.staticTexts["walkthrough.feed.feedActivity.circle"]
+        XCTAssertTrue(app.buttons["Feed"].waitForExistence(timeout: 20))
+        // A cold launch may finish its first short beat before XCTest attaches.
+        // The sequence test below checks both beats; this checks the usable end state.
+        XCTAssertTrue(annotation.waitForNonExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 6))
+        XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
+        XCTAssertTrue(app.buttons["people.recommendation.user_ryan.profile"].isHittable)
+        app.buttons["Map"].tap()
+        app.buttons["Feed"].tap()
+        XCTAssertFalse(annotation.exists)
+        XCTAssertFalse(app.staticTexts["walkthrough.feed.feedActivity.recent"].exists)
         XCTAssertTrue(app.buttons["Feed"].isSelected)
         XCTAssertFalse(app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"].exists)
         XCTAssertFalse(app.buttons["invite.primaryAction"].exists)
+    }
+
+    func testFeedIntroductionFocusesTwoTilesWithoutScrollingAndDoesNotRepeat() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity"]
+        app.launch()
+        let circle = app.staticTexts["walkthrough.feed.feedActivity.circle"]
+        let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
+        XCTAssertTrue(circle.waitForExistence(timeout: 20))
+        let headingY = app.staticTexts["Recent"].frame.minY
+        XCTAssertTrue(recent.waitForExistence(timeout: 6))
+        XCTAssertFalse(circle.exists)
+        captureNUX("C02-recent")
+        XCTAssertEqual(app.staticTexts["Recent"].frame.minY, headingY, accuracy: 2,
+                       "The Feed introduction must not move the page.")
+        XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
+        XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
+        app.buttons["Map"].tap()
+        app.buttons["Feed"].tap()
+        XCTAssertFalse(circle.exists)
+        XCTAssertFalse(recent.exists)
     }
 
     func testListsHintEndsOnListsWithoutStartingAnotherTour() {
@@ -899,7 +923,7 @@ final class OnboardingUITests: XCTestCase {
 
     private var nativeOverviewArguments: [String] {
         ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderUseDemoFixtures",
-         "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs", "-WanderNUXFeedReveal"]
+         "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs"]
     }
 
     func testMapMoreSectionsAndResetFollowTheActiveSource() {

@@ -5407,11 +5407,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(
             feed.components(separatedBy: ".walkthroughTarget(.feedActivity)").count - 1,
             1,
-            "The empty Feed state must provide a stable activity walkthrough target."
+            "The Feed content must provide one stable introduction anchor, including empty/loading states."
         )
         XCTAssertTrue(
-            feed.contains("group.id == groups.first?.id ? .feedActivity : nil"),
-            "The first displayed activity group must remain the Feed walkthrough target."
+            feed.contains("group.id == groups.first?.id ? .feedRecent : nil"),
+            "The first displayed activity group must supply the recent-tile focus target."
         )
         XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
 

@@ -1,35 +1,37 @@
 # Native verification and restart
 
-## Current evidence — September 17–18, 2026
+## Current evidence — September 18, stationary Feed revision
 
-The native review builds on `codex/rec-529-nux-playthrough` in
-`/private/tmp/wander-pr663`. Xcode's Branch Chooser was verified on that branch.
-This is a draft design review, not a production release gate.
+Branch `codex/rec-529-nux-playthrough`, worktree `/private/tmp/wander-pr663`.
+The temporary worktree was restored from its pushed commit before this revision.
 
-- `xcodegen generate` and the revised Simulator build passed.
-- The complete unit target ran: **2,050 of 2,052 tests passed**. The two existing
-  performance gates remain failed: trusted search p95 **53.45 ms** against
-  **50 ms**, and the high-data fixture **0.834 s** against **0.750 s**. No
-  threshold was relaxed and no clean baseline comparison is claimed.
-- **35 walkthrough unit tests passed**, including account-scoped one-time
-  consumption after the new profile introduction and the selected five-second
-  original-quote finale.
-- All **seven revised focused UI checks passed across runs**: real Check In
-  during focus, automatic focus completion without repeat on reopening, full/
-  automatic Map tour, More selection/scroll, and Feed dismissal. The final run
-  passed all three repeat-visit and More checks. The first repeat-visit test
-  incorrectly expected the Map-hosted editor to close into the full profile;
-  it now follows the actual compact-card return and reopens that profile before
-  verifying the lesson stays consumed.
-- The earlier review's ten NUX checks passed across focused runs. These results
-  do not replace the remaining broad UI gate. **No complete UI-suite pass is
-  claimed.**
+- XcodeGen and Simulator build passed on Xcode 26.6 / iOS 26.5.
+- The complete unit target passed **2,054 / 2,054 tests**, including both prior
+  performance gates, without relaxed thresholds. No clean baseline comparison
+  is claimed; these results describe this run.
+- **37 walkthrough unit tests passed**. New coverage checks the single Feed
+  lesson's persisted consumption, 5.65–6-second budget, and missing/offscreen/tall
+  card handling. C04 now asserts 3.5-second focus and a 1.4-second glimmer.
+- All **four affected UI checks passed**: Feed focus sequence without scrolling,
+  Feed departure/re-entry without a repeat, real Check In during held focus,
+  and automatic place focus completion with no repeat after reopening.
+- The first run found a source-contract assertion tied to the former Feed
+  anchor. It was updated to the actual recent-card focus target; the complete
+  unit rerun above passed. Visual review rejected an attempted UIKit animation
+  cleanup that cleared the blur. The final implementation retains the moderate
+  interpolation only while a spotlight is mounted and releases it on removal.
+  The final 38 focused unit/contract checks and two-beat Feed UI test passed.
+  A cold-launch end-state test initially missed the short first beat before
+  XCTest attached; it now checks the usable final state, while the sequence
+  test verifies both beats and unchanged scroll position. Its rerun passed.
+- Earlier Map and other contextual checks remain recorded in prior commits.
+  **No complete UI-suite pass is claimed.** Before production merge, reconcile
+  latest main and run the full integration/device gate.
 
-Only iOS **26.5** was installed here. The repository's iPhone 16 Plus / iOS 18.6
-command could not be used. Dedicated iPhone 17 Pro and smaller iPhone 17e devices
-were used, without changing other tasks' devices. Native light/dark captures,
-compact captures, and a large-text C04 spot check are available. Full physical
-VoiceOver/Reduce Motion and device-feature acceptance remain open.
+The dedicated current iPhone 17 Pro and smaller iPhone 17e use iOS 26.5. The
+repository's iPhone 16 Plus / iOS 18.6 runtime is not installed. Light/dark and
+compact captures are reviewed separately; a full physical VoiceOver/Reduce
+Motion and device-feature acceptance pass remains open.
 
 ## Review media
 
@@ -37,21 +39,22 @@ The local package is
 `/Users/ryanlieblein/Developer/wander/outputs/pr663-native-nux/`:
 
 - `REVIEW.md`: scene-by-scene capture index and review choices.
-- `revision-2/videos/map-tour-approved.mp4`: selected slide/fade Map tour,
+- `revision-3/videos/feed-focus-light.mp4`: stationary people focus, brief clear
+  interval, recent activity focus, then normal Feed. The old scroll is removed.
+- `revision-3/videos/place-focus-glimmer-light.mp4`: 3.5-second profile focus and
+  one 1.4-second diagonal glimmer on each real floating button.
+- `revision-3/screens/`: current light/dark and smaller-phone Feed focus stills.
+- `revision-2/videos/map-tour-approved.mp4`: unchanged selected Map tour,
   dropdown-only More trim and five-second original quote with Enjoy.
-- `revision-2/videos/place-focus-glimmer-light.mp4`: real profile arrival,
-  three-second moderate blur with static annotations, one diagonal sweep across
-  both sharp floating controls, then normal profile.
-- `revision-2/videos/optional-feed-reveal.mp4`: the optional reveal through
-  available fixture activity, return to the top, explanation and usable Feed.
-- `revision-2/screens/`: light/dark profile focus and current/compact native stills.
-  The earlier videos/stills remain as explicitly superseded review history.
+- Earlier Feed scroll and shorter profile captures are explicitly historical.
 
 These are recordings of the running SwiftUI app using local fixtures. Only
 launch wait and idle tail were trimmed. Simulator timing is not a physical
 performance benchmark. Some compact XCTest shots capture a coach entering or
 MapKit tiles loading; settled stills are identified in the capture index.
-Feed uses the available fixture groups and retains native loading states.
+The explicit Feed review fixture uses the existing local Ryan/Maya profiles in
+the real recommendation cards. Ordinary accounts use available real tiles.
+Missing/offscreen targets are skipped, with no automatic scrolling or fake activity.
 The displayed fixture lists do not define the proposed starter-list policy.
 Media stays outside Git to keep the code review small.
 
@@ -78,6 +81,7 @@ xcodebuild test -project Wander.xcodeproj -scheme Wander \
   -only-testing:WanderUITests/OnboardingUITests/testMoreFilterInteractionExitsDemoAndKeepsTheChoice \
   -only-testing:WanderUITests/OnboardingUITests/testPlusRemainsVoluntaryAndDoesNotStartForcedSave \
   -only-testing:WanderUITests/OnboardingUITests/testFeedHintEndsOnFeedWithoutOpeningDiscoverOrInvites \
+  -only-testing:WanderUITests/OnboardingUITests/testFeedIntroductionFocusesTwoTilesWithoutScrollingAndDoesNotRepeat \
   -only-testing:WanderUITests/OnboardingUITests/testListsHintEndsOnListsWithoutStartingAnotherTour \
   -only-testing:WanderUITests/OnboardingUITests/testNativeCheckInWannaAnnotationLeavesActionsUsable \
   -only-testing:WanderUITests/OnboardingUITests/testPlaceIntroductionAutomaticallyFinishesAndDoesNotReturnAfterEditor \
@@ -86,14 +90,14 @@ xcodebuild test -project Wander.xcodeproj -scheme Wander \
 
 To run the complete unit target, use `-only-testing:WanderTests`. For the full
 project gate, remove all `-only-testing` arguments. Before production merge,
-reconcile latest `origin/main`, rerun the complete gate, and resolve the two
-performance failures or establish and document their cause.
+reconcile latest `origin/main` and rerun the complete gate, including the
+performance budgets on that integrated candidate.
 
-Latest evidence: `/private/tmp/pr663-r2-tests.xcresult` (complete unit target and
-seven revised UI checks) and `/private/tmp/pr663-r2-final-ui.xcresult` (final
-More trim and repeat-visit checks). Earlier evidence remains in the
-`/private/tmp/pr663-*-tests.xcresult` and `pr663-final-ui.xcresult` bundles.
-Earlier failure attachments are retained; screenshots alone are not test passes.
+Latest evidence: `/private/tmp/pr663-r3-final-tests.xcresult` (2,054 unit tests
+and four affected UI checks), `/private/tmp/pr663-r3-delivery-tests.xcresult`
+(final 38 unit/contract checks and Feed sequence), and
+`/private/tmp/pr663-r3-endstate-tests.xcresult` (cold-launch end-state check). `/private/tmp/pr663-r3-tests.xcresult` retains the
+initial obsolete source-contract failure; it is not counted as a passing run.
 
 ## Launch the native review
 
@@ -103,7 +107,7 @@ on the review device, then launch with:
 ```text
 -WanderAuthenticatedUITest -WanderMapCapture -WanderUseDemoFixtures
 -WanderEnableWalkthroughs -WanderResetWalkthroughs
--WanderPlaceProfileSaveTrayV1 -WanderNUXReview -WanderNUXFeedReveal
+-WanderPlaceProfileSaveTrayV1 -WanderNUXReview -WanderNUXFeedFixture
 ```
 
 This mode uses local fixtures and no live account. The native **Scenes** menu
@@ -125,10 +129,11 @@ only for deterministic capture, and the real floating actions still work.
 For a clean C04 recording without review controls, use the fixture launch args,
 `-WanderWalkthroughTarget placeSaveActions -WanderMapPlace 'Bar Nido'
 -WanderMapSheetExpanded`; omit `-WanderNUXReview` and the hold argument.
-For the optional Feed reveal, use `-WanderNUXFeedReveal
--WanderWalkthroughTarget feedActivity` without hold. `-WanderDisableFeedReveal`
-disables that experiment.
+For the stationary Feed recording, use `-WanderNUXFeedFixture
+-WanderWalkthroughTarget feedActivity` without hold or review controls. For a
+still of the second beat, add `-WanderHoldWalkthroughStep -WanderNUXFeedRecent`.
+The former Feed-reveal forcing/disable arguments no longer control behavior.
 
-Next review action: inspect the revised focus/glimmer and optional Feed recording.
+Next review action: inspect the two-stage Feed focus and longer C04 recording.
 Starter lists will be entered later. N27 device motion and N28/N29 notification
 policy remain separate follow-ups described in the brief.

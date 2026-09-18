@@ -1,5 +1,13 @@
 # NUX: a quick introduction, then help when you need it
 
+**Latest September 18 revision:** remove the Feed scroll experiment. C02 now
+focuses a real people tile (“Connect with your circle”), clears briefly, then
+focuses a visible recent activity tile (“Keep up with the happenings of your
+people”). The stationary two-stage lesson takes 5.65 seconds once targets are
+ready, only on first entry. C04 focus is extended to 3.5 seconds and its one
+button glimmer to 1.4 seconds. These supersede the earlier Feed and C04 timing
+references preserved below. Starter-list entry remains deferred.
+
 Joe + Ryan · September 16 transcript · rechecked September 17
 
 **The brief:** demonstrate the Map quickly, leave people on a usable Map, and introduce other surfaces when they choose to open them. Native Swift throughout. The long required save-form lesson is removed.

@@ -2121,6 +2121,7 @@ struct PeopleRecommendationShelf: View {
     let didFollowFail: (String) -> Bool
     let open: (DiscoverPeopleRecommendation) -> Void
     let follow: (DiscoverPeopleRecommendation) -> Void
+    var walkthroughProfileID: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
@@ -2137,6 +2138,7 @@ struct PeopleRecommendationShelf: View {
                             open: { open(recommendation) },
                             follow: { follow(recommendation) }
                         )
+                        .walkthroughTarget(recommendation.id == walkthroughProfileID ? .feedCircle : nil)
                     }
                 }
                 .padding(.vertical, WanderTheme.spacing1)

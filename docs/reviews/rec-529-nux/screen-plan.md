@@ -1,5 +1,13 @@
 # Astir · Post-onboarding NUX plan
 
+**Latest September 18 revision:** remove the Feed scroll experiment. C02 now
+focuses a real people tile (“Connect with your circle”), clears briefly, then
+focuses a visible recent activity tile (“Keep up with the happenings of your
+people”). The stationary two-stage lesson takes 5.65 seconds once targets are
+ready, only on first entry. C04 focus is extended to 3.5 seconds and its one
+button glimmer to 1.4 seconds. These supersede the earlier Feed and C04 timing
+references preserved below. Starter-list entry remains deferred.
+
 Prepared September 17, 2026 from **REC-529 Native onboarding review**, Joe + Ryan's September 16 recordings, the original numbered screen archive, and the existing task ledger. This pass starts after signup/profile/permission screens, at the first Map visit.
 
 **Direction:** a short, animated Map demonstration → a connection-focused ending over that Map → a usable app. Feed, Lists, Plus and place-profile guidance appear when the person chooses those surfaces.
