@@ -1933,6 +1933,7 @@ struct MapScreen: View {
             ZStack(alignment: .bottom) {
                 NativeMapView(
                     attributionBottomClearance: mapSearchDockClearance,
+                    isInteractionEnabled: hasRevealedInitialMap,
                     annotations: nativeAnnotations,
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
@@ -2236,16 +2237,18 @@ struct MapScreen: View {
                         compactCardPhase == .entering || compactCardPhase == .presented
                     )
                     .accessibilityHidden(compactCardPhase == .hidden)
-
+            }
+            .background(astirBrandMode.background)
+            .allowsHitTesting(hasRevealedInitialMap)
+            .accessibilityHidden(!hasRevealedInitialMap)
+            .overlay {
                 if !hasRevealedInitialMap {
                     OnboardingLaunchView()
                         .accessibilityIdentifier("map.initialLoading")
                         .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
-                        .zIndex(100)
                 }
             }
-            .background(astirBrandMode.background)
             .toolbar(hasRevealedInitialMap ? .visible : .hidden, for: .tabBar)
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
@@ -6469,6 +6472,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 /// large animated SwiftUI view tree alive over the map renderer.
 private struct NativeMapView: UIViewRepresentable {
     let attributionBottomClearance: CGFloat
+    let isInteractionEnabled: Bool
     let annotations: [NativeMapAnnotationDescriptor]
     let cameraRequest: NativeMapCameraRequest
     let nativeFeatureClearRevision: UInt64
@@ -6563,6 +6567,8 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            mapView.isUserInteractionEnabled = parent.isInteractionEnabled
+            mapView.accessibilityElementsHidden = !parent.isInteractionEnabled
             if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
                 mapView.layoutMargins = UIEdgeInsets(
                     top: 0, left: 0, bottom: parent.attributionBottomClearance + 10, right: 0
