@@ -64,6 +64,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             []
         )
         XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.events]?.map(\.target),
+            []
+        )
+        XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.placeDetail]?.map(\.target),
             [.placeRatings, .placeActions, .placeHistory]
         )
@@ -191,7 +195,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(step.title, "Your places, all connected")
         XCTAssertEqual(
             step.message,
-            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember"
+            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember. Events is coming soon"
         )
     }
 

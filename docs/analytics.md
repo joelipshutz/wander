@@ -61,6 +61,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 
 | Event | When it fires | Allowed product properties |
 |---|---|---|
+| `app_surface_viewed` | A native tab becomes selected, after yielding to its first render | coarse `surface`: `map`, `discover` (Feed), `events`, `lists`, or `profile`; Events remains a coming-soon teaser |
 | `app_first_opened` | First launch after the install-local marker is introduced | `acquisition_source` |
 | `app_session_started` | Cold launch or foreground return after the app refresh grace period | `session_source` |
 | `acquisition_link_opened` | Universal/custom link enters the app | sanitized `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`; coarse `route`; `has_campaign` |
