@@ -182,7 +182,11 @@ private struct OnboardingIdentityView: View {
     }
 
     private var draft: ProfileIdentityDraft {
-        ProfileIdentityDraft(displayName: name, handle: handle)
+        ProfileIdentityDraft(
+            displayName: name,
+            handle: handle,
+            usesAppleSignIn: session.isAppleSignIn == true
+        )
     }
 
     private var canSubmit: Bool {
@@ -210,6 +214,13 @@ private struct OnboardingIdentityView: View {
         OnboardingStepScaffold(step: .identity) {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                    if session.isAppleSignIn == true {
+                        OnboardingHeadline(
+                            eyebrow: "",
+                            title: "Choose your username",
+                            message: "This is how friends find you on Astir."
+                        )
+                    }
                     HStack(spacing: WanderTheme.spacing4) {
                         PhotosPicker(selection: $selectedPhoto, matching: .images) {
                             ZStack(alignment: .bottomTrailing) {
@@ -252,13 +263,16 @@ private struct OnboardingIdentityView: View {
                     }
 
                     VStack(spacing: WanderTheme.spacing3) {
-                        OnboardingTextField(
-                            title: "Name",
-                            prompt: "How friends know you",
-                            text: $name,
-                            capitalization: .words
-                        )
-                        .focused($focusedField, equals: .name)
+                        if session.isAppleSignIn != true {
+                            OnboardingTextField(
+                                title: "Name",
+                                prompt: "How friends know you",
+                                text: $name,
+                                capitalization: .words
+                            )
+                            .focused($focusedField, equals: .name)
+                            .accessibilityIdentifier("onboarding.identity.name")
+                        }
 
                         VStack(alignment: .leading, spacing: 6) {
                             OnboardingTextField(
@@ -270,6 +284,7 @@ private struct OnboardingIdentityView: View {
                                 autocorrectionDisabled: true
                             )
                             .focused($focusedField, equals: .handle)
+                            .accessibilityIdentifier("onboarding.identity.username")
 
                             HStack(spacing: 6) {
                                 switch availability {
@@ -964,10 +979,12 @@ struct OnboardingHeadline: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(eyebrow)
-                .font(AstirTypography.metadata)
-                .tracking(1.4)
-                .foregroundStyle(brandMode.accentText)
+            if !eyebrow.isEmpty {
+                Text(eyebrow)
+                    .font(AstirTypography.metadata)
+                    .tracking(1.4)
+                    .foregroundStyle(brandMode.accentText)
+            }
             Text(title)
                 .font(AstirTypography.screenTitle)
                 .lineSpacing(-2)

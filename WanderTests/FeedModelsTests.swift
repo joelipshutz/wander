@@ -4,6 +4,13 @@ import XCTest
 final class FeedModelsTests: XCTestCase {
     private let groupingNow = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func testCompactPeopleReasonsPreserveRelationshipMeaning() {
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.followsYou.compactDisplayText, "Follows you")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(1).compactDisplayText, "Followed by 1 person you follow")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(3).compactDisplayText, "Followed by 3 people you follow")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.suggested.compactDisplayText, "Suggested by Astir")
+    }
+
     func testGroupsNearbyActionsChronologicallyWithCheckInAsHeadline() throws {
         let events = [groupingEvent("list", .listItemAdded, 240),
                       groupingEvent("wanna", .placeWannaGo, 0),

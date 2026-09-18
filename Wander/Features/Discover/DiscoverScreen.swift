@@ -2146,6 +2146,42 @@ struct PeopleRecommendationShelf: View {
     }
 }
 
+struct PeopleRecommendationLoadingShelf: View {
+    @Environment(\.astirBrandMode) private var brandMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            SectionTitle("People worth following")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        VStack(spacing: 8) {
+                            Circle().fill(brandMode.recessedBackground)
+                                .frame(width: 48, height: 48)
+                            Capsule().fill(brandMode.recessedBackground)
+                                .frame(width: 108, height: 16)
+                            Capsule().fill(brandMode.recessedBackground)
+                                .frame(width: 136, height: 12)
+                            Spacer(minLength: 0)
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                                .fill(brandMode.recessedBackground)
+                                .frame(height: 44)
+                        }
+                        .padding(WanderTheme.spacing3)
+                        .frame(width: 184, height: 188)
+                        .background(brandMode.raisedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                }
+                .padding(.vertical, WanderTheme.spacing1)
+            }
+            .discoverSearchRailBleed()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Finding people worth following")
+    }
+}
+
 private extension View {
     func discoverSearchRailBleed() -> some View {
         contentMargins(
@@ -2157,8 +2193,10 @@ private extension View {
     }
 }
 
-private struct PeopleRecommendationCard: View {
+struct PeopleRecommendationCard: View {
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var followFeedbackTrigger = 0
     let recommendation: DiscoverPeopleRecommendation
     let isFollowing: Bool
     let isFollowInFlight: Bool
@@ -2167,83 +2205,65 @@ private struct PeopleRecommendationCard: View {
     let follow: () -> Void
 
     private var profile: ProfileShell { recommendation.profile }
-
-    private var bioText: String {
-        guard let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty else {
-            return "Follow to see the places they choose to share."
-        }
-        return bio
-    }
+    private var showsFollowing: Bool { isFollowing || isFollowInFlight }
 
     var body: some View {
-        VStack(spacing: WanderTheme.spacing2) {
+        VStack(spacing: 0) {
             Button(action: open) {
-                VStack(spacing: WanderTheme.spacing2) {
+                VStack(spacing: 6) {
                     WanderAvatar(
                         initials: String(profile.displayName.prefix(1)),
                         avatarURL: profile.avatarURL,
-                        size: 52,
+                        size: 48,
                         color: WanderTheme.pinSocial.color
                     )
 
                     Text(profile.displayName)
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-
-                    Text("@\(profile.handle)")
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Open \(profile.displayName)'s profile")
+            .accessibilityIdentifier("people.recommendation.\(profile.id).profile")
 
-            Text(recommendation.reason.displayText(for: profile))
-                .font(AstirTypography.metadata)
-                .foregroundStyle(brandMode.accentText)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(minHeight: 28, alignment: .top)
-
-            Text(bioText)
+            Text(recommendation.reason.compactDisplayText)
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(minHeight: 32, alignment: .top)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 28, alignment: .top)
+                .padding(.top, 4)
+                .accessibilityLabel(recommendation.reason.displayText(for: profile))
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 10)
 
-            Button(action: follow) {
-                Group {
-                    if isFollowInFlight {
-                        ProgressView()
-                            .tint(brandMode.accentForeground)
-                    } else {
-                        Text(isFollowing ? "Following" : "Follow")
-                    }
-                }
+            Button {
+                followFeedbackTrigger += 1
+                follow()
+            } label: {
+                Text(showsFollowing ? "Following" : didFollowFail ? "Try again" : "Follow")
                 .font(AstirTypography.label)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
-            .background(isFollowing ? brandMode.recessedBackground : brandMode.accent)
+            .foregroundStyle(showsFollowing ? brandMode.primaryText : brandMode.accentForeground)
+            .background(showsFollowing ? brandMode.recessedBackground : brandMode.accent)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-            .disabled(isFollowing || isFollowInFlight)
-            .accessibilityLabel(isFollowInFlight ? "Following \(profile.displayName)" : (isFollowing ? "Following \(profile.displayName)" : "Follow \(profile.displayName)"))
-
-            if didFollowFail {
-                Text("Couldn't follow. Try again.")
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(WanderTheme.stateError.color)
-                    .multilineTextAlignment(.center)
-            }
+            .disabled(showsFollowing)
+            .sensoryFeedback(.impact(weight: .medium, intensity: 1), trigger: followFeedbackTrigger)
+            .accessibilityLabel(showsFollowing ? "Following \(profile.displayName)" : didFollowFail ? "Couldn't follow \(profile.displayName). Try again" : "Follow \(profile.displayName)")
+            .accessibilityIdentifier("people.recommendation.\(profile.id).follow")
         }
         .padding(WanderTheme.spacing3)
-        .frame(width: 172)
-        .frame(minHeight: 238)
+        .frame(width: dynamicTypeSize.isAccessibilitySize ? 240 : 184)
+        .frame(minHeight: 188)
         .background(brandMode.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .overlay {

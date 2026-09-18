@@ -48,6 +48,15 @@ enum DiscoverPeopleRecommendationReason: Equatable {
     case sharedFollows(Int)
     case suggested
 
+    var compactDisplayText: String {
+        switch self {
+        case .followsYou: "Follows you"
+        case .sharedFollows(let count):
+            count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
+        case .suggested: "Suggested by Astir"
+        }
+    }
+
     func displayText(for profile: ProfileShell) -> String {
         switch self {
         case .followsYou:

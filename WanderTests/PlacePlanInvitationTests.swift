@@ -61,17 +61,43 @@ import XCTest
         }
         XCTAssertTrue(transport.bucket.isEmpty)
     }
+
+    func testRecipientInboxAndOpenUseAuthenticatedIDsWithoutLinkTokens() async throws {
+        let transport = InvitationReadTransport()
+        let payload = try JSONSerialization.jsonObject(with: transport.response)
+        let id = UUID()
+        transport.response = try JSONSerialization.data(withJSONObject: [[
+            "id": id.uuidString, "created_at": "2026-09-18T07:00:00Z", "read_at": NSNull(), "invitation": payload
+        ]])
+        let repository = SupabasePlacePlanInvitationRepository(rpc: transport, storage: transport)
+        let rows = try await repository.receivedInvitations()
+        XCTAssertEqual(transport.procedure, "received_place_plan_invitations")
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.id, id)
+        XCTAssertEqual(rows.first?.isUnread, true)
+        XCTAssertTrue(transport.token.isEmpty)
+        transport.response = try JSONSerialization.data(withJSONObject: payload)
+        let opened = try await repository.receivedInvitation(id: id)
+        XCTAssertEqual(transport.procedure, "open_received_place_plan_invitation")
+        XCTAssertEqual(transport.invitationID, id.uuidString)
+        XCTAssertEqual(opened, rows.first?.invitation)
+        transport.response = Data("null".utf8)
+        let unavailable = try await repository.receivedInvitation(id: id)
+        XCTAssertNil(unavailable)
+    }
 }
 
 @MainActor private final class InvitationReadTransport: RemoteProcedureCalling, RemoteStorageCalling {
     var procedure = ""
     var token = ""
+    var invitationID = ""
     var bucket = ""
     var response = Data(#"{"title":"Let’s go to Smoke Park together","place_name":"Smoke Park","location":"Los Angeles","sender_name":"Alex","sender_avatar_url":null,"message":"Coffee on Saturday?","connection":"Alex’s been and you wanna go","date_label":"Sep 20, 2026 at 10 AM","image_path":"user_fixture/11111111-2222-4333-8444-555555555555/preview.png"}"#.utf8)
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
         procedure = name
         let values = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(params))
         token = values["input_token"] ?? ""
+        invitationID = values["input_invitation_id"] ?? ""
         return try decoder.decode(Value.self, from: response)
     }
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {

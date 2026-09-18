@@ -1215,7 +1215,7 @@ final class MapHitTestingTests: XCTestCase {
         )
         let invalidation = map[invalidationStart.lowerBound..<invalidationEnd.lowerBound]
         XCTAssertTrue(invalidation.contains("deferredMapNavigationGate.invalidate()"))
-        XCTAssertTrue(invalidation.contains("didResolveInitialCamera = true"))
+        XCTAssertTrue(invalidation.contains("initialCameraState.resolve()"))
         XCTAssertTrue(invalidation.contains("case .place, .sharedVisit:"))
 
         for userIntentHandler in [
@@ -2841,7 +2841,8 @@ final class MapSelectionMotionTests: XCTestCase {
         )
         XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
         XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
-        XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
+        XCTAssertTrue(map.contains("MapLaunchLocationResolver().location()"))
+        XCTAssertTrue(map.contains("CoreLocationProvider(purpose: .map)"))
     }
 
     private func densityProfile() -> LocalProfile {
@@ -3950,7 +3951,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(socialOutline.arcs.map(\.trimTo), [0.472, 0.972])
         XCTAssertEqual(socialOutline.arcs.map(\.rotationDegrees), [-90, -90])
         XCTAssertEqual(socialOutline.arcs[0].dashPattern, [])
-        XCTAssertEqual(socialOutline.arcs[1].dashPattern, [1.5, 3.5])
+        XCTAssertEqual(socialOutline.arcs[1].dashPattern, [1.5, 5.5])
     }
 
     func testRyanBeenJoeBeenAndMayaWannaProducePersonalRingAndSplitSocialHalo() throws {
@@ -4007,7 +4008,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 24)
         XCTAssertEqual(MapPinVisualMetrics.outlineWidth, 3)
         XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
-        XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
+        XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 5.5])
         XCTAssertEqual(MapPinVisualMetrics.activeTitleClearance, 2)
         XCTAssertGreaterThanOrEqual(
             MapPinVisualMetrics.activeTitleVerticalOffset(

@@ -36,6 +36,20 @@ struct PlacePlanInvitationRoute: Identifiable {
     var id: String { token }
 }
 
+struct ReceivedPlacePlanInvitation: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let invitation: PlacePlanInvitation
+    let createdAt: Date
+    var readAt: Date?
+
+    var isUnread: Bool { readAt == nil }
+}
+
+enum PlacePlanInvitationSource: Hashable {
+    case link(String)
+    case notifications(UUID)
+}
+
 /// Public artwork uses a fixed layout so recipients can reuse its exact photo
 /// crop while drawing accessible, resizable title/date text without the View CTA.
 enum PlacePlanArtworkLayout {

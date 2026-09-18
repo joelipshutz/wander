@@ -115,6 +115,32 @@ enum MapSearchCorpusPolicy {
     }
 }
 
+/// A camera choice made after a location request starts wins over its late result.
+struct MapInitialCameraState {
+    private(set) var revision: UInt64 = 0
+    private(set) var isResolved = false
+
+    mutating func resolve() {
+        isResolved = true
+        revision &+= 1
+    }
+
+    mutating func reset() {
+        isResolved = false
+        revision &+= 1
+    }
+
+    func allowsLocationResult(for requestRevision: UInt64) -> Bool {
+        !isResolved && revision == requestRevision
+    }
+
+}
+
+private struct MapLocationActivation: Equatable {
+    let isActive: Bool
+    let authorizationStatus: CLAuthorizationStatus
+}
+
 enum MapInitialLoadingPolicy {
     static let defaultMinimumVisibleInterval: TimeInterval = 0.35
     static let postRevealHydrationDelay: TimeInterval = 0.25
@@ -1033,12 +1059,7 @@ struct MapPinRenderCatalog {
                }) {
                 places.append(currentUserSave)
             }
-            let states = places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            let states = MapPinSaveState.personalStates(for: places, currentUserID: currentUserID)
             outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(for: states)
         }
 
@@ -1411,8 +1432,8 @@ struct MapScreen: View {
     @State private var mapTabBecameInactiveAt: Date?
     @State private var routedVisiblePlace: VisiblePlace?
     @State private var routedVisiblePlaceGroup: VisiblePlaceGroup?
-    @State private var cameraRegionTracker = MapCameraRegionTracker(region: Self.defaultRegion)
-    @State private var featuredRankingRegion = Self.defaultRegion
+    @State private var cameraRegionTracker: MapCameraRegionTracker
+    @State private var featuredRankingRegion: MKCoordinateRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
     @State private var featuredViewportAccountID: String?
     @State private var featuredPlacesRevision: UInt64 = 0
@@ -1429,11 +1450,7 @@ struct MapScreen: View {
     @State private var nearbyOpacity: Double = 1
     @State private var compactCardMotionTask: Task<Void, Never>?
     @State private var droppedPinGeocodingTask: Task<Void, Never>?
-    @State private var nativeCameraRequest = NativeMapCameraRequest(
-        region: Self.defaultRegion,
-        revision: 0,
-        animated: false
-    )
+    @State private var nativeCameraRequest: NativeMapCameraRequest
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
     @State private var mapCardViewerLocation: CLLocation? = nil
@@ -1442,7 +1459,7 @@ struct MapScreen: View {
     @State private var shouldRecenterAfterLocationSettings = false
     @State private var mapSearchSelectionSession = MapSearchSelectionSession()
     @State private var didDismissInitialPlaceRoute = false
-    @State private var didResolveInitialCamera = false
+    @State private var initialCameraState = MapInitialCameraState()
     @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
     @State private var deferredMapNavigationGate = MapDeferredNavigationGate()
@@ -1460,6 +1477,10 @@ struct MapScreen: View {
     >()
 
     private static let defaultRegion = MKCoordinateRegion(
+        center: MapLaunchLocationResolver.oceanPark,
+        span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
+    )
+    private static let fixtureRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
         span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
     )
@@ -1619,6 +1640,12 @@ struct MapScreen: View {
         _mapTabBecameInactiveAt = State(initialValue: nil)
         _routedVisiblePlace = State(initialValue: nil)
         _routedVisiblePlaceGroup = State(initialValue: nil)
+        let launchRegion = Self.initialMapRegion()
+        _cameraRegionTracker = State(initialValue: MapCameraRegionTracker(region: launchRegion))
+        _featuredRankingRegion = State(initialValue: launchRegion)
+        _nativeCameraRequest = State(initialValue: NativeMapCameraRequest(
+            region: launchRegion, revision: 0, animated: false
+        ))
     }
 
     private var authorizedSelectionPlaces: [VisiblePlace] {
@@ -1823,8 +1850,11 @@ struct MapScreen: View {
         }
     }
 
-    private static var initialRemoteViewport: MapViewport {
-        MapViewportRefreshPolicy.prefetchedViewport(for: defaultRegion)
+    private var locationActivation: MapLocationActivation {
+        MapLocationActivation(
+            isActive: isMapTabActive && scenePhase == .active,
+            authorizationStatus: locationPermission.authorizationStatus
+        )
     }
 
     private var shouldShowTypeahead: Bool {
@@ -1948,6 +1978,7 @@ struct MapScreen: View {
                     onEmptyMapTap: handleEmptyMapTap,
                     onLongPress: handleNativeMapLongPress,
                     onNativeFeatureSelection: handleNativeMapFeatureSelection,
+                    onUserInteraction: { initialCameraState.resolve() },
                     onCameraChange: handleMapCameraChange,
                     onCameraInteractionEnd: { region, isUserInitiated in
                         handleMapCameraInteractionEnd(
@@ -2040,7 +2071,10 @@ struct MapScreen: View {
                         AstirFloatingHeaderSurface {
                             VStack(spacing: WanderTheme.spacing1) {
                                 HStack {
-                                    AstirMastheadLockup(presentation: .localizedBlur)
+                                    AstirMastheadLockup(
+                                        presentation: .localizedBlur,
+                                        animatesNeighborhood: isMastheadMotionEnabled
+                                    )
                                     Spacer()
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
@@ -2238,16 +2272,19 @@ struct MapScreen: View {
                         compactCardPhase == .entering || compactCardPhase == .presented
                     )
                     .accessibilityHidden(compactCardPhase == .hidden)
-
+            }
+            .background(astirBrandMode.background)
+            .allowsHitTesting(hasRevealedInitialMap)
+            .accessibilityHidden(!hasRevealedInitialMap)
+            .overlay {
                 if !hasRevealedInitialMap {
-                    OnboardingLaunchView(message: "Loading your map…")
+                    OnboardingLaunchView()
                         .accessibilityIdentifier("map.initialLoading")
                         .accessibilityAddTraits(.isModal)
                         .transition(.opacity)
-                        .zIndex(100)
                 }
             }
-            .background(astirBrandMode.background)
+            .toolbar(hasRevealedInitialMap ? .visible : .hidden, for: .tabBar)
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
@@ -2256,6 +2293,7 @@ struct MapScreen: View {
                 Task { await refreshMapCardViewerLocation() }
             }
             .onChange(of: locationPermission.authorizationStatus) { _, _ in
+                initialCameraState.reset()
                 Task { await refreshMapCardViewerLocation() }
             }
             .onChange(of: compactSelectionIdentity, initial: true) { previous, current in
@@ -2278,7 +2316,8 @@ struct MapScreen: View {
                     dismissMoreFilters()
                 }
             }
-            .task {
+            .task(id: locationActivation) {
+                guard locationActivation.isActive else { return }
                 await centerMapOnCurrentCityIfNeeded()
             }
             .task(id: presentationResetRequest?.id) {
@@ -2443,6 +2482,9 @@ struct MapScreen: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                initialCameraState.reset()
+            }
             guard phase == .active else { return }
             locationPermission.refreshAuthorizationStatus()
             if shouldRecenterAfterLocationSettings,
@@ -2542,7 +2584,7 @@ struct MapScreen: View {
 
     private func invalidateDeferredMapNavigationForUserInteraction() {
         deferredMapNavigationGate.invalidate()
-        didResolveInitialCamera = true
+        initialCameraState.resolve()
         if let request = pushNotifications.navigationRequest {
             switch request.destination {
             case .place, .sharedVisit:
@@ -2623,7 +2665,7 @@ struct MapScreen: View {
             mapQuery = ""
             selectVisiblePlace(visiblePlace)
             isPlaceProfilePresented = false
-            didResolveInitialCamera = true
+            initialCameraState.resolve()
             centerMap(
                 latitude: visiblePlace.place.latitude,
                 longitude: visiblePlace.place.longitude
@@ -2654,7 +2696,7 @@ struct MapScreen: View {
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
-            didResolveInitialCamera = true
+            initialCameraState.resolve()
             centerMap(latitude: latitude, longitude: longitude)
             mapSearchMessage = "Shared place. Add it to keep it on your map."
         } catch {
@@ -2689,6 +2731,7 @@ struct MapScreen: View {
               region.span.longitudeDelta > 0
         else { return }
 
+        initialCameraState.resolve()
         cameraRegionTracker.synchronize(with: region)
         nativeCameraRequest = NativeMapCameraRequest(
             region: region,
@@ -3267,7 +3310,7 @@ struct MapScreen: View {
         routedVisiblePlace = initialPlace
         selectVisiblePlace(initialPlace)
         centerCompactSelection(on: initialPlace)
-        didResolveInitialCamera = true
+        initialCameraState.resolve()
     }
 
     private func refreshInitialMapSources() async {
@@ -3283,7 +3326,7 @@ struct MapScreen: View {
             guard !Task.isCancelled else { return }
         }
 
-        let requestedViewport = Self.initialRemoteViewport
+        let requestedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: currentSearchRegion)
         let didLoadFeatured = await MapInitialSourceLoader.load(
             fetchFeatured: {
                 await store.fetchRemoteFeaturedViewportPlaces(
@@ -3398,32 +3441,39 @@ struct MapScreen: View {
     }
 
     private func centerMapOnCurrentCityIfNeeded() async {
-        guard !didResolveInitialCamera,
-              initialPlaceQuery == nil
+        guard !initialCameraState.isResolved,
+              initialPlaceQuery == nil,
+              !hasSelectedProfile,
+              locationActivation.isActive
         else { return }
 
-        // Keep first-run location access behind the explicit Nearby education
-        // prompt. CoreLocationProvider requests authorization when queried.
-        guard Self.canShowUserLocation else {
-            didResolveInitialCamera = true
-            return
+        let requestRevision = initialCameraState.revision
+        let location: CLLocation
+        do {
+            #if DEBUG
+            if Self.usesLocationFixtures {
+                location = CLLocation(
+                    latitude: Self.fixtureRegion.center.latitude,
+                    longitude: Self.fixtureRegion.center.longitude
+                )
+            } else {
+                location = try await MapLaunchLocationResolver().location()
+            }
+            #else
+            location = try await MapLaunchLocationResolver().location()
+            #endif
+        } catch {
+            return // Cancellation must not apply an obsolete fallback camera.
         }
 
-        let coordinate = await currentUserCoordinate()
         guard !Task.isCancelled,
-              !didResolveInitialCamera,
-              initialPlaceQuery == nil
+              initialCameraState.allowsLocationResult(for: requestRevision),
+              initialPlaceQuery == nil,
+              !hasSelectedProfile,
+              locationActivation.isActive
         else { return }
 
-        didResolveInitialCamera = true
-        guard let coordinate else { return }
-
-        let region = Self.initialCityRegion(
-            center: CLLocationCoordinate2D(
-                latitude: coordinate.latitude,
-                longitude: coordinate.longitude
-            )
-        )
+        let region = Self.initialCityRegion(center: location.coordinate)
         requestMapCamera(region, animated: false)
     }
 
@@ -3492,14 +3542,7 @@ struct MapScreen: View {
             places.append(currentUserSave)
         }
         return MapPinOutlineBuilder.outlines(
-            for: places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == store.currentUser.id
-                        ? .currentUser
-                        : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            for: MapPinSaveState.personalStates(for: places, currentUserID: store.currentUser.id)
         )
     }
 
@@ -3921,6 +3964,12 @@ struct MapScreen: View {
             }
             .zIndex(100)
         }
+    }
+
+    private var isMastheadMotionEnabled: Bool {
+        isMapTabActive && !isAddPresented && !isPlaceProfileOverlayBlockingInteraction
+            && mapSaveFlow == nil && mapActivityEditFlow == nil && mapPlaceListTarget == nil
+            && !isLocationEducationPresented
     }
 
     private var isPlaceProfileOverlayBlockingInteraction: Bool {
@@ -6118,14 +6167,19 @@ struct MapScreen: View {
     private func performCurrentLocationRecenter() {
         guard !isRecenteringOnUser else { return }
 
+        initialCameraState.resolve()
+        let requestRevision = initialCameraState.revision
         isRecenteringOnUser = true
         Task {
             let coordinate = await currentUserCoordinate()
             await MainActor.run {
                 isRecenteringOnUser = false
+                guard requestRevision == initialCameraState.revision,
+                      locationActivation.isActive
+                else { return }
                 let center = coordinate.map {
                     CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                } ?? Self.defaultRegion.center
+                } ?? MapLaunchLocationResolver().fallbackLocation.coordinate
                 requestMapCamera(
                     MKCoordinateRegion(
                         center: center,
@@ -6147,13 +6201,12 @@ struct MapScreen: View {
 
     private func currentUserCoordinate() async -> (latitude: Double, longitude: Double)? {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures")
-            || ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures") {
-            return (Self.defaultRegion.center.latitude, Self.defaultRegion.center.longitude)
+        if Self.usesLocationFixtures {
+            return (Self.fixtureRegion.center.latitude, Self.fixtureRegion.center.longitude)
         }
         #endif
         do {
-            let location = try await CoreLocationProvider().currentLocation()
+            let location = try await CoreLocationProvider(purpose: .map).currentLocation()
             return (location.coordinate.latitude, location.coordinate.longitude)
         } catch {
             return nil
@@ -6164,8 +6217,8 @@ struct MapScreen: View {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-WanderMapCardLocationFixture") {
             mapCardViewerLocation = CLLocation(
-                latitude: Self.defaultRegion.center.latitude,
-                longitude: Self.defaultRegion.center.longitude
+                latitude: Self.fixtureRegion.center.latitude,
+                longitude: Self.fixtureRegion.center.longitude
             )
             return
         }
@@ -6194,6 +6247,24 @@ struct MapScreen: View {
 
     static func initialCityRegion(center: CLLocationCoordinate2D) -> MKCoordinateRegion {
         MKCoordinateRegion(center: center, span: defaultRegion.span)
+    }
+
+    static func initialMapRegion(
+        history: LastSharedLocationStore = LastSharedLocationStore(),
+        useFixtures: Bool = usesLocationFixtures
+    ) -> MKCoordinateRegion {
+        if useFixtures { return fixtureRegion }
+        return initialCityRegion(center: MapLaunchLocationResolver(history: history).fallbackLocation.coordinate)
+    }
+
+    static var usesLocationFixtures: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures")
+            || ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures")
+            || ProcessInfo.processInfo.arguments.contains("-WanderUseDemoFixtures")
+        #else
+        false
+        #endif
     }
 
     private func mapSearchRankingScore(for item: MKMapItem, query: String?, origin: CLLocation) -> Double {
@@ -6481,6 +6552,7 @@ private struct NativeMapView: UIViewRepresentable {
     let onEmptyMapTap: () -> Void
     let onLongPress: (CLLocationCoordinate2D) -> Void
     let onNativeFeatureSelection: (MKMapFeatureAnnotation) -> Void
+    let onUserInteraction: () -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
     let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
 
@@ -6666,6 +6738,16 @@ private struct NativeMapView: UIViewRepresentable {
             isProgrammaticCameraChangeInFlight = false
             synchronizeAnnotations(in: mapView)
             parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldReceive touch: UITouch
+        ) -> Bool {
+            // MapKit can change region during initial layout without a gesture.
+            // Only an actual touch should supersede launch location centering.
+            parent.onUserInteraction()
+            return true
         }
 
         func gestureRecognizer(
@@ -7260,6 +7342,7 @@ private enum NativeMapPinImageRenderer {
                     center: center,
                     radius: radius,
                     lineWidth: MapPinVisualMetrics.outlineWidth * scale,
+                    scale: scale,
                     context: context
                 )
             }
@@ -7286,6 +7369,7 @@ private enum NativeMapPinImageRenderer {
         center: CGPoint,
         radius: CGFloat,
         lineWidth: CGFloat,
+        scale: CGFloat,
         context: CGContext
     ) {
         let color = UIColor(outline.ownership.color)
@@ -7295,7 +7379,7 @@ private enum NativeMapPinImageRenderer {
                 radius: radius,
                 color: color,
                 lineWidth: lineWidth,
-                dash: outline.dashPattern,
+                dash: outline.scaledDashPattern(scale: scale),
                 context: context
             )
             return
@@ -7306,7 +7390,7 @@ private enum NativeMapPinImageRenderer {
             context.setStrokeColor(color.cgColor)
             context.setLineWidth(lineWidth)
             context.setLineCap(.round)
-            context.setLineDash(phase: 0, lengths: arc.dashPattern)
+            context.setLineDash(phase: 0, lengths: arc.dashPattern.map { $0 * scale })
             let rotation = arc.rotationDegrees * .pi / 180
             context.addArc(
                 center: center,
@@ -8912,14 +8996,10 @@ private struct MapSearchSuggestion: Identifiable {
     static func searchCandidate(_ candidate: MapSearchCandidate) -> MapSearchSuggestion {
         switch candidate {
         case .saved(let savedCandidate):
-            let saveStates = savedCandidate.group.places.map { visiblePlace in
-                MapPinSaveState(
-                    ownership: visiblePlace.owner.id == savedCandidate.group.currentUserID
-                        ? .currentUser
-                        : .social,
-                    status: visiblePlace.userPlace.status
-                )
-            }
+            let saveStates = MapPinSaveState.personalStates(
+                for: savedCandidate.group.places,
+                currentUserID: savedCandidate.group.currentUserID
+            )
             return saved(savedCandidate, saveStates: saveStates)
         case .mapKit(let candidate):
             return mapKit(candidate)
@@ -10114,6 +10194,18 @@ enum MapPinSaveOwnership: Equatable {
 struct MapPinSaveState: Equatable {
     let ownership: MapPinSaveOwnership
     let status: PlaceStatus
+
+    /// Featured aggregates describe a place, not a person the viewer follows.
+    /// Keep their recommendation pins, but never turn them into social rings.
+    static func personalStates(for places: [VisiblePlace], currentUserID: String) -> [Self] {
+        places.compactMap { place in
+            guard !place.isCommunityAggregate, place.userPlace.deletedAt == nil else { return nil }
+            return Self(
+                ownership: place.owner.id == currentUserID ? .currentUser : .social,
+                status: place.userPlace.status
+            )
+        }
+    }
 }
 
 enum MapPinVisualMetrics {
@@ -10121,7 +10213,7 @@ enum MapPinVisualMetrics {
     static let emojiDiameter: CGFloat = 24
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
-    static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
+    static let wannaDashPattern: [CGFloat] = [1.5, 5.5]
     static let searchResultOutlineCount = 2
     static let activeTitleClearance: CGFloat = 2
     static let activeTitleFontSize: CGFloat = 13
@@ -10578,6 +10670,10 @@ struct MapPinOutline: Identifiable, Equatable {
         status == .wannaGo ? MapPinVisualMetrics.wannaDashPattern : []
     }
 
+    func scaledDashPattern(scale: CGFloat) -> [CGFloat] {
+        dashPattern.map { $0 * scale }
+    }
+
     var arcs: [MapPinOutlineArc] {
         guard let secondaryStatus else {
             return [
@@ -10638,12 +10734,7 @@ enum MapPinOutlineBuilder {
             currentUserID: currentUserID
         ) {
             let outlines = outlines(
-                for: group.places.map { visiblePlace in
-                    MapPinSaveState(
-                        ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
-                        status: visiblePlace.userPlace.status
-                    )
-                }
+                for: MapPinSaveState.personalStates(for: group.places, currentUserID: currentUserID)
             )
 
             for visiblePlace in group.places {
@@ -10807,6 +10898,19 @@ struct PlaceSheetPlace {
     var compactPlaceType: String {
         WanderPlaceCategory.display(for: categoryAssignment)
             .compactType(foodType: cuisine)
+    }
+
+    var saveCandidate: PlaceCandidate {
+        PlaceCandidate(
+            id: id, name: name, category: category,
+            primaryCategory: primaryCategory, subcategory: subcategory,
+            address: address, locality: locality, region: region,
+            latitude: latitude, longitude: longitude,
+            sourceProvider: sourceProvider ?? "mapkit",
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            websiteURLString: websiteURLString, phoneNumber: phoneNumber,
+            actionLinksJSON: actionLinksJSON, confidence: 1
+        )
     }
 
     var photoRequest: PlacePhotoRequest {
@@ -17231,6 +17335,10 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    func includes(_ entry: PlaceActivityEntry) -> Bool {
+        self == .all || (entry.isCurrentUser && entry.status == .been)
+    }
+
     var title: String {
         switch self {
         case .all: "ALL"
@@ -17446,6 +17554,7 @@ struct PlaceActivitySection: View {
     @Environment(\.astirBrandMode) private var astirBrandMode
     let saves: [PlaceSaveSummary]
     let currentUserID: String
+    var refreshesRemoteHistory = true
     @State private var filter: PlaceActivityFilter = .all
     @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
     @State private var editFlow: MapPlaceSaveContext?
@@ -17504,7 +17613,7 @@ struct PlaceActivitySection: View {
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
         .task(id: remoteActivityUserPlaceIDs) {
-            guard auth.isSignedIn else { return }
+            guard refreshesRemoteHistory, auth.isSignedIn else { return }
             await store.refreshRemotePlaceActivity(
                 userPlaceIDs: remoteActivityUserPlaceIDs,
                 backend: backend
@@ -17576,7 +17685,7 @@ struct PlaceActivitySection: View {
         case .all:
             entries
         case .myVisits:
-            entries.filter { $0.isCurrentUser && $0.status == .been }
+            entries.filter { filter.includes($0) }
         }
     }
 
@@ -17844,6 +17953,7 @@ private struct PlaceActivityCard: View {
             ActivityEngagementActionRow(
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
+                showsWannaButton: false,
                 isEngagementEnabled: isEngagementResolved,
                 resolveContext: resolveEngagementContext,
                 reportSubjectOverride: reportableUserPlaceSubject

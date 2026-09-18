@@ -1,4 +1,3 @@
-#if DEBUG
 import Foundation
 
 /// A normalized mock snapshot, not a production visibility or identity policy.
@@ -68,4 +67,3 @@ struct CommonGroundPersonEvidence: Hashable, Sendable {
         return Self(wannaRecordIDs: wannaIDs, visitRecordIDs: visitIDs)
     }
 }
-#endif

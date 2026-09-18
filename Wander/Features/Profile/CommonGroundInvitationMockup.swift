@@ -1,4 +1,3 @@
-#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -412,4 +411,3 @@ private struct CGInvitationDatePicker: View {
 #Preview("Invitation · opened") {
     NavigationStack { CommonGroundInvitationMockup(draft: .preview, opensEnvelope: true, initiallyOpened: true) }
 }
-#endif

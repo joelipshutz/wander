@@ -4,12 +4,24 @@ import SwiftUI
 struct PlacePlanInvitationScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brand
-    let token: String
+    let source: PlacePlanInvitationSource
     let repository: (any PlacePlanInvitationRepository)?
+    var onOpened: (() -> Void)? = nil
     @State private var invitation: PlacePlanInvitation?
     @State private var isLoading = true
     @State private var failed = false
     @State private var attempt = 0
+
+    init(token: String, repository: (any PlacePlanInvitationRepository)?) {
+        self.source = .link(token)
+        self.repository = repository
+    }
+
+    init(invitationID: UUID, repository: (any PlacePlanInvitationRepository)?, onOpened: @escaping () -> Void) {
+        self.source = .notifications(invitationID)
+        self.repository = repository
+        self.onOpened = onOpened
+    }
 
     var body: some View {
         NavigationStack {
@@ -45,7 +57,8 @@ struct PlacePlanInvitationScreen: View {
         }
         .tint(brand.accentText)
         .astirAdaptiveBrandMode()
-        .task(id: "\(token)-\(attempt)") { await load() }
+        .task(id: source) { await load() }
+        .task(id: attempt) { if attempt > 0 { await load() } }
     }
 
     @MainActor private func load() async {
@@ -54,9 +67,14 @@ struct PlacePlanInvitationScreen: View {
         failed = false
         do {
             guard let repository else { throw WanderRemoteError.notConfigured }
-            let result = try await repository.invitation(token: token)
+            let result: PlacePlanInvitation?
+            switch source {
+            case .link(let token): result = try await repository.invitation(token: token)
+            case .notifications(let id): result = try await repository.receivedInvitation(id: id)
+            }
             guard !Task.isCancelled else { return }
             invitation = result
+            if result != nil { onOpened?() }
         } catch {
             guard !Task.isCancelled else { return }
             failed = true

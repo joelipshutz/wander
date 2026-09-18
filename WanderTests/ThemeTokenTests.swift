@@ -1,7 +1,49 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 final class ThemeTokenTests: XCTestCase {
+    @MainActor
+    func testEventsMarkMatchesListsInkHeightAndVerticalCenter() throws {
+        let events = EventsTabSymbol.tabImage
+        let lists = PlaceListSymbol.paperTabImage
+        XCTAssertEqual(events.renderingMode, .alwaysTemplate)
+        XCTAssertTrue(events === EventsTabSymbol.tabImage, "Tab switches reuse the rendered image.")
+        XCTAssertEqual(events.size.height, lists.size.height)
+        let eventsInk = try inkBounds(events)
+        let listsInk = try inkBounds(lists)
+        let pixel = 1 / events.scale
+        XCTAssertEqual(eventsInk.height, listsInk.height, accuracy: pixel)
+        XCTAssertEqual(eventsInk.midY, listsInk.midY, accuracy: pixel)
+        XCTAssertEqual(eventsInk.midX, events.size.width / 2, accuracy: pixel)
+        XCTAssertGreaterThan(eventsInk.width / eventsInk.height, 1.4, "Preserve the complete wide lighting rig.")
+        XCTAssertGreaterThan(eventsInk.minY, 0)
+        XCTAssertLessThan(eventsInk.maxY, events.size.height)
+    }
+
+    private func inkBounds(_ image: UIImage) throws -> CGRect {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width, height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        try pixels.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(
+                data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        var bounds = CGRect.null
+        for y in 0..<height {
+            for x in 0..<width where pixels[(y * width + x) * 4 + 3] > 127 {
+                bounds = bounds.union(CGRect(x: x, y: y, width: 1, height: 1))
+            }
+        }
+        XCTAssertFalse(bounds.isNull)
+        return bounds.applying(CGAffineTransform(scaleX: 1 / image.scale, y: 1 / image.scale))
+    }
+
     func testColorTokensMatchAstirEditorialLightValues() {
         let expected: [String: String] = [
             "color.canvas.warm": "#F2E9DB",
@@ -148,5 +190,34 @@ final class PlaceRatingReactionTests: XCTestCase {
         XCTAssertLessThan(liveDrag.progress, upperStep.progress)
         XCTAssertGreaterThan(liveDrag.level, lowerStep.level)
         XCTAssertLessThan(liveDrag.level, upperStep.level)
+    }
+
+    func testDarkRatingPaletteKeepsContrastAndLiquidBehaviorAcrossTheScale() {
+        func luminance(_ red: Double, _ green: Double, _ blue: Double) -> Double {
+            func linear(_ value: Double) -> Double {
+                value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        }
+        let surface = luminance(27.0 / 255, 31.0 / 255, 27.0 / 255)
+        for score in PlaceRating.allowedScores {
+            let dark = PlaceRatingLiquidState.resolve(score, isDarkMode: true)
+            let light = PlaceRatingLiquidState.resolve(score)
+            let contrast = (luminance(dark.red, dark.green, dark.blue) + 0.05) / (surface + 0.05)
+            XCTAssertGreaterThanOrEqual(contrast, 4.5, "Solid color at rating \(score)")
+            XCTAssertEqual(dark.score, light.score)
+            XCTAssertEqual(dark.progress, light.progress)
+            XCTAssertEqual(dark.level, light.level)
+            XCTAssertEqual(dark.bubbleCount, light.bubbleCount)
+        }
+        let cool = PlaceRatingLiquidState.resolve(1, isDarkMode: true)
+        let middle = PlaceRatingLiquidState.resolve(3, isDarkMode: true)
+        let hot = PlaceRatingLiquidState.resolve(5, isDarkMode: true)
+        XCTAssertGreaterThan(cool.blue, cool.green)
+        XCTAssertGreaterThan(cool.green, cool.red)
+        XCTAssertGreaterThan(middle.red, middle.green)
+        XCTAssertGreaterThan(middle.green, middle.blue)
+        XCTAssertGreaterThan(hot.red, hot.green)
+        XCTAssertGreaterThan(hot.red, hot.blue)
     }
 }

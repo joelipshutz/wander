@@ -142,6 +142,21 @@ async function main() {
     } finally {
       await client.query("rollback");
     }
+    if (!options.migrationTest) {
+      // pgTAP plans are transaction-scoped; isolate this suite from the suites above.
+      await client.query("begin");
+      try {
+        for (const migrationPreview of migrationPreviews) {
+          await client.query(loadMigrationPreview(migrationPreview));
+        }
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/feed_activity_only.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - activity-only Feed privacy, pagination, and legacy compatibility");
+      } finally {
+        await client.query("rollback");
+      }
+    }
   } catch (error) {
     throw sanitizeError(error, dbURL);
   } finally {
@@ -1259,6 +1274,8 @@ function runLinkedSmokeChecks(
     // Each pgTAP suite gets its own rolled-back transaction and migration preview.
     runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID,
       migrationPreviewPaths, "supabase/tests/checkin_history_engagement.sql");
+    runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID,
+      migrationPreviewPaths, "supabase/tests/feed_activity_only.sql");
   }
 }
 

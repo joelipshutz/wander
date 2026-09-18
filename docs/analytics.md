@@ -61,6 +61,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 
 | Event | When it fires | Allowed product properties |
 |---|---|---|
+| `app_surface_viewed` | A native tab becomes selected, after yielding to its first render | coarse `surface`: `map`, `discover` (Feed), `events`, `lists`, or `profile`; Events remains a coming-soon teaser |
 | `app_first_opened` | First launch after the install-local marker is introduced | `acquisition_source` |
 | `app_session_started` | Cold launch or foreground return after the app refresh grace period | `session_source` |
 | `acquisition_link_opened` | Universal/custom link enters the app | sanitized `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`; coarse `route`; `has_campaign` |
@@ -88,7 +89,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |
 | `contact_invite_delivery_started` | Messages/share sheet begins | `surface`, `delivery_mode`, `recipient_count` |
 | `contact_invite_completed` | Invite handoff sends, cancels, or fails | `surface`, `delivery_mode`, `outcome`, `sent_count` |
-| `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
+| `notification_opened` | A routable local/remote notification response is accepted, or a received plan successfully opens from Notifications | allowlisted `notification_type`; `delivery_channel` (`local`, `remote`, `in_app`, `unknown`); coarse `route` |
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
 
@@ -200,3 +201,5 @@ For every analytics change:
 - When adding a notification type, update its iOS analytics allowlist and keep
   the server worker payload aggregate-only. Never solve frequency distribution
   by sending recipient IDs or per-recipient rows to PostHog.
+
+Place invitation opens from Notifications use `notification_type=place_plan_invitation`, `delivery_channel=in_app`, and `route=place_plan`. Emit only after the recipient resolver succeeds. Reopening is a new open; refreshes and failed/unavailable requests emit nothing. No invitation ID, token, sender, place, date, message, or artwork URL is sent. These in-app opens are excluded from the existing remote push-delivery funnel.

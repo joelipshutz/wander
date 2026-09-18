@@ -2,10 +2,10 @@ import Foundation
 
 @MainActor
 protocol PlacePlanInvitationRepository {
-    #if DEBUG
     func create(draft: CommonGroundInvitationDraft, previewPNG: Data) async throws -> WanderShareContent
-    #endif
     func invitation(token: String) async throws -> PlacePlanInvitation?
+    func receivedInvitations() async throws -> [ReceivedPlacePlanInvitation]
+    func receivedInvitation(id: UUID) async throws -> PlacePlanInvitation?
 }
 
 @MainActor
@@ -23,6 +23,23 @@ final class SupabasePlacePlanInvitationRepository: PlacePlanInvitationRepository
         guard PlacePlanInvitation.isValidToken(token) else { return nil }
         let payload: PlacePlanInvitationPayload? = try await rpc.call("place_plan_preview", params: ["input_token": token])
         guard let payload else { return nil }
+        return try invitation(payload: payload)
+    }
+
+    func receivedInvitations() async throws -> [ReceivedPlacePlanInvitation] {
+        let rows: [ReceivedPlan] = try await rpc.call("received_place_plan_invitations", params: [String: String]())
+        return try rows.map {
+            ReceivedPlacePlanInvitation(id: $0.id, invitation: try invitation(payload: $0.invitation),
+                                        createdAt: $0.createdAt, readAt: $0.readAt)
+        }
+    }
+
+    func receivedInvitation(id: UUID) async throws -> PlacePlanInvitation? {
+        let payload: PlacePlanInvitationPayload? = try await rpc.call("open_received_place_plan_invitation", params: ["input_invitation_id": id.uuidString])
+        return try payload.map { try invitation(payload: $0) }
+    }
+
+    private func invitation(payload: PlacePlanInvitationPayload) throws -> PlacePlanInvitation {
         guard payload.imagePath.range(of: #"^[A-Za-z0-9_-]+/[a-f0-9-]{36}/preview[.]png$"#, options: .regularExpression) != nil else {
             throw WanderRemoteError.invalidResponse("invalid_plan_artwork")
         }
@@ -30,7 +47,6 @@ final class SupabasePlacePlanInvitationRepository: PlacePlanInvitationRepository
         return PlacePlanInvitation(payload: payload, artworkURL: artworkURL)
     }
 
-    #if DEBUG
     func create(draft: CommonGroundInvitationDraft, previewPNG: Data) async throws -> WanderShareContent {
         guard let placeID = draft.place.photoReference?.placeID, UUID(uuidString: placeID) != nil,
               !draft.place.viewer.id.contains("/"), !draft.place.viewer.id.isEmpty,
@@ -59,10 +75,20 @@ final class SupabasePlacePlanInvitationRepository: PlacePlanInvitationRepository
             throw error
         }
     }
-    #endif
 }
 
-#if DEBUG
+private struct ReceivedPlan: Decodable {
+    let id: UUID
+    let invitation: PlacePlanInvitationPayload
+    let createdAt: Date
+    let readAt: Date?
+    enum CodingKeys: String, CodingKey {
+        case id, invitation
+        case createdAt = "created_at"
+        case readAt = "read_at"
+    }
+}
+
 private struct CreatedPlan: Decodable { let token: String }
 private struct CreatePlan: Encodable {
     let input_place_id: String
@@ -74,4 +100,3 @@ private struct CreatePlan: Encodable {
     let input_title: String
     let input_suggested_at: String?
 }
-#endif

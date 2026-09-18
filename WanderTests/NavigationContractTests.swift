@@ -149,7 +149,7 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testNavigationModelRetainsAddRouteWhileHeaderExperimentOwnsVisibleEntryPoint() throws {
-        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
+        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .events, .lists, .profile])
 
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
@@ -158,8 +158,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
-    func testPrimaryTabsUsePaperListsIconAndSystemSelectionFeedback() throws {
-        XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
+    func testPrimaryTabsUseCustomEventsAndListsIconsAndSystemSelectionFeedback() throws {
+        XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .events, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
         XCTAssertEqual(WanderTab.lists.systemImage, PlaceListSymbol.systemImage)
@@ -171,9 +171,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains(".toolbar(.hidden, for: .tabBar)"))
         XCTAssertFalse(root.contains("WanderPrimaryTabBar"))
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
-        XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
+        XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 5)
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
         XCTAssertTrue(root.contains("Image(uiImage: PlaceListSymbol.paperTabImage)"))
+        XCTAssertTrue(root.contains("Image(uiImage: EventsTabSymbol.tabImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
@@ -255,7 +256,8 @@ final class NavigationContractTests: XCTestCase {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
-        XCTAssertTrue(root.contains("FeedScreen(onAdd: presentAddSheet)"))
+        XCTAssertTrue(root.contains("FeedScreen("))
+        XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
@@ -916,7 +918,9 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss)"))
+        XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
+        XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
 
@@ -1164,6 +1168,40 @@ final class NavigationContractTests: XCTestCase {
             source.activityViewController(controller, subjectForActivityType: nil),
             "Maya Chen's Santa Monica map"
         )
+    }
+
+    @MainActor
+    func testProfileSharePreviewProvidesReusableLocalBitmapData() throws {
+        let image = WanderSharePreviewArtwork.profile
+        XCTAssertTrue(image === WanderSharePreviewArtwork.profile)
+        XCTAssertNotNil(image.cgImage)
+        let data = try XCTUnwrap(image.pngData())
+        XCTAssertNotNil(UIImage(data: data))
+        XCTAssertEqual(image.size, CGSize(width: 96, height: 96))
+    }
+
+    @MainActor
+    func testProfileMapImageAttachmentPreparationPreservesPixelsAndHonorsCancellation() async throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 9), format: format).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 12, height: 9))
+        }
+        let prepared = await WanderShareAttachmentStore.preparePNG(image)
+        let fileURL = try XCTUnwrap(prepared)
+        let decoded = try XCTUnwrap(UIImage(contentsOfFile: fileURL.path))
+        XCTAssertEqual(decoded.size, image.size)
+        XCTAssertEqual(decoded.pngData(), image.pngData())
+        await WanderShareAttachmentStore.removePreparedPNG(at: fileURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+
+        let cancelled = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await WanderShareAttachmentStore.preparePNG(image)
+        }
+        let cancelledResult = await cancelled.value
+        XCTAssertNil(cancelledResult)
     }
 
     @MainActor
@@ -3084,10 +3122,10 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(mapSection.contains("ProfileMapSnapshotView("))
-        XCTAssertTrue(mapSection.contains("shareImageFileURL = nil"))
+        XCTAssertTrue(mapSection.contains("shareImageFileURL?.wrappedValue = nil"))
         XCTAssertTrue(mapSection.contains("renderedSnapshot = ProfileMapRenderedSnapshot(key: request.cacheKey, image: image)"))
-        XCTAssertTrue(mapSection.contains("let pngData = image.pngData()"))
-        XCTAssertTrue(mapSection.contains("shareImageFileURL = imageFileURL"))
+        XCTAssertFalse(mapSection.contains("image.pngData()"))
+        XCTAssertTrue(mapSection.contains("shareImageFileURL.wrappedValue = imageFileURL"))
         XCTAssertFalse(mapSection.contains("\n            Map("))
         XCTAssertFalse(source.contains("LazyVStack"))
         XCTAssertFalse(source.contains("LazyVGrid"))
@@ -3137,6 +3175,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.notificationTab(for: .discover), .discover)
     }
 
+    func testEventsComingSoonIsALocalNonInteractiveRecording() throws {
+        let events = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Events/EventsComingSoonScreen.swift"
+            )
+        )
+        XCTAssertTrue(events.contains("Coming soon. An Ocean Park experiment."))
+        XCTAssertTrue(events.contains("AVPlayerLayer()"))
+        XCTAssertTrue(events.contains("Bundle.main.url(forResource:"))
+        XCTAssertTrue(events.contains("isUserInteractionEnabled = false"))
+        XCTAssertFalse(events.contains("AVPlayerViewController"))
+        XCTAssertFalse(events.contains("https://"))
+        XCTAssertFalse(events.contains("isOnWaitlist"))
+    }
+
     @MainActor
     func testRootViewCanResolveInitialTabForVisualQA() {
         XCTAssertEqual(
@@ -3146,6 +3199,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "lists"]),
             .lists
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "events"]),
+            .events
         )
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "add"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "nope"]), .map)
@@ -3260,6 +3317,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("systemColorScheme == .dark ? .editorial : .editorialLight"))
         XCTAssertTrue(root.contains(".toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)"))
         XCTAssertTrue(root.contains(".toolbarBackground(astirBrandMode.background, for: .tabBar)"))
+        XCTAssertTrue(root.contains(".tint(astirBrandMode.accent)"))
+        XCTAssertFalse(root.contains(".preferredColorScheme(selectedTab == .events"))
+        XCTAssertFalse(root.contains("selectedTab == .events ? .editorial"))
         XCTAssertFalse(root.contains(".preferredColorScheme(.light)"))
         XCTAssertFalse(root.contains(".preferredColorScheme(mapAppearanceColorScheme)"))
 
@@ -5068,7 +5128,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(backButton.contains(".buttonStyle(.plain)"))
         XCTAssertFalse(backButton.contains(".wanderGlassCapsule"))
         XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
-        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"envelope\")"))
+        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"bell\")"))
+        XCTAssertTrue(invitationButton.contains(".accessibilityLabel(\"Notifications\")"))
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
         XCTAssertTrue(invitationButton.contains("Circle()"))
         XCTAssertTrue(invitationButton.contains("Color(uiColor: .systemRed)"))
@@ -5329,7 +5390,10 @@ final class NavigationContractTests: XCTestCase {
             1,
             "The empty Feed state must provide a stable activity walkthrough target."
         )
-        XCTAssertTrue(feed.contains("group.id == groups.first?.id ? .feedActivity : nil"))
+        XCTAssertTrue(
+            feed.contains("group.id == groups.first?.id ? .feedActivity : nil"),
+            "The first displayed activity group must remain the Feed walkthrough target."
+        )
         XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
 
         let backHandler = try sourceSection(

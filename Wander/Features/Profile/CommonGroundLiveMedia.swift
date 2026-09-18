@@ -1,4 +1,3 @@
-#if DEBUG
 import Foundation
 import SwiftUI
 
@@ -178,4 +177,3 @@ struct CommonGroundLivePlaceArtwork: View {
         }
     }
 }
-#endif

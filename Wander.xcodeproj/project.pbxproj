@@ -34,6 +34,7 @@
 		0E63C5812CFBBD3907522CA0 /* PlaceBusinessMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F8BE1B23A944FEF54533C0A /* PlaceBusinessMetadata.swift */; };
 		0E8F681583533012E44915CC /* BoundaryImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */; };
 		0F3D94BE097ECC72E14C849E /* ProfileIdentityDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2EFE475CB6583F0C505A332 /* ProfileIdentityDraft.swift */; };
+		0FBC2CA85335E84B315F5529 /* PlacePlanNotificationRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C4EF76F1E573B4E9454338 /* PlacePlanNotificationRow.swift */; };
 		10758BA557EF6D1DF76EDE1A /* rec-303-map-pin-entrance-bounce-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = F4773A8786B641C4B1B2AD5E /* rec-303-map-pin-entrance-bounce-pre.png */; };
 		10B127160E9ED82B0012BD01 /* PlacePhotoGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58182EF60912B97691F7340A /* PlacePhotoGalleryTests.swift */; };
 		11CAC84A6F513A131FA36181 /* WanderDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E635EA909370EB6D597D27AC /* WanderDebugLog.swift */; };
@@ -61,16 +62,19 @@
 		1F0CFA9D6277F7F19F5DE064 /* PlaceSaveDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D3419D22C8CE6E132FBBA5 /* PlaceSaveDraftStore.swift */; };
 		1F0D588284A12A308B3E26A4 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = CF6EFF560365043CF67F3324 /* PostHog */; };
 		1F6050501FF55A31CF052BDD /* OnboardingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5C022AA603520F5AFAA348 /* OnboardingState.swift */; };
+		20911F27377D83B9631D2DDD /* CompactPeopleCardsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19FE7D9B70D86121BB75BDED /* CompactPeopleCardsUITests.swift */; };
 		20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */; };
 		21DB99956D5231546070A9D5 /* ListPlacePhotoResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */; };
 		22366D3693CFC2DA01B4FB7B /* rec-330-camera-preview-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */; };
 		24AA5015511677E17DD8A5BC /* WanderNearbyWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */; };
 		24C727E03F36117FA1336129 /* rec-352-adaptive-map-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = CDE30E27D314EBCB2ED7F01A /* rec-352-adaptive-map-search-pre.json */; };
+		254E0C67E1289AD31E64BF5E /* EventsComingSoonScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E08E04FA98522BED26BC649 /* EventsComingSoonScreen.swift */; };
 		25D95FE2C19A7AC94B8FAF01 /* PlaceProfilePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C27E1F825871B306B970668 /* PlaceProfilePresentationTests.swift */; };
 		26573736780BA54719E0F7EC /* LinkPlaceParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */; };
 		268207FAA4721BCE51516935 /* rec-228-bulk-status-coupling-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 7C1FAD2B72A87F4F90201955 /* rec-228-bulk-status-coupling-pre.json */; };
 		2AED3D2C9BC118C37D65AC08 /* SimulatorPlacePlanInvitationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F126C80903F3E0CACBB1278E /* SimulatorPlacePlanInvitationRepository.swift */; };
 		2B104C64FDB4DC5F3C4E95F2 /* YourMapPrototypeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7063D79739F20DE41DD84697 /* YourMapPrototypeScreen.swift */; };
+		2B6AD816B0418621E03D925D /* PlacePlanInvitationInboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340C9BD0B57127620176A8E9 /* PlacePlanInvitationInboxTests.swift */; };
 		2CF99969C90415247403D552 /* ListMapPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D6E3741B00C6D1C66CD1C7 /* ListMapPresentation.swift */; };
 		2D107CD426A30F739DC2FB0E /* FeedActivityDisclosure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1853352EBF8D89FE915ADAA0 /* FeedActivityDisclosure.swift */; };
 		2E4B3E45711537662297A152 /* ListsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DA94EC62E68038D903E3501 /* ListsScreen.swift */; };
@@ -101,6 +105,7 @@
 		4056AC46D01697D51C1D24A0 /* rec-206-profile-activity-count-instability-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = FC7A37127E589B3983B23875 /* rec-206-profile-activity-count-instability-pre.json */; };
 		416A007AA98854F088979D5D /* rec-195-streak-notification-live-entry-gate-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 2EC6DBFE09F2D96DE9F1DD38 /* rec-195-streak-notification-live-entry-gate-pre.json */; };
 		448B652BEB843822DC3B2FEA /* WannaGoReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159326A07925C1A61C5DEB5F /* WannaGoReminder.swift */; };
+		44C1827843D74D14B5DA318C /* EventsTabSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9418DE1CEF195815E9E029 /* EventsTabSymbol.swift */; };
 		45833D5AA3703CD781FE0E0E /* InviteFrameworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250A52345423E83FCB445CEE /* InviteFrameworkTests.swift */; };
 		465D9A85D1A855682F9C99CD /* WanderActionButtonControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */; };
 		467A349EA278B0B533891B36 /* FullPageBackSwipeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16EB7A1D40F7359CDF8BBD5 /* FullPageBackSwipeTests.swift */; };
@@ -112,6 +117,7 @@
 		4A22B42F0D3DFB823F938E9D /* PlaceImportParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */; };
 		4B1E69D54A34826BF104006B /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059173381275E3363050A4E1 /* OnboardingStateTests.swift */; };
 		4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */; };
+		51C4B153CEDA978761A935A8 /* EventsComingSoonUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 866F7A8809087435E8D57FE8 /* EventsComingSoonUITests.swift */; };
 		52B8AC44581CEA630201DEB3 /* SyncStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0925F17F5640CFD88F70EBA /* SyncStateMachine.swift */; };
 		52D02001E5ABD10E7917EFFF /* VisitPhotoLocalFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */; };
 		52D446DE712D614FF29C56D0 /* OnboardingCommentsCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18244466AAA64D03A3B75227 /* OnboardingCommentsCaptureView.swift */; };
@@ -178,9 +184,11 @@
 		83882725B1B0F79C773EE744 /* rec-195-test-streak-control-visible-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */; };
 		83E1B3A403BBF16CE319CA21 /* CommonGroundInvitationDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7107F97AB4EBA21217D1D6 /* CommonGroundInvitationDraft.swift */; };
 		84316327A030DB7D1B0CD590 /* rec-360-active-pin-layering-and-tap-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 139BCA88A502517AA4BD9F9F /* rec-360-active-pin-layering-and-tap-pre.json */; };
+		8465809D73F52FEE968044AF /* events-coming-soon.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 0ADB53F10E20C3DF1E481E8C /* events-coming-soon.mp4 */; };
 		855C09EA80524544A1FACE89 /* WanderCalendarWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455002E5CE44493FF0A47191 /* WanderCalendarWidgetSnapshot.swift */; };
 		85AADE6CC89E67EF821CA62E /* PhotoPlaceTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A0C8AFCFBDE5C371CED21E /* PhotoPlaceTextExtractor.swift */; };
 		86E4DD65692B2FBC6A1E7860 /* ProfileHeaderMotionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA9C4F456C7AF33B5D9EA15 /* ProfileHeaderMotionStateTests.swift */; };
+		88F05E2226D507C95DE162E3 /* AstirOceanParkTrackingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE21D546D4EE71259590C9D /* AstirOceanParkTrackingTests.swift */; };
 		89260575A4DFCADA518B7C2F /* rec-295-place-card-followup-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 14035390FA49106324C748D4 /* rec-295-place-card-followup-pre.json */; };
 		89DD4F9F93B8FFA91B6B350B /* PlaceExternalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F0D3D160FF8337D43E3C2F /* PlaceExternalLinks.swift */; };
 		8A2B415C5F41508EB61C1026 /* rec-195-copy-rotation-analytics-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 1F632D2BDC390C70FD727599 /* rec-195-copy-rotation-analytics-pre.json */; };
@@ -250,6 +258,7 @@
 		BB987F2130C2446BAF517BAE /* CommonGroundLiveData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B63E568843A399A350F5709 /* CommonGroundLiveData.swift */; };
 		BC07AB3F1E3B95100DB6F3F0 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF55A883DB97E39A4A2D85F2 /* MapScreen.swift */; };
 		BC27BD6C9E2995A175F52958 /* ProfileMetadataTagParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4AB698D7C8717206FB36A4 /* ProfileMetadataTagParserTests.swift */; };
+		BCE3F8DDED219F3307EE901D /* AstirOceanParkLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028330A25B17ACAD18F7F886 /* AstirOceanParkLabel.swift */; };
 		BE796F1EAD29F31F26655410 /* CommunityModeration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112A43105E71C57F00B6F93C /* CommunityModeration.swift */; };
 		BE9D3D08479FCB8BFC8614C1 /* PhotoZoomStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE3ECCD11166CE37B3FE1AC /* PhotoZoomStateTests.swift */; };
 		BF68D1ABCCBC6DF9386E24D2 /* rec-195-streak-notification-not-delivered-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 62DA04AEBFE6C66CC313B4C7 /* rec-195-streak-notification-not-delivered-pre.json */; };
@@ -257,6 +266,7 @@
 		C0F32903B770CE2556F487F7 /* ImportBrandAssets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9BBA2A856408B5D3ADC6F764 /* ImportBrandAssets.xcassets */; };
 		C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */; };
 		C23C35B8F98CEEEC4359F5D9 /* CommonGroundLiveMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04352535CF69E387D08F21EB /* CommonGroundLiveMedia.swift */; };
+		C3FAE1FFEACA2D3807DC3E61 /* EventsComingSoonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6772946B0D4A0BF264E2BCB4 /* EventsComingSoonTests.swift */; };
 		C500C85EDAC2AC11197F7CC8 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E382A2A47A6DC2EAEF12F23 /* ShareViewController.swift */; };
 		C59670B14A081B1E8CD6A303 /* CalendarReservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA0CB4F9DCF420A76B30B3 /* CalendarReservationTests.swift */; };
 		C5C321B30AB5C45FF046F95D /* ProfileIdentityDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EBB83E471DD06673AA7C4A9 /* ProfileIdentityDraftTests.swift */; };
@@ -265,14 +275,17 @@
 		C8BB11723D64693D95477243 /* FutureDateSaveMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */; };
 		C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34977B260344994771BCC93E /* AuthSessionTests.swift */; };
 		C9E6447EAE389755DA5BF2DB /* InviteFramework.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C5F62A98A3826F6DD6332C /* InviteFramework.swift */; };
+		CB16722B5CA43AB34230455B /* PlacePlanInvitationInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6B9B5FC823F06A2BEA10DB9 /* PlacePlanInvitationInbox.swift */; };
 		CCEC1EF2FAE2A0572AF39550 /* rec-360-active-pin-layering-and-tap-post.png in Resources */ = {isa = PBXBuildFile; fileRef = 1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */; };
 		CDE989C7F726EC820478464B /* FeedModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */; };
 		CE09B8314A8C8030E6644CBC /* FirstVisitWalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6F6858FAB55D4C03CB7BC2 /* FirstVisitWalkthroughTests.swift */; };
 		CE0E108A9243224B04BDAD02 /* rec-270-liquid-glass-pin-transition-post.png in Resources */ = {isa = PBXBuildFile; fileRef = D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */; };
 		CE501803271AD8BE8E83680A /* rec-289-selection-lifetime-layering-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = AAD27492E189F57CEEE5FB6F /* rec-289-selection-lifetime-layering-pre.json */; };
+		CFB245B5B5836510193562A3 /* events-coming-soon.jpg in Resources */ = {isa = PBXBuildFile; fileRef = DA273C6E7A5B099774CEE3C3 /* events-coming-soon.jpg */; };
 		D0233FBA3CB9F76B5D6E74CD /* FeedActivityGroupingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F19BFAEF38DDE0C3C848655 /* FeedActivityGroupingUITests.swift */; };
 		D127EAD44B01688CDA0D55D2 /* WanderShareButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */; };
 		D19890A5F55C39BB31669E89 /* ProfilePhotoCropStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46C27751B250A584CB654D8 /* ProfilePhotoCropStateTests.swift */; };
+		D19AAB89FB14B80B623827EB /* ProfileResponsivenessUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A86DDEDB6595D85FEE5C54F2 /* ProfileResponsivenessUITests.swift */; };
 		D28930971035EC9FAB4E2A9F /* MapFilterInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62C6A6EE96BB03651C6503D /* MapFilterInteractionUITests.swift */; };
 		D308F93EA22C89FAB562DE2B /* WanderNearbyWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */; };
 		D43B1F7D234DF0F60BB44306 /* ActivityEngagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E194BD10847F361AB8D779BC /* ActivityEngagementModels.swift */; };
@@ -383,6 +396,7 @@
 /* Begin PBXFileReference section */
 		0078639327C81EA5F98400B4 /* WanderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderApp.swift; sourceTree = "<group>"; };
 		00EAE08EF86AAB6428F14701 /* rec-303-map-pin-entrance-bounce-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-303-map-pin-entrance-bounce-pre.json"; sourceTree = "<group>"; };
+		028330A25B17ACAD18F7F886 /* AstirOceanParkLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirOceanParkLabel.swift; sourceTree = "<group>"; };
 		02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkAuthService.swift; sourceTree = "<group>"; };
 		0322598C99E44A8C80A90F4E /* DiscoverScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverScreen.swift; sourceTree = "<group>"; };
 		038D4985674B1D969110954F /* WanderEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderEnums.swift; sourceTree = "<group>"; };
@@ -396,6 +410,7 @@
 		09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-106-manual-place-search-pre.json"; sourceTree = "<group>"; };
 		0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockupTests.swift; sourceTree = "<group>"; };
 		0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInbox.swift; sourceTree = "<group>"; };
+		0ADB53F10E20C3DF1E481E8C /* events-coming-soon.mp4 */ = {isa = PBXFileReference; path = "events-coming-soon.mp4"; sourceTree = "<group>"; };
 		0B82E95F99088884DF1C0C97 /* rec-303-map-pin-entrance-bounce-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-303-map-pin-entrance-bounce-post.png"; sourceTree = "<group>"; };
 		0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-191-map-search-menu-pre.json"; sourceTree = "<group>"; };
 		0DA94EC62E68038D903E3501 /* ListsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListsScreen.swift; sourceTree = "<group>"; };
@@ -422,6 +437,7 @@
 		1853352EBF8D89FE915ADAA0 /* FeedActivityDisclosure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedActivityDisclosure.swift; sourceTree = "<group>"; };
 		18B541F93C896A5613DCA47F /* MapSnapshotListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSnapshotListTests.swift; sourceTree = "<group>"; };
 		19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-liquid-glass-pin-transition-pre.json"; sourceTree = "<group>"; };
+		19FE7D9B70D86121BB75BDED /* CompactPeopleCardsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactPeopleCardsUITests.swift; sourceTree = "<group>"; };
 		1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
 		1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPlaceImportMetadata.swift; sourceTree = "<group>"; };
 		1B1CBF5DD412F159B9776F04 /* rec-360-active-pin-layering-and-tap-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-360-active-pin-layering-and-tap-post.png"; sourceTree = "<group>"; };
@@ -458,6 +474,7 @@
 		32385DF4A2C769C69C78156B /* ProfileInsightsPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileInsightsPresenter.swift; sourceTree = "<group>"; };
 		3397584216C4AA278DF3FF00 /* CommonGroundMessagesMockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundMessagesMockup.swift; sourceTree = "<group>"; };
 		33B88381D028E94C235961B1 /* PlacePlanInvitationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanInvitationTests.swift; sourceTree = "<group>"; };
+		340C9BD0B57127620176A8E9 /* PlacePlanInvitationInboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanInvitationInboxTests.swift; sourceTree = "<group>"; };
 		3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderActionButtonControlTests.swift; sourceTree = "<group>"; };
 		34905E496D66A68FF5ACC37A /* rec-227-adaptive-import-flow-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-227-adaptive-import-flow-pre.json"; sourceTree = "<group>"; };
 		34977B260344994771BCC93E /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
@@ -517,9 +534,12 @@
 		65300A1846111DFE644E7D4F /* CommunityModerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityModerationTests.swift; sourceTree = "<group>"; };
 		66EA8BBEADA25FD0F942A11B /* WanderUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WanderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		67444BCDECAF77225965C845 /* MapPlaceListPickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPlaceListPickerTests.swift; sourceTree = "<group>"; };
+		6772946B0D4A0BF264E2BCB4 /* EventsComingSoonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsComingSoonTests.swift; sourceTree = "<group>"; };
 		67F3F9CB43AA0683A85C252E /* rec-284-attached-sheet-detents-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-284-attached-sheet-detents-pre.json"; sourceTree = "<group>"; };
 		693C10045243D1D398714042 /* ListPlacePhotoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListPlacePhotoTests.swift; sourceTree = "<group>"; };
 		6BC2B6B7EBCC7219D1EDB524 /* PlacePhotoCarouselMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoCarouselMockups.swift; sourceTree = "<group>"; };
+		6BE21D546D4EE71259590C9D /* AstirOceanParkTrackingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirOceanParkTrackingTests.swift; sourceTree = "<group>"; };
+		6E08E04FA98522BED26BC649 /* EventsComingSoonScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsComingSoonScreen.swift; sourceTree = "<group>"; };
 		6E38429E654223C87319C7AB /* WanderPlaceCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategory.swift; sourceTree = "<group>"; };
 		70527AF1590BEF9CB781A16D /* Wander.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Wander.entitlements; sourceTree = "<group>"; };
 		7063D79739F20DE41DD84697 /* YourMapPrototypeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YourMapPrototypeScreen.swift; sourceTree = "<group>"; };
@@ -552,11 +572,13 @@
 		840B7E03004D458695870EAF /* InviteMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteMockups.swift; sourceTree = "<group>"; };
 		849D2FAFEA465CB5DE06C0C2 /* rec-253-community-personalized-featured-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-253-community-personalized-featured-pre.json"; sourceTree = "<group>"; };
 		86041408E563554B57347025 /* LinkPlaceParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParser.swift; sourceTree = "<group>"; };
+		866F7A8809087435E8D57FE8 /* EventsComingSoonUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsComingSoonUITests.swift; sourceTree = "<group>"; };
 		86E70265B6612F2CECA3C7A8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		875E330C1764F10B9298E2EF /* TrustedPlaceSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedPlaceSearchTests.swift; sourceTree = "<group>"; };
 		88C07DF36F0B2E4637D7BBB8 /* CommonGroundDesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundDesignMockups.swift; sourceTree = "<group>"; };
 		8930E1796F6C94740DFFF448 /* WanderStorePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStorePersistence.swift; sourceTree = "<group>"; };
 		89B71EC80959A49990CF767A /* CoreLocationProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreLocationProviderTests.swift; sourceTree = "<group>"; };
+		8A9418DE1CEF195815E9E029 /* EventsTabSymbol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsTabSymbol.swift; sourceTree = "<group>"; };
 		8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitPhotoLocalFileStore.swift; sourceTree = "<group>"; };
 		8C7C9A64136058A77698E28D /* InCommonDesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InCommonDesignMockups.swift; sourceTree = "<group>"; };
 		8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-test-streak-control-visible-pre.json"; sourceTree = "<group>"; };
@@ -589,6 +611,7 @@
 		A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategoryTests.swift; sourceTree = "<group>"; };
 		A6EDF80E69BF3F4209DC7CA2 /* YourMapPrototypeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YourMapPrototypeModels.swift; sourceTree = "<group>"; };
 		A71C4596873A503C9978BFC8 /* PlaceProfileMapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfileMapSurface.swift; sourceTree = "<group>"; };
+		A86DDEDB6595D85FEE5C54F2 /* ProfileResponsivenessUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileResponsivenessUITests.swift; sourceTree = "<group>"; };
 		A89D9500AD233DA43B3ACEF7 /* WanderWidgetSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetSnapshotTests.swift; sourceTree = "<group>"; };
 		A94F327A80244118BE83E818 /* PlaceSaveDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceSaveDraftStoreTests.swift; sourceTree = "<group>"; };
 		A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-196-offline-map-pre.json"; sourceTree = "<group>"; };
@@ -645,10 +668,12 @@
 		D63987ED78C8738917AB869B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-270-liquid-glass-pin-transition-post.png"; sourceTree = "<group>"; };
 		D6A18F74DCFE0F295B598171 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D6B9B5FC823F06A2BEA10DB9 /* PlacePlanInvitationInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanInvitationInbox.swift; sourceTree = "<group>"; };
 		D6E48A158290C7A15C1FB643 /* CommonGroundMockDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundMockDataTests.swift; sourceTree = "<group>"; };
 		D8130F094346B277D53F8733 /* WanderNearbyWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderNearbyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D81E46FA8A9698B8D338A19F /* ProfileAlignmentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAlignmentUITests.swift; sourceTree = "<group>"; };
 		D83285AB8BC146DF7939BF28 /* RecmePlaceSearchFusion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecmePlaceSearchFusion.swift; sourceTree = "<group>"; };
+		DA273C6E7A5B099774CEE3C3 /* events-coming-soon.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "events-coming-soon.jpg"; sourceTree = "<group>"; };
 		DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackendConfiguration.swift; sourceTree = "<group>"; };
 		DD3F0D58920B1D355AB2E8DB /* WanderShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDE82052FB7FADD2A758552E /* OnboardingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlowView.swift; sourceTree = "<group>"; };
@@ -674,6 +699,7 @@
 		F1EB6D9E784DEB05C9AC510B /* WanderWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F234B226B6C3FEF8C09F4FCF /* CalendarReservationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarReservationManager.swift; sourceTree = "<group>"; };
 		F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderLocalStore.swift; sourceTree = "<group>"; };
+		F2C4EF76F1E573B4E9454338 /* PlacePlanNotificationRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanNotificationRow.swift; sourceTree = "<group>"; };
 		F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRegionFitter.swift; sourceTree = "<group>"; };
 		F34E2861127F5EE79AF8571A /* SharedVisitComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedVisitComponents.swift; sourceTree = "<group>"; };
 		F421570464BDC2628C4013EC /* PlaceImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportTests.swift; sourceTree = "<group>"; };
@@ -762,8 +788,18 @@
 				D63987ED78C8738917AB869B /* Info.plist */,
 				541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */,
 				70527AF1590BEF9CB781A16D /* Wander.entitlements */,
+				212F6267FE5268B87A5CE7D9 /* Events */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		212F6267FE5268B87A5CE7D9 /* Events */ = {
+			isa = PBXGroup;
+			children = (
+				DA273C6E7A5B099774CEE3C3 /* events-coming-soon.jpg */,
+				0ADB53F10E20C3DF1E481E8C /* events-coming-soon.mp4 */,
+			);
+			path = Events;
 			sourceTree = "<group>";
 		};
 		220ECAA9E795A3F5ECA61011 /* Features */ = {
@@ -774,6 +810,7 @@
 				51C7E203BDC0CA8FD714A568 /* Auth */,
 				80C8DEE835E345908AA6E605 /* BrandExploration */,
 				15834F66DEF41606BB0DC1EC /* Discover */,
+				5D934586F183C1C4E6457028 /* Events */,
 				9AE6A3AE5173E9D59B6DEBAD /* Feed */,
 				41D66B0DE9707F183B600BF9 /* Invites */,
 				F478F7316D1F4982657E8812 /* Lists */,
@@ -939,7 +976,9 @@
 				8C7C9A64136058A77698E28D /* InCommonDesignMockups.swift */,
 				46D41FCF4E7F12CF268B7533 /* MapSnapshotCapture.swift */,
 				AACA1D246E6E8CBC7DA85910 /* PlaceImportCanonicalViews.swift */,
+				D6B9B5FC823F06A2BEA10DB9 /* PlacePlanInvitationInbox.swift */,
 				FB8844D089094A4ECCD76AB9 /* PlacePlanInvitationScreen.swift */,
+				F2C4EF76F1E573B4E9454338 /* PlacePlanNotificationRow.swift */,
 				2F6E53AF7F6E50A969880C4C /* ProfileEditScreen.swift */,
 				2B18EB82A28CAB33F19FF520 /* ProfileHeaderMotion.swift */,
 				23B98BF7572FA4C1FB091606 /* ProfileHeaderMotionPreview.swift */,
@@ -963,6 +1002,7 @@
 				04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */,
 				282B94AF8B29C08A7B59F929 /* AstirBrandShellTests.swift */,
 				0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */,
+				6BE21D546D4EE71259590C9D /* AstirOceanParkTrackingTests.swift */,
 				34977B260344994771BCC93E /* AuthSessionTests.swift */,
 				D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */,
 				C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */,
@@ -975,6 +1015,7 @@
 				65300A1846111DFE644E7D4F /* CommunityModerationTests.swift */,
 				89B71EC80959A49990CF767A /* CoreLocationProviderTests.swift */,
 				260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */,
+				6772946B0D4A0BF264E2BCB4 /* EventsComingSoonTests.swift */,
 				AE9E0413D74DC5421A150467 /* ExtractionCandidateFilterTests.swift */,
 				F7C0F41DD41C9EF1F84B70E3 /* FeatureFlagTests.swift */,
 				840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */,
@@ -1002,6 +1043,7 @@
 				249D58D889C2DFE7795EB7C6 /* PlacePhotoCarouselMockupTests.swift */,
 				D0FFAD48FC4FBF130BF07DBA /* PlacePhotoDeliveryTests.swift */,
 				58182EF60912B97691F7340A /* PlacePhotoGalleryTests.swift */,
+				340C9BD0B57127620176A8E9 /* PlacePlanInvitationInboxTests.swift */,
 				33B88381D028E94C235961B1 /* PlacePlanInvitationTests.swift */,
 				3C27E1F825871B306B970668 /* PlaceProfilePresentationTests.swift */,
 				A94F327A80244118BE83E818 /* PlaceSaveDraftStoreTests.swift */,
@@ -1041,6 +1083,14 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
+		5D934586F183C1C4E6457028 /* Events */ = {
+			isa = PBXGroup;
+			children = (
+				6E08E04FA98522BED26BC649 /* EventsComingSoonScreen.swift */,
+			);
+			path = Events;
+			sourceTree = "<group>";
+		};
 		5FEC6D9693B819216CC87C46 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
@@ -1070,8 +1120,10 @@
 			isa = PBXGroup;
 			children = (
 				484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */,
+				028330A25B17ACAD18F7F886 /* AstirOceanParkLabel.swift */,
 				7AA0880B16173B7E854FA11E /* AstirVisualSystem.swift */,
 				81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */,
+				8A9418DE1CEF195815E9E029 /* EventsTabSymbol.swift */,
 				98B104023B0E56EE2EDFF8E3 /* FullPageBackSwipe.swift */,
 				239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */,
 				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
@@ -1239,7 +1291,9 @@
 			children = (
 				EA454CD7CBC8A79CCEE08BBD /* AppStoreScreenshotsUITests.swift */,
 				B68A6D27FC5D96661CAEC103 /* CommonGroundMockupUITests.swift */,
+				19FE7D9B70D86121BB75BDED /* CompactPeopleCardsUITests.swift */,
 				711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */,
+				866F7A8809087435E8D57FE8 /* EventsComingSoonUITests.swift */,
 				4F19BFAEF38DDE0C3C848655 /* FeedActivityGroupingUITests.swift */,
 				7327B8B87EDE207236010857 /* FullPageBackSwipeUITests.swift */,
 				F62C6A6EE96BB03651C6503D /* MapFilterInteractionUITests.swift */,
@@ -1250,6 +1304,7 @@
 				FA91EB8A28701B077AF8EC89 /* PlacePlanInvitationUITests.swift */,
 				D81E46FA8A9698B8D338A19F /* ProfileAlignmentUITests.swift */,
 				1F02A34AD702E15C8702F666 /* ProfileHeaderMotionUITests.swift */,
+				A86DDEDB6595D85FEE5C54F2 /* ProfileResponsivenessUITests.swift */,
 				0FE854C6B6EABA4069584A9B /* YourMapPrototypeUITests.swift */,
 			);
 			path = WanderUITests;
@@ -1527,6 +1582,8 @@
 				9BDDE72CA80B33CAFC0EFD17 /* Assets.xcassets in Resources */,
 				F674627665464A38ABBEF914 /* ImportBrandAssets.xcassets in Resources */,
 				E15BC91E5CA5C62F2E9E710A /* PrivacyInfo.xcprivacy in Resources */,
+				CFB245B5B5836510193562A3 /* events-coming-soon.jpg in Resources */,
+				8465809D73F52FEE968044AF /* events-coming-soon.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1611,6 +1668,7 @@
 				E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */,
 				A29F9C684AFE8EA7FC8F456A /* AstirBrandShell.swift in Sources */,
 				EDB83B1727C9B8248A3652E3 /* AstirLaunchLockup.swift in Sources */,
+				BCE3F8DDED219F3307EE901D /* AstirOceanParkLabel.swift in Sources */,
 				95E8C5A077108A9A3EFD24DC /* AstirVisualSystem.swift in Sources */,
 				9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */,
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
@@ -1634,6 +1692,8 @@
 				00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */,
 				1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */,
 				812F84570207D139A528319C /* DiscoverScreen.swift in Sources */,
+				254E0C67E1289AD31E64BF5E /* EventsComingSoonScreen.swift in Sources */,
+				44C1827843D74D14B5DA318C /* EventsTabSymbol.swift in Sources */,
 				AAB7435F80274F652331795F /* FeatureFlags.swift in Sources */,
 				2D107CD426A30F739DC2FB0E /* FeedActivityDisclosure.swift in Sources */,
 				B2D3D8AE71BC35FB52F0AE0C /* FeedModels.swift in Sources */,
@@ -1680,8 +1740,10 @@
 				7BD8BFE1EAEA64BE5544D68F /* PlacePhotoDelivery.swift in Sources */,
 				66DD0EBCA7C3E73FB6DF09FA /* PlacePhotoGallery.swift in Sources */,
 				5E7BE43E0D64F44875A750F8 /* PlacePlanInvitation.swift in Sources */,
+				CB16722B5CA43AB34230455B /* PlacePlanInvitationInbox.swift in Sources */,
 				1C69982EF8E4C32370639597 /* PlacePlanInvitationRepository.swift in Sources */,
 				A6266EA5FE660FEB4D20E82E /* PlacePlanInvitationScreen.swift in Sources */,
+				0FBC2CA85335E84B315F5529 /* PlacePlanNotificationRow.swift in Sources */,
 				A336C5CBD69909715BC3730D /* PlaceProfileMapSurface.swift in Sources */,
 				9FBB0F26F26D0A3C74556000 /* PlaceProfilePresentation.swift in Sources */,
 				EEB58DFCAF0DD4CEDFC84D27 /* PlaceProfileSaveActionPolicy.swift in Sources */,
@@ -1797,6 +1859,7 @@
 				9323D4075F400D6C36E1DBA8 /* AddCameraPresentationTests.swift in Sources */,
 				F3AAA2E6D7CD55A49779385B /* AstirBrandShellTests.swift in Sources */,
 				127463F7AF39E57A7D6EE9C7 /* AstirLaunchLockupTests.swift in Sources */,
+				88F05E2226D507C95DE162E3 /* AstirOceanParkTrackingTests.swift in Sources */,
 				C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */,
 				0E8F681583533012E44915CC /* BoundaryImportTests.swift in Sources */,
 				940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */,
@@ -1809,6 +1872,7 @@
 				6174C281A2E3108DC73FEA0F /* CommunityModerationTests.swift in Sources */,
 				7097CD10DE64A2D5F401DC2F /* CoreLocationProviderTests.swift in Sources */,
 				74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */,
+				C3FAE1FFEACA2D3807DC3E61 /* EventsComingSoonTests.swift in Sources */,
 				7AE6B55E9D5E343894865F0B /* ExtractionCandidateFilterTests.swift in Sources */,
 				EAAA2737ACAAE2C8F6FF4491 /* FeatureFlagTests.swift in Sources */,
 				CDE989C7F726EC820478464B /* FeedModelsTests.swift in Sources */,
@@ -1836,6 +1900,7 @@
 				05524137CF3C88B0327AFB9F /* PlacePhotoCarouselMockupTests.swift in Sources */,
 				5A218AC15023FD9DA8220E3C /* PlacePhotoDeliveryTests.swift in Sources */,
 				10B127160E9ED82B0012BD01 /* PlacePhotoGalleryTests.swift in Sources */,
+				2B6AD816B0418621E03D925D /* PlacePlanInvitationInboxTests.swift in Sources */,
 				D9E1B1E25DD3A9BFC434BED5 /* PlacePlanInvitationTests.swift in Sources */,
 				25D95FE2C19A7AC94B8FAF01 /* PlaceProfilePresentationTests.swift in Sources */,
 				651CE9673B7352689B764225 /* PlaceSaveDraftStoreTests.swift in Sources */,
@@ -1870,7 +1935,9 @@
 			files = (
 				63B4F0219103EE4D48C147C9 /* AppStoreScreenshotsUITests.swift in Sources */,
 				3625B141B9C12A966D233A98 /* CommonGroundMockupUITests.swift in Sources */,
+				20911F27377D83B9631D2DDD /* CompactPeopleCardsUITests.swift in Sources */,
 				EFD7097207F571D4002C8BEA /* DefaultMapFilterSettingsUITests.swift in Sources */,
+				51C4B153CEDA978761A935A8 /* EventsComingSoonUITests.swift in Sources */,
 				D0233FBA3CB9F76B5D6E74CD /* FeedActivityGroupingUITests.swift in Sources */,
 				983E4529E27D443CF4EB85D3 /* FullPageBackSwipeUITests.swift in Sources */,
 				D28930971035EC9FAB4E2A9F /* MapFilterInteractionUITests.swift in Sources */,
@@ -1881,6 +1948,7 @@
 				9493A1744D00946C4A5AF7C4 /* PlacePlanInvitationUITests.swift in Sources */,
 				838432284A234609CEAF9E64 /* ProfileAlignmentUITests.swift in Sources */,
 				FBCADED9DCDBA88BCC005935 /* ProfileHeaderMotionUITests.swift in Sources */,
+				D19AAB89FB14B80B623827EB /* ProfileResponsivenessUITests.swift in Sources */,
 				3B4783E6754E32F2B622BD64 /* YourMapPrototypeUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2038,7 +2106,7 @@
 		98BE6269A1618DE2ECCB47B5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 174;
+				CURRENT_PROJECT_VERSION = 175;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
@@ -2055,7 +2123,7 @@
 		98C77DC356FB1881F7298017 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 174;
+				CURRENT_PROJECT_VERSION = 175;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;

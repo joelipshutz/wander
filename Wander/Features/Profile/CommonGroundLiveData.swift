@@ -1,4 +1,3 @@
-#if DEBUG
 import Foundation
 
 /// Read-only presentation of the store's authorized profile data. This adapter
@@ -237,4 +236,3 @@ enum CommonGroundLiveData {
         }
     }
 }
-#endif

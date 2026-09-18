@@ -396,3 +396,32 @@ private struct TasteProfile {
         return (score, "Matches your \(display) saves.")
     }
 }
+
+
+/// Resolves full history from authorized saves, never a map's filtered pin set.
+enum PlaceProfileHistoryPolicy {
+    static func summaries(
+        candidate: PlaceCandidate,
+        seeds: [VisiblePlace],
+        available: [VisiblePlace],
+        currentUserID: String,
+        viewerFollows: (String) -> Bool
+    ) -> [PlaceSaveSummary] {
+        let seedAliases = seeds.reduce(into: Set<String>()) {
+            $0.formUnion(VisiblePlaceGrouping.matchingAliases(for: $1))
+        }
+        let groups = VisiblePlaceGrouping.groups(from: available.filter {
+            $0.userPlace.deletedAt == nil && !$0.isCommunityAggregate
+        }, currentUserID: currentUserID)
+        var seen = Set<String>()
+        return groups.filter { group in
+            !group.aliases.isDisjoint(with: seedAliases)
+                || group.places.contains { VisiblePlaceGrouping.matches($0, candidate: candidate) }
+        }.flatMap(\.places).filter {
+            seen.insert($0.userPlace.serverID ?? $0.userPlace.id).inserted
+        }.map {
+            PlaceSaveSummary(visiblePlace: $0, attributes: $0.attributes,
+                             viewerFollowsOwner: viewerFollows($0.owner.id))
+        }
+    }
+}

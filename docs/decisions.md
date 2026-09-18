@@ -73,6 +73,7 @@ and a refresh recomputes it solely from currently visible events.
 
 | Decision | Status | Notes |
 |---|---|---|
+| Dark-mode rating colors | Locked for REC-499 | Use the approved neon palette for the liquid rating slider in dark appearance: electric blue at 1, orange at 3, and neon red at 5, interpolating across the existing half-point rating scale. Light appearance retains its original palette; rating values and interaction are unchanged. |
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | Import review details and source identity | Locked for REC-409 | Import row details expand inline using the same save-editor components, mode switching, validation, and local persistence as ordinary Wanna and Check-in saves. A source mention may select up to five concrete candidates with one shared save mode. Place imagery comes from the place-photo pipeline; history uses preserved source artwork when available and monochrome source-brand assets shared by the app and Share extension. History labels remain Matching while either the batch or an item is processing. |
 | Import attention and progress | Locked for REC-409 | The History badge counts each matching import plus each finished import awaiting its first review, once per import rather than per place. Finished outcomes include successful matches, failed source scans, empty results, and saved reports; explicitly cancelled imports are excluded. It sits at the history button’s top right. Opening the grid or dismissing the toast does not clear it; opening that finished import through its history tile or Review action does, including the saved-report destination. Opening a still-matching report does not pre-acknowledge its future results. The optional review timestamp uses the existing owner-scoped device snapshot and remains compatible with older snapshots. Matching progress is transient, based on actual source/hint/row completion; a source URL is not counted as one place, and unknown totals stay indeterminate until extraction returns. No timer simulates resolved places. Each import-sheet presentation selects the content-fit detent afresh while retaining manual expansion. |
@@ -132,7 +133,8 @@ and a refresh recomputes it solely from currently visible events.
 | Decision | Status | Notes |
 |---|---|---|
 | In Common naming | Accepted for REC-486, 2026-09-16 | **In Common** is the user-facing name for the member-profile feature and its curated place page, replacing Common Ground and In good company. Keep internal type, file, and accessibility identifiers unchanged. |
-| In Common Wanna evidence | Accepted for REC-486, 2026-09-16 | Match Wannas and check-ins independently for each person and canonical place. Inspect every visible Wanna event, including repeat events attached to a Been summary; deduplicate event IDs. A previous check-in remains compatible with a Wanna recommendation. Copy must allow returning to a place. The DEBUG live adapter groups all authorized rows and consumes REC-497 repeat-Wanna events from every matching user-place record without changing the checked-in summary. |
+| In Common Wanna evidence | Accepted for REC-486, 2026-09-16 | Match Wannas and check-ins independently for each person and canonical place. Inspect every visible Wanna event, including repeat events attached to a Been summary; deduplicate event IDs. A previous check-in remains compatible with a Wanna recommendation. Copy must allow returning to a place. The live adapter groups all authorized rows and consumes REC-497 repeat-Wanna events from every matching user-place record without changing the checked-in summary. |
+| In Common invitation inbox | Accepted for REC-486, 2026-09-18 | Creating a shared plan adds it to the recipient's Profile → Notifications → Plans. The authenticated recipient can reopen the same read-only invitation without its external link. Opening marks it read without removing it; expired invitations, deleted accounts, and blocks make it unavailable. External sharing remains optional after creation. The inbox returns up to 100 newest active plans and never returns bearer tokens. Read state persists on the server; the client cache is account-scoped and does not persist invitation contents on disk. |
 | Handoff package is source of truth | Revised provisionally for REC-383 / REC-397 | Keep `preview/follow-profile-settings-mocks/` as the interaction, layout, and functionality reference. Joe's explicit Astir exploration direction supersedes its visual palette and typography across production surfaces. The Astir public name is now approved in REC-475. |
 | `tokens.css` is canonical | Revised provisionally for REC-397 | Its spacing, radius, and functional component guidance remain useful. Production color and type now resolve through the adaptive Astir semantic tokens while this exploration is evaluated in-app. |
 | Adaptive Astir editorial style | Provisional for REC-383 / REC-397 | Light Mode is warm paper with ink; Dark Mode is ink-black with paper. Astir signal coral `#F05A3C` is the brand-action/selection accent. Semantic status colors remain distinct. These adaptive editorial variants are the only live Astir modes; launch arguments do not select a separate palette. |
@@ -195,3 +197,82 @@ are protected from stale reads and acknowledgements; edits never trigger a new
 save celebration or change check-in state or unique-place counters. If the last
 check-in is deleted, an edited original Wanna is restored with its own content
 and visibility; later edits keep that Wanna summary consistent.
+
+## 2026-09-17 — Compact people cards and first Feed load (REC-531)
+
+People worth following occupies the former Featured for you position above
+Recent. Its shared cards are 184 points wide and at least 188 points tall at
+standard text sizes: a 48-point circular portrait, name, short accurate follow
+context, and a full-width 44-point Follow control. Handles and bios stay on the
+profile. Cards retain the adaptive Astir palette, Avenir identity text, and
+existing horizontal rail margins. Accessibility sizes widen cards to 240 points
+and allow content to grow vertically. Following and retry feedback stays inside
+the button so standard cards do not jump in height.
+
+Tapping Follow gives one medium-impact haptic and immediately shows Following while
+the request syncs in the background. A pending card uses the same appearance as
+a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
+Failed requests restore the in-button retry action; server completion does not
+generate another haptic.
+
+September 17 device feedback increased that single tap to medium impact at full
+intensity. Feed postcard photos use the existing background image decoder with
+a separate 48 MiB / 24-entry cache. Decode dimensions follow the card's display
+size in 64-pixel buckets, capped at 2,048 pixels. Local visit photos retain
+priority over authorized remote URLs; missing local files fall back remotely.
+A changed source or layout request cannot display an earlier request's image.
+Original upload data and full-screen photo behavior are unchanged.
+
+Featured's views, models, and original database projection remain available.
+`FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
+request contract; restoring it uses the original RPC. The additive
+`followed_feed(input_include_featured, input_before, input_limit)` overload skips
+Featured's candidate projection when false, while retaining the same authorized
+activity and cursor semantics. Future activity-projection changes must keep both
+overloads aligned and pass `supabase/tests/feed_activity_only.sql`.
+
+People and posts load independently. Existing in-memory feed content remains
+visible during refresh; authorized text can render before media. No new disk
+cache of social content is introduced. Clients fall back to the original RPC
+only when the new overload is absent from the API schema, allowing either
+deployment order without retrying ordinary network or authorization failures.
+
+## 2026-09-17 — Bundled Events coming-soon motion (REC-528)
+
+The temporary Events preview is the middle of five native tabs: Map, Feed,
+Events, Lists, Profile. Add remains a modal action. Events presents the approved
+03C VHS composition on a dark background in both appearance modes: COMING /
+SOON, a worn vertical bar, and AN / OCEAN PARK / EXPERIMENT on three lines.
+The faded signal-orange hue stays fixed; sparse speckles and intermittent
+tracking failures replace most continuous sideways jitter. This supersedes the
+older static Astir lockup and waitlist exploration.
+
+Ship a small, silent recording and its still in the app bundle. A native video
+layer uses the still immediately, reuses the local player between visits, and
+pauses off the tab or outside the active scene. Reduce Motion shows the still.
+Do not add a live shader, network dependency, playback UI, or per-frame SwiftUI
+state to this decorative surface. No event data, waitlist, booking, or RSVP
+behavior is implied by the teaser. The source and asset handoff are documented
+in `docs/designs/events-coming-soon/README.md`.
+
+## 2026-09-17 — Map opening location precedence (REC-539)
+
+On ordinary app opening, center Map on a fresh authorized device location. While
+acquiring it, or when permission is unavailable or acquisition fails, use the
+most recently shared location. With no recorded location, center on Ocean Park,
+Santa Monica, California. Saved places and Featured results never choose the
+launch camera. Explicit place navigation and gestures take precedence over a
+late location response.
+
+Retain one timestamped valid location locally on the device, including locations
+obtained through Allow Once. Keep it after temporary permission expires or
+permission is disabled; only a newer authorized fix replaces it. This is a map
+fallback, not a live location indicator or a location history. Do not sync this
+record or put coordinates in analytics. Older installations without a recorded fix
+cannot reconstruct a past one-time share.
+
+Map location acquisition does not prompt for permission on launch. Approximate
+permission is sufficient for centering the map; nearby POI resolution retains
+its stricter accuracy requirement. Cancel obsolete launch requests and retry
+when the app returns from the background or authorization changes. Preserve the
+existing deterministic Los Angeles viewport only for explicit debug fixtures.

@@ -1,4 +1,3 @@
-#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -33,4 +32,3 @@ enum CommonGroundInvitationSharing {
         return png
     }
 }
-#endif

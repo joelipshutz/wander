@@ -467,21 +467,41 @@ struct SharedVisitInvitationInboxScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
+    @ObservedObject var planInbox: PlacePlanInvitationInbox
     let onReview: (SharedVisitInvitation) -> Void
+    @State private var selectedPlan: ReceivedPlacePlanInvitation?
     @State private var isRefreshing = false
     @State private var refreshError: String?
     @State private var decliningParticipantID: String?
     @State private var declineErrors: [String: String] = [:]
 
+    private var plans: [ReceivedPlacePlanInvitation] {
+        planInbox.userID == store.currentUser.id ? planInbox.invitations : []
+    }
+
+    private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty }
+
     var body: some View {
         Group {
-            if store.sharedVisitInvitations.isEmpty, !isRefreshing {
+            if isEmpty, !isRefreshing, !planInbox.isLoading {
                 emptyState
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: WanderTheme.spacing4) {
                         if let refreshError {
                             refreshErrorRow(refreshError)
+                        }
+
+                        if !plans.isEmpty {
+                            Text("Plans").font(AstirTypography.sectionTitle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ForEach(plans) { plan in
+                                PlacePlanNotificationRow(plan: plan) { selectedPlan = plan }
+                            }
+                        }
+                        if !store.sharedVisitInvitations.isEmpty {
+                            Text("Check-in invitations").font(AstirTypography.sectionTitle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         ForEach(store.sharedVisitInvitations) { invitation in
@@ -502,7 +522,7 @@ struct SharedVisitInvitationInboxScreen: View {
             }
         }
         .overlay {
-            if isRefreshing, store.sharedVisitInvitations.isEmpty {
+            if isRefreshing || planInbox.isLoading, isEmpty {
                 ProgressView("Loading invitations...")
                     .font(AstirTypography.label)
                     .tint(brandMode.accent)
@@ -510,9 +530,16 @@ struct SharedVisitInvitationInboxScreen: View {
         }
         .background(brandMode.background.ignoresSafeArea())
         .foregroundStyle(brandMode.primaryText)
-        .navigationTitle("check-in invitations")
+        .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
+        .sheet(item: $selectedPlan, onDismiss: { Task { await refresh() } }) { plan in
+            let recipientID = store.currentUser.id
+            PlacePlanInvitationScreen(invitationID: plan.id, repository: backend.placePlanInvitationRepository) {
+                planInbox.markOpened(id: plan.id, userID: recipientID, analytics: store.productAnalytics)
+            }
+        }
+        .onChange(of: store.currentUser.id) { _, _ in selectedPlan = nil }
     }
 
     private var emptyState: some View {
@@ -522,13 +549,14 @@ struct SharedVisitInvitationInboxScreen: View {
                 .foregroundStyle(WanderTheme.stateSuccess.color)
                 .frame(width: 84, height: 84)
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
-            Text("no invitations waiting")
+            Text("No invitations yet")
                 .font(AstirTypography.sectionTitle)
-            Text("New shared check-ins will show up here.")
+            Text("Plans and shared check-in invitations will show up here")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
-            if refreshError != nil {
+            if refreshError != nil || planInbox.failed {
+                Text("Couldn’t refresh invitations").font(AstirTypography.bodySmall)
                 Button("Try again") { Task { await refresh() } }
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
@@ -564,7 +592,8 @@ struct SharedVisitInvitationInboxScreen: View {
         isRefreshing = true
         defer { isRefreshing = false }
         let didRefresh = await store.refreshSharedVisitInbox(backend: backend)
-        refreshError = didRefresh ? nil : "Could not refresh invitations. Your saved invitations are still here."
+        await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository)
+        refreshError = (didRefresh || !backend.canUseSharedVisits) && !planInbox.failed ? nil : "Couldn’t refresh invitations"
     }
 
     @MainActor

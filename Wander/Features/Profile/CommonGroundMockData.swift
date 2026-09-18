@@ -1,4 +1,3 @@
-#if DEBUG
 import Foundation
 
 enum CommonGroundMockPage: String, CaseIterable, Sendable {
@@ -334,4 +333,3 @@ enum CommonGroundMockData {
         return sparse ? Array(eligiblePlaces.prefix(2)) : eligiblePlaces
     }
 }
-#endif

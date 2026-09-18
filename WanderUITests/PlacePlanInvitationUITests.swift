@@ -2,6 +2,37 @@
 import XCTest
 
 @MainActor final class PlacePlanInvitationUITests: XCTestCase {
+    func testProfileNotificationsKeepReadPlansAvailableToReopen() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                               "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
+        app.buttons["Profile"].firstMatch.tap()
+        let notifications = app.buttons["profile.checkInInvitations"]
+        XCTAssertTrue(notifications.waitForExistence(timeout: 10))
+        notifications.tap()
+        let row = app.buttons["place-plan.notification.11111111-2222-4333-8444-555555555555"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertEqual(row.value as? String, "Unread")
+        XCTAssertTrue(row.label.contains("Ryan invited you to Narwhal"))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "rec486-notifications-plans"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        row.tap()
+        XCTAssertTrue(app.staticTexts["place-plan.message"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["common-ground.invitation.messages"].exists)
+        XCTAssertTrue(app.textFields.allElementsBoundByIndex.allSatisfy { !$0.isHittable })
+        app.buttons["place-plan.close"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertEqual(row.value as? String, "Read")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["place-plan.message"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["place-plan.message"].label, "Coffee on Saturday?")
+    }
+
     func testIncomingLinkOpensReadOnlyInvitationAndReplacesItWithUnavailableState() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

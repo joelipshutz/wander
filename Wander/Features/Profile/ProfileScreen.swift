@@ -116,6 +116,8 @@ final class ProfilePresentationCache {
 }
 
 struct ProfileScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var planInbox = PlacePlanInvitationInbox()
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -300,11 +302,15 @@ struct ProfileScreen: View {
                         .environmentObject(backend)
                 }
                 .navigationDestination(isPresented: $showsYourMapPrototype) {
-                    YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
-                    .toolbar(.hidden, for: .tabBar)
+                    // SwiftUI also evaluates inactive destinations. Keep the
+                    // map projection out of Profile and Settings updates.
+                    if showsYourMapPrototype {
+                        YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)
+                            .toolbar(.hidden, for: .tabBar)
+                    }
                 }
                 .navigationDestination(isPresented: $showsVisitInvitations) {
-                    SharedVisitInvitationInboxScreen { invitation in
+                    SharedVisitInvitationInboxScreen(planInbox: planInbox) { invitation in
                         showsVisitInvitations = false
                         pushNotifications.openSharedVisit(
                             participantID: invitation.participantID,
@@ -320,6 +326,15 @@ struct ProfileScreen: View {
                     await store.refreshRemoteCurrentUserProfileData(backend: backend)
                     await store.refreshSharedVisitInbox(backend: backend)
                     handleNotificationRoute(pushNotifications.navigationRequest)
+                }
+                .task(id: auth.isSignedIn ? store.currentUser.id : nil) {
+                    guard auth.isSignedIn else { planInbox.reset(for: nil); return }
+                    await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository)
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active, auth.isSignedIn {
+                        Task { await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository) }
+                    }
                 }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
                     handleNotificationRoute(request)
@@ -366,7 +381,7 @@ struct ProfileScreen: View {
             return max(store.sharedVisitInvitations.count, 1)
         }
         #endif
-        return store.sharedVisitInvitations.count
+        return store.sharedVisitInvitations.count + planInbox.unreadCount(for: store.currentUser.id)
     }
 
     private func handlePresentationResetRequest(_ request: WanderPresentationResetRequest?) {
@@ -917,12 +932,15 @@ struct ProfileDetailView: View {
                     .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsYourMapPrototype) {
-                YourMapPrototypeScreen(
-                    dataset: yourMapPrototypeDataset,
-                    viewerID: store.currentUser.id,
-                    mapTitle: profileMapTitle,
-                    pinOwnership: .social
-                )
+                // Avoid projecting the member's full map until it is opened.
+                if showsYourMapPrototype {
+                    YourMapPrototypeScreen(
+                        dataset: yourMapPrototypeDataset,
+                        viewerID: store.currentUser.id,
+                        mapTitle: profileMapTitle,
+                        pinOwnership: .social
+                    )
+                }
             }
             .sheet(item: $socialGraphTab) { tab in
                 ProfileSocialGraphScreen(profileID: profileID, initialTab: tab, onFindFriends: {})
@@ -2407,11 +2425,7 @@ private struct InCommonReleaseMapScreen: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("in-common.map-place.\(visiblePlace.id)")
-                        #if DEBUG
                         .accessibilityHint("Compose an invitation for this shared place")
-                        #else
-                        .accessibilityHint("Shows saved place details")
-                        #endif
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -2443,10 +2457,8 @@ private struct SavedPlacesListScreen: View {
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var showsInCommonMap = false
-    #if DEBUG
     @State private var commonGroundInvitation: CommonGroundMockPlace?
     @State private var commonGroundInvitationShowsLinkage = false
-    #endif
 
     init(mode: SavedPlacesListMode, profileID: String) {
         self.mode = mode
@@ -2503,15 +2515,11 @@ private struct SavedPlacesListScreen: View {
 
     var body: some View {
         Group {
-            #if DEBUG
             if isInCommonRoot {
                 liveInCommonContent
             } else {
                 legacyContent
             }
-            #else
-            legacyContent
-            #endif
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if usesInlineNavigationHeader {
@@ -2549,11 +2557,9 @@ private struct SavedPlacesListScreen: View {
                 onSelect: openSharedMapPlace
             )
         }
-        #if DEBUG
         .navigationDestination(item: $commonGroundInvitation) { selected in
             commonGroundInvitationDestination(selected)
         }
-        #endif
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
         }
@@ -2662,7 +2668,6 @@ private struct SavedPlacesListScreen: View {
         }
     }
 
-    #if DEBUG
     private var liveInCommonContent: some View {
         let snapshot = CommonGroundLiveData.snapshot(store: store, profileID: profileID)
         return CommonGroundMixMockup(
@@ -2706,10 +2711,8 @@ private struct SavedPlacesListScreen: View {
                 .toolbar(.visible, for: .navigationBar)
         }
     }
-    #endif
 
     private func openSharedMapPlace(_ selected: VisiblePlace) {
-        #if DEBUG
         let rows = store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID)
         let matchingIDs = Set(rows.filter { VisiblePlaceGrouping.matches($0, selected) }.map(\.id))
         if let place = CommonGroundLiveData.places(store: store, profileID: profileID)
@@ -2717,17 +2720,10 @@ private struct SavedPlacesListScreen: View {
             commonGroundInvitationShowsLinkage = true
             commonGroundInvitation = place
         }
-        #else
-        selectedPlace = selected
-        #endif
     }
 
     private var hasCommonGroundInvitation: Bool {
-        #if DEBUG
         commonGroundInvitation != nil
-        #else
-        false
-        #endif
     }
 
     private var navigationTitle: String {

@@ -6,6 +6,97 @@ import XCTest
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    func testPostcardPhotoIsDecodedToDisplaySizeAndReused() async throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let data = try XCTUnwrap(UIGraphicsImageRenderer(
+            size: CGSize(width: 4032, height: 3024), format: format
+        ).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 4032, height: 3024))
+        }.jpegData(compressionQuality: 0.9))
+        let localRef = try XCTUnwrap(VisitPhotoLocalFileStore.save(
+            data: data, id: UUID(), contentType: "image/jpeg"
+        ))
+        let url = try XCTUnwrap(VisitPhotoLocalFileStore.fileURL(from: localRef))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let media = ActivityEngagementMedia(id: "large-local-photo", localAssetRef: localRef, accessibilityLabel: "Test photo")
+        let request = try XCTUnwrap(ActivityPostcardImageRequest(
+            media: media, size: CGSize(width: 370, height: 154), displayScale: 3
+        ))
+        let pipeline = WanderAvatarImagePipeline()
+        let firstResult = await ActivityPostcardImages.image(for: request, using: pipeline)
+        let first = try XCTUnwrap(firstResult)
+        let secondResult = await ActivityPostcardImages.image(for: request, using: pipeline)
+        let second = try XCTUnwrap(secondResult)
+        XCTAssertEqual(first.pixelSize, CGSize(width: 1152, height: 864))
+        XCTAssertLessThan(first.estimatedByteCost, 4 * 1_024 * 1_024)
+        XCTAssertTrue(first === second, "Reappearing cards must reuse their decoded image")
+        let original = try XCTUnwrap(VisitPhotoLocalFileStore.image(from: localRef)?.cgImage)
+        XCTAssertLessThan(first.estimatedByteCost, original.bytesPerRow * original.height / 8)
+    }
+
+    func testPostcardRemotePhotoLoadsOffMainAndFallsBackFromMissingLocalFile() async throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let data = try XCTUnwrap(UIGraphicsImageRenderer(
+            size: CGSize(width: 64, height: 64), format: format
+        ).image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }.jpegData(compressionQuality: 0.9))
+        let remoteURL = URL(string: "https://example.com/authorized-activity-photo.jpg")!
+        let pipeline = WanderAvatarImagePipeline(dataLoader: { url in
+            XCTAssertFalse(Thread.isMainThread, "Image bytes and decoding must stay off the UI thread")
+            XCTAssertEqual(url, remoteURL)
+            return data
+        })
+        let request = try XCTUnwrap(ActivityPostcardImageRequest(
+            media: ActivityEngagementMedia(id: "fallback", urlString: remoteURL.absoluteString,
+                localAssetRef: "local_file:missing-\(UUID()).jpg", accessibilityLabel: "Test photo"),
+            size: CGSize(width: 370, height: 154), displayScale: 3
+        ))
+        let result = await ActivityPostcardImages.image(for: request, using: pipeline)
+        XCTAssertNotNil(result)
+    }
+
+    func testPostcardImageRequestPreservesSourceChangesAndBoundsDecodeSize() throws {
+        let media = ActivityEngagementMedia(id: "photo", urlString: "https://example.com/first.jpg", accessibilityLabel: "Photo")
+        let request = try XCTUnwrap(ActivityPostcardImageRequest(media: media, size: CGSize(width: 370, height: 154), displayScale: 3))
+        XCTAssertEqual(request.sources.first?.targetPixelSize, 1152)
+        XCTAssertEqual(request, ActivityPostcardImageRequest(media: media, size: CGSize(width: 370.1, height: 154), displayScale: 3))
+        let huge = try XCTUnwrap(ActivityPostcardImageRequest(media: media, size: CGSize(width: 10_000, height: 154), displayScale: 3))
+        XCTAssertEqual(huge.sources.first?.targetPixelSize, 2048)
+        let changed = ActivityEngagementMedia(id: "photo", urlString: "https://example.com/replaced.jpg", accessibilityLabel: "Photo")
+        XCTAssertNotEqual(request, ActivityPostcardImageRequest(media: changed, size: CGSize(width: 370, height: 154), displayScale: 3))
+        XCTAssertNil(ActivityPostcardImageRequest(media: media, size: .zero, displayScale: 3))
+        XCTAssertNil(ActivityPostcardImageRequest(media: media, size: CGSize(width: CGFloat.infinity, height: 154), displayScale: 3))
+        XCTAssertNil(ActivityPostcardImageRequest(media: ActivityEngagementMedia(id: "pending", accessibilityLabel: "Loading"), size: CGSize(width: 370, height: 154), displayScale: 3))
+    }
+
+    func testPostcardArtworkWaitsForVerifiedActivityMedia() {
+        XCTAssertFalse(
+            ActivityPostcardArtworkPolicy.showsPlacePhoto(
+                hasVisiblePlace: true,
+                mediaCount: 1
+            ),
+            "A pending or resolved activity-media item must suppress the unrelated place fallback"
+        )
+        XCTAssertFalse(
+            ActivityPostcardArtworkPolicy.showsDecorativeFallback(
+                hasVisiblePlace: true,
+                mediaCount: 1
+            )
+        )
+        XCTAssertTrue(
+            ActivityPostcardArtworkPolicy.showsPlacePhoto(
+                hasVisiblePlace: true,
+                mediaCount: 0
+            ),
+            "The verified no-activity-photo result may use the place photo"
+        )
+    }
+
     func testShareDestinationTrayUsesTheRequestedOrderAndRoutes() {
         XCTAssertEqual(
             ActivityShareDestination.allCases,

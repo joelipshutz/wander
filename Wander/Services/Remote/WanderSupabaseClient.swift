@@ -174,6 +174,9 @@ private struct SignedStorageURLResponse: Decodable {
 @MainActor
 final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteTableCalling {
     private static let socialImportUnderstandingTimeout: TimeInterval = 145
+    private static let followedFeedTimeout: TimeInterval = 1.5
+    private static let activityMediaTimeout: TimeInterval = 1
+    private static let discoverProfileRecommendationsTimeout: TimeInterval = 1.5
 
     private struct RejectedTokenKey: Hashable {
         let userID: String
@@ -433,6 +436,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             .appendingPathComponent(name)
 
         var request = URLRequest(url: endpoint)
+        request.timeoutInterval = Self.rpcTimeout(for: name)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -474,6 +478,19 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         }
 
         return (data, httpResponse, requestContext.token)
+    }
+
+    static func rpcTimeout(for name: String) -> TimeInterval {
+        switch name {
+        case "followed_feed":
+            followedFeedTimeout
+        case "activity_media":
+            activityMediaTimeout
+        case "discover_profile_recommendations":
+            discoverProfileRecommendationsTimeout
+        default:
+            60
+        }
     }
 
     private func decodeRPCResponse<Value: Decodable>(

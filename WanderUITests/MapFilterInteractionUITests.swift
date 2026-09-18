@@ -18,13 +18,24 @@ final class MapFilterInteractionUITests: XCTestCase {
             .matching(identifier: "map.initialLoading")
             .firstMatch
         XCTAssertTrue(loading.waitForExistence(timeout: 3))
-        XCTAssertEqual(loading.label, "Loading your map…")
-        XCTAssertFalse(app.maps.firstMatch.isHittable)
+        XCTAssertEqual(loading.label, "Opening Astir")
+        XCTAssertFalse(app.staticTexts["Loading your map…"].exists)
+        XCTAssertFalse(loading.progressIndicators.firstMatch.exists)
+        // MapKit's virtual accessibility map can report hittable through a
+        // covering view. Exercise a real gesture and check its effect instead.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.68))
+            .press(forDuration: 0.7)
+        XCTAssertTrue(loading.exists)
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-381 graceful large-account Map loading"
+        screenshot.name = "REC-537 uninterrupted launch artwork while Map loads"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 35))
+        XCTAssertFalse(app.buttons["map.selectedPlaceCard"].exists)
+        XCTAssertTrue(app.maps.firstMatch.isHittable)
     }
 
     func testPerformanceFixtureRevealsUsableMapAfterInitialLoading() {
@@ -47,6 +58,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 3))
         XCTAssertTrue(map.isHittable)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 3))
     }
 
@@ -386,13 +398,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
-            "-WanderUseStorefrontFixtures"
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends"
         ]
         app.launch()
 
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["map.filter.featured"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 8))
 
         let pin = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Canyon Lookout Trail,")
@@ -444,9 +459,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(map.waitForExistence(timeout: 5))
 
         let pin = app.buttons
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "Bar Nido,"))
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Griffith Observatory Trail,"))
             .firstMatch
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
+
+        // Use the isolated trail marker at the initial camera. Nearby restaurant
+        // markers can be collision-hidden while still exposing accessibility frames.
+        let beforeTap = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        beforeTap.name = "Isolated Griffith trail pin before physical tap"
+        beforeTap.lifetime = .keepAlways
+        add(beforeTap)
 
         // Tap through the map at the rendered pin center. This exercises the
         // gesture bridge instead of dispatching the pin's accessibility action.
@@ -458,7 +480,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 3))
-        XCTAssertTrue(card.label.contains("Bar Nido"))
+        XCTAssertTrue(card.label.contains("Griffith Observatory Trail"), "Selected card: \(card.label)")
 
         let unexpectedRecenterDismissal = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),

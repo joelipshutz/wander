@@ -1,4 +1,3 @@
-#if DEBUG
 import MapKit
 import SwiftUI
 import UIKit
@@ -955,4 +954,3 @@ private struct CommonGroundSampleCaption: View {
 #Preview("Member profile") { CommonGroundDesignMockupRoot(page: .profile) }
 #Preview("Your profile") { CommonGroundDesignMockupRoot(page: .ownProfile) }
 #Preview("In Common · Dark") { CommonGroundDesignMockupRoot(page: .detail).preferredColorScheme(.dark) }
-#endif

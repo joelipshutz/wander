@@ -179,6 +179,10 @@ enum FeedRefreshPolicy {
 }
 
 enum FeedPresentation {
+    // Keep the Featured implementation available for a future layout change.
+    // This choice controls both the top rail and the work requested from the server.
+    static let showsFeaturedPlaces = false
+
     private static let futureClockSkewTolerance: TimeInterval = 5 * 60
     static let activityGroupingWindow: TimeInterval = 30 * 60
 

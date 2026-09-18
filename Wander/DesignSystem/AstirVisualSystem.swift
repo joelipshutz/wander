@@ -190,6 +190,7 @@ struct AstirMastheadLockup: View {
     @Environment(\.astirBrandMode) private var brandMode
     var isCompact = false
     var presentation: AstirMastheadPresentation = .glass
+    var animatesNeighborhood = false
 
     var body: some View {
         masthead
@@ -208,9 +209,7 @@ struct AstirMastheadLockup: View {
             Text("ASTIR")
                 .font(AstirTheme.wordmark(isCompact ? 18 : 22))
                 .tracking(isCompact ? 4.2 : 5.2)
-            Text("OCEAN PARK")
-                .font(AstirTheme.metadata(isCompact ? 6.5 : 7.5))
-                .tracking(isCompact ? 1.8 : 2.3)
+            AstirOceanParkLabel(isCompact: isCompact, animationsEnabled: animatesNeighborhood)
         }
         .foregroundStyle(brandMode.primaryText)
     }

@@ -1,4 +1,3 @@
-#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -186,4 +185,3 @@ private struct CGMessagesConversation: View {
     CommonGroundMessagesMockup(draft: .preview, isReply: true)
         .preferredColorScheme(.dark)
 }
-#endif

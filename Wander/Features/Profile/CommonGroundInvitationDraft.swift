@@ -1,4 +1,3 @@
-#if DEBUG
 import Foundation
 
 /// One value travels from the composer to sharing or the recipient preview. Evidence
@@ -111,4 +110,3 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
     )
 
 }
-#endif

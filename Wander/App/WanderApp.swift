@@ -115,8 +115,9 @@ struct WanderApp: App {
                     state: .signedIn(
                         AuthSession(
                             userID: "user_joe",
-                            displayName: "Joe",
-                            handle: "joe"
+                            displayName: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "Joe",
+                            handle: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "joe",
+                            isAppleSignIn: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? true : nil
                         )
                     )
                 ),
@@ -137,6 +138,7 @@ struct WanderApp: App {
         #if DEBUG && targetEnvironment(simulator)
         let backendStore = usesSimulatorTestSession
             ? WanderBackend(
+                profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
                 notificationRepository: SimulatorNotificationRepository(),
                 placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
                     ? SimulatorPlacePlanInvitationRepository() : nil
@@ -283,6 +285,32 @@ struct WanderApp: App {
 }
 
 #if DEBUG
+/// Exercises identity submission locally without contacting a real account.
+@MainActor
+final class SimulatorOnboardingProfileRepository: ProfileRepository {
+    private let localProfile = LocalProfile(localID: "user_joe", handle: "joe", displayName: "Joe")
+
+    func currentProfile() async throws -> LocalProfile? { localProfile }
+
+    func isHandleAvailable(_ handle: String) async throws -> Bool { true }
+
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        if let displayName = update.displayName { localProfile.displayName = displayName }
+        if let handle = update.handle {
+            localProfile.handle = handle
+            localProfile.searchHandle = handle.lowercased()
+        }
+        if update.markOnboardingComplete { localProfile.onboardingCompletedAt = .now }
+        return localProfile
+    }
+
+    func profile(id: String) async throws -> ProfileViewState {
+        throw WanderRemoteError.notImplemented("simulator profile lookup")
+    }
+
+    func searchProfiles(handleQuery: String) async throws -> [ProfileShell] { [] }
+}
+
 /// Lets simulator UI tests exercise the native notification authorization
 /// prompt without making remote calls or weakening the production boundary.
 @MainActor
