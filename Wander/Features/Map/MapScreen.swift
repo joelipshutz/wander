@@ -2035,7 +2035,10 @@ struct MapScreen: View {
                         AstirFloatingHeaderSurface {
                             VStack(spacing: WanderTheme.spacing1) {
                                 HStack {
-                                    AstirMastheadLockup(presentation: .localizedBlur)
+                                    AstirMastheadLockup(
+                                        presentation: .localizedBlur,
+                                        animatesNeighborhood: isMastheadMotionEnabled
+                                    )
                                     Spacer()
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
@@ -3909,6 +3912,12 @@ struct MapScreen: View {
             }
             .zIndex(100)
         }
+    }
+
+    private var isMastheadMotionEnabled: Bool {
+        isMapTabActive && !isAddPresented && !isPlaceProfileOverlayBlockingInteraction
+            && mapSaveFlow == nil && mapActivityEditFlow == nil && mapPlaceListTarget == nil
+            && !isLocationEducationPresented
     }
 
     private var isPlaceProfileOverlayBlockingInteraction: Bool {
