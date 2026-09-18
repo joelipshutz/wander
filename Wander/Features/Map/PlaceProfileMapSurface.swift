@@ -1545,6 +1545,7 @@ private struct PlaceProfileFullView: View {
     let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let onAttachedClose: @MainActor () -> Void
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
+    @Environment(\.nuxPlaceIntroductionIsFocused) private var nuxPlaceIntroductionIsFocused
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -1674,6 +1675,10 @@ private struct PlaceProfileFullView: View {
         .environment(\.placeProfileVisualStyle, .astir)
         .environment(\.activityPostcardVisualStyle, .astir)
         .ignoresSafeArea(.container, edges: .top)
+        // Blur the real profile and its header, before adding the sharp native
+        // floating actions. The annotation lives above this entire surface.
+        .blur(radius: nuxPlaceIntroductionIsFocused ? NUXPlaceIntroductionTiming.blurRadius : 0)
+        .animation(.easeInOut(duration: 0.2), value: nuxPlaceIntroductionIsFocused)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty {
                 PlaceProfileFloatingActions(

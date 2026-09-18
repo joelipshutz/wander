@@ -46,7 +46,7 @@ stale scene state; large text must not push Next or copy outside the viewport.
 | Specificity | 9/10 | Actual native controls and ring styles; no substitute screens. |
 | Design system | 8/10 | Adaptive Astir paper/ink, coral, editorial type and local glass. |
 | Accessibility | 6/10, unverified | Current/compact phones, both appearances, large text, manual Reduce Motion/VoiceOver path. |
-| Unresolved choices | Reviewable | Pop/slide and original/connection finale remain selectable. |
+| Selected treatment | Implemented | September 18: slide/fade, original quote, five seconds with Enjoy. Feed remains for review. |
 
 The desired arc is orientation on Map, recognition of the controls, a short
 connection-focused ending, then freedom to use the app. Nearby and place-action
@@ -80,3 +80,21 @@ Final creative selection and production merge are separate from this review.
 
 Actual test counts, outstanding performance thresholds, capture limitations and
 restart commands are maintained in [native-validation.md](native-validation.md).
+
+## September 18 revision
+
+The selected motion is slide/fade; N25 uses the original quote and a five-second
+Enjoy ending. C04 keeps the actual profile tree and applies a six-point blur
+before its floating-action inset, so neither the real controls nor the annotations
+are blurred or duplicated. A dedicated cancellable task owns arrival, three seconds
+of focus, a short clear transition, and one 900 ms diagonal sweep over each button.
+It consumes the existing account-scoped contextual lesson. Backgrounding, leaving
+the profile or using a real action clears the treatment. Reduce Motion omits the
+sweep but does not leave a no-skip lesson stuck on screen. Isolated capture mode can
+hold the focus state for screenshots.
+
+More's button anchor is omitted while its dropdown is presented; the dropdown
+alone supplies the target rectangle. The trim is rendered directly on the panel
+with its exact bounds and corner radius, so it also stays aligned during the
+opening animation. Starter-list entry remains deferred by request. The optional
+Feed reveal has its own native recording in the local review index.

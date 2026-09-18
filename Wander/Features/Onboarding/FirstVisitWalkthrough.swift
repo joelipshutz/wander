@@ -142,14 +142,7 @@ enum FirstVisitWalkthroughContent {
         #endif
     }
     static let contextualAutoAdvanceMilliseconds = 5_000
-    static var finaleAutoAdvanceMilliseconds: Int {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFinaleFourSeconds")
-            || (ProcessInfo.processInfo.arguments.contains("-WanderNUXReview")
-                && UserDefaults.standard.integer(forKey: "nux.review.finaleSeconds") == 4) { return 4_000 }
-        #endif
-        return 6_000
-    }
+    static let finaleAutoAdvanceMilliseconds = 5_000
     static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
     static let profileAutoAdvanceDelayMilliseconds = 2_200
     static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
@@ -416,6 +409,7 @@ enum FirstVisitWalkthroughContent {
 
     static func presentationDelayMilliseconds(for step: WalkthroughStep) -> Int {
         if step.presentationStyle == .finale { return finaleAutoAdvanceMilliseconds }
+        if step.target == .placeSaveActions { return NUXPlaceIntroductionTiming.focusMilliseconds }
         if contextualSurfaces.contains(step.surface) { return contextualAutoAdvanceMilliseconds }
         if step.target == .mapMoreFilters { return 6_000 }
         // Include the filter intro animation in the reading window.
@@ -2327,6 +2321,7 @@ extension View {
 }
 
 private struct FirstVisitWalkthroughModifier: ViewModifier {
+    @State private var placeIntroductionIsFocused = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var coordinator: FirstVisitWalkthroughCoordinator
     let surface: WalkthroughSurface
@@ -2335,12 +2330,16 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .environment(\.nuxPlaceIntroductionIsFocused,
+                         isActive && coordinator.currentStep?.target == .placeSaveActions && placeIntroductionIsFocused)
             .simultaneousGesture(TapGesture().onEnded {
-                if FirstVisitWalkthroughContent.contextualSurfaces.contains(surface),
+                if coordinator.currentStep?.target != .placeSaveActions,
+                   FirstVisitWalkthroughContent.contextualSurfaces.contains(surface),
                    coordinator.activeSurface == surface {
                     coordinator.dismissCurrentContext()
                 }
             })
+            .onChange(of: coordinator.currentStep?.id) { _, _ in placeIntroductionIsFocused = false }
             .onAppear { if isActive { coordinator.activate(surface) } }
             .onChange(of: surface) { _, newSurface in
                 if isActive { coordinator.activate(newSurface) }
@@ -2389,6 +2388,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                     resolvedWalkthroughFrame(resolvedWalkthroughFrames($0, in: proxy))
                                 },
                                 userActivityGeneration: coordinator.userActivityGeneration,
+                                placeIntroductionIsFocused: $placeIntroductionIsFocused,
                                 onDismiss: coordinator.dismissEntireWalkthrough,
                                 onBack: step.allowsBackNavigation && coordinator.canGoBack
                                     ? { coordinator.goBack() }
@@ -2540,6 +2540,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     let safeTop: CGFloat
     let additionalTargets: [WalkthroughTargetID: CGRect]
     let userActivityGeneration: Int
+    @Binding var placeIntroductionIsFocused: Bool
     let onDismiss: () -> Void
     let onBack: (() -> Void)?
     let onNext: () -> Void
@@ -2637,7 +2638,12 @@ private struct FirstVisitWalkthroughOverlay: View {
 
     var body: some View {
         ZStack {
-            if step.presentationStyle == .finale {
+            if step.target == .placeSaveActions {
+                NUXPlaceActionIntroduction(step: step, target: activeTargetFrame,
+                                           additionalTargets: additionalTargets, size: containerSize,
+                                           safeTop: safeTop, isFocused: $placeIntroductionIsFocused,
+                                           finish: onNext)
+            } else if step.presentationStyle == .finale {
                 NUXConnectionFinale(step: step, size: containerSize, finish: onNext)
             } else {
                 if shouldShowScrim {
@@ -2741,7 +2747,8 @@ private struct FirstVisitWalkthroughOverlay: View {
             }
         }
         .task(id: "automatic-advance-\(step.id)-\(scenePhase)-\(reduceMotion)") {
-            guard scenePhase == .active, !reduceMotion, step.automaticallyAdvances,
+            guard step.target != .placeSaveActions,
+                  scenePhase == .active, !reduceMotion, step.automaticallyAdvances,
                   !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture,
                   !UIAccessibility.isVoiceOverRunning else { return }
             let delay: Int

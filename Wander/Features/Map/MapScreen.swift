@@ -2080,7 +2080,7 @@ struct MapScreen: View {
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
                                     .accessibilityIdentifier("map.filter.more")
-                                    .walkthroughTarget(.mapMoreFilters)
+                                    .walkthroughTarget(isMoreFiltersPresented ? nil : .mapMoreFilters)
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
                             }
@@ -9886,6 +9886,16 @@ private struct MapMoreFiltersPopover: View {
             tone: appearance.neutralGlassTone
         )
         .accessibilityIdentifier("map.moreFilters.popover")
+        .overlay {
+            // Attach the trim to the real dropdown so it follows the panel's
+            // entrance exactly, without unioning or animating from the chip.
+            if walkthroughs.currentStep?.target == .mapMoreFilters {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .strokeBorder(appearance.accentText.opacity(0.5), lineWidth: 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(scenePhase)") {
             guard walkthroughs.currentStep?.target == .mapMoreFilters, !reduceMotion,
                   scenePhase == .active, !UIAccessibility.isVoiceOverRunning,

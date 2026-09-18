@@ -11,8 +11,9 @@ This branch implements the post-onboarding review from the full [T05](transcript
 ## Native experience
 
 - **M01–M06:** undimmed native Map with eight detached demonstration places. Featured/Friends changes the example set; More opens, scrolls its real sections and closes; Search stays keyboard-free unless tapped; Plus stays voluntary; the legend uses the actual solid/dotted rings. Demonstration models never enter the persistent store.
-- **N25:** a material ending over the same Map, immediate Skip and optional Enjoy. Connection/original-quote copy, four/six seconds, and pop/slide motion remain review alternatives.
-- **C01/C04:** stationary handwritten marks on Nearby Places and the actual place-profile Check In/Wanna actions. Real controls remain available; Next, timeout, or actual use dismisses the hint.
+- **N25:** a material ending over the same Map, with Enjoy and immediate Skip. Ryan selected the original quote, five seconds with Enjoy, and slide/fade motion.
+- **C01:** stationary handwritten marks on Nearby Places; Next, timeout, or actual use dismisses the hint.
+- **C04:** first-visit profile focus: three seconds of moderate blur behind sharp static annotations and the real floating Check In/Wanna buttons, no Next/Skip, then one diagonal glimmer on each button. The page returns to normal and the hint does not repeat. Actual actions remain usable; Reduce Motion omits the glimmer.
 - **C02:** opt-in native Feed reveal through up to twenty available groups, then back to the full content inset. Dragging, navigation, inactivity and Reduce Motion cancel motion. No activity is invented for production accounts.
 - **C03:** one explanation of sharing recs, organizing personal places and keeping imports together.
 - **Review controls:** nested Map, first-visit and playback menus; deterministic launch targets for all eleven scenes.
@@ -26,4 +27,4 @@ See [native-validation.md](native-validation.md) for exact launch/test instructi
 
 ## Decisions still for review
 
-Choose the coach motion, N25 wording/action/duration and whether to keep the Feed experiment. Four localized starter Lists still need names, contents and ownership selected before population. N27 keeps its working setup guide; device-specific motion demonstrations remain a separate pass. N28/N29 are conditional notification requests, not duplicate success confirmations, so removing them requires a distinct product decision. No list data, hardware setup, permission policy or final creative choice is silently committed by these mocks.
+Slide/fade, the original N25 quote and five seconds with Enjoy are selected. The optional Feed reveal remains for review and has its own recording in the local capture index. Starter Lists will be entered later; no population is included in this pass. N27 keeps its working setup guide; device-specific motion demonstrations remain a separate pass. N28/N29 are conditional notification requests, not duplicate success confirmations, so removing them requires a distinct product decision. No list data, hardware setup, permission policy or final creative choice is silently committed by these mocks.

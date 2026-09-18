@@ -305,7 +305,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertNil(coordinator.tutorialUserPlaceID)
     }
 
-    func testReadingWindowsKeepNextAvailableAndPreserveBaselineFinale() throws {
+    func testReadingWindowsUseApprovedFiveSecondOriginalFinale() throws {
         let map = FirstVisitWalkthroughContent.stepsBySurface[.map, default: []]
         for step in map {
             XCTAssertEqual(step.advance, .next)
@@ -316,9 +316,27 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let finale = try XCTUnwrap(FirstVisitWalkthroughContent.stepsBySurface[.sendoff]?.first)
         XCTAssertEqual(finale.nextButtonTitle, "Skip")
         XCTAssertTrue(finale.message.hasPrefix("As you move through this life"))
-        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: finale), 6_000)
+        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: finale), 5_000)
         let context = try XCTUnwrap(FirstVisitWalkthroughContent.stepsBySurface[.lists]?.first)
         XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: context), 5_000)
+    }
+
+    func testPlaceIntroductionCompletionPersistsAcrossProfilesAndRelaunch() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "new-user", store: FirstVisitWalkthroughStore(defaults: defaults))
+        coordinator.activate(.map)
+        coordinator.finishOverviewForUserNavigation()
+        coordinator.activate(.placeDetail)
+        let step = try XCTUnwrap(coordinator.currentStep)
+        XCTAssertEqual(step.target, .placeSaveActions)
+        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step), 3_000)
+        coordinator.advancePassiveStep(ifCurrentStepID: step.id)
+        coordinator.activate(.placeDetail)
+        XCTAssertNil(coordinator.currentStep)
+        let relaunched = FirstVisitWalkthroughCoordinator(userID: "new-user", store: FirstVisitWalkthroughStore(defaults: defaults))
+        relaunched.activate(.placeDetail)
+        XCTAssertNil(relaunched.currentStep)
+        XCTAssertEqual(NUXCoachMotion.selected, .slide)
     }
 
     func testEveryMapSourceRegistersItsOwnWalkthroughTarget() {

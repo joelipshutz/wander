@@ -6,6 +6,13 @@ Prepared September 17, 2026 from **REC-529 Native onboarding review**, Joe + Rya
 
 This is a planning and reference document. Archive entries below identify superseded tutorial presentations; retain their original captures, copy and IDs. The ordinary save, search and import features remain available.
 
+**September 18 selections override the original comparisons below:** slide/fade;
+the original N25 quote for five seconds with Enjoy; More trim on the dropdown
+only. C04 now focuses the profile with three seconds of moderate blur behind
+sharp static annotations and the real floating buttons, with no Next/Skip,
+followed by one diagonal glimmer per button. Starter-list entry is deferred.
+The optional Feed reveal is recorded separately in the local `REVIEW.md` index.
+
 ## Source material
 
 - [Detailed transcript-backed brief](brief.md).
@@ -103,4 +110,7 @@ Implementation should preserve per-account completion, dismissal, reset and migr
 
 **Review delivery:** retain stable N/M/C IDs, transcript excerpts, current copy, entrance/exit states, screenshots and actual Swift recordings in the existing review room. The old baseline remains evidence. Coordinate [REC-393](https://linear.app/recme/issue/REC-393), whose older scope improves the superseded long save tutorial, before implementing conflicting requirements.
 
-The remaining creative choices are coach motion, exact pin placement, N25 wording/timing/button, whether to keep the Feed experiment after review, starter-list contents and N27's visual treatment. No choice here has been silently promoted to an approved design.
+Remaining review items are exact pin placement, whether to keep the Feed
+experiment, and N27's visual treatment. Starter lists will be entered later.
+Motion and N25 wording/timing/button were selected on September 18 as recorded
+above; the older comparison instructions preserve the planning history.

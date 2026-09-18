@@ -858,16 +858,43 @@ final class OnboardingUITests: XCTestCase {
         app.launchArguments = nativeOverviewArguments + ["-WanderNUXReview", "-WanderHoldWalkthroughStep",
             "-WanderPlaceProfileSaveTrayV1", "-WanderWalkthroughTarget", "placeSaveActions"]
         app.launch()
-        let next = app.buttons["walkthrough.next.placeDetail.placeSaveActions"]
-        XCTAssertTrue(next.waitForExistence(timeout: 20))
+        let annotation = app.staticTexts["walkthrough.placeDetail.placeSaveActions"]
+        XCTAssertTrue(annotation.waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["walkthrough.next.placeDetail.placeSaveActions"].exists)
+        XCTAssertFalse(app.buttons["Skip"].exists)
         captureNUX("C04")
         let checkIn = app.buttons["place-profile.floating-action.checkIn"]
         XCTAssertTrue(checkIn.isHittable)
         XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isHittable)
         checkIn.tap()
-        XCTAssertTrue(next.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(annotation.waitForNonExistence(timeout: 3))
         XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5),
                       "The annotation must allow the real Check In editor to open.")
+    }
+
+    func testPlaceIntroductionAutomaticallyFinishesAndDoesNotReturnAfterEditor() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXReview",
+            "-WanderPlaceProfileSaveTrayV1", "-WanderWalkthroughTarget", "placeSaveActions"]
+        app.launch()
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 20))
+        let annotation = app.staticTexts["walkthrough.placeDetail.placeSaveActions"]
+        XCTAssertTrue(annotation.waitForNonExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["walkthrough.next.placeDetail.placeSaveActions"].exists)
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isHittable)
+        checkIn.tap()
+        let close = app.buttons["save.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        // The Map-hosted editor returns to the selected compact place card.
+        // Reopen that real profile to verify the lesson was consumed.
+        let place = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(place.waitForExistence(timeout: 5))
+        place.tap()
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertFalse(annotation.exists)
     }
 
     private var nativeOverviewArguments: [String] {

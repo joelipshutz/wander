@@ -35,6 +35,23 @@ default includes it. Broader explorations remain in the REC-529 open questions.
 Native capture routes are DEBUG-only. Validation and native media evidence are
 recorded in the implementation PR and `docs/reviews/rec-529-native-onboarding.md`.
 
+### September 18 post-onboarding NUX selections
+
+Ryan selected slide/fade coaches and the original N25 quote with a five-second
+ending and an Enjoy button. The More highlight follows only the dropdown panel,
+not the source-filter button above it.
+
+On the first voluntary place-profile visit, the profile is moderately blurred
+while the real floating Check In/Wanna buttons and static handwritten annotations
+remain sharp. That focus moment lasts three seconds, has no Next/Skip control,
+then clears before one diagonal bottom-left to top-right glimmer crosses each
+button. It is consumed once for the enrolled account; later place profiles work
+normally. Reduce Motion keeps the timed static explanation and omits the sweep.
+The actual actions remain usable throughout.
+
+The optional Feed reveal still requires visual review. Starter lists will be
+entered later; this pass must not create them.
+
 ## Astir Events engineering direction (REC-467)
 
 The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)

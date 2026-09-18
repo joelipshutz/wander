@@ -6,6 +6,21 @@ Joe + Ryan · September 16 transcript · rechecked September 17
 
 This document separates transcript decisions, proposed implementation, and gaps in the current build. T02/T05 and T03/T04 are duplicate pairs, not separate votes. The raw T05 and T04 wording takes precedence where the cleaned version lost detail.
 
+## September 18 selections — supersede earlier alternatives below
+
+Ryan selected slide/fade, the original N25 quote, and five seconds with Enjoy.
+The More outline must follow only the dropdown box. C04 now uses a three-second
+moderate blur of the actual profile behind sharp static annotations and the real
+floating Check In/Wanna buttons, with no Next/Skip. Once it clears, each button
+gets one bottom-left to top-right glimmer, then all future visits work normally.
+The optional Feed reveal needs a dedicated recording; starter lists will be
+entered later. These choices supersede the earlier C04 five-second/Next treatment
+and open motion/finale alternatives in the historical transcript brief below.
+
+Current implementation and validation are in [README.md](README.md) and
+[native-validation.md](native-validation.md); the final section below records the
+original handoff's starting state, not the latest result.
+
 ## What you actually said
 
 **Map — [T05, opening](transcripts/T05.txt):**

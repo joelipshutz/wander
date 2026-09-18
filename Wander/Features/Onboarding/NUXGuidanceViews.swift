@@ -3,15 +3,7 @@ import SwiftUI
 enum NUXCoachMotion: String, CaseIterable {
     case pop, slide
 
-    static var selected: Self {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        return args.contains("-WanderNUXSlide") || (args.contains("-WanderNUXReview")
-            && UserDefaults.standard.string(forKey: "nux.review.motion") == "slide") ? .slide : .pop
-        #else
-        return .pop
-        #endif
-    }
+    static let selected: Self = .slide
 
     var transition: AnyTransition {
         switch self {
@@ -20,6 +12,111 @@ enum NUXCoachMotion: String, CaseIterable {
         case .slide: .asymmetric(insertion: .offset(y: 18).combined(with: .opacity),
                                 removal: .offset(y: -14).combined(with: .opacity))
         }
+    }
+}
+
+enum NUXPlaceIntroductionTiming {
+    static let arrivalMilliseconds = 450
+    static let focusMilliseconds = 3_000
+    static let glimmerMilliseconds = 900
+    static let blurRadius: CGFloat = 6
+}
+
+private struct NUXPlaceIntroductionFocusKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var nuxPlaceIntroductionIsFocused: Bool {
+        get { self[NUXPlaceIntroductionFocusKey.self] }
+        set { self[NUXPlaceIntroductionFocusKey.self] = newValue }
+    }
+}
+
+/// A single first-visit moment: arrive, soften the actual page for three
+/// seconds, then sweep the two still-live native buttons once. No Next/Skip.
+struct NUXPlaceActionIntroduction: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasStarted = false
+    @State private var isGlimmering = false
+    @State private var glimmerProgress: CGFloat = 0
+    let step: WalkthroughStep
+    let target: CGRect
+    let additionalTargets: [WalkthroughTargetID: CGRect]
+    let size: CGSize
+    let safeTop: CGFloat
+    @Binding var isFocused: Bool
+    let finish: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if isFocused {
+                NUXGuidanceOverlay(step: step, target: target, additionalTargets: additionalTargets,
+                                   size: size, safeTop: safeTop, next: {}, showsNext: false)
+                    .transition(.opacity)
+            }
+            if isGlimmering, !reduceMotion {
+                ForEach([WalkthroughTargetID.placeCheckIn, .placeWanna], id: \.rawValue) { id in
+                    if let frame = additionalTargets[id] {
+                        NUXButtonGlimmer(progress: glimmerProgress)
+                            .frame(width: frame.width, height: frame.height)
+                            .position(x: frame.midX, y: frame.midY)
+                    }
+                }
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+        .task(id: scenePhase) {
+            guard scenePhase == .active else {
+                if hasStarted {
+                    isFocused = false
+                    finish()
+                }
+                return
+            }
+            guard !hasStarted else { return }
+            hasStarted = true
+            do {
+                try await Task.sleep(for: .milliseconds(NUXPlaceIntroductionTiming.arrivalMilliseconds))
+                withAnimation(.easeInOut(duration: 0.2)) { isFocused = true }
+                // Only deterministic screenshot/review mode can hold the moment.
+                guard !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture else { return }
+                try await Task.sleep(for: .milliseconds(NUXPlaceIntroductionTiming.focusMilliseconds))
+                withAnimation(.easeInOut(duration: 0.2)) { isFocused = false }
+                try await Task.sleep(for: .milliseconds(200))
+                if !reduceMotion, !UIAccessibility.isVoiceOverRunning {
+                    isGlimmering = true
+                    await Task.yield()
+                    withAnimation(.easeInOut(duration: Double(NUXPlaceIntroductionTiming.glimmerMilliseconds) / 1_000)) {
+                        glimmerProgress = 1
+                    }
+                    try await Task.sleep(for: .milliseconds(NUXPlaceIntroductionTiming.glimmerMilliseconds))
+                }
+                finish()
+            } catch {
+                isFocused = false
+            }
+        }
+        .onDisappear { isFocused = false }
+    }
+}
+
+private struct NUXButtonGlimmer: View {
+    let progress: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            LinearGradient(colors: [.clear, .white.opacity(0.65), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: 32, height: hypot(proxy.size.width, proxy.size.height) * 2)
+                .rotationEffect(.degrees(-45))
+                .position(x: proxy.size.width * (-0.45 + 1.9 * progress),
+                          y: proxy.size.height * (1.45 - 1.9 * progress))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: PlaceProfileFloatingActions.compactCornerRadius))
+        .accessibilityHidden(true)
     }
 }
 
@@ -36,6 +133,7 @@ struct NUXGuidanceOverlay: View {
     let size: CGSize
     let safeTop: CGFloat
     let next: () -> Void
+    var showsNext = true
 
     private var handwritten: Bool { step.target == .addNearby || step.target == .placeSaveActions }
     private var ink: Color { brand.prefersDarkInterface ? .white : .black }
@@ -46,7 +144,7 @@ struct NUXGuidanceOverlay: View {
                 if handwritten {
                     annotations
                 } else {
-                    if step.surface == .map {
+                    if step.surface == .map, step.target != .mapMoreFilters {
                         RoundedRectangle(cornerRadius: min(24, target.height / 2))
                             .stroke(brand.accentText.opacity(entered ? 0.5 : 0.9), lineWidth: 2)
                             .frame(width: target.width + 8, height: target.height + 8)
@@ -59,22 +157,24 @@ struct NUXGuidanceOverlay: View {
             }
             .allowsHitTesting(false)
 
-            Button(action: next) {
-                HStack(spacing: 5) {
-                    Text("Next")
-                    Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold))
+            if showsNext {
+                Button(action: next) {
+                    HStack(spacing: 5) {
+                        Text("Next")
+                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold))
+                    }
+                    .font(.system(.subheadline, weight: .semibold))
+                    .foregroundStyle(brand.primaryText)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(brand.border.opacity(0.6), lineWidth: 0.5))
                 }
-                .font(.system(.subheadline, weight: .semibold))
-                .foregroundStyle(brand.primaryText)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 44)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(brand.border.opacity(0.6), lineWidth: 0.5))
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("walkthrough.next.\(step.id)")
+                .position(x: size.width - (step.surface == .add ? 104 : 55),
+                          y: step.surface == .add ? max(32, safeTop + 24) : step.surface == .placeDetail ? max(126, safeTop + 70) : max(82, safeTop + 26))
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("walkthrough.next.\(step.id)")
-            .position(x: size.width - (step.surface == .add ? 104 : 55),
-                      y: step.surface == .add ? max(32, safeTop + 24) : step.surface == .placeDetail ? max(126, safeTop + 70) : max(82, safeTop + 26))
         }
         .frame(width: size.width, height: size.height)
         .task {
@@ -210,16 +310,6 @@ struct NUXConnectionFinale: View {
     let size: CGSize
     let finish: () -> Void
 
-    private var usesOriginalQuote: Bool {
-        #if DEBUG
-        return ProcessInfo.processInfo.arguments.contains("-WanderNUXOriginalFinale")
-            || (ProcessInfo.processInfo.arguments.contains("-WanderNUXReview")
-                && UserDefaults.standard.bool(forKey: "nux.review.originalQuote"))
-        #else
-        return false
-        #endif
-    }
-
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Rectangle().fill(.ultraThinMaterial).opacity(0.88)
@@ -227,12 +317,12 @@ struct NUXConnectionFinale: View {
                 Text("ASTIR")
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .tracking(2).foregroundStyle(brand.accentText)
-                Text(usesOriginalQuote ? step.message : "Life happens\nbetween us.")
-                    .font(.system(size: usesOriginalQuote ? min(30, size.width * 0.075) : min(48, size.width * 0.115), weight: .medium, design: .serif))
+                Text(step.message)
+                    .font(.system(size: min(30, size.width * 0.075), weight: .medium, design: .serif))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(brand.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(usesOriginalQuote ? "Your map is yours now." : "Your people. Your places.\nA little more connected.")
+                Text("Your map is yours now.")
                     .font(AstirTypography.body)
                     .foregroundStyle(brand.secondaryText)
                     .multilineTextAlignment(.center)

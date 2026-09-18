@@ -22,9 +22,10 @@ and its broader UI limits are recorded in `docs/reviews/rec-529-native-onboardin
 
 Contact-to-member matching is not implemented by the current invite provider, so
 the permission purpose must not promise matching. Plans/Events, curated starter
-lists, voluntary Feed scroll exploration, stone/material icon choices, and
-replacement finale quotes remain separate decisions. The native review uses the
-existing Bourdain finale with a six-second timeout and immediate Skip.
+lists, voluntary Feed scroll exploration, and stone/material icon choices remain
+separate decisions. Ryan selected the existing original finale quote, a five-second
+timeout with Enjoy, and slide/fade motion on September 18. Starter-list entry is
+deferred; the Feed reveal is available in a dedicated native recording.
 
 ## Astir Events product and implementation gates (REC-467)
 

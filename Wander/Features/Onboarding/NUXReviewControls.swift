@@ -3,24 +3,13 @@ import SwiftUI
 #if DEBUG
 struct NUXReviewControls: View {
     @AppStorage("nux.review.manual") private var manual = false
-    @AppStorage("nux.review.motion") private var motion = "pop"
-    @AppStorage("nux.review.originalQuote") private var originalQuote = false
-    @AppStorage("nux.review.finaleSeconds") private var finaleSeconds = 6
     let replay: (WalkthroughTargetID) -> Void
 
     var body: some View {
         Menu {
             Menu("Playback · applies on replay") {
                 Toggle("Advance manually", isOn: $manual)
-                Picker("Coach motion", selection: $motion) {
-                    Text("Pop and settle").tag("pop")
-                    Text("Slide and fade").tag("slide")
-                }
-                Toggle("N25 · Original quote", isOn: $originalQuote)
-                Picker("N25 · Duration", selection: $finaleSeconds) {
-                    Text("4 seconds").tag(4)
-                    Text("6 seconds").tag(6)
-                }
+                Text("Slide/fade · original quote · 5 seconds")
             }
             Menu("Map tour") {
                 scene("M01 · Featured / replay", .mapFeatured)
