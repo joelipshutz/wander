@@ -119,6 +119,13 @@ final class ProfileHeaderMotionUITests: XCTestCase {
     }
 
     private func assertPinned(name: XCUIElement, photo: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        // Scroll deceleration can finish before the separate header animation.
+        // Check the settled geometry instead of sampling an intermediate frame.
+        let settled = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in abs(name.frame.midY - photo.frame.midY) <= 3 },
+            object: nil
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 3), .completed, file: file, line: line)
         XCTAssertEqual(name.frame.midY, photo.frame.midY, accuracy: 3, file: file, line: line)
         XCTAssertGreaterThan(photo.frame.minY, 40, file: file, line: line)
     }
