@@ -287,7 +287,7 @@ private struct OnboardingWelcomeParkPreview: View {
     }
 }
 
-private struct OnboardingWelcomePostcard: View {
+struct OnboardingWelcomePostcard: View {
     // The existing public-safe onboarding activity fixture. It is clearly
     // identified in the review inventory and cannot invoke signed-in actions or requests.
     private let context = ActivityEngagementContext(

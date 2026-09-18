@@ -170,7 +170,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let motion = ProfileHeaderMotionVariant.resolved() {
+            if let route = NativeOnboardingReviewRoute.resolved() {
+                NativeOnboardingReviewHost(route: route)
+            } else if let motion = ProfileHeaderMotionVariant.resolved() {
                 ProfileHeaderMotionPreview(variant: motion)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingCommentsCapture") {
                 OnboardingCommentsCaptureView()

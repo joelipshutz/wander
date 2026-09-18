@@ -1067,9 +1067,9 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(OnboardingLocationContent.title, "Find the good stuff nearby")
         XCTAssertEqual(
             OnboardingLocationContent.privacyMessage,
-            "Your location is never shown to friends."
+            "Your location is yours."
         )
-        XCTAssertEqual(OnboardingLocationContent.selectedPlaceName, "Circuit Coffee")
+        XCTAssertEqual(OnboardingLocationContent.selectedPlaceName, "Hotchkiss Park")
     }
 
     func testLocationPreviewUsesNativeMapPinsAndSelectedPlaceCard() throws {
@@ -1084,9 +1084,9 @@ final class OnboardingStateTests: XCTestCase {
         )
 
         XCTAssertTrue(source.contains("Map(position: $position"))
-        XCTAssertTrue(source.contains("OnboardingLocationMapPin(pin: pin)"))
-        XCTAssertTrue(source.contains("OnboardingLocationSelectedPlaceCard()"))
-        XCTAssertTrue(source.contains("isSelected: true"))
+        XCTAssertTrue(source.contains("OnboardingPlacePhotoRepository()"))
+        XCTAssertTrue(source.contains("PlaceProfileMapSurface("))
+        XCTAssertTrue(source.contains("FirstVisitParkSuggestionPolicy.hotchkissPark"))
     }
 }
 

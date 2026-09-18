@@ -17,10 +17,12 @@ struct ProductUpsellScreen: View {
         Group {
             if presentation.isOnboarding {
                 OnboardingStepScaffold(step: .notifications) {
-                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking)
+                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking, showsOnboardingExamples: true)
                 } footer: {
                     footer
                 }
+                .environment(\.astirBrandMode, .editorial)
+                .preferredColorScheme(.dark)
             } else {
                 VStack(spacing: 0) {
                     ProductUpsellContentView(content: presentation.content, isWorking: isWorking)
@@ -148,10 +150,15 @@ struct ProductUpsellScreen: View {
 struct ProductUpsellContentView: View {
     let content: ProductUpsellContent
     let isWorking: Bool
+    var showsOnboardingExamples = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: WanderTheme.spacing6) {
+                if showsOnboardingExamples {
+                    OnboardingNotificationExamples()
+                        .padding(.top, WanderTheme.spacing6)
+                } else {
                 Spacer(minLength: WanderTheme.spacing4)
                 ZStack {
                     Circle()
@@ -163,6 +170,8 @@ struct ProductUpsellContentView: View {
                         .symbolEffect(.bounce, value: isWorking)
                 }
                 .accessibilityHidden(true)
+
+                }
 
                 OnboardingHeadline(
                     eyebrow: content.eyebrow,
@@ -177,7 +186,8 @@ struct ProductUpsellContentView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 560)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, WanderTheme.spacing6)
         }
     }
 
@@ -185,6 +195,77 @@ struct ProductUpsellContentView: View {
         switch content.palette {
         case .sun:
             WanderTheme.categorySun.color
+        }
+    }
+}
+
+/// Illustrative examples of supported notification types, rendered natively in
+/// the signup notification primer. They are not live account activity.
+struct OnboardingNotificationExamples: View {
+    @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var visibleCount = 0
+
+    private let examples: [(icon: String, title: String, message: String)] = [
+        ("mappin.and.ellipse", "Ryan checked in", "A new place to discover."),
+        ("square.and.arrow.down", "Your import is ready", "Your places are ready to review."),
+        ("person.crop.circle.badge.checkmark", "Mina followed you", "Your circle is growing.")
+    ]
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            ForEach(examples.indices, id: \.self) { index in
+                let example = examples[index]
+                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                    Image("InvitationAppIcon")
+                        .resizable().scaledToFit().frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("ASTIR").font(AstirTypography.metadata).tracking(0.8)
+                            Spacer()
+                            Text("now").font(AstirTypography.caption)
+                        }
+                        .foregroundStyle(brandMode.secondaryText)
+                        Text(example.title).font(AstirTypography.control)
+                            .foregroundStyle(brandMode.primaryText)
+                        Text(example.message).font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(WanderTheme.spacing3)
+                .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: 20))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(brandMode.border, lineWidth: 1))
+                .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
+                .opacity(reduceMotion || index < visibleCount ? 1 : 0)
+                .offset(y: reduceMotion || index < visibleCount ? 0 : 20)
+                .scaleEffect(reduceMotion || index < visibleCount ? 1 : 0.96)
+            }
+        }
+        .padding(.vertical, WanderTheme.spacing2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Example Astir notifications: Ryan checked in. Your import is ready. Mina followed you.")
+        .accessibilityIdentifier("onboarding.notificationExamples")
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            if reduceMotion {
+                visibleCount = examples.count
+                return
+            }
+            visibleCount = 0
+            for count in 1...examples.count {
+                do { try await Task.sleep(for: .milliseconds(count == 1 ? 180 : 500)) }
+                catch { return }
+                guard !Task.isCancelled else { return }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                    visibleCount = count
+                }
+            }
+        }
+        .onChange(of: reduceMotion) { _, reduceMotion in
+            if reduceMotion { visibleCount = examples.count }
         }
     }
 }
