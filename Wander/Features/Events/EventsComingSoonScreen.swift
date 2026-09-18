@@ -258,6 +258,7 @@ private struct EventsNotifyControl: UIViewRepresentable {
 
 @MainActor final class EventsNotifyButton: UIButton {
     private var artworkSize: CGSize = .zero
+    private let tapFeedback = UIImpactFeedbackGenerator(style: .light)
     private var animates = false
 
     override init(frame: CGRect) {
@@ -267,12 +268,19 @@ private struct EventsNotifyControl: UIViewRepresentable {
         imageView?.contentMode = .scaleToFill
         adjustsImageWhenHighlighted = false
         backgroundColor = .clear
+        addAction(UIAction { [weak self] _ in
+            guard let self, !self.isSelected else { return }
+            self.tapFeedback.impactOccurred()
+        }, for: .touchDown)
     }
 
     required init?(coder: NSCoder) { nil }
 
     override var isSelected: Bool {
-        didSet { accessibilityValue = isSelected ? "Selected" : "Not selected" }
+        didSet {
+            accessibilityLabel = isSelected ? "Added to waitlist" : "Keep me posted"
+            accessibilityValue = isSelected ? "Selected" : "Not selected"
+        }
     }
 
     override func layoutSubviews() {
@@ -324,9 +332,15 @@ private struct EventsNotifyControl: UIViewRepresentable {
             border.stroke()
             let font = UIFont(name: "HelveticaNeue-CondensedBlack", size: 27)
                 ?? UIFont.systemFont(ofSize: 25, weight: .black)
-            let text = "KEEP ME POSTED" as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color,
+            let text = (selected ? "ADDED TO WAITLIST" : "KEEP ME POSTED") as NSString
+            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color,
                                                             .kern: 0.6]
+            let availableWidth = max(1, size.width - 32)
+            let naturalWidth = text.size(withAttributes: attributes).width
+            if naturalWidth > availableWidth {
+                attributes[.font] = font.withSize(font.pointSize * availableWidth / naturalWidth)
+                attributes[.kern] = 0.6 * availableWidth / naturalWidth
+            }
             let textSize = text.size(withAttributes: attributes)
             text.draw(at: CGPoint(x: (size.width - textSize.width) / 2,
                                  y: (size.height - textSize.height) / 2), withAttributes: attributes)
