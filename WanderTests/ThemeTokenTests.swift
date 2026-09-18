@@ -149,4 +149,33 @@ final class PlaceRatingReactionTests: XCTestCase {
         XCTAssertGreaterThan(liveDrag.level, lowerStep.level)
         XCTAssertLessThan(liveDrag.level, upperStep.level)
     }
+
+    func testDarkRatingPaletteKeepsContrastAndLiquidBehaviorAcrossTheScale() {
+        func luminance(_ red: Double, _ green: Double, _ blue: Double) -> Double {
+            func linear(_ value: Double) -> Double {
+                value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        }
+        let surface = luminance(27.0 / 255, 31.0 / 255, 27.0 / 255)
+        for score in PlaceRating.allowedScores {
+            let dark = PlaceRatingLiquidState.resolve(score, isDarkMode: true)
+            let light = PlaceRatingLiquidState.resolve(score)
+            let contrast = (luminance(dark.red, dark.green, dark.blue) + 0.05) / (surface + 0.05)
+            XCTAssertGreaterThanOrEqual(contrast, 4.5, "Solid color at rating \(score)")
+            XCTAssertEqual(dark.score, light.score)
+            XCTAssertEqual(dark.progress, light.progress)
+            XCTAssertEqual(dark.level, light.level)
+            XCTAssertEqual(dark.bubbleCount, light.bubbleCount)
+        }
+        let cool = PlaceRatingLiquidState.resolve(1, isDarkMode: true)
+        let middle = PlaceRatingLiquidState.resolve(3, isDarkMode: true)
+        let hot = PlaceRatingLiquidState.resolve(5, isDarkMode: true)
+        XCTAssertGreaterThan(cool.blue, cool.green)
+        XCTAssertGreaterThan(cool.green, cool.red)
+        XCTAssertGreaterThan(middle.red, middle.green)
+        XCTAssertGreaterThan(middle.green, middle.blue)
+        XCTAssertGreaterThan(hot.red, hot.green)
+        XCTAssertGreaterThan(hot.red, hot.blue)
+    }
 }

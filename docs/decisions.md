@@ -73,6 +73,7 @@ and a refresh recomputes it solely from currently visible events.
 
 | Decision | Status | Notes |
 |---|---|---|
+| Dark-mode rating colors | Locked for REC-499 | Use the approved neon palette for the liquid rating slider in dark appearance: electric blue at 1, orange at 3, and neon red at 5, interpolating across the existing half-point rating scale. Light appearance retains its original palette; rating values and interaction are unchanged. |
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | Import review details and source identity | Locked for REC-409 | Import row details expand inline using the same save-editor components, mode switching, validation, and local persistence as ordinary Wanna and Check-in saves. A source mention may select up to five concrete candidates with one shared save mode. Place imagery comes from the place-photo pipeline; history uses preserved source artwork when available and monochrome source-brand assets shared by the app and Share extension. History labels remain Matching while either the batch or an item is processing. |
 | Import attention and progress | Locked for REC-409 | The History badge counts each matching import plus each finished import awaiting its first review, once per import rather than per place. Finished outcomes include successful matches, failed source scans, empty results, and saved reports; explicitly cancelled imports are excluded. It sits at the history button’s top right. Opening the grid or dismissing the toast does not clear it; opening that finished import through its history tile or Review action does, including the saved-report destination. Opening a still-matching report does not pre-acknowledge its future results. The optional review timestamp uses the existing owner-scoped device snapshot and remains compatible with older snapshots. Matching progress is transient, based on actual source/hint/row completion; a source URL is not counted as one place, and unknown totals stay indeterminate until extraction returns. No timer simulates resolved places. Each import-sheet presentation selects the content-fit detent afresh while retaining manual expansion. |
@@ -122,7 +123,7 @@ and a refresh recomputes it solely from currently visible events.
 - A fresh Check-in starts with no answers. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
 - Wanna leads with one introduction/context note, with its optional date above categories. Check-in orders rating, note, date, categories, Useful details, then friends/photos. Optional tags stay at the bottom. Adding a visit retains the original Wanna note.
 - Customize belongs beside Useful details and in Settings → Check-in questions. A person can search subtypes, reorder, remove, restore, add catalog questions, or create recurring yes/no questions. Configuration is account-scoped on the current device. Removing a question retains its previous answers. Not useful persists a hidden ID for that account and subtype, including when editing an older save; the current row grays out with Undo. Explicit re-add or confirmed Restore brings a prompt back. Restoring suggestions requires a native confirmation; existing customizations do not silently adopt changed defaults.
-- Each recurring question has an inline eye button (signal open eye for shared, gray slashed eye for private), with no separate Stealth page. Each question has a Stealth setting: on keeps its answer owner-private on this device; off shares it only with that Check-in's audience. New custom questions default to Stealth on; catalog questions default off. Changing a default in Settings never republishes historical answers. Only an explicit audience change in the visit editor moves its draft answer between channels.
+- Each recurring question has an inline eye button (signal open eye for shared, gray slashed eye for private), with no separate Stealth page. Each question has a Stealth setting: on keeps its answer owner-private on this device; off shares it only with that Check-in's audience. New custom questions default to Stealth on; catalog questions default off. Add/create screens omit privacy controls; the recurring-list eye is the single place to change them. The Check-in shows its gray Stealth badge beside the question. Changing a default in Settings never republishes historical answers. Only an explicit audience change in the visit editor moves its draft answer between channels.
 - Most built-in observations use Yes/No with the existing `single_choice` type. Older qualified values remain readable and selectable when already answered. Dietary options use the existing `multi_tag` array contract (Vegan, Vegetarian, Gluten free), preserving every selection across shared/private transitions. Explicitly shared custom answers use a versioned prompt/yes-no JSON envelope with the existing `text` value type and a distinct `place_detail_custom_` key. Legacy private custom keys never imply publication consent. Search uses explicit answer semantics: a negative answer does not become a positive amenity match. Existing labels and unknown attributes remain intact when edited.
 - Shared Visit invitations preserve their established note, rating, tags, and photos, but omit the source owner's question answers. Recipients answer firsthand details themselves. New snapshot construction and reads of older pending snapshots use the same filter; stored history is not rewritten.
 - Tag suggestions describe uses and occasions rather than repeating question facts. Each category offers a small curated set; exact duplicates and an explicit list of near-synonyms render as one chip. Existing personal labels remain stored unchanged unless the person explicitly removes their chip.
@@ -179,3 +180,79 @@ and a refresh recomputes it solely from currently visible events.
 | M2 local product loop pushed | 2026-06-01 | Commit `962efce`, 18 tests passing, visual QA still pending. |
 | Add agent work log protocol | 2026-06-01 | All agents must update `docs/agent-log.md` before, during, and after non-trivial work. |
 | Retire agent work log protocol | 2026-07-28 | REC-177 supersedes the active diary requirement. The file is frozen as history; Linear and PRs are the current coordination surface. |
+
+## 2026-09-14 — Repeat Wanna saves preserve check-in state (REC-497)
+
+The place-profile right floating action always starts a fresh Wanna. The left
+Check in action keeps its existing behavior and always displays “Check in”,
+including after earlier visits. Repeated Wannas are independent history and Feed
+events; they do not rewrite the parent save. Each completed form creates a new
+record with its own date and details, retained until explicitly deleted. New Wanna
+events sort by their own save time in ALL; only the original pre-check-in Wanna
+summary is grouped as historical.
+Completing a Wanna form flushes the local save before dismissing the editor.
+Remote delivery and reminder reconciliation continue afterward; failed delivery
+retains the same record identity for retry instead of holding the form open.
+Any existing check-in therefore remains authoritative for the map pin, place
+state, rating, and unique-place profile counters. Wanna → Check-in → Wanna
+stays Been and does not increase the profile Wanna count. Repeat Wanna-only
+saves still count as one place. This supersedes REC-357's proposed active-Wanna
+after-check-in relationship rule, without adopting its planning/invitation work.
+
+Repeat Wanna creation uses the same save celebration as an initial save. Every
+owned activity tile exposes its edit pencil. Wanna edits update only that event's
+details and preserve its identity and original activity timestamp, including the
+original Wanna archived by a later check-in. Pending revisions remain durable and
+are protected from stale reads and acknowledgements; edits never trigger a new
+save celebration or change check-in state or unique-place counters. If the last
+check-in is deleted, an edited original Wanna is restored with its own content
+and visibility; later edits keep that Wanna summary consistent.
+
+## 2026-09-17 — Compact people cards and first Feed load (REC-531)
+
+People worth following occupies the former Featured for you position above
+Recent. Its shared cards are 184 points wide and at least 188 points tall at
+standard text sizes: a 48-point circular portrait, name, short accurate follow
+context, and a full-width 44-point Follow control. Handles and bios stay on the
+profile. Cards retain the adaptive Astir palette, Avenir identity text, and
+existing horizontal rail margins. Accessibility sizes widen cards to 240 points
+and allow content to grow vertically. Following and retry feedback stays inside
+the button so standard cards do not jump in height.
+
+Tapping Follow gives one light haptic and immediately shows Following while
+the request syncs in the background. A pending card uses the same appearance as
+a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
+Failed requests restore the in-button retry action; server completion does not
+generate another haptic.
+
+Featured's views, models, and original database projection remain available.
+`FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
+request contract; restoring it uses the original RPC. The additive
+`followed_feed(input_include_featured, input_before, input_limit)` overload skips
+Featured's candidate projection when false, while retaining the same authorized
+activity and cursor semantics. Future activity-projection changes must keep both
+overloads aligned and pass `supabase/tests/feed_activity_only.sql`.
+
+People and posts load independently. Existing in-memory feed content remains
+visible during refresh; authorized text can render before media. No new disk
+cache of social content is introduced. Clients fall back to the original RPC
+only when the new overload is absent from the API schema, allowing either
+deployment order without retrying ordinary network or authorization failures.
+
+## 2026-09-17 — Bundled Events coming-soon motion (REC-528)
+
+The temporary Events preview is the middle of five native tabs: Map, Feed,
+Events, Lists, Profile. Add remains a modal action. Events presents the approved
+03C VHS composition on a dark background in both appearance modes: COMING /
+SOON, a worn vertical bar, and AN / OCEAN PARK / EXPERIMENT on three lines.
+The faded signal-orange hue stays fixed; sparse speckles and intermittent
+tracking failures replace most continuous sideways jitter. This supersedes the
+older static Astir lockup and waitlist exploration.
+
+Ship a small, silent recording and its still in the app bundle. A native video
+layer uses the still immediately, reuses the local player between visits, and
+pauses off the tab or outside the active scene. Reduce Motion shows the still.
+Do not add a live shader, network dependency, playback UI, or per-frame SwiftUI
+state to this decorative surface. No event data, waitlist, booking, or RSVP
+behavior is implied by the teaser. The source and asset handoff are documented
+in `docs/designs/events-coming-soon/README.md`.

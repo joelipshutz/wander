@@ -103,7 +103,7 @@ struct PlaceProfileFullScreen: View {
     let onBack: () -> Void
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
-    let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    let onFloatingAction: ((PlaceProfileSaveAction) -> Void)?
     @Binding private var attachedSaveContext: MapPlaceSaveContext?
     let attachedSaveDraft: PlaceSaveDraft?
     let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
@@ -112,6 +112,16 @@ struct PlaceProfileFullScreen: View {
     let onAttachedClose: @MainActor () -> Void
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var remoteSaves: [VisiblePlace]?
+    @State private var remoteSnapshotStartedAt: Date?
+    @State private var historyRefreshFailed = false
+    @State private var isRefreshingHistory = false
+    @State private var localSaveContext: MapPlaceSaveContext?
+    @State private var localListTarget: MapPlaceListTarget?
     @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
     init(
@@ -147,7 +157,7 @@ struct PlaceProfileFullScreen: View {
         self.onBack = onBack
         self.onAction = onAction
         self.onAddToList = onAddToList
-        self.onFloatingAction = onFloatingAction ?? { _ in onAction() }
+        self.onFloatingAction = onFloatingAction
         _attachedSaveContext = attachedSaveContext
         self.attachedSaveDraft = attachedSaveDraft
         self.onAttachedDraftChange = onAttachedDraftChange
@@ -162,7 +172,7 @@ struct PlaceProfileFullScreen: View {
         PlaceProfilePresenter.presentation(
             placeID: place.id,
             category: place.primaryCategory,
-            saves: saves,
+            saves: resolvedSaves,
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
         )
@@ -183,23 +193,63 @@ struct PlaceProfileFullScreen: View {
         PlaceProfileFullView(
             place: place,
             presentation: presentation,
-            saves: saves,
+            saves: resolvedSaves,
             currentUserID: currentUserID,
             action: action,
             saveActionSnapshot: saveActionSnapshot,
-            attachedSaveContext: $attachedSaveContext,
+            attachedSaveContext: effectiveSaveContext,
             attachedSaveDraft: attachedSaveDraft,
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
-            onAddToList: onAddToList,
-            onFloatingAction: onFloatingAction,
+            onAddToList: onAddToList ?? {
+                if let visible = resolvedSaves.first?.visiblePlace {
+                    localListTarget = .visiblePlace(visible)
+                } else {
+                    localListTarget = .candidate(place.saveCandidate)
+                }
+            },
+            onFloatingAction: handleSaveAction,
             onAttachedDraftChange: onAttachedDraftChange,
-            onAttachedSave: onAttachedSave,
-            onAttachedRemove: onAttachedRemove,
-            onAttachedClose: onAttachedClose,
-            onAttachedSaveCompleted: onAttachedSaveCompleted
+            onAttachedSave: saveSubmission,
+            onAttachedRemove: removeSave,
+            onAttachedClose: closeSave,
+            onAttachedSaveCompleted: completeSave
         )
+        .overlay(alignment: .top) {
+            if historyRefreshFailed {
+                Button("History could not refresh. Tap to retry.") {
+                    Task { await refreshHistory() }
+                }
+                .font(.footnote)
+                .padding(10)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.top, 64)
+            }
+        }
+        .task(id: "\(currentUserID):\(place.id)") {
+            remoteSaves = nil
+            remoteSnapshotStartedAt = nil
+            historyRefreshFailed = false
+            if saveActionSnapshot == nil {
+                saveActionSnapshot = PlaceProfileSaveActionPolicy.snapshot(
+                    state: currentUserActionState,
+                    isSignedIn: auth.isSignedIn,
+                    resolvedFlagValue: backend.featureFlag(.placeProfileSaveTrayV1, for: currentUserID)
+                )
+            }
+            await refreshHistory()
+        }
+        .refreshable { await refreshHistory() }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await refreshHistory() }
+        }
+        .sheet(item: $localListTarget) { target in
+            MapPlaceListPickerSheet(target: target) { _ in
+                localListTarget = nil
+            }
+        }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
@@ -214,11 +264,132 @@ struct PlaceProfileFullScreen: View {
 
     private var currentUserActionState: PlaceProfileSaveActionState {
         PlaceProfileSaveActionPolicy.state(
-            saves: saves,
+            saves: resolvedSaves,
             currentUserID: currentUserID,
             hasSharedVisitInvitation: false,
-            isReadOnly: false
+            isReadOnly: walkthroughs.activeSurface == .placeDetail
         )
+    }
+
+
+    // Entry points supply an immediate preview. The full profile owns its
+    // unfiltered server snapshot, independently of map/feed/list filters.
+    private var resolvedSaves: [PlaceSaveSummary] {
+        let available = remoteSaves ?? (store.visiblePlaces() + saves.map(\.visiblePlace))
+        let own = store.currentUserVisiblePlaces.filter { visible in
+            guard let remoteSnapshotStartedAt else { return true }
+            return visible.userPlace.syncState != .synced
+                || visible.userPlace.localUpdatedAt > remoteSnapshotStartedAt
+        }
+        return PlaceProfileHistoryPolicy.summaries(
+            candidate: place.saveCandidate,
+            seeds: saves.map(\.visiblePlace),
+            available: store.placeProfileVisibleSaves(from: own + available),
+            currentUserID: currentUserID,
+            viewerFollows: store.viewerFollows
+        )
+    }
+
+    @MainActor
+    private func refreshHistory() async {
+        guard !isRefreshingHistory, auth.isSignedIn, backend.visitRepository != nil
+        else { return }
+        isRefreshingHistory = true
+        defer { isRefreshingHistory = false }
+        let requestUserID = currentUserID
+        if backend.placeRepository != nil, let latitude = place.latitude, let longitude = place.longitude {
+            let requestStartedAt = Date.now
+            let viewport = MapViewport(
+                minLatitude: max(-90, latitude - 0.002),
+                minLongitude: max(-180, longitude - 0.002),
+                maxLatitude: min(90, latitude + 0.002),
+                maxLongitude: min(180, longitude + 0.002)
+            )
+            guard let fetched = await store.fetchRemoteViewportPlaces(in: viewport, backend: backend) else {
+                if !Task.isCancelled { historyRefreshFailed = true }
+                return
+            }
+            guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+            remoteSnapshotStartedAt = requestStartedAt
+            remoteSaves = fetched
+        }
+        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+        let userPlaceIDs = resolvedSaves.compactMap { summary -> String? in
+            let id = summary.visiblePlace.userPlace.serverID ?? summary.visiblePlace.userPlace.id
+            return UUID(uuidString: id) == nil ? nil : id
+        }
+        let refreshed = await store.refreshRemotePlaceActivity(userPlaceIDs: userPlaceIDs, backend: backend)
+        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+        historyRefreshFailed = !refreshed
+        await store.refreshPlaceActivityEngagement(userPlaceIDs: userPlaceIDs, backend: backend)
+    }
+
+    private var effectiveSaveContext: Binding<MapPlaceSaveContext?> {
+        onFloatingAction == nil ? $localSaveContext : $attachedSaveContext
+    }
+
+    private func handleSaveAction(_ action: PlaceProfileSaveAction) {
+        if let onFloatingAction {
+            onFloatingAction(action)
+            return
+        }
+        guard let status = action.destinationStatus else { return }
+        let own = resolvedSaves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
+        let context: MapPlaceSaveContext
+        if let own {
+            context = .existingCurrentUserSave(
+                own, selectedStatus: status,
+                attributes: store.attributes(for: own.userPlace.id),
+                latestVisit: store.visits(for: own.userPlace.id).first
+            )
+        } else if let visible = resolvedSaves.first?.visiblePlace {
+            context = status == .wannaGo
+                ? .addWannaVisiblePlace(visible, defaultVisibility: store.effectiveDefaultVisibility)
+                : .addVisiblePlace(visible, defaultVisibility: store.effectiveDefaultVisibility)
+                    .preselectingStatus(status)
+        } else {
+            context = .addCandidate(
+                place.saveCandidate, sourceType: .manual,
+                defaultVisibility: store.effectiveDefaultVisibility
+            ).preselectingStatus(status)
+        }
+        store.saveFlowDidPresent(.saveSheet)
+        localSaveContext = PlaceProfileSaveActionPolicy.attachedSaveContext(
+            route: .floatingActions,
+            state: currentUserActionState,
+            action: action,
+            baseContext: context
+        ) ?? context
+    }
+
+    @MainActor
+    private func saveSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        if onFloatingAction != nil { return await onAttachedSave(submission) }
+        return await persistAddPlaceSaveSubmission(submission, store: store, backend: auth.isSignedIn ? backend : nil)
+    }
+
+    @MainActor
+    private func removeSave(_ context: MapPlaceSaveContext) async -> Bool {
+        if onFloatingAction != nil { return await onAttachedRemove(context) }
+        guard case .editWant(let own) = context.mode else { return false }
+        let removed = await store.removeSave(userPlaceID: own.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
+        if removed { await refreshHistory() }
+        return removed
+    }
+
+    private func closeSave() {
+        if onFloatingAction != nil { onAttachedClose(); return }
+        localSaveContext = nil
+        store.saveFlowDidDismiss(.saveSheet)
+    }
+
+    private func completeSave(_ result: SaveResult) {
+        if onFloatingAction != nil {
+            onAttachedSaveCompleted(result)
+        } else {
+            closeSave()
+        }
+        Task { await refreshHistory() }
     }
 
     static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
@@ -1495,7 +1666,7 @@ private struct PlaceProfileFullView: View {
 
                             bestForSection
                             VStack(spacing: 0) {
-                                PlaceActivitySection(saves: saves, currentUserID: currentUserID)
+                                PlaceActivitySection(saves: saves, currentUserID: currentUserID, refreshesRemoteHistory: false)
                                     .id(PlaceProfileScrollAnchor.activity)
                             }
                             .id(WalkthroughTargetID.placeHistory)

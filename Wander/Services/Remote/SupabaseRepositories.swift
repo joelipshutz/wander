@@ -673,10 +673,16 @@ private struct PublicSharedPlacePreview: Decodable {
 struct SupabaseFeedRepository: FeedRepository {
     private let rpc: RemoteProcedureCalling
     private let storage: (any RemoteStorageCalling)?
+    private let includesFeaturedPlaces: Bool
 
-    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
+    init(
+        rpc: RemoteProcedureCalling,
+        storage: (any RemoteStorageCalling)? = nil,
+        includesFeaturedPlaces: Bool = FeedPresentation.showsFeaturedPlaces
+    ) {
         self.rpc = rpc
         self.storage = storage ?? (rpc as? any RemoteStorageCalling)
+        self.includesFeaturedPlaces = includesFeaturedPlaces
     }
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
@@ -688,17 +694,30 @@ struct SupabaseFeedRepository: FeedRepository {
         limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
-        let response: RemoteFollowedFeedPageDTO = try await rpc.call(
-            "followed_feed",
-            params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
+        let boundedLimit = min(max(limit, 1), 50)
+        let response = try await followedFeedResponse(before: before, limit: boundedLimit)
+        // Reserve the artwork slot while the separate authorized-media read is
+        // pending. A non-renderable marker prevents the card from starting a
+        // provider-photo fallback that would be replaced by visit media later.
+        let pendingMediaByActivityID = Dictionary(
+            response.activity.map { item in
+                (
+                    item.id.lowercased(),
+                    [RemoteFeedMediaDTO(
+                        id: "pending:\(item.id.lowercased())",
+                        urlString: nil,
+                        storageBucket: nil,
+                        storagePath: nil,
+                        accessibilityLabel: "Activity photo loading"
+                    )]
+                )
+            },
+            uniquingKeysWith: { first, _ in first }
         )
         // This projection uses the same server-authorized rows. Media arrives
         // later, so slow storage/signing cannot hold up the first Feed cards.
         let content = try await response.followedFeedPage(
-            mediaByActivityID: Dictionary(
-                response.activity.map { ($0.id.lowercased(), [RemoteFeedMediaDTO]()) },
-                uniquingKeysWith: { first, _ in first }
-            )
+            mediaByActivityID: pendingMediaByActivityID
         )
         try Task.checkCancellation()
         onContent(content)
@@ -707,14 +726,22 @@ struct SupabaseFeedRepository: FeedRepository {
                 UUID(uuidString: item.id)?.uuidString.lowercased()
             })
         ).sorted()
+        guard !activityIDs.isEmpty else {
+            return try await response.followedFeedPage()
+        }
+
         let mediaRows: [RemoteActivityMediaDTO]
-        if activityIDs.isEmpty {
-            mediaRows = []
-        } else {
-            mediaRows = (try? await rpc.call(
+        do {
+            mediaRows = try await rpc.call(
                 "activity_media",
                 params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
-            )) ?? []
+            )
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            // Keep the verified text page and neutral artwork placeholders.
+            // Falling back to an unrelated provider image here would make a
+            // later refresh visibly swap the wrong photo for the visit photo.
+            return content
         }
         let mediaByActivityID = Dictionary(
             mediaRows.map { ($0.activityID.lowercased(), $0.media) },
@@ -724,6 +751,63 @@ struct SupabaseFeedRepository: FeedRepository {
             storage: storage,
             mediaByActivityID: mediaByActivityID
         )
+    }
+
+    private func followedFeedResponse(
+        before: String?,
+        limit: Int
+    ) async throws -> RemoteFollowedFeedPageDTO {
+        do {
+            return try await followedFeedResponseAttempt(before: before, limit: limit)
+        } catch {
+            guard Self.isTransientTransportFailure(error) else { throw error }
+            try await Task.sleep(for: .milliseconds(150))
+            try Task.checkCancellation()
+            return try await followedFeedResponseAttempt(before: before, limit: limit)
+        }
+    }
+
+    private func followedFeedResponseAttempt(
+        before: String?,
+        limit: Int
+    ) async throws -> RemoteFollowedFeedPageDTO {
+        do {
+            return try await rpc.call(
+                "followed_feed",
+                params: FollowedFeedParams(
+                    before: before, limit: limit,
+                    includeFeatured: includesFeaturedPlaces ? nil : false
+                )
+            )
+        } catch {
+            // Rolling deployments may briefly have the old RPC signature.
+            // Never use the legacy projection for ordinary transport, auth,
+            // decoding, or server failures.
+            guard !includesFeaturedPlaces,
+                  Self.isMissingActivityOnlyOverload(error)
+            else { throw error }
+            return try await rpc.call(
+                "followed_feed",
+                params: FollowedFeedParams(before: before, limit: limit)
+            )
+        }
+    }
+
+    static func isMissingActivityOnlyOverload(_ error: Error) -> Bool {
+        guard case WanderRemoteError.invalidResponse(let message) = error else { return false }
+        return message.contains("PGRST202") && message.contains("followed_feed")
+    }
+
+    static func isTransientTransportFailure(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return [
+            .timedOut,
+            .networkConnectionLost,
+            .cannotConnectToHost,
+            .cannotFindHost,
+            .dnsLookupFailed,
+            .notConnectedToInternet
+        ].contains(error.code)
     }
 }
 
@@ -805,7 +889,7 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     }
 }
 
-struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
+struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository, WannaSaveRepository {
     private let rpc: RemoteProcedureCalling
 
     init(rpc: RemoteProcedureCalling) {
@@ -849,6 +933,29 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
             params: SaveOwnPlaceParams(draft: draft)
         )
         return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced, placeID: result.placeID)
+    }
+
+    func saveWanna(_ wanna: PlaceWannaSave) async throws {
+        try CommunityContentPolicy.validate(wanna.note)
+        try CommunityContentPolicy.validateJSONText(wanna.attributeAnswersJSON)
+        let _: RemoteWannaSaveDTO = try await rpc.call(
+            "save_own_place_wanna", params: SaveOwnPlaceWannaParams(wanna: wanna)
+        )
+    }
+
+    func updateWanna(_ wanna: PlaceWannaSave) async throws -> PlaceWannaSave {
+        try CommunityContentPolicy.validate(wanna.note)
+        try CommunityContentPolicy.validateJSONText(wanna.attributeAnswersJSON)
+        let row: RemoteWannaSaveDTO = try await rpc.call(
+            "update_own_place_wanna", params: SaveOwnPlaceWannaParams(wanna: wanna))
+        return row.model
+    }
+
+    func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
+        let rows: [RemoteWannaSaveDTO] = try await rpc.call(
+            "visible_place_wannas", params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
+        )
+        return rows.map { $0.model }
     }
 
     func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
@@ -3593,10 +3700,12 @@ private struct ProfileVisiblePlacesParams: Encodable {
 private struct FollowedFeedParams: Encodable {
     let before: String?
     let limit: Int
+    var includeFeatured: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case before = "input_before"
         case limit = "input_limit"
+        case includeFeatured = "input_include_featured"
     }
 }
 
@@ -4225,5 +4334,77 @@ private struct SaveOwnPlaceResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
+    }
+}
+
+private struct SaveOwnPlaceWannaParams: Encodable {
+    let inputUserPlaceID: String
+    let inputWanna: Payload
+
+    init(wanna: PlaceWannaSave) throws {
+        inputUserPlaceID = wanna.userPlaceID
+        let editFormatter = ISO8601DateFormatter()
+        editFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        inputWanna = Payload(id: wanna.id, occurredAt: wanna.occurredAt,
+                            editedAt: wanna.editedAt.map { editFormatter.string(from: $0) },
+                            isHistoricalOriginal: wanna.isHistoricalOriginal, note: wanna.note,
+                            visibility: wanna.visibility, plannedDate: wanna.plannedDate.map { WannaGoDate.storageString(from: $0) },
+                            attributeAnswers: try JSONDecoder().decode(JSONValue.self,
+                                from: Data(wanna.attributeAnswersJSON.utf8)))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceID = "input_user_place_id"
+        case inputWanna = "input_wanna"
+    }
+
+    struct Payload: Encodable {
+        let id: String
+        let occurredAt: Date
+        let editedAt: String?
+        let isHistoricalOriginal: Bool?
+        let note: String?
+        let visibility: PlaceVisibility
+        let plannedDate: String?
+        let attributeAnswers: JSONValue
+        enum CodingKeys: String, CodingKey {
+            case id, note, visibility
+            case editedAt = "edited_at"
+            case isHistoricalOriginal = "is_historical_original"
+            case occurredAt = "occurred_at"
+            case plannedDate = "planned_date"
+            case attributeAnswers = "attribute_answers"
+        }
+    }
+}
+
+private struct RemoteWannaSaveDTO: Decodable {
+    let id: String
+    let ownerID: String
+    let userPlaceID: String
+    let occurredAt: Date
+    let editedAt: Date?
+    let isHistoricalOriginal: Bool?
+    let note: String?
+    let visibility: PlaceVisibility
+    let plannedDate: String?
+    let attributeAnswersJSON: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, note, visibility
+        case ownerID = "owner_id"
+        case userPlaceID = "user_place_id"
+        case editedAt = "edited_at"
+        case isHistoricalOriginal = "is_historical_original"
+        case occurredAt = "occurred_at"
+        case plannedDate = "planned_date"
+        case attributeAnswersJSON = "attribute_answers_json"
+    }
+
+    var model: PlaceWannaSave {
+        PlaceWannaSave(id: id, ownerID: ownerID, userPlaceID: userPlaceID,
+                      occurredAt: occurredAt, note: note, visibility: visibility,
+                      plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) }, attributeAnswersJSON: attributeAnswersJSON,
+                      isSynced: true, editedAt: editedAt, isHistoricalOriginal: isHistoricalOriginal)
     }
 }

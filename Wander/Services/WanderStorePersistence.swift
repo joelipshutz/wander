@@ -185,6 +185,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let userPlaces: [UserPlaceRecord]
     let placeAttributes: [PlaceAttributeRecord]
     let cachedCurrentUserVisiblePlaces: [VisiblePlaceRecord]?
+    let placeWannaSaves: [PlaceWannaSave]?
     let placeVisits: [PlaceVisitRecord]?
     let visitPhotos: [VisitPhotoRecord]?
     let sharedVisitInvitations: [SharedVisitInvitation]?
@@ -224,6 +225,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                     && $0.userPlace.deletedAt == nil
             }
             .map(VisiblePlaceRecord.init)
+        placeWannaSaves = store.placeWannaSaves
         placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
         sharedVisitInvitations = store.sharedVisitInvitations
@@ -273,6 +275,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             userPlaces: shouldResetSavedPlaces ? [] : userPlaces.map { $0.model() },
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             cachedCurrentUserVisiblePlaces: restoredCachedCurrentUserVisiblePlaces,
+            placeWannaSaves: shouldResetSavedPlaces ? [] : placeWannaSaves ?? [],
             placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
             sharedVisitInvitations: sharedVisitInvitations ?? [],
@@ -311,6 +314,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let userPlaces: [LocalUserPlace]
         let placeAttributes: [LocalPlaceAttribute]
         let cachedCurrentUserVisiblePlaces: [VisiblePlace]
+        let placeWannaSaves: [PlaceWannaSave]
         let placeVisits: [LocalPlaceVisit]
         let visitPhotos: [LocalVisitPhoto]
         let sharedVisitInvitations: [SharedVisitInvitation]

@@ -437,12 +437,6 @@ private struct CheckInQuestionAnswerRow: View {
                 }
             }
 
-            if question.isPrivate {
-                Label("Stealth", systemImage: "eye.slash")
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(brandMode.secondaryText)
-            }
-
             // These small option sets must remain in the accessibility tree
             // while their enclosing save sheet scrolls or changes detents.
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -477,12 +471,21 @@ private struct CheckInQuestionAnswerRow: View {
     }
 
     private var prompt: some View {
-        Text(question.prompt)
-            .font(AstirTypography.cardTitle)
-            .foregroundStyle(isDismissed ? brandMode.secondaryText : brandMode.primaryText)
-            .opacity(isDismissed ? 0.5 : 1)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("save.question.row.\(question.id)")
+        HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+            Text(question.prompt)
+                .font(AstirTypography.cardTitle)
+                .foregroundStyle(isDismissed ? brandMode.secondaryText : brandMode.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("save.question.row.\(question.id)")
+            if question.isPrivate {
+                Label("Stealth", systemImage: "eye.slash")
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .fixedSize()
+                    .accessibilityIdentifier("save.question.stealth.\(question.id)")
+            }
+        }
+        .opacity(isDismissed ? 0.5 : 1)
     }
 
     private var usefulnessButton: some View {
@@ -615,7 +618,16 @@ struct CheckInQuestionCustomizationSheet: View {
             } header: {
                 Text("For \(subtypeTitle)")
             } footer: {
-                Text("Drag to reorder. Removing a question changes future prompts and keeps previous answers. A grayed out eye means those questions only stay with you.")
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("Drag to reorder.")
+                    Text("Removing a question changes future prompts and keeps previous answers.")
+                    Label("This symbol means those questions only stay with you", systemImage: "eye.slash")
+                        .accessibilityLabel("Slashed eye. This symbol means those questions only stay with you")
+                }
+                .font(AstirTypography.caption)
+                .foregroundStyle(brandMode.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("save.questions.footer")
             }
 
             Section {
@@ -658,7 +670,8 @@ struct CheckInQuestionCustomizationSheet: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .navigationDestination(isPresented: $showsCatalog) {
-            CheckInAddCatalogQuestionScreen(selectedIDs: Set(configuration.orderedQuestionIDs)) { id, stealth in
+            CheckInAddCatalogQuestionScreen(selectedIDs: Set(configuration.orderedQuestionIDs)) { id in
+                let stealth = false
                 var updated = configuration
                 updated.addCatalogQuestion(id: id, stealth: stealth)
                 try persist(updated)
@@ -667,7 +680,8 @@ struct CheckInQuestionCustomizationSheet: View {
             }
         }
         .navigationDestination(isPresented: $showsCustomEditor) {
-            CheckInCreateCustomQuestionScreen { prompt, stealth in
+            CheckInCreateCustomQuestionScreen { prompt in
+                let stealth = true
                 var updated = configuration
                 let question = try updated.addCustomQuestion(prompt: prompt, stealth: stealth)
                 try persist(updated)
@@ -721,13 +735,12 @@ struct CheckInQuestionCustomizationSheet: View {
 
 private struct CheckInAddCatalogQuestionScreen: View {
     let selectedIDs: Set<String>
-    let onAdd: (String, Bool) throws -> Void
+    let onAdd: (String) throws -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
     @State private var search = ""
     @FocusState private var isSearchFocused: Bool
     @State private var errorMessage: String?
-    @State private var stealth = false
 
     private var matches: [PlaceCheckInQuestion] {
         PlaceCheckInQuestionCatalog.availableQuestions.filter {
@@ -748,10 +761,6 @@ private struct CheckInAddCatalogQuestionScreen: View {
             }
             .listRowBackground(brandMode.raisedBackground)
 
-            Section {
-                CheckInQuestionStealthToggle(isOn: $stealth, accessibilityIdentifier: "save.questions.catalogStealth")
-            }
-            .listRowBackground(brandMode.raisedBackground)
 
             if let errorMessage {
                 Text(errorMessage)
@@ -769,7 +778,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
                 Button {
                     isSearchFocused = false
                     do {
-                        try onAdd(question.id, stealth)
+                        try onAdd(question.id)
                         dismiss()
                     } catch {
                         errorMessage = error.localizedDescription
@@ -848,12 +857,11 @@ struct CheckInQuestionSearchField: View {
 }
 
 private struct CheckInCreateCustomQuestionScreen: View {
-    let onAdd: (String, Bool) throws -> Void
+    let onAdd: (String) throws -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
     @State private var prompt = ""
     @State private var errorMessage: String?
-    @State private var stealth = true
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -876,10 +884,6 @@ private struct CheckInCreateCustomQuestionScreen: View {
                 Text("Ask something you can answer with Yes or No.")
             }
             .listRowBackground(brandMode.raisedBackground)
-            Section {
-                CheckInQuestionStealthToggle(isOn: $stealth, accessibilityIdentifier: "save.questions.customStealth")
-            }
-            .listRowBackground(brandMode.raisedBackground)
             if let errorMessage {
                 Text(errorMessage)
                     .font(AstirTypography.bodySmall)
@@ -897,7 +901,7 @@ private struct CheckInCreateCustomQuestionScreen: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Add") {
                     do {
-                        try onAdd(prompt, stealth)
+                        try onAdd(prompt)
                         dismiss()
                     } catch {
                         errorMessage = error.localizedDescription
@@ -908,46 +912,5 @@ private struct CheckInCreateCustomQuestionScreen: View {
             }
         }
         .onAppear { isFocused = true }
-    }
-}
-
-private struct CheckInQuestionStealthToggle: View {
-    @Binding var isOn: Bool
-    let accessibilityIdentifier: String
-    @Environment(\.astirBrandMode) private var brandMode
-
-    private var privacyDescription: String {
-        isOn ? "Only you see this question and your answer." : "Shared with your check-in’s audience."
-    }
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                HStack(spacing: WanderTheme.spacing3) {
-                    Text("Stealth")
-                    Spacer(minLength: 0)
-                    Label(isOn ? "On" : "Off", systemImage: isOn ? "eye.slash.fill" : "eye")
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, WanderTheme.spacing1)
-                        .background(isOn ? brandMode.accentWash : brandMode.background)
-                        .clipShape(Capsule())
-                }
-                .font(AstirTypography.control)
-                Text(privacyDescription)
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(brandMode.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .foregroundStyle(brandMode.primaryText)
-            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .toggleStyle(.button)
-        .buttonStyle(.plain)
-        .tint(brandMode.accent)
-        .accessibilityIdentifier(accessibilityIdentifier)
-        .accessibilityLabel("Stealth. \(privacyDescription)")
-        .accessibilityValue(isOn ? "On" : "Off")
-        .accessibilityHint(isOn ? "Turn Stealth off" : "Turn Stealth on")
     }
 }

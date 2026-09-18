@@ -35,6 +35,20 @@ async function main() {
     return;
   }
 
+  // Connector transports can execute the identical rollback-only smoke SQL
+  // without loading local credentials or spawning an authenticated CLI.
+  if (options.printSQL) {
+    const previews = (options.migrationPreviews ?? []).map(loadMigrationPreview).join("\n\n");
+    const test = options.migrationTest
+      ? transactionBody(readFileSync(resolve(options.migrationTest), "utf8"), "rollback")
+      : "";
+    process.stdout.write(options.migrationTest
+      ? `begin;\n${previews}\n${test}\nrollback;\n`
+      : buildLinkedSmokeSQL(DEFAULT_SMOKE_USER_ID, DEFAULT_SMOKE_COLLABORATOR_ID,
+          DEFAULT_SMOKE_STRANGER_ID, previews));
+    return;
+  }
+
   loadEnvFile(options.envFile ?? process.env.WANDER_SUPABASE_ENV_FILE ?? DEFAULT_ENV_FILE);
 
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
@@ -120,6 +134,16 @@ async function main() {
           strangerUserID,
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await client.query("savepoint repeat_wanna_smoke");
+        try {
+          await client.query(transactionBody(
+            readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"),
+            "rollback",
+          ));
+        } finally {
+          await client.query("rollback to savepoint repeat_wanna_smoke");
+          await client.query("release savepoint repeat_wanna_smoke");
+        }
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/checkin_history_engagement.sql", import.meta.url),
         ), "rollback"));
@@ -141,6 +165,21 @@ async function main() {
       }
     } finally {
       await client.query("rollback");
+    }
+    if (!options.migrationTest) {
+      // pgTAP plans are transaction-scoped; isolate this suite from the suites above.
+      await client.query("begin");
+      try {
+        for (const migrationPreview of migrationPreviews) {
+          await client.query(loadMigrationPreview(migrationPreview));
+        }
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/feed_activity_only.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - activity-only Feed privacy, pagination, and legacy compatibility");
+      } finally {
+        await client.query("rollback");
+      }
     }
   } catch (error) {
     throw sanitizeError(error, dbURL);
@@ -1092,6 +1131,9 @@ function parseArgs(args) {
         parsed.writeLinkedSQL = requiredValue(args, index, arg);
         index += 1;
         break;
+      case "--print-sql":
+        parsed.printSQL = true;
+        break;
       case "--linked":
         parsed.linked = true;
         break;
@@ -1134,6 +1176,7 @@ Options:
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --write-linked-sql <path>        Write the same rollback-only linked suite for an authorized SQL runner; reads no credentials.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
+  --print-sql                      Emit rollback-only SQL for a connector; do not load credentials or connect.
   --migration-preview <path>       Apply a transaction-wrapped migration inside the rollback-only smoke transaction. Repeatable.
   --migration-test <path>          Run one strict rollback-only pgTAP file against the current schema and any supplied previews.
 
@@ -1214,6 +1257,12 @@ function runLinkedSmokeChecks(
     ),
     "rollback",
   )}\nrollback;`;
+  const feedActivitySmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(
+      new URL("../supabase/tests/feed_activity_only.sql", import.meta.url),
+    ),
+    "rollback",
+  )}\nrollback;`;
   const questionSnapshotSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
     loadStrictPgTapSQL(
       new URL("../supabase/tests/question_snapshot_privacy.sql", import.meta.url),
@@ -1229,7 +1278,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
@@ -2527,6 +2576,13 @@ end
 $user_place_soft_delete$;
 
 ${migrationPreviewTestSQL}
+
+-- This suite sets the JSON JWT claims, which take precedence over the scalar
+-- claims used below. Restore both its fixtures and session state afterward.
+savepoint repeat_wanna_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint repeat_wanna_smoke;
+release savepoint repeat_wanna_smoke;
 
 reset role;
 ${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}

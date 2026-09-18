@@ -706,8 +706,13 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         let coldProjectionStart = CFAbsoluteTimeGetCurrent()
         let visiblePlaces = store.visiblePlaces()
+        // Prime both projections measured below; owner counts have a separate cache.
+        let visiblePlaceCountsByOwnerID = store.visiblePlaceCountsByOwnerID()
         let coldProjectionElapsed = CFAbsoluteTimeGetCurrent() - coldProjectionStart
         XCTAssertGreaterThan(visiblePlaces.count, 1_400)
+        XCTAssertFalse(visiblePlaceCountsByOwnerID.isEmpty)
+        let projectionBuildCount = store.visiblePlaceProjectionBuildCount
+        let ownerCountBuildCount = store.visiblePlaceOwnerCountBuildCount
 
         let warmProjectionStart = CFAbsoluteTimeGetCurrent()
         var checksum = 0
@@ -716,6 +721,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
             checksum += store.visiblePlaceCountsByOwnerID().count
         }
         let warmProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmProjectionStart
+        XCTAssertEqual(store.visiblePlaceProjectionBuildCount, projectionBuildCount)
+        XCTAssertEqual(store.visiblePlaceOwnerCountBuildCount, ownerCountBuildCount)
 
         let visibleLists = store.visiblePlaceLists
         XCTAssertEqual(store.visiblePlaceListsBuildCount, 1)
@@ -864,7 +871,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
         XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
         XCTAssertLessThan(storeElapsed, 0.5, "High-data store initialization took \(storeElapsed)s")
-        XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place projection took \(coldProjectionElapsed)s")
+        XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place and owner-count projections took \(coldProjectionElapsed)s")
         XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
         XCTAssertLessThan(listProjectionElapsed, 0.12, "High-data list projection took \(listProjectionElapsed)s")
         XCTAssertLessThan(warmListProjectionElapsed, 0.1, "Warm high-data list reads took \(warmListProjectionElapsed)s")

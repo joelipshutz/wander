@@ -21,6 +21,11 @@ final class CheckInQuestionUITests: XCTestCase {
         cancel.tap()
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 5))
         XCTAssertEqual(recurringIDs(in: app), previous)
+        let footer = app.staticTexts["Drag to reorder."]
+        reveal(footer, in: app)
+        XCTAssertTrue(footer.exists)
+        XCTAssertTrue(app.staticTexts["Removing a question changes future prompts and keeps previous answers."].exists)
+        XCTAssertTrue(app.staticTexts["Slashed eye. This symbol means those questions only stay with you"].exists)
         capture("REC-485 restore cancellation preserves customization")
     }
 
@@ -88,14 +93,8 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(addCatalog, in: app)
         XCTAssertTrue(addCatalog.isEnabled, "Adding a question stays available while native reorder controls are shown.")
         addCatalog.tap()
-        let catalogStealth = app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch
-        XCTAssertTrue(catalogStealth.waitForExistence(timeout: 3))
-        XCTAssertEqual(catalogStealth.value as? String, "Off")
-        capture("REC-485 question library Stealth control")
-        catalogStealth.tap()
-        let stealthEnabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "On"), object: catalogStealth)
-        XCTAssertEqual(XCTWaiter.wait(for: [stealthEnabled], timeout: 3), .completed, catalogStealth.debugDescription)
-        XCTAssertEqual(catalogStealth.value as? String, "On")
+        XCTAssertFalse(app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch.exists)
+        capture("REC-485 question library without Stealth section")
         let search = app.textFields["save.questions.catalogSearch"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap()
@@ -104,18 +103,16 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(outlets.waitForExistence(timeout: 3))
         outlets.tap()
         XCTAssertTrue(recurringElement("place_detail_outlets", in: app).waitForExistence(timeout: 3))
-        XCTAssertEqual(app.buttons["save.questions.stealth.place_detail_outlets"].value as? String, "On, only you")
+        let outletsEye = app.buttons["save.questions.stealth.place_detail_outlets"]
+        XCTAssertEqual(outletsEye.value as? String, "Off, check-in audience")
+        outletsEye.tap()
+        XCTAssertEqual(outletsEye.value as? String, "On, only you")
 
         let createCustom = app.buttons["save.questions.createCustom"]
         reveal(createCustom, in: app)
         XCTAssertTrue(createCustom.isEnabled, "Creating a question stays available while native reorder controls are shown.")
         createCustom.tap()
-        let customStealth = app.descendants(matching: .any)["save.questions.customStealth"].firstMatch
-        XCTAssertTrue(customStealth.waitForExistence(timeout: 3))
-        XCTAssertEqual(customStealth.value as? String, "On")
-        reveal(customStealth, in: app)
-        customStealth.tap()
-        XCTAssertEqual(customStealth.value as? String, "Off")
+        XCTAssertFalse(app.descendants(matching: .any)["save.questions.customStealth"].firstMatch.exists)
         let prompt = app.descendants(matching: .any)["save.questions.customPrompt"].firstMatch
         XCTAssertTrue(prompt.waitForExistence(timeout: 3))
         reveal(prompt, in: app, upwards: false)
@@ -124,7 +121,10 @@ final class CheckInQuestionUITests: XCTestCase {
         app.buttons["save.questions.customAdd"].tap()
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 3))
         let customID = try XCTUnwrap(recurringIDs(in: app).first { $0.hasPrefix("custom_question_") })
-        XCTAssertEqual(app.buttons["save.questions.stealth.\(customID)"].value as? String, "Off, check-in audience")
+        let customEye = app.buttons["save.questions.stealth.\(customID)"]
+        XCTAssertEqual(customEye.value as? String, "On, only you")
+        customEye.tap()
+        XCTAssertEqual(customEye.value as? String, "Off, check-in audience")
         let expectedIDs = recurringIDs(in: app)
         capture("REC-485 customized recurring questions")
         app.buttons["save.questions.done"].tap()
@@ -146,6 +146,13 @@ final class CheckInQuestionUITests: XCTestCase {
         selectedStealth.tap()
         XCTAssertEqual(selectedStealth.value as? String, "On, only you")
         app.buttons["save.questions.done"].tap()
+        let badge = app.descendants(matching: .any)["save.question.stealth.\(customID)"].firstMatch
+        reveal(badge, in: app)
+        let questionText = app.staticTexts["save.question.row.\(customID)"]
+        XCTAssertTrue(badge.isHittable)
+        XCTAssertGreaterThanOrEqual(badge.frame.minX, questionText.frame.maxX)
+        XCTAssertLessThan(badge.frame.minY, questionText.frame.maxY, "Stealth stays beside the question.")
+        capture("REC-485 inline Stealth answer badge")
         restoreSuggestions(in: app)
     }
 
@@ -296,8 +303,9 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(add, in: app, upwards: false)
         XCTAssertTrue(add.isEnabled)
         add.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch.exists)
         let questionSearch = app.textFields["save.questions.catalogSearch"]
+        XCTAssertTrue(questionSearch.waitForExistence(timeout: 3))
         questionSearch.tap()
         questionSearch.typeText("outlet\n")
         let outlets = app.buttons["save.questions.catalog.place_detail_outlets"]
