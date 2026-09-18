@@ -6,15 +6,21 @@ struct SignedOutOnboardingFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.astirBrandMode) private var brandMode
 
     let analytics: AnalyticsClient
     var configuration: OnboardingWelcomeConfiguration = .current
 
     @State private var welcomeGeneration = 0
+    @State private var filmIsPlaying = false
+    @State private var reviewTreatment: OnboardingVisualTreatment?
+
+    private var treatment: OnboardingVisualTreatment { reviewTreatment ?? configuration.visualTreatment }
 
     var body: some View {
         ZStack {
-            OnboardingWelcomeColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
+            (treatment.isFilm ? OnboardingVisualTreatment.background
+                : OnboardingWelcomeColors.background(isDark: colorScheme == .dark)).ignoresSafeArea()
 
             if auth.isPresentingNativeAuth {
                 NativeAuthFlowView(
@@ -44,11 +50,56 @@ struct SignedOutOnboardingFlowView: View {
                 .zIndex(1)
             }
         }
+        .overlay {
+            if treatment.isFilm {
+                OnboardingFilmTexture(isPlaying: filmIsPlaying && !auth.isPresentingNativeAuth, reduceMotion: reduceMotion)
+                    .ignoresSafeArea()
+                    .blendMode(.screen)
+                    .opacity(0.42)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .environment(\.onboardingVisualTreatment, treatment)
+        .environment(\.onboardingFilmMotion, filmIsPlaying && !auth.isPresentingNativeAuth)
+        .environment(\.astirBrandMode, treatment.isFilm ? .editorial : brandMode)
+        .preferredColorScheme(treatment.isFilm ? .dark : nil)
+        .onPreferenceChange(OnboardingMotionPreferenceKey.self) { filmIsPlaying = $0 }
+        .overlay(alignment: .topTrailing) { reviewMenu }
         .animation(
             reduceMotion ? nil : OnboardingCarouselTiming.slideAnimation,
             value: auth.isPresentingNativeAuth
         )
 
+    }
+
+    @ViewBuilder private var reviewMenu: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut"),
+           ProcessInfo.processInfo.environment["WANDER_ONBOARDING_REVIEW_PICKER"] == "1" {
+            Menu {
+                Button("Approved opening") { reviewTreatment = .approved }
+                Button("Film · current fonts") { reviewTreatment = .film }
+                Button("Film · matching fonts") { reviewTreatment = .filmType }
+                Divider()
+                Button("Replay introduction") {
+                    welcomeGeneration += 1
+                    auth.nativeAuthDidDismiss()
+                }
+            } label: {
+                Label("Style", systemImage: "slider.horizontal.3")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 44)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
+            .accessibilityIdentifier("onboarding.reviewTreatment")
+            .accessibilityValue(treatment.rawValue)
+            .disabled(auth.isPerformingNativeAuth)
+            .padding(.trailing, 62)
+            .padding(.top, 2)
+        }
+        #endif
     }
 }
 

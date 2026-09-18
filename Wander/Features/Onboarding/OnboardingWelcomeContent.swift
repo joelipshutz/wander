@@ -46,6 +46,7 @@ struct OnboardingWelcomeConfiguration: Equatable {
     var autoAdvanceSeconds = 7.0
     var startsAt: OnboardingWelcomeStep? = nil
     var pausesAutomatically = false
+    var visualTreatment: OnboardingVisualTreatment = .approved
 
     var steps: [OnboardingWelcomeStep] {
         let hasOpening = ticker.map { !$0.words.isEmpty } ?? false
@@ -80,6 +81,7 @@ struct OnboardingWelcomeConfiguration: Equatable {
             descriptionIsDelayed: true
         )
         #if DEBUG
+        configuration.visualTreatment = .resolved(environment: environment)
         if let raw = environment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"],
            let seconds = Double(raw), seconds.isFinite, seconds > 0 {
             configuration.autoAdvanceSeconds = seconds

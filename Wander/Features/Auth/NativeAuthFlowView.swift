@@ -6,6 +6,7 @@ struct NativeAuthFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.onboardingVisualTreatment) private var treatment
 
     let isDismissable: Bool
     let mode: NativeAuthMode
@@ -62,7 +63,7 @@ struct NativeAuthFlowView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(WanderTheme.surfaceBone.color.ignoresSafeArea())
+            .background((treatment.isFilm ? OnboardingVisualTreatment.background : WanderTheme.surfaceBone.color).ignoresSafeArea())
             .toolbar {
                 if isDismissable && mode != .signUp {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -144,13 +145,14 @@ struct NativeAuthFlowView: View {
                     }
                     .foregroundStyle(brandMode.accentForeground)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(WanderTheme.terracotta.color)
+                    .background(treatment.isFilm ? OnboardingVisualTreatment.signal : WanderTheme.terracotta.color)
                     .clipShape(
                         RoundedRectangle(
                             cornerRadius: WanderTheme.radiusMedium,
                             style: .continuous
                         )
                     )
+                    .onboardingFilmInk()
                 }
                 .buttonStyle(.plain)
                 .disabled(auth.isPerformingNativeAuth)
@@ -211,8 +213,10 @@ struct NativeAuthFlowView: View {
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(title)
-                    .font(AstirTypography.screenTitle)
+                    .font(treatment.headline(size: 34, approved: AstirTypography.screenTitle))
+                    .foregroundStyle(treatment.isFilm ? OnboardingVisualTreatment.signal : WanderTheme.textInk.color)
                     .multilineTextAlignment(.center)
+                    .onboardingFilmInk()
 
                 Text(subtitle)
                     .font(AstirTypography.bodySmall)

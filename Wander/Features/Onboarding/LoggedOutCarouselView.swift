@@ -15,6 +15,7 @@ struct LoggedOutCarouselView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.onboardingVisualTreatment) private var treatment
     let analytics: AnalyticsClient
     let getStarted: () -> Void
     let logIn: () -> Void
@@ -52,10 +53,12 @@ struct LoggedOutCarouselView: View {
 
     var body: some View {
         ZStack {
-            OnboardingWelcomeColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
+            (treatment.isFilm ? OnboardingVisualTreatment.background
+                : OnboardingWelcomeColors.background(isDark: colorScheme == .dark)).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack {
                     AstirMastheadLockup(isCompact: true)
+                        .onboardingFilmInk()
                     Spacer()
                     if !accessibilityPausesAutoAdvance {
                         Button { isPaused.toggle() } label: {
@@ -113,7 +116,7 @@ struct LoggedOutCarouselView: View {
                 .accessibilityIdentifier("onboarding.carouselPage")
                 .padding(.bottom, WanderTheme.spacing4)
                 VStack(spacing: WanderTheme.spacing2) {
-                    WanderPrimaryButton(title: "Next", systemImage: "arrow.right") { advance(source: "manual") }
+                    nextButton
                         .accessibilityIdentifier("onboarding.next")
                     Button("Already have an account? Log in") { startAuth(mode: .signIn) }
                         .font(AstirTypography.control).foregroundStyle(brandMode.secondaryText)
@@ -123,6 +126,7 @@ struct LoggedOutCarouselView: View {
                 .padding(.horizontal, WanderTheme.spacing4).padding(.bottom, WanderTheme.spacing2)
             }
         }
+        .preference(key: OnboardingMotionPreferenceKey.self, value: isPlaying)
         .onAppear { trackViewed() }
         .onChange(of: selection) { _, _ in autoAdvanceGeneration += 1; trackViewed() }
         .task(id: slideGeneration) {
@@ -158,6 +162,22 @@ struct LoggedOutCarouselView: View {
                 guard !Task.isCancelled, isPlaying else { return }
                 advance(source: "timer")
             } catch { }
+        }
+    }
+    @ViewBuilder private var nextButton: some View {
+        if treatment.isFilm {
+            Button { advance(source: "manual") } label: {
+                Label("Next", systemImage: "arrow.right")
+                    .font(AstirTypography.control)
+                    .foregroundStyle(AstirTheme.ink.color)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(OnboardingVisualTreatment.signal)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .onboardingFilmInk()
+            }
+            .buttonStyle(.plain)
+        } else {
+            WanderPrimaryButton(title: "Next", systemImage: "arrow.right") { advance(source: "manual") }
         }
     }
     private func moveTo(_ next: Int, source: String) {
@@ -332,6 +352,7 @@ struct OnboardingTickerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.onboardingVisualTreatment) private var treatment
     let content: OnboardingTickerContent
     let descriptionIsDelayed: Bool
     let isPlaying: Bool
@@ -376,10 +397,14 @@ struct OnboardingTickerView: View {
                             .frame(width: width, height: width * 0.50)
                             .overlay {
                                 Text(content.stableText)
-                                    .font(.system(size: width * 0.108, weight: .semibold, design: .serif))
+                                    .font(treatment.headline(size: width * 0.108,
+                                        approved: .system(size: width * 0.108, weight: .semibold, design: .serif)))
                                     .foregroundStyle(brandMode.primaryText)
                                     .lineLimit(1)
-                                    .fixedSize(horizontal: true, vertical: false)
+                                    .minimumScaleFactor(0.75)
+                                    .fixedSize(horizontal: !treatment.matchesFilmType, vertical: false)
+                                    .frame(width: treatment.matchesFilmType ? width : nil)
+                                    .onboardingFilmInk()
                                     .offset(y: -width * 0.145)
                                     .opacity(leadOpacity)
                                     .accessibilityHidden(true)
@@ -391,7 +416,8 @@ struct OnboardingTickerView: View {
                         .accessibilityIdentifier("onboarding.ticker")
                     Spacer(minLength: 30)
                     if let description = content.description {
-                        Text(description).font(AstirTypography.body)
+                        Text(description).font(treatment.matchesFilmType
+                            ? .custom("HelveticaNeue-BoldItalic", size: 17, relativeTo: .body) : AstirTypography.body)
                             .foregroundStyle(brandMode.secondaryText)
                             .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                             .frame(width: min(width, 360))
@@ -400,6 +426,7 @@ struct OnboardingTickerView: View {
                             .animation(animates ? OnboardingCarouselTiming.slideAnimation : nil, value: descriptionHasArrived)
                             .padding(.bottom, 26)
                             .accessibilityIdentifier("onboarding.openingDescription")
+                            .onboardingFilmInk()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -416,6 +443,7 @@ struct OnboardingTickerView: View {
 /// Each Text is one naturally spaced label. The retained outgoing and incoming
 /// labels share a distance and progress, including reverse navigation.
 private struct OnboardingSlidingText: View, @MainActor Animatable {
+    @Environment(\.onboardingVisualTreatment) private var treatment
     let from: String
     let to: String
     var progress: Double
@@ -439,12 +467,13 @@ private struct OnboardingSlidingText: View, @MainActor Animatable {
 
     private func label(_ text: String) -> some View {
         Text(text)
-            .font(.custom("AvenirNext-Bold", size: fontSize))
-            .foregroundStyle(AstirTheme.signal.color)
+            .font(treatment.headline(size: fontSize, approved: .custom("AvenirNext-Bold", size: fontSize)))
+            .foregroundStyle(treatment.isFilm ? OnboardingVisualTreatment.signal : AstirTheme.signal.color)
             .multilineTextAlignment(.center)
             .lineLimit(3).minimumScaleFactor(0.75)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onboardingFilmInk()
     }
 }
 
