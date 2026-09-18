@@ -7744,6 +7744,39 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    /// Cards own the optimistic state so a press does not invalidate every
+    /// store observer. Commit one acknowledged edge; Map/Profile/Feed refresh
+    /// their data through their normal surface refresh, not inside this action.
+    @discardableResult
+    func followRecommendation(userID: String, backend: WanderBackend?) async -> Bool {
+        let requestingUserID = currentUser.id
+        guard userID != requestingUserID,
+              !isBlockedBetweenCurrentUser(and: userID)
+        else { return false }
+        if hasAcknowledgedFollow(to: userID) { return true }
+        guard let backend else { return false }
+
+        do {
+            try await backend.follow(userID: userID)
+            guard !Task.isCancelled, currentUser.id == requestingUserID,
+                  let follow = upsertFollow(userID: userID, source: .profile)
+            else { return false }
+            follow.syncStateRaw = SyncState.synced.rawValue
+            follow.lastSyncError = nil
+            follow.serverUpdatedAt = .now
+            lastRemoteError = nil
+            objectWillChange.send()
+            persist()
+            trackFollowCreated(source: .profile, outcome: "succeeded")
+            productUpsellTriggerRequest = ProductUpsellTriggerRequest(trigger: .followCreated)
+            return true
+        } catch {
+            guard currentUser.id == requestingUserID else { return false }
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
+    }
+
     private func trackFollowCreated(source: FollowSource, outcome: String) {
         let properties = ["source": source.rawValue, "outcome": outcome]
         analytics.track(
