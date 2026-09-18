@@ -737,23 +737,94 @@ private struct ActivityPostcardArtwork: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
     private func activityImage(_ media: ActivityEngagementMedia) -> some View {
-        if let localImage = VisitPhotoLocalFileStore.image(from: media.localAssetRef) {
-            Image(uiImage: localImage)
-                .resizable()
-                .scaledToFill()
-                .accessibilityLabel(media.accessibilityLabel)
-        } else if let remoteURL = media.urlString.flatMap(URL.init(string:)) {
-            AsyncImage(url: remoteURL) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Color.clear
-            }
-            .accessibilityLabel(media.accessibilityLabel)
+        ActivityPostcardMediaImage(media: media)
+    }
+}
+
+/// The original visit image can be much larger than its 154-point Feed slot.
+/// Match the decode to the display and retain the existing local-first fallback.
+struct ActivityPostcardImageRequest: Hashable, Sendable {
+    let mediaID: String
+    let sources: [WanderAvatarImageRequest]
+
+    init?(media: ActivityEngagementMedia, size: CGSize, displayScale: CGFloat) {
+        let pixels = max(size.width, size.height) * displayScale
+        guard size.width > 0, size.height > 0, displayScale > 0,
+              size.width.isFinite, size.height.isFinite, pixels.isFinite else { return nil }
+        // Quantization avoids new decodes for fractional layout changes.
+        let target = max(64, Int(ceil(min(pixels, 2_048) / 64)) * 64)
+        var urls = [URL]()
+        if let localURL = VisitPhotoLocalFileStore.fileURL(from: media.localAssetRef) {
+            urls.append(localURL)
         }
+        if let remoteURL = media.urlString.flatMap(URL.init(string:)), !urls.contains(remoteURL) {
+            urls.append(remoteURL)
+        }
+        let sources = urls.compactMap {
+            WanderAvatarImageRequest(avatarURL: $0.absoluteString, targetPixelSize: target)
+        }
+        guard !sources.isEmpty else { return nil }
+        mediaID = media.id
+        self.sources = sources
+    }
+}
+
+enum ActivityPostcardImages {
+    // Reuse the proven background decoder and request coalescing. Larger visit
+    // thumbnails have their own bounded cache so they cannot evict avatars.
+    static let sharedPipeline = WanderAvatarImagePipeline(
+        countLimit: 24, totalCostLimit: 48 * 1_024 * 1_024
+    )
+
+    static func image(
+        for request: ActivityPostcardImageRequest,
+        using pipeline: WanderAvatarImagePipeline = sharedPipeline
+    ) async -> WanderAvatarDecodedImage? {
+        for source in request.sources {
+            guard !Task.isCancelled else { return nil }
+            if let image = await pipeline.image(for: source) {
+                return image
+            }
+        }
+        return nil
+    }
+}
+
+private struct ActivityPostcardMediaImage: View {
+    let media: ActivityEngagementMedia
+    @Environment(\.displayScale) private var displayScale
+    @State private var loaded: LoadedImage?
+
+    private struct LoadedImage {
+        let request: ActivityPostcardImageRequest
+        let image: UIImage
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let request = ActivityPostcardImageRequest(
+                media: media, size: proxy.size, displayScale: displayScale
+            )
+            ZStack {
+                Color.clear
+                if let loaded, loaded.request == request {
+                    Image(uiImage: loaded.image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .accessibilityLabel(media.accessibilityLabel)
+                }
+            }
+            .task(id: request) {
+                guard let request else { loaded = nil; return }
+                let image = await ActivityPostcardImages.image(for: request)
+                guard !Task.isCancelled else { return }
+                loaded = image.map { LoadedImage(request: request, image: $0.image) }
+            }
+        }
+        .clipped()
     }
 }
 

@@ -206,11 +206,19 @@ existing horizontal rail margins. Accessibility sizes widen cards to 240 points
 and allow content to grow vertically. Following and retry feedback stays inside
 the button so standard cards do not jump in height.
 
-Tapping Follow gives one light haptic and immediately shows Following while
+Tapping Follow gives one medium-impact haptic and immediately shows Following while
 the request syncs in the background. A pending card uses the same appearance as
 a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
 Failed requests restore the in-button retry action; server completion does not
 generate another haptic.
+
+September 17 device feedback increased that single tap to medium impact at full
+intensity. Feed postcard photos use the existing background image decoder with
+a separate 48 MiB / 24-entry cache. Decode dimensions follow the card's display
+size in 64-pixel buckets, capped at 2,048 pixels. Local visit photos retain
+priority over authorized remote URLs; missing local files fall back remotely.
+A changed source or layout request cannot display an earlier request's image.
+Original upload data and full-screen photo behavior are unchanged.
 
 Featured's views, models, and original database projection remain available.
 `FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
