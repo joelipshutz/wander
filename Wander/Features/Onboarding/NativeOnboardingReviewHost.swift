@@ -6,13 +6,15 @@ import UIKit
 /// This route uses the app's production views. Only repository data is local,
 /// so recording a session cannot create an account, contact a member or upload.
 enum NativeOnboardingReviewRoute: String {
-    case welcome, signup, login, identity, location, contacts, friends, notifications
+    case welcome, signup, login, identity, location, contacts, friends, notifications, founders
     case friendsEmpty = "friends-empty"
     case friendsFailure = "friends-failure"
 
     static func resolved(arguments: [String] = ProcessInfo.processInfo.arguments) -> Self? {
         guard let index = arguments.firstIndex(of: "-WanderNativeOnboardingReview"),
-              arguments.indices.contains(index + 1) else { return nil }
+              arguments.indices.contains(index + 1) else {
+            return ProcessInfo.processInfo.environment["WANDER_NATIVE_ONBOARDING_REVIEW"].flatMap(Self.init(rawValue:))
+        }
         return Self(rawValue: arguments[index + 1])
     }
 
@@ -45,6 +47,9 @@ struct NativeOnboardingReviewHost: View {
 
     init(route: NativeOnboardingReviewRoute) {
         self.route = route
+        // A review launch always starts a fresh fictional journey; real users'
+        // onboarding and playback progress are untouched.
+        UserDefaults.standard.removeObject(forKey: "astir.founders-welcome.v1.\(Self.session.userID)")
         let repository = NativeOnboardingReviewRepository(route: route)
         let backend = WanderBackend(
             profileRepository: repository,
@@ -54,7 +59,7 @@ struct NativeOnboardingReviewHost: View {
         )
         let auth = AuthSessionStore(
             provider: PreviewAuthSessionProvider(
-                state: route.initialStep == nil ? .signedOut : .signedIn(Self.session),
+                state: route.initialStep == nil && route != .founders ? .signedOut : .signedIn(Self.session),
                 canPresentNativeAuth: true,
                 nativeAuthFailure: AuthSessionError.cancelled,
                 emailVerificationSession: Self.session,
@@ -79,14 +84,21 @@ struct NativeOnboardingReviewHost: View {
                     analyticsLifecycle: AppAnalyticsLifecycleTracker(analytics: NoopAnalyticsClient()),
                     parser: DeterministicFilterParser()
                 )
-            } else if completed {
-                WanderRootView(
-                    initialSession: auth.state.session,
-                    isFirstVisitWalkthroughEligible: true,
-                    analytics: NoopAnalyticsClient(),
-                    parser: DeterministicFilterParser()
+            } else if route == .founders && !completed {
+                FoundersWelcomeView(
+                    initialPosition: Double(ProcessInfo.processInfo.environment["WANDER_FOUNDERS_REVIEW_POSITION"] ?? "0") ?? 0,
+                    finish: { completed = true }
                 )
-                .environmentObject(WanderApp.makeMapCaptureBackend())
+            } else if completed {
+                FoundersWelcomeGate(userID: Self.session.userID, isEligible: route != .founders) {
+                    WanderRootView(
+                        initialSession: auth.state.session,
+                        isFirstVisitWalkthroughEligible: true,
+                        analytics: NoopAnalyticsClient(),
+                        parser: DeterministicFilterParser()
+                    )
+                    .environmentObject(WanderApp.makeMapCaptureBackend())
+                }
             } else if let step = route.initialStep ?? (startsOnboarding ? .identity : nil) {
                 OnboardingFlowView(
                     session: Self.session, initialStep: step,

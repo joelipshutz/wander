@@ -165,7 +165,6 @@ struct OnboardingIdentityView: View {
     @State private var existingAvatarURL: String?
     @State private var previewImage: UIImage?
     @State private var jpegData: Data?
-    @State private var existingAvatarURL: String?
     @State private var availability: Availability = .idle
     @State private var errorMessage: String?
     @State private var isSaving = false
@@ -348,9 +347,6 @@ struct OnboardingIdentityView: View {
                 Task { await save() }
             }
             .accessibilityIdentifier("onboarding.identity.continue")
-        }
-        .task {
-            if let profile = try? await backend.currentProfile() { existingAvatarURL = profile.avatarURL }
         }
         .task(id: draft.normalizedHandle) { await checkAvailability() }
         .task {

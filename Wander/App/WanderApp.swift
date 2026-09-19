@@ -114,38 +114,40 @@ struct WanderApp: App {
             wrappedValue: CalendarReservationManager(analytics: contextualAnalytics)
         )
         let authStore: AuthSessionStore
-        #if targetEnvironment(simulator)
         if usesNativeOnboardingReview {
             authStore = AuthSessionStore(
                 provider: PreviewAuthSessionProvider(state: .signedOut, canPresentNativeAuth: true),
                 analytics: contextualAnalytics
             )
-        } else if usesSimulatorTestSession {
-            authStore = AuthSessionStore(
-                provider: PreviewAuthSessionProvider(
-                    state: .signedIn(
-                        AuthSession(
-                            userID: "user_joe",
-                            displayName: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "Joe",
-                            handle: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "joe",
-                            isAppleSignIn: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? true : nil
-                        )
-                    )
-                ),
-                analytics: contextualAnalytics
-            )
         } else {
+            #if targetEnvironment(simulator)
+            if usesSimulatorTestSession {
+                authStore = AuthSessionStore(
+                    provider: PreviewAuthSessionProvider(
+                        state: .signedIn(
+                            AuthSession(
+                                userID: "user_joe",
+                                displayName: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "Joe",
+                                handle: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "joe",
+                                isAppleSignIn: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? true : nil
+                            )
+                        )
+                    ),
+                    analytics: contextualAnalytics
+                )
+            } else {
+                authStore = AuthSessionStore(
+                    provider: ClerkAuthService(configuration: configuration),
+                    analytics: contextualAnalytics
+                )
+            }
+            #else
             authStore = AuthSessionStore(
                 provider: ClerkAuthService(configuration: configuration),
                 analytics: contextualAnalytics
             )
+            #endif
         }
-        #else
-        authStore = AuthSessionStore(
-            provider: ClerkAuthService(configuration: configuration),
-            analytics: contextualAnalytics
-        )
-        #endif
         #if DEBUG && targetEnvironment(simulator)
         let backendStore = (usesSimulatorTestSession || usesNativeOnboardingReview)
             ? WanderBackend(

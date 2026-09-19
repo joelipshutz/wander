@@ -85,7 +85,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         keepScreenshot("N08-after-auth", app: app, settleSeconds: 1.3)
     }
 
-    func testProfilePreviewUpdatesAndRequiresARealPhoto() {
+    func testProfilePreviewUpdatesWithOptionalPhoto() {
         let app = launchReview("identity")
         let name = app.textFields["How friends know you"]
         let username = app.textFields["your_username"]
@@ -101,7 +101,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         dismissKeyboardIfPresent(in: app)
         XCTAssertTrue(app.staticTexts["Jordan Lee"].exists)
         XCTAssertEqual(app.staticTexts["onboarding.identity.previewHandle"].label, "@jordan_review")
-        XCTAssertFalse(continueButton.isEnabled, "A valid name and available handle still require a photo.")
+        XCTAssertTrue(continueButton.isEnabled, "A valid name and available handle can continue without a photo.")
         keepScreenshot("N08-filled", app: app)
 
         replaceText(in: username, with: "taken")
@@ -116,7 +116,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
 
         let photo = app.buttons["onboarding.identity.photo"]
         reveal(photo, in: app, direction: .down)
-        XCTAssertEqual(photo.label, "Add a required profile photo")
+        XCTAssertEqual(photo.label, "Add an optional profile photo")
         photo.tap()
         // The recording setup imports the app's public-safe bundled avatar
         // artwork into this simulator's Photos library. Selection and crop both
