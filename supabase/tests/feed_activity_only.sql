@@ -17,6 +17,11 @@ insert into public.profiles(id, handle, display_name, is_private_profile) values
 ('user_rec531_feed_viewer', 'rec531feedviewer', 'Feed smoke viewer', false),
 ('user_rec531_feed_actor', 'rec531feedactor', 'Feed smoke actor', false),
 ('user_rec531_feed_stranger', 'rec531feedstranger', 'Feed smoke stranger', false);
+-- This suite models one explicit follow and a stranger. New-account defaults
+-- are tested separately; remove only these rolled-back fixtures' default edges.
+delete from public.follows
+where follower_user_id in ('user_rec531_feed_viewer', 'user_rec531_feed_actor', 'user_rec531_feed_stranger')
+  and source = 'signup_default';
 insert into public.follows(follower_user_id, followed_user_id, source)
 values ('user_rec531_feed_viewer', 'user_rec531_feed_actor', 'profile');
 insert into public.places(id, canonical_name, category, latitude, longitude, source_provider, source_provider_place_id) values
