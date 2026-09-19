@@ -1,3 +1,31 @@
+## Latest — direct main landing now
+
+Full founders C completed and bundled: 91.0 seconds, 2,184 frames, exact Events shader/damage1/clock+.17. Complete cleaned AAC packets verified unchanged, including outtake through Cut. `founders-vhs-selected.html` has the full movie; A/B/C and original preserved. Signed generic-iPhone review build passed before this resource replacement. Native complete units 2,346 pass; four film/founders UI checks pass; corrected login journey 1/1 pass. Final resource playback check follows. Joe explicitly reiterated main now; do not wait for TestFlight to land the already verified onboarding implementation. Ticket updates are now explicitly authorized by the September19 standing instruction; prior Linear approval block is resolved.
+
+## Current checkpoint — selected C export and landing
+
+- C selected for full founders video; exact original Events shader at damage 1.0, +0.17 clock. Full 2,184-frame export running in `founders-vhs/render_full.py`; preserves every cleaned AAC packet and outtake through Cut.
+- Initial archive media upload completed: all 1,009 LFS objects (3.9 GB). Main ref not pushed yet.
+- 2,346 units + four film/founders UI tests passed. Final login/background UI journey now passes after removing a masked parent accessibility label and fixing the test helper to recognize an offscreen retained iOS keyboard node. `native-final-login-check-summary.json`: 1/1 pass.
+- Signed generic-device Onboarding Review build running. Full C resource needs replacement after render, then final native media validation and main/TestFlight release.
+- Latest origin/main 6bd2a4c adds backend feedback polish only; integrate after the active build stops. Preserve Ryan NUX. No implementation PR per Joe; direct-main landing authorized.
+- Linear external update remains blocked by automatic approval review; no message sent. Local/repo release work continues.
+
+## T34 — Ship founders video C (latest steering)
+
+Joe approved VHS clip C: “ship vid c thats perfect.” Render the FULL current cut with the exact C / Events 03C shader (damage 1.0, original clock offset), preserve all wind-cleaned audio and the celebratory outtake through Cut, and replace only the native bundled movie/poster and review preview. C is now the release video; T33's instruction to ship the original independently is superseded by this selection. Keep originals and all three short options archived. Main/TestFlight still authorized.
+
+Current code branch 149d0f7 plus uncommitted removal of generic parent AX label. Focused retest confirms benefit label now works, then fails at the old test helper's keyboard-dismiss gesture. Diagnose that next; do not change app behavior merely to satisfy an unreliable gesture. Full units2346 and film+founders four UI tests passed. Signed device build stopped at49GiB/50GiBfloor. LFS upload is running. Full C render should stream decoded source frames instead of storing gigabytes of intermediate PNGs.
+
+## September 19 validation detail — continue from here
+
+- Working branch now 149d0f7, full archive committed locally (Git LFS). Uploading LFS objects to origin in a separate running CLI; main ref not pushed yet.
+- Full native validation at 1185c81: 2,346 unit tests passed; both founders tests and both film auto-advance/auth tests passed. One NativeOnboardingFlow test failed at the benefit accessibility label; Xcode spent extra time in simctl diagnose after tests ended, not an application crash. This corrects the earlier provisional simulator interpretation.
+- Removed generic parent `What you can do with Astir` AX label in LoggedOutCarouselView (uncommitted) to preserve per-screen semantics. Focused native login/background journey queued via helper, with `-collect-test-diagnostics never` (retains XCResult/assertions/screenshots, skips verbose sysdiagnose). Await `native-benefit-accessibility-check.log`/`.xcresult` before finalizing that fix.
+- ASC read-only: latest uploaded 176 VALID, Astir app 6776850787/com.grayline.wander verified. Next candidate number is 177 unless newer upload/unfinished release appears. No bump or upload yet.
+- Current public review: founders-vhs-review.html?v=decoded; 4 videos loaded, ended at eight seconds, one audio track, no media errors. All recipe/source/provenance archived. Portable archive hashes verified (1,597 files). Source bundle has eight refs including combined 1185c81.
+- Git LFS official 3.8.0 installed in ~/.local/bin; archive binary pointers staged/committed, cloned objects preserve disk. Original media remains untouched.
+
 ## September 19 release/VHS checkpoint — T33 active
 
 - Joe lifted the main hold: land current wind-cleaned 90.965-second video and selected native film C. Earlier TestFlight bump authorization remains active. Do not wait for a VHS selection. No Drive upload.

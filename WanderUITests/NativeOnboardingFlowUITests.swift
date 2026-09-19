@@ -304,8 +304,8 @@ final class NativeOnboardingFlowUITests: XCTestCase {
     }
 
     private func dismissKeyboardIfPresent(in app: XCUIApplication) {
-        guard app.keyboards.firstMatch.exists else { return }
         let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists, keyboard.frame.intersects(app.frame) else { return }
         let scrollView = app.scrollViews.firstMatch
         if scrollView.exists {
             // The ScrollView AX frame can extend behind the keyboard. Begin
@@ -316,7 +316,12 @@ final class NativeOnboardingFlowUITests: XCTestCase {
             let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.95))
             start.press(forDuration: 0.05, thenDragTo: end)
         } else { app.swipeDown() }
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "Keyboard dismissal must finish before the next field action.")
+        // iOS can retain the dismissed keyboard in AX below the window. Wait
+        // for it to leave the visible screen, not for that cached node to die.
+        let dismissed = NSPredicate { _, _ in
+            !keyboard.exists || !keyboard.frame.intersects(app.frame)
+        }
+        XCTAssertTrue(waitFor(dismissed, on: app, timeout: 3), "Keyboard dismissal must finish before the next field action.")
     }
 
     private func waitFor(_ predicate: NSPredicate, on object: Any, timeout: TimeInterval = 5) -> Bool {

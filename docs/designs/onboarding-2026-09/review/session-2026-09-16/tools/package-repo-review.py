@@ -17,7 +17,7 @@ args = parser.parse_args()
 source, destination = args.source.resolve(), args.destination.resolve()
 assert source != destination and source not in destination.parents
 allowed = {'.html', '.md', '.json', '.jsonl', '.py', '.swift', '.js', '.css', '.txt', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.mp4', '.mov', '.woff', '.woff2', '.ttf', '.otf'}
-omit_directories = {'native-test-results', '__pycache__', 'node_modules', '.git', 'source-frames', 'native-device-review-attachments', 'cache-cleanup-2026-09-19'}
+omit_directories = {'native-test-results', '__pycache__', 'node_modules', '.git', 'source-frames', 'native-device-review-attachments', 'cache-cleanup-2026-09-19', 'native-benefit-accessibility-attachments', 'native-final-login-attachments'}
 libc = ctypes.CDLL(None, use_errno=True)
 clone = getattr(libc, 'clonefile', None)
 if clone:
@@ -38,6 +38,7 @@ for original in sorted(source.rglob('*')):
     rel = original.relative_to(source)
     if (original.is_symlink() or any(p.startswith('.') or p.endswith('.xcresult') or p in omit_directories for p in rel.parts)
         or original.suffix.lower() not in allowed
+        or original.name.endswith('-picture.mp4')
         or any('tests-all' in p or 'tests-final' in p for p in rel.parts)):
         excluded.append(str(rel))
         continue
@@ -56,7 +57,7 @@ for original in sorted(source.rglob('*')):
     assert digest(target) == expected, rel
     entries.append({'path': str(rel), 'bytes': original.stat().st_size, 'sha256': expected})
 
-manifest = {'format': 1, 'status': 'release preparation; Joe authorized main and TestFlight, VHS clips remain separate',
+manifest = {'format': 1, 'status': 'release preparation; Joe selected full founders C and authorized main and TestFlight',
             'files': entries, 'excludedExecutionOutputs': excluded,
             'bytes': sum(e['bytes'] for e in entries),
             'largeMediaRequiringPublicationPackaging': [e['path'] for e in entries if e['bytes'] >= 100 * 1024**2]}

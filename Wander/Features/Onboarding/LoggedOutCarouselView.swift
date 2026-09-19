@@ -108,7 +108,6 @@ struct LoggedOutCarouselView: View {
                     })
                 }
                 .onboardingFilmSurface()
-                .accessibilityLabel("What you can do with Astir")
                 HStack(spacing: 7) {
                     ForEach(configuration.steps.indices, id: \.self) { index in
                         Capsule().fill(index == selection ? brandMode.primaryText : brandMode.secondaryText.opacity(0.4))

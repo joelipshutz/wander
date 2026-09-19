@@ -170,7 +170,7 @@ struct FoundersWelcomeView: View {
 
 @MainActor
 final class FoundersWelcomePlayer: ObservableObject {
-    static let duration = 90.965
+    static let duration = 91.0
     let player = AVPlayer()
     @Published var hasStarted = false
     @Published var isPlaying = false

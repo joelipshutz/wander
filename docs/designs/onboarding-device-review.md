@@ -1,6 +1,6 @@
 # Onboarding device review — REC-547
 
-Local review branch: `codex/rec-547-film-welcome-device`, in `wander-native-onboarding-review`. Joe lifted the release hold on September 19: land the current cleaned video and selected film C; keep the new VHS video options separate. Main/TestFlight validation is underway.
+Local review branch: `codex/rec-547-film-welcome-device`, in `wander-native-onboarding-review`. Joe lifted the release hold on September 19: land the selected film C opening and the full founders VHS C video, preserving the cleaned audio and outtake. Main/TestFlight validation is underway.
 
 ## Run in Xcode
 
@@ -12,7 +12,7 @@ N09 says **Find places nearby**. Its existing explanatory body, privacy line and
 
 After setup, the founders’ video offers Play and Skip. The 1:31 cut keeps the outtake through the final Cut. Native pause, scrub and mute controls remain; backgrounding pauses playback. Ending or skipping fades into Ryan’s existing first-use walkthrough. The walkthrough is not constructed underneath the video. Playback progress and handled status are account-scoped; a new fictional review launch resets only the review account’s movie progress.
 
-Captions are not included in this review candidate. The current release uses the wind-cleaned cut; the separate VHS clip comparison does not replace it. Automatic tests and device-build outcomes are recorded in the dedicated process archive when complete.
+Captions are not included in this review candidate. Joe selected the full Events 03C VHS treatment for the welcome video. The complete cleaned audio and outtake remain unchanged. All three original eight-second options are archived. Automatic tests and device-build outcomes are recorded in the dedicated process archive when complete.
 
 ## Repeatable build
 

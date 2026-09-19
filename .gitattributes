@@ -9,3 +9,4 @@ docs/designs/onboarding-2026-09/**/*.woff filter=lfs diff=lfs merge=lfs -text
 docs/designs/onboarding-2026-09/**/*.woff2 filter=lfs diff=lfs merge=lfs -text
 docs/designs/onboarding-2026-09/**/*.ttf filter=lfs diff=lfs merge=lfs -text
 docs/designs/onboarding-2026-09/**/*.otf filter=lfs diff=lfs merge=lfs -text
+Wander/Resources/FoundersWelcome/founders-welcome.mp4 filter=lfs diff=lfs merge=lfs -text

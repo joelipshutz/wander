@@ -22,6 +22,14 @@ If you are working in Joe's local workspace, the repo path is:
 /Users/joelipshutz/Developer/Wander (nametbd)
 ```
 
+## Onboarding media
+
+Install Git LFS before cloning. In an existing checkout, run `git lfs install`
+and `git lfs pull --include="Wander/Resources/FoundersWelcome/founders-welcome.mp4"`
+before building. The founders welcome is bundled for offline playback. The full
+process archive under `docs/designs/onboarding-2026-09` also uses LFS; pull those
+paths when replaying the archived review studies.
+
 ## Generate Project
 
 `project.yml` is the source of truth for the Xcode project.
