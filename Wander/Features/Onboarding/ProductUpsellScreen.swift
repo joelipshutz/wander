@@ -151,6 +151,7 @@ struct ProductUpsellContentView: View {
     let content: ProductUpsellContent
     let isWorking: Bool
     var showsOnboardingExamples = false
+    private var accent: Color { AstirTheme.signal.color }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
