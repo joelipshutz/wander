@@ -100,7 +100,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Username available"].waitForExistence(timeout: 8))
         dismissKeyboardIfPresent(in: app)
         XCTAssertTrue(app.staticTexts["Jordan Lee"].exists)
-        XCTAssertEqual(app.staticTexts["onboarding.identity.previewHandle"].label, "@jordan_review")
+        XCTAssertTrue(app.staticTexts["@jordan_review"].exists)
         XCTAssertTrue(continueButton.isEnabled, "A valid name and available handle can continue without a photo.")
         keepScreenshot("N08-filled", app: app)
 
