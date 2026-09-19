@@ -17,16 +17,18 @@ struct CommonGroundInvitationMockup: View {
     let opensEnvelope: Bool
     let liveSharing: Bool
     let showsLinkage: Bool
+    private let analytics: AnalyticsClient
     private let sourcePlace: CommonGroundMockPlace
     private let canShare: (CommonGroundMockPlace) -> Bool
     private let prepareShare: ((CommonGroundInvitationDraft) async throws -> WanderShareContent)?
 
-    init(draft: CommonGroundInvitationDraft, opensEnvelope: Bool = false, initiallyOpened: Bool = false, liveSharing: Bool = false, showsLinkage: Bool = false, canShare: @escaping (CommonGroundMockPlace) -> Bool = { _ in true }, prepareShare: ((CommonGroundInvitationDraft) async throws -> WanderShareContent)? = nil) {
+    init(draft: CommonGroundInvitationDraft, opensEnvelope: Bool = false, initiallyOpened: Bool = false, liveSharing: Bool = false, showsLinkage: Bool = false, analytics: AnalyticsClient = NoopAnalyticsClient(), canShare: @escaping (CommonGroundMockPlace) -> Bool = { _ in true }, prepareShare: ((CommonGroundInvitationDraft) async throws -> WanderShareContent)? = nil) {
         _draft = State(initialValue: draft)
         _envelopeOpened = State(initialValue: initiallyOpened)
         self.opensEnvelope = opensEnvelope
         self.liveSharing = liveSharing
         self.showsLinkage = showsLinkage
+        self.analytics = analytics
         sourcePlace = draft.place
         self.canShare = canShare
         self.prepareShare = prepareShare
@@ -69,7 +71,14 @@ struct CommonGroundInvitationMockup: View {
         }
         .sheet(isPresented: $showsMessages) {
             if liveSharing, let content = shareContent {
-                WanderShareSheet(content: content)
+                WanderShareSheet(content: content, onComplete: { completed in
+                    guard canShare(draft.place) else { return }
+                    analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placePlanShareCompleted,
+                        properties: ["outcome": completed ? "shared" : "not_shared"]))
+                    if completed {
+                        analytics.track(.engagement(need: .connect, action: .placePlanShared, surface: "in_common"))
+                    }
+                })
             } else {
                 CommonGroundMessagesMockup(draft: draft, isReply: opensEnvelope)
             }
@@ -248,6 +257,7 @@ struct CommonGroundInvitationMockup: View {
         do {
             let content = try await prepareShare(sharedDraft)
             guard canShare(sharedDraft.place), draft == sharedDraft else { return }
+            analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placePlanCreated, properties: [:]))
             shareContent = content
             showsMessages = true
         } catch {

@@ -6,20 +6,24 @@ struct PlacePlanInvitationScreen: View {
     @Environment(\.astirBrandMode) private var brand
     let source: PlacePlanInvitationSource
     let repository: (any PlacePlanInvitationRepository)?
+    let analytics: AnalyticsClient
+    @State private var didTrackOpen = false
     var onOpened: (() -> Void)? = nil
     @State private var invitation: PlacePlanInvitation?
     @State private var isLoading = true
     @State private var failed = false
     @State private var attempt = 0
 
-    init(token: String, repository: (any PlacePlanInvitationRepository)?) {
+    init(token: String, repository: (any PlacePlanInvitationRepository)?, analytics: AnalyticsClient = NoopAnalyticsClient()) {
         self.source = .link(token)
         self.repository = repository
+        self.analytics = analytics
     }
 
-    init(invitationID: UUID, repository: (any PlacePlanInvitationRepository)?, onOpened: @escaping () -> Void) {
+    init(invitationID: UUID, repository: (any PlacePlanInvitationRepository)?, analytics: AnalyticsClient = NoopAnalyticsClient(), onOpened: @escaping () -> Void) {
         self.source = .notifications(invitationID)
         self.repository = repository
+        self.analytics = analytics
         self.onOpened = onOpened
     }
 
@@ -74,7 +78,19 @@ struct PlacePlanInvitationScreen: View {
             }
             guard !Task.isCancelled else { return }
             invitation = result
-            if result != nil { onOpened?() }
+            if result != nil {
+                if !didTrackOpen {
+                    didTrackOpen = true
+                    let surface: String
+                    switch source {
+                    case .link: surface = "link"
+                    case .notifications: surface = "notifications"
+                    }
+                    analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placePlanOpened,
+                                                  properties: ["surface": surface]))
+                }
+                onOpened?()
+            }
         } catch {
             guard !Task.isCancelled else { return }
             failed = true

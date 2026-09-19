@@ -118,6 +118,7 @@ struct PlaceProfileFullScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.scenePhase) private var scenePhase
+    @State private var analyticsViewedPlaceID: String?
     @State private var remoteSaves: [VisiblePlace]?
     @State private var remoteSnapshotStartedAt: Date?
     @State private var historyRefreshFailed = false
@@ -277,6 +278,11 @@ struct PlaceProfileFullScreen: View {
             }
         }
         .task(id: "\(currentUserID):\(place.id)") {
+            if analyticsViewedPlaceID != place.id {
+                analyticsViewedPlaceID = place.id
+                store.productAnalytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placeProfileViewed,
+                    properties: ["surface": "place_profile"]))
+            }
             remoteSaves = nil
             remoteSnapshotStartedAt = nil
             historyRefreshFailed = false

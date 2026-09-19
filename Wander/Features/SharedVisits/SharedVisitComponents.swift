@@ -547,7 +547,7 @@ struct SharedVisitInvitationInboxScreen: View {
         .task { await refresh() }
         .sheet(item: $selectedPlan, onDismiss: { Task { await refresh() } }) { plan in
             let recipientID = store.currentUser.id
-            PlacePlanInvitationScreen(invitationID: plan.id, repository: backend.placePlanInvitationRepository) {
+            PlacePlanInvitationScreen(invitationID: plan.id, repository: backend.placePlanInvitationRepository, analytics: store.productAnalytics) {
                 planInbox.markOpened(id: plan.id, userID: recipientID, analytics: store.productAnalytics)
             }
         }

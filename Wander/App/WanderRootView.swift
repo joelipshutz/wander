@@ -534,7 +534,8 @@ struct WanderRootView: View {
                 EventsComingSoonScreen(
                     isSelected: selectedTab == .events && !isPresentingAdd,
                     userID: auth.state.session?.userID,
-                    repository: backend.eventsInterestRepository
+                    repository: backend.eventsInterestRepository,
+                    analytics: analytics
                 )
                     .tabItem { tabItemLabel(for: .events) }
                     .tag(WanderTab.events)
@@ -861,7 +862,7 @@ struct WanderRootView: View {
                 onPresent: handleDeepLinkPresentation,
                 onDismiss: handleDeepLinkPresentationDismissalImmediately
             ) {
-                PlacePlanInvitationScreen(token: route.token, repository: backend.placePlanInvitationRepository)
+                PlacePlanInvitationScreen(token: route.token, repository: backend.placePlanInvitationRepository, analytics: analytics)
             }
         }
         .fullScreenCover(item: $sharedProfile) { route in
