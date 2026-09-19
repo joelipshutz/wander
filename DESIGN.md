@@ -62,6 +62,11 @@ across production surfaces by this provisional grammar:
   launch arguments must not select a separate palette.
 - Feed and Lists floating headers hide on sustained downward scrolling and
   return on upward scrolling; Reduce Motion must remain respected.
+- The owner Profile header places Feedback at the leading edge, with the
+  notification bell and hamburger Settings action trailing. Edit profile and
+  Share profile sit side by side beneath Member since, using light adaptive
+  Astir surfaces and full text labels. The existing member-profile actions stay
+  in their navigation row.
 - The Map masthead's OCEAN PARK label uses the approved 06 analog tracking
   motion: the first 0.96-second episode starts after 3 seconds, followed by newly
   randomized 25–30-second onset-to-onset intervals.
