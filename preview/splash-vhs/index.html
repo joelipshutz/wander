@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Astir · VHS splash preview</title>
+  <link rel="stylesheet" href="preview.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <main>
+    <section class="stage" aria-label="Splash animation preview">
+      <div class="phone">
+        <canvas id="splash" width="720" height="1561" role="img" aria-label="The original Astir statue and serif wordmark with worn VHS tape effects"></canvas>
+        <img id="original" hidden alt="Original unchanged Astir splash artwork" src="../../Wander/Resources/Assets.xcassets/AstirLaunchWordmark.imageset/AstirLaunchWordmark.png">
+        <video id="reference" hidden muted loop playsinline preload="none" src="../../Wander/Resources/Events/events-coming-soon.mp4"></video>
+        <div class="island" aria-hidden="true"></div><div class="home" aria-hidden="true"></div>
+      </div>
+    </section>
+    <aside>
+      <p class="eyebrow">ASTIR / MOTION STUDY</p>
+      <h1>Same signal.<br>Worn tape.</h1>
+      <p class="description">The original splash, through the Coming Soon tape treatment. Heavy tracking tears arrive immediately; the lettering stays yours.</p>
+      <div class="modes" role="group" aria-label="Preview surface">
+        <button data-mode="splash" aria-pressed="true">VHS splash</button>
+        <button data-mode="original" aria-pressed="false">Original</button>
+        <button data-mode="reference" aria-pressed="false">Coming Soon</button>
+      </div>
+      <div class="controls">
+        <button id="replay" class="primary">Replay splash</button>
+        <button id="pause">Pause</button>
+      </div>
+      <div class="settings">
+        <label>Preview length<select id="duration"><option value="1.2">1.2 seconds</option><option value="1.8" selected>1.8 seconds</option><option value="3">3 seconds</option></select></label>
+        <label>Phone size<select id="size"><option value="standard">Standard</option><option value="compact">Compact</option><option value="large">Large</option></select></label>
+      </div>
+      <label class="loop"><input type="checkbox" id="loop" checked> Repeat preview</label>
+      <p id="status">Loading the original artwork…</p>
+      <p class="note">Branch preview · Font and artwork unchanged.<br>Preview timing only; app launch duration is unchanged.</p>
+    </aside>
+  </main>
+  <video id="texture" muted loop playsinline preload="auto" hidden src="../../Wander/Resources/OnboardingFilm/onboarding-film-texture.mp4"></video>
+  <script src="tape-shader.js"></script>
+  <script src="preview.js"></script>
+</body>
+</html>
