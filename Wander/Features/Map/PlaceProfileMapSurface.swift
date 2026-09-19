@@ -872,12 +872,15 @@ private struct PlaceProfilePreviewCard: View {
         }
         .sheet(isPresented: $isShareSheetPresented) {
             if let shareContent {
-                WanderShareSheet(content: shareContent) { completed in
-                    Task { @MainActor in
-                        store.trackPlaceShareCompletion(completed: completed)
-                        isShareSheetPresented = false
+                ActivitySharePreviewScreen(
+                    card: ShareCardContent(kind: .place, name: place.name, detail: place.compactPlaceType),
+                    content: shareContent,
+                    completion: { completed in store.trackPlaceShareCompletion(completed: completed) },
+                    loadImages: {
+                        if let preparedImage { return ShareCardImages(photos: [preparedImage]) }
+                        return ShareCardImages(photos: await ShareCardRenderer.placeImages([place.photoRequest], backend: backend))
                     }
-                }
+                )
             }
         }
     }
@@ -1806,8 +1809,10 @@ private struct PlaceProfileFullView: View {
                     }
 
                     if let shareURL {
-                        WanderShareButton(
-                            content: .place(item: shareURL, name: place.name, message: shareText)
+                        ShareCardButton(
+                            content: .place(item: shareURL, name: place.name, message: shareText),
+                            card: ShareCardContent(kind: .place, name: place.name, detail: place.compactPlaceType),
+                            loadImages: { ShareCardImages(photos: await ShareCardRenderer.placeImages([place.photoRequest], backend: backend)) }
                         ) {
                             headerNavigationLabel(systemImage: "square.and.arrow.up")
                         }

@@ -29,6 +29,16 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  ShareCardMock:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderShareCardMockup: true
+        -WanderAuthenticatedUITest: true
+        -WanderDisableWalkthroughs: true
   Onboarding Review:
     build:
       targets:

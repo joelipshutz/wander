@@ -1003,6 +1003,7 @@ struct ProfileDetailView: View {
                     YourMapPrototypeScreen(
                         dataset: yourMapPrototypeDataset,
                         viewerID: store.currentUser.id,
+                        sharedProfileID: profileID,
                         mapTitle: profileMapTitle,
                         pinOwnership: .social
                     )

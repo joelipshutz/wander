@@ -183,7 +183,10 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {
+            if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
+                ShareCardDesignMockupRoot()
+                    .environmentObject(mapCaptureBackend)
+            } else if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {
                 NativeOnboardingReviewHost(route: nativeReviewRoute)
             } else if let motion = ProfileHeaderMotionVariant.resolved() {
                 ProfileHeaderMotionPreview(variant: motion)
@@ -217,6 +220,7 @@ struct WanderApp: App {
                 PlaceActivityMockupRoot(page: activityMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderActivityShareMockup") {
                 ActivitySharePreviewMockupRoot()
+                    .environmentObject(mapCaptureBackend)
             } else if let importCapturePage = ImportImplementationCapturePage.resolved() {
                 ImportImplementationCaptureRoot(page: importCapturePage)
                     .environmentObject(auth)

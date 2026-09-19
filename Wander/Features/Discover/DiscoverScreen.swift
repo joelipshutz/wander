@@ -2462,6 +2462,7 @@ private struct DiscoverSearchField: View {
 }
 
 private struct DiscoverPlaceResultCard: View {
+    @EnvironmentObject private var backend: WanderBackend
     @Environment(\.astirBrandMode) private var brandMode
     let group: VisiblePlaceGroup
     let currentUserStatus: PlaceStatus?
@@ -2531,7 +2532,11 @@ private struct DiscoverPlaceResultCard: View {
                 .accessibilityIdentifier("discover.addToList.\(visiblePlace.place.id)")
 
                 if let shareContent {
-                    WanderShareButton(content: shareContent) {
+                    ShareCardButton(content: shareContent,
+                                    card: ShareCardContent(kind: .place, name: visiblePlace.place.canonicalName,
+                                                           detail: visiblePlace.effectiveCompactType),
+                                    loadImages: { ShareCardImages(photos: await ShareCardRenderer.placeImages(
+                                        [PlaceSheetPlace(visiblePlace: visiblePlace).photoRequest], backend: backend)) }) {
                         DiscoverResultActionLabel(title: "Share", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)

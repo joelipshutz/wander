@@ -361,3 +361,36 @@ permission is sufficient for centering the map; nearby POI resolution retains
 its stricter accuracy requirement. Cancel obsolete launch requests and retry
 when the app returns from the background or authorization changes. Preserve the
 existing deterministic Los Angeles viewport only for explicit debug fixtures.
+
+
+## 2026-09-19 — Share cards use topic-specific content (REC-546)
+
+One native SwiftUI renderer powers previews and exported Link, Story and Post
+artwork. Profiles use “Discover <first name>’s world” without a footer subtitle.
+Named map snapshots use the saved list name. Lists use a place collage for two
+or more places, one cover for one place, and an empty state for zero. Missing
+photos keep their slots. View remains visible in the link card footer.
+
+Check-ins use their visit date. Wanna cards use the exact event’s planned date
+when present, otherwise “On <first name>’s radar”; their action is “Let’s Go”.
+List invitations omit a repeated list-name subtitle and use “Join”. Messages and system sharing use one published card link. Instagram and TikTok
+photo handoffs copy that link for captions or stickers.
+
+## Linked share-card snapshots (REC-546)
+
+Sharing publishes the approved Link card as a static public image behind an
+unguessable preview token on a website-only `/cards/<entity>/<id>` URL.
+Messages and the system share sheet send only this URL. The card itself is the website's tappable
+preview; no separate caption or PNG is attached. Copy Link and social handoffs
+use the same published URL. Merely opening the preview or saving an image to
+Photos does not publish it.
+
+Publication is authenticated, target-authorized, and scoped to the creator's
+storage folder. Anonymous resolution requires both token and matching route;
+it reads only the published title and image path, never underlying saves, notes,
+visits, or list contents. The tappable card opens the original query-free app
+route, including on older installed clients that reject query parameters. Card wrapper paths deliberately
+stay outside AASA associations. Existing app visibility rules remain authoritative.
+Snapshots are deliberate shared copies: later edits do not change them, and
+public image copies/third-party link caches cannot be recalled. List-invitation
+resolution also respects invitation expiry, acceptance, and revocation.

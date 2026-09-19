@@ -1130,7 +1130,9 @@ private struct ListDetailScreen: View {
         .toolbar {
             ListDetailHeaderToolbar {
                 if let listShareContent {
-                    WanderShareButton(content: listShareContent) {
+                    ShareCardButton(content: listShareContent,
+                                    card: displayList.shareCard(owner: displayList.isOwnedByCurrentUser ? store.currentUser.displayName : displayList.ownerName),
+                                    loadImages: { await displayList.shareImages(backend: backend) }) {
                         ListDetailHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .accessibilityLabel("Share list")
@@ -2914,7 +2916,11 @@ private struct CollaboratorInviteSheet: View {
                 }
             }
             .sheet(item: $sharePresentation) { presentation in
-                WanderShareSheet(content: presentation.content)
+                ActivitySharePreviewScreen(
+                    card: list.shareCard(owner: store.currentUser.displayName, invitation: true),
+                    content: presentation.content,
+                    loadImages: { await list.shareImages(backend: backend) }
+                )
             }
             .alert("Couldn’t create invitation", isPresented: inviteLinkErrorBinding) {
                 Button("OK", role: .cancel) {}
@@ -5003,6 +5009,20 @@ private struct PlaceListMock: Identifiable, Hashable {
             center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
             span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
         )
+    }
+
+    func shareCard(owner: String, invitation: Bool = false) -> ShareCardContent {
+        ShareCardContent(kind: invitation ? .invitation : (snapshotCoverData != nil || snapshotCoverPath != nil ? .map : .list),
+                         name: name, ownerName: owner, count: totalItemCount)
+    }
+
+    @MainActor
+    func shareImages(backend: WanderBackend) async -> ShareCardImages {
+        if let snapshotCoverData, let map = UIImage(data: snapshotCoverData) { return ShareCardImages(map: map) }
+        if let snapshotCoverPath, let data = try? await backend.listSnapshotCoverData(path: snapshotCoverPath),
+           let map = UIImage(data: data) { return ShareCardImages(map: map) }
+        let photos = await ShareCardRenderer.placeImages(places.prefix(4).map { $0.canonicalProfilePlace.photoRequest }, backend: backend)
+        return ShareCardImages(photos: photos)
     }
 
     var previewPlaces: [ListPlaceMock] { places }

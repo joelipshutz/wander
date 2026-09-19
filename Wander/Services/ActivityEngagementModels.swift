@@ -126,6 +126,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     let placeDetail: String
     let ticketKind: FeedTicketKind
     let occurredAt: Date
+    let plannedDate: Date?
+    let sourceUserPlaceID: String?
     let note: String?
     let rating: Double?
     let ticketEyebrow: String
@@ -141,6 +143,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         placeDetail: String,
         status: PlaceStatus,
         occurredAt: Date,
+        plannedDate: Date? = nil,
+        sourceUserPlaceID: String? = nil,
         note: String? = nil,
         rating: Double? = nil,
         ticketEyebrow: String? = nil,
@@ -156,6 +160,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             placeDetail: placeDetail,
             ticketKind: status == .been ? .checkIn : .wanna,
             occurredAt: occurredAt,
+            plannedDate: plannedDate,
+            sourceUserPlaceID: sourceUserPlaceID,
             note: note,
             rating: rating,
             ticketEyebrow: ticketEyebrow,
@@ -173,6 +179,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         placeDetail: String,
         ticketKind: FeedTicketKind,
         occurredAt: Date,
+        plannedDate: Date? = nil,
+        sourceUserPlaceID: String? = nil,
         note: String? = nil,
         rating: Double? = nil,
         ticketEyebrow: String? = nil,
@@ -187,6 +195,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         self.placeDetail = placeDetail
         self.ticketKind = ticketKind
         self.occurredAt = occurredAt
+        self.plannedDate = plannedDate
+        self.sourceUserPlaceID = sourceUserPlaceID
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.note = trimmedNote?.isEmpty == false ? trimmedNote : nil
         self.rating = rating

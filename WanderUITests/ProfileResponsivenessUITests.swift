@@ -38,14 +38,14 @@ final class ProfileResponsivenessUITests: XCTestCase {
         for attempt in 0..<3 {
             let start = Date()
             share.tap()
-            let sheet = app.otherElements["ActivityListView"]
+            let sheet = app.segmentedControls["share.format"]
             XCTAssertTrue(sheet.waitForExistence(timeout: 3))
             let elapsed = Date().timeIntervalSince(start)
             print("PROFILE_SHARE attempt=\(attempt) presentation_seconds=\(elapsed)")
             // tap() also waits for XCTest quiescence. Record that end-to-end
             // duration, but enforce readiness with the sheet wait above.
             capture("Profile share attempt \(attempt)")
-            sheet.swipeDown()
+            app.buttons["Close share preview"].tap()
             XCTAssertTrue(sheet.waitForNonExistence(timeout: 3))
             XCTAssertTrue(share.waitForExistence(timeout: 3))
             XCTAssertTrue(share.isHittable)

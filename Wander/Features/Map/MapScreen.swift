@@ -17456,6 +17456,7 @@ private struct MapSaveWrappingChipLayout: Layout {
 }
 
 struct PlaceSheet: View {
+    @EnvironmentObject private var backend: WanderBackend
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
     let tasteSaves: [PlaceSaveSummary]
@@ -17646,7 +17647,9 @@ struct PlaceSheet: View {
     @ViewBuilder
     private var shareButton: some View {
         if let shareURL {
-            WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
+            ShareCardButton(content: .place(item: shareURL, name: place.name, message: shareText),
+                            card: ShareCardContent(kind: .place, name: place.name, detail: place.compactPlaceType),
+                            loadImages: { ShareCardImages(photos: await ShareCardRenderer.placeImages([place.photoRequest], backend: backend)) }) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 17, weight: .black))
                     .frame(width: 42, height: 42)
@@ -18707,6 +18710,7 @@ private struct PlaceActivityCard: View {
             placeDetail: detailParts.joined(separator: " · "),
             status: entry.status,
             occurredAt: entry.timestamp,
+            plannedDate: entry.wanna != nil ? entry.wanna?.plannedDate : (entry.status == .wannaGo ? entry.userPlace.plannedDate : nil),
             note: entry.note,
             rating: entry.ratingScore,
             media: photos.map {

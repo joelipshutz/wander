@@ -455,13 +455,19 @@ struct ProfileOwnerHome: View {
                     displayName: profile.displayName,
                     handle: profile.handle
                 ) {
-                    WanderShareButton(
+                    ShareCardButton(
                         content: shareContent,
-                        preview: SharePreview(
-                            profile.displayName,
-                            image: Image(uiImage: WanderSharePreviewArtwork.profile)
-                        ),
-                        onTap: shareAction
+                        card: ShareCardContent(kind: .profile, name: profile.displayName,
+                                               ownerName: profile.displayName, detail: "@\(profile.handle)"),
+                        onTap: shareAction,
+                        loadImages: {
+                            let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: profile.avatarURL)
+                            let request = ProfileMapSnapshotRequest(points: insights.mapPoints,
+                                size: CGSize(width: 390, height: 238), displayScale: 3,
+                                colorScheme: brandMode == .editorial ? .dark : .light)
+                            let map = await ProfileMapSnapshotCache.shared.image(for: request)
+                            return ShareCardImages(avatar: avatar, map: map)
+                        }
                     ) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
@@ -1707,12 +1713,14 @@ private struct ProfileMapSection: View {
                 }
                 Spacer()
                 if let shareContent = mapShareContent {
-                    WanderShareButton(content: shareContent) {
+                    ShareCardButton(content: shareContent,
+                        card: ShareCardContent(kind: .map, name: "\(profile.displayName)’s map", ownerName: profile.displayName, count: insights.mapPlaceCount),
+                        loadImages: { ShareCardImages(map: shareImageFileURL.flatMap { UIImage(contentsOfFile: $0.path) }) }) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Share \(profile.displayName)'s map")
-                    .accessibilityHint("Shares the profile link and this map as a PNG")
+                    .accessibilityHint("Shares this map as a linked card")
                 } else if profile.serverID != nil {
                     Button {} label: {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
@@ -1897,7 +1905,7 @@ private struct ProfileMapRenderedSnapshot {
     let image: UIImage
 }
 
-private struct ProfileMapSnapshotRequest {
+struct ProfileMapSnapshotRequest {
     struct Coordinate: Hashable {
         let latitude: Double
         let longitude: Double
@@ -1951,7 +1959,7 @@ private struct ProfileMapSnapshotRequest {
 }
 
 @MainActor
-private final class ProfileMapSnapshotCache {
+final class ProfileMapSnapshotCache {
     static let shared = ProfileMapSnapshotCache()
 
     private let images: NSCache<NSString, UIImage>
@@ -2096,7 +2104,11 @@ private struct ProfileMapSummaryShareButton: View {
         .accessibilityHint(shareAccessibilityHint)
         .sheet(isPresented: $showsShareSheet, onDismiss: cleanupShareAttachment) {
             if let shareContent {
-                WanderShareSheet(content: shareContent)
+                ActivitySharePreviewScreen(
+                    card: ShareCardContent(kind: .map, name: item.title, ownerName: profile.displayName, count: item.count),
+                    content: shareContent,
+                    loadImages: { ShareCardImages(map: shareContent.additionalItems.first.flatMap { UIImage(contentsOfFile: $0.path) }) }
+                )
             }
         }
         .alert("Couldn't prepare this map", isPresented: $showsShareError) {
@@ -2159,7 +2171,7 @@ private struct ProfileMapSummaryShareButton: View {
         guard profile.serverID != nil else {
             return "Available after this profile finishes syncing"
         }
-        return "Shares the profile link and a map of these \(item.count) checked-in \(item.count == 1 ? "place" : "places")"
+        return "Shares a linked map of these \(item.count) checked-in \(item.count == 1 ? "place" : "places")"
     }
 
     private func cancelSharePreparation() {

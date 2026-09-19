@@ -284,11 +284,10 @@ final class ActivityEngagementTests: XCTestCase {
 
         XCTAssertEqual(content.items, [
             URL(string: "https://getrec.me/activities/\(activityID)")!,
-            WanderShareContent.publicTestFlightURL,
             fileURL,
         ])
         XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
-        XCTAssertTrue(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
+        XCTAssertFalse(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
         XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
     }
 
@@ -386,6 +385,68 @@ final class ActivityEngagementTests: XCTestCase {
 
         XCTAssertNotEqual(fallbackArtwork.pngData(), avatarArtwork.pngData())
         XCTAssertEqual(avatarArtwork.size, CGSize(width: 360, height: 640))
+    }
+
+    func testShareCardCopyAndDatesFollowApprovedVariants() {
+        let profile = ShareCardContent(kind: .profile, name: "Ryan Lieblein", ownerName: "Ryan Lieblein", detail: "@ryan")
+        XCTAssertEqual(profile.headline, "Discover Ryan’s world")
+        XCTAssertNil(profile.subtitle)
+        let invitation = ShareCardContent(kind: .invitation, name: "Good nights, great tables", ownerName: "Ryan Lieblein", count: 4)
+        XCTAssertNil(invitation.subtitle)
+        XCTAssertEqual(invitation.action, "Join")
+        XCTAssertEqual(ShareCardContent(kind: .list, name: "A long list name with many places", count: 4).action, "View")
+        var wanna = ShareCardContent(kind: .wanna, name: "Bar Chelou", ownerName: "Ryan Lieblein")
+        XCTAssertEqual(wanna.subtitle, "Bar Chelou · On Ryan’s radar")
+        XCTAssertEqual(wanna.action, "Let’s Go")
+        wanna.date = Date(timeIntervalSince1970: 1_789_754_400)
+        XCTAssertEqual(wanna.subtitle, "Bar Chelou · \(wanna.dateLabel!)")
+        XCTAssertFalse(wanna.socialTitle.contains("radar"))
+        wanna.date = nil
+        XCTAssertEqual(wanna.socialTitle, "On Ryan’s radar.")
+    }
+
+    func testShareCardWannaDateUsesExactEventAndRespectsExplicitlyUndatedRepeats() {
+        let date = Date(timeIntervalSince1970: 1_789_754_400)
+        let context = ActivityEngagementContext(activityID: "event-a",
+            actor: ProfileShell(id: "user", handle: "ryan", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .owner),
+            placeName: "Bar Chelou", placeServerID: nil, placeDetail: "Pasadena", status: .wannaGo,
+            occurredAt: date, plannedDate: date)
+        let other = PlaceWannaSave(id: "event-b", ownerID: "user", userPlaceID: "parent", occurredAt: date,
+            visibility: .followers, plannedDate: date.addingTimeInterval(86_400), attributeAnswersJSON: "[]")
+        var exact = PlaceWannaSave(id: "EVENT-A", ownerID: "user", userPlaceID: "parent", occurredAt: date,
+            visibility: .followers, plannedDate: nil, attributeAnswersJSON: "[]")
+        XCTAssertEqual(context.shareCard(resolving: [other]).date, date)
+        XCTAssertNil(context.shareCard(resolving: [other, exact]).date)
+        exact.plannedDate = date.addingTimeInterval(172_800)
+        XCTAssertEqual(context.shareCard(resolving: [other, exact]).date, exact.plannedDate)
+    }
+
+    func testShareCardFormatsExportCorrectPixelDimensions() throws {
+        for format in ShareCardFormat.allCases {
+            let image = try XCTUnwrap(ShareCardRenderer.render(
+                ShareCardContent(kind: .list, name: "An empty list", ownerName: "Ryan"),
+                images: ShareCardImages(), format: format))
+            XCTAssertEqual(image.cgImage?.width, Int(format.size.width * 3))
+            XCTAssertEqual(image.cgImage?.height, Int(format.size.height * 3))
+            XCTAssertNotNil(image.pngData())
+        }
+    }
+
+    func testListCollageUsesSecondPlaceOnlyWhenAtLeastTwoPlacesExist() throws {
+        func photo(_ color: UIColor) -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image {
+                color.setFill(); $0.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+            }
+        }
+        let first = photo(.red)
+        let second = photo(.blue)
+        for count in 0...4 {
+            let card = ShareCardContent(kind: .list, name: "Favorites", ownerName: "Ryan", count: count)
+            let one = try XCTUnwrap(ShareCardRenderer.render(card, images: ShareCardImages(photos: [first, nil])))
+            let two = try XCTUnwrap(ShareCardRenderer.render(card, images: ShareCardImages(photos: [first, second])))
+            if count < 2 { XCTAssertEqual(one.pngData(), two.pngData()) }
+            else { XCTAssertNotEqual(one.pngData(), two.pngData()) }
+        }
     }
 
     func testLikeMutationUpdatesTheVisibleCountAndCanUndo() async {
