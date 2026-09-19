@@ -56,9 +56,9 @@ final class OnboardingFilmTreatmentTests: XCTestCase {
         XCTAssertGreaterThan(OnboardingFilmFrame(time: 0.62, moving: true).density, 0.85)
     }
 
-    func testOrdinaryAndUnknownLaunchesKeepApprovedTreatment() {
-        XCTAssertEqual(OnboardingWelcomeConfiguration.resolved(environment: [:]).visualTreatment, .approved)
-        XCTAssertEqual(OnboardingVisualTreatment.resolved(environment: ["WANDER_ONBOARDING_TREATMENT": "unknown"]), .approved)
+    func testOrdinaryAndUnknownLaunchesUseSelectedFilmC() {
+        XCTAssertEqual(OnboardingWelcomeConfiguration.resolved(environment: [:]).visualTreatment, .filmType)
+        XCTAssertEqual(OnboardingVisualTreatment.resolved(environment: ["WANDER_ONBOARDING_TREATMENT": "unknown"]), .filmType)
     }
 
     func testExplorationsPreserveCopySequenceAndPacing() {
@@ -68,7 +68,7 @@ final class OnboardingFilmTreatmentTests: XCTestCase {
             #if DEBUG
             XCTAssertTrue(exploration.visualTreatment.isFilm)
             #else
-            XCTAssertEqual(exploration.visualTreatment, .approved)
+            XCTAssertEqual(exploration.visualTreatment, .filmType)
             #endif
             XCTAssertEqual(exploration.ticker, approved.ticker)
             XCTAssertEqual(exploration.steps, approved.steps)

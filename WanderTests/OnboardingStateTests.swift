@@ -1066,7 +1066,7 @@ final class OnboardingStateTests: XCTestCase {
 
     func testApprovedLocationValueCopyIsStable() {
         XCTAssertEqual(OnboardingLocationContent.eyebrow, "AROUND YOU")
-        XCTAssertEqual(OnboardingLocationContent.title, "Find the good stuff nearby")
+        XCTAssertEqual(OnboardingLocationContent.title, "Find places nearby")
         XCTAssertEqual(
             OnboardingLocationContent.privacyMessage,
             "Your location is yours."

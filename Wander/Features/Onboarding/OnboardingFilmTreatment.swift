@@ -2,7 +2,7 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// Optional review treatments. Release and ordinary debug launches stay approved.
+/// Selected film C ships by default; debug review may compare archived treatments.
 enum OnboardingVisualTreatment: String, Equatable, CaseIterable {
     case approved
     case film
@@ -15,9 +15,9 @@ enum OnboardingVisualTreatment: String, Equatable, CaseIterable {
 
     static func resolved(environment: [String: String]) -> Self {
         #if DEBUG
-        Self(rawValue: environment["WANDER_ONBOARDING_TREATMENT"] ?? "") ?? .approved
+        Self(rawValue: environment["WANDER_ONBOARDING_TREATMENT"] ?? "") ?? .filmType
         #else
-        .approved
+        .filmType
         #endif
     }
 

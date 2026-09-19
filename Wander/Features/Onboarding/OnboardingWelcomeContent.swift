@@ -80,8 +80,8 @@ struct OnboardingWelcomeConfiguration: Equatable {
             ),
             descriptionIsDelayed: true
         )
-        #if DEBUG
         configuration.visualTreatment = .resolved(environment: environment)
+        #if DEBUG
         if let raw = environment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"],
            let seconds = Double(raw), seconds.isFinite, seconds > 0 {
             configuration.autoAdvanceSeconds = seconds
