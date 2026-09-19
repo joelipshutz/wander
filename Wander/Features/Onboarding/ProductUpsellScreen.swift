@@ -209,7 +209,7 @@ struct OnboardingNotificationExamples: View {
 
     private let examples: [(icon: String, title: String, message: String)] = [
         ("mappin.and.ellipse", "Ryan checked in", "A new place to discover."),
-        ("square.and.arrow.down", "Your import is ready", "Your places are ready to review."),
+        ("square.and.arrow.down", "Your Instagram import is ready", "Your places are ready to review."),
         ("person.crop.circle.badge.checkmark", "Mina followed you", "Your circle is growing.")
     ]
 
@@ -217,7 +217,7 @@ struct OnboardingNotificationExamples: View {
         VStack(spacing: WanderTheme.spacing3) {
             ForEach(examples.indices, id: \.self) { index in
                 let example = examples[index]
-                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     Image("InvitationAppIcon")
                         .resizable().scaledToFit().frame(width: 42, height: 42)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -246,7 +246,7 @@ struct OnboardingNotificationExamples: View {
         }
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Example Astir notifications: Ryan checked in. Your import is ready. Mina followed you.")
+        .accessibilityLabel("Example Astir notifications: Ryan checked in. Your Instagram import is ready. Mina followed you.")
         .accessibilityIdentifier("onboarding.notificationExamples")
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
