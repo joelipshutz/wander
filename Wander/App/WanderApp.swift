@@ -87,10 +87,16 @@ struct WanderApp: App {
 
     init() {
         let configuration = WanderBackendConfiguration.current()
+        #if DEBUG
+        let usesNativeOnboardingReview = NativeOnboardingReviewRoute.resolved() != nil
+        #else
+        let usesNativeOnboardingReview = false
+        #endif
         let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
         let forcedOnboardingStep = SimulatorTestSessionPolicy.forcedOnboardingStep()
         let analyticsClient: AnalyticsClient
-        if let postHog = PostHogAnalyticsClient(configuration: .current()) {
+        if !usesNativeOnboardingReview, !usesSimulatorTestSession,
+           let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
         } else {
             analyticsClient = NoopAnalyticsClient()
@@ -109,7 +115,12 @@ struct WanderApp: App {
         )
         let authStore: AuthSessionStore
         #if targetEnvironment(simulator)
-        if usesSimulatorTestSession {
+        if usesNativeOnboardingReview {
+            authStore = AuthSessionStore(
+                provider: PreviewAuthSessionProvider(state: .signedOut, canPresentNativeAuth: true),
+                analytics: contextualAnalytics
+            )
+        } else if usesSimulatorTestSession {
             authStore = AuthSessionStore(
                 provider: PreviewAuthSessionProvider(
                     state: .signedIn(
@@ -136,7 +147,7 @@ struct WanderApp: App {
         )
         #endif
         #if DEBUG && targetEnvironment(simulator)
-        let backendStore = usesSimulatorTestSession
+        let backendStore = (usesSimulatorTestSession || usesNativeOnboardingReview)
             ? WanderBackend(
                 profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
                 notificationRepository: SimulatorNotificationRepository(),
@@ -172,6 +183,8 @@ struct WanderApp: App {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
                 ShareCardDesignMockupRoot()
+            } else if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {
+                NativeOnboardingReviewHost(route: nativeReviewRoute)
             } else if let motion = ProfileHeaderMotionVariant.resolved() {
                 ProfileHeaderMotionPreview(variant: motion)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingCommentsCapture") {

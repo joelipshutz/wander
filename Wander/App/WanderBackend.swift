@@ -194,6 +194,7 @@ final class WanderBackend: ObservableObject {
     private static let placePhotoMetadataCacheLimit = 256
 
     let configuration: WanderBackendConfiguration
+    let feedbackRepository: (any FeedbackRepository)?
     let photoCacheScopeID = UUID()
     let featureFlagRepository: (any FeatureFlagRepository)?
     let profileRepository: (any ProfileRepository)?
@@ -243,6 +244,7 @@ final class WanderBackend: ObservableObject {
 
         if configuration.isSupabaseConfigured {
             let client = WanderSupabaseClient(configuration: configuration, authSession: authSession)
+            self.feedbackRepository = SupabaseFeedbackRepository(rpc: client, storage: client)
             self.featureFlagRepository = SupabaseFeatureFlagRepository(table: client)
             self.profileRepository = SupabaseProfileRepository(rpc: client)
             self.profileAvatarRepository = SupabaseProfileAvatarRepository(rpc: client, storage: client)
@@ -268,6 +270,7 @@ final class WanderBackend: ObservableObject {
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
             self.placePlanInvitationRepository = SupabasePlacePlanInvitationRepository(rpc: client, storage: client)
         } else {
+            self.feedbackRepository = nil
             self.featureFlagRepository = nil
             self.profileRepository = nil
             self.profileAvatarRepository = nil
@@ -329,6 +332,7 @@ final class WanderBackend: ObservableObject {
         placePhotoDownloadLimiter: PlacePhotoDownloadLimiter = .shared
     ) {
         self.configuration = configuration
+        self.feedbackRepository = nil
         self.featureFlagDeviceOverrides = featureFlagDeviceOverrides
         self.placePlanInvitationRepository = placePlanInvitationRepository
         self.placePhotoDataDiskCache = placePhotoDataDiskCache

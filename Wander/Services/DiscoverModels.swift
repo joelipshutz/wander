@@ -702,8 +702,22 @@ enum VisiblePlaceGrouping {
 
     static func groups(
         from places: [VisiblePlace],
-        currentUserID: String
+        currentUserID: String,
+        onKeysBuilt: (() -> Void)? = nil
     ) -> [VisiblePlaceGroup] {
+        // A place can participate in several saves and become the primary of
+        // a merged group. Normalize it once for this invocation only: models are
+        // mutable, so these keys must never survive into the next grouping pass.
+        var keysByPlace: [ObjectIdentifier: [String]] = [:]
+        keysByPlace.reserveCapacity(places.count)
+        func groupingKeys(for visiblePlace: VisiblePlace) -> [String] {
+            let identity = ObjectIdentifier(visiblePlace.place)
+            if let cached = keysByPlace[identity] { return cached }
+            onKeysBuilt?()
+            let result = keys(for: visiblePlace)
+            keysByPlace[identity] = result
+            return result
+        }
         var orderedKeys: [String] = []
         var grouped: [String: [VisiblePlace]] = [:]
         var aliasesByKey: [String: Set<String>] = [:]
@@ -725,7 +739,7 @@ enum VisiblePlaceGrouping {
         }
 
         for visiblePlace in places {
-            let aliases = keys(for: visiblePlace)
+            let aliases = groupingKeys(for: visiblePlace)
             var existingKeys: [String] = []
             for alias in aliases {
                 guard let existingKey = keyByAlias[alias],
@@ -734,7 +748,7 @@ enum VisiblePlaceGrouping {
                 existingKeys.append(existingKey)
             }
 
-            let key = existingKeys.first ?? key(for: visiblePlace)
+            let key = existingKeys.first ?? aliases[0]
             if grouped[key] == nil {
                 orderedKeys.append(key)
                 grouped[key] = []
@@ -787,7 +801,7 @@ enum VisiblePlaceGrouping {
                 return lhs.userPlace.id < rhs.userPlace.id
             }
             let primary = sortedPlaces.first { $0.owner.id == currentUserID } ?? sortedPlaces[0]
-            let primaryKey = Self.key(for: primary)
+            let primaryKey = groupingKeys(for: primary)[0]
             let aliases = aliasesByKey[key, default: []].union([primaryKey])
 
             return VisiblePlaceGroup(

@@ -2,6 +2,20 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testInitialSplashDoesNotReturnAfterTabRoundTrip() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderMapCapture", "-WanderUsePerformanceFixtures", "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let loading = app.descendants(matching: .any).matching(identifier: "map.initialLoading").firstMatch
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 3))
+        app.buttons["Profile"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5))
+        app.buttons["Map"].firstMatch.tap()
+        XCTAssertFalse(loading.exists)
+        XCTAssertTrue(app.maps.firstMatch.isHittable)
+    }
+
     func testPerformanceFixtureCoversMapKitDuringInitialAccountLoading() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -21,8 +35,8 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertEqual(loading.label, "Opening Astir")
         XCTAssertFalse(app.staticTexts["Loading your map…"].exists)
         XCTAssertFalse(loading.progressIndicators.firstMatch.exists)
-        // MapKit's virtual accessibility map can report hittable through a
-        // covering view. Exercise a real gesture and check its effect instead.
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable)
+        XCTAssertFalse(app.maps.firstMatch.isHittable)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.68))
             .press(forDuration: 0.7)
         XCTAssertTrue(loading.exists)
@@ -749,6 +763,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let add = app.buttons["map.headerAdd"]
         XCTAssertFalse(search.isHittable)
         XCTAssertFalse(nearby.isHittable)
+        XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
         XCTAssertFalse(add.isHittable)
 
         let feed = app.buttons["Feed"]
@@ -759,6 +774,8 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
+        XCTAssertTrue(add.waitForExistence(timeout: 2))
+        XCTAssertTrue(add.isHittable)
     }
 
     func testThreeMinutesOnAnotherTabResetsMoreFilters() {

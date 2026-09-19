@@ -6,11 +6,13 @@ Warehouse and dashboard surface: PostHog
 
 Live project: [rec.me / ID 557259](https://us.posthog.com/project/557259)
 
-Live dashboard: [rec.me Product Funnel / ID 1994904](https://us.posthog.com/project/557259/dashboard/1994904)
+Live dashboard: [Astir Launch — Product Behavior / ID 1994904](https://us.posthog.com/project/557259/dashboard/1994904)
 
-Account/project registry: `/Users/joelipshutz/Developer/grayline/ops/service-account-registry.json`
+Account/project registry: `/Users/joelipshutz/.config/project-secrets/inventory.json` (metadata); scoped access through `~/.local/bin/project-secrets`. Read its README before credentials or account selection.
 
-Client contract version: `analytics_schema_version=2`
+Client contract version: `analytics_schema_version=3`
+
+Launch audit and rollout gates: [September 19 audit](reviews/2026-09-19-launch-analytics.md).
 
 ## Why PostHog
 
@@ -24,9 +26,9 @@ PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys
 |---|---|---|
 | Acquisition | Which channels reach the app? | Unique devices recording `app_first_opened` plus sanitized UTM properties on `acquisition_link_opened`. `direct_or_unknown` is an honest bucket. |
 | Activation | Where does onboarding lose people? | Ordered funnel: first open → sign-up start/completion → onboarding start → identity → location → contacts → friends → notifications → completion. |
-| Activation | Did a new user reach trusted value? | `onboarding_started` → at least one `follow_created` (during or after onboarding) → `onboarding_completed` → at least one `place_saved`, within 14 days. |
+| Activation | Did a new user create value? | `onboarding_completed` → `core_action_performed` within 14 days. A Wanna or check-in qualifies; following is optional. Local completion is separate from server sync. |
 | Engagement | Which human need is the app serving? | Unique users and action volume for `engagement_action_performed`, broken down by `need` and `action`. |
-| Retention | Do activated users come back? | Exact D1, D7, D14, and D30 `app_session_started` return after `onboarding_completed`. |
+| Retention | Do people return and repeat the core behavior? | Separate weekly cohorts: onboarding → session return, and first observed core action → repeat core action. D1/D7/D14/D30 use elapsed-day windows and a distinct fully matured denominator at each horizon. |
 | Referrals | Are users inviting others? | Invite sheet open → delivery start → successful Messages/share-sheet handoff. |
 | Monetization | What is the revenue loop? | Intentionally blank until the product has a monetization decision and event contract. |
 | Notification Operations | Are remote notifications healthy? | APNs-accepted volume, terminal notification acceptance rate, final device-token disposition, and aggregate remote taps. APNs acceptance is not proof of display. |
@@ -34,7 +36,7 @@ PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys
 
 App Store impressions and downloads do not originate in the app. Reconcile those in App Store Connect when acquisition spend begins. Generic TestFlight links do not support deferred sender/campaign attribution, so referral install, signup, and activation are not claimed by this dashboard. Add those stages only after attributed links exist.
 
-Rollout caveat: the schema-v2 release creates the first-open marker for both new installs and existing installs the first time they launch that build. Establish the acquisition baseline with `build_number`/release-date filters; after that one-time migration, the marker is install-local and emits only once.
+Historical rollout caveat: the schema-v2 release created the first-open marker for both new installs and existing installs the first time they launch that build. Establish the acquisition baseline with `build_number`/release-date filters; after that one-time migration, the marker is install-local and emits only once.
 
 ## Engagement: human need → action
 
@@ -49,7 +51,7 @@ engagement_action_performed
 
 | Human need | Current action values | Product behavior |
 |---|---|---|
-| Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed` | Build and interact with a trusted people graph. |
+| Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared` | Build and interact with a trusted people graph. |
 | Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
@@ -57,10 +59,26 @@ Status was the blank area in the original card. These are deliberately product-n
 
 ## Event contract
 
-Every event receives `analytics_schema_version`, `app_version`, `build_number`, and `platform` from `ContextualAnalyticsClient`.
+Every event receives `analytics_schema_version`, `app_version`, `build_number`, `platform`, and `analytics_environment` from `ContextualAnalyticsClient`. Callers cannot override this context. Debug and simulator events are `development`; Release device builds are `production` (including TestFlight). Authenticated simulator fixtures and native review galleries use a Noop client. The SDK's opaque identify/reset behavior stays unchanged.
+
+Behavioral dashboard queries require schema 3, production, exclusion from the existing Internal / Test users cohort 481950, and absence of a true `$internal_or_test_user` person marker. Native queries also retain the project test-account filter. SQL explicitly excludes the same cohort; update both if the project rule changes. The cohort had zero members on September 19: release staff/review accounts still need classification. Do not infer or assign internal status to unknown users. Existing schema-2 traffic remains available in Data Quality; it is not silently counted as verified launch traffic.
+
+SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashboard date selectors do not alter those SQL literals. Native trends/funnels support normal dashboard filtering. Retention uses merged `person_id`, not raw `distinct_id`. Exact D1 is `[start+24h, start+48h)`; users enter its denominator only at `start+48h`. D7/D14/D30 follow the same rule, return null without eligible users, and show both eligible and returned counts. Cohort weeks use the project's UTC time basis. First observed core action after rollout can belong to an existing user and is not a new-signup claim.
 
 | Event | When it fires | Allowed product properties |
 |---|---|---|
+| `feedback_submitted` | The server confirms the feedback and attachments are durably queued, once per composer | `surface=profile`, aggregate `photo_count`, `has_voice_note`; never feedback text, attachment names/data, or email |
+| `core_action_performed` | Derived once from `place_saved(status=wanna_go)` or `check_in_created`. A new Been save also emits raw `place_saved`; it does not produce a second core event. Edits/retries of an existing Wanna do not qualify. | `action`: `wanna_saved` or `check_in_created`; `completion=local` |
+| `save_flow_opened` | Shared editor first appears once per mounted editor, including inline entry | coarse `mode` (`add`, `repeat_check_in`, `shared_visit`, `edit`); initial `status` |
+| `save_flow_submitted` | Validated editor submission enters the save operation | `mode`, submitted `status` |
+| `save_flow_completed` | Save callback returns in the same account | `mode`, submitted `status`; `outcome` (`synced`, `pending`, `failed`). Pending/local is not confirmed backend persistence. |
+| `place_profile_viewed` | Full place profile opens, deduplicated across refreshes of the same mounted place | `surface=place_profile`; no place ID or content |
+| `events_interest_submitted` | A non-duplicate Events registration request starts | none |
+| `events_interest_result` | Registration returns in the same account | `outcome=confirmed` or `failed`; hydration/cached confirmation does not count as a signup |
+| `place_plan_created` | Live In Common invitation creation succeeds and is still valid for the same draft/account | none; this is creation, not delivery |
+| `place_plan_share_completed` | Native share completion for the invitation | `outcome=shared` or `not_shared`; the native Boolean completion cannot distinguish cancellation from failure |
+| `place_plan_opened` | A recipient invitation successfully loads once per mounted screen | coarse `surface=link` or `notifications`; no invitation token, recipient, location, date, or message |
+| `feedback_submitted` | Existing feedback composer successfully submits | `surface=profile`, `photo_count`, `has_voice_note` |
 | `app_surface_viewed` | A native tab becomes selected, after yielding to its first render | coarse `surface`: `map`, `discover` (Feed), `events`, `lists`, or `profile`; Events remains a coming-soon teaser |
 | `app_first_opened` | First launch after the install-local marker is introduced | `acquisition_source` |
 | `app_session_started` | Cold launch or foreground return after the app refresh grace period | `session_source` |
@@ -69,6 +87,9 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
 | `onboarding_step_completed` | Each step advances successfully or is explicitly skipped | `step` |
 | `onboarding_completed` | Local completion is persisted | `server_confirmed` |
+| `onboarding_identity_submitted` | Required identity and any selected photo finish saving | `photo_selected` |
+| `onboarding_identity_failed` | Identity or required-photo submission fails | coarse `reason`, including `photo_save_failed` |
+| `onboarding_friend_suggestions_completed` | User continues after explicit per-person actions | aggregate `selected_count`, `followed_count`; both count successful follows in this visit |
 | `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
 | `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number` |
 | `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number` |
@@ -134,7 +155,7 @@ Analytics must never receive:
 - names, handles, emails, phone numbers, contact IDs, recipient IDs, invite tokens, or full URLs;
 - auth tokens, backend payloads, photos, or private error messages.
 
-Prefer enums, booleans, counts, lengths, coarse error categories, internal build metadata, and opaque authenticated user IDs. `WanderAnalyticsSchema.sanitized` drops known forbidden property keys and truncates values, but that is defense in depth—not permission to create a sensitive property under a different name.
+Prefer enums, booleans, counts, lengths, coarse error categories, internal build metadata, and opaque authenticated user IDs. The sanitizer compares forbidden property keys case-insensitively and also blocks token/recipient/error-message aliases. `WanderAnalyticsSchema.sanitized` drops known forbidden property keys and truncates values, but that is defense in depth—not permission to create a sensitive property under a different name.
 
 Apple Calendar analytics is aggregate-only. It must never include calendar event
 identifiers, titles, notes, attendees, URLs, addresses, place names, provider
@@ -150,9 +171,7 @@ inside Supabase and export only the aggregate summary and fixed histogram.
 The script uses only rec.me-specific credentials. It intentionally does not fall back to generic `POSTHOG_*` variables, because this machine also has credentials for other products.
 
 The live project belongs to the `Grayline Studio` PostHog organization under
-Joe's `jolipshutz@gmail.com` Google login. Secret values stay in
-`/Users/joelipshutz/.openclaw/workspace/.env.keys`; the cross-project registry
-records only env-var references and safe project identifiers.
+Joe's `jolipshutz@gmail.com` Google login. Use only the scoped Astir credentials through the private project-secrets helper; never source the mixed-project compatibility env file. The metadata inventory records access scope and verification status. The current API key supports dashboard/insight read and write but not project-settings or direct query access. Saved insights can be refreshed/read through the supported Insights API; no key expansion is needed for that path.
 
 ```bash
 cd scripts
@@ -161,11 +180,14 @@ npm run analytics:check
 export WANDER_POSTHOG_PROJECT_ID='<rec.me project id>'
 export WANDER_POSTHOG_PERSONAL_API_KEY='<project-scoped personal API key>'
 npm run analytics:apply
+npm run analytics:verify
+# Optional SQL-only arithmetic fixture: creates then soft-deletes an unsaved insight.
+npm run analytics:test-retention
 ```
 
 Optional: set `WANDER_POSTHOG_API_HOST`; the management API defaults to `https://us.posthog.com`. The ingestion host in the iOS app remains `https://us.i.posthog.com`.
 
-The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes seven visibly ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, blank Monetization, and bottom-of-dashboard Notification Operations.
+The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes eight ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, blank Monetization, Data Quality, and bottom-of-dashboard Notification Operations. Managed updates preserve unrelated tiles and existing insight memberships in other dashboards.
 
 ## Validation checklist
 

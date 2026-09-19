@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -326,6 +327,8 @@ struct FeedScreen: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
+                .walkthroughTarget(.feedActivity)
+                .id("nux.feed.top")
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
             .astirScrollTracking(
@@ -337,6 +340,14 @@ struct FeedScreen: View {
                 )
             }
             .accessibilityIdentifier("feed.places.scroll")
+            .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                if walkthroughs.currentStep?.target == .feedActivity {
+                    walkthroughs.dismissCurrentContext()
+                }
+            })
+            .onChange(of: walkthroughs.feedIntroductionScrollTarget, initial: true) { _, target in
+                scrollForIntroduction(target, proxy: proxy)
+            }
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await refresh()
@@ -346,6 +357,24 @@ struct FeedScreen: View {
             }
             .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
+                scrollForIntroduction(walkthroughs.feedIntroductionScrollTarget, proxy: proxy)
+            }
+        }
+    }
+
+    private func scrollForIntroduction(_ target: NUXFeedScrollTarget?, proxy: ScrollViewProxy) {
+        guard let target, walkthroughs.currentStep?.target == .feedActivity else { return }
+        switch target {
+        case .top:
+            resetFloatingHeaderScrollTracking(revealHeader: true)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo("nux.feed.top", anchor: .top)
+            }
+        case .recent:
+            guard let id = FeedPresentation.groupedActivity(page?.activity ?? []).first?.id else { return }
+            setFloatingHeaderHidden(true)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo(id, anchor: .center)
             }
         }
     }
@@ -359,6 +388,7 @@ struct FeedScreen: View {
         surface: FeedSurface
     ) {
         guard selectedSurface == surface, !isShowingSearch else { return }
+        if walkthroughs.feedIntroductionScrollTarget == .recent { return }
 
         if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
             lastFeedScrollOffset = scrollOffset
@@ -497,38 +527,55 @@ struct FeedScreen: View {
                 openProfile: openProfile,
                 follow: follow
             )
-            .walkthroughTarget(.feedActivity)
 
         }
     }
 
+    private var feedPeopleRecommendations: [DiscoverPeopleRecommendation] {
+        #if DEBUG
+        // Explicit, local-only review fixture; use the existing native cards.
+        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedFixture"),
+           ProcessInfo.processInfo.arguments.contains("-WanderUseDemoFixtures") {
+            return ["user_ryan", "user_maya"].enumerated().compactMap { index, id in
+                guard let profile = store.profile(for: id) else { return nil }
+                return DiscoverPeopleRecommendation(profile: store.shell(for: profile),
+                                                    reason: .sharedFollows(3), rank: index)
+            }
+        }
+        #endif
+        return store.visibleDiscoverPeopleRecommendations
+    }
+
     @ViewBuilder
     private var peopleRail: some View {
-        switch store.discoverPeopleRecommendationsState {
-        case .loaded where !store.visibleDiscoverPeopleRecommendations.isEmpty:
+        if !feedPeopleRecommendations.isEmpty {
             PeopleRecommendationShelf(
-                recommendations: store.visibleDiscoverPeopleRecommendations,
+                recommendations: feedPeopleRecommendations,
                 isFollowing: { store.hasAcknowledgedFollow(to: $0) },
                 isFollowInFlight: { followingProfileIDs.contains($0) },
                 didFollowFail: { followFailedProfileIDs.contains($0) },
                 open: { openProfile($0.profile) },
-                follow: follow
+                follow: follow,
+                walkthroughProfileID: feedPeopleRecommendations.first?.id
             )
-        case .idle, .loading:
-            if auth.isSignedIn {
-                PeopleRecommendationLoadingShelf()
-            }
-        case .failed:
-            FeedRetryRow(
-                title: "Suggestions couldn't load",
-                subtitle: "Your feed can still load below.",
-                actionTitle: "Try again",
-                retry: {
-                    await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+        } else {
+            switch store.discoverPeopleRecommendationsState {
+            case .idle, .loading:
+                if auth.isSignedIn {
+                    PeopleRecommendationLoadingShelf()
                 }
-            )
-        case .loaded:
-            EmptyView()
+            case .failed:
+                FeedRetryRow(
+                    title: "Suggestions couldn't load",
+                    subtitle: "Your feed can still load below.",
+                    actionTitle: "Try again",
+                    retry: {
+                        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+                    }
+                )
+            case .loaded:
+                EmptyView()
+            }
         }
     }
 
@@ -1641,7 +1688,7 @@ private struct FeedActivityList: View {
                 )
                 .id(group.id)
                 .walkthroughTarget(
-                    group.id == groups.first?.id ? .feedActivity : nil
+                    group.id == groups.first?.id ? .feedRecent : nil
                 )
             }
         }

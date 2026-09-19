@@ -1,6 +1,8 @@
 import CoreLocation
+import Combine
 import XCTest
 import UIKit
+import SwiftUI
 @testable import Wander
 
 private enum TestError: Error {
@@ -9,6 +11,237 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testForegroundUnchangedInboxDoesNotInvalidatePresentations() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let repository = FakeSharedVisitRepository()
+        repository.inboxInvitations = [makeSharedVisitInvitation()]
+        let backend = WanderBackend(sharedVisitRepository: repository)
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        let revision = store.presentationRevision
+        let firstSaves = saves
+        for _ in 0..<3 { _ = await store.refreshSharedVisitInbox(backend: backend) }
+        XCTAssertEqual(saves, firstSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+        repository.inboxInvitations = []
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertEqual(saves, firstSaves + 1)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+    }
+
+    func testForegroundUnchangedProfileDoesNotInvalidateButPrivacyChangeDoes() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Local", handle: "local")))
+        let remote = LocalProfile(localID: "remote", serverID: "user_live", handle: "live", displayName: "Live", syncState: .synced)
+        let backend = WanderBackend(profileRepository: FakeProfileRepository(currentProfile: remote))
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
+        let revision = store.presentationRevision
+        let firstSaves = saves
+        let timestamp = store.currentUser.updatedAt
+        var publications = 0
+        let subscription = store.objectWillChange.sink { publications += 1 }
+        defer { subscription.cancel() }
+        for _ in 0..<3 { _ = await store.refreshRemoteCurrentProfile(backend: backend) }
+        XCTAssertEqual(saves, firstSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+        XCTAssertEqual(store.currentUser.updatedAt, timestamp)
+        XCTAssertEqual(publications, 0)
+        remote.isPrivateProfile = true
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
+        XCTAssertTrue(store.isPrivateProfile)
+        XCTAssertGreaterThan(saves, firstSaves)
+    }
+
+    func testForegroundConcurrentListRefreshFetchesAndAppliesOnce() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let repository = FakeSurfaceSnapshotRepository()
+        repository.suspendLists = true
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        let first = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        while repository.listRequestCount == 0 { await Task.yield() }
+        let second = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        for _ in 0..<100 { await Task.yield() }
+        repository.suspendLists = false
+        await first.value
+        await second.value
+        XCTAssertEqual(repository.listRequestCount, 1)
+        XCTAssertEqual(saves, 1)
+    }
+
+    func testForegroundListRefreshDiscardsPreviousAccountCompletion() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        store.apply(authState: .signedIn(AuthSession(userID: "first", displayName: "First", handle: "first")))
+        let repository = FakeSurfaceSnapshotRepository()
+        repository.suspendLists = true
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        let refresh = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        while repository.listRequestCount == 0 { await Task.yield() }
+        store.apply(authState: .signedIn(AuthSession(userID: "second", displayName: "Second", handle: "second")))
+        let revision = store.presentationRevision
+        let accountSaves = saves
+        repository.suspendLists = false
+        await refresh.value
+        XCTAssertEqual(saves, accountSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+    }
+
+    func testForegroundUnchangedListSnapshotSkipsApplyButLocalEditsInvalidateIt() async {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let repository = FakeSurfaceSnapshotRepository()
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        await store.refreshRemotePlaceLists(backend: backend)
+        let revision = store.presentationRevision
+        let initialSaves = saves
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(repository.listRequestCount, 2, "Do not substitute a stale cache for a server read")
+        XCTAssertEqual(saves, initialSaves)
+        XCTAssertEqual(store.presentationRevision, revision)
+        _ = store.createPlaceList(name: "Pending local list", description: "", visibility: .followers)
+        let afterEdit = saves
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(saves, afterEdit + 1)
+        XCTAssertTrue(store.placeLists.contains { $0.name == "Pending local list" })
+    }
+
+    func testForegroundProfileRequestsCoalesceAndDiscardAccountSwitch() async {
+        let store = WanderStore(fixtures: .empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "first", displayName: "First", handle: "first")))
+        let remote = LocalProfile(localID: "remote", serverID: "first", handle: "remote", displayName: "Remote", syncState: .synced)
+        let repository = FakeProfileRepository(currentProfile: remote, suspendCurrentProfile: true)
+        let backend = WanderBackend(profileRepository: repository)
+        let first = Task { await store.refreshRemoteCurrentProfile(backend: backend) }
+        while repository.currentProfileRequestCount == 0 { await Task.yield() }
+        let second = Task { await store.refreshRemoteCurrentProfile(backend: backend) }
+        for _ in 0..<100 { await Task.yield() }
+        store.apply(authState: .signedIn(AuthSession(userID: "second", displayName: "Second", handle: "second")))
+        let revision = store.presentationRevision
+        repository.resumeCurrentProfile()
+        let firstResult = await first.value
+        let secondResult = await second.value
+        XCTAssertFalse(firstResult)
+        XCTAssertFalse(secondResult)
+        XCTAssertEqual(repository.currentProfileRequestCount, 1)
+        XCTAssertEqual(store.currentUser.displayName, "Second")
+        XCTAssertEqual(store.presentationRevision, revision)
+    }
+
+    func testForegroundRootRemovalCancelsSharedRefreshApplication() async throws {
+        var saves = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
+        let session = AuthSession(userID: "root_owner", displayName: "Local", handle: "local")
+        store.apply(authState: .signedIn(session))
+        let remote = LocalProfile(localID: "remote", serverID: "root_owner", handle: "remote", displayName: "Remote", syncState: .synced)
+        let profiles = FakeProfileRepository(currentProfile: remote, suspendCurrentProfile: true)
+        let lists = FakeSurfaceSnapshotRepository()
+        lists.suspendLists = true
+        let backend = WanderBackend(profileRepository: profiles, surfaceSnapshotRepository: lists)
+        let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(state: .signedIn(session)))
+        let disappeared = expectation(description: "The mounted account root disappeared")
+        let root = WanderRootView(
+            initialTab: .lists, isSessionValidated: false,
+            storeFactory: { store },
+            importStoreFactory: { PlaceImportStore(persistence: EphemeralPlaceImportPersistence(), resolver: DevicePlaceImportResolver()) }
+        )
+        .environmentObject(auth)
+        .environmentObject(backend)
+        .environmentObject(PushNotificationManager())
+        .environmentObject(ProductUpsellCoordinator())
+        .environmentObject(CalendarReservationManager())
+        .onDisappear { disappeared.fulfill() }
+        let host = UIHostingController(rootView: AnyView(root))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        await Task.yield()
+        let profileRefresh = Task { await store.refreshRemoteCurrentProfile(backend: backend) }
+        let listRefresh = Task { await store.refreshRemotePlaceLists(backend: backend) }
+        for _ in 0..<200 where profiles.currentProfileRequestCount == 0 || lists.listRequestCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(profiles.currentProfileRequestCount, 1)
+        XCTAssertEqual(lists.listRequestCount, 1)
+
+        // SwiftUI replaces the whole account root on an identity change. The
+        // old store's user ID need not change before its suspended reads finish.
+        host.rootView = AnyView(EmptyView())
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        await fulfillment(of: [disappeared], timeout: 3)
+        let revisionAfterRemoval = store.presentationRevision
+        let savesAfterRemoval = saves
+        profiles.resumeCurrentProfile()
+        lists.suspendLists = false
+        let didRefreshProfile = await profileRefresh.value
+        await listRefresh.value
+        XCTAssertFalse(didRefreshProfile)
+        XCTAssertEqual(store.currentUser.displayName, "Local")
+        XCTAssertEqual(store.presentationRevision, revisionAfterRemoval)
+        XCTAssertEqual(saves, savesAfterRemoval, "An obsolete account root must not overwrite the shared persistence snapshot")
+    }
+
+    func testForegroundSaveAcknowledgementDoesNotPersistPartialRows() async throws {
+        var snapshots: [WanderStoreSnapshot] = []
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { snapshots.append($0) }))
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Fixture", handle: "fixture")))
+        let saved = store.saveCandidate(PlaceCandidate(id: "fixture", name: "Fixture Cafe", category: "coffee",
+            latitude: 34, longitude: -118, confidence: 1), status: .been, visibility: .followers,
+            note: nil, sourceType: .manual, ratingScore: 4)
+        let repository = FakeUserPlaceRepository(result: SaveResult(userPlaceID: "remote_save", syncState: .synced, placeID: "remote_place"))
+        snapshots.removeAll()
+        let count = await store.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: repository))
+        XCTAssertEqual(count, 1)
+        let acknowledged = snapshots.filter { $0.places.contains { $0.serverID == "remote_place" } }
+        XCTAssertFalse(acknowledged.isEmpty)
+        for snapshot in acknowledged {
+            let row = try XCTUnwrap(snapshot.userPlaces.first { $0.localID == saved.userPlaceID })
+            XCTAssertEqual(row.syncStateRaw, SyncState.synced.rawValue)
+            XCTAssertEqual(row.serverID, "remote_save")
+            XCTAssertEqual(row.placeID, "remote_place")
+        }
+        XCTAssertEqual(repository.savedCheckInDrafts.count, 1)
+    }
+
+    func testForegroundListSnapshotStillAppliesChangedContentAndRevocation() async {
+        let store = WanderStore(fixtures: .empty())
+        let repository = FakeSurfaceSnapshotRepository()
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        var list = LocalPlaceList(localID: "remote_list", serverID: listID, ownerUserID: store.currentUser.id,
+                                  name: "Original", description: "", visibility: .followers, syncState: .synced)
+        func snapshot() -> PlaceListsRemoteSnapshot {
+            PlaceListsRemoteSnapshot(summaries: [RemotePlaceListSummary(list: list,
+                owner: ProfileShell(id: store.currentUser.id, handle: "fixture", displayName: "Fixture",
+                                    avatarURL: nil, bio: nil, relationship: .nonFollower),
+                collaborators: [], itemCount: 0)],
+                details: [RemotePlaceListDetail(list: list, collaborators: [], items: [])],
+                visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:])
+        }
+        repository.listSnapshot = snapshot()
+        await store.refreshRemotePlaceLists(backend: backend)
+        let revision = store.presentationRevision
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(store.presentationRevision, revision)
+        // Content must be compared, not just IDs or timestamps.
+        list.name = "Renamed"
+        repository.listSnapshot = snapshot()
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertEqual(store.placeLists.first { $0.id == listID }?.name, "Renamed")
+        XCTAssertGreaterThan(store.presentationRevision, revision)
+        repository.listSnapshot = PlaceListsRemoteSnapshot(summaries: [], details: [], visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:])
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertNotNil(store.placeLists.first { $0.id == listID }?.deletedAt)
+    }
+
     func testDarkMapDefaultsOff() {
         let store = WanderStore(fixtures: .seed())
 
@@ -11400,6 +11633,236 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(store.lastRemoteError)
     }
 
+    func testRemoteListRefreshBatchesCalendarFingerprintAndGroupingAcrossDetails() async throws {
+        for usesSnapshot in [true, false] {
+            var saveCount = 0
+            var savedSnapshot: WanderStoreSnapshot?
+            let store = WanderStore(fixtures: .seed(), persistence: WanderStorePersistence(
+                load: { nil }, save: {
+                    saveCount += 1
+                    savedSnapshot = $0
+                }
+            ))
+            let owner = try XCTUnwrap(store.profiles.first { $0.id == "user_ryan" })
+            let visiblePlace = try XCTUnwrap(store.visiblePlaces(for: owner.id).first)
+            let shell = ProfileShell(
+                id: owner.id, handle: owner.handle, displayName: owner.displayName,
+                avatarURL: nil, bio: nil, relationship: .mutual
+            )
+            let details = (0..<12).map { index in
+                let listID = UUID().uuidString.lowercased()
+                return RemotePlaceListDetail(
+                    list: LocalPlaceList(
+                        localID: "batch-list-\(index)", serverID: listID,
+                        ownerUserID: owner.id, name: "Batch \(index)", description: "",
+                        visibility: .followers, syncState: .synced, cachedItemCount: 99
+                    ),
+                    collaborators: [],
+                    items: (0..<2).map { itemIndex in
+                        LocalPlaceListItem(
+                            localID: "batch-item-\(index)-\(itemIndex)",
+                            serverID: UUID().uuidString.lowercased(), listID: listID,
+                            placeID: visiblePlace.place.id,
+                            sourceUserPlaceID: visiblePlace.userPlace.id,
+                            addedByUserID: owner.id, syncState: .synced
+                        )
+                    }
+                )
+            }
+            let summaries = details.map {
+                RemotePlaceListSummary(list: $0.list, owner: shell, collaborators: [], itemCount: 99)
+            }
+            let snapshotRepository = FakeSurfaceSnapshotRepository()
+            snapshotRepository.listSnapshot = PlaceListsRemoteSnapshot(
+                summaries: summaries, details: details + [details[0]],
+                visiblePlacesByOwnerID: [owner.id: [visiblePlace]],
+                relationshipsByOwnerID: [owner.id: .mutual]
+            )
+            let fallbackRepository = FakePlaceListRepository(
+                visibleLists: summaries,
+                details: Dictionary(uniqueKeysWithValues: details.map { ($0.list.id, $0) })
+            )
+            let backend = usesSnapshot
+                ? WanderBackend(surfaceSnapshotRepository: snapshotRepository)
+                : WanderBackend(
+                    followRepository: FakeFollowRepository(relationships: [owner.id: .mutual]),
+                    userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [owner.id: [visiblePlace]]),
+                    placeListRepository: fallbackRepository
+                )
+            let initialFingerprints = store.currentUserCalendarFingerprintBuildCount
+            let initialGroupings = store.placeGroupingIndexBuildCount
+            let initialSaves = saveCount
+
+            await store.refreshRemotePlaceLists(backend: backend)
+
+            XCTAssertNil(store.lastRemoteError)
+            XCTAssertEqual(saveCount - initialSaves, 1)
+            XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+            XCTAssertEqual(store.placeGroupingIndexBuildCount - initialGroupings, 1)
+            for detail in details {
+                let list = try XCTUnwrap(store.placeLists.first { $0.id == detail.list.id })
+                XCTAssertEqual(list.cachedItemCount, 1, "Duplicate place memberships still collapse")
+                XCTAssertEqual(savedSnapshot?.placeLists?.first { $0.serverID == list.id }?.cachedItemCount, 1)
+                XCTAssertEqual(store.visiblePlaces(in: list).map(\.place.id), [visiblePlace.place.id])
+            }
+        }
+    }
+
+    func testBatchedRemoteListCountsPreservePendingOwnerChanges() async throws {
+        for syncState: SyncState in [.pendingCreate, .pendingUpdate, .pendingDelete, .failed, .serverDenied] {
+            let owner = WanderFixtures.empty().currentUser
+            let localList = LocalPlaceList(
+                localID: "pending-list", serverID: UUID().uuidString.lowercased(),
+                ownerUserID: owner.id, name: "Local edit", description: "Pending owner edit",
+                visibility: .stealth, syncState: syncState, cachedItemCount: 7
+            )
+            var staleList = localList
+            staleList.name = "Stale remote name"
+            staleList.syncStateRaw = SyncState.synced.rawValue
+            staleList.cachedItemCount = 99
+            let newList = LocalPlaceList(
+                localID: "new-list", serverID: UUID().uuidString.lowercased(),
+                ownerUserID: owner.id, name: "New remote list", description: "",
+                syncState: .synced, cachedItemCount: 99
+            )
+            let store = WanderStore(fixtures: WanderFixtures(
+                currentUser: owner, profiles: [owner], places: [], userPlaces: [],
+                placeAttributes: [], follows: [], blocks: [], placeLists: [localList],
+                placeListMembers: [], placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            ))
+            let repository = FakeSurfaceSnapshotRepository()
+            repository.listSnapshot = PlaceListsRemoteSnapshot(
+                summaries: [staleList, newList].map {
+                    RemotePlaceListSummary(
+                        list: $0,
+                        owner: ProfileShell(
+                            id: owner.id, handle: owner.handle, displayName: owner.displayName,
+                            avatarURL: nil, bio: nil, relationship: .owner
+                        ),
+                        collaborators: [], itemCount: 99
+                    )
+                },
+                details: [staleList, newList].map {
+                    RemotePlaceListDetail(list: $0, collaborators: [], items: [])
+                },
+                visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:]
+            )
+
+            await store.refreshRemotePlaceLists(backend: WanderBackend(surfaceSnapshotRepository: repository))
+
+            XCTAssertNil(store.lastRemoteError)
+            XCTAssertEqual(store.placeLists.first { $0.id == localList.id }, localList)
+            XCTAssertEqual(store.placeLists.first { $0.id == newList.id }?.cachedItemCount, 0)
+        }
+    }
+
+    func testNestedLocalBatchesReconcileOnceAndKeepListReadsFreshWithoutDiskPersistence() throws {
+        for hasPersistence in [true, false] {
+            var savedSnapshots: [WanderStoreSnapshot] = []
+            let persistence = hasPersistence ? WanderStorePersistence(
+                load: { nil }, save: { savedSnapshots.append($0) }
+            ) : nil
+            let store = WanderStore(fixtures: .empty(), persistence: persistence)
+            let initialFingerprints = store.currentUserCalendarFingerprintBuildCount
+            savedSnapshots.removeAll()
+
+            try store.performBatchedLocalMutations {
+                let first = try XCTUnwrap(store.createPlaceList(name: "First", description: "", visibility: .stealth))
+                XCTAssertEqual(store.visiblePlaceLists.map(\.id), [first.id])
+                try store.performBatchedLocalMutations {
+                    let second = try XCTUnwrap(store.createPlaceList(name: "Second", description: "", visibility: .stealth))
+                    XCTAssertEqual(Set(store.visiblePlaceLists.map(\.id)), [first.id, second.id])
+                }
+                XCTAssertTrue(store.deletePlaceList(id: first.id))
+                XCTAssertFalse(store.visiblePlaceLists.contains { $0.id == first.id })
+                XCTAssertTrue(savedSnapshots.isEmpty)
+                XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount, initialFingerprints)
+            }
+
+            XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+            XCTAssertEqual(savedSnapshots.count, hasPersistence ? 1 : 0)
+            XCTAssertEqual(store.visiblePlaceLists.map(\.name), ["Second"])
+        }
+    }
+
+    func testThrowingLocalBatchFlushesOnceAndDoesNotLeaveDeferralActive() {
+        var saveCount = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(
+            load: { nil }, save: { _ in saveCount += 1 }
+        ))
+        let initialFingerprints = store.currentUserCalendarFingerprintBuildCount
+        let initialSaves = saveCount
+        XCTAssertThrowsError(try store.performBatchedLocalMutations {
+            store.createPlaceList(name: "Before error", description: "", visibility: .stealth)
+            try store.performBatchedLocalMutations {
+                store.createPlaceList(name: "Inside error", description: "", visibility: .stealth)
+                throw TestError.expected
+            }
+        })
+        XCTAssertEqual(saveCount - initialSaves, 1)
+        XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+        XCTAssertEqual(store.visiblePlaceLists.count, 2)
+
+        store.createPlaceList(name: "After error", description: "", visibility: .stealth)
+        XCTAssertEqual(saveCount - initialSaves, 2)
+        XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 2)
+    }
+
+    func testCalendarReadInsideBatchReconcilesLocalVisitAndPreservesAcceptedHydration() async throws {
+        let store = makeStore()
+        let userPlace = try XCTUnwrap(store.userPlaces.first { $0.id == "up_joe_woodcat" })
+        _ = await hydrateSyntheticCalendarVisits(in: store, userPlaceID: userPlace.id, results: [])
+        XCTAssertTrue(store.currentUserCalendarProjection.isAuthoritative)
+        let initialFingerprints = store.currentUserCalendarFingerprintBuildCount
+
+        try store.performBatchedLocalMutations {
+            let visit = try XCTUnwrap(store.createVisit(userPlaceID: userPlace.id, note: "Local pending visit"))
+            XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount, initialFingerprints)
+            let projection = store.currentUserCalendarProjection
+            XCTAssertFalse(projection.isAuthoritative)
+            XCTAssertTrue(projection.visits.contains { $0.localID == visit.localID })
+            XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+        }
+        XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+        XCTAssertFalse(store.currentUserCalendarProjection.isAuthoritative)
+    }
+
+    func testCalendarMutationAfterEarlyBatchReadReconcilesAgainAtCompletion() throws {
+        let store = makeStore()
+        let userPlace = try XCTUnwrap(store.userPlaces.first { $0.id == "up_joe_woodcat" })
+        let initialFingerprints = store.currentUserCalendarFingerprintBuildCount
+        var secondVisitID: String?
+
+        try store.performBatchedLocalMutations {
+            let first = try XCTUnwrap(store.createVisit(userPlaceID: userPlace.id))
+            XCTAssertTrue(store.currentUserCalendarProjection.visits.contains { $0.localID == first.localID })
+            XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+            secondVisitID = try XCTUnwrap(store.createVisit(userPlaceID: userPlace.id)).localID
+            XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 1)
+        }
+
+        XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 2)
+        XCTAssertTrue(store.currentUserCalendarProjection.visits.contains { $0.localID == secondVisitID })
+        XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount - initialFingerprints, 2)
+    }
+
+    func testEmptyNestedBatchDoesNotReconcileOrWriteSnapshot() {
+        var saveCount = 0
+        let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(
+            load: { nil }, save: { _ in saveCount += 1 }
+        ))
+        let initialFingerprints = store.currentUserCalendarFingerprintBuildCount
+        let initialSaves = saveCount
+
+        store.performBatchedLocalMutations {
+            store.performBatchedLocalMutations {}
+        }
+
+        XCTAssertEqual(store.currentUserCalendarFingerprintBuildCount, initialFingerprints)
+        XCTAssertEqual(saveCount, initialSaves)
+    }
+
     func testRemotePlaceListDetailRefreshDoesNotRequestAllListSummaries() async {
         let store = makeStore()
         let listID = "11111111-1111-4111-8111-111111111111"
@@ -12864,7 +13327,11 @@ private final class FakePlaceListRepository: PlaceListRepository {
 private final class FakeSurfaceSnapshotRepository: SurfaceSnapshotRepository {
     private(set) var calendarRequestCount = 0
     private(set) var listRequestCount = 0
+    var suspendLists = false
     private(set) var socialViewports: [MapViewport] = []
+    var listSnapshot = PlaceListsRemoteSnapshot(
+        summaries: [], details: [], visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:]
+    )
 
     func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot {
         calendarRequestCount += 1
@@ -12873,12 +13340,8 @@ private final class FakeSurfaceSnapshotRepository: SurfaceSnapshotRepository {
 
     func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot {
         listRequestCount += 1
-        return PlaceListsRemoteSnapshot(
-            summaries: [],
-            details: [],
-            visiblePlacesByOwnerID: [:],
-            relationshipsByOwnerID: [:]
-        )
+        while suspendLists { await Task.yield() }
+        return listSnapshot
     }
 
     func socialSurfaceSnapshot(in viewport: MapViewport) async throws -> SocialSurfaceRemoteSnapshot {

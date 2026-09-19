@@ -18,7 +18,7 @@ struct NoopAnalyticsClient: AnalyticsClient {
 }
 
 enum WanderAnalyticsSchema {
-    static let version = "2"
+    static let version = "3"
 
     static let forbiddenPropertyKeys: Set<String> = [
         "address",
@@ -39,6 +39,14 @@ enum WanderAnalyticsSchema {
         "place_name",
         "query",
         "raw_query",
+        "search_text",
+        "error_message",
+        "access_token",
+        "device_token",
+        "invite_token",
+        "recipient_id",
+        "actor_id",
+        "notification_id",
         "recipient",
         "text",
         "token",
@@ -49,7 +57,7 @@ enum WanderAnalyticsSchema {
         AnalyticsEvent(
             name: event.name,
             properties: event.properties.reduce(into: [:]) { result, item in
-                guard !forbiddenPropertyKeys.contains(item.key) else { return }
+                guard !forbiddenPropertyKeys.contains(item.key.lowercased()) else { return }
                 result[item.key] = String(item.value.prefix(128))
             }
         )
@@ -63,23 +71,31 @@ struct ContextualAnalyticsClient: AnalyticsClient {
     init(
         client: AnalyticsClient,
         bundle: Bundle = .main,
-        platform: String = "ios"
+        platform: String = "ios",
+        environment: AnalyticsEnvironment = .current
     ) {
         self.client = client
         commonProperties = [
             "analytics_schema_version": WanderAnalyticsSchema.version,
             "app_version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
             "build_number": bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
-            "platform": platform
+            "platform": platform,
+            "analytics_environment": environment.rawValue
         ]
     }
 
     func track(_ event: AnalyticsEvent) {
         let contextualEvent = AnalyticsEvent(
             name: event.name,
-            properties: commonProperties.merging(event.properties) { _, eventValue in eventValue }
+            properties: event.properties.merging(commonProperties) { _, commonValue in commonValue }
         )
         client.track(WanderAnalyticsSchema.sanitized(contextualEvent))
+        if let coreAction = AnalyticsEvent.coreAction(for: event) {
+            client.track(WanderAnalyticsSchema.sanitized(AnalyticsEvent(
+                name: coreAction.name,
+                properties: coreAction.properties.merging(commonProperties) { _, commonValue in commonValue }
+            )))
+        }
     }
 
     func identify(userID: String) {
@@ -88,6 +104,56 @@ struct ContextualAnalyticsClient: AnalyticsClient {
 
     func resetIdentity() {
         client.resetIdentity()
+    }
+}
+
+/// Release device traffic includes TestFlight. Simulator and Debug traffic are never
+/// silently mixed into launch metrics. Legacy events without this property stay unclassified.
+enum AnalyticsEnvironment: String {
+    case development, production
+    static var current: Self {
+        #if DEBUG || targetEnvironment(simulator)
+        .development
+        #else
+        .production
+        #endif
+    }
+}
+
+extension AnalyticsEvent {
+    /// A first check-in also emits place_saved(been). Count it only once here.
+    /// Keep the original events unchanged for historical consumers.
+    static func coreAction(for event: AnalyticsEvent) -> AnalyticsEvent? {
+        let action: String
+        switch event.name {
+        case WanderAnalyticsEvents.placeSaved where event.properties["status"] == "wanna_go":
+            action = "wanna_saved"
+        case WanderAnalyticsEvents.checkInCreated:
+            action = "check_in_created"
+        default:
+            return nil
+        }
+        return AnalyticsEvent(name: WanderAnalyticsEvents.coreActionPerformed,
+                              properties: ["action": action, "completion": "local"])
+    }
+}
+
+enum AnalyticsSaveMode: String { case add, edit, repeatCheckIn = "repeat_check_in", sharedVisit = "shared_visit" }
+enum AnalyticsSaveOutcome: String { case synced, pending, failed }
+
+/// One editor exposure even if SwiftUI rebuilds or presents a child picker.
+struct SaveFlowAnalyticsTracker {
+    private var didOpen = false
+    mutating func opened(mode: AnalyticsSaveMode, status: String) -> AnalyticsEvent? {
+        guard !didOpen else { return nil }
+        didOpen = true
+        return Self.event(WanderAnalyticsEvents.saveFlowOpened, mode: mode, status: status)
+    }
+    static func event(_ name: String, mode: AnalyticsSaveMode, status: String,
+                      outcome: AnalyticsSaveOutcome? = nil) -> AnalyticsEvent {
+        var properties = ["mode": mode.rawValue, "status": status == "been" ? "been" : "wanna_go"]
+        if let outcome { properties["outcome"] = outcome.rawValue }
+        return AnalyticsEvent(name: name, properties: properties)
     }
 }
 
@@ -107,6 +173,7 @@ enum AnalyticsEngagementAction: String {
     case listPlaceAdded = "list_place_added"
     case ownProfileViewed = "own_profile_viewed"
     case placeSaved = "place_saved"
+    case placePlanShared = "place_plan_shared"
     case recommendationShared = "recommendation_shared"
     case saveStreakAdvanced = "save_streak_advanced"
     case sharedVisitAccepted = "shared_visit_accepted"
@@ -221,6 +288,17 @@ struct AcquisitionAttribution: Equatable {
 }
 
 enum WanderAnalyticsEvents {
+    static let coreActionPerformed = "core_action_performed"
+    static let saveFlowOpened = "save_flow_opened"
+    static let saveFlowSubmitted = "save_flow_submitted"
+    static let saveFlowCompleted = "save_flow_completed"
+    static let placeProfileViewed = "place_profile_viewed"
+    static let eventsInterestSubmitted = "events_interest_submitted"
+    static let eventsInterestResult = "events_interest_result"
+    static let placePlanCreated = "place_plan_created"
+    static let placePlanShareCompleted = "place_plan_share_completed"
+    static let placePlanOpened = "place_plan_opened"
+    static let feedbackSubmitted = "feedback_submitted"
     static let appFirstOpened = "app_first_opened"
     static let appSessionStarted = "app_session_started"
     static let acquisitionLinkOpened = "acquisition_link_opened"

@@ -16,6 +16,14 @@ struct ProfilePresentation {
 
 @MainActor
 final class ProfilePresentationCache {
+    private weak var presentationStore: WanderStore?
+    private weak var mapStore: WanderStore?
+    private var cachedMap: (
+        revision: UInt64,
+        profileID: String,
+        currentUserID: String,
+        dataset: YourMapPrototypeDataset
+    )?
     private var cached: (
         revision: UInt64,
         profileID: String,
@@ -28,6 +36,7 @@ final class ProfilePresentationCache {
 
     func present(store: WanderStore, profileID: String) -> ProfilePresentation {
         if let cached,
+           presentationStore === store,
            cached.revision == store.presentationRevision,
            cached.profileID == profileID,
            cached.currentUserID == store.currentUser.id {
@@ -81,8 +90,38 @@ final class ProfilePresentationCache {
             relationship: store.relationship(to: profileID),
             isMuted: !isOwner && store.isMuted(userID: profileID)
         )
+        presentationStore = store
         cached = (store.presentationRevision, profileID, store.currentUser.id, presentation)
         return presentation
+    }
+
+    func mapDataset(
+        store: WanderStore,
+        profileID: String,
+        now: Date = .now,
+        build: () -> YourMapPrototypeDataset
+    ) -> YourMapPrototypeDataset {
+        let dataset: YourMapPrototypeDataset
+        if let cachedMap,
+           mapStore === store,
+           cachedMap.revision == store.presentationRevision,
+           cachedMap.profileID == profileID,
+           cachedMap.currentUserID == store.currentUser.id {
+            dataset = cachedMap.dataset
+        } else {
+            dataset = build()
+            mapStore = store
+            cachedMap = (store.presentationRevision, profileID, store.currentUser.id, dataset)
+        }
+        // Share the prepared collections, but keep date-relative lenses current
+        // when an unchanged profile is reopened on another day.
+        return YourMapPrototypeDataset(
+            volume: dataset.volume,
+            places: dataset.places,
+            now: now,
+            initialLens: dataset.initialLens,
+            visiblePlaceByPlaceID: dataset.visiblePlaceByPlaceID
+        )
     }
 
     func activityItems(store: WanderStore, currentUserID: String) -> [ProfileActivityItem] {
@@ -126,6 +165,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var showsSettings = false
+    @State private var showsFeedback = false
     @State private var showsProfilePhotoViewer = false
     @State private var socialGraphTab: ProfileSocialGraphTab?
     @State private var listMode: GraphListMode?
@@ -224,8 +264,12 @@ struct ProfileScreen: View {
                     showsYourMapPrototype = true
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
-                onCalendarScrollRequestHandled: completeCalendarLaunchRequest
+                onCalendarScrollRequestHandled: completeCalendarLaunchRequest,
+                feedbackAction: isFeedbackEnabled ? { showsFeedback = true } : nil
             )
+                .sheet(isPresented: $showsFeedback) {
+                    FeedbackSheet(repository: feedbackRepository, analytics: store.productAnalytics)
+                }
                 .accessibilityHidden(showsSettings)
                 .allowsHitTesting(!showsSettings)
                 .overlay {
@@ -395,6 +439,7 @@ struct ProfileScreen: View {
     }
 
     private func resetProfilePresentations() {
+        showsFeedback = false
         activeCalendarLaunchRequest = nil
         visitInvitationInboxRequestID = nil
         showsSettings = false
@@ -413,6 +458,24 @@ struct ProfileScreen: View {
         withAnimation(.easeOut(duration: 0.24)) {
             showsSettings = true
         }
+    }
+
+    private var isFeedbackEnabled: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderFeedbackUITest") { return true }
+        #endif
+        return backend.featureFlag(.profileFeedbackV1, for: store.currentUser.id) == true
+    }
+
+    private var feedbackRepository: (any FeedbackRepository)? {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderFeedbackUITest") {
+            return FeedbackUITestRepository()
+        }
+        #endif
+        return backend.feedbackRepository
     }
 
     private func dismissSettings() {
@@ -476,14 +539,16 @@ struct ProfileScreen: View {
     }
 
     private var yourMapPrototypeDataset: YourMapPrototypeDataset {
-        let projection = store.currentUserCalendarProjection
-        return YourMapPrototypeDataset.make(
-            ownerID: store.currentUser.id,
-            userPlaces: projection.userPlaces,
-            visits: projection.visits,
-            places: projection.places,
-            visiblePlaces: projection.visiblePlaces
-        )
+        profilePresentationCache.mapDataset(store: store, profileID: store.currentUser.id) {
+            let projection = store.currentUserCalendarProjection
+            return YourMapPrototypeDataset.make(
+                ownerID: store.currentUser.id,
+                userPlaces: projection.userPlaces,
+                visits: projection.visits,
+                places: projection.places,
+                visiblePlaces: projection.visiblePlaces
+            )
+        }
     }
 
     private var profilePresentation: ProfilePresentation {
@@ -1043,14 +1108,16 @@ struct ProfileDetailView: View {
     }
 
     private var yourMapPrototypeDataset: YourMapPrototypeDataset {
-        let presentation = profilePresentation
-        return YourMapPrototypeDataset.make(
-            ownerID: profileID,
-            userPlaces: profileVisiblePlaces.map(\.userPlace),
-            visits: presentation.visits,
-            places: profileVisiblePlaces.map(\.place),
-            visiblePlaces: profileVisiblePlaces
-        )
+        profilePresentationCache.mapDataset(store: store, profileID: profileID) {
+            let presentation = profilePresentation
+            return YourMapPrototypeDataset.make(
+                ownerID: profileID,
+                userPlaces: profileVisiblePlaces.map(\.userPlace),
+                visits: presentation.visits,
+                places: profileVisiblePlaces.map(\.place),
+                visiblePlaces: profileVisiblePlaces
+            )
+        }
     }
 
     private var profileMapTitle: String {
@@ -2698,6 +2765,7 @@ private struct SavedPlacesListScreen: View {
                 draft: CommonGroundInvitationDraft(place: current),
                 liveSharing: true,
                 showsLinkage: commonGroundInvitationShowsLinkage,
+                analytics: store.productAnalytics,
                 canShare: { draftPlace in
                     store.currentUser.id == draftPlace.viewer.id
                         && CommonGroundLiveData.places(store: store, profileID: profileID).contains(draftPlace)

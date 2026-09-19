@@ -7,6 +7,7 @@ struct EventsComingSoonScreen: View {
     let isSelected: Bool
     var userID: String? = nil
     var repository: (any EventsInterestRepository)? = nil
+    var analytics: AnalyticsClient = NoopAnalyticsClient()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = false
@@ -34,7 +35,7 @@ struct EventsComingSoonScreen: View {
                         saving: interest.isSaving,
                         enabled: userID != nil,
                         animates: playbackPolicy.shouldPlay,
-                        action: { Task { await interest.register(repository: repository) } }
+                        action: { Task { await interest.register(repository: repository, analytics: analytics) } }
                     )
                 }
             }
@@ -53,7 +54,7 @@ struct EventsComingSoonScreen: View {
             get: { interest.errorMessage != nil },
             set: { if !$0 { interest.errorMessage = nil } }
         )) {
-            Button("Try again") { Task { await interest.register(repository: repository) } }
+            Button("Try again") { Task { await interest.register(repository: repository, analytics: analytics) } }
             Button("Cancel", role: .cancel) { interest.errorMessage = nil }
         } message: {
             Text(interest.errorMessage ?? "")

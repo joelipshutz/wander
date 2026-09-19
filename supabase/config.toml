@@ -466,3 +466,15 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/refresh-place-embeddings/deno.json"
 entrypoint = "./functions/refresh-place-embeddings/index.ts"
+
+[functions.feedback-email-worker]
+enabled = true
+# Dedicated cron secret checked by the handler. No client access or JWT bypass.
+verify_jwt = false
+entrypoint = "./functions/feedback-email-worker/index.ts"
+
+[functions.feedback-slack-worker]
+enabled = true
+# Dedicated cron secret is checked before any lookup, signing or Slack work.
+verify_jwt = false
+entrypoint = "./functions/feedback-slack-worker/index.ts"
