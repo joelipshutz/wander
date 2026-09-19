@@ -3,6 +3,52 @@ import UIKit
 @testable import Wander
 
 @MainActor final class FeedbackTests: XCTestCase {
+    #if DEBUG && targetEnvironment(simulator)
+    func testVoicePlaybackPausesResumesAndStopsWithoutLosingAttachment() async throws {
+        let audio = FeedbackAudioRecorder()
+        let note = FeedbackAudioRecorder.silentTestRecording()
+        audio.attachment = note
+        defer { audio.close() }
+        audio.togglePlayback()
+        XCTAssertTrue(audio.isPlaying)
+        try await Task.sleep(for: .milliseconds(350))
+        audio.togglePlayback()
+        let pausedAt = audio.playbackSeconds
+        XCTAssertFalse(audio.isPlaying)
+        XCTAssertGreaterThan(pausedAt, 0)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(audio.playbackSeconds, pausedAt, accuracy: 0.01)
+        audio.togglePlayback()
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertGreaterThan(audio.playbackSeconds, pausedAt)
+        audio.pauseForBackground()
+        XCTAssertFalse(audio.isPlaying)
+        audio.stopPlayback()
+        XCTAssertEqual(audio.playbackSeconds, 0)
+        XCTAssertEqual(audio.attachment, note)
+        audio.remove()
+        XCTAssertNil(audio.attachment)
+    }
+
+    func testCompletedVoiceNoteCanReplayAndInvalidAudioDoesNotPlay() async throws {
+        let audio = FeedbackAudioRecorder()
+        defer { audio.close() }
+        audio.attachment = FeedbackAudioRecorder.silentTestRecording(seconds: 1)
+        audio.togglePlayback()
+        for _ in 0..<30 where audio.isPlaying { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertFalse(audio.isPlaying)
+        XCTAssertEqual(audio.playbackSeconds, 1, accuracy: 0.1)
+        audio.togglePlayback()
+        XCTAssertTrue(audio.isPlaying)
+        XCTAssertLessThan(audio.playbackSeconds, 0.2)
+        audio.remove()
+        audio.attachment = FeedbackAttachment(kind: .voice, data: Data([0, 1]), duration: 1)
+        audio.togglePlayback()
+        XCTAssertFalse(audio.isPlaying)
+        XCTAssertNotNil(audio.errorMessage)
+    }
+    #endif
+
     func testEmptyAndWhitespaceCannotSubmitButPhotoOrVoiceAloneCan() {
         let model = FeedbackComposer()
         XCTAssertFalse(model.canSubmit)

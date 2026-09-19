@@ -14,7 +14,14 @@ struct FeedbackSheet: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var isLoadingPhotos = false
     @State private var showsDiscardConfirmation = false
+    @State private var showsReplaceConfirmation = false
+    @State private var inputMode: InputMode = .voice
     @FocusState private var textFocused: Bool
+
+    private enum InputMode: String, CaseIterable {
+        case voice = "Voice", text = "Text"
+        var symbol: String { self == .voice ? "waveform" : "text.alignleft" }
+    }
 
     var body: some View {
         NavigationStack {
@@ -49,8 +56,16 @@ struct FeedbackSheet: View {
             Button("Discard feedback", role: .destructive) { dismiss() }
             Button("Keep editing", role: .cancel) {}
         } message: { Text("Your unsent text and attachments will be removed from this device.") }
-        .onChange(of: audio.attachment) { _, value in composer.voice = value }
-        .onChange(of: scenePhase) { _, phase in if phase != .active { audio.pauseForBackground() } }
+        .onChange(of: audio.attachment, initial: true) { _, value in composer.voice = value }
+        .onChange(of: inputMode) { _, _ in
+            textFocused = false
+            audio.pauseForBackground()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || (phase == .inactive && (audio.isRecording || audio.isPlaying)) {
+                audio.pauseForBackground()
+            }
+        }
         .onChange(of: composer.isSubmitted) { _, submitted in
             if submitted { UINotificationFeedbackGenerator().notificationOccurred(.success) }
         }
@@ -65,41 +80,22 @@ struct FeedbackSheet: View {
                     Image(systemName: "ladybug.fill")
                         .font(.system(size: 30)).foregroundStyle(brandMode.accentText)
                         .accessibilityHidden(true)
-                    Text("Tell us your feedback")
+                    Text("Drop us a line")
                         .font(AstirTypography.screenTitle).foregroundStyle(brandMode.primaryText)
                     Text("(feature request, bug, or tell us you love us)")
                         .font(AstirTypography.body).foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                VStack(alignment: .trailing, spacing: 8) {
-                    ZStack(alignment: .topLeading) {
-                        if composer.text.isEmpty {
-                            Text("Type your feedback…")
-                                .foregroundStyle(brandMode.secondaryText)
-                                .padding(.horizontal, 16).padding(.vertical, 20)
-                                .allowsHitTesting(false)
-                        }
-                        TextEditor(text: $composer.text)
-                            .scrollContentBackground(.hidden)
-                            .padding(12)
-                            .frame(minHeight: 180)
-                            .focused($textFocused)
-                            .disabled(!composer.canEdit || composer.isSubmitting)
-                            .accessibilityLabel("Type your feedback")
-                            .accessibilityIdentifier("feedback.text")
-                    }
-                    .font(AstirTypography.body)
-                    .foregroundStyle(brandMode.primaryText)
-                    .background(brandMode.primaryText.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
-                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(brandMode.primaryText.opacity(0.14), lineWidth: 1))
-                    Text("\(composer.text.unicodeScalars.count) / \(FeedbackSubmission.maximumTextLength)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(composer.text.unicodeScalars.count > FeedbackSubmission.maximumTextLength ? Color.red : brandMode.secondaryText)
+                inputTabs
+                if inputMode == .voice { voicePanel }
+                else { textPanel }
+                if inputMode == .text, audio.attachment != nil {
+                    Label("Your voice note will be included.", systemImage: "checkmark.circle.fill")
+                        .font(.footnote).foregroundStyle(brandMode.secondaryText)
+                } else if inputMode == .voice, hasTextDraft {
+                    Label("Your text and photos will be included.", systemImage: "checkmark.circle.fill")
+                        .font(.footnote).foregroundStyle(brandMode.secondaryText)
                 }
-                attachmentControls
-                if isLoadingPhotos { ProgressView("Adding photos…").font(AstirTypography.body) }
-                if !composer.photos.isEmpty { photos }
-                if let voice = audio.attachment { voiceNote(voice) }
                 if let error = composer.errorMessage ?? audio.errorMessage {
                     VStack(alignment: .leading, spacing: 8) {
                         Label(error, systemImage: "exclamationmark.circle")
@@ -147,10 +143,70 @@ struct FeedbackSheet: View {
         composer.canSubmit && !audio.isRecording && !audio.isRequestingPermission && !isLoadingPhotos
     }
 
-    private var attachmentControls: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) { photoButton; recordingButton }
-            VStack(alignment: .leading, spacing: 12) { photoButton; recordingButton }
+    private var hasTextDraft: Bool {
+        !composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !composer.photos.isEmpty
+    }
+
+    private var inputTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(InputMode.allCases, id: \.self) { mode in
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { inputMode = mode }
+                } label: {
+                    VStack(spacing: 9) {
+                        HStack(spacing: 8) {
+                            Label(mode.rawValue, systemImage: mode.symbol)
+                            if mode == .voice ? audio.attachment != nil : hasTextDraft {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.caption).accessibilityHidden(true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity).frame(minHeight: 35)
+                        Capsule().fill(inputMode == mode ? brandMode.accent : .clear).frame(height: 3)
+                    }
+                    .font(AstirTypography.body.weight(.semibold))
+                    .foregroundStyle(inputMode == mode ? brandMode.primaryText : brandMode.secondaryText)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("feedback.tab.\(mode.rawValue.lowercased())")
+                .accessibilityAddTraits(inputMode == mode ? .isSelected : [])
+                .disabled(composer.isSubmitting)
+            }
+        }
+        .overlay(alignment: .bottom) { Rectangle().fill(brandMode.primaryText.opacity(0.1)).frame(height: 1).offset(y: 1) }
+    }
+
+    private var textPanel: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
+                ZStack(alignment: .topLeading) {
+                    if composer.text.isEmpty {
+                        Text("Type your feedback…")
+                            .foregroundStyle(brandMode.secondaryText)
+                            .padding(.horizontal, 16).padding(.vertical, 20)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $composer.text)
+                        .scrollContentBackground(.hidden)
+                        .padding(12)
+                        .frame(minHeight: 180)
+                        .focused($textFocused)
+                        .disabled(!composer.canEdit)
+                        .accessibilityLabel("Type your feedback")
+                        .accessibilityIdentifier("feedback.text")
+                }
+                if isLoadingPhotos { ProgressView("Adding photos…").padding(.horizontal, 16) }
+                if !composer.photos.isEmpty { photos.padding(.horizontal, 16) }
+                photoButton.padding(.horizontal, 12).padding(.bottom, 12)
+            }
+            .font(AstirTypography.body)
+            .foregroundStyle(brandMode.primaryText)
+            .background(brandMode.primaryText.opacity(0.035), in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(brandMode.primaryText.opacity(0.14), lineWidth: 1))
+            Text("\(composer.text.unicodeScalars.count) / \(FeedbackSubmission.maximumTextLength)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(composer.text.unicodeScalars.count > FeedbackSubmission.maximumTextLength ? Color.red : brandMode.secondaryText)
         }
     }
 
@@ -162,21 +218,96 @@ struct FeedbackSheet: View {
                 .background(background, in: Capsule())
         }
         .disabled(!composer.canEdit || isLoadingPhotos || audio.isRecording || composer.photos.count >= FeedbackSubmission.maximumPhotos)
+        .accessibilityIdentifier("feedback.photos")
     }
 
-    private var recordingButton: some View {
-        Button {
-            textFocused = false
-            if audio.isRecording { audio.finish() }
-            else { Task { await audio.start() } }
-        } label: {
-            Label(audio.isRecording ? "Stop · \(duration(audio.elapsedSeconds))" : "Voice note", systemImage: audio.isRecording ? "stop.circle.fill" : "mic")
-                .font(AstirTypography.body).padding(.horizontal, 16).frame(minHeight: 48)
-                .foregroundStyle(audio.isRecording ? brandMode.accentText : brandMode.primaryText)
-                .background(brandMode.primaryText.opacity(0.06), in: Capsule())
+    private var voicePanel: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 6) {
+                Text(audio.isRecording ? "Recording your note…" : audio.attachment == nil ? "Say it your way" : "Ready when you are")
+                    .font(AstirTypography.body.weight(.semibold))
+                Text(audio.isRecording ? "Tap stop when you’re done" : audio.attachment == nil ? "Tap to record · up to 2 minutes" : "Give it a listen before you send")
+                    .font(.footnote).foregroundStyle(brandMode.secondaryText)
+            }.multilineTextAlignment(.center)
+
+            Button {
+                if audio.attachment != nil { audio.togglePlayback() }
+                else if audio.isRecording {
+                    audio.finish()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } else { Task { await audio.start() } }
+            } label: {
+                ZStack {
+                    Circle().stroke(brandMode.accent.opacity(0.2), lineWidth: 1).frame(width: 136, height: 136)
+                    Circle().fill(brandMode.accent.opacity(0.09)).frame(width: 122, height: 122)
+                    Circle().fill(brandMode.accent).frame(width: 104, height: 104)
+                        .shadow(color: brandMode.accent.opacity(0.22), radius: 14, y: 6)
+                    if audio.isRequestingPermission { ProgressView().tint(.white) }
+                    else {
+                        Image(systemName: audio.attachment != nil ? (audio.isPlaying ? "pause.fill" : "play.fill") : (audio.isRecording ? "stop.fill" : "mic.fill"))
+                            .font(.system(size: 34, weight: .semibold)).foregroundStyle(.white)
+                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(audio.isRequestingPermission || composer.isSubmitting || (!composer.canEdit && audio.attachment == nil))
+            .accessibilityLabel(audio.attachment != nil ? (audio.isPlaying ? "Pause voice note" : "Play voice note") : (audio.isRecording ? "Stop recording" : "Record a voice note"))
+            .accessibilityIdentifier(audio.attachment == nil ? "feedback.record" : "feedback.play")
+
+            VStack(spacing: 10) {
+                waveform
+                HStack(spacing: 6) {
+                    if audio.isRecording { Circle().fill(brandMode.accentText).frame(width: 6, height: 6).accessibilityHidden(true) }
+                    Text(voiceTime).monospacedDigit()
+                        .accessibilityIdentifier("feedback.voiceTime")
+                }
+                .font(.subheadline.weight(.medium)).foregroundStyle(brandMode.secondaryText)
+            }
+            if audio.attachment != nil {
+                HStack(spacing: 20) {
+                    Button { audio.stopPlayback() } label: { Label("Stop", systemImage: "stop.fill").frame(minHeight: 44) }
+                        .disabled(audio.playbackSeconds == 0 && !audio.isPlaying)
+                        .accessibilityIdentifier("feedback.stopPlayback")
+                    Button { audio.stopPlayback(); showsReplaceConfirmation = true } label: {
+                        Label("Record again", systemImage: "arrow.counterclockwise").frame(minHeight: 44)
+                    }
+                    .disabled(!composer.canEdit)
+                    .alert("Replace this voice note?", isPresented: $showsReplaceConfirmation) {
+                        Button("Replace recording", role: .destructive) { audio.remove() }
+                        Button("Keep recording", role: .cancel) {}
+                    } message: { Text("Your current voice note will be removed so you can record a new one.") }
+                }
+                .font(.footnote.weight(.medium)).frame(minHeight: 44)
+            }
         }
-        .disabled(!composer.canEdit || audio.isRequestingPermission || audio.attachment != nil)
-        .accessibilityLabel(audio.isRecording ? "Stop recording" : "Record a voice note, up to two minutes")
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 22).padding(.horizontal, 16)
+        .foregroundStyle(brandMode.primaryText)
+        .background(brandMode.primaryText.opacity(0.025), in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(brandMode.primaryText.opacity(0.08), lineWidth: 1))
+    }
+
+    private var voiceTime: String {
+        if let voice = audio.attachment {
+            return "\(duration(Int(audio.playbackSeconds))) / \(duration(voice.duration ?? 0))"
+        }
+        return "\(duration(audio.elapsedSeconds)) / 2:00"
+    }
+
+    private var waveform: some View {
+        HStack(spacing: 3) {
+            ForEach(audio.levels.indices, id: \.self) { index in
+                let played = audio.playbackDuration > 0 && Double(index) / Double(audio.levels.count) < audio.playbackSeconds / audio.playbackDuration
+                Capsule()
+                    .fill(audio.isRecording || played ? brandMode.accentText : brandMode.primaryText.opacity(0.2))
+                    .frame(maxWidth: 4)
+                    .frame(height: 4 + audio.levels[index] * 30)
+            }
+        }
+        .frame(height: 34)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: audio.levels)
+        .accessibilityHidden(true)
     }
 
     private var photos: some View {
@@ -198,21 +329,6 @@ struct FeedbackSheet: View {
                 }
             }
         }
-    }
-
-    private func voiceNote(_ voice: FeedbackAttachment) -> some View {
-        HStack(spacing: 12) {
-            Button { audio.togglePlayback() } label: {
-                Image(systemName: audio.isPlaying ? "pause.fill" : "play.fill").frame(width: 44, height: 44)
-            }.accessibilityLabel(audio.isPlaying ? "Pause voice note" : "Play voice note")
-            Label("Voice note · \(duration(voice.duration ?? 0))", systemImage: "waveform")
-                .font(AstirTypography.body)
-            Spacer(minLength: 0)
-            Button { audio.remove() } label: {
-                Image(systemName: "trash").frame(width: 44, height: 44)
-            }.disabled(!composer.canEdit).accessibilityLabel("Remove voice note")
-        }
-        .padding(8).background(brandMode.primaryText.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var success: some View {

@@ -1,12 +1,19 @@
 # Profile feedback
 
 REC-545 adds an owner-profile ladybug button and native Feedback sheet. The prompt
-is “Tell us your feedback (feature request, bug, or tell us you love us)”. A report
-can contain text, up to three photos, and one voice note up to two minutes. At
+is “Drop us a line” with “(feature request, bug, or tell us you love us)” beneath it.
+Voice and Text tabs preserve their drafts when switching; Voice opens by default.
+Voice has a large record/stop control, live audio-level waveform, timer, and
+play/pause/resume/replay controls. Stop rewinds playback. Replacing a note requires
+confirmation. Text contains the editor and Add photos. Checkmarks and inclusion
+copy make it clear when both tabs have content; Submit includes both drafts.
+A report can contain text, up to three photos, and one voice note up to two minutes. At
 least one of those is required. Photos are downsampled to 2,000 pixels without
 cropping and re-encoded without source metadata. Each attachment is capped at
 2 MiB; text is capped at 5,000 characters. Microphone access is requested only
-after Record is tapped. Recording stops when the app leaves the foreground.
+after Record is tapped. Switching tabs or leaving the foreground stops and saves
+an active recording and pauses playback. Pending permission cannot start a hidden
+recording after a tab switch or dismissal.
 
 Submit reserves a private server draft, uploads its declared attachments, then
 atomically finalizes the report into a durable email outbox. The UI celebrates
@@ -77,7 +84,12 @@ Before launch:
 Native tests cover empty/media-only input, limits, duplicate taps, unavailable
 backend, frozen retries, exactly-once success analytics, upload/finalize ordering,
 and preserving photo aspect ratio. UI tests capture the profile, form, keyboard,
-confirmation, and discard flow using a simulator-only fake. The fake requires
+confirmation, tab/draft preservation, playback, replacement, and discard flow
+using a simulator-only fake. Native AVAudioPlayer tests verify pause/resume,
+completion, replay, stop, and corrupt-data handling with generated silent audio.
+The extra `-WanderFeedbackVoiceUITest` argument seeds silent PCM only for UI
+playback coverage; it does not exercise microphone capture or M4A encoding.
+The fake requires
 both `-WanderAuthenticatedUITest` and `-WanderFeedbackUITest` and cannot be used in
 a release build.
 
