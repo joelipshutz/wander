@@ -1,5 +1,5 @@
 {
-  "archiveFileCount": 1610,
+  "archiveFileCount": 1614,
   "sourceBundleVerified": true,
   "sourceCheckpoint": "1185c81b8968a69eb96c233db833fa6e14eeb742",
   "nativeCaptureSource": "c71aee6",
@@ -12,7 +12,7 @@
     "optional N08 profile photo; form survives background",
     "N08\u2013N12 + denied/failure captures"
   ],
-  "fullReleaseValidation": "2346 unit tests + four film/founders UI tests passed; corrected final login journey passed; signed iPhone build passed; final C resource playback check running",
+  "fullReleaseValidation": "2346 units passed; film/auth/player UI checks passed; final login journey passed; final selected C tests 5/5 passed; signed pre-media-swap device build passed",
   "foundersVideo": {
     "duration": 91.0,
     "outtake": "included through Cut",
@@ -32,6 +32,7 @@
     "mediaErrors": null,
     "page": "founders-vhs-review.html"
   },
-  "mainLanding": false,
-  "testFlightUploaded": false
+  "mainLanding": "3a12911b2f3be9dd50399364fc07e68cb872fab5",
+  "testFlightUploaded": false,
+  "testFlightBlocker": "Below build disk floor. Explicit legacy-cache cleanup exception awaiting Joe; normal managed cleanup has no eligible files. REC-556 tracks release177."
 }

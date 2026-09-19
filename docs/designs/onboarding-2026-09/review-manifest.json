@@ -1374,8 +1374,8 @@
     },
     {
       "path": "session-2026-09-16/TASKS.md",
-      "bytes": 105461,
-      "sha256": "dd3cc079685258cf0c85133fab72b33c32e23efee1809b0e4d2fd82b325777f9"
+      "bytes": 107535,
+      "sha256": "6cb76915c2eb6647773c60026a40ad53a2efa731caf45309958e650de290a718"
     },
     {
       "path": "session-2026-09-16/archives/account-setup-before-dark/native-copy.json",
@@ -1669,8 +1669,8 @@
     },
     {
       "path": "session-2026-09-16/device-onboarding-review.html",
-      "bytes": 57795,
-      "sha256": "fdff1b02509bc163e30d26ae41fc6fd494ab37cb6d4be2efbadde302bf6a6667"
+      "bytes": 57842,
+      "sha256": "0d1440fa3ca5c7a85097193cf1a00ead09c19e66111e86f0b18087c299b07182"
     },
     {
       "path": "session-2026-09-16/events-native-prototype.png",
@@ -1914,8 +1914,8 @@
     },
     {
       "path": "session-2026-09-16/index.html",
-      "bytes": 92523,
-      "sha256": "ebe2da504d2e18884a0ce9e6ab00b35053902bb8bb78f71fe9e5afc9bfbbffe2"
+      "bytes": 92569,
+      "sha256": "0828b7214ce0e9699fce217d5918432c138de5eda2e478b19b3abb695bffff53"
     },
     {
       "path": "session-2026-09-16/linear-handoff-pending.md",
@@ -6413,6 +6413,21 @@
       "sha256": "49713a213cea924f8bcc9bb2b8df7a22f9fd31d03a8daef81dd905d90a5ac158"
     },
     {
+      "path": "session-2026-09-16/native-captures/founders-selected-c/Founders-playing.png",
+      "bytes": 2422882,
+      "sha256": "8502b26c175ca740bd2d28b62be89924ee3308eb9920b55f1a11b6bf7b503ca5"
+    },
+    {
+      "path": "session-2026-09-16/native-captures/founders-selected-c/Founders-poster.png",
+      "bytes": 2617097,
+      "sha256": "e51b1383ba6a251742a77f355d24739c4b780ca75430a67884c31e779156c635"
+    },
+    {
+      "path": "session-2026-09-16/native-captures/founders-selected-c/Founders-to-NUX.png",
+      "bytes": 211260,
+      "sha256": "94d9034f88d3e621e9891015c81e60f79012414ea12834b5952dbad52d8c7952"
+    },
+    {
       "path": "session-2026-09-16/native-captures/interaction-validation.md",
       "bytes": 8555,
       "sha256": "c3f43c77b70bfd7e5fdcd77768da39259d44a74a0b9b4839005e5ff4877fe06a"
@@ -7134,8 +7149,8 @@
     },
     {
       "path": "session-2026-09-16/native-copy.json",
-      "bytes": 85214,
-      "sha256": "df8c97115c89771501955a2cddc11fee40f62c2e8615010ffad4162037f10adf"
+      "bytes": 85261,
+      "sha256": "67a032e4ae49beb1ecec790b765a18908f5cdd1987034958763a76f627bc171e"
     },
     {
       "path": "session-2026-09-16/native-dark-setup-final-summary.json",
@@ -7264,18 +7279,23 @@
     },
     {
       "path": "session-2026-09-16/native-review-check.js",
-      "bytes": 80307,
-      "sha256": "89387a2356e069342beec8efe015e8b19bfabde32ba9b2a750e0dac656201fc7"
+      "bytes": 80354,
+      "sha256": "7b0b49a12a5efc2dd7a57a0ba648ef1ac81709d755a11173ea910df664917e86"
     },
     {
       "path": "session-2026-09-16/native-review-data.json",
-      "bytes": 80582,
-      "sha256": "6193d2d2d10c97db73ea2b6c1aacf7fb55e2291298ca5864e570f1eb56dcec5d"
+      "bytes": 80629,
+      "sha256": "442f436c727bd67d88e846ef1df0b64939086c911ce4d99ad2d7c99370342e97"
     },
     {
       "path": "session-2026-09-16/native-review.template.html",
-      "bytes": 31979,
-      "sha256": "e30e2ad983e2839e178ea81ca8c4e54587a656a3c18401b82ccbf89f0687104e"
+      "bytes": 31978,
+      "sha256": "9c714d3f8e04b9b45a1a18330649a31f67e7a002400752d1ab17b81a292aa132"
+    },
+    {
+      "path": "session-2026-09-16/native-selected-c-playback-summary.json",
+      "bytes": 960,
+      "sha256": "c9b7d08c8b9899269a7b4cb60bf099dce7beda6533347d3e4ada4b414e911ce2"
     },
     {
       "path": "session-2026-09-16/native-setup-before-welcome-archive.html",
@@ -7609,8 +7629,8 @@
     },
     {
       "path": "session-2026-09-16/tools/native-account-setup/finalize-device-review.py",
-      "bytes": 4252,
-      "sha256": "df741cbf8b81a29549134ef72a6840b4840bfa8058ea6d23b2123ee085b4a46d"
+      "bytes": 4269,
+      "sha256": "69f7f25c9da7638e2b5832bb3ccc8fed4ed38123dd68ad503475da4891a4c0bd"
     },
     {
       "path": "session-2026-09-16/tools/native-account-setup/refresh-n11.py",
@@ -7704,8 +7724,8 @@
     },
     {
       "path": "session-2026-09-16/tools/package-repo-review.py",
-      "bytes": 3423,
-      "sha256": "e8aa09757f223bfcfe2549a2b2cdadb48ef1a01c7a61ed2da46511354e8d79de"
+      "bytes": 3456,
+      "sha256": "65e5ee9ac6e76a1fbe9215fcd1cd98a20a6aa0cf6f887eb0008577d21104af53"
     },
     {
       "path": "session-2026-09-16/transcript-audit.md",
@@ -48520,6 +48540,69 @@
     "session-2026-09-16/native-release-validation.xcresult/Data/refs.0~zzRvGCwTRy5RxnbbJ9UH20nuYPC7W-TgamMJd6fRVPFAg38LFlHQVV-dG8VMKunFxzFtXa6kO4Z8pafXDeRajA==",
     "session-2026-09-16/native-release-validation.xcresult/Info.plist",
     "session-2026-09-16/native-release-validation.xcresult/database.sqlite3",
+    "session-2026-09-16/native-selected-c-attachments/81517017-E82E-4BA3-8EB0-2AF1C91E7B8A.png",
+    "session-2026-09-16/native-selected-c-attachments/EB3C37F8-2B17-4C87-98E9-D60FF4799E9B.png",
+    "session-2026-09-16/native-selected-c-attachments/F06EEB4B-5DD5-452F-B4B9-F5D9A8B004E0.png",
+    "session-2026-09-16/native-selected-c-attachments/manifest.json",
+    "session-2026-09-16/native-selected-c-playback.log",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~0fkymkDf4EyXcsEOpIhT57GT3wug4DDifHdsJxrjUhauu-kPgZxBYJqf7F8Gy31miz68W4haSlA6XNRW8i0Utw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~4VqMqsI5lOfxRppnud6-VDWcNsU8J7VgFCJfW2dXPwOcAkvU-I8Um5yp9n0Zv6nr3VmcxYggaVMDFfR0U_vjKw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~56yxU0e8n4IlbNg-_dpDGZk7FuY1Kx-N3RxVUXN7TCVHDjSacU4oS1GQB5CGqvu4s-OaS0VmOePvCW7fiQMeBA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~5jBflOpMMU_BMkd4S1gHDUb1xUDiPhfGUy9WaDsBDsJVJvVHKPp9iK0EP6-h4-fN9Kh5jZGPZnShF8J1UPorFg==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~5m2hcRaDX4INQvvgI99I5kl-awQO1fXLTZIWIHX8RVWvXQac00sarM8PPKeOzKsgpyze1k66PbAsRtTjBNfa5w==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~7eOOpeuUBlr5UhCKbH8mZcvVsqIz0FsGoFrSo6V2gKrzSN2T9kIrk_T-cknAzm13Y9HpOmq0Soi_hnZZbS2s0A==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~7vDlYgPzYtx4Ftv375-8ReCAqhYSCBBehlPhKRDmkAzOuYNdudKBz3JSjK1GbU868YQuTz5naGF1yb9Oba8fhw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~7y07tPXIaCP3d4eBxrAemRYHfLpIerQvaqX9AD5_ZvchNNqjbIAprM88_u_18yrxbe_5BA9Ei8TX7KfzSddNUg==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~9FVRSGOe1fXHdlpuFgjBd8x5S5vIxKQ1ZpzO15PWGXukEd2nzyagi-1sufjRJxkHT0QDurUJagc6dw5_FaOBEA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~9SCd4chu4dilXpKqOq5pE5WL4aOhhVKaWOc1hkgcCEIsxyLYQcoIsjtb_MwLQQx8slPFE5r42SyDga4__ZH3MQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~HHtgrZg8BdxLpc1mcBTs7MZKVnP4-l7UdyiTG1VAZclKFB5MX3tbzB5hfqKIgAM_ax-gIkJDL0XAOEkWkYkzkA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~Iw2TTWMVRoQahRKrYX9PPosVM2EmQEl8PZfsRC8LVvJnjz3GknyhvBg6mQrSVzYgdPU_9WvgfJhljvwnpcS0xA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~J4oT0oZkAu0ZAPlxg1aJEMkI1zeFquFmVXjTLjRIm0BctW9iDf090btz8D73h4pkQqTS5TH7fFhfK2mJyXTeSA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~JxSSaFI8ZpiAveqJs-XwUtzAG1CpeMHSWRWZ3qWucMc521Vs0V7KeHVAK77d62jNED8gX-wdli6HpRYBazqSJQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~KVS0fd7yRuuxPkOMiXpUgZAtbD0MeiHXFuePmaOjg4cXvlGy4JtUZCr1ens6PFyzHOQSahpcv0vLSzW3BhkikA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~Mk0dA31Fd_8HaW9Qi0HTHqHypBrg6Qg2GoCbYAZYkeeySrrTpje3E4qiCWzMRk7zKzp6GxWFNTc5Wa0-kz9N7g==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~QszP2NPNmZxVeM6hRXAeb2-BtARWwl4kuUnqplHuBwjTzRfut-I700oI4-lm6Msh1YGVThWUaCO0is0HAUIP6Q==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~R3y_yhH_05nMRkmAA4iepv89684HhFm24cldZaTykO02N1n-K0iN6KqBuRzjblSqJ_Vb7sKVKZzw5VW6OEJAoQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~UMmukeQK7n9YkW2fOhuaj-9z9D0d6CzWFYSnNEXb918_Wg0zSvnHK3Ig5vCyRMFrnLVMiS0rGleA9zOfNRGtrQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~Ue085VU4G-L7oP4_hLaRv2sboyWZjclOP-Go1sRVxRK6O4Tu0jX5prFiJwf0XjHQpoRzNcoKj0ktbn6cu5z9pw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~Z40F9bL9QR46QJ8ygfyYeCGXfOQ0leFtOv_249RxOyETQzOEVWmlmppZ-ViWAyGK-w1HfuPYYhDORzpxEMhWpg==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~ccSgyfk6PIw6kSVjeieWSBekMeCP-__MMZM7XYTtKJZ9WqUibDM2recbZh_HbtsavtrHST5E5NESSLdXpD1k0g==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~eh7ynqdQUBJmdI9lQNbKkZf7AXZUUwrRyLJf5OM6RvfsXazG1kXYSQm-28A5FGHBk8X87uSHiOE7fO2TToK8YA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~fCGYY9LLHB6Bqf1wyArPK4AqGSGdh637Vu272h7Rw5T__g8_5D_0EjxMO3VLaD36i4Hj-9xltGhDrWf0zrDWwA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~i6bFweFBcsEm9edEqsnWEbURo_WogX_zgOqktr0FaxKiyvGSg8vQlstyWhcsJLOZCoRTQ40HR3TMJLeIS63C1A==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~kEqkmwEvEJiSGXgKZjvYK-DlbDn3tlwvpBqnW94Vs-zR0r5CpzlTiyGTFYNTQsE6c4_Q53ZlqxeHq_a4wVTMAQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~pc1G0FtF80DEbIdztXFVi_FFfV1fdVj5_dqxjEI6AMDWiW-N3h1KgkMv09GDYiMoK6JYeb6avmn24T_7UsLppw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/data.0~qYftiRFUqWWNAU44fD_Adzve5VMmAOsjfdjlXepzmiAebf59V-tyALyzsoNE3AMMmWWoUP9vMOdHgRxiaSBJgw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~0fkymkDf4EyXcsEOpIhT57GT3wug4DDifHdsJxrjUhauu-kPgZxBYJqf7F8Gy31miz68W4haSlA6XNRW8i0Utw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~4VqMqsI5lOfxRppnud6-VDWcNsU8J7VgFCJfW2dXPwOcAkvU-I8Um5yp9n0Zv6nr3VmcxYggaVMDFfR0U_vjKw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~56yxU0e8n4IlbNg-_dpDGZk7FuY1Kx-N3RxVUXN7TCVHDjSacU4oS1GQB5CGqvu4s-OaS0VmOePvCW7fiQMeBA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~5jBflOpMMU_BMkd4S1gHDUb1xUDiPhfGUy9WaDsBDsJVJvVHKPp9iK0EP6-h4-fN9Kh5jZGPZnShF8J1UPorFg==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~5m2hcRaDX4INQvvgI99I5kl-awQO1fXLTZIWIHX8RVWvXQac00sarM8PPKeOzKsgpyze1k66PbAsRtTjBNfa5w==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~7eOOpeuUBlr5UhCKbH8mZcvVsqIz0FsGoFrSo6V2gKrzSN2T9kIrk_T-cknAzm13Y9HpOmq0Soi_hnZZbS2s0A==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~7vDlYgPzYtx4Ftv375-8ReCAqhYSCBBehlPhKRDmkAzOuYNdudKBz3JSjK1GbU868YQuTz5naGF1yb9Oba8fhw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~7y07tPXIaCP3d4eBxrAemRYHfLpIerQvaqX9AD5_ZvchNNqjbIAprM88_u_18yrxbe_5BA9Ei8TX7KfzSddNUg==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~9FVRSGOe1fXHdlpuFgjBd8x5S5vIxKQ1ZpzO15PWGXukEd2nzyagi-1sufjRJxkHT0QDurUJagc6dw5_FaOBEA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~9SCd4chu4dilXpKqOq5pE5WL4aOhhVKaWOc1hkgcCEIsxyLYQcoIsjtb_MwLQQx8slPFE5r42SyDga4__ZH3MQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~HHtgrZg8BdxLpc1mcBTs7MZKVnP4-l7UdyiTG1VAZclKFB5MX3tbzB5hfqKIgAM_ax-gIkJDL0XAOEkWkYkzkA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~Iw2TTWMVRoQahRKrYX9PPosVM2EmQEl8PZfsRC8LVvJnjz3GknyhvBg6mQrSVzYgdPU_9WvgfJhljvwnpcS0xA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~J4oT0oZkAu0ZAPlxg1aJEMkI1zeFquFmVXjTLjRIm0BctW9iDf090btz8D73h4pkQqTS5TH7fFhfK2mJyXTeSA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~JxSSaFI8ZpiAveqJs-XwUtzAG1CpeMHSWRWZ3qWucMc521Vs0V7KeHVAK77d62jNED8gX-wdli6HpRYBazqSJQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~KVS0fd7yRuuxPkOMiXpUgZAtbD0MeiHXFuePmaOjg4cXvlGy4JtUZCr1ens6PFyzHOQSahpcv0vLSzW3BhkikA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~Mk0dA31Fd_8HaW9Qi0HTHqHypBrg6Qg2GoCbYAZYkeeySrrTpje3E4qiCWzMRk7zKzp6GxWFNTc5Wa0-kz9N7g==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~QszP2NPNmZxVeM6hRXAeb2-BtARWwl4kuUnqplHuBwjTzRfut-I700oI4-lm6Msh1YGVThWUaCO0is0HAUIP6Q==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~R3y_yhH_05nMRkmAA4iepv89684HhFm24cldZaTykO02N1n-K0iN6KqBuRzjblSqJ_Vb7sKVKZzw5VW6OEJAoQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~UMmukeQK7n9YkW2fOhuaj-9z9D0d6CzWFYSnNEXb918_Wg0zSvnHK3Ig5vCyRMFrnLVMiS0rGleA9zOfNRGtrQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~Ue085VU4G-L7oP4_hLaRv2sboyWZjclOP-Go1sRVxRK6O4Tu0jX5prFiJwf0XjHQpoRzNcoKj0ktbn6cu5z9pw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~Z40F9bL9QR46QJ8ygfyYeCGXfOQ0leFtOv_249RxOyETQzOEVWmlmppZ-ViWAyGK-w1HfuPYYhDORzpxEMhWpg==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~ccSgyfk6PIw6kSVjeieWSBekMeCP-__MMZM7XYTtKJZ9WqUibDM2recbZh_HbtsavtrHST5E5NESSLdXpD1k0g==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~eh7ynqdQUBJmdI9lQNbKkZf7AXZUUwrRyLJf5OM6RvfsXazG1kXYSQm-28A5FGHBk8X87uSHiOE7fO2TToK8YA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~fCGYY9LLHB6Bqf1wyArPK4AqGSGdh637Vu272h7Rw5T__g8_5D_0EjxMO3VLaD36i4Hj-9xltGhDrWf0zrDWwA==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~i6bFweFBcsEm9edEqsnWEbURo_WogX_zgOqktr0FaxKiyvGSg8vQlstyWhcsJLOZCoRTQ40HR3TMJLeIS63C1A==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~kEqkmwEvEJiSGXgKZjvYK-DlbDn3tlwvpBqnW94Vs-zR0r5CpzlTiyGTFYNTQsE6c4_Q53ZlqxeHq_a4wVTMAQ==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~pc1G0FtF80DEbIdztXFVi_FFfV1fdVj5_dqxjEI6AMDWiW-N3h1KgkMv09GDYiMoK6JYeb6avmn24T_7UsLppw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Data/refs.0~qYftiRFUqWWNAU44fD_Adzve5VMmAOsjfdjlXepzmiAebf59V-tyALyzsoNE3AMMmWWoUP9vMOdHgRxiaSBJgw==",
+    "session-2026-09-16/native-selected-c-playback.xcresult/Info.plist",
+    "session-2026-09-16/native-selected-c-playback.xcresult/database.sqlite3",
     "session-2026-09-16/native-signal-slide-tests.log",
     "session-2026-09-16/native-signal-slide-tests.xcresult/Data/data.0~0LVk4Pak5iPJ7LeDndXEYWMppxM3SjMcN9kIZqPHFabLUCSyr5N1A3361_ZRNVYtolQHIh-LdolZJrdZqCwPMA==",
     "session-2026-09-16/native-signal-slide-tests.xcresult/Data/data.0~2jkA63vEJUo25SllHacy65rYh2XZTS_cdBL9tteWIoHiQp1P-cTLYeBLyRhxRQk4EvrCJMywRSFtIQQzXxzlXg==",
@@ -53591,7 +53674,7 @@
     "session-2026-09-16/nux-native/native-tests.xcresult/database.sqlite3",
     "session-2026-09-16/phone-main-build.log"
   ],
-  "bytes": 4361030476,
+  "bytes": 4366285032,
   "largeMediaRequiringPublicationPackaging": [
     "session-2026-09-16/founders-vhs/full-c.mp4",
     "session-2026-09-16/native-captures/film-app-palette/film-type-dark.mp4",

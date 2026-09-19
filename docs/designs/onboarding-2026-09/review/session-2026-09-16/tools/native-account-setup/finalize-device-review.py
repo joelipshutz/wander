@@ -38,12 +38,12 @@ founders=dict(id='N71',title='A quick hello · founders welcome',group='03 · Se
  source='Wander/Features/Onboarding/FoundersWelcomeView.swift',image=str((OUT/'Founders-poster.png').relative_to(ROOT)),
  sourceCommit=args.source_ref,coverage='Actual Swift player · September 19 device candidate',
  captureNote='Native AVKit player · full portrait video · iPhone 16e',sampleData=False,
- note='After Notifications, before Ryan’s NUX. Play starts sound; Skip is always available. Background pauses. Ending/Skip fades into the first-use walkthrough. Full outtake included; wind-cleaned audio awaits Joe’s listening approval. Use the Welcome video link above for same-position cleaned/original audio comparison.',
+ note='After Notifications, before Ryan’s NUX. Play starts sound; Skip is always available. Background pauses. Ending/Skip fades into the first-use walkthrough. Full outtake included; Joe selected VHS C with the cleaned audio. Use Selected founders C above for the complete video.',
  lines=[dict(role=r,text=t) for r,t in [('Heading','A quick hello'),('Byline','From Joe & Ryan · 1:31'),('Primary','Play welcome'),('Interrupted','Resume welcome'),('Exit','Skip intro'),('Supporting line','A little about why we made Astir.'),('Playback','Pause / Resume'),('Audio','Mute / Sound on')]])
 if 'N71' in cards:source['cards']=[founders if c['id']=='N71' else c for c in source['cards']]
 else:source['cards'].insert(next(i for i,c in enumerate(source['cards']) if c['id']=='N12')+1,founders)
 source['deviceReviewSourceCommit']=args.source_ref
 (ROOT/'native-copy.json').write_text(json.dumps(source,indent=2,ensure_ascii=False)+'\n')
-manifest={'sourceCommit':args.source_ref,'screens':{p.stem:{'image':str(p.relative_to(ROOT)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in OUT.glob('*.png')},'openingSourceCommit':film['sourceCommit'],'audioListeningApproval':'pending Joe','mainAndTestFlight':'held'}
+manifest={'sourceCommit':args.source_ref,'screens':{p.stem:{'image':str(p.relative_to(ROOT)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in OUT.glob('*.png')},'openingSourceCommit':film['sourceCommit'],'audioListeningApproval':'C selected by Joe','mainAndTestFlight':'main landed; consult current release ticket for TestFlight'}
 (OUT/'verification.json').write_text(json.dumps(manifest,indent=2)+'\n')
 subprocess.run(['python3',str(ROOT/'build_native_review.py'),'--publish'],check=True)

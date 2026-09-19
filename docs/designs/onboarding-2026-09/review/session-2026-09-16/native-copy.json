@@ -895,12 +895,12 @@
       "title": "A quick hello · founders welcome",
       "group": "03 · Setup",
       "source": "Wander/Features/Onboarding/FoundersWelcomeView.swift",
-      "image": "native-captures/device-review/Founders-poster.png",
-      "sourceCommit": "c71aee6",
-      "coverage": "Actual Swift player · September 19 device candidate",
-      "captureNote": "Native AVKit player · full portrait video · iPhone 16e",
+      "image": "native-captures/founders-selected-c/Founders-poster.png",
+      "sourceCommit": "97723a1",
+      "coverage": "Actual Swift player · final C playback tests 5/5 passed",
+      "captureNote": "Actual Swift · selected VHS C · iPhone 16e · onboarding source 97723a1, now landed on main 3a12911",
       "sampleData": false,
-      "note": "After Notifications, before Ryan’s NUX. Play starts sound; Skip is always available. Background pauses. Ending/Skip fades into the first-use walkthrough. Full outtake included; wind-cleaned audio awaits Joe’s listening approval. Use the Welcome video link above for same-position cleaned/original audio comparison.",
+      "note": "After Notifications, before Ryan’s NUX. Full selected C, including cleaned voices and the outtake through Cut. Play starts sound; Skip is always available. Background pauses. Ending/Skip fades into the walkthrough. Five final media/store/UI checks passed; watch the full film at the Selected founders C link.",
       "lines": [
         {
           "role": "Heading",

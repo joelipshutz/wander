@@ -17,7 +17,7 @@ args = parser.parse_args()
 source, destination = args.source.resolve(), args.destination.resolve()
 assert source != destination and source not in destination.parents
 allowed = {'.html', '.md', '.json', '.jsonl', '.py', '.swift', '.js', '.css', '.txt', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.mp4', '.mov', '.woff', '.woff2', '.ttf', '.otf'}
-omit_directories = {'native-test-results', '__pycache__', 'node_modules', '.git', 'source-frames', 'native-device-review-attachments', 'cache-cleanup-2026-09-19', 'native-benefit-accessibility-attachments', 'native-final-login-attachments'}
+omit_directories = {'native-test-results', '__pycache__', 'node_modules', '.git', 'source-frames', 'native-device-review-attachments', 'cache-cleanup-2026-09-19', 'native-benefit-accessibility-attachments', 'native-final-login-attachments', 'native-selected-c-attachments'}
 libc = ctypes.CDLL(None, use_errno=True)
 clone = getattr(libc, 'clonefile', None)
 if clone:
