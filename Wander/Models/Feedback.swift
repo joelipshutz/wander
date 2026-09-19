@@ -23,7 +23,7 @@ struct FeedbackSubmission: Equatable {
     static let maximumTextLength = 5_000
     static let maximumPhotos = 3
     static let maximumAttachmentBytes = 2 * 1_024 * 1_024
-    static let maximumVoiceSeconds = 120
+    static let maximumVoiceSeconds = 180
 
     let id: UUID
     let text: String

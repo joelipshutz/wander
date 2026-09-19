@@ -73,9 +73,9 @@ import UIKit
         model.photos = [FeedbackAttachment(kind: .photo, data: Data(count: 2 * 1024 * 1024 + 1))]
         XCTAssertFalse(model.canSubmit)
         model.photos = []
-        model.voice = FeedbackAttachment(kind: .voice, data: Data([1]), duration: 121)
+        model.voice = FeedbackAttachment(kind: .voice, data: Data([1]), duration: 181)
         XCTAssertFalse(model.canSubmit)
-        model.voice = FeedbackAttachment(kind: .voice, data: Data([1]), duration: 120)
+        model.voice = FeedbackAttachment(kind: .voice, data: Data([1]), duration: 180)
         XCTAssertTrue(model.canSubmit)
     }
 

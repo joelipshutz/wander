@@ -131,8 +131,20 @@ begin
   exception when others then if sqlerrm <> 'feedback_rate_limited' then raise; end if; end;
 end
 $quota$;
+select set_config('request.jwt.claim.sub','user_codex_feedback_other',true);
+do $voice_duration$
+declare manifest jsonb := '[{"filename":"54500000-0000-0000-0000-000000000011.m4a","kind":"voice","content_type":"audio/mp4","byte_size":1440000,"duration_seconds":180}]';
+begin
+  if (public.begin_own_feedback(gen_random_uuid(),'',manifest,'1','1')->>'submitted')::boolean then
+    raise exception 'three-minute voice draft was already submitted'; end if;
+  begin
+    perform public.begin_own_feedback(gen_random_uuid(),'',jsonb_set(manifest,'{0,duration_seconds}','181'),'1','1');
+    raise exception 'test_voice_duration';
+  exception when others then if sqlerrm <> 'invalid_attachment' then raise; end if; end;
+end
+$voice_duration$;
 reset role;
 
-select pass('feedback authorization, storage, idempotency, quotas, account purge and email settlement');
+select pass('feedback authorization, storage, idempotency, quotas, voice duration, account purge and email settlement');
 select * from finish();
 rollback;

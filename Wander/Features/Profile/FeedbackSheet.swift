@@ -224,9 +224,11 @@ struct FeedbackSheet: View {
     private var voicePanel: some View {
         VStack(spacing: 18) {
             VStack(spacing: 6) {
-                Text(audio.isRecording ? "Recording your note…" : audio.attachment == nil ? "Say it your way" : "Ready when you are")
-                    .font(AstirTypography.body.weight(.semibold))
-                Text(audio.isRecording ? "Tap stop when you’re done" : audio.attachment == nil ? "Tap to record · up to 2 minutes" : "Give it a listen before you send")
+                if audio.isRecording || audio.attachment != nil {
+                    Text(audio.isRecording ? "Recording your note…" : "Ready when you are")
+                        .font(AstirTypography.body.weight(.semibold))
+                }
+                Text(audio.isRecording ? "Tap stop when you’re done" : audio.attachment == nil ? "Tap to record · up to \(FeedbackSubmission.maximumVoiceSeconds / 60) minutes" : "Give it a listen before you send")
                     .font(.footnote).foregroundStyle(brandMode.secondaryText)
             }.multilineTextAlignment(.center)
 
@@ -292,7 +294,7 @@ struct FeedbackSheet: View {
         if let voice = audio.attachment {
             return "\(duration(Int(audio.playbackSeconds))) / \(duration(voice.duration ?? 0))"
         }
-        return "\(duration(audio.elapsedSeconds)) / 2:00"
+        return "\(duration(audio.elapsedSeconds)) / \(duration(FeedbackSubmission.maximumVoiceSeconds))"
     }
 
     private var waveform: some View {

@@ -65,7 +65,7 @@ begin
         (item->>'kind' = 'photo' and item->>'content_type' = 'image/jpeg'
           and item->>'filename' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$')
         or (item->>'kind' = 'voice' and item->>'content_type' = 'audio/mp4'
-          and (item->>'duration_seconds')::integer between 1 and 120
+          and (item->>'duration_seconds')::integer between 1 and 180
           and item->>'filename' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.m4a$')
       ), false) then raise exception 'invalid_attachment'; end if;
   end loop;

@@ -7,7 +7,7 @@ Voice has a large record/stop control, live audio-level waveform, timer, and
 play/pause/resume/replay controls. Stop rewinds playback. Replacing a note requires
 confirmation. Text contains the editor and Add photos. Checkmarks and inclusion
 copy make it clear when both tabs have content; Submit includes both drafts.
-A report can contain text, up to three photos, and one voice note up to two minutes. At
+A report can contain text, up to three photos, and one voice note up to three minutes. At
 least one of those is required. Photos are downsampled to 2,000 pixels without
 cropping and re-encoded without source metadata. Each attachment is capped at
 2 MiB; text is capped at 5,000 characters. Microphone access is requested only
