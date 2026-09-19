@@ -4,6 +4,38 @@ import XCTest
 @MainActor final class EventsInterestTests: XCTestCase {
     private let saved = EventsInterest(createdAt: Date(timeIntervalSince1970: 1789724400))
 
+    func testAnalyticsEmitsOneConfirmationAndNoHydrationConversion() async {
+        let analytics = InterestAnalyticsRecorder()
+        let repository = InterestRepositoryDouble()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
+        await model.load(userID: "private-owner", repository: repository)
+        repository.shouldFail = true
+        await model.register(repository: repository, analytics: analytics)
+        repository.shouldFail = false
+        await model.register(repository: repository, analytics: analytics)
+        await model.register(repository: repository, analytics: analytics)
+        await model.load(userID: "private-owner", repository: repository)
+        XCTAssertEqual(analytics.events.map(\.name), [
+            "events_interest_submitted", "events_interest_result", "events_interest_submitted", "events_interest_result"
+        ])
+        XCTAssertEqual(analytics.events.filter { $0.name == "events_interest_result" }.map { $0.properties["outcome"] }, ["failed", "confirmed"])
+        XCTAssertFalse(analytics.events.flatMap { $0.properties.values }.contains("private-owner"))
+    }
+
+    func testAnalyticsDiscardsCompletionAfterAccountSwitch() async {
+        let analytics = InterestAnalyticsRecorder()
+        let repository = InterestRepositoryDouble()
+        let model = EventsInterestModel(cache: EventsInterestCache(defaults: nil))
+        await model.load(userID: "first", repository: repository)
+        repository.suspendWrite = true
+        let pending = Task { await model.register(repository: repository, analytics: analytics) }
+        await repository.waitForWrite()
+        await model.load(userID: "second", repository: InterestRepositoryDouble())
+        repository.writeContinuation?.resume(returning: saved)
+        await pending.value
+        XCTAssertEqual(analytics.events.map(\.name), ["events_interest_submitted"])
+    }
+
     func testConfirmedSignupIsAvailableBeforeColdStartLoadAndWorksOffline() async {
         let suite = "EventsInterestTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
@@ -243,4 +275,11 @@ import XCTest
         parameters.append(String(decoding: try JSONEncoder().encode(params), as: UTF8.self))
         return try decoder.decode(Value.self, from: Data(response.utf8))
     }
+}
+
+private final class InterestAnalyticsRecorder: AnalyticsClient {
+    var events: [AnalyticsEvent] = []
+    func track(_ event: AnalyticsEvent) { events.append(event) }
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }

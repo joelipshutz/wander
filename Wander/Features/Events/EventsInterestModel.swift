@@ -77,12 +77,13 @@ enum EventsInterestPresentation: Equatable {
         }
     }
 
-    func register(repository: (any EventsInterestRepository)?) async {
+    func register(repository: (any EventsInterestRepository)?, analytics: AnalyticsClient = NoopAnalyticsClient()) async {
         guard let userID, !isRegistered, !isSaving else { return }
         guard let repository else {
             errorMessage = "Couldn't save that yet. Please try again."
             return
         }
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.eventsInterestSubmitted, properties: [:]))
         // Supersede a pending read so its older nil result cannot undo success.
         generation += 1
         let request = generation
@@ -96,8 +97,12 @@ enum EventsInterestPresentation: Equatable {
             interest = saved
             cache.store(saved, for: userID)
             loaded = true
+            analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.eventsInterestResult,
+                                          properties: ["outcome": "confirmed"]))
         } catch {
             guard request == generation else { return }
+            analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.eventsInterestResult,
+                                          properties: ["outcome": "failed"]))
             errorMessage = "Couldn't save that yet. Please try again."
         }
     }
