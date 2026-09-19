@@ -3,12 +3,12 @@ import SwiftUI
 
 enum OnboardingCarouselTiming {
     static let defaultAutoAdvanceSeconds = 7.0
-    static let slideSeconds = 0.6
-    static let slideAnimation = Animation.timingCurve(0.32, 0, 0.18, 1, duration: slideSeconds)
+    static let slideSeconds = OnboardingSlideMotion.seconds
+    static let slideAnimation = Animation.timingCurve(OnboardingSlideMotion.x1, 0, OnboardingSlideMotion.x2, 1, duration: slideSeconds)
 }
 
-/// A persistent lower board lets benefit copy flip while only the upper app UI
-/// slides. Opening and account transitions move their entire compositions.
+/// Words, complete benefit phrases and native scenes share one slide language.
+/// The masthead and account actions remain usable throughout.
 struct LoggedOutCarouselView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,6 +28,7 @@ struct LoggedOutCarouselView: View {
     @State private var isPaused: Bool
     @State private var didFinish = false
     @State private var queuedAdvances = 0
+    @State private var queuedSwipeSelection: Int?
 
     init(analytics: AnalyticsClient, getStarted: @escaping () -> Void,
          logIn: @escaping () -> Void, configuration: OnboardingWelcomeConfiguration = .current) {
@@ -51,7 +52,7 @@ struct LoggedOutCarouselView: View {
 
     var body: some View {
         ZStack {
-            OnboardingBoardColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
+            OnboardingWelcomeColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack {
                     AstirMastheadLockup(isCompact: true)
@@ -85,9 +86,8 @@ struct LoggedOutCarouselView: View {
                         OnboardingBenefitSequenceView(
                                 step: step == .opening ? (previousStep ?? .places) : step,
                                 previousStep: previousStep,
-                                progress: slideProgress, direction: slideDirection,
-                                isPlaying: isPlaying && step != .opening
-                            )
+                                progress: slideProgress, direction: slideDirection
+                                                            )
                             .offset(x: step == .opening
                                 ? -slideDirection * geometry.size.width * slideProgress
                                 : (previousStep == .opening ? slideDirection * geometry.size.width * (1 - slideProgress) : 0))
@@ -102,7 +102,6 @@ struct LoggedOutCarouselView: View {
                         moveTo(selection + (drag.translation.width < 0 ? 1 : -1), source: "swipe")
                     })
                 }
-                .accessibilityLabel("What you can do with Astir")
                 HStack(spacing: 7) {
                     ForEach(configuration.steps.indices, id: \.self) { index in
                         Capsule().fill(index == selection ? brandMode.primaryText : brandMode.secondaryText.opacity(0.4))
@@ -142,7 +141,10 @@ struct LoggedOutCarouselView: View {
                 } completion: {
                     guard slideGeneration == generation else { return }
                     previousSelection = nil
-                    if queuedAdvances > 0 {
+                    if let destination = queuedSwipeSelection {
+                        queuedSwipeSelection = nil
+                        moveTo(destination, source: "swipe")
+                    } else if queuedAdvances > 0 {
                         queuedAdvances -= 1
                         advance(source: "manual")
                     }
@@ -159,7 +161,14 @@ struct LoggedOutCarouselView: View {
         }
     }
     private func moveTo(_ next: Int, source: String) {
-        guard !didFinish, previousSelection == nil, configuration.steps.indices.contains(next), next != selection else { return }
+        guard !didFinish, configuration.steps.indices.contains(next), next != selection else { return }
+        guard previousSelection == nil else {
+            // A slower slide must not swallow a back swipe that lands
+            // just before its completion. Retain the latest requested page.
+            queuedSwipeSelection = next
+            queuedAdvances = 0
+            return
+        }
         var transaction = Transaction(animation: nil); transaction.disablesAnimations = true
         withTransaction(transaction) {
             previousSelection = selection; slideDirection = next > selection ? 1 : -1
@@ -171,6 +180,7 @@ struct LoggedOutCarouselView: View {
     private func advance(source: String) {
         guard !didFinish else { return }
         if previousSelection != nil {
+            queuedSwipeSelection = nil
             // Preserve fast Next taps while each outgoing slide completes.
             // The queue is bounded by the remaining pages plus account entry.
             queuedAdvances = min(queuedAdvances + 1, configuration.steps.count - selection)
@@ -183,6 +193,7 @@ struct LoggedOutCarouselView: View {
         guard !didFinish else { return }
         didFinish = true
         queuedAdvances = 0
+        queuedSwipeSelection = nil
         analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingAuthStarted,
             properties: ["mode": mode == .signUp ? "sign_up" : "sign_in"]))
         if mode == .signUp { getStarted() } else { logIn() }
@@ -198,7 +209,6 @@ private struct OnboardingBenefitSequenceView: View {
     let previousStep: OnboardingWelcomeStep?
     let progress: Double
     let direction: Double
-    let isPlaying: Bool
     var body: some View {
         GeometryReader { geometry in
             let width = min(geometry.size.width - 32, 440)
@@ -223,11 +233,14 @@ private struct OnboardingBenefitSequenceView: View {
                     }
                 }
                 .frame(width: pictureSide, height: pictureSide).clipped()
-                OnboardingSplitFlapBoard(
-                    fromRows: previousStep == .opening ? ["", "", ""] : OnboardingBoardCopy.benefitRows(previousStep ?? step),
-                    toRows: OnboardingBoardCopy.benefitRows(step), progress: progress
+                OnboardingSlidingText(
+                    from: OnboardingWelcomeCopy.benefitRows(previousStep ?? step).joined(separator: "\n"),
+                    to: OnboardingWelcomeCopy.benefitRows(step).joined(separator: "\n"),
+                    progress: previousStep != nil && previousStep != .opening ? progress : 1,
+                    direction: direction, fontSize: width * 0.086,
+                    travelWidth: geometry.size.width
                 )
-                .frame(width: width, height: width * 0.36)
+                .frame(width: width, height: width * 0.39)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(step == .places ? "Keep track of everywhere you’ve been." : "Keep up with the people you love.")
                 .accessibilityIdentifier("onboarding.benefitCopy")
@@ -311,12 +324,8 @@ private struct OnboardingWelcomePostcard: View {
     }
 }
 
-enum OnboardingBoardColors {
+enum OnboardingWelcomeColors {
     static func background(isDark: Bool) -> Color { isDark ? AstirTheme.ink.color : .white }
-    static func face(isDark: Bool, top: Bool) -> Color {
-        if isDark { return top ? Color(red: 0.14, green: 0.16, blue: 0.145) : Color(red: 0.10, green: 0.12, blue: 0.105) }
-        return top ? .white : Color(red: 0.965, green: 0.965, blue: 0.955)
-    }
 }
 
 struct OnboardingTickerView: View {
@@ -328,43 +337,57 @@ struct OnboardingTickerView: View {
     let isPlaying: Bool
     @State private var startedAt = Date.now
     @State private var elapsedBeforePause = 0.0
-    @State private var flapHaptics = OnboardingFlapHaptics()
     private var animates: Bool { isPlaying && !reduceMotion && !voiceOverEnabled }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !animates)) { context in
             let elapsed = elapsedBeforePause + (animates ? context.date.timeIntervalSince(startedAt) : 0)
-            let readableElapsed = (reduceMotion || voiceOverEnabled)
-                ? floor(elapsed / OnboardingTickerFrame.wordSeconds) * OnboardingTickerFrame.wordSeconds : elapsed
+            let staticReading = reduceMotion || voiceOverEnabled
+            let sequenceElapsed = max(0, elapsed - OnboardingSlideMotion.seconds)
+            let readableElapsed = staticReading
+                ? content.staticElapsed : sequenceElapsed
             let frame = OnboardingTickerFrame.at(elapsed: readableElapsed, content: content)
-            let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex] : ""
-            let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0] : nil } ?? currentWord
-            let finalRows = OnboardingBoardCopy.finalRows(content.finalLockup ?? "a local experiment")
-            let fromRows = frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(word: currentWord)
-            let toRows = frame.isFinalTransition || frame.showsFinalLockup ? finalRows : OnboardingBoardCopy.openingRows(word: nextWord)
+            let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex].uppercased() : ""
+            let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0].uppercased() : nil } ?? currentWord
+            let finalText = OnboardingWelcomeCopy.finalRows(content.finalLockup ?? "a local experiment").joined(separator: "\n")
+            let entering = elapsed < OnboardingSlideMotion.seconds && !staticReading && (isPlaying || elapsed > 0)
+            let from = entering ? "" : (frame.showsFinalLockup ? finalText : currentWord)
+            let to = entering ? currentWord : (frame.isFinalTransition || frame.showsFinalLockup ? finalText : nextWord)
+            let progress = entering ? elapsed / OnboardingSlideMotion.seconds : (frame.isTransitioning ? frame.transitionProgress : 1)
             let leadOpacity = OnboardingTickerFrame.leadOpacity(elapsed: readableElapsed, content: content)
-            let descriptionHasArrived = !descriptionIsDelayed || elapsed >= OnboardingTickerFrame.descriptionArrivalSeconds || reduceMotion || voiceOverEnabled
+            let descriptionHasArrived = !descriptionIsDelayed || sequenceElapsed >= OnboardingTickerFrame.descriptionArrivalSeconds || staticReading
             GeometryReader { geometry in
                 let width = min(geometry.size.width - 32, 440)
                 VStack(spacing: 0) {
                     Spacer(minLength: 20)
                     VStack(spacing: 16) {
                         Text(content.stableText)
-                            .font(.custom("AvenirNext-DemiBold", size: 27, relativeTo: .title2))
+                            .font(.system(.title, design: .serif, weight: .semibold))
                             .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1).minimumScaleFactor(0.7)
                             .frame(width: width)
-                            .opacity(leadOpacity)
+                            // Preserve the existing word center while the visible
+                            // lead-in moves independently closer to it.
+                            .hidden()
                             .accessibilityHidden(true)
-                        OnboardingSplitFlapBoard(fromRows: fromRows, toRows: toRows,
-                            progress: frame.isTransitioning ? frame.transitionProgress : 1,
-                            minimumColumns: OnboardingBoardCopy.openingColumns,
-                            flips: OnboardingSplitFlapFrame.flipCount)
-                            .frame(width: width, height: width * 0.48)
+                        OnboardingSlidingText(from: from, to: to,
+                            progress: OnboardingSlideMotion.easedProgress(progress),
+                            fontSize: width * 0.104, travelWidth: geometry.size.width)
+                            .frame(width: width, height: width * 0.50)
+                            .overlay {
+                                Text(content.stableText)
+                                    .font(.system(size: width * 0.108, weight: .semibold, design: .serif))
+                                    .foregroundStyle(brandMode.primaryText)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .offset(y: -width * 0.145)
+                                    .opacity(leadOpacity)
+                                    .accessibilityHidden(true)
+                            }
                     }
                         .frame(width: width)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(frame.showsFinalLockup ? (content.finalLockup ?? "") : "\(content.stableText) \(content.words.joined(separator: ", "))")
+                        .accessibilityLabel(staticReading ? content.staticAccessibilityLabel : (frame.showsFinalLockup ? (content.finalLockup ?? "") : "\(content.stableText) \(content.words.joined(separator: ", "))"))
                         .accessibilityIdentifier("onboarding.ticker")
                     Spacer(minLength: 30)
                     if let description = content.description {
@@ -374,42 +397,54 @@ struct OnboardingTickerView: View {
                             .frame(width: min(width, 360))
                             .opacity(descriptionHasArrived ? 1 : 0)
                             .offset(x: descriptionHasArrived ? 0 : geometry.size.width)
-                            .animation(animates ? .easeOut(duration: 0.5) : nil, value: descriptionHasArrived)
+                            .animation(animates ? OnboardingCarouselTiming.slideAnimation : nil, value: descriptionHasArrived)
                             .padding(.bottom, 26)
                             .accessibilityIdentifier("onboarding.openingDescription")
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .onChange(of: elapsed) { _, time in
-                flapHaptics.advance(to: time, playing: animates, content: content)
-            }
         }
         .onAppear { startedAt = .now }
         .onChange(of: animates) { _, playing in
-            flapHaptics.reset()
             if playing { startedAt = .now }
             else { elapsedBeforePause += max(0, Date.now.timeIntervalSince(startedAt)) }
         }
-        .onDisappear { flapHaptics.reset() }
     }
 }
 
-/// Uniform cells, full flap faces, and a constant three-row footprint. The same
-/// board persists across the benefit transition while its letters change.
-struct OnboardingSplitFlapBoard: View, @MainActor Animatable {
-    let fromRows: [String]
-    let toRows: [String]
+/// Each Text is one naturally spaced label. The retained outgoing and incoming
+/// labels share a distance and progress, including reverse navigation.
+private struct OnboardingSlidingText: View, @MainActor Animatable {
+    let from: String
+    let to: String
     var progress: Double
-    var minimumColumns: Int = OnboardingBoardCopy.columns
-    var flips: Int = 2
+    var direction = 1.0
+    let fontSize: CGFloat
+    let travelWidth: CGFloat
     var animatableData: Double { get { progress } set { progress = newValue } }
-    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        OnboardingFlapSurface(fromRows: fromRows, toRows: toRows,
-                              progress: progress, isDark: colorScheme == .dark,
-                              minimumColumns: minimumColumns, flips: flips)
-            .accessibilityHidden(true)
+        let offsets = OnboardingSlideMotion.offsets(progress: progress, distance: travelWidth, direction: direction)
+        ZStack {
+            if from != to {
+                label(from).offset(x: offsets.outgoing)
+            }
+            label(to).offset(x: from == to ? 0 : offsets.incoming)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .accessibilityHidden(true)
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .font(.custom("AvenirNext-Bold", size: fontSize))
+            .foregroundStyle(AstirTheme.signal.color)
+            .multilineTextAlignment(.center)
+            .lineLimit(3).minimumScaleFactor(0.75)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

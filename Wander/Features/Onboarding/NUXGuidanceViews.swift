@@ -120,6 +120,24 @@ private struct NUXButtonGlimmer: View {
     }
 }
 
+enum NUXAddIntroductionTiming {
+    static let layoutSettleMilliseconds = 450
+    static let nearbyMilliseconds = 3_300
+    static let importMilliseconds = 4_700
+}
+
+/// Loading and measured sheet content must settle before the reading clock starts.
+struct NUXAddIntroductionReadiness: Equatable {
+    let hasRequestedSuggestions: Bool
+    let isLoadingSuggestions: Bool
+    let contentHeight: CGFloat?
+
+    var canPresent: Bool {
+        hasRequestedSuggestions && !isLoadingSuggestions
+            && contentHeight.map { $0.isFinite && $0 > 0 } == true
+    }
+}
+
 enum NUXFeedScrollTarget: Equatable {
     case top, recent
 }
@@ -127,7 +145,7 @@ enum NUXFeedScrollTarget: Equatable {
 enum NUXFeedIntroductionTiming {
     static let arrivalMilliseconds = 200
     static let readinessMilliseconds = 350
-    static let focusMilliseconds = 2_200
+    static let focusMilliseconds = 2_700
     static let clearMilliseconds = 150
     static let scrollMilliseconds = 350
     static let totalMilliseconds = arrivalMilliseconds + focusMilliseconds * 2 + clearMilliseconds * 2 + scrollMilliseconds * 2
@@ -357,12 +375,6 @@ struct NUXGuidanceOverlay: View {
         ZStack(alignment: .topLeading) {
             Group {
                 if step.surface == .add {
-                    NUXFeedBackdropBlur()
-                        .mask {
-                            NUXFeedSpotlightCutout(frame: target.insetBy(dx: -3, dy: -3))
-                                .fill(.black, style: FillStyle(eoFill: true))
-                        }
-                        .accessibilityHidden(true)
                     addAnnotation
                 } else if handwritten {
                     annotations
@@ -443,15 +455,16 @@ struct NUXGuidanceOverlay: View {
     private var addAnnotation: some View {
         let isImport = step.target == .addImport
         let text = isImport ? "Import your saved places\nfrom Instagram, TikTok\nand Google Maps" : "Search nearby places"
-        let y = max(76, target.minY - (isImport ? 76 : 38))
+        let sectionTop = additionalTargets[.addNearbySection]?.minY ?? target.minY
+        let y = isImport ? target.minY - 66 : sectionTop - 34
         return ZStack(alignment: .topLeading) {
-            NUXHandDrawnOval()
+            NUXHandDrawnSectionOutline()
                 .stroke(ink, style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
                 .frame(width: target.width + 10, height: target.height + 10)
                 .position(x: target.midX, y: target.midY)
                 .accessibilityHidden(true)
             NUXHandDrawnArrow(start: CGPoint(x: size.width / 2, y: y + (isImport ? 44 : 15)),
-                              end: CGPoint(x: target.midX, y: target.minY - 6), bend: 18)
+                              end: CGPoint(x: target.midX, y: target.minY - 7), bend: 4)
                 .stroke(ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .accessibilityHidden(true)
             Text(text)
@@ -528,6 +541,31 @@ struct NUXHandDrawnOval: Shape {
         path.addCurve(to: CGPoint(x: rect.width * 0.28, y: rect.height * 0.045),
                       control1: CGPoint(x: -12, y: rect.height * 0.74),
                       control2: CGPoint(x: -3, y: rect.height * 0.03))
+        return path
+    }
+}
+
+/// Soft, slightly irregular corners keep the entire section inside the line.
+private struct NUXHandDrawnSectionOutline: Shape {
+    func path(in rect: CGRect) -> Path {
+        let r = min(24, rect.height / 3)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + r, y: rect.minY + 1))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: rect.minY + 2),
+                          control: CGPoint(x: rect.midX, y: rect.minY - 2))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - 1, y: rect.minY + r),
+                          control: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - 2, y: rect.maxY - r))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: rect.maxY - 1),
+                          control: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + r, y: rect.maxY - 2),
+                          control: CGPoint(x: rect.midX, y: rect.maxY + 2))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + 1, y: rect.maxY - r),
+                          control: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + 2, y: rect.minY + r))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + r, y: rect.minY + 1),
+                          control: CGPoint(x: rect.minX, y: rect.minY))
+        path.closeSubpath()
         return path
     }
 }

@@ -1,63 +1,77 @@
-# Native verification and restart
+# Native verification
 
-## Current evidence — September 18, Map → live Feed revision
+## Candidate
 
-Branch `codex/rec-529-nux-playthrough`, worktree `/private/tmp/wander-pr663`.
-PR #663 remains a design-review draft; reconcile newer main before production merge.
+PR #663, branch `codex/rec-529-nux-playthrough`, worktree
+`/private/tmp/wander-pr663`. Main at `f3d9cb6e96b775a46a41d593200037385439fad0`
+is integrated. The requested outcome is a squash merge; no TestFlight build or
+upload is part of this change.
 
-- XcodeGen and Simulator compilation passed on Xcode 26.6 / iOS 26.5.
-- The complete unit target passed **2,055 / 2,055 tests**, including its existing
-  performance gates. No clean-baseline performance comparison is claimed.
-- The final **38 walkthrough tests passed**, including Map → Feed routing,
-  retired quote checkpoint migration, complete-card geometry, two Add beats,
-  repeated Add activation, account-scoped consumption and no later scheduled NUX.
-- Four affected UI scenarios passed across focused runs: the complete Map tour
-  followed by both Feed Next buttons; automatic rings → Feed completion; Feed
-  centering, return to top and no repeat; and both first-Add annotations followed
-  by reopening without a repeat or forced save.
-- The initial Feed UI run caught an inactive-at-mount lifecycle issue that
-  consumed the lesson early. It was fixed and the automatic Feed and rings
-  tests both passed on rerun. The final focused run also passed after preserving
-  an active Add beat across repeated sheet activation.
-- The full unit run preceded those final localized corrections; the final
-  walkthrough tests and affected Feed UI checks cover them. **No complete UI
-  suite or physical-device pass is claimed.** Full integration tests, device
-  VoiceOver/Reduce Motion acceptance and newer-main reconciliation remain merge
-  gates. The retired Lists UI check was updated but not run in this revision.
+The integration preserves main's September 18 Signal/slide welcome sequence,
+Feed presentation callbacks, current place editor, and build 176. The obsolete
+split-flap implementation is removed. The branch also retains its earlier native
+identity/photo, per-person following, permission-primer and preview work.
 
-Held native blur scenes can cause XCTest to wait for its 60-second animation
-idle timeout. The automatic Feed sequence passed in ordinary playback; the
-held Next test's longer wall time is test synchronization, not tutorial length.
-The nominal Feed flow is 5.6 seconds, with short bounded waits for real targets.
-A missing people/activity target is skipped; no example card is substituted.
+## Latest behavior and visual evidence
 
-## Visual evidence
+- Feed holds each annotation for 2.7 seconds, with 6.6 seconds total once real
+  targets are ready. It centers the whole latest activity card and returns to
+  the top after Next or automatic completion.
+- Add waits for nearby loading and a stable measured sheet. It stays unblurred,
+  outlines the complete Nearby section through See more, or only the search
+  field without location/results, then outlines Import. The two reading windows
+  total eight seconds. The lesson does not request location permission.
+- First profile retains its 3.5-second moderate focus, revised Wanna copy and
+  1.4-second glimmer. Later visits do not repeat the completed hints.
 
-Current iPhone 17 Pro and smaller iPhone 17e use iOS 26.5. The repository's
-usual iPhone 16 Plus / iOS 18.6 runtime is not installed on this machine.
-The current local package is
-`/Users/ryanlieblein/Developer/wander/outputs/pr663-native-nux/`:
+Native screenshots were inspected on iPhone 17 Pro and smaller iPhone 17e,
+including dark appearance, complete Nearby/Import bounds, no-location fallback,
+and the entire latest Feed card with attribution and engagement actions. The
+current local index is
+`/Users/ryanlieblein/Developer/wander/outputs/pr663-native-nux/REVIEW.md`.
 
-- `REVIEW.md`: current scenes first; previous revisions explicitly historical.
-- `revision-4/videos/map-to-feed-light.mp4`: continuous Map tour, rings → Feed,
-  people focus, complete latest-card focus, clear and return to Feed top.
-- `revision-4/videos/add-search-import-light.mp4`: both first-+ annotations.
-- `revision-4/videos/place-wanna-light.mp4`: revised Wanna copy with the retained
-  3.5-second focus and 1.4-second diagonal glimmer.
-- `revision-4/screens/`: whole latest card in light/dark and on the smaller
-  phone, both Add annotations, and profile Wanna copy.
+Revision 5 includes untrimmed native recordings:
 
-These are recordings of the real SwiftUI views with explicit local test
-fixtures. Production reads the current account's Feed page. Capture fixtures
-are DEBUG-only; no live account activity was created. Only launch wait and idle
-ends were trimmed, with no synthesized or accelerated transitions. Media stays
-outside Git. Simulator recording is not a physical-device performance benchmark.
+- `revision-5/videos/map-to-feed-raw.mp4`
+- `revision-5/videos/add-nearby-import-raw.mp4`
+- `revision-5/screens/`: final light/dark/compact Feed and Add stills.
 
-## Validation commands and results
+The unchanged profile recording remains
+`revision-4/videos/place-wanna-light.mp4`. Earlier revisions are historical.
+The recordings use explicit DEBUG fixtures in the production SwiftUI views.
+Ordinary accounts use their current available Feed; no live account activity
+was created for capture. Media remains outside Git. Frame-by-frame playback of
+the new MP4s is not claimed; the final stills and native interaction tests are
+the inspected evidence.
 
-Use a new result-bundle path for each run. The dedicated smaller simulator is
-`0D221A8D-45A5-4A87-840C-6B52E5DA22B9`; the review simulator is
-`21F0051B-9DD1-42C7-ADC1-26D4E694BC05`. Choose an installed equivalent elsewhere.
+## Validation
+
+XcodeGen and Simulator build/build-for-testing passed on Xcode 26.6 / iOS 26.5.
+The usual iPhone 16 Plus / iOS 18.6 runtime is not installed locally. The analytics
+dashboard contract check and its Node tests passed.
+
+The integrated full run passed **2,284 unit tests**. Its UI target reported
+155 passing cases, 33 failures and one unsigned App Group skip. The first main
+comparison reproduced 12 of 15 broader failures on unchanged main; remaining
+comparisons and serial reruns are in progress. Final focused checks passed all
+39 walkthrough and 153 navigation contracts. Native Add's whole-section/Import
+flow, first-Add Next/reopen/no-repeat, actual Contacts denial/recovery, and the
+complete welcome → login → OTP background/restore → identity flow passed across
+focused runs. Final totals and the baseline comparison will be recorded in the
+PR before merging.
+
+Verification caught and corrected parent accessibility metadata overriding
+native Add control identifiers and the welcome benefit copy. More filtering is
+checked with a physical tap and resulting selection. Its explanatory text is
+checked against the dropdown's visible bounds after a real drag, rather than
+requiring reading copy to expose a tappable accessibility point.
+
+No physical-device, VoiceOver or Reduce Motion acceptance is claimed. Those
+remain explicit device checks for the next manually requested TestFlight batch.
+
+## Reproduce
+
+Use an installed Simulator equivalent and a fresh result-bundle path:
 
 ```sh
 cd /private/tmp/wander-pr663
@@ -65,51 +79,31 @@ xcodebuild test -project Wander.xcodeproj -scheme Wander \
   -destination 'platform=iOS Simulator,id=0D221A8D-45A5-4A87-840C-6B52E5DA22B9' \
   -derivedDataPath /private/tmp/pr663-build \
   -clonedSourcePackagesDirPath /Users/ryanlieblein/Developer/wander/DerivedData-sim/SourcePackages \
-  -disableAutomaticPackageResolution \
-  CODE_SIGNING_ALLOWED=NO -jobs 4 -parallel-testing-enabled NO \
-  -only-testing:WanderTests/FirstVisitWalkthroughTests \
-  -only-testing:WanderUITests/OnboardingUITests/testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving \
-  -only-testing:WanderUITests/OnboardingUITests/testMapRingsAutomaticallyContinueIntoFeedAndFinishAtTop \
-  -only-testing:WanderUITests/OnboardingUITests/testFeedIntroductionCentersWholeLatestTileThenReturnsToTopWithoutRepeating \
-  -only-testing:WanderUITests/OnboardingUITests/testPlusRemainsVoluntaryAndDoesNotStartForcedSave
+  -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO -jobs 4
 ```
 
-Use `-only-testing:WanderTests` for the complete unit target. Remove all
-`-only-testing` arguments for the complete integration gate after reconciling
-main. Keep existing performance thresholds.
+For focused regression checks, add `-parallel-testing-enabled NO` and select
+`WanderTests/FirstVisitWalkthroughTests`, `WanderTests/NavigationContractTests`,
+or the affected cases in `WanderUITests/OnboardingUITests` and
+`WanderUITests/NativeOnboardingFlowUITests`.
 
-Result bundles:
+For native replay, install the built app and launch with
+`-WanderAuthenticatedUITest -WanderMapCapture -WanderEnableWalkthroughs
+-WanderResetWalkthroughs`, plus:
 
-- `/private/tmp/pr663-r4-main-tests.xcresult`: 2,055 passing unit tests, passing
-  Add/rings UI scenarios, and the initial Feed lifecycle failure.
-- `/private/tmp/pr663-r4-lifecycle-tests.xcresult`: 38 passing walkthrough tests
-  plus passing automatic Feed and rings UI scenarios after the lifecycle fix.
-- `/private/tmp/pr663-r4-next-tests.xcresult`: final 38 passing walkthrough tests
-  and the complete held Map → both Feed Next controls → top scenario.
+- Map → Feed: `-WanderUseDemoFixtures -WanderNUXFeedFixture
+  -WanderWalkthroughTarget mapFeatured`.
+- Feed: the same fixture arguments with target `feedActivity`.
+- Add with nearby results: `-WanderUseStorefrontFixtures -WanderOpenAdd
+  -WanderWalkthroughTarget addNearby`.
+- No-location Add: use `-WanderUseDemoFixtures` instead of Storefront fixtures
+  on a review simulator without location permission.
+- Place profile: `-WanderUseDemoFixtures -WanderPlaceProfileSaveTrayV1
+  -WanderWalkthroughTarget placeSaveActions -WanderMapPlace 'Bar Nido'
+  -WanderMapSheetExpanded`.
 
-## Replay the native review
-
-Install `/private/tmp/pr663-build/Build/Products/Debug-iphonesimulator/Wander.app`
-on a review simulator. Common local-fixture arguments:
-
-```text
--WanderAuthenticatedUITest -WanderMapCapture -WanderUseDemoFixtures
--WanderEnableWalkthroughs -WanderResetWalkthroughs
-```
-
-Add the relevant arguments:
-
-- Full Map → Feed: `-WanderNUXFeedFixture -WanderWalkthroughTarget mapFeatured`.
-- Feed only: `-WanderNUXFeedFixture -WanderWalkthroughTarget feedActivity`.
-- First +: `-WanderOpenAdd -WanderWalkthroughTarget addNearby`.
-- Profile: `-WanderPlaceProfileSaveTrayV1 -WanderWalkthroughTarget placeSaveActions
-  -WanderMapPlace 'Bar Nido' -WanderMapSheetExpanded`.
-
-For a still, add `-WanderHoldWalkthroughStep`. Feed's recent-card still also
-needs `-WanderNUXFeedRecent`. Add's second-beat still uses target `addImport`.
-The profile hold has no Next/Skip and leaves the real floating actions usable.
-
-Optional `-WanderNUXReview` exposes native playback and scene menus. No quote
-scene or Lists scene remains. Starter lists remain deferred. The next production
-step is to reconcile main and run the complete integration/device acceptance
-on that candidate; do not merge or upload TestFlight as part of this revision.
+Add `-WanderHoldWalkthroughStep` for stills. A recent-card still also uses
+`-WanderNUXFeedRecent`; Import uses target `addImport`. Held blur scenes can
+cause XCTest's animation-idleness wait; automatic-flow tests separately cover
+ordinary playback timing. Optional `-WanderNUXReview` exposes the native scene
+menu. No quote or Lists scene remains; starter lists are deferred.

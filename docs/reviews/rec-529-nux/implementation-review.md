@@ -1,5 +1,10 @@
 # Native NUX implementation review
 
+> Historical implementation review. The current Map → live Feed flow, unblurred
+> first-Add annotations, timing and merge validation are documented in
+> [README.md](README.md) and [native-validation.md](native-validation.md).
+> The quote finale and later scheduled lessons below were subsequently retired.
+
 Scope: finish the existing PR #663 SwiftUI review, using the T04/T05 brief and
 the production Map, Plus, Feed, Lists and place-profile surfaces. Reuse the
 existing coordinator, account-scoped enrollment, anchor preferences, native

@@ -106,11 +106,13 @@ struct PlaceProfileFullScreen: View {
     let onFloatingAction: ((PlaceProfileSaveAction) -> Void)?
     @Binding private var attachedSaveContext: MapPlaceSaveContext?
     let attachedSaveDraft: PlaceSaveDraft?
+    let presentsAttachedSaveSheet: Bool
     let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let onAttachedClose: @MainActor () -> Void
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -133,6 +135,7 @@ struct PlaceProfileFullScreen: View {
         saveActionSnapshot: PlaceProfileSaveActionSnapshot? = nil,
         attachedSaveContext: Binding<MapPlaceSaveContext?> = .constant(nil),
         attachedSaveDraft: PlaceSaveDraft? = nil,
+        presentsAttachedSaveSheet: Bool = true,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
         hidesTabBar: Bool = true,
@@ -160,6 +163,7 @@ struct PlaceProfileFullScreen: View {
         self.onFloatingAction = onFloatingAction
         _attachedSaveContext = attachedSaveContext
         self.attachedSaveDraft = attachedSaveDraft
+        self.presentsAttachedSaveSheet = presentsAttachedSaveSheet
         self.onAttachedDraftChange = onAttachedDraftChange
         self.onAttachedSave = onAttachedSave
         self.onAttachedRemove = onAttachedRemove
@@ -187,6 +191,57 @@ struct PlaceProfileFullScreen: View {
                     .simultaneousGesture(edgeSwipeBackGesture)
             }
         }
+        // Non-map profiles own their editor here. The map presents from its
+        // SwiftUI root, outside the sliding profile's native hosting controller.
+        .sheet(item: attachedSaveSheetContext) { context in
+            MapPlaceSaveFlowSheet(
+                context: context,
+                draft: resolvedAttachedSaveDraft(for: context),
+                onDraftChange: onAttachedDraftChange,
+                onSave: saveSubmission,
+                onRemove: removeSave,
+                onClose: closeSave,
+                onSaveCompleted: { result in
+                    guard effectiveSaveContext.wrappedValue?.id == context.id else { return }
+                    completeSave(result)
+                }
+            )
+            .id(context.id)
+            .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
+        }
+        .onChange(of: attachedSaveContext?.id) { previousID, currentID in
+            guard !presentsAttachedSaveSheet, previousID != nil, currentID == nil else { return }
+            Task { await refreshHistory() }
+        }
+    }
+
+    private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {
+        Binding(
+            get: { presentsAttachedSaveSheet ? effectiveSaveContext.wrappedValue : nil },
+            set: { nextContext in
+                guard presentsAttachedSaveSheet else { return }
+                if let nextContext {
+                    effectiveSaveContext.wrappedValue = nextContext
+                } else {
+                    closeSave()
+                }
+            }
+        )
+    }
+
+    private func resolvedAttachedSaveDraft(for context: MapPlaceSaveContext) -> PlaceSaveDraft? {
+        guard let liveDraft = placeSaveDraftStore.draft,
+              liveDraft.candidate.id == context.candidate.id
+        else { return attachedSaveDraft }
+        return liveDraft
+    }
+
+    private func saveSheetAccessibilityIdentifier(for context: MapPlaceSaveContext) -> String {
+        let selectedStatus = resolvedAttachedSaveDraft(for: context)?.form.selectedStatus
+            ?? context.initialStatus
+        return selectedStatus == .wannaGo
+            ? "place-profile.attached-wanna"
+            : "place-profile.attached-check-in"
     }
 
     private var profileContent: some View {
@@ -198,7 +253,6 @@ struct PlaceProfileFullScreen: View {
             action: action,
             saveActionSnapshot: saveActionSnapshot,
             attachedSaveContext: effectiveSaveContext,
-            attachedSaveDraft: attachedSaveDraft,
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
@@ -209,12 +263,7 @@ struct PlaceProfileFullScreen: View {
                     localListTarget = .candidate(place.saveCandidate)
                 }
             },
-            onFloatingAction: handleSaveAction,
-            onAttachedDraftChange: onAttachedDraftChange,
-            onAttachedSave: saveSubmission,
-            onAttachedRemove: removeSave,
-            onAttachedClose: closeSave,
-            onAttachedSaveCompleted: completeSave
+            onFloatingAction: handleSaveAction
         )
         .overlay(alignment: .top) {
             if historyRefreshFailed {
@@ -449,15 +498,18 @@ struct PlaceProfileFullScreen: View {
 struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isPresented: Bool
+    let isAccessibilityModal: Bool
     let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
 
     init(
         isPresented: Bool,
+        isAccessibilityModal: Bool = true,
         onTransitionCompleted: @escaping @MainActor (Bool) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
         self.isPresented = isPresented
+        self.isAccessibilityModal = isAccessibilityModal
         self.onTransitionCompleted = onTransitionCompleted
         self.content = content()
     }
@@ -466,6 +518,7 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
         PlaceProfileSlidingHostingController(
             rootView: content,
             isPresented: isPresented,
+            isAccessibilityModal: isAccessibilityModal,
             onTransitionCompleted: onTransitionCompleted
         )
     }
@@ -475,6 +528,7 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
         context: Context
     ) {
         controller.onTransitionCompleted = onTransitionCompleted
+        controller.setAccessibilityModal(isAccessibilityModal)
         if controller.isPresented == isPresented {
             controller.updateRootView(content)
         } else if isPresented {
@@ -487,23 +541,44 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
     }
 }
 
+/// Publish updates through a stable hosting root. Replacing the controller's
+/// root view during native presentation can reconstruct its save-sheet state.
+@MainActor
+private final class PlaceProfileHostedContentState<Content: View>: ObservableObject {
+    @Published var content: Content
+
+    init(content: Content) { self.content = content }
+}
+
+private struct PlaceProfileHostedContent<Content: View>: View {
+    @ObservedObject var state: PlaceProfileHostedContentState<Content>
+
+    var body: some View { state.content }
+}
+
 @MainActor
 final class PlaceProfileSlidingHostingController<Content: View>: UIViewController {
-    private let hostingController: UIHostingController<Content>
+    private let contentState: PlaceProfileHostedContentState<Content>
+    private let hostingController: UIHostingController<PlaceProfileHostedContent<Content>>
     private var hostingConstraints: [NSLayoutConstraint] = []
     private var animator: UIViewPropertyAnimator?
     private var pendingRootView: Content?
     private var appliesInitialPosition = true
     private(set) var isPresented: Bool
+    private var isAccessibilityModal: Bool
     var onTransitionCompleted: @MainActor (Bool) -> Void
 
     init(
         rootView: Content,
         isPresented: Bool,
+        isAccessibilityModal: Bool = true,
         onTransitionCompleted: @escaping @MainActor (Bool) -> Void
     ) {
-        hostingController = UIHostingController(rootView: rootView)
+        let contentState = PlaceProfileHostedContentState(content: rootView)
+        self.contentState = contentState
+        hostingController = UIHostingController(rootView: PlaceProfileHostedContent(state: contentState))
         self.isPresented = isPresented
+        self.isAccessibilityModal = isAccessibilityModal
         self.onTransitionCompleted = onTransitionCompleted
         super.init(nibName: nil, bundle: nil)
     }
@@ -542,8 +617,16 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         if animator != nil {
             pendingRootView = rootView
         } else {
-            hostingController.rootView = rootView
+            contentState.content = rootView
         }
+    }
+
+    func setAccessibilityModal(_ isAccessibilityModal: Bool) {
+        self.isAccessibilityModal = isAccessibilityModal
+        guard isViewLoaded else { return }
+        // Sheet presentation does not change the profile's visual state, so
+        // modality must update independently of setPresented(_:animated:).
+        updateAccessibilityVisibility(isPresented: isPresented)
     }
 
     func setPresented(_ isPresented: Bool, animated: Bool) {
@@ -601,7 +684,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
             }
             if let pendingRootView {
                 self.pendingRootView = nil
-                hostingController.rootView = pendingRootView
+                contentState.content = pendingRootView
             }
             onTransitionCompleted(isPresented)
         }
@@ -641,7 +724,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
     private func updateAccessibilityVisibility(isPresented: Bool) {
         view.accessibilityElementsHidden = !isPresented
-        view.accessibilityViewIsModal = isPresented
+        view.accessibilityViewIsModal = isPresented && isAccessibilityModal
         hostingController.view.accessibilityElementsHidden = !isPresented
     }
 }
@@ -1534,17 +1617,11 @@ private struct PlaceProfileFullView: View {
     let action: PlaceSheetAction
     let saveActionSnapshot: PlaceProfileSaveActionSnapshot?
     @Binding var attachedSaveContext: MapPlaceSaveContext?
-    let attachedSaveDraft: PlaceSaveDraft?
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
-    let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
-    let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
-    let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
-    let onAttachedClose: @MainActor () -> Void
-    let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @Environment(\.nuxPlaceIntroductionIsFocused) private var nuxPlaceIntroductionIsFocused
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
@@ -1553,7 +1630,6 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
-    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -1564,34 +1640,6 @@ private struct PlaceProfileFullView: View {
     @State private var discoveredReservationAction: PlaceExternalAction?
     @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
     @State private var floatingActivityScrollRequest = 0
-
-    private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {
-        Binding(
-            get: { attachedSaveContext },
-            set: { nextContext in
-                if let nextContext {
-                    attachedSaveContext = nextContext
-                } else {
-                    onAttachedClose()
-                }
-            }
-        )
-    }
-
-    private func resolvedAttachedSaveDraft(for context: MapPlaceSaveContext) -> PlaceSaveDraft? {
-        guard let liveDraft = placeSaveDraftStore.draft,
-              liveDraft.candidate.id == context.candidate.id
-        else { return attachedSaveDraft }
-        return liveDraft
-    }
-
-    private func saveSheetAccessibilityIdentifier(for context: MapPlaceSaveContext) -> String {
-        let selectedStatus = resolvedAttachedSaveDraft(for: context)?.form.selectedStatus
-            ?? context.initialStatus
-        return selectedStatus == .wannaGo
-            ? "place-profile.attached-wanna"
-            : "place-profile.attached-check-in"
-    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -1687,22 +1735,6 @@ private struct PlaceProfileFullView: View {
                     onAction: handleFloatingAction
                 )
             }
-        }
-        .sheet(item: attachedSaveSheetContext) { context in
-            MapPlaceSaveFlowSheet(
-                context: context,
-                draft: resolvedAttachedSaveDraft(for: context),
-                onDraftChange: onAttachedDraftChange,
-                onSave: onAttachedSave,
-                onRemove: onAttachedRemove,
-                onClose: onAttachedClose,
-                onSaveCompleted: { result in
-                    guard attachedSaveContext?.id == context.id else { return }
-                    onAttachedSaveCompleted(result)
-                }
-            )
-            .id(context.id)
-            .accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))
         }
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()
@@ -3821,7 +3853,7 @@ private enum PlaceProfileCopy {
     }
 
     static func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
-        PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).map { value in
+        PlaceProfileAttributePresentation.displayValues(from: attribute).map { value in
             PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
         }
     }

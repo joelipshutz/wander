@@ -4,8 +4,215 @@ import XCTest
 
 @MainActor
 final class CoreLocationProviderTests: XCTestCase {
+    func testMapLaunchWithoutLocationHistoryUsesOceanParkWithoutPrompting() async throws {
+        for status in [CLAuthorizationStatus.notDetermined, .denied, .restricted] {
+            let history = makeHistory()
+            let harness = Harness(status: status, history: history, purpose: .map)
+            let resolver = MapLaunchLocationResolver(history: history, provider: harness.provider)
+            let region = MapScreen.initialMapRegion(history: history, useFixtures: false)
+            XCTAssertEqual(region.center.latitude, 34.0036, accuracy: 0.00001)
+            XCTAssertEqual(region.center.longitude, -118.4808, accuracy: 0.00001)
+            let result = try await resolver.location()
+            XCTAssertEqual(result.coordinate.latitude, region.center.latitude)
+            XCTAssertEqual(result.coordinate.longitude, region.center.longitude)
+            XCTAssertEqual(harness.manager.authorizationRequestCount, 0)
+            XCTAssertEqual(harness.manager.requestCount, 0)
+            XCTAssertNil(history.location)
+        }
+    }
+
+    func testAllowOnceFixSurvivesRelaunchAndExpiredOrDisabledPermission() async throws {
+        let history = makeHistory()
+        let harness = Harness(status: .notDetermined, history: history)
+        let requested = expectation(description: "Explicit permission request")
+        harness.manager.onAuthorizationRequest = { requested.fulfill() }
+        let task = Task { try await harness.provider.currentLocation() }
+        await fulfillment(of: [requested], timeout: 1)
+        harness.manager.changeAuthorization(to: .authorizedWhenInUse)
+        await waitForTimer(harness.clock)
+        harness.manager.deliver([fix()])
+        let shared = try await task.value
+
+        // A new store/provider models a later process after Allow Once expires.
+        for status in [CLAuthorizationStatus.notDetermined, .denied, .restricted] {
+            let relaunchedHistory = LastSharedLocationStore(defaults: history.defaults)
+            let relaunched = Harness(status: status, history: relaunchedHistory, purpose: .map)
+            let resolver = MapLaunchLocationResolver(history: relaunchedHistory, provider: relaunched.provider)
+            let region = MapScreen.initialMapRegion(history: relaunchedHistory, useFixtures: false)
+            XCTAssertEqual(region.center.latitude, shared.coordinate.latitude)
+            XCTAssertEqual(region.center.longitude, shared.coordinate.longitude)
+            let result = try await resolver.location()
+            assertTimestamp(result.timestamp, equals: shared.timestamp)
+            XCTAssertEqual(relaunched.manager.authorizationRequestCount, 0)
+            XCTAssertEqual(relaunched.manager.requestCount, 0)
+        }
+    }
+
+    func testAuthorizedCurrentLocationReplacesRememberedLocation() async throws {
+        for status in [CLAuthorizationStatus.authorizedWhenInUse, .authorizedAlways] {
+            let history = makeHistory()
+            history.remember(CLLocation(latitude: 10, longitude: 20))
+            let harness = Harness(status: status, history: history, purpose: .map)
+            let resolver = MapLaunchLocationResolver(history: history, provider: harness.provider)
+            let task = Task { try await resolver.location() }
+            await waitForTimer(harness.clock)
+            harness.manager.deliver([fix()])
+            let result = try await task.value
+            XCTAssertEqual(result.coordinate.latitude, 0)
+            XCTAssertEqual(result.coordinate.longitude, 0)
+            assertTimestamp(history.location?.timestamp, equals: result.timestamp)
+            XCTAssertEqual(history.location?.coordinate.latitude, 0)
+        }
+    }
+
+    func testMapAcquisitionTimeoutKeepsRememberedLocation() async throws {
+        let history = makeHistory()
+        let shared = fix(age: 86_400 * 365)
+        history.remember(shared)
+        let harness = Harness(history: history, purpose: .map)
+        let resolver = MapLaunchLocationResolver(history: history, provider: harness.provider)
+        let task = Task { try await resolver.location() }
+        await waitForTimer(harness.clock)
+        harness.clock.advance()
+        await waitForTimer(harness.clock)
+        harness.clock.advance()
+        let result = try await task.value
+        assertTimestamp(result.timestamp, equals: shared.timestamp)
+        assertTimestamp(history.location?.timestamp, equals: shared.timestamp)
+        XCTAssertEqual(harness.manager.requestCount, 2)
+
+        let retry = Task { try await resolver.location() }
+        await waitForTimer(harness.clock)
+        harness.manager.deliver([fix()])
+        let recovered = try await retry.value
+        XCTAssertGreaterThan(recovered.timestamp, shared.timestamp)
+        assertTimestamp(history.location?.timestamp, equals: recovered.timestamp)
+    }
+
+    func testMapCancellationDoesNotReturnFallbackOrReplaceHistory() async {
+        let history = makeHistory()
+        let shared = fix(age: 10)
+        history.remember(shared)
+        let harness = Harness(history: history, purpose: .map)
+        let resolver = MapLaunchLocationResolver(history: history, provider: harness.provider)
+        let task = Task { try await resolver.location() }
+        await waitForTimer(harness.clock)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancellation must not produce a camera location")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        assertTimestamp(history.location?.timestamp, equals: shared.timestamp)
+        XCTAssertNil(harness.manager.delegate)
+    }
+
+    func testApproximateLocationCanCenterMapButCannotResolveNearbyPlace() async throws {
+        let map = Harness(history: makeHistory(), purpose: .map)
+        map.manager.accuracyAuthorization = .reducedAccuracy
+        let mapTask = Task { try await map.provider.currentLocation() }
+        await waitForTimer(map.clock)
+        map.manager.deliver([fix(accuracy: 5_000)])
+        let location = try await mapTask.value
+        XCTAssertEqual(location.horizontalAccuracy, 5_000)
+        XCTAssertEqual(map.history.location?.horizontalAccuracy, 5_000)
+
+        let nearby = Harness(history: makeHistory())
+        nearby.manager.accuracyAuthorization = .reducedAccuracy
+        let nearbyTask = Task { try await nearby.provider.currentLocation() }
+        await waitForTimer(nearby.clock)
+        nearby.manager.deliver([fix(accuracy: 5_000)])
+        nearby.clock.advance()
+        await waitForTimer(nearby.clock)
+        nearby.clock.advance()
+        await assertFailure(nearbyTask, .locationUnavailable)
+        XCTAssertEqual(nearby.history.location?.horizontalAccuracy, 5_000)
+        let fallback = MapLaunchLocationResolver(history: nearby.history).fallbackLocation
+        XCTAssertEqual(fallback.coordinate.latitude, location.coordinate.latitude)
+        XCTAssertEqual(fallback.coordinate.longitude, location.coordinate.longitude)
+    }
+
+    func testMapStillRejectsCoarseFixWhenFullAccuracyIsAvailable() async {
+        let harness = Harness(history: makeHistory(), purpose: .map)
+        let task = Task { try await harness.provider.currentLocation() }
+        await waitForTimer(harness.clock)
+        harness.manager.deliver([fix(accuracy: 5_000)])
+        XCTAssertNotNil(harness.manager.delegate)
+        task.cancel()
+        _ = await task.result
+        XCTAssertNil(harness.history.location)
+    }
+
+    func testOlderConcurrentFixCannotReplaceNewerHistory() {
+        let history = makeHistory()
+        let newest = fix()
+        history.remember(newest)
+        history.remember(fix(age: 90))
+        assertTimestamp(history.location?.timestamp, equals: newest.timestamp)
+    }
+
+    func testInvalidOrCorruptHistoryFallsBackWithoutTreatingZeroAsMissing() {
+        let history = makeHistory()
+        for record: [Double] in [
+            [], [1, 2], [91, 0, 10, 1], [0, 181, 10, 1], [0, 0, -1, 1],
+            [0, 0, 10, Date().addingTimeInterval(3_600).timeIntervalSince1970]
+        ] {
+            history.defaults.set(record, forKey: LastSharedLocationStore.storageKey)
+            XCTAssertNil(history.location)
+            XCTAssertEqual(MapLaunchLocationResolver(history: history).fallbackLocation.coordinate.latitude, 34.0036)
+        }
+        history.remember(fix())
+        XCTAssertEqual(history.location?.coordinate.latitude, 0)
+        XCTAssertEqual(history.location?.coordinate.longitude, 0)
+        history.remember(CLLocation(latitude: 91, longitude: 0))
+        XCTAssertEqual(history.location?.coordinate.latitude, 0)
+    }
+
+    func testAuthorizationExpiredDuringRequestCannotPersistALateFix() async {
+        let harness = Harness(history: makeHistory(), purpose: .map)
+        let task = Task { try await harness.provider.currentLocation() }
+        await waitForTimer(harness.clock)
+        harness.manager.changeAuthorization(to: .notDetermined)
+        harness.manager.deliver([fix()])
+        await assertFailure(task, .locationDenied)
+        XCTAssertNil(harness.history.location)
+        XCTAssertNil(harness.manager.delegate)
+        XCTAssertEqual(harness.manager.authorizationRequestCount, 0)
+    }
+
+    func testCameraNavigationAndNewActivationRejectObsoleteLocationResults() {
+        var state = MapInitialCameraState()
+        let firstRequest = state.revision
+        XCTAssertTrue(state.allowsLocationResult(for: firstRequest))
+        state.resolve() // A selection, search, recenter, or gesture chose the camera.
+        XCTAssertFalse(state.allowsLocationResult(for: firstRequest))
+        state.reset() // Next app activation or authorization change.
+        let newRequest = state.revision
+        XCTAssertFalse(state.allowsLocationResult(for: firstRequest))
+        XCTAssertTrue(state.allowsLocationResult(for: newRequest))
+        state.resolve()
+        XCTAssertFalse(state.allowsLocationResult(for: newRequest))
+    }
+
+    private func assertTimestamp(
+        _ actual: Date?, equals expected: Date,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            actual?.timeIntervalSince1970 ?? .nan, expected.timeIntervalSince1970,
+            accuracy: 0.000_001, file: file, line: line
+        )
+    }
+
+    private func makeHistory() -> LastSharedLocationStore {
+        let suite = "CoreLocationProviderTests.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        return LastSharedLocationStore(defaults: UserDefaults(suiteName: suite)!)
+    }
+
     func testFirstAttemptSuccessStopsLocationWork() async throws {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         harness.manager.deliver([fix()])
@@ -17,7 +224,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testNoFixRetriesAtSixSecondsAndFailsOnlyAfterSecondSixSeconds() async {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         XCTAssertEqual(harness.clock.durations, [.seconds(6)])
@@ -36,7 +243,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testTemporaryErrorWaitsForScheduledRetryThenSucceeds() async throws {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         harness.manager.fail(.locationUnknown)
@@ -52,7 +259,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testUnusableFirstReadingsDoNotFailEarlyAndFreshRetrySucceeds() async throws {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         harness.manager.deliver([
@@ -67,7 +274,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testSecondAttemptErrorWaitsUntilItsDeadline() async {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         harness.manager.deliver([])
@@ -81,7 +288,7 @@ final class CoreLocationProviderTests: XCTestCase {
 
     func testDeniedAndRestrictedPermissionsDoNotStartAcquisition() async {
         for status in [CLAuthorizationStatus.denied, .restricted] {
-            let harness = Harness(status: status)
+            let harness = Harness(status: status, history: makeHistory())
             let task = Task { try await harness.provider.currentLocation() }
             await assertFailure(task, .locationDenied)
             XCTAssertEqual(harness.manager.requestCount, 0)
@@ -90,7 +297,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testAuthorizationStartsBudgetOnlyAfterGrantAndIgnoresDuplicateCallbacks() async throws {
-        let harness = Harness(status: .notDetermined)
+        let harness = Harness(status: .notDetermined, history: makeHistory())
         let requested = expectation(description: "Permission requested")
         harness.manager.onAuthorizationRequest = { requested.fulfill() }
         let task = Task { try await harness.provider.currentLocation() }
@@ -107,7 +314,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testPermissionRevocationEndsImmediatelyWithoutRetry() async {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         harness.manager.changeAuthorization(to: .denied)
@@ -116,7 +323,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testDeniedCallbackEndsImmediatelyWithoutRetry() async {
-        let harness = Harness()
+        let harness = Harness(history: makeHistory())
         let task = Task { try await harness.provider.currentLocation() }
         await waitForTimer(harness.clock)
         harness.manager.fail(.denied)
@@ -126,7 +333,7 @@ final class CoreLocationProviderTests: XCTestCase {
 
     func testCancellationDuringEitherAttemptStopsRequest() async {
         for cancelDuringRetry in [false, true] {
-            let harness = Harness()
+            let harness = Harness(history: makeHistory())
             let task = Task { try await harness.provider.currentLocation() }
             await waitForTimer(harness.clock)
             if cancelDuringRetry {
@@ -146,7 +353,7 @@ final class CoreLocationProviderTests: XCTestCase {
     }
 
     func testCancellationWhileAwaitingPermissionDoesNotStartAcquisition() async {
-        let harness = Harness(status: .notDetermined)
+        let harness = Harness(status: .notDetermined, history: makeHistory())
         let requested = expectation(description: "Permission requested")
         harness.manager.onAuthorizationRequest = { requested.fulfill() }
         let task = Task { try await harness.provider.currentLocation() }
@@ -164,7 +371,7 @@ final class CoreLocationProviderTests: XCTestCase {
 
     func testAlreadyCanceledCallerNeverCreatesManager() async {
         var managerCount = 0
-        let provider = CoreLocationProvider(makeManager: {
+        let provider = CoreLocationProvider(history: makeHistory(), makeManager: {
             managerCount += 1
             return FakeLocationManager()
         })
@@ -185,6 +392,7 @@ final class CoreLocationProviderTests: XCTestCase {
         let clock = LocationTestClock()
         var managers = [first, second]
         let provider = CoreLocationProvider(
+            history: makeHistory(),
             makeManager: { managers.removeFirst() },
             sleep: { try await clock.sleep($0) }
         )
@@ -243,12 +451,22 @@ final class CoreLocationProviderTests: XCTestCase {
 private final class Harness {
     let manager: FakeLocationManager
     let clock = LocationTestClock()
+    let history: LastSharedLocationStore
+    let purpose: CurrentLocationPurpose
     lazy var provider = CoreLocationProvider(
+        purpose: purpose,
+        history: history,
         makeManager: { [manager] in manager },
         sleep: { [clock] in try await clock.sleep($0) }
     )
 
-    init(status: CLAuthorizationStatus = .authorizedWhenInUse) {
+    init(
+        status: CLAuthorizationStatus = .authorizedWhenInUse,
+        history: LastSharedLocationStore,
+        purpose: CurrentLocationPurpose = .nearbyPlace
+    ) {
+        self.history = history
+        self.purpose = purpose
         manager = FakeLocationManager()
         manager.authorizationStatus = status
     }
@@ -258,15 +476,20 @@ private final class Harness {
 private final class FakeLocationManager: CurrentLocationManaging {
     weak var delegate: (any CLLocationManagerDelegate)?
     var authorizationStatus: CLAuthorizationStatus = .authorizedWhenInUse
+    var accuracyAuthorization: CLAccuracyAuthorization = .fullAccuracy
     var desiredAccuracy: CLLocationAccuracy = 0
     var requestCount = 0
+    var authorizationRequestCount = 0
     var stopCount = 0
     var onRequest: (() -> Void)?
     var onAuthorizationRequest: (() -> Void)?
     // Only supplies the delegate signature; never requests device location.
     private lazy var callbackManager = CLLocationManager()
 
-    func requestWhenInUseAuthorization() { onAuthorizationRequest?() }
+    func requestWhenInUseAuthorization() {
+        authorizationRequestCount += 1
+        onAuthorizationRequest?()
+    }
     func requestLocation() { requestCount += 1; onRequest?() }
     func stopUpdatingLocation() { stopCount += 1 }
     func deliver(_ locations: [CLLocation]) {

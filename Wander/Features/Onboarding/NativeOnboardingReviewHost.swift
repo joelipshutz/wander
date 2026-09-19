@@ -94,8 +94,11 @@ struct NativeOnboardingReviewHost: View {
                 )
             } else {
                 SignedOutOnboardingFlowView(
-                    analytics: NoopAnalyticsClient(), initialAuthMode: route.authMode
+                    analytics: NoopAnalyticsClient()
                 )
+                .onAppear {
+                    if let mode = route.authMode { auth.beginSignIn(mode: mode) }
+                }
             }
         }
         .environmentObject(auth)

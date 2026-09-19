@@ -245,6 +245,18 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertNil(handoff.takeReadyRoute(requestID: latestRequestID))
     }
 
+    func testNewestPostNotificationWaitsForEveryFeedAndPostCover() {
+        var handoff = WanderDeepLinkHandoffCoordinator()
+        let surfaces: [WanderDeepLinkPresentationSurface] = [.feedProfile, .feedSave, .activityShare, .activityPhoto, .activityReport, .activitySave]
+        let tokens = surfaces.map { WanderDeepLinkPresentationToken(surface: $0) }
+        handoff.begin(requestID: UUID(), route: .sharedActivity(activityID: "older"), awaitingDismissals: Set(tokens))
+        let target = WanderDeepLinkRoute.checkInActivity(userPlaceID: "parent", visitID: "visit")
+        handoff.begin(requestID: UUID(), route: target, awaitingDismissals: Set(tokens))
+        for token in tokens.dropLast() { XCTAssertNil(handoff.acknowledgeDismissal(token)) }
+        XCTAssertEqual(handoff.acknowledgeDismissal(tokens.last!), target)
+        XCTAssertNil(handoff.acknowledgeDismissal(tokens.last!))
+    }
+
     @MainActor
     func testOlderAddDismissalCannotResetANewerPhysicalGeneration() {
         let olderAdd = WanderDeepLinkPresentationToken(

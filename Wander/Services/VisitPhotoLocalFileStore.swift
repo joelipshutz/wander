@@ -19,13 +19,16 @@ enum VisitPhotoLocalFileStore {
     }
 
     static func image(from localAssetRef: String?) -> UIImage? {
+        fileURL(from: localAssetRef).flatMap { UIImage(contentsOfFile: $0.path) }
+    }
+
+    static func fileURL(from localAssetRef: String?) -> URL? {
         guard let filename = filename(from: localAssetRef),
               let directory = directoryURL()
         else {
             return nil
         }
-
-        return UIImage(contentsOfFile: directory.appendingPathComponent(filename).path)
+        return directory.appendingPathComponent(filename)
     }
 
     static func data(from localAssetRef: String?) -> Data? {

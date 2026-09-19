@@ -21,6 +21,14 @@ struct OnboardingTickerContent: Equatable {
         self.finalLockup = finalLockup.flatMap(Self.nonempty)
     }
 
+    /// One complete reading when automatic motion is disabled.
+    var staticAccessibilityLabel: String {
+        ["\(stableText) \(words.joined(separator: ", ")).", finalLockup]
+            .compactMap { $0 }.joined(separator: " ")
+    }
+
+    var staticElapsed: Double { OnboardingTickerFrame.totalDuration(for: self) }
+
     private static func nonempty(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -52,7 +60,7 @@ struct OnboardingWelcomeConfiguration: Equatable {
 
     func seconds(for step: OnboardingWelcomeStep) -> Double {
         if step == .opening, let ticker {
-            return OnboardingTickerFrame.totalDuration(for: ticker)
+            return OnboardingSlideMotion.seconds + OnboardingTickerFrame.totalDuration(for: ticker)
         }
         return autoAdvanceSeconds.isFinite ? min(600, max(0.5, autoAdvanceSeconds)) : 7
     }
@@ -62,8 +70,7 @@ struct OnboardingWelcomeConfiguration: Equatable {
     }
 
     static func resolved(environment: [String: String]) -> Self {
-        // Confirmed by Joe on September 17. Supporting copy and its timing
-        // remain review choices; the lead-in, words and final phrase are fixed.
+        // Approved opening copy and finite three-scene sequence.
         var configuration = Self(
             ticker: OnboardingTickerContent(
                 words: ["community", "people", "places", "loved ones"],
@@ -105,12 +112,38 @@ struct OnboardingWelcomeConfiguration: Equatable {
     }
 }
 
-/// Each word is held before its letters rotate through physical split flaps.
-/// The later slide to a different scene belongs to the surrounding composition.
+/// Shared slide score for words, phrases and complete scenes. Timeline-driven
+/// text uses the same cubic curve as SwiftUI's scene animation.
+enum OnboardingSlideMotion {
+    static let seconds = 1.5
+    static let x1 = 0.38
+    static let x2 = 0.24
+
+    static func easedProgress(_ progress: Double) -> Double {
+        let progress = progress.isFinite ? min(1, max(0, progress)) : 0
+        if progress == 0 || progress == 1 { return progress }
+        // Solve the Bezier time axis before evaluating its distance axis.
+        var low = 0.0, high = 1.0
+        for _ in 0..<22 {
+            let t = (low + high) / 2, remaining = 1 - t
+            let x = 3 * remaining * remaining * t * x1 + 3 * remaining * t * t * x2 + t * t * t
+            if x < progress { low = t } else { high = t }
+        }
+        let t = (low + high) / 2
+        return 3 * (1 - t) * t * t + t * t * t
+    }
+
+    static func offsets(progress: Double, distance: Double, direction: Double = 1) -> (outgoing: Double, incoming: Double) {
+        (-direction * distance * progress, direction * distance * (1 - progress))
+    }
+}
+
+/// A held word followed by a whole-word slide. The initial entrance is separate
+/// so COMMUNITY receives its full reading hold after it lands.
 struct OnboardingTickerFrame: Equatable {
     static let holdSeconds = 1.8
-    static let flipSeconds = 1.5
-    static let wordSeconds = holdSeconds + flipSeconds
+    static let slideSeconds = OnboardingSlideMotion.seconds
+    static let wordSeconds = holdSeconds + slideSeconds
     static let finalHoldSeconds = 2.4
     static let leadFadeSeconds = 0.18
     static let descriptionArrivalSeconds = 3.6
@@ -135,7 +168,7 @@ struct OnboardingTickerFrame: Equatable {
             return Double(content.words.count) * wordSeconds + finalHoldSeconds
         }
         // A sequence without a final phrase holds its last word and stops;
-        // there is no phantom flip out of that word.
+        // there is no phantom slide out of that word.
         return Double(content.words.count - 1) * wordSeconds + holdSeconds
     }
 
@@ -154,14 +187,14 @@ struct OnboardingTickerFrame: Equatable {
             )
         }
         let index = min(lastIndex, Int(elapsed / wordSeconds))
-        let flipStart = Double(index) * wordSeconds + holdSeconds
-        guard elapsed >= flipStart else { return held(wordIndex: index) }
+        let slideStart = Double(index) * wordSeconds + holdSeconds
+        guard elapsed >= slideStart else { return held(wordIndex: index) }
         let isFinal = index == lastIndex
         guard !isFinal || content.finalLockup != nil else { return held(wordIndex: index) }
         return Self(
             wordIndex: index,
             nextWordIndex: isFinal ? nil : index + 1,
-            transitionProgress: min(1, max(0, (elapsed - flipStart) / flipSeconds)),
+            transitionProgress: min(1, max(0, (elapsed - slideStart) / slideSeconds)),
             isTransitioning: true,
             isFinalTransition: isFinal,
             showsFinalLockup: false
@@ -177,99 +210,13 @@ struct OnboardingTickerFrame: Equatable {
     }
 }
 
-/// One physical flap within an eight-flip letter change. Intermediate letters are
-/// deterministic so native rendering, scrubbing and tests follow the same path.
-struct OnboardingSplitFlapFrame: Equatable {
-    static let flipCount = 8
-    static let columnDelay = 0.012
-    static let maximumStaggeredColumn = 12
-
-    let from: Character
-    let to: Character
-    let progress: Double
-
-    static func at(progress: Double, from: Character, to: Character, column: Int, flips: Int = flipCount) -> Self {
-        let progress = progress.isFinite ? min(1, max(0, progress)) : 0
-        if progress >= 1 { return Self(from: to, to: to, progress: 1) }
-
-        let column = max(0, column)
-        let delay = Double(min(maximumStaggeredColumn, column)) * columnDelay
-        let local = min(1, max(0, (progress - delay) / (1 - delay)))
-        let count = max(1, min(12, flips))
-        let glyphs = cycle(from: from, to: to, column: column, count: count)
-        let position = local * Double(count)
-        let flip = min(count - 1, Int(position))
-        return Self(
-            from: glyphs[flip], to: glyphs[flip + 1],
-            progress: min(1, max(0, position - Double(flip)))
-        )
-    }
-
-    private static func cycle(from: Character, to: Character, column: Int, count: Int) -> [Character] {
-        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        let scalarSeed = (String(from) + String(to)).unicodeScalars.reduce(0) {
-            ($0 + Int($1.value) % alphabet.count) % alphabet.count
-        }
-        var cursor = (scalarSeed + column % alphabet.count) % alphabet.count
-        var glyphs = [from]
-        for _ in 0..<(count - 1) {
-            // Every physical flip changes its glyph, including the final one.
-            while alphabet[cursor] == glyphs.last || alphabet[cursor] == to {
-                cursor = (cursor + 1) % alphabet.count
-            }
-            glyphs.append(alphabet[cursor])
-            cursor = (cursor + 7) % alphabet.count
-        }
-        glyphs.append(to)
-        return glyphs
-    }
-}
-
-/// Three visible rows persist; only the middle row contains a held opening word.
-/// Every cell participates in a change, including blanks and repeated letters.
-enum OnboardingBoardCopy {
-    static let columns = 17
-    static let openingColumns = 10
-    static func openingRows(word: String) -> [String] {
-        ["", word.uppercased(), ""]
-    }
+/// Approved line breaks shared by the opening and native benefits.
+enum OnboardingWelcomeCopy {
     static func finalRows(_ phrase: String) -> [String] {
         let words = phrase.uppercased().split(separator: " ").map(String.init)
         return [words.first ?? "", words.dropFirst().first ?? "", words.dropFirst(2).joined(separator: " ")]
     }
     static func benefitRows(_ step: OnboardingWelcomeStep) -> [String] {
         step == .people ? ["KEEP UP WITH", "THE PEOPLE", "YOU LOVE"] : ["KEEP TRACK OF", "EVERYWHERE", "YOU’VE BEEN"]
-    }
-    static func centered(_ text: String, columns: Int = columns) -> [Character] {
-        let characters = Array(text.uppercased())
-        let spare = max(0, columns - characters.count)
-        return Array(repeating: " ", count: spare / 2) + characters + Array(repeating: " ", count: spare - spare / 2)
-    }
-}
-
-/// A bounded tactile phrase, not one impact for every letter on the display.
-/// The cursor follows the same paused clock as the visible flaps. Lost frames
-/// never replay old impacts in a burst, and resuming never replays a prior tap.
-struct OnboardingFlapHapticCursor {
-    static let fractions = [0.10, 0.35, 0.62, 0.89]
-    private var lastElapsed: Double?
-
-    mutating func reset() { lastElapsed = nil }
-
-    mutating func advance(to elapsed: Double, playing: Bool, content: OnboardingTickerContent) -> Int? {
-        guard playing, elapsed.isFinite, elapsed >= 0, !content.words.isEmpty else {
-            reset()
-            return nil
-        }
-        let previous = lastElapsed
-        lastElapsed = elapsed
-        guard let previous, elapsed > previous, elapsed - previous <= 0.12 else { return nil }
-        let frame = OnboardingTickerFrame.at(elapsed: elapsed, content: content)
-        guard frame.isTransitioning else { return nil }
-        let start = Double(frame.wordIndex) * OnboardingTickerFrame.wordSeconds + OnboardingTickerFrame.holdSeconds
-        return Self.fractions.indices.last { index in
-            let time = start + Self.fractions[index] * OnboardingTickerFrame.flipSeconds
-            return previous < time && elapsed >= time
-        }
     }
 }

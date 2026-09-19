@@ -14,10 +14,11 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         XCTAssertTrue(next.waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
 
+        let benefit = app.descendants(matching: .any)["onboarding.benefitCopy"].firstMatch
         next.tap()
-        XCTAssertTrue(app.staticTexts["Keep track of everywhere you’ve been."].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitFor(NSPredicate(format: "label == %@", "Keep track of everywhere you’ve been."), on: benefit))
         next.tap()
-        XCTAssertTrue(app.staticTexts["Keep up with the people you love."].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitFor(NSPredicate(format: "label == %@", "Keep up with the people you love."), on: benefit))
         next.tap()
         XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["Create your account"].exists)

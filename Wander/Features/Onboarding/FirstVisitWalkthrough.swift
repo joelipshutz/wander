@@ -31,6 +31,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case addPlace
     case addImport
     case addNearby
+    case addNearbySection
     case addClose
     case saveStatus
     case saveContinue
@@ -397,8 +398,8 @@ enum FirstVisitWalkthroughContent {
     static func presentationDelayMilliseconds(for step: WalkthroughStep) -> Int {
         if step.target == .placeSaveActions { return NUXPlaceIntroductionTiming.focusMilliseconds }
         if step.target == .feedActivity { return NUXFeedIntroductionTiming.totalMilliseconds }
-        if step.target == .addNearby { return 2_800 }
-        if step.target == .addImport { return 4_200 }
+        if step.target == .addNearby { return NUXAddIntroductionTiming.nearbyMilliseconds }
+        if step.target == .addImport { return NUXAddIntroductionTiming.importMilliseconds }
         if contextualSurfaces.contains(step.surface) { return contextualAutoAdvanceMilliseconds }
         if step.target == .mapMoreFilters { return 6_000 }
         // Include the filter intro animation in the reading window.
@@ -1205,7 +1206,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         }
         // A previously open import lesson or forced save demo must never
         // reopen after the shorter overview ships. Retire only that primary
-        // journey; the independently scheduled device guide remains intact.
+        // journey; contextual first-use hints retain their own completion.
         if checkpoint.presentation == .importLesson
             || checkpoint.presentation == .awaitingDeviceFeaturesLesson
             || (checkpoint.presentation == nil && (
@@ -1925,14 +1926,16 @@ extension View {
         _ coordinator: FirstVisitWalkthroughCoordinator,
         surface: WalkthroughSurface,
         externalTargetFrames: [WalkthroughTargetID: CGRect] = [:],
-        isActive: Bool = true
+        isActive: Bool = true,
+        isContentReady: Bool = true
     ) -> some View {
         modifier(
             FirstVisitWalkthroughModifier(
                 coordinator: coordinator,
                 surface: surface,
                 externalTargetFrames: externalTargetFrames,
-                isActive: isActive
+                isActive: isActive,
+                isContentReady: isContentReady
             )
         )
     }
@@ -2330,6 +2333,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
     let surface: WalkthroughSurface
     let externalTargetFrames: [WalkthroughTargetID: CGRect]
     let isActive: Bool
+    let isContentReady: Bool
 
     func body(content: Content) -> some View {
         content
@@ -2371,7 +2375,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                         ?? anchoredTargetFrames
                     let targetFrame = resolvedWalkthroughFrame(targetFrames)
                     if
-                        isActive, coordinator.activeSurface == surface,
+                        isActive, isContentReady, coordinator.activeSurface == surface,
                         let step = coordinator.currentStep,
                         let targetFrame
                     {
@@ -2405,7 +2409,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                         } else {
                             MissingWalkthroughTargetResolver(coordinator: coordinator, step: step)
                         }
-                    } else if coordinator.activeSurface == surface, let step = coordinator.currentStep {
+                    } else if isContentReady, coordinator.activeSurface == surface, let step = coordinator.currentStep {
                         MissingWalkthroughTargetResolver(coordinator: coordinator, step: step)
                     }
                 }

@@ -173,6 +173,7 @@ struct AddScreen: View {
     let onClose: () -> Void
     @State private var step: AddStep = .source
     @State private var compactContentHeight: CGFloat?
+    @State private var isWalkthroughContentReady = false
     @State private var candidates: [PlaceCandidate] = []
     @State private var selectedCandidateID: String?
     @State private var selectedSource: AddSourceType = .manual
@@ -199,6 +200,7 @@ struct AddScreen: View {
     @State private var isRunningWalkthroughSearch = false
     @State private var showsImportReview = false
     @State private var importReviewBatchIDs: [String] = []
+    @State private var needsSignInAfterSave = false
     @FocusState private var isQuickAddFocused: Bool
 
     init(
@@ -234,6 +236,12 @@ struct AddScreen: View {
         )
     }
 
+    private var walkthroughContentReadiness: NUXAddIntroductionReadiness {
+        NUXAddIntroductionReadiness(hasRequestedSuggestions: hasRequestedSuggestions,
+                                    isLoadingSuggestions: isLoadingSuggestions,
+                                    contentHeight: compactContentHeight)
+    }
+
     private var showsFloatingCurrentLocationAction: Bool {
         isShowingInlineCandidateResults
             && selectedSource == .currentLocation
@@ -246,6 +254,11 @@ struct AddScreen: View {
 
     private var isShowingHereNowResults: Bool {
         isShowingInlineCandidateResults && selectedSource == .currentLocation
+    }
+
+    private var isContextualAddIntroduction: Bool {
+        walkthroughs.activeSurface == .add
+            && walkthroughs.currentStep?.presentationStyle == .contextual
     }
 
     private var isAddWalkthroughActive: Bool {
@@ -307,7 +320,17 @@ struct AddScreen: View {
         .walkthroughPresenterScrim(
             isPresented: addSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
         )
-        .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .add,
+                                     isContentReady: isWalkthroughContentReady)
+        .task(id: walkthroughContentReadiness) {
+            isWalkthroughContentReady = false
+            guard walkthroughContentReadiness.canPresent else { return }
+            // Restart when loading or measured height changes, so no annotation
+            // or reading timer runs over an opening/resizing sheet.
+            try? await Task.sleep(for: .milliseconds(NUXAddIntroductionTiming.layoutSettleMilliseconds))
+            guard !Task.isCancelled else { return }
+            isWalkthroughContentReady = true
+        }
         .onChange(of: walkthroughs.currentStep?.target) { _, _ in
             autoCloseAfterImportIfNeeded()
         }
@@ -444,12 +467,14 @@ struct AddScreen: View {
             }
             .navigationDestination(isPresented: $showsImportReview) {
                 importCompletionDestination
+                .environment(\.finishPlaceImport, onClose)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsImportInbox) {
                 PlaceImportHistoryScreen(importStore: importStore)
+                    .environment(\.finishPlaceImport, onClose)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -522,11 +547,12 @@ struct AddScreen: View {
                     openImportHub()
                 }
             )
-            .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing3)
-            .background(brandMode.background)
             .walkthroughTarget(.addImport)
+            .padding(.horizontal, WanderTheme.spacing4)
+            .background(brandMode.background)
+            .padding(.top, isContextualAddIntroduction ? 108 : 0)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
@@ -557,6 +583,7 @@ struct AddScreen: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     header
                     suggestedPlaces
+                        .padding(.top, isContextualAddIntroduction ? 50 : 0)
 
                     if let resolutionMessage {
                         InlineMessage(text: resolutionMessage)
@@ -692,6 +719,8 @@ struct AddScreen: View {
             suggestedPlacesCore
             suggestedPlacesSeeMore
         }
+        .walkthroughTarget(suggestedCandidates.isEmpty ? nil : .addNearby)
+        .walkthroughTarget(.addNearbySection)
     }
 
     private var suggestedPlacesCore: some View {
@@ -702,7 +731,7 @@ struct AddScreen: View {
                 .accessibilityAddTraits(.isHeader)
 
             searchField
-                .walkthroughTarget(.addNearby)
+                .walkthroughTarget(suggestedCandidates.isEmpty ? .addNearby : nil)
 
             if isLoadingSuggestions {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -723,7 +752,7 @@ struct AddScreen: View {
                 Button {
                     hasRequestedSuggestions = false
                     Task {
-                        await loadNearbySuggestionsIfNeeded()
+                        await loadNearbySuggestionsIfNeeded(requestLocationIfNeeded: true)
                     }
                 } label: {
                     Label(
@@ -766,6 +795,7 @@ struct AddScreen: View {
                     }
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("add.nearbySeeMore")
             .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
         }
     }
@@ -1326,9 +1356,18 @@ struct AddScreen: View {
         sourceContextID: UUID
     ) {
         guard addSaveFlow?.id == sourceContextID else { return }
+        let shouldPresentSignIn = needsSignInAfterSave
+        needsSignInAfterSave = false
+        resetAfterSave()
         placeSaveDraftStore.clear()
         addSaveFlow = nil
         onClose()
+        if shouldPresentSignIn {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                auth.presentGate(for: .syncPlace)
+            }
+        }
     }
 
     private func addCandidateContext(
@@ -1466,13 +1505,29 @@ struct AddScreen: View {
         openSharedSaveFlow()
     }
 
+    private var canLoadNearbyIntroductionWithoutPermissionPrompt: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures") { return true }
+        #endif
+        let status = CLLocationManager().authorizationStatus
+        return status == .authorizedWhenInUse || status == .authorizedAlways
+    }
+
     @MainActor
-    private func loadNearbySuggestionsIfNeeded() async {
+    private func loadNearbySuggestionsIfNeeded(requestLocationIfNeeded: Bool = false) async {
         guard !hasRequestedSuggestions else { return }
         hasRequestedSuggestions = true
         isLoadingSuggestions = true
         suggestionMessage = nil
         defer { isLoadingSuggestions = false }
+
+        // The first-use annotation explains search without asking again for
+        // location. The explicit location button remains the permission action.
+        if !requestLocationIfNeeded, walkthroughs.activeSurface == .add,
+           !canLoadNearbyIntroductionWithoutPermissionPrompt {
+            suggestedCandidates = []
+            return
+        }
 
         do {
             let nearby = try await store.currentLocationCandidates()
@@ -1503,15 +1558,11 @@ struct AddScreen: View {
         if let reservationID = submission.context.calendarReservationID {
             _ = try? await backend.completeCalendarReservation(id: reservationID)
         }
-        let needsSignIn = !auth.isSignedIn
+        needsSignInAfterSave = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        resetAfterSave()
-        if needsSignIn {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
-                auth.presentGate(for: .syncPlace)
-            }
-        }
+        // The editor acknowledges a successful save before completing. Keep it
+        // mounted so a private-details warning can be dismissed without retrying
+        // the already committed check-in or competing with a sign-in sheet.
         return result
     }
 

@@ -951,6 +951,12 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
         return row.model
     }
 
+    func deleteWanna(_ wanna: PlaceWannaSave) async throws {
+        let _: Bool = try await rpc.call("delete_own_place_wanna", params: DeleteOwnPlaceWannaParams(
+            inputUserPlaceID: wanna.userPlaceID, inputWannaID: wanna.id,
+            inputHistoricalOriginal: wanna.isHistoricalOriginal == true))
+    }
+
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave] {
         let rows: [RemoteWannaSaveDTO] = try await rpc.call(
             "visible_place_wannas", params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
@@ -1030,10 +1036,12 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
 struct SupabaseVisitRepository: VisitRepository {
     private let table: RemoteTableCalling
     private let storage: RemoteStorageCalling
+    private let rpc: RemoteProcedureCalling
 
-    init(table: RemoteTableCalling, storage: RemoteStorageCalling) {
+    init(table: RemoteTableCalling, storage: RemoteStorageCalling, rpc: RemoteProcedureCalling) {
         self.table = table
         self.storage = storage
+        self.rpc = rpc
     }
 
     func visits(for userPlaceID: String) async throws -> [PlaceVisitResult] {
@@ -1046,7 +1054,7 @@ struct SupabaseVisitRepository: VisitRepository {
                 URLQueryItem(name: "order", value: "visited_at.desc")
             ]
         )
-        return rows.map(\.result)
+        return try await PlaceVisitDetailHydration.hydrate(rows.map(\.result), rpc: rpc, requireComplete: false)
     }
 
     func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult {
@@ -1061,7 +1069,9 @@ struct SupabaseVisitRepository: VisitRepository {
         guard let row = rows.first else {
             throw WanderRemoteError.invalidResponse("place_visits upsert returned no rows")
         }
-        return row.result
+        var result = row.result
+        result.attributeAnswersJSON = String(decoding: try JSONEncoder().encode(body.attributeAnswers), as: UTF8.self)
+        return result
     }
 
     func deleteVisit(visitID: String) async throws {
@@ -1163,6 +1173,8 @@ private struct PlaceVisitRow: Decodable {
     let ratingScore: Double?
     let tags: [String]
     let backfilledFromUserPlace: Bool
+    let createdAt: Date?
+    let updatedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1172,6 +1184,8 @@ private struct PlaceVisitRow: Decodable {
         case ratingScore = "rating_score"
         case tags
         case backfilledFromUserPlace = "backfilled_from_user_place"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 
     var result: PlaceVisitResult {
@@ -1182,8 +1196,81 @@ private struct PlaceVisitRow: Decodable {
             note: note,
             ratingScore: ratingScore,
             tags: tags,
-            backfilledFromUserPlace: backfilledFromUserPlace
+            backfilledFromUserPlace: backfilledFromUserPlace,
+            createdAt: createdAt,
+            updatedAt: updatedAt
         )
+    }
+}
+
+/// Raw visit columns intentionally exclude answers. Only owners can hydrate
+/// them. A social visit retains nil (unknown), and a failed owner read never
+/// masquerades as a cleared answer set.
+private enum PlaceVisitDetailHydration {
+    @MainActor
+    static func hydrate(
+        _ visits: [PlaceVisitResult], rpc: RemoteProcedureCalling, requireComplete: Bool
+    ) async throws -> [PlaceVisitResult] {
+        guard !visits.isEmpty else { return [] }
+        let parentIDs = Array(Set(visits.map(\.userPlaceID))).sorted()
+        let expectedIDs = Set(visits.map(\.visitID))
+        guard expectedIDs.count == visits.count else {
+            throw WanderRemoteError.invalidResponse("Duplicate visit IDs before detail hydration")
+        }
+        var detailsByID: [String: PlaceVisitDetailRow] = [:]
+        for start in stride(from: 0, to: parentIDs.count, by: 200) {
+            let chunk = Array(parentIDs[start..<min(start + 200, parentIDs.count)])
+            let rows: [PlaceVisitDetailRow] = try await rpc.call(
+                "own_place_visit_details", params: PlaceVisitDetailParams(inputUserPlaceIDs: chunk)
+            )
+            for row in rows {
+                guard chunk.contains(row.userPlaceID), expectedIDs.contains(row.id),
+                      detailsByID[row.id] == nil else {
+                    throw WanderRemoteError.invalidResponse("Unexpected or duplicate visit detail")
+                }
+                detailsByID[row.id] = row
+            }
+        }
+        return try visits.map { visit in
+            guard let detail = detailsByID[visit.visitID] else {
+                if !requireComplete { return visit }
+                throw WanderRemoteError.invalidResponse("Visit details were incomplete")
+            }
+            guard detail.userPlaceID == visit.userPlaceID else {
+                throw WanderRemoteError.invalidResponse("Visit detail belonged to another parent")
+            }
+            var hydrated = visit
+            hydrated.attributeAnswersJSON = String(
+                decoding: try JSONEncoder().encode(detail.attributeAnswers), as: UTF8.self
+            )
+            hydrated.createdAt = detail.createdAt
+            hydrated.updatedAt = detail.updatedAt
+            return hydrated
+        }
+    }
+}
+
+private struct PlaceVisitDetailParams: Encodable {
+    let inputUserPlaceIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceIDs = "input_user_place_ids"
+    }
+}
+
+private struct PlaceVisitDetailRow: Decodable {
+    let id: String
+    let userPlaceID: String
+    let attributeAnswers: [JSONValue]
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userPlaceID = "user_place_id"
+        case attributeAnswers = "attribute_answers"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
@@ -2094,7 +2181,7 @@ struct SupabaseSurfaceSnapshotRepository: SurfaceSnapshotRepository {
         )
         return CurrentUserCalendarRemoteSnapshot(
             visiblePlaces: try response.places.map { try $0.visiblePlace() },
-            visits: response.visits.map(\.result)
+            visits: try await PlaceVisitDetailHydration.hydrate(response.visits.map(\.result), rpc: rpc, requireComplete: true)
         )
     }
 
@@ -4253,6 +4340,17 @@ private struct SaveOwnPlaceResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
+    }
+}
+
+private struct DeleteOwnPlaceWannaParams: Encodable {
+    let inputUserPlaceID: String
+    let inputWannaID: String
+    let inputHistoricalOriginal: Bool
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceID = "input_user_place_id"
+        case inputWannaID = "input_wanna_id"
+        case inputHistoricalOriginal = "input_historical_original"
     }
 }
 

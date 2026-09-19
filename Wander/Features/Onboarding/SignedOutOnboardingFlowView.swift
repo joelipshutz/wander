@@ -9,14 +9,12 @@ struct SignedOutOnboardingFlowView: View {
 
     let analytics: AnalyticsClient
     var configuration: OnboardingWelcomeConfiguration = .current
-    var initialAuthMode: NativeAuthMode? = nil
 
-    @State private var appliedInitialMode = false
     @State private var welcomeGeneration = 0
 
     var body: some View {
         ZStack {
-            OnboardingBoardColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
+            OnboardingWelcomeColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
 
             if auth.isPresentingNativeAuth {
                 NativeAuthFlowView(
@@ -50,12 +48,42 @@ struct SignedOutOnboardingFlowView: View {
             reduceMotion ? nil : OnboardingCarouselTiming.slideAnimation,
             value: auth.isPresentingNativeAuth
         )
-        .task {
-            guard !appliedInitialMode else { return }
-            appliedInitialMode = true
-            if let initialAuthMode {
-                auth.beginSignIn(mode: initialAuthMode)
-            }
-        }
+
     }
 }
+
+#if DEBUG
+/// Exercises production entry routing with local providers for native UI tests.
+struct SignedOutOnboardingPreview: View {
+    @StateObject private var auth: AuthSessionStore
+    @StateObject private var backend: WanderBackend
+    @StateObject private var coordinator: AppEntryCoordinator
+    @StateObject private var pushNotifications = PushNotificationManager(analytics: NoopAnalyticsClient())
+    @StateObject private var productUpsells = ProductUpsellCoordinator()
+    @StateObject private var calendarReservations = CalendarReservationManager(analytics: NoopAnalyticsClient())
+
+    init() {
+        let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(state: .signedOut, canPresentNativeAuth: true))
+        let backend = WanderBackend(notificationRepository: SimulatorNotificationRepository())
+        _auth = StateObject(wrappedValue: auth)
+        _backend = StateObject(wrappedValue: backend)
+        _coordinator = StateObject(wrappedValue: AppEntryCoordinator(
+            auth: auth, backend: backend, analytics: NoopAnalyticsClient(),
+            usesLocalSimulatorTestSession: true, forcedLocalSimulatorOnboardingStep: .identity
+        ))
+    }
+
+    var body: some View {
+        AppEntryView(coordinator: coordinator, analytics: NoopAnalyticsClient(),
+            analyticsLifecycle: AppAnalyticsLifecycleTracker(analytics: NoopAnalyticsClient()),
+            parser: DeterministicFilterParser())
+            .environmentObject(auth)
+            .environmentObject(backend)
+            .environmentObject(pushNotifications)
+            .environmentObject(productUpsells)
+            .environmentObject(calendarReservations)
+            .modelContainer(WanderModelContainer.preview)
+            .astirAdaptiveBrandMode()
+    }
+}
+#endif

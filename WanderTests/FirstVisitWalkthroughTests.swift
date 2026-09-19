@@ -339,6 +339,18 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                        "Import your saved places from Instagram, TikTok and Google Maps")
     }
 
+    func testAddIntroductionWaitsForLoadedMeasuredContentAndHasEightSecondsOfReadingTime() {
+        XCTAssertFalse(NUXAddIntroductionReadiness(hasRequestedSuggestions: false, isLoadingSuggestions: false, contentHeight: 440).canPresent)
+        XCTAssertFalse(NUXAddIntroductionReadiness(hasRequestedSuggestions: true, isLoadingSuggestions: true, contentHeight: 440).canPresent)
+        let invalidHeights: [CGFloat?] = [nil, 0, .nan, .infinity]
+        for height in invalidHeights {
+            XCTAssertFalse(NUXAddIntroductionReadiness(hasRequestedSuggestions: true, isLoadingSuggestions: false, contentHeight: height).canPresent)
+        }
+        XCTAssertTrue(NUXAddIntroductionReadiness(hasRequestedSuggestions: true, isLoadingSuggestions: false, contentHeight: 700).canPresent)
+        let steps = FirstVisitWalkthroughContent.stepsBySurface[.add, default: []]
+        XCTAssertEqual(steps.map(FirstVisitWalkthroughContent.presentationDelayMilliseconds).reduce(0, +), 8_000)
+    }
+
     func testPlaceIntroductionCompletionPersistsAcrossProfilesAndRelaunch() throws {
         let defaults = try makeDefaults()
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "new-user", store: FirstVisitWalkthroughStore(defaults: defaults))
@@ -367,8 +379,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let step = try XCTUnwrap(coordinator.currentStep)
         XCTAssertEqual(step.target, .feedActivity)
         XCTAssertEqual(FirstVisitWalkthroughContent.stepsBySurface[.feed]?.count, 1)
-        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step), 5_600)
-        XCTAssertEqual(NUXFeedIntroductionTiming.totalMilliseconds + NUXFeedIntroductionTiming.readinessMilliseconds, 5_950)
+        XCTAssertEqual(FirstVisitWalkthroughContent.presentationDelayMilliseconds(for: step), 6_600)
+        XCTAssertEqual(NUXFeedIntroductionTiming.totalMilliseconds + NUXFeedIntroductionTiming.readinessMilliseconds, 6_950)
         coordinator.advancePassiveStep(ifCurrentStepID: step.id)
         coordinator.activate(.feed)
         XCTAssertNil(coordinator.currentStep)
