@@ -1,0 +1,56 @@
+[
+  {
+    "id": "T01",
+    "original": "/Users/joelipshutz/.codex/attachments/14115e95-098c-462e-ae1e-7f112ac43b2e/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T01.txt",
+    "sha256": "526cc3287a65d72ec6e1474cf6e74b2176eee51f3a2a608a06ef5d5051f8f567"
+  },
+  {
+    "id": "T02",
+    "original": "/Users/joelipshutz/.codex/attachments/cd2e52b1-0498-41d1-b682-a3e50944ee17/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T02.txt",
+    "sha256": "a968bd3ad26c89c30028f4d3cd37394700775331fda0d55f98f2c211b0dc3faf"
+  },
+  {
+    "id": "T03",
+    "original": "/Users/joelipshutz/.codex/attachments/47de4472-1bda-4403-be3f-b707f5d867c0/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T03.txt",
+    "sha256": "ff982c8ee56a8ecc2c60f6c985eb83fd375a53a7283b52e00cdf7d823b1f9c78"
+  },
+  {
+    "id": "T04",
+    "original": "/Users/joelipshutz/.codex/attachments/e9566684-03c0-413a-870a-5e04737b7ca5/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T04.txt",
+    "sha256": "e46365c23a1c1b3dd36cec87cca6abfd86d92a0dd1ca2504a3b10e2daf14fa0c"
+  },
+  {
+    "id": "T05",
+    "original": "/Users/joelipshutz/.codex/attachments/c9e45722-000c-471e-a44e-75bed6fb1b4f/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T05.txt",
+    "sha256": "8e189151d057a9a3e23e88751f10380faebeaa941526e41808bea34306937078"
+  },
+  {
+    "id": "T06",
+    "original": "/Users/joelipshutz/.codex/attachments/87d66269-9961-40eb-9048-185f8d6d6ddf/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T06.txt",
+    "sha256": "d77152d2d1bcf0fb552412bf505dbb7e0b9e1ba40af918ad20568b3148d73e3a"
+  },
+  {
+    "id": "T07",
+    "original": "/Users/joelipshutz/.codex/attachments/ab3c2371-d77e-41eb-9051-a8b5efb30140/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T07.txt",
+    "sha256": "3102cd52055ac7025541e5022dbf67d516333814ebb0b4813dcfe9487320e502"
+  },
+  {
+    "id": "T08",
+    "original": "/Users/joelipshutz/.codex/attachments/8ee1d0df-67f8-4e7f-b80e-7ab2de8fe977/pasted-text.txt",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T08-opening-refinements.txt",
+    "sha256": "672346de60795a01895f2004352f1c1eea559faa66c54e8b202b0349911bb396"
+  },
+  {
+    "id": "T09",
+    "source": "Joe/Ryan message in this task; selected excerpts, not the full recording",
+    "copy": "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/transcripts/T09-analog-flutter-excerpts.txt",
+    "sha256": "4e7a9bd7010216bd6d1c8eb678ea47594c5f18f64b0c697d94e200eb3a808d44"
+  }
+]

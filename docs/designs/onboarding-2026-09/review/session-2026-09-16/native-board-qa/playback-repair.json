@@ -1,0 +1,14 @@
+{
+  "cause": "Detached server was absent; cached page could not load media",
+  "repair": "Detached loopback server plus explicit per-preview/global Play-Pause and separate Restart",
+  "nativeSourceUnchanged": "39214cb",
+  "verified": [
+    "Server PID parent is 1 after launcher exit",
+    "HTTP 206 range request",
+    "Station playing time advances",
+    "Click video pauses",
+    "Play all starts all three",
+    "Play queued immediately after light mode starts all three",
+    "Letters framing stays while playing"
+  ]
+}

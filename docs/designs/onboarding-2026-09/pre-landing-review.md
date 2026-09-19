@@ -1,0 +1,13 @@
+# REC-547 pre-landing review
+
+Native code checkpoint: 1185c81, based on main 5ce5d0d. Review lens: repository release workflow and gstack pre-landing review checklist. Joe explicitly requested direct main landing and preservation of the entire design process; no implementation PR is required for this handoff.
+
+The delivered scope matches the brief: selected film C (now the production default), logo-only account animation, normal auth controls, optional photo, N09/N11/V05 copy and dark setup imagery, optional founders video before Ryan's existing NUX, linked old studies, reproducible render sources. The new founders VHS options remain separate from the current bundled cleaned video. No database/API change or regenerated face/voice is included.
+
+Reviewed the native entry gate, account-scoped progress, teardown/audio ownership, background behavior, finite playback, original NUX/deep-link handoff, debug-only fake accounts, photo validation/upload errors, adaptive/reduce-motion branches, token/font changes and native hit targets. The gate constructs the existing root only after Skip/end; it does not retire NUX eligibility or consume incoming deep links. Auth controls retain their real hit areas and accessibility; decorative layers ignore input. Chosen-photo upload failures remain recoverable even though choosing a photo is optional.
+
+Mechanical integration fixes already applied: duplicate profile fetch/property and notification-example view removed after integrating main; restored the notification primer accent; corrected a missing newline in the opening view; aligned the N09 assertion and release-default film assertions with Joe's accepted copy/style. No unresolved blocking structural finding from this review. The large media archive uses Git LFS; original media bytes and source branch provenance are preserved. Secret-pattern scan found no verified JWT/private key credential payload; the broad match in the old HTML was embedded image data.
+
+Verification: the prior 16e run compiled and passed four native UI tests, including the actual movie ending, plus the setup screenshot inventory; one old N09 title assertion failed and was corrected. The current full unit + focused film/player UI suite is running on 1185c81. Do not interpret the source review as a completed validation/build or release. No subjective audio approval is inferred from objective media checks. No captions are shipped.
+
+Operational learning: WebKit may retain a paused hidden video texture despite seek events. The new VHS renderer decodes actual source PNG frames first; first/last picture checks and copied AAC packet hashes prevent a moving effect from disguising frozen footage. `extract_frames.py` reconstructs the disposable input frames.

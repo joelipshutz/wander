@@ -1,0 +1,155 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CC9A73D4-1795-45F6-AD58-FFFB30B6BDB1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-C02_0_B133C71A-3078-4891-B604-E989F2FBA456.png",
+        "timestamp" : 1789707676.55
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testFeedHintEndsOnFeedWithoutOpeningDiscoverOrInvites()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testFeedHintEndsOnFeedWithoutOpeningDiscoverOrInvites"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "86D1A039-DC7B-403E-8C39-2FB12555D433.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-C03_0_B47A1AA8-D239-412D-88C3-B014A517E992.png",
+        "timestamp" : 1789707691.173
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testListsHintEndsOnListsWithoutStartingAnotherTour()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testListsHintEndsOnListsWithoutStartingAnotherTour"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "16840550-536B-4179-A870-A542616CB08A.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-C04_0_42D3A3D8-D3A7-4EB2-A621-4F0724C39B58.png",
+        "timestamp" : 1789707710.308
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testNativeCheckInWannaAnnotationLeavesActionsUsable()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testNativeCheckInWannaAnnotationLeavesActionsUsable"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "5D068AA9-F83D-45D8-9470-9D2A5C92540A.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-N25_0_5D35F940-6B54-405D-B804-CC41C8463020.png",
+        "timestamp" : 1789707759.564
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "95B631ED-AD2B-4AD6-99DF-F3BC83567EEE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-mapPinLegend_0_D5B72C6D-BFB3-48E2-82A4-3C6D1BDC6A52.png",
+        "timestamp" : 1789707757.206
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C074A2F3-F758-453A-8574-4E76CC010B6E.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-mapAdd_0_677A8E44-C736-43B2-927A-AB686F792159.png",
+        "timestamp" : 1789707755.541
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E6EF684C-336B-4CB0-A91E-2D0893242E8C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-mapSearch_0_AB80655E-391D-4FB5-BBEE-EEE55422E91D.png",
+        "timestamp" : 1789707753.907
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E021ADDE-0402-409A-A6A8-10A28F93A428.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-mapMoreFilters_0_1D6B3808-31A2-4F77-B986-912081069A7F.png",
+        "timestamp" : 1789707752.191
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "5DBF0F50-6410-4365-A52D-50AC2828949D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-mapFriends_0_0F712DF5-2814-4EC4-9FD7-07182D77ECCA.png",
+        "timestamp" : 1789707750.544
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C1770678-AFB9-47D4-8838-3694A7FEB121.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-mapFeatured_0_68C83DA5-1AFB-446E-AB98-2C73519FFF33.png",
+        "timestamp" : 1789707748.913
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6346C8A7-A2E6-4397-9050-B66D45DFB693.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "NUX-C01_0_B3151A2C-E389-4B48-BDDF-6E6B881C2A25.png",
+        "timestamp" : 1789707775.727
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testPlusRemainsVoluntaryAndDoesNotStartForcedSave()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testPlusRemainsVoluntaryAndDoesNotStartForcedSave"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "097B9540-91AE-4156-983C-A14F77C47779",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Synthesized Event 2026-09-17 at 10.03.10 PM",
+        "timestamp" : 1789707790.07
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FD6770B4-AF24-4435-BD3F-301C706D51E2",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F8D65987-0A27-4B88-9AC8-F942F5AF8D5C.mp4",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Screen Recording 2026-09-17 at 10.02.57 PM.mp4",
+        "timestamp" : 1789707777.76
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testRealMapFilterActionCanExitOverviewImmediately()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testRealMapFilterActionCanExitOverviewImmediately"
+  }
+]

@@ -1,0 +1,54 @@
+{
+  "sourceCommit": "b7ff1f42f95c21efe5980b38b0996101adc6a0f8",
+  "checkedAt": "2026-09-18T04:15:11.164945+00:00",
+  "native": {
+    "recordings": 6,
+    "allReachedAccount": true,
+    "rows": 3,
+    "openingCells": 30,
+    "flipsPerCell": 8,
+    "flutterSeconds": 1.5,
+    "faces": {
+      "light": "black",
+      "dark": "white or off-white",
+      "letters": "Signal in both"
+    },
+    "compactAppearances": [
+      "dark",
+      "light"
+    ],
+    "framesInspected": [
+      "opening",
+      "flutter",
+      "final phrase",
+      "Places",
+      "People",
+      "account"
+    ],
+    "sourceFilesVerified": 27
+  },
+  "browser": {
+    "threeFullPhonesFitTV": true,
+    "noVideoCropping": true,
+    "containAndNoTransform": true,
+    "sixVideosReadyState": 4,
+    "darkAndLightPlayPauseAndAccountSeek": true,
+    "stateBookmarksConfirmedFromNativeText": true,
+    "errors": []
+  },
+  "tests": {
+    "welcomeUnitsPassed": 25,
+    "navigationContractChecksPassed": 147,
+    "manualPagingPassed": true,
+    "accountEntryAndClosePassed": true,
+    "automaticProgressionRecheckPassedSeconds": 53.242,
+    "broadSuiteClean": false,
+    "remainingPerformanceOutlierSeconds": [
+      0.12131392955780029,
+      0.10220801830291748
+    ],
+    "performanceThresholdSeconds": 0.1,
+    "initialAutoFailure": "The UI snapshot retained Play introduction after the test tap; unchanged isolated retry passed."
+  },
+  "physicalIPhoneHapticsAndFramePacingVerified": false
+}

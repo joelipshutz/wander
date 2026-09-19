@@ -1,0 +1,52 @@
+{
+  "sourceCommit": "c71aee6",
+  "screens": {
+    "Founders-poster": {
+      "image": "native-captures/device-review/Founders-poster.png",
+      "sha256": "792db78240e299f5aeb275eead64ea31a5c120a03fa4f3cb0db4b7cf074a6a27"
+    },
+    "N12": {
+      "image": "native-captures/device-review/N12.png",
+      "sha256": "b362d1617cd9283d259f2f27d8888b6f8d62c04554560bd38f5cb1cecd0353f2"
+    },
+    "N10": {
+      "image": "native-captures/device-review/N10.png",
+      "sha256": "4313abc302fa3bf3c1695e836a946cf3c3015f75f22d69362090055780d38e2b"
+    },
+    "N11": {
+      "image": "native-captures/device-review/N11.png",
+      "sha256": "5029b81850540d97fa83f83d7d7e53c865a9fdc7e05f33a1f03ff34bafdafe9f"
+    },
+    "N08": {
+      "image": "native-captures/device-review/N08.png",
+      "sha256": "778500caa4f3ef7c3f4eb0be2629d8d63f1eab9dd51632288c4e045aa90cab01"
+    },
+    "N34": {
+      "image": "native-captures/device-review/N34.png",
+      "sha256": "c7c71d1bf73ef2168a98490ea83e7e74066866dd12e3c82b82b4301300525e34"
+    },
+    "N09": {
+      "image": "native-captures/device-review/N09.png",
+      "sha256": "f6e4f4acfb6a1e9d2041dc6742893737d50305459b38ae7a5e8e668efdb6576e"
+    },
+    "N33": {
+      "image": "native-captures/device-review/N33.png",
+      "sha256": "93222bf0c0bf0c93aecf6e64e03cfd85b4663b07cb93f7c385f59ef17822aa9f"
+    },
+    "Founders-playing": {
+      "image": "native-captures/device-review/Founders-playing.png",
+      "sha256": "80705a2ef0431fb648a8479f92966c3d8f61f66100a8fbcc26068c13a20c2c77"
+    },
+    "Founders-to-NUX": {
+      "image": "native-captures/device-review/Founders-to-NUX.png",
+      "sha256": "94d9034f88d3e621e9891015c81e60f79012414ea12834b5952dbad52d8c7952"
+    },
+    "N08-filled": {
+      "image": "native-captures/device-review/N08-filled.png",
+      "sha256": "6e0a1bfe3c50ec1f19fee6155e3727ebc825049a1f94115d6926ffb7f54421f0"
+    }
+  },
+  "openingSourceCommit": "1155ca4d43fa816e18bda5ebd6cbfbb67074e245",
+  "audioListeningApproval": "pending Joe",
+  "mainAndTestFlight": "held"
+}

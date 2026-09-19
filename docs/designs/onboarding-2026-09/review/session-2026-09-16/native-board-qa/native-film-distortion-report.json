@@ -1,0 +1,42 @@
+{
+  "sourceCommit": "04667200de81b0eef066644e347989145941ee9a",
+  "reference": "Events 03C Near failure revision 4; actual bundled events-coming-soon.mp4",
+  "device": "iPhone 16e / iOS 26.3.1",
+  "tests": {
+    "passed": 26,
+    "failed": 0,
+    "skipped": 0,
+    "unit": 22,
+    "ui": 4,
+    "results": [
+      "native-film-distortion-playback-tests.xcresult",
+      "native-film-auto-only.xcresult"
+    ],
+    "automaticTestRunsBothFilmTreatments": true
+  },
+  "captures": {
+    "film-dark": "native-captures/film-distortion/film-dark.mp4",
+    "film-type-dark": "native-captures/film-distortion/film-type-dark.mp4",
+    "bothReachAccount": true,
+    "hashesVerified": true,
+    "approvedCaptureSource": "64324018242bc2c20db9f66b31fd28fa96607f9a"
+  },
+  "browser": {
+    "url": "http://127.0.0.1:8766/session-2026-09-16/opening-film-comparison.html?v=0466720",
+    "playPause": true,
+    "completeAccountEndpoints": true,
+    "italicLeadC": true,
+    "embeddedOriginalReferencePlayback": true,
+    "mediaErrors": 0,
+    "consoleErrors": 0
+  },
+  "regressionsFixed": [
+    "Decorative overlay intercepted account controls; common parent now disables hit testing",
+    "RenderBox crash from live filtered video/backdrop; removed those filters and retained pure-text effects"
+  ],
+  "newHiggsfieldGenerations": 0,
+  "pushed": false,
+  "merged": false,
+  "physicalDevicePacingMeasured": false,
+  "next": "N08-N12 after opening feedback; post-onboarding NUX belongs to Ryan"
+}

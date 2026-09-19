@@ -1,0 +1,28 @@
+{
+  "modes": [
+    {
+      "id": "video-D",
+      "duration": 42.985,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "id": "video-L",
+      "duration": 29.916667,
+      "width": 1206,
+      "height": 2622
+    }
+  ],
+  "errors": [],
+  "broken": [],
+  "checks": [
+    "complete native phone fits TV focus",
+    "dark default focus",
+    "light shortcut",
+    "compare / replay / pause",
+    "seek both native videos",
+    "four-state latest transcript brief",
+    "archives including native A video",
+    "updated native board copy"
+  ]
+}

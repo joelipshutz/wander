@@ -1,0 +1,283 @@
+{
+  "sourceCommit": "4a9f122c062d04db2f06e7b75226a9e85999169b",
+  "date": "September 16, 2026",
+  "build": "174",
+  "captures": [
+    {
+      "id": "N69",
+      "file": "launch-opening-component.png",
+      "kind": "Native component reference \u00b7 approved static splash",
+      "sha256": "2bd8d39a2732f29a220b27eeb6f0c299e302b52c4b34ab9afe99b05925348339"
+    },
+    {
+      "id": "N70",
+      "file": "launch-loading-component.png",
+      "kind": "Native component reference \u00b7 approved static splash",
+      "sha256": "082e255e65963d22e181a3737a1a5c80aba9c14760f82c453d8b3dcd61b1efb1"
+    },
+    {
+      "id": "N01",
+      "file": "welcome-1.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "5765ea859df9ed2c24b155bec301cf39d53ace63f87bd1b2550ad019e2f76fa3"
+    },
+    {
+      "id": "N02",
+      "file": "welcome-2.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "deec7a090ef09c6256a885bab9414d82f375de90ad0775116e41612d016d8dc8"
+    },
+    {
+      "id": "N03",
+      "file": "welcome-3.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "b3f36fcff949a12a305408aebdd1a58caec72edd6aee60a82f92d87156e22b6c"
+    },
+    {
+      "id": "N04",
+      "file": "signup-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "bedbb39c3232911f10a055ef6dea62ae0b07c2a5b4b3bc1391d55a0edc69cefd"
+    },
+    {
+      "id": "N05",
+      "file": "verify-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "fb5a0dbcfc0afd2b8d8d4643a0002954f86c2acded4a7dd463dd116a36d5b064"
+    },
+    {
+      "id": "N06",
+      "file": "auth.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "ab4a9a227d1e378f2652da637b461166506bb71a19874e26121e43c3da70598d"
+    },
+    {
+      "id": "N07",
+      "file": "password.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "c340b74750c5832146a952a2ccaa48610f9ec7b2373723b2fc6f0d726c80347b"
+    },
+    {
+      "id": "N08",
+      "file": "identity.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "d4978d9772ae76ae94687961a55a24e9a769fffc0099a6cbd8fd6982e1ad16ea"
+    },
+    {
+      "id": "N09",
+      "file": "location.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "ba6a0a5ffef9f86f7bd059d96a6c35f2a246a07de5f84ac122a414699c475222"
+    },
+    {
+      "id": "N10",
+      "file": "contacts.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "1567056900ee61578a60740754c79b6c3091005a53617b5f0b4fd184a0441816"
+    },
+    {
+      "id": "N11",
+      "file": "friends-loaded-component.png",
+      "kind": "Native component preview \u00b7 fictional people",
+      "sha256": "2ea2a66d1dbc7ed53975d1a3d6050a4a5a327f9a68546bdb161326243a4c6ef3"
+    },
+    {
+      "id": "N12",
+      "file": "notifications.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "a4421b34ebdab3be9a048df276a66d65de90070b674444463f6dd0402c8f7c31"
+    },
+    {
+      "id": "N13",
+      "file": "mapAdd.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "e0c4aff31b2664adf1b27bdbfa74abda0297725060f8f242f1dcb913f7285a01"
+    },
+    {
+      "id": "N14",
+      "file": "addSearch.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "dc019292e524cb91573c2be230bd01eff77d3ce7466e33c73d1b34153a959c8f"
+    },
+    {
+      "id": "N15",
+      "file": "saveStatus.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "39edb03a9ea6f8576b001a1362df39ca56196f3f98de18c3450671a7f48e0dcb"
+    },
+    {
+      "id": "N16",
+      "file": "saveDate.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "bf8ce1fe9bc5a306bb6d18acea11f332abbaab52edf5a250ac610ab1a1186511"
+    },
+    {
+      "id": "N17",
+      "file": "saveNote.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "0d02529d6901c2fe28455ca0c3018069ebc50a2c9c349e16e914bb73dcaff0f6"
+    },
+    {
+      "id": "N18",
+      "file": "saveRating.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "20c82d53ba6feaac544785b1d22b3bf8c4a0de333acfbf71b736c971d079d143"
+    },
+    {
+      "id": "N19",
+      "file": "saveMoreOptions.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "fc9747bb09c1467c9c1ae118e1bc10eb69c85050a6fb902642dd954675270113"
+    },
+    {
+      "id": "N20",
+      "file": "saveQuestions.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "73009fb46b54afaf467f9b7feee477b07a4e4a0d496b5dfbd08b0c03a58b586f"
+    },
+    {
+      "id": "N21",
+      "file": "saveTags.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "d7239e8b96d7456367f8385f4c29a9b76e0625c4dce30893da3df87bbd0ebafa"
+    },
+    {
+      "id": "N22",
+      "file": "saveSubmit.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "37983aa3a518ff6d024f1eb493e527c458938c2922accef556c5a83486f0964f"
+    },
+    {
+      "id": "N23",
+      "file": "mapAddAgain.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "d3ad09eeb9d00d063d5d940d04ffed3900ebdeb4986ca993bbed74176b6534b0"
+    },
+    {
+      "id": "N24",
+      "file": "addImport.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "032254628f375bca058a512b1eac40f606f678ad9ff363cb7ddfcfe310043098"
+    },
+    {
+      "id": "N25",
+      "file": "mapSendoff.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "f5e5f5ef817177f45314b7272fdfd42b36b0987c6faa19b24d8a70e43a85aecb"
+    },
+    {
+      "id": "N26",
+      "file": "import-lesson.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "024fb67eaf190c6d69f533f23c235e7c9d25f895a417b6e49c5911cdd29997e8"
+    },
+    {
+      "id": "N27",
+      "file": "device-features.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "1b92d7bd7a14412a39343f185a327c31bc66ccc7e2adf6cb02ecbedd59e67d86"
+    },
+    {
+      "id": "N28",
+      "file": "place_saved.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "47e242433ea949a4aeeb5b13298981c24890fa3bf94ba54aca724af17d63b00e"
+    },
+    {
+      "id": "N29",
+      "file": "follow_created.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "bdbd981d138dce310081b2560c309bfb6042b229e007ac197b5be51152e8f560"
+    },
+    {
+      "id": "N30",
+      "file": "system-location.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "7c0c46025c510be04212972d5e6c3a172baf85325ec1c2582a4e36d27ec91087"
+    },
+    {
+      "id": "N31",
+      "file": "location-denied.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "f3cae986c5881d59fb5b11607ddcdc90703914c1ec670959bafd858d1830f20a"
+    },
+    {
+      "id": "N32",
+      "file": "notifications-denied-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "391309a66ee5c56d514a9344495dc4a896d8f5cc75c343c948daff4bcb0b7479"
+    },
+    {
+      "id": "N33",
+      "file": "friends-empty-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "c15137daa2f8a12db396060e21a0eb6883d47e6605bea10379bfa9c074a9d7dc"
+    },
+    {
+      "id": "N34",
+      "file": "friends.png",
+      "kind": "Native app capture \u00b7 build 174",
+      "sha256": "c1aab5c7efa60e678c53c78b03b7844fb4f79a16877628999acb66718ba68797"
+    },
+    {
+      "id": "N35",
+      "file": "identity-checking-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "3ca9bd8e125dceed100322137c699099d2d858097ba1a02546072a272c358648"
+    },
+    {
+      "id": "N71",
+      "file": "identity-available-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "4e297019de182db1e1080d103c447f426d54c049d05bf50695ab0c6ef837e81c"
+    },
+    {
+      "id": "N72",
+      "file": "identity-taken-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "cdfd953b4622014c1d919dbb535dced9471889fc35428bba2c4200fa3f1ca2c8"
+    },
+    {
+      "id": "N73",
+      "file": "identity-saving-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "7c56fd0aaffe2ce066e976248e90af69015290129f1d98e7da0003747c571431"
+    },
+    {
+      "id": "N36",
+      "file": "system-contacts-component.png",
+      "kind": "Native iOS prompt \u00b7 isolated preview app",
+      "sha256": "d05a5c65eb62a681697fe0ce09b0d42a5c27770e5a9c0b98fd9356fa94ac9751"
+    },
+    {
+      "id": "N37",
+      "file": "system-camera-component.png",
+      "kind": "Native iOS prompt \u00b7 isolated preview app",
+      "sha256": "ac4d814baa9f8a8d3a379d8b760850f7d2390b586f878859acfa89d8d0241e4b"
+    },
+    {
+      "id": "N38",
+      "file": "system-calendar-component.png",
+      "kind": "Native iOS prompt \u00b7 isolated preview app",
+      "sha256": "2ec35851d7d812e419524bfc7679bb31990d75d23ed1e72d685681fbf2eb7257"
+    },
+    {
+      "id": "N39",
+      "file": "system-photos-component.png",
+      "kind": "Native iOS prompt \u00b7 isolated preview app",
+      "sha256": "260e97f4f6c4a833e852709b06a2f3da649826a0bf7393b44db75322ce0e6833"
+    },
+    {
+      "id": "N67",
+      "file": "crop-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "404e970c62c7ceccaad2e666b2dba480a66b0d020e4f2f9cc85cf71046571932"
+    },
+    {
+      "id": "N68",
+      "file": "recovery-component.png",
+      "kind": "Native component preview \u00b7 fixed demo state",
+      "sha256": "55226e0ec26742fdbb16f375f2706fde34b0687ac81ae2d3bedc82cac87fef0e"
+    }
+  ]
+}

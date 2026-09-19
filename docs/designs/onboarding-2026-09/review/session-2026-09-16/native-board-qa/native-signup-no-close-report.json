@@ -1,0 +1,21 @@
+{
+  "implementationCommit": "766a7ce00423d6cd7fb96a7f1b0d76cc14c550f2",
+  "pr": "https://github.com/joelipshutz/wander/pull/670",
+  "sourceReview": "passed; shared toolbar excludes signup; login callback, close path, providers, legal text, and post-auth steps preserved",
+  "diffCheck": "passed",
+  "scope": "One production toolbar condition, existing UI journey and two flow docs",
+  "freshBuildAndTests": "Blocked before compilation: 43.4 GiB available, 50 GiB required. Explicit low-risk environment skip under repository merge policy. No fresh native pass claimed.",
+  "priorOpeningValidation": {
+    "unit": 240,
+    "ui": 4,
+    "genericSimulatorBuild": "passed"
+  },
+  "simulator": "Prior build remains installed; no fresh captures generated",
+  "publicRedactionScans": "diff and PR body zero findings",
+  "mergeCommit": "a956cdec904cb3e3051f3828de61117c140f9515",
+  "xcodeBranchChooser": "codex/rec-529-no-signup-close",
+  "requiredPRCheck": "success",
+  "mainManifestWorkflow": "https://github.com/joelipshutz/wander/actions/runs/35321008498",
+  "mainManifestStatus": "success",
+  "mainManifestEntry": "a956cdec90 / #670 / ship"
+}

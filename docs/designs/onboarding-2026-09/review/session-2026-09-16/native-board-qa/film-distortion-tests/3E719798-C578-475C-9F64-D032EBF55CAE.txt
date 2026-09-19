@@ -1,0 +1,39 @@
+Application, 0x1089ef070, pid: 66167, label: 'Astir' <App element pid: 66167>
+  Window (Main), 0x108933cc0, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4355808128.3>
+    Other, 0x108932eb0, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4356350944.4>
+      Other, 0x108932b30, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4356369648.5>
+        Other, 0x108931380, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4356903280.6>
+          Other, 0x108923e80, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4356788272.7>
+            Other, 0x10892d690, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 5363885376.162>
+              Other, 0x10891ba50, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 5363792000.163>
+                Other, 0x10892eb10, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 5364392992.165>
+                  Other, 0x10892e530, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 5581860464.167>
+                    Other, 0x108933250, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4352723824.168>
+                      ScrollView, 0x1089335c0, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4364926976.169>
+                        Other, 0x108933940, {{0.0, 47.0}, {390.0, 711.7}} <AX element pid: 66167, elementOrHash.elementID: 5364191568.170>
+                          StaticText, 0x10892eeb0, {{34.7, 169.1}, {320.7, 40.7}}, label: 'Create your account' <AX element pid: 66167, elementOrHash.elementID: 5505490656.172>
+                          StaticText, 0x108921fa0, {{64.2, 217.7}, {261.7, 38.3}}, label: 'Keep your places synced and discover recommendations from people you trust.' <AX element pid: 66167, elementOrHash.elementID: 4352753168.173>
+                          Button, 0x1089343d0, {{16.0, 272.0}, {358.0, 54.0}}, identifier: 'auth.continueWithApple', label: 'Continue with Apple' <AX element pid: 66167, elementOrHash.elementID: 5363839600.174>
+                          Button, 0x10892a8b0, {{15.5, 337.5}, {359.0, 53.0}}, identifier: 'auth.continueWithGoogle', label: 'Continue with Google' <AX element pid: 66167, elementOrHash.elementID: 5505492800.175>
+                            StaticText, 0x108932560, {{118.5, 353.7}, {153.0, 20.7}}, label: 'Continue with Google' <AX element pid: 66167, elementOrHash.elementID: 4352711888.183>
+                            StaticText, 0x10891ac90, {{32.0, 352.1}, {14.7, 24.0}}, label: 'G' <AX element pid: 66167, elementOrHash.elementID: 4352716288.184>
+                          StaticText, 0x108930c50, {{16.0, 438.7}, {33.7, 18.0}}, label: 'Email' <AX element pid: 66167, elementOrHash.elementID: 5505388928.176>
+                          TextField, 0x10892bc10, {{15.5, 468.2}, {359.0, 53.0}}, identifier: 'auth.email', placeholderValue: 'you@example.com' <AX element pid: 66167, elementOrHash.elementID: 4366097408.177>
+                          Button, 0x108924b10, {{16.0, 532.7}, {358.0, 52.0}}, identifier: 'auth.continueWithEmail', label: 'Continue with email' <AX element pid: 66167, elementOrHash.elementID: 4353403440.178>
+                            StaticText, 0x10892c6d0, {{125.3, 548.4}, {139.3, 20.7}}, label: 'Continue with email' <AX element pid: 66167, elementOrHash.elementID: 5505688352.185>
+                            Other, 0x108929500, {{16.0, 532.7}, {358.0, 52.0}} <AX element pid: 66167, elementOrHash.elementID: 5505494864.186>
+                          StaticText, 0x108927740, {{16.0, 600.7}, {358.0, 33.0}}, identifier: 'auth.accountLinkingExplanation', label: 'If Apple or Google returns the same verified email, it connects to your existing Astir account.' <AX element pid: 66167, elementOrHash.elementID: 5505584592.179>
+                          StaticText, 0x10891cfd0, {{25.2, 641.7}, {339.7, 33.0}}, identifier: 'auth.legalAcknowledgement', label: 'By continuing, you agree to the Terms of Use and Community Guidelines, and acknowledge the Privacy Policy.' <AX element pid: 66167, elementOrHash.elementID: 4352722528.180>
+                            Link, 0x10891f050, {{201.2, 641.7}, {70.9, 16.4}}, identifier: 'https://getrec.me/terms', label: 'Terms of Use' <AX element pid: 66167, elementOrHash.elementID: 105553156249312.187>
+                            Link, 0x108934760, {{25.2, 641.7}, {339.7, 32.8}}, identifier: 'https://getrec.me/community', label: 'Community Guidelines' <AX element pid: 66167, elementOrHash.elementID: 105553156253632.188>
+                            Link, 0x108934ac0, {{250.7, 658.1}, {73.0, 16.4}}, identifier: 'https://getrec.me/privacy', label: 'Privacy Policy' <AX element pid: 66167, elementOrHash.elementID: 105553156251520.189>
+                          Button, 0x108934e10, {{16.0, 690.7}, {358.0, 44.0}}, identifier: 'auth.logIn', label: 'Already have an account? Log in' <AX element pid: 66167, elementOrHash.elementID: 4353061808.181>
+                        Other, 0x108935920, {{357.0, 41.3}, {30.0, 760.7}}, label: 'Vertical scroll bar, 1 page', value: 0% <AX element pid: 66167, elementOrHash.elementID: 5363578960.171>
+                          Other, 0x108935c70, {{384.0, 101.3}, {3.0, 705.7}} <AX element pid: 66167, elementOrHash.elementID: 5363579424.182>
+                        Other, 0x108935fe0, {{357.0, 41.3}, {30.0, 760.7}}, label: 'Vertical scroll bar, 1 page', value: 0% <AX element pid: 66167, elementOrHash.elementID: 5363578960.171>
+                          Other, 0x108936330, {{384.0, 101.3}, {3.0, 705.7}} <AX element pid: 66167, elementOrHash.elementID: 5363579424.182>
+              Other, 0x108936680, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 5363796224.164>
+                Other, 0x1089369f0, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 5363798496.166>
+            Other, 0x108936d60, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4356459984.30>
+              Image, 0x1089370b0, {{0.0, 0.0}, {390.0, 844.0}}, identifier: '/Users/joelipshutz/Library/Developer/CoreSimulator/Devices/6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C/data/Containers/Bundle/Application/70FA213F-AFFB-4FAA-90DC-A09FCB049506/Wander.app/onboarding-film-texture.png' <AX element pid: 66167, elementOrHash.elementID: 4356460448.60>
+            Other, 0x108937420, {{0.0, 0.0}, {390.0, 844.0}} <AX element pid: 66167, elementOrHash.elementID: 4356795856.31>

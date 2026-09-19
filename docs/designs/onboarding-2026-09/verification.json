@@ -1,0 +1,34 @@
+{
+  "archiveFileCount": 1597,
+  "sourceBundleVerified": true,
+  "sourceCheckpoint": "1185c81b8968a69eb96c233db833fa6e14eeb742",
+  "nativeCaptureSource": "c71aee6",
+  "reviewManifestVerified": true,
+  "largeMedia": "Git LFS pointers; original bytes preserved",
+  "nativeVideoIntegration": true,
+  "nativeUIValidated": [
+    "actual video end \u2192 NUX",
+    "Play/Pause/Mute/background/Skip \u2192 NUX",
+    "optional N08 profile photo; form survives background",
+    "N08\u2013N12 + denied/failure captures"
+  ],
+  "fullReleaseValidation": "in progress",
+  "foundersVideo": {
+    "duration": 90.965,
+    "outtake": "included through Cut",
+    "windCleaned": true,
+    "sourceAudioABPage": "founders-video-review.html"
+  },
+  "vhsStudy": {
+    "clips": 3,
+    "durationEach": 8,
+    "actualDecodedFramesEach": 192,
+    "audioPacketsIdentical": true,
+    "higgsfieldCredits": 0,
+    "browserPlaybackVerified": true,
+    "mediaErrors": null,
+    "page": "founders-vhs-review.html"
+  },
+  "mainLanding": false,
+  "testFlightUploaded": false
+}

@@ -1,0 +1,140 @@
+[
+  {
+    "finish": "station",
+    "mode": "dark",
+    "screen": "W00",
+    "text": [
+      "9:41",
+      "\u2022e0e",
+      "ASTIR",
+      "OCEAN PARK",
+      "Connect with your",
+      "COMMUNIT",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-dark-W00-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "dark",
+    "screen": "W01",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "Josly",
+      "re]",
+      "Hotchkiss Park",
+      "Park",
+      "+",
+      "=",
+      "nig",
+      "AAiAMaMina",
+      "KEEP.TRACKOF",
+      "EVERYWHERE",
+      "YOU\"",
+      "E",
+      "B'EEN",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-dark-W01-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "dark",
+    "screen": "W02",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CHECKED IN",
+      "Marigold Table",
+      "Y1 Santa Monica \u2022 Restaurant",
+      "M",
+      "Mina checked in",
+      "2h ago \u2022 someone you follow",
+      "\"The patio at golden hour. Get the focaccia!\"",
+      "5",
+      "EIP",
+      "UIP",
+      "WlTH",
+      "THEPEOPLE",
+      "YoU",
+      "L'OV'E",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-dark-W02-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "light",
+    "screen": "W00",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "Connect with your",
+      "COMMUNITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-light-W00-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "light",
+    "screen": "W01",
+    "text": [
+      "9:41",
+      "2",
+      "ASTIR",
+      "OCEAN PARK",
+      "Josly",
+      "rel",
+      "Hotchkiss Park",
+      "Park",
+      "+",
+      "nig",
+      "\u041c\u041b\u0410 \u041c\u0456n\u0410",
+      "KEEP-TRACK",
+      "EVERYWHERE",
+      "YOU-VE",
+      "BEEN",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-light-W01-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "light",
+    "screen": "W02",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CHECKED IN",
+      "Marigold Table",
+      "Y Santa Monica \u2022 Restaurant",
+      "M",
+      "Mina checked in",
+      "2h ago \u2022 someone you follow",
+      "\"The patio at golden hour. Get the focaccia!\"",
+      "5",
+      "K",
+      "EEP",
+      "UP",
+      "WITH",
+      "THE-",
+      "-PEOPLE",
+      "YOU",
+      "LOVE",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-light-W02-compact.png"
+  }
+]

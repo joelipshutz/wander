@@ -1,0 +1,17 @@
+{
+  "bundle": "onboarding-branches.bundle",
+  "sha256": "2c63978b1b4ce064b1c281bb1703559d0086365abd47faeab89760ba5b207633",
+  "refs": [
+    "ed8646a10d0d038da68b0c77881e22af3a1f9592 refs/heads/codex/rec-529-dark-account-setup",
+    "945c2806f55a433ef4f7c525b7b8dae9ff9c470c refs/heads/codex/rec-529-film-app-palette",
+    "1155ca4d43fa816e18bda5ebd6cbfbb67074e245 refs/heads/codex/rec-529-film-events-match",
+    "a2bfb91d4d5983117f1e480cc92dd0be1fe273d5 refs/heads/codex/rec-529-native-onboarding-review",
+    "766a7ce00423d6cd7fb96a7f1b0d76cc14c550f2 refs/heads/codex/rec-529-no-signup-close",
+    "1e27cb4513ee4f55d496ea7554ce2242c81e5610 refs/heads/codex/rec-529-onboarding-film-exploration",
+    "18b24196caab381eba1946da4ceeb4466c9a817f refs/heads/codex/rec-529-opening-signal",
+    "1185c81b8968a69eb96c233db833fa6e14eeb742 refs/heads/codex/rec-547-film-welcome-device"
+  ],
+  "baseFetchedMain": "eb4e6ada5346e00dcda37905a9a1c5acb6c2d141",
+  "verification": "git bundle verify passed; prerequisite commits are in the normal repository history",
+  "mainAndTestFlight": "authorized by Joe; current video lands independently of VHS options"
+}

@@ -1,0 +1,18 @@
+{
+  "archiveFileCount": 1552,
+  "sourceBundleVerified": true,
+  "repositoryBrowserURL": "http://127.0.0.1:8776/session-2026-09-16/founders-video-review.html",
+  "media": {
+    "duration": 75.1,
+    "width": 540,
+    "height": 960,
+    "playback": "verified",
+    "seekToSeconds": 67,
+    "mediaError": null,
+    "browserWarningsOrErrors": []
+  },
+  "reviewOnly": true,
+  "nativeVideoIntegration": false,
+  "mainLanding": false,
+  "testFlightUploaded": false
+}
