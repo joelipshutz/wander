@@ -101,8 +101,17 @@ The report's canonical `user_id` links to `profiles` and
    inert until its dedicated Vault secret exists.
 4. Verify a fictional notification in the actual private channel, including
    contact identity, photo and playable voice links, and `status=sent` in
-   `feedback_slack_deliveries`. Links expire in 24 hours; originals remain private
-   on the server. Only invite teammates who should see feedback and contact data.
+   `feedback_slack_deliveries`. Newly generated links expire in 30 days; previously
+   posted links retain their original expiry. Originals remain private on the
+   server. Anyone holding a signed link can use it until expiry; only invite
+   teammates who should see feedback and contact data.
+
+Notifications use bold literal rich-text elements for sender/contact details and
+the available Feedback text, Feedback photo, and Feedback voice note sections.
+Submitted uses Slack's readable local date/time, with an explicit UTC fallback.
+User content cannot create Slack mentions or markup. Account/report/app metadata
+remains available for support; the server inbox button and explanatory footer are
+omitted. The attachment links themselves are generated only by the worker.
 
 The worker resolves the canonical account through Clerk and includes its current
 verified primary email and, when present, a verified primary phone number. It

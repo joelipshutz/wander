@@ -53,7 +53,7 @@ enum DiscoverPeopleRecommendationReason: Equatable {
         case .followsYou: "Follows you"
         case .sharedFollows(let count):
             count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
-        case .suggested: "Suggested by Astir"
+        case .suggested: ""
         }
     }
 
@@ -66,7 +66,7 @@ enum DiscoverPeopleRecommendationReason: Equatable {
                 ? "1 person you follow follows \(profile.displayName)"
                 : "\(count) people you follow follow \(profile.displayName)"
         case .suggested:
-            return "Suggested by Astir"
+            return ""
         }
     }
 }
