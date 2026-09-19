@@ -508,34 +508,22 @@ struct ProfileOwnerHome: View {
 
     private var profileIdentityBlock: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            ProfileIdentityHeader(name: profile.displayName, tracksProfileMotion: true) {
                 profileAvatarControl
-                .profileMotionSource(.avatar)
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text(profile.displayName)
-                        .font(AstirTypography.sheetTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .profileMotionSource(.name)
-
-                    HStack(spacing: 0) {
-                        ProfileGraphCountButton(value: followerCount, label: "Followers") {
-                            graphAction(.followers)
-                        }
-                        ProfileGraphCountButton(value: followingCount, label: "Following") {
-                            graphAction(.following)
-                        }
-                        ProfileGraphCountButton(value: stats.friends, label: "Friends") {
-                            graphAction(.friends)
-                        }
+            } details: {
+                HStack(spacing: 0) {
+                    ProfileGraphCountButton(value: followerCount, label: "Followers") {
+                        graphAction(.followers)
                     }
-                    .frame(maxWidth: .infinity)
-                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                    ProfileGraphCountButton(value: followingCount, label: "Following") {
+                        graphAction(.following)
+                    }
+                    ProfileGraphCountButton(value: stats.friends, label: "Friends") {
+                        graphAction(.friends)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, WanderTheme.spacing2)
+                .frame(maxWidth: .infinity)
+                .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
             }
 
             VStack(alignment: .leading, spacing: 4) {

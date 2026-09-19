@@ -87,6 +87,57 @@ enum WanderPlaceEmojiResolver {
         return emoji(for: assignment, cuisine: cuisine, name: name)
     }
 
+    /// Native category fallback used only when the platform emoji font cannot
+    /// render. Existing emoji/category assignments remain the source of truth.
+    static func fallbackSystemImage(forEmoji emoji: String) -> String {
+        fallbackSymbolsByEmoji[normalizedEmoji(emoji)] ?? "mappin"
+    }
+
+    static func fallbackSystemImage(forCategory category: String) -> String {
+        switch WanderPlaceCategory.normalizedPrimaryCategory(category) {
+        case WanderPlaceCategory.restaurantsFood: "fork.knife"
+        case WanderPlaceCategory.coffeeTeaSweets: "cup.and.saucer.fill"
+        case WanderPlaceCategory.barsNightlife: "wineglass.fill"
+        case WanderPlaceCategory.outdoorsNature: "leaf.fill"
+        case WanderPlaceCategory.thingsToDo: "ticket.fill"
+        case WanderPlaceCategory.shopping: "bag.fill"
+        case WanderPlaceCategory.wellnessFitness: "heart.fill"
+        case WanderPlaceCategory.stays: "bed.double.fill"
+        case WanderPlaceCategory.servicesErrands: "wrench.and.screwdriver.fill"
+        case WanderPlaceCategory.travelTransit: "tram.fill"
+        case WanderPlaceCategory.workEducation: "book.fill"
+        case WanderPlaceCategory.civicFaith: "building.columns.fill"
+        case WanderPlaceCategory.areasAddresses: "map.fill"
+        default: "mappin"
+        }
+    }
+
+    private static func normalizedEmoji(_ emoji: String) -> String {
+        emoji.replacingOccurrences(of: "\u{FE0F}", with: "")
+            .replacingOccurrences(of: "\u{FE0E}", with: "")
+    }
+
+    private static let fallbackSymbolsByEmoji: [String: String] = {
+        var result: [String: String] = [:]
+        for entry in WanderPlaceCategory.taxonomy {
+            let symbol = fallbackSystemImage(forCategory: entry.id)
+            result[normalizedEmoji(entry.emoji)] = symbol
+            for rule in subcategoryRules[entry.id] ?? [] {
+                let key = normalizedEmoji(rule.emoji)
+                if result[key] == nil { result[key] = symbol }
+            }
+        }
+        for emoji in restaurantCuisineEmojis.values {
+            let key = normalizedEmoji(emoji)
+            if result[key] == nil { result[key] = "fork.knife" }
+        }
+        for rule in restaurantDetailRules {
+            let key = normalizedEmoji(rule.emoji)
+            if result[key] == nil { result[key] = "fork.knife" }
+        }
+        return result
+    }()
+
     private static func restaurantEmoji(
         assignment: PlaceCategoryAssignment,
         cuisine: String?,

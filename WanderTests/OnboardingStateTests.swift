@@ -199,7 +199,8 @@ final class OnboardingStateTests: XCTestCase {
                 needsServerCompletion: true,
                 isFirstVisitWalkthroughEligible: true,
                 firstVisitWalkthroughEnrollmentGeneration:
-                    FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration
+                    FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration,
+                hasSavedRequiredIdentity: false
             )
         )
         XCTAssertEqual(store.state(for: "user_b"), .fresh)
@@ -228,9 +229,10 @@ final class OnboardingStateTests: XCTestCase {
     func testIncompleteProfileResumesSavedOptionalStep() {
         let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
         let local = OnboardingLocalState(nextStep: .contacts, isComplete: false, needsServerCompletion: false)
+        let profile = LocalProfile(localID: "user", handle: "maya", displayName: "Maya", avatarURL: "https://example.invalid/avatar.jpg")
 
         XCTAssertEqual(
-            AppEntryStateResolver.signedInState(session: session, localState: local, remoteProfile: nil),
+            AppEntryStateResolver.signedInState(session: session, localState: local, remoteProfile: profile),
             .onboarding(session: session, step: .contacts)
         )
     }
