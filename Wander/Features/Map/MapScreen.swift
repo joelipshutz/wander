@@ -8831,6 +8831,7 @@ enum MapFeaturedSelection {
     static let maximumPlaceGroupCount = 24
     private static let maximumCandidateRowCount = 480
     private static let reservedRelationshipRowCount = 240
+    private static let reservedTasteRowCount = 120
 
     static func places(
         from candidates: [VisiblePlace],
@@ -8849,14 +8850,15 @@ enum MapFeaturedSelection {
                 && MapViewportRefreshPolicy.contains(visiblePlace, in: viewport)
         }
         let refinedPlaces = MapFilterSelection.applying(refinements, to: communityCheckIns)
-        let boundedPlaces = boundedCandidates(
-            refinedPlaces,
-            currentUserID: currentUserID,
-            followedOwnerIDs: followedOwnerIDs
-        )
         let tasteProfile = MapFeaturedTasteProfile(
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
+        )
+        let boundedPlaces = boundedCandidates(
+            refinedPlaces,
+            currentUserID: currentUserID,
+            followedOwnerIDs: followedOwnerIDs,
+            tasteProfile: tasteProfile
         )
         let rankedGroups = VisiblePlaceGrouping.groups(
             from: boundedPlaces,
@@ -8926,22 +8928,35 @@ enum MapFeaturedSelection {
     private static func boundedCandidates(
         _ candidates: [VisiblePlace],
         currentUserID: String,
-        followedOwnerIDs: Set<String>
+        followedOwnerIDs: Set<String>,
+        tasteProfile: MapFeaturedTasteProfile
     ) -> [VisiblePlace] {
         guard candidates.count > maximumCandidateRowCount else { return candidates }
 
-        let relationshipRows = Array(candidates.lazy.filter { visiblePlace in
-            visiblePlace.owner.id == currentUserID
-                || followedOwnerIDs.contains(visiblePlace.owner.id)
+        // Reserve taste recall before truncation, including a matching place late
+        // in the server response. Leave capacity for social and community discovery.
+        let tasteRows = candidates.map { ($0, tasteProfile.taxonomyFitScore(for: $0)) }
+            .filter { $0.1 > 0 }
+            .sorted { lhs, rhs in
+                lhs.1 == rhs.1 ? lhs.0.id < rhs.0.id : lhs.1 > rhs.1
+            }
+            .prefix(reservedTasteRowCount)
+            .map(\.0)
+        var selectedIDs = Set(tasteRows.map(\.id))
+        var selected = tasteRows
+        let relationshipRows = candidates.lazy.filter { visiblePlace in
+            !selectedIDs.contains(visiblePlace.id)
+                && (visiblePlace.owner.id == currentUserID
+                    || followedOwnerIDs.contains(visiblePlace.owner.id))
+        }.prefix(reservedRelationshipRowCount)
+        selected.append(contentsOf: relationshipRows)
+        selectedIDs.formUnion(selected.map(\.id))
+        for candidate in candidates where selected.count < maximumCandidateRowCount {
+            if selectedIDs.insert(candidate.id).inserted {
+                selected.append(candidate)
+            }
         }
-        .prefix(reservedRelationshipRowCount))
-        let communityRows = Array(candidates.lazy.filter { visiblePlace in
-            visiblePlace.owner.id != currentUserID
-                && !followedOwnerIDs.contains(visiblePlace.owner.id)
-        }
-        .prefix(maximumCandidateRowCount - relationshipRows.count))
-
-        return relationshipRows + communityRows
+        return selected
     }
 
     private static func supportCount(for group: VisiblePlaceGroup) -> Int {
@@ -8960,24 +8975,38 @@ enum MapFeaturedSelection {
 }
 
 private struct MapFeaturedTasteProfile {
+    private struct SubcategoryKey: Hashable {
+        let category: String
+        let subcategory: String
+    }
+
     private let categoryCounts: [String: Int]
+    private let subcategoryCounts: [SubcategoryKey: Int]
     private let cuisineCounts: [String: Int]
     private let tagCounts: [String: Int]
     private let likedSaveCount: Int
 
     init(tasteSaves: [PlaceSaveSummary], currentUserID: String) {
+        var seenPlaceIDs: Set<String> = []
         let likedSaves = tasteSaves.filter { summary in
-            guard summary.visiblePlace.owner.id == currentUserID else { return false }
-            return summary.visiblePlace.userPlace.status == .wannaGo
-                || (summary.visiblePlace.userPlace.ratingScore ?? 0) >= 4
+            guard summary.visiblePlace.owner.id == currentUserID,
+                  summary.visiblePlace.userPlace.deletedAt == nil,
+                  summary.visiblePlace.userPlace.status == .wannaGo
+                    || (summary.visiblePlace.userPlace.ratingScore ?? 0) >= 4
+            else { return false }
+            return seenPlaceIDs.insert(summary.visiblePlace.place.id).inserted
         }
 
         var categoryCounts: [String: Int] = [:]
+        var subcategoryCounts: [SubcategoryKey: Int] = [:]
         var cuisineCounts: [String: Int] = [:]
         var tagCounts: [String: Int] = [:]
 
         for summary in likedSaves {
             categoryCounts[Self.normalized(summary.visiblePlace.effectiveCategory), default: 0] += 1
+            if let key = Self.subcategoryKey(for: summary.visiblePlace) {
+                subcategoryCounts[key, default: 0] += 1
+            }
 
             if let cuisine = summary.visiblePlace.restaurantCuisine {
                 cuisineCounts[Self.normalized(cuisine), default: 0] += 1
@@ -8989,6 +9018,7 @@ private struct MapFeaturedTasteProfile {
         }
 
         self.categoryCounts = categoryCounts
+        self.subcategoryCounts = subcategoryCounts
         self.cuisineCounts = cuisineCounts
         self.tagCounts = tagCounts
         self.likedSaveCount = likedSaves.count
@@ -8997,10 +9027,7 @@ private struct MapFeaturedTasteProfile {
     func fitScore(for group: VisiblePlaceGroup) -> Double {
         guard likedSaveCount > 0 else { return 0 }
 
-        var score = affinityScore(
-            count: categoryCounts[Self.normalized(group.primary.effectiveCategory), default: 0],
-            maximum: 1.1
-        )
+        var score = taxonomyFitScore(for: group.primary)
 
         if let cuisine = group.primary.restaurantCuisine {
             score += affinityScore(
@@ -9020,6 +9047,28 @@ private struct MapFeaturedTasteProfile {
         score += min(0.75, Double(matchingTagCount) * 0.25)
 
         return score
+    }
+
+    func taxonomyFitScore(for place: VisiblePlace) -> Double {
+        guard likedSaveCount > 0 else { return 0 }
+        var score = affinityScore(
+            count: categoryCounts[Self.normalized(place.effectiveCategory), default: 0],
+            maximum: 1.1
+        )
+        if let key = Self.subcategoryKey(for: place) {
+            score += affinityScore(count: subcategoryCounts[key, default: 0], maximum: 3.0)
+        }
+        return score
+    }
+
+    private static func subcategoryKey(for place: VisiblePlace) -> SubcategoryKey? {
+        guard let subcategory = place.effectiveSubcategory.map(normalized),
+              !subcategory.isEmpty else { return nil }
+        let category = normalized(place.effectiveCategory)
+        let coffeeTypes: Set<String> = ["coffee shop", "cafe", "café", "coffee stand", "coffee lounge", "roastery"]
+        let subtype = category == WanderPlaceCategory.coffeeTeaSweets && coffeeTypes.contains(subcategory)
+            ? "coffee" : subcategory
+        return SubcategoryKey(category: category, subcategory: subtype)
     }
 
     private func affinityScore(count: Int, maximum: Double) -> Double {
