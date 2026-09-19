@@ -14,6 +14,7 @@ struct YourMapPrototypeScreen: View {
 
     let dataset: YourMapPrototypeDataset
     let viewerID: String?
+    let sharedProfileID: String?
     let mapTitle: String
     let pinOwnership: MapPinSaveOwnership
 
@@ -29,6 +30,7 @@ struct YourMapPrototypeScreen: View {
     init(
         dataset: YourMapPrototypeDataset,
         viewerID: String? = nil,
+        sharedProfileID: String? = nil,
         mapTitle: String = "Your Map",
         pinOwnership: MapPinSaveOwnership = .currentUser,
         initialMode: YourMapPrototypeMode = .map,
@@ -36,6 +38,7 @@ struct YourMapPrototypeScreen: View {
     ) {
         self.dataset = dataset
         self.viewerID = viewerID
+        self.sharedProfileID = sharedProfileID
         self.mapTitle = mapTitle
         self.pinOwnership = pinOwnership
         _mode = State(initialValue: initialMode)
@@ -79,15 +82,7 @@ struct YourMapPrototypeScreen: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .fullScreenCover(isPresented: $showsSharePreview) {
-            YourMapPrototypeSharePreview(
-                places: filteredPlaces,
-                lens: lens,
-                now: dataset.now,
-                pinOwnership: pinOwnership,
-                dismiss: { showsSharePreview = false }
-            )
-        }
+        .fullScreenCover(isPresented: $showsSharePreview) { mapSharePreview }
         .sheet(isPresented: Binding(
             get: { editingSnapshotListID != nil },
             set: { if !$0 { editingSnapshotListID = nil } }
@@ -118,6 +113,7 @@ struct YourMapPrototypeScreen: View {
                 } label: {
                     Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
                 }
+                .disabled(mode == .map && sharedMapProfile?.serverID == nil)
                 .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
             }
         }
@@ -129,6 +125,32 @@ struct YourMapPrototypeScreen: View {
             else { return }
             self.selectedPlaceID = nil
         }
+    }
+
+    @ViewBuilder
+    private var mapSharePreview: some View {
+            if let profile = sharedMapProfile,
+               let content = WanderShareContent.profile(serverID: profile.serverID, displayName: profile.displayName, handle: profile.handle) {
+                ActivitySharePreviewScreen(
+                    card: ShareCardContent(kind: .map, name: mapShareTitle(profile), ownerName: profile.displayName, count: filteredPlaces.count),
+                    content: content.withSubject(mapShareTitle(profile)),
+                    loadImages: {
+                        let points = filteredPlaces.map { ProfileMapPoint(id: $0.id, name: $0.name, city: $0.city, latitude: $0.latitude, longitude: $0.longitude) }
+                        let request = ProfileMapSnapshotRequest(points: points, size: CGSize(width: 390, height: 238), displayScale: 3, colorScheme: .dark)
+                        return ShareCardImages(map: await ProfileMapSnapshotCache.shared.image(for: request))
+                    }
+                )
+            }
+    }
+
+    private var sharedMapProfile: LocalProfile? {
+        sharedProfileID.flatMap { store.profile(for: $0) } ?? (sharedProfileID == nil ? store.currentUser : nil)
+    }
+
+    private func mapShareTitle(_ profile: LocalProfile) -> String {
+        if let city = lens.cities.sorted().first { return "\(profile.displayName)’s \(city) map" }
+        if let category = lens.categories.sorted().first { return "\(profile.displayName)’s \(category.lowercased()) map" }
+        return mapTitle == "Your Map" ? "\(profile.displayName)’s map" : mapTitle
     }
 
     private var filteredPlaces: [YourMapPrototypePlace] {
@@ -943,254 +965,6 @@ private struct YourMapPrototypeFilterSheet: View {
     private func sortedOptions(_ values: [String], fallback: [String]) -> [String] {
         let resolved = Set(values).sorted()
         return resolved.isEmpty ? fallback : resolved
-    }
-}
-
-private struct YourMapPrototypeSharePreview: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let places: [YourMapPrototypePlace]
-    let lens: YourMapPrototypeLens
-    let now: Date
-    let pinOwnership: MapPinSaveOwnership
-    let dismiss: () -> Void
-
-    @State private var format: YourMapPrototypeShareFormat = .staticSnapshot
-    @State private var createdLink: YourMapPrototypeShareLink?
-    @State private var showsShareSheet = false
-    @State private var didCopyLink = false
-
-    private var insights: YourMapPrototypeInsights {
-        YourMapPrototypeInsights(places: places, now: now)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: WanderTheme.spacing2) {
-                YourMapPrototypeCircleButton(systemImage: "xmark", label: "Close share preview", action: dismiss)
-                Spacer()
-                Text("Share your map")
-                    .font(AstirTypography.sectionTitle)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Spacer()
-                Color.clear.frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.vertical, WanderTheme.spacing3)
-
-            ScrollView {
-                VStack(spacing: WanderTheme.spacing3) {
-                    shareStoryCard
-
-                    Picker("Share format", selection: $format) {
-                        ForEach(YourMapPrototypeShareFormat.allCases) { option in
-                            Label(option.title, systemImage: option.systemImage).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityIdentifier("yourMap.prototype.shareFormat")
-                    .onChange(of: format) { _, _ in
-                        createdLink = nil
-                        didCopyLink = false
-                    }
-
-                    Text(formatDescription)
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Button {
-                        let link = YourMapPrototypeShareLink.make(format: format)
-                        createdLink = link
-                        UIPasteboard.general.url = link.url
-                        didCopyLink = true
-                        UIAccessibility.post(notification: .announcement, argument: "Copied")
-                        showsShareSheet = true
-                    } label: {
-                        Label("Create share link", systemImage: "link")
-                            .font(AstirTypography.control)
-                            .foregroundStyle(brandMode.accentForeground)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .background(brandMode.accent, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("yourMap.prototype.createShare")
-
-                    privacyRow(
-                        title: "Private notes stay private",
-                        detail: "The link contains the map view, never your personal notes.",
-                        systemImage: "lock.fill"
-                    )
-                }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing6)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .background(brandMode.background.ignoresSafeArea())
-        .foregroundStyle(brandMode.primaryText)
-        .accessibilityIdentifier("yourMap.prototype.sharePreview")
-        .overlay(alignment: .top) {
-            if didCopyLink {
-                Label("Copied", systemImage: "checkmark")
-                    .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.primaryText)
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.vertical, WanderTheme.spacing3)
-                    .astirGlassSurface(cornerRadius: 20, castsShadow: true)
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-                    .padding(.top, WanderTheme.spacing2)
-                    .accessibilityIdentifier("yourMap.prototype.copiedToast")
-                    .allowsHitTesting(false)
-            }
-        }
-        .task(id: didCopyLink) {
-            guard didCopyLink else { return }
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            didCopyLink = false
-        }
-        .sheet(isPresented: $showsShareSheet, onDismiss: { didCopyLink = false }) {
-            if let createdLink {
-                WanderShareSheet(content: .place(
-                    item: createdLink.url,
-                    name: lensTitle,
-                    message: "Explore my saved places on Astir"
-                ))
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
-        }
-    }
-
-    private var shareStoryCard: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text(lensTitle)
-                .font(AstirTypography.screenTitle)
-                .fixedSize(horizontal: false, vertical: true)
-            YourMapPrototypeMiniMap(places: places, pinOwnership: pinOwnership)
-                .frame(height: 210)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            HStack(spacing: WanderTheme.spacing3) {
-                shareStat(
-                    value: "\(places.count)",
-                    label: "places",
-                    systemImage: "cup.and.saucer.fill",
-                    color: brandMode.accent
-                )
-                shareStat(
-                    value: "\(Int((insights.repeatRate * 100).rounded()))%",
-                    label: "repeat rate",
-                    systemImage: "star.fill",
-                    color: brandMode.primaryText
-                )
-            }
-        }
-        .padding(WanderTheme.spacing4)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(brandMode.border))
-    }
-
-    private func privacyRow(title: String, detail: String, systemImage: String) -> some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .bold))
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(AstirTypography.label)
-                Text(detail)
-                    .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.secondaryText)
-            }
-            Spacer(minLength: 0)
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 21, weight: .bold))
-                .foregroundStyle(brandMode.accentText)
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: 66)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(brandMode.border))
-    }
-
-    private var lensTitle: String {
-        if let category = lens.categories.sorted().first {
-            return "Your \(category.lowercased()) map"
-        }
-        if let city = lens.cities.sorted().first {
-            return "Your \(city) map"
-        }
-        return "Your saved places"
-    }
-
-    private var formatDescription: String {
-        switch format {
-        case .staticSnapshot:
-            "Static freezes these \(places.count) places exactly as they are when the link is created."
-        case .liveLens:
-            "Live keeps this lens connected, so future places that match it appear automatically."
-        }
-    }
-
-    private func shareStat(
-        value: String,
-        label: String,
-        systemImage: String,
-        color: Color
-    ) -> some View {
-        VStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(color)
-            Text(value)
-                .font(AstirTypography.screenTitle.monospacedDigit())
-            Text(label)
-                .font(AstirTypography.metadata)
-                .foregroundStyle(brandMode.secondaryText)
-        }
-        .frame(maxWidth: .infinity, minHeight: 112)
-        .background(
-            brandMode.recessedBackground,
-            in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-        )
-    }
-}
-
-private struct YourMapPrototypeMiniMap: View {
-    let places: [YourMapPrototypePlace]
-    let pinOwnership: MapPinSaveOwnership
-
-    var body: some View {
-        Map(position: .constant(.region(region)), interactionModes: []) {
-            ForEach(Array(places.prefix(28))) { place in
-                Annotation(place.name, coordinate: place.coordinate) {
-                    YourMapPrototypePin(place: place, pinOwnership: pinOwnership)
-                        .scaleEffect(0.58)
-                }
-                .annotationTitles(.hidden)
-            }
-        }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Preview map with \(places.count) places")
-    }
-
-    private var region: MKCoordinateRegion {
-        guard let first = places.first else {
-            return MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437),
-                span: MKCoordinateSpan(latitudeDelta: 0.34, longitudeDelta: 0.34)
-            )
-        }
-        return MKCoordinateRegion(
-            center: first.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.3, longitudeDelta: 0.3)
-        )
     }
 }
 

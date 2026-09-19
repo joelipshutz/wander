@@ -293,9 +293,9 @@ final class InviteFrameworkTests: XCTestCase {
             includeInstallPrompt: false
         )
         XCTAssertEqual(content.message, ContactInviteWalkthroughContent.inviteProse)
-        XCTAssertTrue(content.messageBody.hasPrefix("\(ContactInviteWalkthroughContent.inviteProse)\n\n"))
-        XCTAssertTrue(content.items.contains(WanderShareContent.publicTestFlightURL))
-        XCTAssertEqual(content.items.count, 2)
+        XCTAssertEqual(content.messageBody, content.item.absoluteString)
+        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user-sender")
+        XCTAssertEqual(content.items.count, 1)
     }
 
     func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {

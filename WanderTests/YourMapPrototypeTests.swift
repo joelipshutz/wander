@@ -201,22 +201,7 @@ final class YourMapPrototypeTests: XCTestCase {
         )
     }
 
-    func testShareLinksAreOpaqueAndDistinguishStaticFromLive() {
-        let token = UUID(uuidString: "A94D4A30-31A3-48CB-B5BB-744F8F83B013")!
-        let staticLink = YourMapPrototypeShareLink.make(format: .staticSnapshot, token: token)
-        let liveLink = YourMapPrototypeShareLink.make(format: .liveLens, token: token)
 
-        XCTAssertEqual(
-            staticLink.url.absoluteString,
-            "https://rec.me/maps/a94d4a30-31a3-48cb-b5bb-744f8f83b013?type=static"
-        )
-        XCTAssertEqual(
-            liveLink.url.absoluteString,
-            "https://rec.me/maps/a94d4a30-31a3-48cb-b5bb-744f8f83b013?type=live"
-        )
-        XCTAssertFalse(staticLink.url.absoluteString.contains("Coffee"))
-        XCTAssertNotEqual(staticLink.url, liveLink.url)
-    }
 
     func testInitialCuratedLensOnlyAppliesToUsefulDataVolumes() {
         XCTAssertEqual(YourMapPrototypeDataset.make(volume: .empty).initialLens, YourMapPrototypeLens())
@@ -447,7 +432,9 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(yourMapScreen.contains("currentUserID: viewerID ?? selectedVisiblePlace.owner.id"))
         XCTAssertTrue(yourMapScreen.contains("pinOwnership: MapPinSaveOwnership = .currentUser"))
         XCTAssertTrue(yourMapScreen.contains("ownership: pinOwnership"))
-        XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeMiniMap(places: places, pinOwnership: pinOwnership)"))
+        XCTAssertTrue(yourMapScreen.contains("ActivitySharePreviewScreen("))
+        XCTAssertTrue(yourMapScreen.contains("sharedProfileID.flatMap { store.profile(for: $0) }"))
+        XCTAssertTrue(memberProfile.contains("sharedProfileID: profileID"))
     }
 
     func testYourMapIsCompiledIntoReleaseBuilds() throws {

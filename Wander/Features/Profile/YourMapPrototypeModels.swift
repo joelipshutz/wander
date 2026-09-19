@@ -173,41 +173,6 @@ enum YourMapPrototypeLensSwipePolicy {
     }
 }
 
-enum YourMapPrototypeShareFormat: String, CaseIterable, Identifiable {
-    case staticSnapshot = "static"
-    case liveLens = "live"
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .staticSnapshot: "Static"
-        case .liveLens: "Live"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .staticSnapshot: "camera.fill"
-        case .liveLens: "dot.radiowaves.left.and.right"
-        }
-    }
-}
-
-struct YourMapPrototypeShareLink: Equatable {
-    let format: YourMapPrototypeShareFormat
-    let url: URL
-
-    static func make(
-        format: YourMapPrototypeShareFormat,
-        token: UUID = UUID()
-    ) -> Self {
-        let tokenValue = token.uuidString.lowercased()
-        let url = URL(string: "https://rec.me/maps/\(tokenValue)?type=\(format.rawValue)")!
-        return Self(format: format, url: url)
-    }
-}
-
 struct YourMapPrototypePlace: Identifiable, Equatable {
     let id: String
     let name: String

@@ -221,6 +221,8 @@ struct ActivitySharePreviewScreen: View {
     @State private var renderedImage: UIImage?
     @State private var renderedImageURL: URL?
     @State private var isPreparingArtwork = false
+    @State private var publishedContent: WanderShareContent?
+    @State private var isPublishing = false
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
     @State private var instagramPostPresentation: ActivityShareInstagramPostPresentation?
@@ -265,7 +267,7 @@ struct ActivitySharePreviewScreen: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ActivityShareDestinationTray(
-                isPreparing: isPreparingArtwork || isMessagePresentationPending,
+                isPreparing: isPreparingArtwork || isPublishing || isMessagePresentationPending,
                 initiallyVisibleDestination: initiallyVisibleDestination,
                 instagramPhotoAccessInfoAction: hasAcknowledgedInstagramFullPhotoAccess
                     ? { instagramPhotoAccessGuidance = .reminder }
@@ -296,8 +298,7 @@ struct ActivitySharePreviewScreen: View {
             Task { await presentSystemShare() }
         }) { presentation in
             ActivityShareMessageComposer(
-                body: presentation.content.messageBody,
-                image: presentation.image
+                body: presentation.content.messageBody
             ) { result in
                 handleMessageCompletion(result)
             }
@@ -425,9 +426,12 @@ struct ActivitySharePreviewScreen: View {
     private func handleDestination(_ destination: ActivityShareDestination) {
         switch destination.route {
         case .copyLink:
-            UIPasteboard.general.url = content.item
-            trackShareCompleted(destination: "copy_link", outcome: "copied")
-            showConfirmation("link copied")
+            Task {
+                guard let shared = await preparedShareContent() else { return }
+                UIPasteboard.general.url = shared.item
+                trackShareCompleted(destination: "copy_link", outcome: "copied")
+                showConfirmation("link copied")
+            }
         case .messages:
             startMessagesPresentation()
         case .instagramStory:
@@ -497,14 +501,27 @@ struct ActivitySharePreviewScreen: View {
     }
 
     @MainActor
-    private func preparedShareContent(format: ShareCardFormat = .link) async -> WanderShareContent? {
-        guard await prepareArtworkIfNeeded(format: format), let renderedImageURL else { return nil }
-        return content.attachingPNG(at: renderedImageURL)
+    private func preparedShareContent() async -> WanderShareContent? {
+        if let publishedContent { return publishedContent }
+        guard !isPublishing else { return nil }
+        isPublishing = true
+        defer { isPublishing = false }
+        guard await prepareArtworkIfNeeded(format: .link), let renderedImage,
+              let png = renderedImage.pngData() else { return nil }
+        do {
+            guard let repository = backend.shareCardPreviewRepository else { throw WanderRemoteError.notConfigured }
+            let shared = try await repository.publish(content: content, previewPNG: png)
+            publishedContent = shared
+            return shared
+        } catch {
+            isShowingExportError = true
+            return nil
+        }
     }
 
     @MainActor
     private func presentMessages() async {
-        guard let shareContent = await preparedShareContent(), let renderedImage else {
+        guard let shareContent = await preparedShareContent() else {
             isMessagePresentationPending = false
             return
         }
@@ -513,10 +530,7 @@ struct ActivitySharePreviewScreen: View {
             systemSharePresentation = ActivityShareSystemPresentation(content: shareContent)
             return
         }
-        messagePresentation = ActivityShareMessagePresentation(
-            content: shareContent,
-            image: renderedImage
-        )
+        messagePresentation = ActivityShareMessagePresentation(content: shareContent)
     }
 
     @MainActor
@@ -551,16 +565,17 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentSystemShare() async {
-        guard let shareContent = await preparedShareContent(format: selectedFormat) else { return }
+        guard let shareContent = await preparedShareContent() else { return }
         systemSharePresentation = ActivityShareSystemPresentation(content: shareContent)
     }
 
     @MainActor
     private func presentInstagramStory() async {
+        guard let shared = await preparedShareContent() else { return }
         guard await prepareArtworkIfNeeded(), let renderedImage else { return }
         guard await ActivityShareProviderLauncher.openInstagramStory(
             image: renderedImage,
-            contentURL: content.item
+            contentURL: shared.item
         ) else {
             await presentSystemShare()
             return
@@ -570,9 +585,10 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentInstagramPost() async {
+        guard let shared = await preparedShareContent() else { return }
         guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
 
-        UIPasteboard.general.url = content.item
+        UIPasteboard.general.url = shared.item
         if ActivityShareProviderLauncher.canOpenInstagramPostLibrary,
            await ensurePhotoLibraryAccess() {
             do {
@@ -594,8 +610,9 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentCompatibleInstagramPost() async {
+        guard let shared = await preparedShareContent() else { return }
         guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
-        UIPasteboard.general.url = content.item
+        UIPasteboard.general.url = shared.item
         do {
             let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
             instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
@@ -607,6 +624,7 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentTikTok() async {
+        guard let shared = await preparedShareContent() else { return }
         guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
         guard ActivityShareProviderLauncher.canOpenTikTok else {
             await presentSystemShare()
@@ -621,7 +639,7 @@ struct ActivitySharePreviewScreen: View {
             isShowingExportError = true
             return
         }
-        UIPasteboard.general.url = content.item
+        UIPasteboard.general.url = shared.item
         guard await ActivityShareProviderLauncher.openTikTok(
             localIdentifier: localIdentifier,
             onCompletion: handleTikTokOutcome
@@ -651,10 +669,11 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentSnapchat() async {
+        guard let shared = await preparedShareContent() else { return }
         guard await prepareArtworkIfNeeded(), let renderedImage else { return }
         guard await ActivityShareProviderLauncher.openSnapchatPreview(
             image: renderedImage,
-            contentURL: content.item
+            contentURL: shared.item
         ) else {
             await presentSystemShare()
             return
@@ -765,8 +784,8 @@ private struct ActivityShareDestinationTray: View {
                                 action(destination)
                             }
                             .id(destination)
-                            .disabled(isPreparing && destination != .copyLink)
-                            .opacity(isPreparing && destination != .copyLink ? 0.58 : 1)
+                            .disabled(isPreparing)
+                            .opacity(isPreparing ? 0.58 : 1)
                         }
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -1430,12 +1449,10 @@ private final class ActivityShareInstagramPostHostController: UIViewController,
 private struct ActivityShareMessagePresentation: Identifiable {
     let id = UUID()
     let content: WanderShareContent
-    let image: UIImage
 }
 
 private struct ActivityShareMessageComposer: UIViewControllerRepresentable {
     let body: String
-    let image: UIImage
     let onFinish: (MessageComposeResult) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -1446,13 +1463,6 @@ private struct ActivityShareMessageComposer: UIViewControllerRepresentable {
         let controller = MFMessageComposeViewController()
         controller.messageComposeDelegate = context.coordinator
         controller.body = body
-        if MFMessageComposeViewController.canSendAttachments(), let data = image.pngData() {
-            controller.addAttachmentData(
-                data,
-                typeIdentifier: "public.png",
-                filename: "recme-ticket.png"
-            )
-        }
         return controller
     }
 

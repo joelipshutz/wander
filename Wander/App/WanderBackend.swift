@@ -218,6 +218,7 @@ final class WanderBackend: ObservableObject {
     let notificationRepository: (any NotificationRepository)?
     let eventsInterestRepository: (any EventsInterestRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
+    let shareCardPreviewRepository: (any ShareCardPreviewRepository)?
     let placePlanInvitationRepository: (any PlacePlanInvitationRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
@@ -268,6 +269,7 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
             self.eventsInterestRepository = SupabaseEventsInterestRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
+            self.shareCardPreviewRepository = SupabaseShareCardPreviewRepository(rpc: client, storage: client, authSession: authSession)
             self.placePlanInvitationRepository = SupabasePlacePlanInvitationRepository(rpc: client, storage: client)
         } else {
             self.feedbackRepository = nil
@@ -293,6 +295,7 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = nil
             self.eventsInterestRepository = nil
             self.sharedVisitRepository = nil
+            self.shareCardPreviewRepository = nil
             self.placePlanInvitationRepository = nil
         }
     }
@@ -324,6 +327,7 @@ final class WanderBackend: ObservableObject {
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
+        shareCardPreviewRepository: (any ShareCardPreviewRepository)? = nil,
         placePlanInvitationRepository: (any PlacePlanInvitationRepository)? = nil,
         eventsInterestRepository: (any EventsInterestRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
@@ -334,6 +338,7 @@ final class WanderBackend: ObservableObject {
         self.configuration = configuration
         self.feedbackRepository = nil
         self.featureFlagDeviceOverrides = featureFlagDeviceOverrides
+        self.shareCardPreviewRepository = shareCardPreviewRepository
         self.placePlanInvitationRepository = placePlanInvitationRepository
         self.placePhotoDataDiskCache = placePhotoDataDiskCache
         self.placePhotoDownloadLimiter = placePhotoDownloadLimiter

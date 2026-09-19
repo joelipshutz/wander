@@ -112,15 +112,22 @@ struct WanderShareContent: Equatable {
             message = opening
         }
         return WanderShareContent(
-            item: publicTestFlightURL,
-            additionalItems: [profileURL].compactMap { $0 },
+            item: profileURL ?? publicTestFlightURL,
             subject: "Join me on Astir",
             message: message
         )
     }
 
     var messageBody: String {
-        ([message] + items.filter { !$0.isFileURL }.map(\.absoluteString)).joined(separator: "\n\n")
+        item.absoluteString
+    }
+
+    func withSubject(_ title: String) -> WanderShareContent {
+        WanderShareContent(item: item, additionalItems: additionalItems, subject: title, message: message)
+    }
+
+    func withLink(_ url: URL) -> WanderShareContent {
+        WanderShareContent(item: url, subject: subject, message: "")
     }
 
     func attachingPNG(at fileURL: URL) -> WanderShareContent? {
@@ -147,13 +154,7 @@ struct WanderShareSheet: UIViewControllerRepresentable {
     var onComplete: ((Bool) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        var activityItems: [Any] = [
-            WanderShareActivityItemSource(
-                message: content.message,
-                subject: content.subject
-            )
-        ]
-        activityItems.append(contentsOf: content.items)
+        let activityItems: [Any] = [WanderShareActivityItemSource(url: content.item, subject: content.subject)]
         let controller = UIActivityViewController(
             activityItems: activityItems,
             applicationActivities: nil
@@ -168,23 +169,23 @@ struct WanderShareSheet: UIViewControllerRepresentable {
 }
 
 final class WanderShareActivityItemSource: NSObject, UIActivityItemSource {
-    let message: String
+    let url: URL
     let subject: String
 
-    init(message: String, subject: String) {
-        self.message = message
+    init(url: URL, subject: String) {
+        self.url = url
         self.subject = subject
     }
 
     func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
-        message
+        url
     }
 
     func activityViewController(
         _ activityViewController: UIActivityViewController,
         itemForActivityType activityType: UIActivity.ActivityType?
     ) -> Any? {
-        message
+        url
     }
 
     func activityViewController(
@@ -340,7 +341,6 @@ struct WanderShareButton<Label: View>: View {
             ShareLink(
                 item: content.item,
                 subject: Text(content.subject),
-                message: Text(content.message),
                 preview: preview,
                 label: label
             )
@@ -349,15 +349,13 @@ struct WanderShareButton<Label: View>: View {
             ShareLink(
                 item: content.item,
                 subject: Text(content.subject),
-                message: Text(content.message),
                 label: label
             )
             .simultaneousGesture(TapGesture().onEnded { _ in onTap() })
         } else {
             ShareLink(
-                items: content.items,
+                item: content.item,
                 subject: Text(content.subject),
-                message: Text(content.message),
                 label: label
             )
             .simultaneousGesture(TapGesture().onEnded { _ in onTap() })

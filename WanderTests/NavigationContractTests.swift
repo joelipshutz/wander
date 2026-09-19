@@ -1015,20 +1015,12 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
-    func testAppInviteContainsTestFlightAndSenderProfileLinks() {
+    func testAppInviteUsesOneProfileLinkWithWebsiteInstallationFallback() {
         let content = WanderShareContent.appInvite(senderProfileID: "user sender")
-
-        XCTAssertEqual(content.item, WanderShareContent.publicTestFlightURL)
-        XCTAssertEqual(content.items.map(\.absoluteString), [
-            "https://testflight.apple.com/join/knEhRa6t",
-            "https://getrec.me/profiles/user%20sender"
-        ])
-        XCTAssertTrue(content.messageBody.contains("Install the TestFlight beta"))
-        XCTAssertTrue(content.messageBody.contains("https://testflight.apple.com/join/knEhRa6t"))
-        XCTAssertTrue(content.messageBody.contains("https://getrec.me/profiles/user%20sender"))
-
-        let anonymousContent = WanderShareContent.appInvite(senderProfileID: nil)
-        XCTAssertEqual(anonymousContent.items, [WanderShareContent.publicTestFlightURL])
+        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20sender")
+        XCTAssertEqual(content.items, [content.item])
+        XCTAssertEqual(content.messageBody, content.item.absoluteString)
+        XCTAssertEqual(WanderShareContent.appInvite(senderProfileID: nil).items, [WanderShareContent.publicTestFlightURL])
     }
 
     @MainActor
@@ -1170,17 +1162,17 @@ final class NavigationContractTests: XCTestCase {
             applicationActivities: nil
         )
         let source = WanderShareActivityItemSource(
-            message: "Explore Santa Monica on @maya's Astir map",
+            url: URL(string: "https://getrec.me/profiles/user_maya")!,
             subject: "Maya Chen's Santa Monica map"
         )
 
         XCTAssertEqual(
-            source.activityViewControllerPlaceholderItem(controller) as? String,
-            "Explore Santa Monica on @maya's Astir map"
+            source.activityViewControllerPlaceholderItem(controller) as? URL,
+            URL(string: "https://getrec.me/profiles/user_maya")!
         )
         XCTAssertEqual(
-            source.activityViewController(controller, itemForActivityType: nil) as? String,
-            "Explore Santa Monica on @maya's Astir map"
+            source.activityViewController(controller, itemForActivityType: nil) as? URL,
+            URL(string: "https://getrec.me/profiles/user_maya")!
         )
         XCTAssertEqual(
             source.activityViewController(controller, subjectForActivityType: nil),
@@ -3196,7 +3188,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapSection.contains("points: insights.mapPoints(matching: item)"))
         XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))
         XCTAssertTrue(shareButton.contains("filterTitle: item.title"))
-        XCTAssertTrue(shareButton.contains("WanderShareSheet(content: shareContent)"))
+        XCTAssertTrue(shareButton.contains("ActivitySharePreviewScreen("))
         XCTAssertTrue(shareButton.contains(".alert(\"Couldn't prepare this map\""))
         XCTAssertTrue(shareButton.contains(".onDisappear(perform: cancelSharePreparation)"))
     }
