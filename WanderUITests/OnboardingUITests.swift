@@ -149,7 +149,8 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launch()
         let action = app.buttons["import.checkin.report-place-1"]
         scrollToImportControl(action, in: app)
-        action.tap()
+        keepScreenshot("Import report — single save before physical tap")
+        action.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(action.value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
         XCTAssertTrue(app.buttons["import.wanna.report-place-2"].isEnabled)

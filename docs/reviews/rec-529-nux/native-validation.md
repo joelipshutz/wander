@@ -51,20 +51,49 @@ The usual iPhone 16 Plus / iOS 18.6 runtime is not installed locally. The analyt
 dashboard contract check and its Node tests passed.
 
 The integrated full run passed **2,284 unit tests**. Its UI target reported
-155 passing cases, 33 failures and one unsigned App Group skip. The first main
-comparison reproduced 12 of 15 broader failures on unchanged main; remaining
-comparisons and serial reruns are in progress. Final focused checks passed all
-39 walkthrough and 153 navigation contracts. Native Add's whole-section/Import
-flow, first-Add Next/reopen/no-repeat, actual Contacts denial/recovery, and the
-complete welcome → login → OTP background/restore → identity flow passed across
-focused runs. Final totals and the baseline comparison will be recorded in the
-PR before merging.
+155 passing cases, 33 failures and one unsigned App Group skip. This is not a
+claim that the full UI suite is green. All 28 comparable failures were exercised
+against unchanged main at `f3d9cb6e`: 17 also failed there and 11 passed.
+
+Final focused checks passed **43/43**: all 39 walkthrough contracts plus native
+Map rings → Feed, whole-card Feed → top/no-repeat, Nearby → Import, and profile
+completion → real editor/no-repeat. All 153 navigation contracts also passed.
+First-Add Next/reopen, actual Contacts denial/recovery, and the complete welcome
+→ login → OTP background/restore → identity flow passed across focused runs.
+
+The comparison exposed an ancestor tap recognizer installed even when guidance
+was inactive. It is now absent unless a real dismissible contextual hint is
+active. Check-in restore/confirmation and answer editing pass with that fix;
+all eight initially failing question-editor cases pass across final serial
+reruns, including accessibility text, reorder/persistence, dietary selections,
+subtype changes, hiding/undo/re-adding a question, and restore cancellation.
 
 Verification caught and corrected parent accessibility metadata overriding
 native Add control identifiers and the welcome benefit copy. More filtering is
 checked with a physical tap and resulting selection. Its explanatory text is
 checked against the dropdown's visible bounds after a real drag, rather than
-requiring reading copy to expose a tappable accessibility point.
+requiring reading copy to expose a tappable accessibility point. The import
+single-save check also passes with a physical tap on its visible control,
+followed by Save/reopen and assertions that the other matches remain available.
+Its accessibility-synthesized tap had missed that same control.
+The question-catalog reopening test similarly reveals its real control, taps
+its visible center, and waits for the catalog before entering search text.
+
+Across final reruns, 19 of the initial 33 UI failures cleared. The remaining
+14 also failed on unchanged main:
+
+| Existing area | Cases |
+| --- | ---: |
+| Light/dark Events tab-bar identifiers | 2 |
+| More/filter dismissal and map-pin performance assertions | 3 |
+| Compact place preview/profile round trip | 1 |
+| Legacy Wanna copy/scroll, draft restoration, and calendar timing | 4 |
+| Profile settings and Your Map geography | 2 |
+| Import inline-details and saved-profile assertions | 2 |
+
+These are retained as known baseline limitations rather than reported as
+passes. The unsigned App Group share-extension case requires a signed host and
+is not counted as validated.
 
 No physical-device, VoiceOver or Reduce Motion acceptance is claimed. Those
 remain explicit device checks for the next manually requested TestFlight batch.

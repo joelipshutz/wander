@@ -2335,18 +2335,26 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
     let isActive: Bool
     let isContentReady: Bool
 
+    // A no-op ancestor recognizer can still compete with native controls and
+    // confirmation dialogs. Remove it entirely when there is no dismissible hint.
+    private var dismissesContextOnTap: Bool {
+        isActive
+            && coordinator.activeSurface == surface
+            && coordinator.currentStep != nil
+            && coordinator.currentStep?.target != .placeSaveActions
+            && coordinator.currentStep?.target != .feedActivity
+            && FirstVisitWalkthroughContent.contextualSurfaces.contains(surface)
+    }
+
     func body(content: Content) -> some View {
         content
             .environment(\.nuxPlaceIntroductionIsFocused,
                          isActive && coordinator.currentStep?.target == .placeSaveActions && placeIntroductionIsFocused)
-            .simultaneousGesture(TapGesture().onEnded {
-                if coordinator.currentStep?.target != .placeSaveActions,
-                   coordinator.currentStep?.target != .feedActivity,
-                   FirstVisitWalkthroughContent.contextualSurfaces.contains(surface),
-                   coordinator.activeSurface == surface {
+            .simultaneousGesture(
+                dismissesContextOnTap ? TapGesture().onEnded {
                     coordinator.dismissCurrentContext()
-                }
-            })
+                } : nil
+            )
             .onChange(of: coordinator.currentStep?.id) { _, _ in placeIntroductionIsFocused = false }
             .onAppear { if isActive { coordinator.activate(surface) } }
             .onChange(of: surface) { _, newSurface in

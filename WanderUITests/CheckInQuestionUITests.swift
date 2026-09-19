@@ -373,8 +373,11 @@ final class CheckInQuestionUITests: XCTestCase {
         openCheckIn(in: app)
         XCTAssertFalse(app.staticTexts["save.question.row.place_detail_arrival_parking"].exists)
         openCustomize(in: app)
-        app.buttons["save.questions.addCatalog"].tap()
+        let addCatalog = app.buttons["save.questions.addCatalog"]
+        reveal(addCatalog, in: app)
+        addCatalog.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let search = app.textFields["save.questions.catalogSearch"]
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap()
         search.typeText("Easy to find parking\n")
         app.buttons["save.questions.catalog.place_detail_arrival_parking"].tap()
