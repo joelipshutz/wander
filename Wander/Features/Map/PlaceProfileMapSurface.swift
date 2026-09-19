@@ -1622,6 +1622,7 @@ private struct PlaceProfileFullView: View {
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    @Environment(\.nuxPlaceIntroductionIsFocused) private var nuxPlaceIntroductionIsFocused
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -1722,6 +1723,10 @@ private struct PlaceProfileFullView: View {
         .environment(\.placeProfileVisualStyle, .astir)
         .environment(\.activityPostcardVisualStyle, .astir)
         .ignoresSafeArea(.container, edges: .top)
+        // Blur the real profile and its header, before adding the sharp native
+        // floating actions. The annotation lives above this entire surface.
+        .blur(radius: nuxPlaceIntroductionIsFocused ? NUXPlaceIntroductionTiming.blurRadius : 0)
+        .animation(.easeInOut(duration: 0.2), value: nuxPlaceIntroductionIsFocused)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty {
                 PlaceProfileFloatingActions(
@@ -1771,7 +1776,7 @@ private struct PlaceProfileFullView: View {
                 AstirMastheadLockup(presentation: .localizedBlur)
 
                 HStack(spacing: WanderTheme.spacing2) {
-                    if walkthroughs.activeSurface != .placeDetail {
+                    if !walkthroughs.isPresentingLegacyPlaceWalkthrough {
                         Button(action: onBack) {
                             headerNavigationLabel(systemImage: "chevron.left")
                         }
@@ -1832,6 +1837,7 @@ private struct PlaceProfileFullView: View {
     }
 
     private func handleFloatingAction(_ action: PlaceProfileSaveAction) {
+        walkthroughs.dismissCurrentContext()
         if action.kind == .editHistory {
             floatingActivityScrollRequest += 1
             return
@@ -1843,7 +1849,7 @@ private struct PlaceProfileFullView: View {
         _ target: WalkthroughTargetID?,
         using proxy: ScrollViewProxy
     ) {
-        guard walkthroughs.activeSurface == .placeDetail,
+        guard walkthroughs.isPresentingLegacyPlaceWalkthrough,
               let target,
               [WalkthroughTargetID.placeRatings, .placeActions, .placeHistory].contains(target)
         else { return }
@@ -2060,7 +2066,7 @@ private struct PlaceProfileFullView: View {
 
     @ViewBuilder
     private var actionRow: some View {
-        if walkthroughs.activeSurface == .placeDetail {
+        if walkthroughs.isPresentingLegacyPlaceWalkthrough {
             HStack(spacing: WanderTheme.spacing2) {
                 ForEach(actionItems) { item in
                     walkthroughActionButton(item)
@@ -2083,6 +2089,7 @@ private struct PlaceProfileFullView: View {
 
     private func standardActionButton(_ item: PlaceExternalAction) -> some View {
         Button {
+            walkthroughs.dismissCurrentContext()
             openURL(item.url)
         } label: {
             HStack(spacing: WanderTheme.spacing1) {
@@ -2103,6 +2110,7 @@ private struct PlaceProfileFullView: View {
 
     private func walkthroughActionButton(_ item: PlaceExternalAction) -> some View {
         Button {
+            walkthroughs.dismissCurrentContext()
             openURL(item.url)
         } label: {
             VStack(spacing: 3) {
@@ -2123,7 +2131,10 @@ private struct PlaceProfileFullView: View {
     }
 
     private var primaryPlaceAction: some View {
-        Button(action: onAction) {
+        Button {
+            walkthroughs.dismissCurrentContext()
+            onAction()
+        } label: {
             Label(primaryActionTitle, systemImage: action.systemImage)
                 .font(AstirTypography.control)
                 .frame(maxWidth: .infinity, minHeight: 48)
@@ -2178,7 +2189,7 @@ private struct PlaceProfileFullView: View {
             businessMetadata: effectiveBusinessMetadata,
             reservationAction: discoveredReservationAction
         )
-        guard walkthroughs.activeSurface == .placeDetail else { return resolved }
+        guard walkthroughs.isPresentingLegacyPlaceWalkthrough else { return resolved }
 
         var byKind: [PlaceExternalAction.Kind: PlaceExternalAction] = [:]
         for item in resolved where byKind[item.kind] == nil {
@@ -2452,6 +2463,7 @@ struct PlaceProfileFloatingActions: View {
         .padding(.horizontal, usesCompactLayout ? WanderTheme.spacing6 : WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .contain)
+        .walkthroughTarget(actions.contains { $0.kind == .checkIn } && actions.contains { $0.kind == .wanna } ? .placeSaveActions : nil)
     }
 
     @ViewBuilder
@@ -2519,6 +2531,7 @@ struct PlaceProfileFloatingActions: View {
                 }
             }
             .buttonStyle(.plain)
+            .walkthroughTarget(action.kind == .checkIn ? .placeCheckIn : action.kind == .wanna ? .placeWanna : nil)
             .accessibilityIdentifier("place-profile.floating-action.\(action.kind.rawValue)")
             .accessibilityLabel(action.title)
             .accessibilityAddTraits(action.isSelected ? .isSelected : [])

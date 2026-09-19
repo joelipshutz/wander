@@ -6,7 +6,7 @@ import UIKit
 /// This route uses the app's production views. Only repository data is local,
 /// so recording a session cannot create an account, contact a member or upload.
 enum NativeOnboardingReviewRoute: String {
-    case identity, location, contacts, friends, notifications
+    case welcome, signup, login, identity, location, contacts, friends, notifications
     case friendsEmpty = "friends-empty"
     case friendsFailure = "friends-failure"
 
@@ -20,7 +20,13 @@ enum NativeOnboardingReviewRoute: String {
         if self == .friendsEmpty || self == .friendsFailure { return .friends }
         return OnboardingStep(rawValue: rawValue)
     }
-
+    var authMode: NativeAuthMode? {
+        switch self {
+        case .signup: .signUp
+        case .login: .signIn
+        default: nil
+        }
+    }
 }
 
 @MainActor
@@ -28,9 +34,11 @@ struct NativeOnboardingReviewHost: View {
     let route: NativeOnboardingReviewRoute
     @StateObject private var auth: AuthSessionStore
     @StateObject private var backend: WanderBackend
+    @StateObject private var entryCoordinator: AppEntryCoordinator
     @StateObject private var pushNotifications = PushNotificationManager(analytics: NoopAnalyticsClient())
     @StateObject private var productUpsells = ProductUpsellCoordinator()
     @StateObject private var calendarReservations = CalendarReservationManager(analytics: NoopAnalyticsClient())
+    @State private var startsOnboarding = false
     @State private var completed = false
 
     static let session = AuthSession(userID: "native-review-user", displayName: "", handle: "")
@@ -55,25 +63,43 @@ struct NativeOnboardingReviewHost: View {
         )
         _backend = StateObject(wrappedValue: backend)
         _auth = StateObject(wrappedValue: auth)
-
+        _entryCoordinator = StateObject(wrappedValue: AppEntryCoordinator(
+            auth: auth, backend: backend, analytics: NoopAnalyticsClient(),
+            usesLocalSimulatorTestSession: true,
+            forcedLocalSimulatorOnboardingStep: .identity
+        ))
     }
 
     var body: some View {
         Group {
-            if completed {
+            if route == .welcome {
+                AppEntryView(
+                    coordinator: entryCoordinator,
+                    analytics: NoopAnalyticsClient(),
+                    analyticsLifecycle: AppAnalyticsLifecycleTracker(analytics: NoopAnalyticsClient()),
+                    parser: DeterministicFilterParser()
+                )
+            } else if completed {
                 WanderRootView(
                     initialSession: auth.state.session,
-                    isFirstVisitWalkthroughEligible: false,
+                    isFirstVisitWalkthroughEligible: true,
                     analytics: NoopAnalyticsClient(),
                     parser: DeterministicFilterParser()
                 )
                 .environmentObject(WanderApp.makeMapCaptureBackend())
-            } else if let step = route.initialStep {
+            } else if let step = route.initialStep ?? (startsOnboarding ? .identity : nil) {
                 OnboardingFlowView(
                     session: Self.session, initialStep: step,
                     analytics: NoopAnalyticsClient(), saveProgress: { _ in },
                     complete: { _ in completed = true }
                 )
+            } else {
+                SignedOutOnboardingFlowView(
+                    analytics: NoopAnalyticsClient()
+                )
+                .onAppear {
+                    if let mode = route.authMode { auth.beginSignIn(mode: mode) }
+                }
             }
         }
         .environmentObject(auth)
@@ -84,7 +110,7 @@ struct NativeOnboardingReviewHost: View {
         .modelContainer(WanderModelContainer.preview)
         .astirAdaptiveBrandMode()
         .overlay {
-            if let presentation = productUpsells.activePresentation {
+            if route != .welcome, let presentation = productUpsells.activePresentation {
                 ProductUpsellScreen(presentation: presentation, analytics: NoopAnalyticsClient())
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -94,6 +120,9 @@ struct NativeOnboardingReviewHost: View {
             }
         }
         .task { productUpsells.bind(to: Self.session.userID) }
+        .onChange(of: auth.state) { _, state in
+            if state.isSignedIn { startsOnboarding = true }
+        }
     }
 }
 

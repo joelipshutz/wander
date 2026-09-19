@@ -143,6 +143,7 @@ struct OnboardingFlowView: View {
 }
 
 struct OnboardingIdentityView: View {
+    @Environment(\.astirBrandMode) private var brandMode
     private enum Availability: Equatable {
         case idle
         case checking
@@ -164,6 +165,7 @@ struct OnboardingIdentityView: View {
     @State private var existingAvatarURL: String?
     @State private var previewImage: UIImage?
     @State private var jpegData: Data?
+    @State private var existingAvatarURL: String?
     @State private var availability: Availability = .idle
     @State private var errorMessage: String?
     @State private var isSaving = false
@@ -171,7 +173,7 @@ struct OnboardingIdentityView: View {
 
     private enum Field { case name, handle }
 
-    init(session: AuthSession, analytics: AnalyticsClient, continueAction: @escaping () -> Void) {
+    init(session: AuthSession, analytics: AnalyticsClient, initialPhoto: UIImage? = nil, continueAction: @escaping () -> Void) {
         self.session = session
         self.analytics = analytics
         self.continueAction = continueAction
@@ -183,6 +185,8 @@ struct OnboardingIdentityView: View {
         ).normalizedHandle
         _name = State(initialValue: initialName)
         _handle = State(initialValue: initialHandle)
+        _previewImage = State(initialValue: initialPhoto)
+        _jpegData = State(initialValue: initialPhoto?.jpegData(compressionQuality: 0.9))
     }
 
     private var draft: ProfileIdentityDraft {
@@ -331,6 +335,7 @@ struct OnboardingIdentityView: View {
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing6)
+                .disabled(isSaving)
             }
             .scrollDismissesKeyboard(.interactively)
         } footer: {
@@ -348,6 +353,12 @@ struct OnboardingIdentityView: View {
             if let profile = try? await backend.currentProfile() { existingAvatarURL = profile.avatarURL }
         }
         .task(id: draft.normalizedHandle) { await checkAvailability() }
+        .task {
+            guard let profile = try? await backend.currentProfile(), !Task.isCancelled,
+                  let url = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty
+            else { return }
+            existingAvatarURL = url
+        }
         .onChange(of: selectedPhoto) { _, item in
             guard let item else { return }
             Task { await loadPhoto(item) }
@@ -360,10 +371,25 @@ struct OnboardingIdentityView: View {
                     jpegData = data
                     previewImage = image
                     photoCropSelection = nil
+                    errorMessage = nil
                 }
             )
             .environment(\.astirBrandMode, .editorial)
             .preferredColorScheme(.dark)
+        }
+    }
+
+    @ViewBuilder
+    private var profilePhoto: some View {
+        if let previewImage {
+            Image(uiImage: previewImage).resizable().scaledToFill()
+        } else if let existingAvatarURL {
+            WanderAvatar(initials: String(draft.normalizedDisplayName.prefix(2)).uppercased(), avatarURL: existingAvatarURL, size: 104)
+        } else {
+            Circle().fill(brandMode.border.opacity(0.4))
+                .overlay(Image(systemName: "person.crop.circle")
+                    .font(.system(size: 50, weight: .ultraLight))
+                    .foregroundStyle(brandMode.secondaryText))
         }
     }
 
@@ -390,12 +416,16 @@ struct OnboardingIdentityView: View {
             return
         }
         availability = .checking
+        let candidate = draft.normalizedHandle
         do {
             try await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
-            availability = try await backend.isProfileHandleAvailable(draft.normalizedHandle) ? .available : .unavailable
+            let isAvailable = try await backend.isProfileHandleAvailable(candidate)
+            guard !Task.isCancelled, candidate == draft.normalizedHandle else { return }
+            availability = isAvailable ? .available : .unavailable
         } catch is CancellationError {
         } catch {
+            guard !Task.isCancelled, candidate == draft.normalizedHandle else { return }
             availability = .idle
         }
     }
@@ -407,20 +437,24 @@ struct OnboardingIdentityView: View {
         errorMessage = nil
         defer { isSaving = false }
         do {
-            _ = try await backend.updateCurrentProfile(
-                ProfileDetailsUpdate(
-                    displayName: draft.normalizedDisplayName,
-                    handle: draft.normalizedHandle
-                )
+            try await OnboardingIdentitySubmission.save(
+                draft: draft,
+                photoData: jpegData,
+                existingAvatarURL: existingAvatarURL,
+                updateIdentity: { update in _ = try await backend.updateCurrentProfile(update) },
+                uploadPhoto: { data in _ = try await backend.uploadProfileAvatar(jpegData: data, userID: session.userID) }
             )
             analytics.track(AnalyticsEvent(
                 name: WanderAnalyticsEvents.onboardingIdentitySubmitted,
                 properties: ["photo_selected": jpegData == nil ? "false" : "true"]
             ))
-            if let jpegData {
-                _ = try? await backend.uploadProfileAvatar(jpegData: jpegData, userID: session.userID)
-            }
             continueAction()
+        } catch let error as OnboardingIdentityPhotoError {
+            errorMessage = error.message
+            analytics.track(AnalyticsEvent(
+                name: WanderAnalyticsEvents.onboardingIdentityFailed,
+                properties: ["reason": "photo_save_failed"]
+            ))
         } catch {
             let mapped = ProfileIdentitySubmissionError.map(error)
             availability = mapped == .handleTaken ? .unavailable : availability

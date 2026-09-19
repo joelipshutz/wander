@@ -325,7 +325,7 @@ private struct EventsWaitlistStatus: UIViewRepresentable {
         isAccessibilityElement = true
         accessibilityTraits = .staticText
         accessibilityIdentifier = "events.waitlistStatus"
-        accessibilityLabel = "Added to Wait List"
+        accessibilityLabel = "Added to Waitlist"
         addSubview(artwork)
     }
 
@@ -361,7 +361,7 @@ private struct EventsWaitlistStatus: UIViewRepresentable {
             }
             let font = UIFont(name: "HelveticaNeue-CondensedBlack", size: 27)
                 ?? UIFont.systemFont(ofSize: 25, weight: .black)
-            let text = (selected ? "ADDED TO WAIT LIST" : "KEEP ME POSTED") as NSString
+            let text = (selected ? "ADDED TO WAITLIST" : "KEEP ME POSTED") as NSString
             var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color,
                                                             .kern: 0.6]
             let availableWidth = max(1, size.width - 32)

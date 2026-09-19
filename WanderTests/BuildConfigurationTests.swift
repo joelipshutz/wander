@@ -193,7 +193,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Astir")
         XCTAssertEqual(plist["CFBundleName"] as? String, "$(PRODUCT_NAME)")
 
-        for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription"] {
+        for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription", "NSMicrophoneUsageDescription"] {
             let usageDescription = try XCTUnwrap(plist[key] as? String)
             XCTAssertTrue(usageDescription.contains("Astir"), "\(key) must use the public app name")
             XCTAssertFalse(usageDescription.contains("Wander"), "\(key) must not expose the internal app name")
@@ -204,9 +204,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(cameraUsage.contains("restaurant photo"))
 
         let contactsUsage = try XCTUnwrap(plist["NSContactsUsageDescription"] as? String)
-        XCTAssertTrue(contactsUsage.contains("on this device"))
-        XCTAssertTrue(contactsUsage.contains("address book is not uploaded"))
-        XCTAssertTrue(contactsUsage.contains("only a number you select"))
+        XCTAssertEqual(contactsUsage, "Astir uses your contacts to help you connect with people you know.")
 
         for (relativePath, expectedName) in [
             ("WanderShareExtension/Info.plist", "Save to Astir"),
@@ -561,6 +559,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(
             try collectedDataTypes(in: manifest),
             [
+                "NSPrivacyCollectedDataTypeAudioData",
                 "NSPrivacyCollectedDataTypeContacts",
                 "NSPrivacyCollectedDataTypeDeviceID",
                 "NSPrivacyCollectedDataTypeEmailAddress",

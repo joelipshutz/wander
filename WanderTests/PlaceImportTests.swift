@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 import XCTest
@@ -3899,6 +3900,31 @@ final class PlaceImportStoreTests: XCTestCase {
 
         XCTAssertEqual(store.item(id: item.id)?.state, .ready)
         XCTAssertEqual(persistence.snapshot.items.first?.state, .ready)
+    }
+
+    func testDuplicateReconciliationPublishesOneBatchAndNoUnchangedBatch() async throws {
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(), resolver: FakePlaceImportResolver())
+        let batchID = try store.enqueue(source: .textNotes, text: "Ready, Los Angeles\nReady too, Los Angeles")
+        await store.waitForProcessing(batchID: batchID)
+        let rows = store.items(for: batchID)
+        XCTAssertEqual(rows.count, 2)
+        let existing = try rows.enumerated().map { index, row in
+            let candidate = try XCTUnwrap(row.selectedCandidate)
+            return PlaceImportExistingPlace(userPlaceID: "existing-\(index)", name: candidate.name,
+                latitude: candidate.latitude, longitude: candidate.longitude,
+                sourceProvider: candidate.sourceProvider, sourceProviderPlaceID: candidate.sourceProviderPlaceID)
+        }
+        var publications = 0
+        let subscription = store.$items.dropFirst().sink { _ in publications += 1 }
+        defer { subscription.cancel() }
+        store.reconcileDuplicates(with: existing)
+        XCTAssertEqual(store.summary.duplicateCount, 2)
+        XCTAssertEqual(publications, 1)
+        store.reconcileDuplicates(with: existing)
+        XCTAssertEqual(publications, 1)
+        store.reconcileDuplicates(with: [])
+        XCTAssertEqual(store.summary.duplicateCount, 0)
+        XCTAssertEqual(publications, 2)
     }
 
     func testReconcileMarksAnAlreadySavedProviderPlaceAsDuplicate() async throws {

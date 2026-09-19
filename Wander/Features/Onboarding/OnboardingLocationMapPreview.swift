@@ -3,7 +3,7 @@ import SwiftUI
 
 enum OnboardingLocationContent {
     static let eyebrow = "AROUND YOU"
-    static let title = "Find the good stuff nearby"
+    static let title = "Find places nearby"
     static let message = "See places your friends recommend and save spots around you without searching for an address."
     static let privacyMessage = "Your location is yours."
     static let selectedPlaceName = "Hotchkiss Park"

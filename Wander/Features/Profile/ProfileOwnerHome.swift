@@ -284,6 +284,7 @@ struct ProfileOwnerHome: View {
     let yourMapAction: (() -> Void)?
     let calendarScrollRequestID: UUID?
     let onCalendarScrollRequestHandled: (UUID) -> Void
+    var feedbackAction: (() -> Void)? = nil
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
     @Environment(\.resolvedProfileHeaderMotion) private var profileHeaderMotion
@@ -434,6 +435,10 @@ struct ProfileOwnerHome: View {
                 Spacer(minLength: 0)
 
                 if mode.isOwner {
+                    if let feedbackAction {
+                        ProfileHeaderActionButton(systemImage: "ladybug.fill", accessibilityLabel: "Feedback", action: feedbackAction)
+                            .accessibilityIdentifier("profile.feedback")
+                    }
                     ProfileInvitationButton(
                         pendingInvitationCount: sharedVisitInvitationCount,
                         action: sharedVisitInvitationsAction
@@ -512,9 +517,15 @@ struct ProfileOwnerHome: View {
                 profileAvatarControl
             } details: {
                 HStack(spacing: 0) {
-                    ProfileGraphCountButton(value: followerCount, label: "Followers") { graphAction(.followers) }
-                    ProfileGraphCountButton(value: followingCount, label: "Following") { graphAction(.following) }
-                    ProfileGraphCountButton(value: stats.friends, label: "Friends") { graphAction(.friends) }
+                    ProfileGraphCountButton(value: followerCount, label: "Followers") {
+                        graphAction(.followers)
+                    }
+                    ProfileGraphCountButton(value: followingCount, label: "Following") {
+                        graphAction(.following)
+                    }
+                    ProfileGraphCountButton(value: stats.friends, label: "Friends") {
+                        graphAction(.friends)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)

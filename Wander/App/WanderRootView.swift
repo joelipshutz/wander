@@ -314,6 +314,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
+    @State private var nuxFeedEntranceProgress: CGFloat = 0
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
@@ -321,7 +322,7 @@ struct WanderRootView: View {
     @State private var importHubRestingHeight = AddSheetLayout.importEntryHeight
     @State private var importHubPresentationID = UUID()
     @State private var opensImportHubAfterReportDismissal = false
-    @State private var addSheetDetent: PresentationDetent
+    @State private var selectedAddSheetDetent: PresentationDetent?
     @State private var addLaunchRequest: WanderAddLaunchRequest?
     @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
     @State private var profileCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
@@ -400,7 +401,9 @@ struct WanderRootView: View {
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser(),
-        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil
+        socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil,
+        storeFactory: (@MainActor () -> WanderStore)? = nil,
+        importStoreFactory: (@MainActor () -> PlaceImportStore)? = nil
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         let launchArguments = ProcessInfo.processInfo.arguments
@@ -438,31 +441,23 @@ struct WanderRootView: View {
         _placeProfileFloatingActionVariant = State(
             initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
         )
-        // SwiftUI retains the StateObject. Defer construction so root value
-        // updates do not restore a throwaway store from disk.
-        _store = StateObject(wrappedValue: {
-            let store = Self.makeStore(
+        // StateObject's autoclosure must own construction. An eager local would
+        // reload the entire snapshot on every parent update, even when SwiftUI
+        // keeps the already-mounted store for this account.
+        _store = StateObject(wrappedValue: storeFactory?() ?? Self.makeStore(
+            fixtureMode: fixtureMode,
+            parser: parser,
+            analytics: analytics,
+            persistence: fixtureMode == .empty ? .live : nil,
+            initialSession: initialSession,
+            initialDarkMap: Self.resolvedInitialDarkMap(from: launchArguments)
+        ))
+        _importStore = StateObject(
+            wrappedValue: importStoreFactory?() ?? Self.makeImportStore(
                 fixtureMode: fixtureMode,
-                parser: parser,
-                analytics: analytics,
-                persistence: fixtureMode == .empty ? .live : nil,
-                initialSession: initialSession
-            )
-            if Self.resolvedInitialDarkMap(from: launchArguments) {
-                store.isDarkMapEnabled = true
-            }
-            return store
-        }())
-        let importPersistence: any PlaceImportPersisting = fixtureMode == .empty
-            ? FilePlaceImportPersistence()
-            : EphemeralPlaceImportPersistence()
-        let importStore = PlaceImportStore(
-            persistence: importPersistence,
-            resolver: DevicePlaceImportResolver(
                 socialUnderstandingRepository: socialImportUnderstandingRepository
             )
         )
-        _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(
             wrappedValue: PlaceSaveDraftStore(
                 persistence: fixtureMode == .empty ? .live : .ephemeral
@@ -482,11 +477,6 @@ struct WanderRootView: View {
                     walkthroughDebugPreferences.clearReplayRequest(for: completedUserID)
                     onFirstVisitWalkthroughCompleted(completedUserID)
                 }
-            )
-        )
-        _addSheetDetent = State(
-            initialValue: AddSheetLayout.restingDetent(
-                hasPendingImports: importStore.summary.hasPendingImports
             )
         )
     }
@@ -535,6 +525,9 @@ struct WanderRootView: View {
                     },
                     onAdd: presentAddSheet
                 )
+                    .visualEffect { [nuxFeedEntranceProgress] content, geometry in
+                        content.offset(x: geometry.size.width * nuxFeedEntranceProgress)
+                    }
                     .tabItem { tabItemLabel(for: .discover) }
                     .tag(WanderTab.discover)
 
@@ -624,6 +617,18 @@ struct WanderRootView: View {
             surface: walkthroughSurface(for: selectedTab),
             externalTargetFrames: nativeTabItemControlsFrame.map { [.mapTabs: $0] } ?? [:]
         )
+        .overlay(alignment: .bottomTrailing) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-WanderNUXReview"),
+               walkthroughs.activeSurface != .placeDetail {
+                NUXReviewControls { target in
+                    walkthroughs.prepareDebugReplay(at: target)
+                    if let surface = walkthroughs.activeSurface { routeWalkthrough(to: surface) }
+                }
+                .padding(.trailing, 16).padding(.bottom, 94)
+            }
+            #endif
+        }
         .walkthroughLaunchLessonOverlay(
             walkthroughs,
             onOpenImport: presentWalkthroughImportHub
@@ -788,7 +793,10 @@ struct WanderRootView: View {
                     importStore: importStore,
                     placeSaveDraftStore: placeSaveDraftStore,
                     resetToken: addTabResetToken,
-                    selectedDetent: $addSheetDetent,
+                    selectedDetent: Binding(
+                        get: { addSheetDetent },
+                        set: { addSheetDetent = $0 }
+                    ),
                     launchRequest: addLaunchRequest,
                     onLaunchRequestHandled: consumeAddLaunchRequest,
                     walkthroughParkSuggestion: resolveFirstVisitParkSuggestion,
@@ -872,8 +880,7 @@ struct WanderRootView: View {
     }
 
     private var shouldDimBehindAddWalkthrough: Bool {
-        walkthroughs.activeSurface == .add
-            || walkthroughs.activeSurface == .saveFlow
+        walkthroughs.activeSurface == .saveFlow
             || walkthroughs.requestedSurface == .map
     }
 
@@ -1246,10 +1253,12 @@ struct WanderRootView: View {
         Binding {
             selectedTab
         } set: { newTab in
+            guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
                 presentAddSheet()
             } else {
-                walkthroughs.perform(.mapTabs)
+                walkthroughs.finishOverviewForUserNavigation()
+                walkthroughs.dismissCurrentContext()
                 // Preserve the system Liquid Glass bar while committing the
                 // destination content without its long selection transition.
                 withTransaction(Transaction(animation: nil)) {
@@ -1263,11 +1272,8 @@ struct WanderRootView: View {
 
     private func presentAddSheet() {
         dismissKeyboard()
-        if walkthroughs.currentStep?.target == .mapAddAgain {
-            walkthroughs.perform(.mapAddAgain)
-        } else {
-            walkthroughs.perform(.mapAdd)
-        }
+        walkthroughs.finishOverviewForUserNavigation()
+        walkthroughs.dismissCurrentContext()
         walkthroughs.transition(to: .add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
@@ -1452,6 +1458,11 @@ struct WanderRootView: View {
         isPresentingAdd = true
     }
 
+    private var addSheetDetent: PresentationDetent {
+        get { selectedAddSheetDetent ?? addSheetRestingDetent }
+        nonmutating set { selectedAddSheetDetent = newValue }
+    }
+
     private var addSheetRestingDetent: PresentationDetent {
         AddSheetLayout.restingDetent(
             hasPendingImports: importStore.summary.hasPendingImports
@@ -1474,6 +1485,7 @@ struct WanderRootView: View {
     }
 
     private func reconcilePlaceImports() {
+        guard importStore.hasDuplicateReconciliationCandidates else { return }
         importStore.reconcileDuplicates(
             with: store.currentUserVisiblePlaces.map { visiblePlace in
                 PlaceImportExistingPlace(
@@ -1897,6 +1909,7 @@ struct WanderRootView: View {
     }
 
     private func handleRootDisappear() {
+        store.cancelForegroundRefreshTasks()
         cancelSignedInMaintenance()
         walkthroughFeatureFlagRefreshTask?.cancel()
         walkthroughFeatureFlagRefreshTask = nil
@@ -2257,7 +2270,20 @@ struct WanderRootView: View {
             isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
             isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         )
-        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePresentation
+        // Enroll only the new-user cohort (or an explicit enabled debug replay).
+        // Its independent marker keeps unfinished hints available after the
+        // primary tour retires, without introducing NUX to established users.
+        walkthroughs.setContextualEnabled(FirstVisitWalkthroughFeatureFlag.isEnabled(
+            isEligible: isEnabled || walkthroughs.hasContextualEnrollment,
+            isUsingLiveData: fixtureMode == .empty,
+            launchArguments: launchArguments,
+            resolvedValue: resolvedFlag?.isEnabled,
+            entitledDebugOverride: debugNUXOverride,
+            isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
+            isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
+        ), enrollCurrentUser: isEnabled)
+        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePrimaryJourney
+            || walkthroughs.isPresentingLaunchLesson
         walkthroughs.setEnabled(isEnabled)
 
         guard isEnabled else {
@@ -2282,6 +2308,7 @@ struct WanderRootView: View {
                     forceRootCleanup: hadActiveWalkthroughPresentation
                 )
             }
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
             return
         }
 
@@ -2443,8 +2470,15 @@ struct WanderRootView: View {
                 isPresentingAdd = false
             }
         case .feed:
+            nuxFeedEntranceProgress = selectedTab == .map && !accessibilityReduceMotion ? 1 : 0
             selectedTab = .discover
             isPresentingAdd = false
+            Task { @MainActor in
+                await Task.yield()
+                withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.4)) {
+                    nuxFeedEntranceProgress = 0
+                }
+            }
         case .events:
             selectedTab = .events
             isPresentingAdd = false
@@ -2488,8 +2522,9 @@ struct WanderRootView: View {
             if isPresentingAdd {
                 await Task.yield()
             } else {
-                try? await Task.sleep(for: .milliseconds(220))
+                try? await Task.sleep(for: .milliseconds(surface == .feed ? 450 : 220))
             }
+            guard walkthroughSurface(for: selectedTab) == surface || isPresentingAdd else { return }
             walkthroughs.consumeRequestedSurface(surface)
             walkthroughs.activate(surface)
         }
@@ -3216,8 +3251,11 @@ struct WanderRootView: View {
         parser: any LLMFilterParser,
         analytics: AnalyticsClient,
         persistence: WanderStorePersistence?,
-        initialSession: AuthSession?
+        initialSession: AuthSession?,
+        initialDarkMap: Bool
     ) -> WanderStore {
+        let interval = WanderDebugLog.beginPerformanceInterval("Root Store Initialization")
+        defer { WanderDebugLog.endPerformanceInterval("Root Store Initialization", id: interval) }
         let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
         let fixtures = resolvedFixtures(from: ProcessInfo.processInfo.arguments)
         let fixturesFinishedAt = CFAbsoluteTimeGetCurrent()
@@ -3238,11 +3276,30 @@ struct WanderRootView: View {
         if (fixtureMode == .empty || fixtureMode == .ephemeralEmpty), let initialSession {
             store.apply(authState: .signedIn(initialSession))
         }
+        if initialDarkMap {
+            store.isDarkMapEnabled = true
+        }
         let storeFinishedAt = CFAbsoluteTimeGetCurrent()
         WanderDebugLog.performance.notice(
             "root initialization fixture_mode=\(String(describing: fixtureMode), privacy: .public) fixture_ms=\((fixturesFinishedAt - fixturesStartedAt) * 1_000, privacy: .public) store_ms=\((storeFinishedAt - fixturesFinishedAt) * 1_000, privacy: .public)"
         )
         return store
+    }
+
+    private static func makeImportStore(
+        fixtureMode: WanderFixtureMode,
+        socialUnderstandingRepository: (any SocialImportUnderstandingRepository)?
+    ) -> PlaceImportStore {
+        let interval = WanderDebugLog.beginPerformanceInterval("Import Store Initialization")
+        defer { WanderDebugLog.endPerformanceInterval("Import Store Initialization", id: interval) }
+        return PlaceImportStore(
+            persistence: fixtureMode == .empty
+                ? FilePlaceImportPersistence()
+                : EphemeralPlaceImportPersistence(),
+            resolver: DevicePlaceImportResolver(
+                socialUnderstandingRepository: socialUnderstandingRepository
+            )
+        )
     }
 }
 
