@@ -26,9 +26,34 @@ final class OnboardingFilmTreatmentTests: XCTestCase {
     func testStaticFrameHasNoMotionOrDensityFailureEvenAtFaultTime() {
         let frame = OnboardingFilmFrame(time: 1.78, moving: false)
         XCTAssertFalse(frame.tracking)
-        XCTAssertEqual(frame.verticalSlip, 0)
+        XCTAssertEqual(frame.verticalSlip(height: 852), 0)
         XCTAssertEqual(frame.displacement(row: frame.bandCenter, width: 390), 0)
         XCTAssertEqual(frame.density, 0.94)
+    }
+
+    func testFilmClockSurvivesSceneChangesAndResumesWithoutJumping() {
+        let start = Date(timeIntervalSince1970: 100)
+        var clock = OnboardingFilmClock(epoch: start)
+        clock.setPlaying(true, at: start)
+        let newSceneClock = clock
+        XCTAssertEqual(newSceneClock.elapsed(at: start.addingTimeInterval(17)), 17)
+        clock.setPlaying(false, at: start.addingTimeInterval(17))
+        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(40)), 17)
+        clock.setPlaying(true, at: start.addingTimeInterval(40))
+        clock.setPlaying(true, at: start.addingTimeInterval(41))
+        XCTAssertEqual(clock.elapsed(at: start.addingTimeInterval(42)), 19)
+    }
+
+    func testReferenceRasterAndFaultSizeScaleWithViewport() {
+        let fault = OnboardingFilmFrame(time: 1.78, moving: true)
+        XCTAssertEqual(OnboardingFilmFrame.rasterScale, 720.0 / 393.0)
+        XCTAssertEqual(fault.damageBand(row: fault.bandCenter), 1)
+        XCTAssertEqual(fault.damageBand(row: fault.bandCenter + 0.081), 0)
+        XCTAssertEqual(fault.verticalSlip(height: 1704), fault.verticalSlip(height: 852) * 2, accuracy: 0.0001)
+        XCTAssertEqual(fault.chromaDelay(row: fault.bandCenter), 15.6 / OnboardingFilmFrame.rasterScale, accuracy: 0.0001)
+        // Type power is six hundredths ahead of tape time in the original.
+        XCTAssertLessThan(OnboardingFilmFrame(time: 0.68, moving: true).density, 0.4)
+        XCTAssertGreaterThan(OnboardingFilmFrame(time: 0.62, moving: true).density, 0.85)
     }
 
     func testOrdinaryAndUnknownLaunchesKeepApprovedTreatment() {

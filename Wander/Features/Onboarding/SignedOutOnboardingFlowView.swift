@@ -50,6 +50,7 @@ struct SignedOutOnboardingFlowView: View {
                 .zIndex(1)
             }
         }
+        .modifier(OnboardingFilmTimelineScope(isPlaying: auth.isPresentingNativeAuth || filmIsPlaying))
         .environment(\.onboardingVisualTreatment, treatment)
         // The account hero keeps its own decorative motion after the carousel
         // ends. Form controls and their background never enter the ink layer.

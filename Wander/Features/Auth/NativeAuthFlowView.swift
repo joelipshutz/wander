@@ -229,7 +229,6 @@ struct NativeAuthFlowView: View {
                     .font(treatment.headline(size: 34, approved: AstirTypography.screenTitle))
                     .foregroundStyle(treatment.isFilm ? OnboardingVisualTreatment.signal : WanderTheme.textInk.color)
                     .multilineTextAlignment(.center)
-                    .onboardingFilmInk(isEnabled: mode == .signUp)
 
                 Text(subtitle)
                     .font(AstirTypography.bodySmall)
