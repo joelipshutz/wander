@@ -533,6 +533,46 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertNil(attribution.properties["url"])
     }
 
+    func testCoreActionsCountFirstCheckInOnceAndExcludeEditsAndOtherEngagement() {
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+        let analytics = ContextualAnalyticsClient(client: recording, environment: .production)
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.checkInCreated, properties: [:]))
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placeSaved, properties: ["status": "been"]))
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placeSaved, properties: ["status": "wanna_go"]))
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.checkInEdited, properties: [:]))
+        analytics.track(.engagement(need: .status, action: .ownProfileViewed, surface: "profile"))
+        let core = recording.events.filter { $0.name == WanderAnalyticsEvents.coreActionPerformed }
+        XCTAssertEqual(core.map { $0.properties["action"] }, ["check_in_created", "wanna_saved"])
+        XCTAssertTrue(core.allSatisfy { $0.properties["analytics_environment"] == "production" })
+        XCTAssertTrue(core.allSatisfy { $0.properties["completion"] == "local" })
+    }
+
+    func testContextCannotBeOverriddenAndPrivacyKeysAreCaseInsensitive() throws {
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+        let analytics = ContextualAnalyticsClient(client: recording, environment: .development)
+        analytics.track(AnalyticsEvent(name: "probe", properties: [
+            "analytics_environment": "production", "analytics_schema_version": "1", "platform": "server",
+            "Email": "private@example.test", "access_token": "private", "error_message": "private failure"
+        ]))
+        let event = try XCTUnwrap(recording.events.first)
+        XCTAssertEqual(event.properties["analytics_environment"], "development")
+        XCTAssertEqual(event.properties["analytics_schema_version"], "3")
+        XCTAssertEqual(event.properties["platform"], "ios")
+        XCTAssertNil(event.properties["Email"])
+        XCTAssertNil(event.properties["access_token"])
+        XCTAssertNil(event.properties["error_message"])
+    }
+
+    func testSaveEditorExposureIsDeduplicatedAndResultsStayCoarse() throws {
+        var tracker = SaveFlowAnalyticsTracker()
+        let opened = try XCTUnwrap(tracker.opened(mode: .add, status: "been"))
+        XCTAssertEqual(opened.name, WanderAnalyticsEvents.saveFlowOpened)
+        XCTAssertNil(tracker.opened(mode: .add, status: "been"))
+        let result = SaveFlowAnalyticsTracker.event(WanderAnalyticsEvents.saveFlowCompleted,
+            mode: .repeatCheckIn, status: "been", outcome: .pending)
+        XCTAssertEqual(result.properties, ["mode": "repeat_check_in", "status": "been", "outcome": "pending"])
+    }
+
     func testAnalyticsDashboardAndMaintenanceDocsStayCheckedIn() throws {
         let dashboard = try String(
             contentsOf: projectRoot.appendingPathComponent("scripts/posthog-product-dashboard.mjs")
@@ -545,7 +585,7 @@ final class BuildConfigurationTests: XCTestCase {
         )
 
         for section in ["Acquisition", "Activation", "Engagement", "Retention", "Referrals", "Monetization"] {
-            XCTAssertTrue(dashboard.contains("title: \"\(section)\""))
+            XCTAssertTrue(dashboard.contains("\"title\": \"\(section)\""))
         }
         XCTAssertTrue(analyticsDocs.contains("engagement_action_performed"))
         XCTAssertTrue(agentInstructions.contains("## Analytics Maintenance"))

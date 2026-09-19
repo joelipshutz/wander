@@ -2765,6 +2765,7 @@ private struct SavedPlacesListScreen: View {
                 draft: CommonGroundInvitationDraft(place: current),
                 liveSharing: true,
                 showsLinkage: commonGroundInvitationShowsLinkage,
+                analytics: store.productAnalytics,
                 canShare: { draftPlace in
                     store.currentUser.id == draftPlace.viewer.id
                         && CommonGroundLiveData.places(store: store, profileID: profileID).contains(draftPlace)
