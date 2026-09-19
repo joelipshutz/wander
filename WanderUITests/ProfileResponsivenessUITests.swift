@@ -69,7 +69,9 @@ final class ProfileResponsivenessUITests: XCTestCase {
             XCTAssertTrue(back.waitForExistence(timeout: 3))
             print("PROFILE_SETTINGS round=\(round) entry_seconds=\(Date().timeIntervalSince(started))")
 
-            let notifications = app.buttons.matching(
+            let settingsScreen = app.otherElements["settings.screen"]
+            XCTAssertTrue(settingsScreen.waitForExistence(timeout: 3))
+            let notifications = settingsScreen.buttons.matching(
                 NSPredicate(format: "label BEGINSWITH %@", "Notifications")
             ).firstMatch
             notifications.tap()
@@ -85,10 +87,16 @@ final class ProfileResponsivenessUITests: XCTestCase {
                 ("settings.importHistory", "Import history"),
                 ("settings.resources", "Resources")
             ] {
-                let link = app.descendants(matching: .any).matching(
+                let link = settingsScreen.buttons.matching(
                     NSPredicate(format: "identifier == %@ OR label == %@", row, row)
                 ).firstMatch
-                for _ in 0..<24 where !link.isHittable { app.swipeUp(velocity: .fast) }
+                // Short drags keep nearby rows from being skipped by momentum.
+                for _ in 0..<24 where !link.isHittable {
+                    settingsScreen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                        .press(forDuration: 0.1, thenDragTo: settingsScreen.coordinate(
+                            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)
+                        ), withVelocity: .slow, thenHoldForDuration: 0.25)
+                }
                 XCTAssertTrue(link.isHittable, "Missing Settings destination: \(row)")
                 let start = Date()
                 link.tap()

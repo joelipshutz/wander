@@ -19,6 +19,12 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         XCTAssertLessThan(name.frame.midY, photo.frame.midY - 5)
         capture("Owner clear header")
 
+        // Edit lives with the identity details and scrolls with that section.
+        app.buttons["Edit profile"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+
         app.swipeUp()
         assertPinned(name: name, photo: photo)
         XCTAssertEqual(photo.frame.width, photoWidth, accuracy: 1)
@@ -26,10 +32,6 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(identifier: "Settings").count, 1)
         capture("Owner pinned header")
 
-        app.buttons["Edit profile"].tap()
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
         let settingsScreen = app.descendants(matching: .any)["settings.screen"]
         XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
