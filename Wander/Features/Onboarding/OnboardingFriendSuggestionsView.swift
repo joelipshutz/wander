@@ -18,8 +18,8 @@ struct OnboardingFriendSuggestionsView: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 OnboardingHeadline(
                     eyebrow: "YOUR PEOPLE",
-                    title: "Connect with the people you love",
-                    message: "Follow a few familiar people. See where life takes them."
+                    title: "Keep up with the people you love",
+                    message: ""
                 )
                 .padding(.horizontal, WanderTheme.spacing4)
 

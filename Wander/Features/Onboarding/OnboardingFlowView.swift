@@ -818,11 +818,13 @@ struct OnboardingHeadline: View {
                 .font(AstirTypography.screenTitle)
                 .lineSpacing(-2)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(message)
-                .font(AstirTypography.body)
-                .foregroundStyle(brandMode.secondaryText)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
+            if !message.isEmpty {
+                Text(message)
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
