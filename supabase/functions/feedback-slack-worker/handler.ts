@@ -6,9 +6,10 @@ export type FeedbackJob = {
 };
 type Dependencies = { env: (key: string) => string | undefined; fetch: typeof fetch };
 type Contact = { email?: string; phone?: string };
+type FeedbackMedia = { kind: string; url: string };
 const headers = { "Cache-Control": "no-store" };
 const projectURL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
-const dashboardURL = "https://supabase.com/dashboard/project/rugmtlgufrhlxwfkumhw/editor";
+export const attachmentLinkLifetimeSeconds = 30 * 24 * 60 * 60;
 
 export function verifiedContact(user: any, canonicalID: string): Contact {
   const identity = user.external_id || user.public_metadata?.canonical_user_id || user.id;
@@ -20,21 +21,34 @@ export function verifiedContact(user: any, canonicalID: string): Contact {
   return { email: email?.email_address, phone: phone?.phone_number };
 }
 
-export function slackPayload(job: FeedbackJob, contact: Contact, media: Array<{ name: string; url: string }>) {
-  // Feedback is plain_text, so user text cannot become mentions, links or Slack commands.
-  const plain = (text: string) => ({ type: "section", text: { type: "plain_text", text, emoji: false } });
+export function slackPayload(job: FeedbackJob, contact: Contact, media: FeedbackMedia[]) {
+  // Literal rich-text elements preserve bold styling without parsing user input as Slack markup.
+  const text = (value: string) => ({ type: "text", text: value, style: { bold: true } });
+  const rich = (elements: unknown[]) => ({ type: "rich_text", elements: [{ type: "rich_text_section", elements }] });
   const blocks: any[] = [
     { type: "header", text: { type: "plain_text", text: "New Astir feedback", emoji: false } },
-    plain(`${job.display_name} (@${job.handle})\nEmail: ${contact.email || "Not available — use account lookup"}\nPhone: ${contact.phone || "Not provided"}`),
+    rich([text(`Sender: ${job.display_name} (@${job.handle})\nEmail: ${contact.email || "Not available — use account lookup"}\nPhone: ${contact.phone || "Not provided"}`)]),
   ];
-  const body = job.body || "Feedback is in the attachments.";
-  for (let index = 0; index < body.length; index += 2500) blocks.push(plain(body.slice(index, index + 2500)));
-  if (media.length) blocks.push({ type: "actions", elements: media.map(item => ({
-    type: "button", text: { type: "plain_text", text: item.name }, url: item.url,
-  })) });
-  blocks.push(plain(`Account: ${job.user_id}\nReport: ${job.id}\nApp: ${job.app_version} (${job.build_number})\nSubmitted: ${job.submitted_at}`));
-  blocks.push({ type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: "Open server inbox" }, url: dashboardURL }] });
-  blocks.push(plain("Attachment links expire in 24 hours. Originals remain in private server storage. Slack replies stay internal; use the listed contact details to reach the sender."));
+  // Split at code-point boundaries so long feedback never breaks an emoji in half.
+  const body = Array.from(job.body);
+  for (let index = 0; index < body.length; index += 1250) {
+    blocks.push(rich([text(`${index === 0 ? "Feedback text\n" : ""}${body.slice(index, index + 1250).join("")}`)]));
+  }
+  let photos = 0;
+  const photoCount = media.filter(item => item.kind !== "voice").length;
+  for (const item of media) {
+    const label = item.kind === "voice" ? "Feedback voice note" : `Feedback photo${photoCount > 1 ? ` ${++photos}` : ""}`;
+    blocks.push(rich([text(`${label}: `), {
+      type: "link", text: item.kind === "voice" ? "Listen to voice note" : "View photo", url: item.url, style: { bold: true },
+    }]));
+  }
+  const submitted = new Date(job.submitted_at);
+  const date = Number.isFinite(submitted.getTime()) ? {
+    type: "date", timestamp: Math.floor(submitted.getTime() / 1000), format: "{date_long_pretty} at {time}",
+    fallback: new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" }).format(submitted) + " UTC",
+    style: { bold: true },
+  } : text("Not available");
+  blocks.push(rich([text(`Account: ${job.user_id}\nReport: ${job.id}\nApp: ${job.app_version} (${job.build_number})\nSubmitted: `), date]));
   return { text: "New Astir feedback", blocks, unfurl_links: false, unfurl_media: false };
 }
 
@@ -77,16 +91,15 @@ export async function handleRequest(request: Request, deps: Dependencies): Promi
           if (contact.email || contact.phone) break;
         }
         const media = [];
-        let photos = 0;
         for (const attachment of job.attachments) {
           const path = `feedback-attachments/${encodeURIComponent(job.id)}/${encodeURIComponent(attachment.filename)}`;
           const response = await deps.fetch(`${url}/storage/v1/object/sign/${path}`, {
-            method: "POST", headers: serviceHeaders, body: JSON.stringify({ expiresIn: 86400 }), signal: AbortSignal.timeout(10_000),
+            method: "POST", headers: serviceHeaders, body: JSON.stringify({ expiresIn: attachmentLinkLifetimeSeconds }), signal: AbortSignal.timeout(10_000),
           });
           if (!response.ok) throw new Error("attachment_unavailable");
           const signed = await response.json();
           if (typeof signed.signedURL !== "string" || !signed.signedURL.startsWith(`/object/sign/${path}?`)) throw new Error("attachment_unavailable");
-          media.push({ name: attachment.kind === "voice" ? "Listen to voice note" : `View photo ${++photos}`, url: `${url}/storage/v1${signed.signedURL}` });
+          media.push({ kind: attachment.kind, url: `${url}/storage/v1${signed.signedURL}` });
         }
         const response = await deps.fetch(webhook, { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(slackPayload(job, contact, media)), signal: AbortSignal.timeout(15_000) });
