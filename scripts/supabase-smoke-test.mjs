@@ -104,6 +104,12 @@ async function main() {
           : "hosted schema";
         console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
+        await client.query("savepoint launch_profile_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/launch_profile_discovery.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint launch_profile_smoke");
+        await client.query("release savepoint launch_profile_smoke");
+        console.log("ok - launch follows and suggestion controls preserve account and privacy boundaries");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -1273,6 +1279,10 @@ function runLinkedSmokeChecks(
   const discoverSmokeSQL = loadStrictPgTapSQL(
     new URL("../supabase/tests/discover_profile_recommendations.sql", import.meta.url),
   );
+  // Each isolated suite needs the preview because the preceding suite rolls it back.
+  const discoverPreviewSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(discoverSmokeSQL, "rollback")}\nrollback;`;
+  const launchProfileSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
+    new URL("../supabase/tests/launch_profile_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
   const socialImportAdmissionSmokeSQL = migrationPreviewPaths.length === 0
     ? loadStrictPgTapSQL(
       new URL("../supabase/tests/social_import_paid_work_admission.sql", import.meta.url),
@@ -1307,7 +1317,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
@@ -4030,6 +4040,10 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
   const fixtureIDs = Object.values(fixture);
 
   await client.query("reset role");
+  await client.query("savepoint discover_launch_config");
+  await client.query("update app.profile_discovery_settings set follow_on_signup=false, suggestion_priority=0");
+  // The reusable viewer predates this sub-suite and may already have signup defaults.
+  await client.query("delete from public.follows where follower_user_id=$1 and source='signup_default'", [smokeUserID]);
   await expectQuery(
     client,
     "create rolled-back Discover profile fixtures",
@@ -4348,6 +4362,8 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
     /permission denied/,
   );
   await client.query("reset role");
+  await client.query("rollback to savepoint discover_launch_config");
+  await client.query("release savepoint discover_launch_config");
 }
 
 async function runListSnapshotCoverSmokeChecks(client, ownerID, collaboratorID, strangerID) {
