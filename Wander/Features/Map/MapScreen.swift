@@ -8951,6 +8951,13 @@ enum MapFeaturedSelection {
         }.prefix(reservedRelationshipRowCount)
         selected.append(contentsOf: relationshipRows)
         selectedIDs.formUnion(selected.map(\.id))
+        let communityRows = candidates.lazy.filter { visiblePlace in
+            !selectedIDs.contains(visiblePlace.id)
+                && visiblePlace.owner.id != currentUserID
+                && !followedOwnerIDs.contains(visiblePlace.owner.id)
+        }.prefix(maximumCandidateRowCount - selected.count)
+        selected.append(contentsOf: communityRows)
+        selectedIDs.formUnion(selected.map(\.id))
         for candidate in candidates where selected.count < maximumCandidateRowCount {
             if selectedIDs.insert(candidate.id).inserted {
                 selected.append(candidate)

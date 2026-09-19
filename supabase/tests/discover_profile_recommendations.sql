@@ -4,6 +4,10 @@ create extension if not exists pgtap;
 
 select plan(23);
 
+-- Isolate historical graph-ranking fixtures from administrator launch configuration.
+-- The dedicated launch suite exercises priority/defaults separately; this rolls back.
+update app.profile_discovery_settings set follow_on_signup = false, suggestion_priority = 0;
+
 select is(
   (select prosecdef from pg_proc where oid = 'app.discover_profile_recommendations(integer)'::regprocedure),
   false,
