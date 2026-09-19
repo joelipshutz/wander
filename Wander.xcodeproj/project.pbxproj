@@ -22,6 +22,7 @@
 		06454DA85E1AFBEE71EBCA2D /* ProfileEditScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F6E53AF7F6E50A969880C4C /* ProfileEditScreen.swift */; };
 		06CF892F21408BC786EF5D3A /* rec-303-map-pin-entrance-bounce-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 00EAE08EF86AAB6428F14701 /* rec-303-map-pin-entrance-bounce-pre.json */; };
 		070B082A25EB057E7D4A8E03 /* rec-275-place-profile-checkin-routing-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = CD01185367E4332DDC38DE98 /* rec-275-place-profile-checkin-routing-pre.json */; };
+		082F64B2798DFD3CC49A4CBD /* ShareCardDesignMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94B6F88C15DD3C749623A67 /* ShareCardDesignMockups.swift */; };
 		08A71584C0760AC1D7565D9D /* ProfileHeaderMotionPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B98BF7572FA4C1FB091606 /* ProfileHeaderMotionPreview.swift */; };
 		091449D11FBA897F223C76C9 /* PhotoPlaceTextExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F7C135DE60BED317B033C7E /* PhotoPlaceTextExtractorTests.swift */; };
 		0974966D0DFF5BAE09E35165 /* WanderPlaceEmojiResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED328375152E3181B06DC6E /* WanderPlaceEmojiResolver.swift */; };
@@ -54,6 +55,7 @@
 		1892B85AE93D8064CAA26A43 /* WanderRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12893CD9516BC58FD7D3BE43 /* WanderRootView.swift */; };
 		18A3A19D2D8E795D294D7591 /* WanderCheckInControlIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0513E538B756870944C1F6 /* WanderCheckInControlIntent.swift */; };
 		18D6E77C3054DE54444A24BD /* rec-228-bulk-status-coupling-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = 0FEB786FE1F5CAD432194B30 /* rec-228-bulk-status-coupling-pre.png */; };
+		1AF990FD1D70E32E6E0834BE /* ShareCardMockupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD08C8D51EA03071934C8973 /* ShareCardMockupUITests.swift */; };
 		1B5F7AE1882A1C2C51D99E92 /* WanderBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = E850341A28B18117631F62F5 /* WanderBackend.swift */; };
 		1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */; };
 		1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */; };
@@ -743,6 +745,7 @@
 		DA273C6E7A5B099774CEE3C3 /* events-coming-soon.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "events-coming-soon.jpg"; sourceTree = "<group>"; };
 		DB83727DB2DEC9045DD7A63A /* PlaceCheckInQuestionCatalog+CoreQuestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlaceCheckInQuestionCatalog+CoreQuestions.swift"; sourceTree = "<group>"; };
 		DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackendConfiguration.swift; sourceTree = "<group>"; };
+		DD08C8D51EA03071934C8973 /* ShareCardMockupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardMockupUITests.swift; sourceTree = "<group>"; };
 		DD3F0D58920B1D355AB2E8DB /* WanderShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDE82052FB7FADD2A758552E /* OnboardingFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlowView.swift; sourceTree = "<group>"; };
 		DE62D76C9EC89546850909A7 /* AnalyticsEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsEvent.swift; sourceTree = "<group>"; };
@@ -756,6 +759,7 @@
 		E635EA909370EB6D597D27AC /* WanderDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderDebugLog.swift; sourceTree = "<group>"; };
 		E850341A28B18117631F62F5 /* WanderBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackend.swift; sourceTree = "<group>"; };
 		E94B3FAB15B2BBA5C24B48EF /* PlacePhotoDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoDelivery.swift; sourceTree = "<group>"; };
+		E94B6F88C15DD3C749623A67 /* ShareCardDesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardDesignMockups.swift; sourceTree = "<group>"; };
 		EA454CD7CBC8A79CCEE08BBD /* AppStoreScreenshotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotsUITests.swift; sourceTree = "<group>"; };
 		EBC33DCB35C37A5C6742CF56 /* ActivitySharePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySharePreview.swift; sourceTree = "<group>"; };
 		ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverModels.swift; sourceTree = "<group>"; };
@@ -1296,6 +1300,7 @@
 			children = (
 				981D76A8E140702A7FD7AFB7 /* ActivityEngagementViews.swift */,
 				EBC33DCB35C37A5C6742CF56 /* ActivitySharePreview.swift */,
+				E94B6F88C15DD3C749623A67 /* ShareCardDesignMockups.swift */,
 			);
 			path = Activity;
 			sourceTree = "<group>";
@@ -1418,6 +1423,7 @@
 				D81E46FA8A9698B8D338A19F /* ProfileAlignmentUITests.swift */,
 				1F02A34AD702E15C8702F666 /* ProfileHeaderMotionUITests.swift */,
 				A86DDEDB6595D85FEE5C54F2 /* ProfileResponsivenessUITests.swift */,
+				DD08C8D51EA03071934C8973 /* ShareCardMockupUITests.swift */,
 				0FE854C6B6EABA4069584A9B /* YourMapPrototypeUITests.swift */,
 			);
 			path = WanderUITests;
@@ -1911,6 +1917,7 @@
 				FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */,
 				03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */,
 				13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */,
+				082F64B2798DFD3CC49A4CBD /* ShareCardDesignMockups.swift in Sources */,
 				7DEF7563B13704B7AA76A6D2 /* ShareExtensionItemLoader.swift in Sources */,
 				CFF69A48E9FB3ED216B463A0 /* SharedCheckInQuestion.swift in Sources */,
 				18622774B25BD7DAE231ADE4 /* SharedPlaceImportInbox.swift in Sources */,
@@ -2101,6 +2108,7 @@
 				838432284A234609CEAF9E64 /* ProfileAlignmentUITests.swift in Sources */,
 				FBCADED9DCDBA88BCC005935 /* ProfileHeaderMotionUITests.swift in Sources */,
 				D19AAB89FB14B80B623827EB /* ProfileResponsivenessUITests.swift in Sources */,
+				1AF990FD1D70E32E6E0834BE /* ShareCardMockupUITests.swift in Sources */,
 				3B4783E6754E32F2B622BD64 /* YourMapPrototypeUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
