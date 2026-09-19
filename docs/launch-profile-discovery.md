@@ -35,11 +35,12 @@ is denied. Use an authorized administrator or service-role process for changes.
 | Default follow | `user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc` |
 | First eligible suggestion | `user_3InBzTuUhmItvfKyvQJdoelfseQ` |
 
-The migration hides ten known demo/review profiles by exact ID: the original
+The migration hides seventeen verified test/review profiles by exact ID: the original
 demo account, six profiles from `scripts/seed-discover-demo-people.sql`, the two
-App Review friend fixtures, and the previously verified dedicated review login.
+App Review friend fixtures, the previously verified dedicated review login,
+and seven additional accounts Joe confirmed as tests on September 19, 2026.
 It does not infer test status from a person's name, low activity, or an email
-pattern. Other candidate test accounts await Joe's identification. No wildcard
+pattern. All seven candidates raised in this task are confirmed. No wildcard
 rule automatically hides future real users.
 
 ## Reversible administration

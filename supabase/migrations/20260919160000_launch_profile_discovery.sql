@@ -25,7 +25,8 @@ from public.profiles
 where id in ('user_3EhATWssjvHxwGiUaoWR5VTgeoy', 'user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc',
              'user_3InBzTuUhmItvfKyvQJdoelfseQ');
 
--- Known demo/review fixtures. Ambiguous personal accounts require identification.
+-- Known demo/review fixtures plus seven accounts Joe identified as tests on
+-- September 19, 2026. Match exact canonical IDs, never names or patterns.
 insert into app.profile_discovery_settings (profile_id, hidden_from_suggestions)
 select id, true from public.profiles
 where id in (
@@ -34,7 +35,14 @@ where id in (
   'user_recme_demo_marcus_reed', 'user_recme_demo_priya_shah',
   'user_recme_demo_theo_brooks', 'user_recme_demo_samira_patel',
   'recme_app_review_friend_maya', 'recme_app_review_friend_theo',
-  'user_3HvoxPsyGxnoK4B0DTD7elBgHA3'
+  'user_3HvoxPsyGxnoK4B0DTD7elBgHA3',
+  'user_3H6Fo6Gfy6hEkrqOeIZw1OrB25Q',
+  'user_3HXES5zBV3Vjo9Sdc3ExYj3SmZh',
+  'user_3HtgxWK1DbBOE9KXVLCBjqMXuJI',
+  'user_3J1plKJ6dqvOjw5epCnWlhagmwm',
+  'user_3JQwJee5bnmIfEbqlS8kgKS7YoS',
+  'user_3FmEDQY1USlBSbdPVGGuA8dOLlw',
+  'user_3JBqOSE5gyVAelfQX8vOcwpbfcZ'
 );
 
 -- Preserve the historical source values and add explicit provenance for defaults.
