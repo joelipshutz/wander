@@ -10,6 +10,13 @@ insert into public.profiles(id, handle, display_name) values
 do $security$
 declare signature text;
 begin
+  if not exists(select 1 from public.feature_flags where key = 'profile_feedback_v1'
+    and user_id is null and value_type = 'boolean' and integer_value is null) then
+    raise exception 'feedback rollout must register a Boolean global value'; end if;
+  begin
+    update public.feature_flags set value_type = 'integer', integer_value = 1 where key = 'profile_feedback_v1';
+    raise exception 'test_feedback_flag_type';
+  exception when check_violation then null; end;
   if not (select relrowsecurity from pg_class where oid = 'public.app_feedback'::regclass)
     or has_table_privilege('authenticated','public.app_feedback','select,insert,update,delete')
     or has_table_privilege('anon','public.app_feedback','select,insert,update,delete')

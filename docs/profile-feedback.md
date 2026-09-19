@@ -15,6 +15,14 @@ after Record is tapped. Switching tabs or leaving the foreground stops and saves
 an active recording and pauses playback. Pending permission cannot start a hidden
 recording after a tab switch or dismissal.
 
+The entry point is gated by `profile_feedback_v1`, with bundled and remote global
+defaults off. Ordinary Debug, Simulator, and release builds use the same registry.
+Authorized testers can use the existing Feature flags Settings row and restart,
+or use an account rollout after deployment. Isolated UI tests require both
+`-WanderAuthenticatedUITest` and `-WanderFeedbackUITest` to show the entry point
+with a fake repository. Keep the flag off until the delivery acceptance below
+passes; merging the code does not deploy the service or enable the button.
+
 Submit reserves a private server draft, uploads its declared attachments, then
 atomically finalizes the report into a durable email outbox. The UI celebrates
 server confirmation with the existing save confetti, respecting Reduce Motion.
@@ -78,6 +86,7 @@ Before launch:
    customer-support content, linked to the account for app functionality. The
    app privacy manifest includes Audio Data and the microphone purpose string.
    Run the normal explicit app-release process to put the button in a binary.
+7. Enable `profile_feedback_v1` for the intended rollout only after these checks.
 
 ## Validation
 

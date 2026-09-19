@@ -70,6 +70,9 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
 | `onboarding_step_completed` | Each step advances successfully or is explicitly skipped | `step` |
 | `onboarding_completed` | Local completion is persisted | `server_confirmed` |
+| `onboarding_identity_submitted` | Required identity and any selected photo finish saving | `photo_selected` |
+| `onboarding_identity_failed` | Identity or required-photo submission fails | coarse `reason`, including `photo_save_failed` |
+| `onboarding_friend_suggestions_completed` | User continues after explicit per-person actions | aggregate `selected_count`, `followed_count`; both count successful follows in this visit |
 | `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
 | `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number` |
 | `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number` |

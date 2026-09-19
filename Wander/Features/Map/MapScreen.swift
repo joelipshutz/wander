@@ -1454,6 +1454,11 @@ struct MapScreen: View {
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
     @State private var mapCardViewerLocation: CLLocation? = nil
+    @State private var nuxDemoPlaces: [VisiblePlace] = []
+    private var isShowingNUXDemo: Bool {
+        (walkthroughs.activeSurface == .map || walkthroughs.activeSurface == .sendoff)
+            && !nuxDemoPlaces.isEmpty
+    }
     @State private var isLocationEducationPresented = false
     @State private var isRequestingLocationPermission = false
     @State private var shouldRecenterAfterLocationSettings = false
@@ -1512,6 +1517,9 @@ struct MapScreen: View {
         followedOwnerIDs: Set<String>,
         tasteSummaries: [PlaceSaveSummary]
     ) -> [VisiblePlace] {
+        if isShowingNUXDemo {
+            return mapFilterState.source == .friends ? Array(nuxDemoPlaces.prefix(5)) : nuxDemoPlaces
+        }
         switch mapFilterState.source {
         case .featured:
             return MapFeaturedSelection.places(
@@ -1559,7 +1567,7 @@ struct MapScreen: View {
 
         return renderProjectionCache.value(
             for: key,
-            partition: mapFilterState.source.rawValue
+            partition: (isShowingNUXDemo ? "nux-demo-" : "live-") + mapFilterState.source.rawValue
         ) {
             let followedOwnerIDs = Set(store.following(of: currentUserID).map(\.id))
             let currentUserPlaces = store.currentUserVisiblePlaces
@@ -2082,6 +2090,7 @@ struct MapScreen: View {
                                 HStack(spacing: WanderTheme.spacing1) {
                                     ForEach(MapSource.allCases) { source in
                                         Button {
+                                            walkthroughs.finishOverviewForUserNavigation()
                                             selectMapSource(source)
                                         } label: {
                                             MapSourceFilterChip(
@@ -2096,6 +2105,7 @@ struct MapScreen: View {
                                     }
 
                                     Button {
+                                        walkthroughs.finishOverviewForUserNavigation()
                                         toggleMoreFilters()
                                     } label: {
                                         MapMoreFilterChip(
@@ -2106,7 +2116,7 @@ struct MapScreen: View {
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
                                     .accessibilityIdentifier("map.filter.more")
-                                    .walkthroughTarget(.mapMoreFilters)
+                                    .walkthroughTarget(isMoreFiltersPresented ? nil : .mapMoreFilters)
                                 }
                                 .padding(.horizontal, WanderTheme.spacing3)
                             }
@@ -2124,6 +2134,7 @@ struct MapScreen: View {
                                     peopleOptions: socialOwnerOptions,
                                     dismiss: dismissMoreFilters
                                 )
+                                .walkthroughTarget(.mapMoreFilters)
                                 .padding(.trailing, WanderTheme.spacing3)
                                 .offset(y: 88)
                                 .transition(
@@ -2153,6 +2164,12 @@ struct MapScreen: View {
                     Spacer()
 
                     VStack(spacing: WanderTheme.spacing2) {
+                        if walkthroughs.currentStep?.target == .mapPinLegend {
+                            MapWalkthroughPinLegend()
+                                .walkthroughTarget(.mapPinLegend)
+                                .transition(.opacity)
+                                .padding(.bottom, WanderTheme.spacing3)
+                        }
                         if shouldShowTypeahead {
                             MapTypeaheadList(
                                 suggestions: typeaheadSuggestions,
@@ -2382,14 +2399,56 @@ struct MapScreen: View {
                 resolveInitialSelection()
                 resolvePerformanceFixtureSelectionIfNeeded()
             }
+            .onChange(of: isMapSearchFocused) { _, focused in
+                if focused { walkthroughs.finishOverviewForUserNavigation() }
+            }
             .onChange(of: mapQuery) { _, _ in
                 handleMapQueryChange()
             }
-            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { oldTarget, target in
+                if (walkthroughs.activeSurface == .map || walkthroughs.activeSurface == .sendoff) && nuxDemoPlaces.isEmpty {
+                    let center = NUXMapDemonstration.center()
+                    nuxDemoPlaces = NUXMapDemonstration.places(around: center)
+                    requestMapCamera(MKCoordinateRegion(center: center,
+                        span: MKCoordinateSpan(latitudeDelta: 0.016, longitudeDelta: 0.016)))
+                }
+                #if DEBUG
+                if target == .placeSaveActions,
+                   ProcessInfo.processInfo.arguments.contains("-WanderNUXReview") {
+                    if let example = store.visiblePlaces().first(where: {
+                        $0.owner.id != store.currentUser.id && $0.place.canonicalName == "Bar Nido"
+                    }) {
+                        routedVisiblePlace = example
+                        selectVisiblePlace(example)
+                    } else {
+                        selectSearchCandidateFromMapTap(FirstVisitParkSuggestionPolicy.hotchkissPark)
+                    }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        guard walkthroughs.currentStep?.target == .placeSaveActions else { return }
+                        openSelectedPlaceProfile()
+                    }
+                }
+                #endif
+                if oldTarget == .mapMoreFilters, target != .mapMoreFilters {
+                    dismissMoreFilters()
+                }
+                if walkthroughs.activeSurface == .map {
+                    switch target {
+                    case .mapFeatured:
+                        selectMapSource(.featured)
+                    case .mapFriends:
+                        selectMapSource(.friends)
+                    case .mapMoreFilters:
+                        if !isMoreFiltersPresented { toggleMoreFilters() }
+                    default:
+                        break
+                    }
+                }
                 if target == .mapMemory {
                     isMapSearchFocused = false
                     presentWalkthroughPlaceMemory()
-                } else if walkthroughs.activeSurface == .placeDetail {
+                } else if walkthroughs.isPresentingLegacyPlaceWalkthrough {
                     if !hasSelectedProfile {
                         presentWalkthroughPlaceMemory()
                     }
@@ -2821,6 +2880,7 @@ struct MapScreen: View {
         guard mapFilterState.more != selection else { return }
         let previousSource = mapFilterState.source
         mapFilterState.setMoreSelection(selection)
+        walkthroughs.finishOverviewForUserNavigation()
         if mapFilterState.source != previousSource {
             handleFeaturedCameraChange(currentSearchRegion)
         }
@@ -3046,6 +3106,8 @@ struct MapScreen: View {
     }
 
     private func handleNativeMapAnnotationTap(_ kind: NativeMapAnnotationKind) {
+        // Demo pins teach the legend; they must never become saveable records.
+        guard !isShowingNUXDemo else { return }
         dismissMoreFilters()
         cancelPendingMapTapDismissal()
         nativeMapFeatureSelectionSuppressionUntil = Date.now.addingTimeInterval(
@@ -3953,7 +4015,7 @@ struct MapScreen: View {
                             isEnabled: isPlaceProfilePresented && attachedMapSaveFlow == nil
                                 && mapSaveFlow == nil && mapActivityEditFlow == nil
                                 && mapPlaceListTarget == nil
-                                && walkthroughs.activeSurface != .placeDetail,
+                                && !walkthroughs.isPresentingLegacyPlaceWalkthrough,
                             containerOffset: $placeProfileBackSwipeOffset,
                             onBack: { collapseSelectedPlaceProfile() }
                         )
@@ -3971,7 +4033,7 @@ struct MapScreen: View {
                     \.placeProfileFloatingActionVariant,
                     placeProfileFloatingActionVariant
                 )
-                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
+                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail, isActive: isPlaceProfilePresented)
                 .id(compactSelectionIdentity)
             }
             .ignoresSafeArea()
@@ -3981,7 +4043,7 @@ struct MapScreen: View {
             .accessibilityAddTraits(isPlaceProfileAccessibilityModal ? .isModal : [])
             .accessibilityHidden(!isPlaceProfilePresented)
             .accessibilityAction(.escape) {
-                guard walkthroughs.activeSurface != .placeDetail else { return }
+                guard !walkthroughs.isPresentingLegacyPlaceWalkthrough else { return }
                 collapseSelectedPlaceProfile()
             }
             .zIndex(100)
@@ -4008,7 +4070,7 @@ struct MapScreen: View {
 
     private func presentWalkthroughPlaceMemory() {
         guard walkthroughs.currentStep?.target == .mapMemory
-                || walkthroughs.activeSurface == .placeDetail
+                || walkthroughs.isPresentingLegacyPlaceWalkthrough
         else { return }
 
         mapSearchSelectionSession.finish()
@@ -4062,7 +4124,7 @@ struct MapScreen: View {
 
     private func clearSelectedPlaceProfile() {
         closeAttachedSaveFlow()
-        guard walkthroughs.activeSurface == .placeDetail
+        guard walkthroughs.isPresentingLegacyPlaceWalkthrough
                 || walkthroughs.requestedSurface == .map
                 || walkthroughs.requestedSurface == .feed
         else { return }
@@ -4255,7 +4317,7 @@ struct MapScreen: View {
                 saves: saves,
                 currentUserID: store.currentUser.id,
                 hasSharedVisitInvitation: false,
-                isReadOnly: walkthroughs.activeSurface == .placeDetail
+                isReadOnly: walkthroughs.isPresentingLegacyPlaceWalkthrough
             ),
             isSignedIn: auth.isSignedIn,
             resolvedFlagValue: backend.featureFlag(
@@ -5282,7 +5344,7 @@ struct MapScreen: View {
             saves: saves,
             currentUserID: store.currentUser.id,
             hasSharedVisitInvitation: false,
-            isReadOnly: walkthroughs.activeSurface == .placeDetail
+            isReadOnly: walkthroughs.isPresentingLegacyPlaceWalkthrough
         )
         let currentUserSave = currentUserSave(matching: visiblePlace)
         let context = currentUserSave.map {
@@ -5336,7 +5398,7 @@ struct MapScreen: View {
             saves: saves,
             currentUserID: store.currentUser.id,
             hasSharedVisitInvitation: false,
-            isReadOnly: walkthroughs.activeSurface == .placeDetail
+            isReadOnly: walkthroughs.isPresentingLegacyPlaceWalkthrough
         )
         let context = addCandidateContext(
             candidate,
@@ -7391,18 +7453,14 @@ private enum NativeMapPinImageRenderer {
             }
         }
 
-        let emojiFont = UIFont.systemFont(
-            ofSize: MapPinVisualMetrics.emojiDiameter * scale
-        )
-        let attributedEmoji = NSAttributedString(
-            string: descriptor.emoji,
-            attributes: [.font: emojiFont]
-        )
-        let emojiSize = attributedEmoji.size()
-        attributedEmoji.draw(
-            at: CGPoint(
-                x: center.x - emojiSize.width / 2,
-                y: center.y - emojiSize.height / 2
+        WanderCategoryGlyph.resolve(
+            emoji: descriptor.emoji,
+            supportsEmoji: WanderEmojiFontAvailability.supportsEmoji
+        ).draw(
+            center: center,
+            pointSize: MapPinVisualMetrics.emojiDiameter * scale,
+            foregroundColor: descriptor.isSearchResult ? .white : UIColor(
+                isDark ? WanderMapAppearance.nightText.color : WanderTheme.textInk.color
             )
         )
     }
@@ -9826,6 +9884,9 @@ private struct MapMoreFiltersPopover: View {
     let peopleOptions: [MapSocialOwnerOption]
     let dismiss: () -> Void
     @State private var showsAllCategories = false
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.wanderMapAppearance) private var appearance
 
     private let columns = [
@@ -9837,9 +9898,10 @@ private struct MapMoreFiltersPopover: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                header
+                header.id("nux.more.top")
 
                 filterSection(
                     title: "Categories",
@@ -9941,6 +10003,8 @@ private struct MapMoreFiltersPopover: View {
                     .font(AstirTypography.caption)
                     .foregroundStyle(appearance.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+                    .id("nux.more.bottom")
+                    .accessibilityIdentifier("map.more.explanation")
             }
             .padding(WanderTheme.spacing4)
         }
@@ -9950,6 +10014,28 @@ private struct MapMoreFiltersPopover: View {
             tone: appearance.neutralGlassTone
         )
         .accessibilityIdentifier("map.moreFilters.popover")
+        .overlay {
+            // Attach the trim to the real dropdown so it follows the panel's
+            // entrance exactly, without unioning or animating from the chip.
+            if walkthroughs.currentStep?.target == .mapMoreFilters {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .strokeBorder(appearance.accentText.opacity(0.5), lineWidth: 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .task(id: "\(walkthroughs.currentStep?.target.rawValue ?? "none")-\(scenePhase)") {
+            guard walkthroughs.currentStep?.target == .mapMoreFilters, !reduceMotion,
+                  scenePhase == .active, !UIAccessibility.isVoiceOverRunning,
+                  !FirstVisitWalkthroughContent.holdsAutomaticAdvanceForCapture else { return }
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 1)) { proxy.scrollTo("nux.more.bottom", anchor: .bottom) }
+            try? await Task.sleep(for: .milliseconds(2000))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.65)) { proxy.scrollTo("nux.more.top", anchor: .top) }
+        }
+        }
     }
 
     private var header: some View {
@@ -10013,8 +10099,7 @@ private struct MapMoreOptionChip: View {
         Button(action: action) {
             HStack(spacing: WanderTheme.spacing1) {
                 if let emoji {
-                    Text(emoji)
-                        .font(.system(size: 14))
+                    WanderCategoryEmoji(emoji: emoji, size: 14)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 11, weight: .bold))
@@ -10175,6 +10260,40 @@ private struct WanderMapPin: View {
     private func outlinePadding(for index: Int) -> CGFloat {
         guard outlines.count > 1 else { return 0 }
         return index == 0 ? 0 : MapPinVisualMetrics.secondaryOutlinePadding
+    }
+}
+
+private struct MapWalkthroughPinLegend: View {
+    @Environment(\.astirBrandMode) private var brandMode
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing4) {
+            item(status: .been, label: "Check In")
+            item(status: .wannaGo, label: "Wanna Go")
+        }
+        .padding(WanderTheme.spacing3)
+        .background(brandMode.raisedBackground,
+                    in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(brandMode.border, lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("map.walkthrough.pinLegend")
+    }
+
+    private func item(status: PlaceStatus, label: String) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            MapPinOutlineStroke(
+                outline: MapPinOutline(ownership: .currentUser, status: status),
+                lineWidth: MapPinVisualMetrics.outlineWidth
+            )
+            .frame(width: 30, height: 30)
+            .accessibilityHidden(true)
+            Text(label)
+                .font(AstirTypography.label)
+                .foregroundStyle(brandMode.primaryText)
+        }
     }
 }
 

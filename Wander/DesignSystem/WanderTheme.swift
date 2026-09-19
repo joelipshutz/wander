@@ -1,3 +1,4 @@
+import CoreText
 import ImageIO
 import SwiftUI
 import UIKit
@@ -354,8 +355,54 @@ extension View {
     }
 }
 
+enum WanderCategoryGlyph: Equatable {
+    case emoji(String)
+    case systemImage(String)
+
+    static func resolve(emoji: String, fallbackSystemImage: String? = nil, supportsEmoji: Bool) -> Self {
+        supportsEmoji ? .emoji(emoji) : .systemImage(fallbackSystemImage ?? WanderPlaceEmojiResolver.fallbackSystemImage(forEmoji: emoji))
+    }
+
+    @MainActor
+    func draw(center: CGPoint, pointSize: CGFloat, foregroundColor: UIColor) {
+        switch self {
+        case .emoji(let emoji):
+            let text = NSAttributedString(
+                string: emoji,
+                attributes: [.font: UIFont.systemFont(ofSize: pointSize)]
+            )
+            let size = text.size()
+            text.draw(at: CGPoint(x: center.x - size.width / 2, y: center.y - size.height / 2))
+        case .systemImage(let name):
+            guard let image = UIImage(
+                systemName: name,
+                withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize * 0.85, weight: .medium)
+            )?.withTintColor(foregroundColor, renderingMode: .alwaysOriginal) else { return }
+            image.draw(at: CGPoint(x: center.x - image.size.width / 2, y: center.y - image.size.height / 2))
+        }
+    }
+}
+
+enum WanderEmojiFontAvailability {
+    // Resolve once, not for each map pin. A broken Simulator runtime can expose
+    // an AppleColorEmoji descriptor whose underlying file is absent; checking
+    // only UIFont(name:) would still produce LastResort boxes in that case.
+    static let supportsEmoji: Bool = {
+        let font = CTFontCreateWithName("AppleColorEmoji" as CFString, 18, nil)
+        guard (CTFontCopyPostScriptName(font) as String).contains("AppleColorEmoji") else { return false }
+        if let url = CTFontCopyAttribute(font, kCTFontURLAttribute) as? URL,
+           url.isFileURL, !FileManager.default.fileExists(atPath: url.path) {
+            return false
+        }
+        var character: UniChar = 0x2615
+        var glyph: CGGlyph = 0
+        return CTFontGetGlyphsForCharacters(font, &character, &glyph, 1) && glyph != 0
+    }()
+}
+
 struct WanderCategoryEmoji: View {
     private let emoji: String
+    private var fallbackSystemImage: String? = nil
     let size: CGFloat
 
     init(
@@ -374,6 +421,7 @@ struct WanderCategoryEmoji: View {
             name: name
         )
         self.size = size
+        fallbackSystemImage = WanderPlaceEmojiResolver.fallbackSystemImage(forCategory: category)
     }
 
     init(
@@ -384,6 +432,7 @@ struct WanderCategoryEmoji: View {
     ) {
         emoji = WanderPlaceCategory.emoji(for: assignment, cuisine: cuisine, name: name)
         self.size = size
+        fallbackSystemImage = WanderPlaceEmojiResolver.fallbackSystemImage(forCategory: assignment.primaryCategory)
     }
 
     init(emoji: String, size: CGFloat = 18) {
@@ -392,10 +441,19 @@ struct WanderCategoryEmoji: View {
     }
 
     var body: some View {
-        Text(emoji)
-            .font(.system(size: size))
-            .lineLimit(1)
-            .accessibilityHidden(true)
+        Group {
+            switch WanderCategoryGlyph.resolve(
+                emoji: emoji,
+                fallbackSystemImage: fallbackSystemImage,
+                supportsEmoji: WanderEmojiFontAvailability.supportsEmoji
+            ) {
+            case .emoji(let text):
+                Text(text).font(.system(size: size)).lineLimit(1)
+            case .systemImage(let name):
+                Image(systemName: name).font(.system(size: size * 0.85, weight: .medium))
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 

@@ -57,7 +57,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select.</string>
+	<string>Astir uses your contacts to help you connect with people you know.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -4,6 +4,60 @@ Last updated: 2026-09-18
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Native onboarding review (REC-529)
+
+Onboarding review uses the production Swift views and simulator recordings. The
+review host supplies local sample data through the existing repository interfaces;
+it does not recreate phone screens in HTML or create real accounts/follows.
+
+The welcome sequence retains the September 18 Signal treatment from main:
+“Connect with your” introduces community, people, places, and loved ones with
+whole-word slides before the final “a local experiment” phrase. Supporting
+copy slides in separately; the entire composition slides into the next screen.
+The flow advances once through
+the places and people benefits into account creation, with Next, pause, and
+direct Log in. Profile setup requires a
+name, available username, and saved photo; its header previews the profile live.
+Following is an explicit action on each person, with search and retry states.
+
+The first-visit tour explains Map controls in order: Featured, Friends, More,
+Search, Plus, then pin meanings. It continues directly into the user's current
+Feed and ends at the Feed top without forcing a save. Independent first-use
+annotations remain for Plus and place profiles; Lists and scheduled follow-on
+NUX are retired. Established accounts are not newly enrolled by this change.
+
+The delayed supporting line “Keep track of everywhere you’ve been. Keep up with
+the people you love.” is the current review baseline; supporting-copy alternatives
+and timing remain open. The lead-in, four words and final phrase are confirmed.
+Explicit empty preview/test configurations can omit the opening; the production
+default includes it. Broader explorations remain in the REC-529 open questions.
+Native capture routes are DEBUG-only. Validation and native media evidence are
+recorded in the implementation PR and `docs/reviews/rec-529-native-onboarding.md`.
+
+### September 18 post-onboarding NUX selections
+
+Slide/fade remains selected. The quote/Enjoy ending is removed. After Map rings,
+the app slides into the user's actual current Feed. A people tile stays sharp
+with “Connect with your circle,” then the blur clears and the Feed scrolls to
+center the latest actual activity tile. Its entire bounds—including the footer—
+remain unblurred with “Keep up with their moments.” Both beats have Next and
+finite automatic playback, with 2.7-second reading holds and 6.6 seconds total
+once targets are ready. The page clears and returns to the top to finish.
+Completion is account-scoped and does not repeat on later visits. Missing data
+is not replaced with example content. The old multi-card scroll is not restored.
+
+On the first voluntary + opening, guide nearby search and the import entry with
+“Search nearby places” and “Import your saved places from Instagram, TikTok and
+Google Maps.” Wait for nearby loading and sheet layout to settle. Keep the page
+unblurred and outline the entire Nearby section, including its header, results
+and See more. Without location/results, outline only the search bar. The two
+reading windows total eight seconds. Normal source actions remain usable; the
+lesson itself never requests location access. On first place-profile entry,
+keep the 3.5-second moderate blur, static annotations and real floating buttons,
+then one 1.4-second diagonal glimmer. Wanna copy is “Places you wanna go.” No
+Next/Skip on the profile; Reduce Motion omits its sweep. Later visits are normal.
+The More highlight continues to hug only its dropdown. Starter lists are deferred.
+
 ## Astir Events engineering direction (REC-467)
 
 The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)
@@ -114,7 +168,7 @@ and a refresh recomputes it solely from currently visible events.
 | Product analytics dashboard | Locked for REC-170 | The acquisition-to-referral dashboard lives in PostHog and is provisioned from `scripts/posthog-product-dashboard.mjs`. Explicit, privacy-safe events are the source of truth; PostHog autocapture remains disabled. Engagement is normalized to Connect, Expression, and Status. Referral measurement stops at invite handoff until attributed links exist, and Monetization remains visibly blank until a product decision defines it. |
 | Analytics provider | Locked for alpha | Use PostHog through the vendor-neutral analytics interface. Keep sync/auth diagnostics non-PII: counts, enum metadata, and internal auth user id only; no place names, notes, coordinates, emails, or handles. |
 | Sync conflict behavior | Locked v0.1 | Simple `updated_at`/server-wins plus local retry queue. |
-| Full onboarding | Locked for REC-132 Phase A; permissions revised for REC-396 and REC-425; opening revised for REC-529 on 2026-09-18 | Logged-out users see the Signal word sequence, then native Places and People previews. Next and Log in remain available throughout; the final scene advances into native Clerk-backed account entry with a horizontal slide, and sign-up has no close button. Closing Log in restarts the welcome flow. Required display name/username, optional photo, and location, Contacts, trusted-friend, and notification steps follow authentication. A permission primer that immediately precedes a system alert has one neutral Continue action and no skip path; denied state recovery may open Settings or continue without the optional capability. Apple Calendar setup stays in Profile → Settings → Privacy and trust until the NUX reaches the relevant social experience. Existing users remain complete. Contextual notification enrollment reuses the central campaign after new saves/follows. |
+| Full onboarding | Locked for REC-132 Phase A; permissions revised for REC-396 and REC-425; opening revised for REC-529 on 2026-09-18 | Logged-out users see the Signal word sequence, then native Places and People previews. Next and Log in remain available throughout; the final scene advances into native Clerk-backed account entry with a horizontal slide, and sign-up has no close button. Closing Log in restarts the welcome flow. Required display name/username and a saved profile photo (including an existing provider avatar), followed by location, Contacts, trusted-friend, and notification steps, complete account setup. A permission primer that immediately precedes a system alert has one neutral Continue action and no skip path; denied state recovery may open Settings or continue without the optional capability. Apple Calendar setup stays in Profile → Settings → Privacy and trust until the NUX reaches the relevant social experience. Existing users remain complete. Contextual notification enrollment reuses the central campaign after new saves/follows. |
 | M3 backend schema/RLS/profile foundation | Project created, migrations applied, webhook verified | New Supabase project `rugmtlgufrhlxwfkumhw` and new Clerk app `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9` are created. Migrations `20260602131500`, `20260602140304`, `20260602143000`, `20260602210000`, and `20260604185000` are applied remotely. Hosted pgTAP tests passed with 29 assertions. Clerk profile mirroring is deployed through Svix -> Supabase Edge Function -> PostgREST RPC, and real create/delete webhook flow was verified. Schema includes custom `question_definitions` plus JSON-backed `place_attributes` so future user-created questions/inputs can be added without answer-column churn. |
 
 ## Check-in details (REC-485, revised 2026-09-17)

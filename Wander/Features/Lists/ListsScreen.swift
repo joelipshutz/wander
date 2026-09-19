@@ -694,7 +694,8 @@ struct ListsScreen: View {
 
     @MainActor
     private func runListsWalkthroughAnimationIfNeeded() async {
-        guard walkthroughs.activeSurface == .lists else { return }
+        guard walkthroughs.activeSurface == .lists,
+              walkthroughs.currentStep?.presentationStyle != .contextual else { return }
 
         switch walkthroughs.currentStep?.target {
         case .listsScope:

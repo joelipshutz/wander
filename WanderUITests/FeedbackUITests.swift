@@ -3,6 +3,15 @@ import XCTest
 @MainActor final class FeedbackUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testFeedbackEntryIsHiddenWithoutExplicitEnablement() {
+        let app = application()
+        app.launchArguments.removeAll { $0 == "-WanderFeedbackUITest" }
+        app.launch()
+        XCTAssertTrue(app.buttons["Edit profile"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["profile.feedback"].exists)
+        capture("Profile feedback disabled")
+    }
+
     func testProfileFeedbackAndSubmission() {
         let app = application()
         app.launch()

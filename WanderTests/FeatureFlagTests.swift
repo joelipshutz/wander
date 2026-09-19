@@ -13,6 +13,7 @@ final class FeatureFlagTests: XCTestCase {
                 "semantic_place_search_v1",
                 "social_import_apify_gemini_v1",
                 "place_profile_action_variant",
+                "profile_feedback_v1",
             ]
         )
         XCTAssertEqual(FeatureFlagKey.placeProfileSaveTrayV1.definition.valueKind, .boolean)
@@ -28,6 +29,26 @@ final class FeatureFlagTests: XCTestCase {
             FeatureFlagKey.socialImportApifyGeminiV1.definition.allowsRemoteAccountOverride
         )
         XCTAssertTrue(FeatureFlagKey.socialImportApifyGeminiV1.definition.isEditableOnDevice)
+        XCTAssertEqual(FeatureFlagKey.profileFeedbackV1.definition.bundledDefault, .boolean(false))
+        XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.isEditableOnDevice)
+        XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.allowsRemoteAccountOverride)
+    }
+
+    func testProfileFeedbackDefaultsOffAndRequiresExplicitEnablementAfterRestart() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = FeatureFlagOverrideStore(defaults: defaults)
+        let backend = WanderBackend(featureFlagRepository: FeatureFlagTestRepository(values: [:]),
+                                    featureFlagDeviceOverrides: store.launchSnapshot())
+        XCTAssertNotEqual(backend.featureFlag(.profileFeedbackV1, for: "user_a"), true)
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.featureFlag(.profileFeedbackV1, for: "user_a"), false)
+        store.setOverride(.boolean(true), for: .profileFeedbackV1, userID: "user_a")
+        XCTAssertEqual(backend.featureFlag(.profileFeedbackV1, for: "user_a"), false)
+        let restarted = WanderBackend(featureFlagRepository: FeatureFlagTestRepository(values: [:]),
+                                      featureFlagDeviceOverrides: store.launchSnapshot())
+        XCTAssertEqual(restarted.featureFlag(.profileFeedbackV1, for: "user_a"), true)
+        XCTAssertNotEqual(restarted.featureFlag(.profileFeedbackV1, for: "user_b"), true)
     }
 
     func testOverrideStorePersistsBooleanAndIntegerValuesPerAccount() throws {

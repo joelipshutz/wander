@@ -2598,7 +2598,12 @@ begin
 end
 $user_place_soft_delete$;
 
+-- Isolate preview fixtures and pgTAP's transaction-local plan before other suites.
+reset role;
+savepoint migration_preview_smoke;
 ${migrationPreviewTestSQL}
+rollback to savepoint migration_preview_smoke;
+release savepoint migration_preview_smoke;
 
 -- This suite sets the JSON JWT claims, which take precedence over the scalar
 -- claims used below. Restore both its fixtures and session state afterward.

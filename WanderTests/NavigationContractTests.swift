@@ -50,21 +50,36 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
+        let signedOutFlow = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Onboarding/SignedOutOnboardingFlowView.swift")
+        )
+        let signedOutBranch = try sourceSection(
+            entry, after: "case .signedOut:", before: "case .onboarding(let session, let step):"
+        )
+        let modalOwnership = try sourceSection(
+            entry, after: "private var modalAuthPresentation: Binding<Bool>", before: "private func receiveIncomingURL"
+        )
+
         XCTAssertTrue(app.contains("AppEntryView("))
         XCTAssertTrue(app.contains("analyticsLifecycle: analyticsLifecycle"))
         XCTAssertTrue(entry.contains("case .signedOut:"))
-        let signedOutFlow = try String(contentsOf: projectRoot.appendingPathComponent(
-            "Wander/Features/Onboarding/SignedOutOnboardingFlowView.swift"
-        ))
-        XCTAssertTrue(entry.contains("SignedOutOnboardingFlowView(analytics: analytics)"))
+        XCTAssertTrue(signedOutBranch.contains("SignedOutOnboardingFlowView(analytics: analytics)"))
+        XCTAssertTrue(signedOutFlow.contains("LoggedOutCarouselView("))
         XCTAssertTrue(signedOutFlow.contains("auth.beginSignIn(mode: .signUp)"))
         XCTAssertTrue(signedOutFlow.contains("auth.beginSignIn(mode: .signIn)"))
+        XCTAssertTrue(signedOutFlow.contains("NativeAuthFlowView("))
+        let closeAction = try sourceSection(signedOutFlow, after: "onClose: {", before: "onLogIn:")
+        XCTAssertTrue(closeAction.contains("auth.nativeAuthDidDismiss()"))
+        XCTAssertFalse(signedOutFlow.contains(".sheet("))
         XCTAssertTrue(entry.contains("case .ready(let session, let firstVisitWalkthroughEligible):"))
         XCTAssertTrue(entry.contains("initialSession: session"))
         XCTAssertTrue(entry.contains("isSessionValidated: auth.isSessionValidated"))
         XCTAssertTrue(entry.contains("isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible"))
         XCTAssertTrue(entry.contains("coordinator.completeFirstVisitWalkthrough(forUserID: completedUserID)"))
         XCTAssertTrue(entry.contains(".sheet(isPresented: modalAuthPresentation"))
+        XCTAssertTrue(modalOwnership.contains("guard case .signedOut = coordinator.state else"))
+        XCTAssertTrue(modalOwnership.contains("return auth.isPresentingNativeAuth"))
+        XCTAssertTrue(modalOwnership.contains("return false"))
         XCTAssertTrue(entry.contains("ClerkNativeAuthView(mode: auth.activeNativeAuthMode)"))
         XCTAssertTrue(entry.contains("case .background:"))
         XCTAssertTrue(entry.contains("foregroundRefreshPolicy.didEnterBackground("))
@@ -1803,7 +1818,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discoverSearch.contains(".astirOutlinedSurface(castsShadow: true)"))
         XCTAssertFalse(discoverSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
-        XCTAssertTrue(profile.contains("Text(profile.displayName)\n                        .font(AstirTypography.sheetTitle)"))
+        XCTAssertTrue(profile.contains("ProfileIdentityHeader(name: profile.displayName"))
         XCTAssertTrue(profile.contains(".font(AstirTypography.sectionTitle)"))
         XCTAssertFalse(profile.contains("WanderTypography.editorial"))
         let profileStreak = try XCTUnwrap(
@@ -2040,13 +2055,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("persistAddPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))
-        XCTAssertTrue(addScreen.contains("Text(\"Suggested\")"))
+        XCTAssertTrue(addScreen.contains("Text(\"Nearby places\")"))
         XCTAssertTrue(addScreen.contains("Search for a place"))
         XCTAssertTrue(addScreen.contains("Label(\"Take a Photo\", systemImage: \"camera\")"))
         XCTAssertTrue(addScreen.contains("Label(\"Photo Library\", systemImage: \"photo.on.rectangle\")"))
         XCTAssertTrue(addScreen.contains("AddSuggestedPlaces.limited(nearby)"))
         XCTAssertTrue(addScreen.contains("static let maximumCount = 7"))
-        XCTAssertTrue(suggestedSection.contains("Text(\"Suggested\")"))
+        XCTAssertTrue(suggestedSection.contains("Text(\"Nearby places\")"))
         XCTAssertTrue(suggestedSection.contains("searchField"))
         XCTAssertTrue(suggestedSection.contains("AddSuggestedPlaces.previewCount("))
         XCTAssertTrue(suggestedSection.contains("Label(\"See more\", systemImage: \"arrow.up.right\")"))
@@ -4168,7 +4183,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileModality.contains("mapSaveFlow == nil && mapActivityEditFlow == nil"))
         XCTAssertTrue(profileModality.contains("mapPlaceListTarget == nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
-        XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
+        XCTAssertTrue(mapScreen.contains("guard !walkthroughs.isPresentingLegacyPlaceWalkthrough else { return }"))
         XCTAssertTrue(mapScreen.contains("onTransitionCompleted: handlePlaceProfileTransitionCompleted"))
         XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
@@ -4714,7 +4729,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(actionRow.contains(".frame(width: 136, height: 48)"))
         XCTAssertTrue(actionRow.contains(".astirOutlinedSurface()"))
         XCTAssertTrue(actionRow.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
-        XCTAssertTrue(actionRow.contains("walkthroughs.activeSurface == .placeDetail"))
+        XCTAssertTrue(actionRow.contains("walkthroughs.isPresentingLegacyPlaceWalkthrough"))
         XCTAssertTrue(actionRow.contains("walkthroughActionButton(item)"))
         XCTAssertTrue(actionRow.contains(".frame(maxWidth: .infinity, minHeight: 56)"))
         XCTAssertTrue(actionRow.contains("VStack(spacing: 3)"))
@@ -5200,11 +5215,9 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(navigationRow.contains("pendingInvitationCount: sharedVisitInvitationCount"))
         XCTAssertFalse(navigationRow.contains("WanderTheme.surfaceRaised.color"))
-        XCTAssertTrue(identityBlock.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
-        XCTAssertTrue(identityBlock.contains("Text(profile.displayName)"))
+        XCTAssertTrue(identityBlock.contains("ProfileIdentityHeader(name: profile.displayName, tracksProfileMotion: true)"))
         XCTAssertTrue(identityBlock.contains("ProfileGraphCountButton(value: followerCount"))
         XCTAssertTrue(identityBlock.contains("normalized(profile.homeArea)"))
-        XCTAssertTrue(identityBlock.contains(".font(AstirTypography.sheetTitle)"))
         XCTAssertTrue(identityBlock.contains(".font(AstirTypography.control)"))
         XCTAssertTrue(identityBlock.contains("normalized(profile.bio)"))
         XCTAssertTrue(identityBlock.contains("Text(memberSinceText)"))
@@ -5315,6 +5328,9 @@ final class NavigationContractTests: XCTestCase {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
         )
+        let sharedIdentityHeader = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileIdentityHeader.swift")
+        )
         let screen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
         )
@@ -5361,7 +5377,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(inCommonRow.contains(".fill(brandMode.border)"))
         XCTAssertTrue(inCommonRow.contains("viewerProfile.avatarURL"))
         XCTAssertTrue(inCommonRow.contains("profile.avatarURL"))
-        XCTAssertTrue(identity.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(identity.contains("ProfileIdentityHeader(name: profile.displayName, tracksProfileMotion: true)"))
+        XCTAssertTrue(sharedIdentityHeader.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(sharedIdentityHeader.contains(".font(AstirTypography.sheetTitle)"))
+        XCTAssertTrue(sharedIdentityHeader.contains(".profileMotionSource(tracksProfileMotion ? .name : nil)"))
         XCTAssertTrue(identity.contains("ProfileGraphCountButton(value: followerCount"))
         XCTAssertTrue(identity.contains(".astirOutlinedSurface("))
         XCTAssertTrue(home.contains("private struct ProfileHeaderActionLabel: View"))
@@ -5483,11 +5502,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(
             feed.components(separatedBy: ".walkthroughTarget(.feedActivity)").count - 1,
             1,
-            "The empty Feed state must provide a stable activity walkthrough target."
+            "The Feed content must provide one stable introduction anchor, including empty/loading states."
         )
         XCTAssertTrue(
-            feed.contains("group.id == groups.first?.id ? .feedActivity : nil"),
-            "The first displayed activity group must remain the Feed walkthrough target."
+            feed.contains("group.id == groups.first?.id ? .feedRecent : nil"),
+            "The first displayed activity group must supply the recent-tile focus target."
         )
         XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
 

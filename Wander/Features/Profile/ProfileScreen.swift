@@ -226,7 +226,7 @@ struct ProfileScreen: View {
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest,
-                feedbackAction: { showsFeedback = true }
+                feedbackAction: isFeedbackEnabled ? { showsFeedback = true } : nil
             )
                 .sheet(isPresented: $showsFeedback) {
                     FeedbackSheet(repository: feedbackRepository, analytics: store.productAnalytics)
@@ -419,6 +419,14 @@ struct ProfileScreen: View {
         withAnimation(.easeOut(duration: 0.24)) {
             showsSettings = true
         }
+    }
+
+    private var isFeedbackEnabled: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderFeedbackUITest") { return true }
+        #endif
+        return backend.featureFlag(.profileFeedbackV1, for: store.currentUser.id) == true
     }
 
     private var feedbackRepository: (any FeedbackRepository)? {
