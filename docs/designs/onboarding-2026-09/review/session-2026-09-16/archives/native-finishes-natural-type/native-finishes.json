@@ -1,0 +1,99 @@
+{
+  "sourceCommit": "7a5125f8999000925d2cb61e90172f57e33abb88",
+  "native": true,
+  "higgsfieldGenerationUsed": false,
+  "finishes": [
+    {
+      "id": "station",
+      "name": "Station",
+      "summary": "Crisp, mechanical faces.",
+      "detail": "A restrained bevel, deep center cut, and a quick weighted landing.",
+      "appearances": {
+        "dark": {
+          "file": "native-captures/finishes-natural-type/station-dark.mp4",
+          "poster": "native-captures/finishes-natural-type/station-dark.png",
+          "startSeconds": 3.75,
+          "accountConfirmed": true,
+          "durationSeconds": 45.69833333333333,
+          "sha256": "7d20acf7ede41d379646f0fe217b13efdce592aadab0e0b63e1a48395020e34f",
+          "browserDurationSeconds": 36.343333,
+          "compact": "native-captures/finishes-natural-type/station-dark-compact.png"
+        },
+        "light": {
+          "file": "native-captures/finishes-natural-type/station-light.mp4",
+          "poster": "native-captures/finishes-natural-type/station-light.png",
+          "startSeconds": 4.5,
+          "accountConfirmed": true,
+          "durationSeconds": 48.345,
+          "sha256": "fdacddab8b31b65d3d5c1db3237fdf065e3d41f32d9980fcf89162fe74f50ad8",
+          "browserDurationSeconds": 37.275,
+          "compact": "native-captures/finishes-natural-type/station-light-compact.png"
+        }
+      }
+    },
+    {
+      "id": "sculpted",
+      "name": "Sculpted",
+      "summary": "More depth in the face.",
+      "detail": "Rounder edges and stronger light and shadow, with the same natural letterforms.",
+      "appearances": {
+        "dark": {
+          "file": "native-captures/finishes-natural-type/sculpted-dark.mp4",
+          "poster": "native-captures/finishes-natural-type/sculpted-dark.png",
+          "startSeconds": 5.5,
+          "accountConfirmed": true,
+          "durationSeconds": 46.86666666666667,
+          "sha256": "64ee333a1da31ddb01a090ca400cb3fb43057aca60f8a54b03bd1dce0313a675",
+          "browserDurationSeconds": 38.37
+        },
+        "light": {
+          "file": "native-captures/finishes-natural-type/sculpted-light.mp4",
+          "poster": "native-captures/finishes-natural-type/sculpted-light.png",
+          "startSeconds": 3.5,
+          "accountConfirmed": true,
+          "durationSeconds": 45.555,
+          "sha256": "216624ddf3a892cc0b28313104c34885802316ca1de2fd800e76a4dd5fbe26e2",
+          "browserDurationSeconds": 35.038333
+        }
+      }
+    },
+    {
+      "id": "graphic",
+      "name": "Graphic",
+      "summary": "Flat, clean faces.",
+      "detail": "A matte treatment around the same natural monospaced caps.",
+      "appearances": {
+        "dark": {
+          "file": "native-captures/finishes-natural-type/graphic-dark.mp4",
+          "poster": "native-captures/finishes-natural-type/graphic-dark.png",
+          "startSeconds": 3.75,
+          "accountConfirmed": true,
+          "durationSeconds": 45.611666666666665,
+          "sha256": "87c1c90ed04da520322991ef6762a78b8edc09a606c8271947deb0ddeedf0be0",
+          "browserDurationSeconds": 35.465
+        },
+        "light": {
+          "file": "native-captures/finishes-natural-type/graphic-light.mp4",
+          "poster": "native-captures/finishes-natural-type/graphic-light.png",
+          "startSeconds": 4.25,
+          "accountConfirmed": true,
+          "durationSeconds": 45.111666666666665,
+          "sha256": "5778c91572de6a86ea3a1a5902bf03c326704eece71f825ceb7e382b04c91eed",
+          "browserDurationSeconds": 35.996667
+        }
+      }
+    }
+  ],
+  "verifiedAt": "2026-09-18T00:27:57.860408+00:00",
+  "reviewPage": "opening-explorations.html",
+  "typography": "Native bold monospaced; one font size, no horizontal-only scaling",
+  "checks": {
+    "nativeAccountEndStates": 6,
+    "sharedTypographyCompactAppearances": 2,
+    "focusedUnitTestsPassed": 22,
+    "browserReport": "native-board-qa/native-natural-type-report.json",
+    "physicalDevicePacingVerified": false
+  },
+  "pullRequest": "https://github.com/joelipshutz/wander/pull/648",
+  "handoffCommit": "565bc0dad4de10d90b91f8228efc162653b5e162"
+}

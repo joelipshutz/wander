@@ -1,0 +1,16 @@
+{
+  "status": "outtake-approved; cleanup-listening-review-pending",
+  "source": "IMG_4916-original.mov",
+  "sourceSha256": "2e19bca9103a7b0a63a417f50828e41948e11ce4c575d8006c45d2129ea21d78",
+  "sourceDuration": 114.465,
+  "startSeconds": 23.5,
+  "endSeconds": 114.465,
+  "cutDuration": 90.965,
+  "reason": "Joe approved keeping the celebratory outtake through the final Cut. Only setup before 23.5 seconds is removed.",
+  "transcript": "Local machine transcript, not verified captions; proper nouns and some words are inaccurate.",
+  "placement": "After account setup, before Ryan\u2019s first-use NUX",
+  "mainAndTestFlight": "held at user request",
+  "reviewCut": "founders-welcome-cleaned.mp4",
+  "reviewCutSha256": "4d98d12ee32b10b0b5d3a4b96318980f1fb36fd7fb724e9c07823e0d24467374",
+  "export": "AVFoundation 1280x720 preset; preserves portrait transform; H.264 review rendition"
+}

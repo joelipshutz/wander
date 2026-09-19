@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "cards": 51,
+  "decodedImages": 37,
+  "copyAppendix": 4,
+  "requiredNativeCards": [
+    "W00",
+    "V00A",
+    "V00B",
+    "V00C",
+    "N67"
+  ],
+  "checks": [
+    "All published native screenshots decode",
+    "No canvas cards overlap",
+    "Pan and zoom operate",
+    "W00 opens in TV view",
+    "N67 loads the actual native crop screen",
+    "Opening gallery link works; all three native videos load while paused",
+    "Confirmed words match every take",
+    "No JavaScript errors or failed assets"
+  ],
+  "screenshots": [
+    "published-board-overview.png",
+    "published-opening.png",
+    "published-crop.png",
+    "published-opening-gallery.png"
+  ],
+  "verifiedAt": "2026-09-17T17:04:36.582Z"
+}

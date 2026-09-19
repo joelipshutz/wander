@@ -1,0 +1,18 @@
+Attributes: Keyboard, 0x105460840, {{9.9, 908.0}, {379.2, 226.5}}
+Element subtree:
+ →Keyboard, 0x105460840, {{9.9, 908.0}, {379.2, 226.5}}
+Path to element:
+ →Keyboard, 0x105460840, {{9.9, 908.0}, {379.2, 226.5}}
+Query chain:
+ →Find: Target Application 'com.grayline.wander'
+  Output: {
+    Application, 0x1053644a0, pid: 21157, label: 'Astir'
+  }
+  ↪︎Find: Descendants matching type Keyboard
+    Output: {
+      Keyboard, 0x105465890, {{0.0, 922.0}, {390.0, 233.0}}
+    }
+    ↪︎Find: First Match
+      Output: {
+        Keyboard, 0x10555d780, {{0.0, 922.0}, {390.0, 233.0}}
+      }

@@ -1,0 +1,167 @@
+{
+  "sourceCommit": "1155ca4d43fa816e18bda5ebd6cbfbb67074e245",
+  "native": true,
+  "newHiggsfieldGenerations": 0,
+  "textureSource": "Original unlettered Coming Soon / Ocean Park Higgsfield texture",
+  "device": "iPhone 16e, iOS 26.3.1",
+  "takes": {
+    "film-type-dark": {
+      "file": "native-captures/film-events-match/film-type-dark.mp4",
+      "poster": "native-captures/film-events-match/film-type-dark.png",
+      "startSeconds": 3.75,
+      "durationSeconds": 53.61833333333333,
+      "accountConfirmed": true,
+      "sha256": "581ad546ba6f5685f1a1cfb44ae35f2370e45e1639fd462feb657bfdcc751d3c",
+      "sourceCommit": "1155ca4d43fa816e18bda5ebd6cbfbb67074e245",
+      "phaseSeconds": {
+        "community": 2.0,
+        "tracking": 1.57,
+        "wordChange": 2.95,
+        "placesWord": 8.4,
+        "localExperiment": 15.8,
+        "sceneChange": 17.5,
+        "places": 22.5,
+        "peopleChange": 26.3,
+        "people": 31.5
+      },
+      "phaseTextProof": {
+        "community": [
+          "9:41",
+          "ASTIR",
+          "OCEAN",
+          "PARK",
+          "Connect with your",
+          "COMMUNITY",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "tracking": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "COMMUNITY",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "wordChange": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "PEOPLE",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "placesWord": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "PLACES",
+          "Keep track of everywhere you've been.",
+          "Keep up with the people you love.",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "localExperiment": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "A",
+          "LOCAL",
+          "EXPERIMENT",
+          "Keep track of everywhere you've been.",
+          "Keep up with the people you love.",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "sceneChange": [
+          "9:41",
+          "ASTIR",
+          "OCEAN",
+          "PARK",
+          "rel",
+          "Hotchkiss Park",
+          "Park",
+          "ENT",
+          "CAlAr",
+          "KEEP TRACI",
+          "EVERYWHE",
+          "YOU'VE BE",
+          "you ve been.",
+          "- you love.",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "places": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Josly",
+          "re]",
+          "Hotchkiss Park",
+          "Park",
+          "+",
+          "AiAr Ma Mina",
+          "KEEP TRACK OF",
+          "EVERYWHERE",
+          "YOU'VE BEEN",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "peopleChange": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Josly",
+          "Hotchkiss Park",
+          "Park",
+          "+",
+          "nig",
+          "PAlArNA",
+          "KEEP TRACK OF",
+          "EVERYWHERE",
+          "YOU'VE BEEN",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "people": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "V CHECKED IN",
+          "Marigold Table",
+          "\"1 Santa Monica \u2022 Restaurant",
+          "Mina checked in",
+          "2h ago \u2022 someone you follow",
+          "\"The patio at golden hour. Get the focaccia!\"",
+          "5",
+          "KEEP UP WITH",
+          "THE PEOPLE",
+          "YOU LOVE",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ]
+      },
+      "accountStartSeconds": 42.5
+    }
+  },
+  "validation": {
+    "result": "Passed",
+    "tests": 26,
+    "failedTests": 0,
+    "unitTests": 24,
+    "uiJourneys": 2,
+    "resultBundle": "native-film-events-match-tests.xcresult",
+    "testSummary": "native-film-events-match-test-summary.json",
+    "accountPixels": "native-board-qa/film-events-match-account-pixels.json",
+    "deviceScope": "Fresh iPhone 16e simulator only; no new iPad or physical-device performance claim."
+  },
+  "reference": {
+    "file": "native-captures/events-reference/events-coming-soon-03c.mp4",
+    "sha256": "03ad72d7c94b9abc4f0ba822137a1175d5af74e973063e8905c244a9946201e3",
+    "selection": "Original Events 03C revision 4"
+  },
+  "archive": "opening-film-app-palette-archive.html"
+}

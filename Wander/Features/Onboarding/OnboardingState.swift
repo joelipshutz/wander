@@ -46,7 +46,7 @@ struct OnboardingLocalState: Codable, Equatable {
     var needsServerCompletion: Bool
     var isFirstVisitWalkthroughEligible: Bool? = nil
     var firstVisitWalkthroughEnrollmentGeneration: Int? = nil
-    /// Missing on older installs, where identity did not require a photo.
+    /// Missing on older installs. Records that required identity fields were saved.
     var hasSavedRequiredIdentity: Bool? = nil
 
     static let fresh = OnboardingLocalState(
@@ -297,8 +297,6 @@ enum AppEntryStateResolver {
 
     static func hasRequiredIdentity(_ profile: LocalProfile?, usesAppleSignIn: Bool = false) -> Bool {
         guard let profile else { return false }
-        let hasPhoto = !(profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        guard usesAppleSignIn || hasPhoto else { return false }
         return ProfileIdentityDraft(displayName: profile.displayName, handle: profile.handle,
                                     usesAppleSignIn: usesAppleSignIn).isValid
     }
@@ -324,8 +322,8 @@ enum AppEntryStateResolver {
     static func canContinueOffline(
         localState: OnboardingLocalState
     ) -> Bool {
-        // Only advancing from identity proves that its required photo and
-        // identity fields were saved. Auth-session name/handle alone cannot.
+        // Only advancing from identity proves that its required name/username
+        // fields were saved. Auth-session name/handle alone cannot.
         localState.nextStep != .identity && localState.hasSavedRequiredIdentity == true
     }
 }

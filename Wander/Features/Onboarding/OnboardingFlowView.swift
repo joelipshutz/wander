@@ -13,6 +13,7 @@ struct OnboardingFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step: OnboardingStep
     @State private var didTrackStart = false
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
@@ -77,12 +78,14 @@ struct OnboardingFlowView: View {
                 )
             }
         }
+        .environment(\.astirBrandMode, .editorial)
+        .preferredColorScheme(.dark)
         .environmentObject(backend)
         .environmentObject(auth)
         .environmentObject(productUpsells)
         .environmentObject(pushNotifications)
-        .transition(.opacity.combined(with: .move(edge: .trailing)))
-        .animation(.snappy(duration: 0.35), value: step)
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : OnboardingCarouselTiming.slideAnimation, value: step)
         .task(id: step) {
             if !didTrackStart {
                 didTrackStart = true
@@ -159,9 +162,9 @@ struct OnboardingIdentityView: View {
     @State private var hasEditedHandle = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoCropSelection: ProfilePhotoCropSelection?
+    @State private var existingAvatarURL: String?
     @State private var previewImage: UIImage?
     @State private var jpegData: Data?
-    @State private var existingAvatarURL: String?
     @State private var availability: Availability = .idle
     @State private var errorMessage: String?
     @State private var isSaving = false
@@ -195,7 +198,6 @@ struct OnboardingIdentityView: View {
 
     private var canSubmit: Bool {
         draft.isValid
-            && (session.isAppleSignIn == true || jpegData?.isEmpty == false || existingAvatarURL != nil)
             && availability != .checking
             && availability != .unavailable
             && !isSaving
@@ -215,6 +217,10 @@ struct OnboardingIdentityView: View {
     }
 
     var body: some View {
+        let avatarImage = previewImage.map { Image(uiImage: $0) }
+        let avatarInitials = String(name.prefix(2)).uppercased()
+        let avatarURL = existingAvatarURL
+
         OnboardingStepScaffold(step: .identity) {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
@@ -225,45 +231,51 @@ struct OnboardingIdentityView: View {
                             message: "This is how friends find you on Astir."
                         )
                     }
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                         Text("YOUR PROFILE")
-                            .font(AstirTypography.metadata)
-                            .tracking(1.4)
-                            .foregroundStyle(brandMode.accentText)
+                            .font(AstirTypography.metadata).tracking(1.4)
+                            .foregroundStyle(AstirTheme.signal.color)
                         ProfileIdentityHeader(name: draft.normalizedDisplayName.isEmpty ? "Your name" : draft.normalizedDisplayName) {
                             PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                                VStack(spacing: WanderTheme.spacing2) {
-                                    ZStack(alignment: .bottomTrailing) {
-                                        profilePhoto
-                                            .frame(width: 104, height: 104)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(brandMode.border, lineWidth: 1))
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundStyle(brandMode.background)
-                                            .frame(width: 30, height: 30)
-                                            .background(brandMode.primaryText, in: Circle())
-                                            .overlay(Circle().stroke(brandMode.background, lineWidth: 3))
+                                ZStack(alignment: .bottomTrailing) {
+                                    Group {
+                                        if let avatarImage {
+                                            avatarImage.resizable().scaledToFill()
+                                        } else if avatarInitials.isEmpty && avatarURL == nil {
+                                            Circle().fill(AstirTheme.inkRaised.color)
+                                                .overlay(Image(systemName: "person.fill")
+                                                    .font(.system(size: 40))
+                                                    .foregroundStyle(AstirTheme.mutedOnInk.color))
+                                        } else {
+                                            WanderAvatar(initials: avatarInitials,
+                                                avatarURL: avatarURL, size: 104,
+                                                color: AstirTheme.signal.color)
+                                        }
                                     }
-                                    Text(previewImage == nil && existingAvatarURL == nil ? "Add a photo" : "Change photo")
-                                        .font(AstirTypography.caption)
-                                        .foregroundStyle(brandMode.primaryText)
+                                    .frame(width: 104, height: 104).clipShape(Circle())
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(AstirTheme.ink.color)
+                                        .frame(width: 30, height: 30)
+                                        .background(AstirTheme.signal.color, in: Circle())
+                                        .overlay(Circle().stroke(AstirTheme.ink.color, lineWidth: 3))
                                 }
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(previewImage == nil && existingAvatarURL == nil ? "Add a required profile photo" : "Change profile photo")
+                            .accessibilityLabel(previewImage == nil && existingAvatarURL == nil ? "Add an optional profile photo" : "Change profile photo")
                             .accessibilityIdentifier("onboarding.identity.photo")
                         } details: {
-                            Text("@\(draft.normalizedHandle.isEmpty ? "your_username" : draft.normalizedHandle)")
-                                .font(AstirTypography.control)
-                                .foregroundStyle(brandMode.secondaryText)
-                                .lineLimit(2)
-                                .accessibilityIdentifier("onboarding.identity.previewHandle")
+                            Text(draft.normalizedHandle.isEmpty ? "@username" : "@\(draft.normalizedHandle)")
+                                .font(AstirTypography.bodySmall)
+                                .foregroundStyle(AstirTheme.mutedOnInk.color)
+                            Text(previewImage == nil && existingAvatarURL == nil ? "Add a photo" : "Change photo")
+                                .font(AstirTypography.label)
+                                .foregroundStyle(AstirTheme.signal.color)
                         }
-                        Spacer(minLength: 0)
+                        Text("Make yourself easy to find.")
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(AstirTheme.mutedOnInk.color)
                     }
-                    .padding(.top, WanderTheme.spacing4)
-                    .frame(minHeight: 240, alignment: .top)
+                    .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
 
                     VStack(spacing: WanderTheme.spacing3) {
                         if session.isAppleSignIn != true {
@@ -358,6 +370,8 @@ struct OnboardingIdentityView: View {
                     errorMessage = nil
                 }
             )
+            .environment(\.astirBrandMode, .editorial)
+            .preferredColorScheme(.dark)
         }
     }
 
@@ -594,19 +608,12 @@ private struct OnboardingPermissionView: View {
         OnboardingStepScaffold(step: step) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: WanderTheme.spacing6) {
-                    Spacer(minLength: WanderTheme.spacing4)
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 42, style: .continuous)
-                            .fill(accent.opacity(0.12))
-                            .frame(width: 270, height: 210)
-                            .rotationEffect(.degrees(-5))
-                        Image(systemName: systemImage)
-                            .font(.system(size: 88, weight: .medium))
-                            .foregroundStyle(accent)
-                            .symbolEffect(.bounce, value: isRequesting)
-                    }
+                    OnboardingWelcomePostcard()
+                        .allowsHitTesting(false)
+                        .padding(.vertical, WanderTheme.spacing6)
+                        .accessibilityLabel("Example of a friend’s activity on Astir")
 
-                    OnboardingHeadline(eyebrow: "ONE QUICK THING", title: title, message: message)
+                    OnboardingHeadline(eyebrow: "YOUR PEOPLE", title: title, message: message)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                         ForEach(bullets, id: \.self) { bullet in
@@ -776,7 +783,7 @@ private struct OnboardingNotificationUpsellTrigger: View {
 }
 
 struct OnboardingStepScaffold<Content: View, Footer: View>: View {
-    @Environment(\.astirBrandMode) private var brandMode
+    private let brandMode = AstirBrandMode.editorial
     let step: OnboardingStep
     @ViewBuilder let content: Content
     @ViewBuilder let footer: Footer
@@ -797,7 +804,7 @@ struct OnboardingStepScaffold<Content: View, Footer: View>: View {
                 ForEach(OnboardingStep.allCases, id: \.self) { candidate in
                     Capsule()
                         .fill(candidateIndex(candidate) <= candidateIndex(step) ? brandMode.accent : brandMode.border)
-                        .frame(height: 5)
+                        .frame(height: 3)
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
@@ -810,9 +817,11 @@ struct OnboardingStepScaffold<Content: View, Footer: View>: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
                 .padding(.bottom, WanderTheme.spacing2)
-                .background(.ultraThinMaterial)
+                .background(AstirTheme.ink.color)
         }
-        .background(brandMode.background.ignoresSafeArea())
+        .environment(\.astirBrandMode, .editorial)
+        .preferredColorScheme(.dark)
+        .background(AstirTheme.ink.color.ignoresSafeArea())
         .foregroundStyle(brandMode.primaryText)
     }
 
@@ -839,11 +848,13 @@ struct OnboardingHeadline: View {
                 .font(AstirTypography.screenTitle)
                 .lineSpacing(-2)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(message)
-                .font(AstirTypography.body)
-                .foregroundStyle(brandMode.secondaryText)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
+            if !message.isEmpty {
+                Text(message)
+                    .font(AstirTypography.body)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

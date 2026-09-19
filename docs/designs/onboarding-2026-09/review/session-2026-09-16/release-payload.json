@@ -1,0 +1,15 @@
+{
+  "disposition": "ship",
+  "issue": "REC-547",
+  "testerFacingChange": "Onboarding uses the selected Astir film opening, refined dark setup screens, an optional profile photo and an optional VHS founders welcome with cleaned audio and the outtake before the existing first-use walkthrough.",
+  "whatToTest": [
+    "Start signed out: watch or advance the film opening, then create an account or log in using the normal interactive controls.",
+    "Continue profile setup without a photo; review nearby places, contacts, following and notification screens.",
+    "Play the founders welcome, pause or mute, background and resume, then finish or Skip intro into the existing walkthrough."
+  ],
+  "releaseOperations": "none",
+  "validation": "2,346 native unit tests passed; film autoplay/auth and founders Play/Pause/Mute/background/Skip/end UI tests passed; final login/background journey passed; signed iPhone review build passed; full C decoded (2,184 frames) and every cleaned audio packet verified unchanged.",
+  "knownLimitations": [
+    "Founders video has no captions."
+  ]
+}

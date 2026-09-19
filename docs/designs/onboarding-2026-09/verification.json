@@ -1,0 +1,37 @@
+{
+  "archiveFileCount": 1610,
+  "sourceBundleVerified": true,
+  "sourceCheckpoint": "1185c81b8968a69eb96c233db833fa6e14eeb742",
+  "nativeCaptureSource": "c71aee6",
+  "reviewManifestVerified": true,
+  "largeMedia": "Git LFS pointers; original bytes preserved",
+  "nativeVideoIntegration": true,
+  "nativeUIValidated": [
+    "actual video end \u2192 NUX",
+    "Play/Pause/Mute/background/Skip \u2192 NUX",
+    "optional N08 profile photo; form survives background",
+    "N08\u2013N12 + denied/failure captures"
+  ],
+  "fullReleaseValidation": "2346 unit tests + four film/founders UI tests passed; corrected final login journey passed; signed iPhone build passed; final C resource playback check running",
+  "foundersVideo": {
+    "duration": 91.0,
+    "outtake": "included through Cut",
+    "windCleaned": true,
+    "sourceAudioABPage": "founders-video-review.html",
+    "selectedTreatment": "C / Events 03C",
+    "fullMovieSha256": "b9d8fc1dbcecedb8e797fb99af7e8f92425f35e9e96d0840562af1d7d0dfde82",
+    "allCleanedAudioPacketsIdentical": true
+  },
+  "vhsStudy": {
+    "clips": 3,
+    "durationEach": 8,
+    "actualDecodedFramesEach": 192,
+    "audioPacketsIdentical": true,
+    "higgsfieldCredits": 0,
+    "browserPlaybackVerified": true,
+    "mediaErrors": null,
+    "page": "founders-vhs-review.html"
+  },
+  "mainLanding": false,
+  "testFlightUploaded": false
+}

@@ -1,0 +1,121 @@
+[
+  {
+    "finish": "signal",
+    "mode": "dark",
+    "screen": "W00",
+    "text": [
+      "9:41",
+      "\u2022...",
+      "ASTIR",
+      "OCEAN PARK",
+      "Connect with your",
+      "COMMUNITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "signal-dark-W00-compact.png"
+  },
+  {
+    "finish": "signal",
+    "mode": "dark",
+    "screen": "W01",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "Hotchkiss Park",
+      "Park",
+      "+",
+      "KEEP TRACK OF",
+      "EVERYWHERE",
+      "YOU'VE BEEN",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "signal-dark-W01-compact.png"
+  },
+  {
+    "finish": "signal",
+    "mode": "dark",
+    "screen": "W02",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CHECKED IN",
+      "Marigold Table",
+      "Y1 Santa Monica \u2022 Restaurant",
+      "M",
+      "Mina checked in",
+      "2h ago \u2022 someone you follow",
+      "\"The patio at golden hour. Get the focaccia!\"",
+      "5",
+      "KEEP UP WITH",
+      "THE PEOPLE",
+      "YOU LOVE",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "signal-dark-W02-compact.png"
+  },
+  {
+    "finish": "signal",
+    "mode": "light",
+    "screen": "W00",
+    "text": [
+      "ASTIR",
+      "OCEAN PARK",
+      "Connect with your",
+      "COMMUNITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "signal-light-W00-compact.png"
+  },
+  {
+    "finish": "signal",
+    "mode": "light",
+    "screen": "W01",
+    "text": [
+      "9:41",
+      "2",
+      "ASTIR",
+      "OCEAN PARK",
+      "Josly",
+      "re]",
+      "Hotchkiss Park",
+      "Park",
+      "+",
+      "KEEP TRACK OF",
+      "EVERYWHERE",
+      "YOU'VE BEEN",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "signal-light-W01-compact.png"
+  },
+  {
+    "finish": "signal",
+    "mode": "light",
+    "screen": "W02",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CHECKED IN",
+      "Marigold Table",
+      "\u01781 Santa Monica \u2022 Restaurant",
+      "M",
+      "Mina checked in",
+      "2h ago \u2022 someone you follow",
+      "\"The patio at golden hour. Get the focaccia!\"",
+      "5",
+      "KEEP UP WITH",
+      "THE PEOPLE",
+      "YOU LOVE",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "signal-light-W02-compact.png"
+  }
+]

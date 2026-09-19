@@ -1,0 +1,4 @@
+Query chain:
+ →Find: Target Application 'com.grayline.wander'
+  ↪︎Find: Descendants matching type TextField
+    ↪︎Find: Elements matching predicate '"auth.email" IN identifiers'

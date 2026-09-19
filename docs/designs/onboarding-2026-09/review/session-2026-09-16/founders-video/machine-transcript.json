@@ -1,0 +1,1876 @@
+{
+  "model": "faster-whisper-tiny.en",
+  "machineTranscript": true,
+  "segments": [
+    {
+      "start": 21.62,
+      "end": 23.5,
+      "text": " Just it's like we can always cut it out",
+      "words": [
+        {
+          "start": 21.62,
+          "end": 22.0,
+          "word": " Just",
+          "probability": 0.2965528964996338
+        },
+        {
+          "start": 22.0,
+          "end": 22.16,
+          "word": " it's",
+          "probability": 0.9489160180091858
+        },
+        {
+          "start": 22.16,
+          "end": 23.36,
+          "word": " like",
+          "probability": 0.9978904128074646
+        },
+        {
+          "start": 23.36,
+          "end": 23.5,
+          "word": " we",
+          "probability": 0.8817973732948303
+        },
+        {
+          "start": 23.5,
+          "end": 23.5,
+          "word": " can",
+          "probability": 0.9961141347885132
+        },
+        {
+          "start": 23.5,
+          "end": 23.5,
+          "word": " always",
+          "probability": 0.9955039620399475
+        },
+        {
+          "start": 23.5,
+          "end": 23.5,
+          "word": " cut",
+          "probability": 0.9972200393676758
+        },
+        {
+          "start": 23.5,
+          "end": 23.5,
+          "word": " it",
+          "probability": 0.9975683093070984
+        },
+        {
+          "start": 23.5,
+          "end": 23.5,
+          "word": " out",
+          "probability": 0.9789469242095947
+        }
+      ]
+    },
+    {
+      "start": 23.5,
+      "end": 29.36,
+      "text": " Hello, it's Joe and Ryan and your phone feels a little weird being here, but here we are",
+      "words": [
+        {
+          "start": 23.5,
+          "end": 23.66,
+          "word": " Hello,",
+          "probability": 0.015257052145898342
+        },
+        {
+          "start": 23.94,
+          "end": 24.76,
+          "word": " it's",
+          "probability": 0.9938758611679077
+        },
+        {
+          "start": 24.76,
+          "end": 24.9,
+          "word": " Joe",
+          "probability": 0.6799027919769287
+        },
+        {
+          "start": 24.9,
+          "end": 25.04,
+          "word": " and",
+          "probability": 0.9480230808258057
+        },
+        {
+          "start": 25.04,
+          "end": 25.22,
+          "word": " Ryan",
+          "probability": 0.9914274215698242
+        },
+        {
+          "start": 25.22,
+          "end": 25.38,
+          "word": " and",
+          "probability": 0.6078566908836365
+        },
+        {
+          "start": 25.38,
+          "end": 25.58,
+          "word": " your",
+          "probability": 0.8725998997688293
+        },
+        {
+          "start": 25.58,
+          "end": 26.14,
+          "word": " phone",
+          "probability": 0.9122602343559265
+        },
+        {
+          "start": 26.14,
+          "end": 26.88,
+          "word": " feels",
+          "probability": 0.35337528586387634
+        },
+        {
+          "start": 26.88,
+          "end": 27.02,
+          "word": " a",
+          "probability": 0.9981732368469238
+        },
+        {
+          "start": 27.02,
+          "end": 27.18,
+          "word": " little",
+          "probability": 0.9974068999290466
+        },
+        {
+          "start": 27.18,
+          "end": 27.46,
+          "word": " weird",
+          "probability": 0.9136826395988464
+        },
+        {
+          "start": 27.46,
+          "end": 27.76,
+          "word": " being",
+          "probability": 0.8117077946662903
+        },
+        {
+          "start": 27.76,
+          "end": 28.04,
+          "word": " here,",
+          "probability": 0.9848631024360657
+        },
+        {
+          "start": 28.1,
+          "end": 28.68,
+          "word": " but",
+          "probability": 0.9992614388465881
+        },
+        {
+          "start": 28.68,
+          "end": 28.86,
+          "word": " here",
+          "probability": 0.8996498584747314
+        },
+        {
+          "start": 28.86,
+          "end": 29.04,
+          "word": " we",
+          "probability": 0.9580138921737671
+        },
+        {
+          "start": 29.04,
+          "end": 29.36,
+          "word": " are",
+          "probability": 0.9993560910224915
+        }
+      ]
+    },
+    {
+      "start": 30.06,
+      "end": 34.46,
+      "text": " A stir started as a way to remember the places and experiences that mattered.",
+      "words": [
+        {
+          "start": 30.06,
+          "end": 30.54,
+          "word": " A",
+          "probability": 0.11533918976783752
+        },
+        {
+          "start": 30.54,
+          "end": 30.68,
+          "word": " stir",
+          "probability": 0.8980231881141663
+        },
+        {
+          "start": 30.68,
+          "end": 31.08,
+          "word": " started",
+          "probability": 0.9899915456771851
+        },
+        {
+          "start": 31.08,
+          "end": 31.36,
+          "word": " as",
+          "probability": 0.9518330097198486
+        },
+        {
+          "start": 31.36,
+          "end": 31.46,
+          "word": " a",
+          "probability": 0.985832691192627
+        },
+        {
+          "start": 31.46,
+          "end": 31.7,
+          "word": " way",
+          "probability": 0.9971869587898254
+        },
+        {
+          "start": 31.7,
+          "end": 31.82,
+          "word": " to",
+          "probability": 0.8813905119895935
+        },
+        {
+          "start": 31.82,
+          "end": 32.22,
+          "word": " remember",
+          "probability": 0.9693443179130554
+        },
+        {
+          "start": 32.22,
+          "end": 32.48,
+          "word": " the",
+          "probability": 0.959634006023407
+        },
+        {
+          "start": 32.48,
+          "end": 32.82,
+          "word": " places",
+          "probability": 0.7886791825294495
+        },
+        {
+          "start": 32.82,
+          "end": 33.08,
+          "word": " and",
+          "probability": 0.8880349397659302
+        },
+        {
+          "start": 33.08,
+          "end": 33.7,
+          "word": " experiences",
+          "probability": 0.9936313033103943
+        },
+        {
+          "start": 33.7,
+          "end": 34.02,
+          "word": " that",
+          "probability": 0.8741350173950195
+        },
+        {
+          "start": 34.02,
+          "end": 34.46,
+          "word": " mattered.",
+          "probability": 0.9954343438148499
+        }
+      ]
+    },
+    {
+      "start": 35.32,
+      "end": 38.36,
+      "text": " I gave Joe a call and I dropped one of the little Sequoias and said,",
+      "words": [
+        {
+          "start": 35.32,
+          "end": 35.32,
+          "word": " I",
+          "probability": 0.9636445641517639
+        },
+        {
+          "start": 35.32,
+          "end": 35.48,
+          "word": " gave",
+          "probability": 0.9872586131095886
+        },
+        {
+          "start": 35.48,
+          "end": 35.68,
+          "word": " Joe",
+          "probability": 0.8000743389129639
+        },
+        {
+          "start": 35.68,
+          "end": 35.88,
+          "word": " a",
+          "probability": 0.9972965121269226
+        },
+        {
+          "start": 35.88,
+          "end": 36.12,
+          "word": " call",
+          "probability": 0.9992302656173706
+        },
+        {
+          "start": 36.12,
+          "end": 36.24,
+          "word": " and",
+          "probability": 0.3772297203540802
+        },
+        {
+          "start": 36.24,
+          "end": 36.4,
+          "word": " I",
+          "probability": 0.7162784337997437
+        },
+        {
+          "start": 36.4,
+          "end": 36.58,
+          "word": " dropped",
+          "probability": 0.47420597076416016
+        },
+        {
+          "start": 36.58,
+          "end": 36.86,
+          "word": " one",
+          "probability": 0.4655096232891083
+        },
+        {
+          "start": 36.86,
+          "end": 36.96,
+          "word": " of",
+          "probability": 0.8263152837753296
+        },
+        {
+          "start": 36.96,
+          "end": 37.08,
+          "word": " the",
+          "probability": 0.8124489784240723
+        },
+        {
+          "start": 37.08,
+          "end": 37.2,
+          "word": " little",
+          "probability": 0.1279316544532776
+        },
+        {
+          "start": 37.2,
+          "end": 37.62,
+          "word": " Sequoias",
+          "probability": 0.6194918851057688
+        },
+        {
+          "start": 37.62,
+          "end": 38.02,
+          "word": " and",
+          "probability": 0.699187695980072
+        },
+        {
+          "start": 38.02,
+          "end": 38.36,
+          "word": " said,",
+          "probability": 0.9798198342323303
+        }
+      ]
+    },
+    {
+      "start": 38.84,
+      "end": 40.04,
+      "text": " we're going to be working on something.",
+      "words": [
+        {
+          "start": 38.84,
+          "end": 38.88,
+          "word": " we're",
+          "probability": 0.49926358461380005
+        },
+        {
+          "start": 38.88,
+          "end": 39.0,
+          "word": " going",
+          "probability": 0.36178770661354065
+        },
+        {
+          "start": 39.0,
+          "end": 39.06,
+          "word": " to",
+          "probability": 0.9990498423576355
+        },
+        {
+          "start": 39.06,
+          "end": 39.22,
+          "word": " be",
+          "probability": 0.9988638162612915
+        },
+        {
+          "start": 39.22,
+          "end": 39.44,
+          "word": " working",
+          "probability": 0.9992464780807495
+        },
+        {
+          "start": 39.44,
+          "end": 39.72,
+          "word": " on",
+          "probability": 0.997660756111145
+        },
+        {
+          "start": 39.72,
+          "end": 40.04,
+          "word": " something.",
+          "probability": 0.521223247051239
+        }
+      ]
+    },
+    {
+      "start": 41.22,
+      "end": 43.6,
+      "text": " At the time we had no idea what that meant,",
+      "words": [
+        {
+          "start": 41.22,
+          "end": 41.36,
+          "word": " At",
+          "probability": 0.6049039959907532
+        },
+        {
+          "start": 41.36,
+          "end": 41.6,
+          "word": " the",
+          "probability": 0.9905256032943726
+        },
+        {
+          "start": 41.6,
+          "end": 41.86,
+          "word": " time",
+          "probability": 0.9992079138755798
+        },
+        {
+          "start": 41.86,
+          "end": 41.94,
+          "word": " we",
+          "probability": 0.5334177017211914
+        },
+        {
+          "start": 41.94,
+          "end": 42.1,
+          "word": " had",
+          "probability": 0.9851396679878235
+        },
+        {
+          "start": 42.1,
+          "end": 42.28,
+          "word": " no",
+          "probability": 0.9961509704589844
+        },
+        {
+          "start": 42.28,
+          "end": 42.56,
+          "word": " idea",
+          "probability": 0.9991913437843323
+        },
+        {
+          "start": 42.56,
+          "end": 42.8,
+          "word": " what",
+          "probability": 0.9281449913978577
+        },
+        {
+          "start": 42.8,
+          "end": 43.04,
+          "word": " that",
+          "probability": 0.9966036081314087
+        },
+        {
+          "start": 43.04,
+          "end": 43.6,
+          "word": " meant,",
+          "probability": 0.9951321482658386
+        }
+      ]
+    },
+    {
+      "start": 43.76,
+      "end": 45.28,
+      "text": " where we just knew that something was missing.",
+      "words": [
+        {
+          "start": 43.76,
+          "end": 43.84,
+          "word": " where",
+          "probability": 0.19869354367256165
+        },
+        {
+          "start": 43.84,
+          "end": 43.88,
+          "word": " we",
+          "probability": 0.9946216344833374
+        },
+        {
+          "start": 43.88,
+          "end": 44.1,
+          "word": " just",
+          "probability": 0.9026049971580505
+        },
+        {
+          "start": 44.1,
+          "end": 44.24,
+          "word": " knew",
+          "probability": 0.9979726672172546
+        },
+        {
+          "start": 44.24,
+          "end": 44.44,
+          "word": " that",
+          "probability": 0.9601734280586243
+        },
+        {
+          "start": 44.44,
+          "end": 44.76,
+          "word": " something",
+          "probability": 0.9844725728034973
+        },
+        {
+          "start": 44.76,
+          "end": 44.98,
+          "word": " was",
+          "probability": 0.5502772927284241
+        },
+        {
+          "start": 44.98,
+          "end": 45.28,
+          "word": " missing.",
+          "probability": 0.9902117848396301
+        }
+      ]
+    },
+    {
+      "start": 45.98,
+      "end": 48.54,
+      "text": " We have more ways than ever to discover what's around us,",
+      "words": [
+        {
+          "start": 45.98,
+          "end": 46.06,
+          "word": " We",
+          "probability": 0.9852429628372192
+        },
+        {
+          "start": 46.06,
+          "end": 46.22,
+          "word": " have",
+          "probability": 0.6386445164680481
+        },
+        {
+          "start": 46.22,
+          "end": 46.42,
+          "word": " more",
+          "probability": 0.9813557267189026
+        },
+        {
+          "start": 46.42,
+          "end": 46.64,
+          "word": " ways",
+          "probability": 0.9966061115264893
+        },
+        {
+          "start": 46.64,
+          "end": 46.8,
+          "word": " than",
+          "probability": 0.9944188594818115
+        },
+        {
+          "start": 46.8,
+          "end": 47.0,
+          "word": " ever",
+          "probability": 0.9989770650863647
+        },
+        {
+          "start": 47.0,
+          "end": 47.26,
+          "word": " to",
+          "probability": 0.9899465441703796
+        },
+        {
+          "start": 47.26,
+          "end": 47.46,
+          "word": " discover",
+          "probability": 0.9988846182823181
+        },
+        {
+          "start": 47.46,
+          "end": 47.82,
+          "word": " what's",
+          "probability": 0.9769803285598755
+        },
+        {
+          "start": 47.82,
+          "end": 48.08,
+          "word": " around",
+          "probability": 0.9987831711769104
+        },
+        {
+          "start": 48.08,
+          "end": 48.54,
+          "word": " us,",
+          "probability": 0.9996562004089355
+        }
+      ]
+    },
+    {
+      "start": 48.6,
+      "end": 52.0,
+      "text": " and yet somehow it's still hard to feel connected to the neighborhood we live in.",
+      "words": [
+        {
+          "start": 48.6,
+          "end": 48.7,
+          "word": " and",
+          "probability": 0.9928770661354065
+        },
+        {
+          "start": 48.7,
+          "end": 48.94,
+          "word": " yet",
+          "probability": 0.9977205395698547
+        },
+        {
+          "start": 48.94,
+          "end": 49.22,
+          "word": " somehow",
+          "probability": 0.9607279896736145
+        },
+        {
+          "start": 49.22,
+          "end": 49.46,
+          "word": " it's",
+          "probability": 0.9652873575687408
+        },
+        {
+          "start": 49.46,
+          "end": 49.76,
+          "word": " still",
+          "probability": 0.9967917799949646
+        },
+        {
+          "start": 49.76,
+          "end": 49.96,
+          "word": " hard",
+          "probability": 0.998699426651001
+        },
+        {
+          "start": 49.96,
+          "end": 50.1,
+          "word": " to",
+          "probability": 0.9237843155860901
+        },
+        {
+          "start": 50.1,
+          "end": 50.32,
+          "word": " feel",
+          "probability": 0.9987964630126953
+        },
+        {
+          "start": 50.32,
+          "end": 50.68,
+          "word": " connected",
+          "probability": 0.9982903599739075
+        },
+        {
+          "start": 50.68,
+          "end": 51.02,
+          "word": " to",
+          "probability": 0.9908361434936523
+        },
+        {
+          "start": 51.02,
+          "end": 51.16,
+          "word": " the",
+          "probability": 0.9809834361076355
+        },
+        {
+          "start": 51.16,
+          "end": 51.32,
+          "word": " neighborhood",
+          "probability": 0.9022426009178162
+        },
+        {
+          "start": 51.32,
+          "end": 51.58,
+          "word": " we",
+          "probability": 0.8033953309059143
+        },
+        {
+          "start": 51.58,
+          "end": 51.72,
+          "word": " live",
+          "probability": 0.9775592684745789
+        },
+        {
+          "start": 51.72,
+          "end": 52.0,
+          "word": " in.",
+          "probability": 0.997922956943512
+        }
+      ]
+    },
+    {
+      "start": 53.14,
+      "end": 57.22,
+      "text": " A stir is a way for saving places you love, discovering new ones,",
+      "words": [
+        {
+          "start": 53.14,
+          "end": 53.14,
+          "word": " A",
+          "probability": 0.9843265414237976
+        },
+        {
+          "start": 53.14,
+          "end": 53.4,
+          "word": " stir",
+          "probability": 0.9988763928413391
+        },
+        {
+          "start": 53.4,
+          "end": 53.72,
+          "word": " is",
+          "probability": 0.9583495259284973
+        },
+        {
+          "start": 53.72,
+          "end": 53.9,
+          "word": " a",
+          "probability": 0.9969013929367065
+        },
+        {
+          "start": 53.9,
+          "end": 54.18,
+          "word": " way",
+          "probability": 0.9993589520454407
+        },
+        {
+          "start": 54.18,
+          "end": 54.42,
+          "word": " for",
+          "probability": 0.9908841252326965
+        },
+        {
+          "start": 54.42,
+          "end": 54.64,
+          "word": " saving",
+          "probability": 0.9923068881034851
+        },
+        {
+          "start": 54.64,
+          "end": 55.12,
+          "word": " places",
+          "probability": 0.9932740926742554
+        },
+        {
+          "start": 55.12,
+          "end": 55.42,
+          "word": " you",
+          "probability": 0.9863734245300293
+        },
+        {
+          "start": 55.42,
+          "end": 56.04,
+          "word": " love,",
+          "probability": 0.9938384890556335
+        },
+        {
+          "start": 56.24,
+          "end": 56.54,
+          "word": " discovering",
+          "probability": 0.9921557307243347
+        },
+        {
+          "start": 56.54,
+          "end": 56.94,
+          "word": " new",
+          "probability": 0.8818399906158447
+        },
+        {
+          "start": 56.94,
+          "end": 57.22,
+          "word": " ones,",
+          "probability": 0.9927847385406494
+        }
+      ]
+    },
+    {
+      "start": 57.22,
+      "end": 62.22,
+      "text": " for people who trust and hopefully spending a little more time out in the world experiencing that.",
+      "words": [
+        {
+          "start": 57.22,
+          "end": 57.44,
+          "word": " for",
+          "probability": 0.02866234816610813
+        },
+        {
+          "start": 57.44,
+          "end": 57.74,
+          "word": " people",
+          "probability": 0.8222404718399048
+        },
+        {
+          "start": 57.74,
+          "end": 58.0,
+          "word": " who",
+          "probability": 0.8292357921600342
+        },
+        {
+          "start": 58.0,
+          "end": 58.5,
+          "word": " trust",
+          "probability": 0.9519758224487305
+        },
+        {
+          "start": 58.5,
+          "end": 58.88,
+          "word": " and",
+          "probability": 0.7470768094062805
+        },
+        {
+          "start": 58.88,
+          "end": 59.08,
+          "word": " hopefully",
+          "probability": 0.9723829627037048
+        },
+        {
+          "start": 59.08,
+          "end": 59.52,
+          "word": " spending",
+          "probability": 0.730059027671814
+        },
+        {
+          "start": 59.52,
+          "end": 59.7,
+          "word": " a",
+          "probability": 0.992958664894104
+        },
+        {
+          "start": 59.7,
+          "end": 59.86,
+          "word": " little",
+          "probability": 0.9642801880836487
+        },
+        {
+          "start": 59.86,
+          "end": 60.08,
+          "word": " more",
+          "probability": 0.9968155026435852
+        },
+        {
+          "start": 60.08,
+          "end": 60.44,
+          "word": " time",
+          "probability": 0.9996017813682556
+        },
+        {
+          "start": 60.44,
+          "end": 60.74,
+          "word": " out",
+          "probability": 0.9665165543556213
+        },
+        {
+          "start": 60.74,
+          "end": 60.9,
+          "word": " in",
+          "probability": 0.7299005389213562
+        },
+        {
+          "start": 60.9,
+          "end": 60.98,
+          "word": " the",
+          "probability": 0.8304997682571411
+        },
+        {
+          "start": 60.98,
+          "end": 61.18,
+          "word": " world",
+          "probability": 0.9627590179443359
+        },
+        {
+          "start": 61.18,
+          "end": 61.84,
+          "word": " experiencing",
+          "probability": 0.7368334531784058
+        },
+        {
+          "start": 61.84,
+          "end": 62.22,
+          "word": " that.",
+          "probability": 0.522275447845459
+        }
+      ]
+    },
+    {
+      "start": 63.18,
+      "end": 67.34,
+      "text": " We put a lot of ourselves into this because ultimately a stir isn't just about saving places.",
+      "words": [
+        {
+          "start": 63.18,
+          "end": 63.22,
+          "word": " We",
+          "probability": 0.904435932636261
+        },
+        {
+          "start": 63.22,
+          "end": 63.48,
+          "word": " put",
+          "probability": 0.8515411019325256
+        },
+        {
+          "start": 63.48,
+          "end": 63.58,
+          "word": " a",
+          "probability": 0.9985355138778687
+        },
+        {
+          "start": 63.58,
+          "end": 63.74,
+          "word": " lot",
+          "probability": 0.9985748529434204
+        },
+        {
+          "start": 63.74,
+          "end": 63.82,
+          "word": " of",
+          "probability": 0.996425449848175
+        },
+        {
+          "start": 63.82,
+          "end": 64.2,
+          "word": " ourselves",
+          "probability": 0.9877374172210693
+        },
+        {
+          "start": 64.2,
+          "end": 64.4,
+          "word": " into",
+          "probability": 0.9931262731552124
+        },
+        {
+          "start": 64.4,
+          "end": 64.78,
+          "word": " this",
+          "probability": 0.9994732737541199
+        },
+        {
+          "start": 64.78,
+          "end": 65.14,
+          "word": " because",
+          "probability": 0.9026528000831604
+        },
+        {
+          "start": 65.14,
+          "end": 65.6,
+          "word": " ultimately",
+          "probability": 0.9869251251220703
+        },
+        {
+          "start": 65.6,
+          "end": 65.82,
+          "word": " a",
+          "probability": 0.5302773714065552
+        },
+        {
+          "start": 65.82,
+          "end": 65.96,
+          "word": " stir",
+          "probability": 0.9784673452377319
+        },
+        {
+          "start": 65.96,
+          "end": 66.16,
+          "word": " isn't",
+          "probability": 0.6255415230989456
+        },
+        {
+          "start": 66.16,
+          "end": 66.46,
+          "word": " just",
+          "probability": 0.9975104331970215
+        },
+        {
+          "start": 66.46,
+          "end": 66.72,
+          "word": " about",
+          "probability": 0.9984564781188965
+        },
+        {
+          "start": 66.72,
+          "end": 66.88,
+          "word": " saving",
+          "probability": 0.9662653803825378
+        },
+        {
+          "start": 66.88,
+          "end": 67.34,
+          "word": " places.",
+          "probability": 0.9949241876602173
+        }
+      ]
+    },
+    {
+      "start": 67.66,
+      "end": 69.7,
+      "text": " It's about what those places lead to.",
+      "words": [
+        {
+          "start": 67.66,
+          "end": 68.0,
+          "word": " It's",
+          "probability": 0.991797685623169
+        },
+        {
+          "start": 68.0,
+          "end": 68.14,
+          "word": " about",
+          "probability": 0.9985710382461548
+        },
+        {
+          "start": 68.14,
+          "end": 68.3,
+          "word": " what",
+          "probability": 0.9985514283180237
+        },
+        {
+          "start": 68.3,
+          "end": 68.46,
+          "word": " those",
+          "probability": 0.9859845638275146
+        },
+        {
+          "start": 68.46,
+          "end": 68.76,
+          "word": " places",
+          "probability": 0.9985735416412354
+        },
+        {
+          "start": 68.76,
+          "end": 69.06,
+          "word": " lead",
+          "probability": 0.8903328776359558
+        },
+        {
+          "start": 69.06,
+          "end": 69.7,
+          "word": " to.",
+          "probability": 0.9960129261016846
+        }
+      ]
+    },
+    {
+      "start": 69.94,
+      "end": 75.44,
+      "text": " New experiences, shared memories, familiar faces, and ultimately a little more connection.",
+      "words": [
+        {
+          "start": 69.94,
+          "end": 70.04,
+          "word": " New",
+          "probability": 0.9702295064926147
+        },
+        {
+          "start": 70.04,
+          "end": 70.76,
+          "word": " experiences,",
+          "probability": 0.9896911382675171
+        },
+        {
+          "start": 71.4,
+          "end": 71.58,
+          "word": " shared",
+          "probability": 0.998358428478241
+        },
+        {
+          "start": 71.58,
+          "end": 72.24,
+          "word": " memories,",
+          "probability": 0.990256130695343
+        },
+        {
+          "start": 72.9,
+          "end": 73.04,
+          "word": " familiar",
+          "probability": 0.9884586930274963
+        },
+        {
+          "start": 73.04,
+          "end": 73.72,
+          "word": " faces,",
+          "probability": 0.9990830421447754
+        },
+        {
+          "start": 73.8,
+          "end": 74.04,
+          "word": " and",
+          "probability": 0.99826580286026
+        },
+        {
+          "start": 74.04,
+          "end": 74.46,
+          "word": " ultimately",
+          "probability": 0.9896949529647827
+        },
+        {
+          "start": 74.46,
+          "end": 74.72,
+          "word": " a",
+          "probability": 0.9011659622192383
+        },
+        {
+          "start": 74.72,
+          "end": 74.88,
+          "word": " little",
+          "probability": 0.99847811460495
+        },
+        {
+          "start": 74.88,
+          "end": 75.08,
+          "word": " more",
+          "probability": 0.9989296793937683
+        },
+        {
+          "start": 75.08,
+          "end": 75.44,
+          "word": " connection.",
+          "probability": 0.9913520812988281
+        }
+      ]
+    },
+    {
+      "start": 75.88,
+      "end": 78.8,
+      "text": " We built a stir because we wanted a little more of that,",
+      "words": [
+        {
+          "start": 75.88,
+          "end": 76.06,
+          "word": " We",
+          "probability": 0.996209979057312
+        },
+        {
+          "start": 76.06,
+          "end": 76.34,
+          "word": " built",
+          "probability": 0.8167847990989685
+        },
+        {
+          "start": 76.34,
+          "end": 76.6,
+          "word": " a",
+          "probability": 0.9936052560806274
+        },
+        {
+          "start": 76.6,
+          "end": 76.76,
+          "word": " stir",
+          "probability": 0.998105525970459
+        },
+        {
+          "start": 76.76,
+          "end": 77.08,
+          "word": " because",
+          "probability": 0.9691518545150757
+        },
+        {
+          "start": 77.08,
+          "end": 77.34,
+          "word": " we",
+          "probability": 0.9991695880889893
+        },
+        {
+          "start": 77.34,
+          "end": 77.56,
+          "word": " wanted",
+          "probability": 0.9360185861587524
+        },
+        {
+          "start": 77.56,
+          "end": 77.74,
+          "word": " a",
+          "probability": 0.9965857267379761
+        },
+        {
+          "start": 77.74,
+          "end": 78.0,
+          "word": " little",
+          "probability": 0.9977167844772339
+        },
+        {
+          "start": 78.0,
+          "end": 78.22,
+          "word": " more",
+          "probability": 0.9979488253593445
+        },
+        {
+          "start": 78.22,
+          "end": 78.32,
+          "word": " of",
+          "probability": 0.2661077380180359
+        },
+        {
+          "start": 78.32,
+          "end": 78.8,
+          "word": " that,",
+          "probability": 0.9970020651817322
+        }
+      ]
+    },
+    {
+      "start": 78.82,
+      "end": 81.44,
+      "text": " and we believe it will help you have a little more of that too.",
+      "words": [
+        {
+          "start": 78.82,
+          "end": 79.14,
+          "word": " and",
+          "probability": 0.9972057938575745
+        },
+        {
+          "start": 79.14,
+          "end": 79.26,
+          "word": " we",
+          "probability": 0.9979044198989868
+        },
+        {
+          "start": 79.26,
+          "end": 79.54,
+          "word": " believe",
+          "probability": 0.9320911765098572
+        },
+        {
+          "start": 79.54,
+          "end": 79.66,
+          "word": " it",
+          "probability": 0.9520444273948669
+        },
+        {
+          "start": 79.66,
+          "end": 79.78,
+          "word": " will",
+          "probability": 0.885286808013916
+        },
+        {
+          "start": 79.78,
+          "end": 79.96,
+          "word": " help",
+          "probability": 0.992265522480011
+        },
+        {
+          "start": 79.96,
+          "end": 80.16,
+          "word": " you",
+          "probability": 0.997005045413971
+        },
+        {
+          "start": 80.16,
+          "end": 80.4,
+          "word": " have",
+          "probability": 0.7831435203552246
+        },
+        {
+          "start": 80.4,
+          "end": 80.5,
+          "word": " a",
+          "probability": 0.9984002709388733
+        },
+        {
+          "start": 80.5,
+          "end": 80.7,
+          "word": " little",
+          "probability": 0.9975641965866089
+        },
+        {
+          "start": 80.7,
+          "end": 80.84,
+          "word": " more",
+          "probability": 0.9987533092498779
+        },
+        {
+          "start": 80.84,
+          "end": 80.92,
+          "word": " of",
+          "probability": 0.9086712002754211
+        },
+        {
+          "start": 80.92,
+          "end": 81.12,
+          "word": " that",
+          "probability": 0.9941200613975525
+        },
+        {
+          "start": 81.12,
+          "end": 81.44,
+          "word": " too.",
+          "probability": 0.6915943026542664
+        }
+      ]
+    },
+    {
+      "start": 82.04,
+      "end": 84.12,
+      "text": " There's a feedback button in the top of your profile.",
+      "words": [
+        {
+          "start": 82.04,
+          "end": 82.2,
+          "word": " There's",
+          "probability": 0.9783706665039062
+        },
+        {
+          "start": 82.2,
+          "end": 82.32,
+          "word": " a",
+          "probability": 0.9991487264633179
+        },
+        {
+          "start": 82.32,
+          "end": 82.58,
+          "word": " feedback",
+          "probability": 0.9944931268692017
+        },
+        {
+          "start": 82.58,
+          "end": 82.88,
+          "word": " button",
+          "probability": 0.9906031489372253
+        },
+        {
+          "start": 82.88,
+          "end": 83.04,
+          "word": " in",
+          "probability": 0.9845529794692993
+        },
+        {
+          "start": 83.04,
+          "end": 83.16,
+          "word": " the",
+          "probability": 0.9981202483177185
+        },
+        {
+          "start": 83.16,
+          "end": 83.28,
+          "word": " top",
+          "probability": 0.9555025100708008
+        },
+        {
+          "start": 83.28,
+          "end": 83.46,
+          "word": " of",
+          "probability": 0.9564946293830872
+        },
+        {
+          "start": 83.46,
+          "end": 83.6,
+          "word": " your",
+          "probability": 0.9972711205482483
+        },
+        {
+          "start": 83.6,
+          "end": 84.12,
+          "word": " profile.",
+          "probability": 0.9985753297805786
+        }
+      ]
+    },
+    {
+      "start": 84.12,
+      "end": 87.66,
+      "text": " Tell us what you like, what you think is weird, what you want to see,",
+      "words": [
+        {
+          "start": 84.12,
+          "end": 84.52,
+          "word": " Tell",
+          "probability": 0.6745424270629883
+        },
+        {
+          "start": 84.52,
+          "end": 84.66,
+          "word": " us",
+          "probability": 0.9983121156692505
+        },
+        {
+          "start": 84.66,
+          "end": 84.78,
+          "word": " what",
+          "probability": 0.9926267266273499
+        },
+        {
+          "start": 84.78,
+          "end": 84.92,
+          "word": " you",
+          "probability": 0.9910270571708679
+        },
+        {
+          "start": 84.92,
+          "end": 85.3,
+          "word": " like,",
+          "probability": 0.991355836391449
+        },
+        {
+          "start": 85.4,
+          "end": 85.46,
+          "word": " what",
+          "probability": 0.8634799718856812
+        },
+        {
+          "start": 85.46,
+          "end": 85.48,
+          "word": " you",
+          "probability": 0.9025083780288696
+        },
+        {
+          "start": 85.48,
+          "end": 85.7,
+          "word": " think",
+          "probability": 0.9958528280258179
+        },
+        {
+          "start": 85.7,
+          "end": 85.94,
+          "word": " is",
+          "probability": 0.9901325702667236
+        },
+        {
+          "start": 85.94,
+          "end": 86.46,
+          "word": " weird,",
+          "probability": 0.9961704611778259
+        },
+        {
+          "start": 86.72,
+          "end": 86.8,
+          "word": " what",
+          "probability": 0.9761613011360168
+        },
+        {
+          "start": 86.8,
+          "end": 86.94,
+          "word": " you",
+          "probability": 0.9978561997413635
+        },
+        {
+          "start": 86.94,
+          "end": 87.14,
+          "word": " want",
+          "probability": 0.7811327576637268
+        },
+        {
+          "start": 87.14,
+          "end": 87.3,
+          "word": " to",
+          "probability": 0.9922277331352234
+        },
+        {
+          "start": 87.3,
+          "end": 87.66,
+          "word": " see,",
+          "probability": 0.9979193806648254
+        }
+      ]
+    },
+    {
+      "start": 87.84,
+      "end": 89.36,
+      "text": " feedback is truly a gift.",
+      "words": [
+        {
+          "start": 87.84,
+          "end": 87.92,
+          "word": " feedback",
+          "probability": 0.5236122012138367
+        },
+        {
+          "start": 87.92,
+          "end": 88.24,
+          "word": " is",
+          "probability": 0.9967684745788574
+        },
+        {
+          "start": 88.24,
+          "end": 88.58,
+          "word": " truly",
+          "probability": 0.9958420395851135
+        },
+        {
+          "start": 88.58,
+          "end": 88.84,
+          "word": " a",
+          "probability": 0.48944559693336487
+        },
+        {
+          "start": 88.84,
+          "end": 89.36,
+          "word": " gift.",
+          "probability": 0.5261421203613281
+        }
+      ]
+    },
+    {
+      "start": 89.52,
+      "end": 92.32,
+      "text": " And when we thought about who we wanted to share this with first,",
+      "words": [
+        {
+          "start": 89.52,
+          "end": 89.7,
+          "word": " And",
+          "probability": 0.9447897672653198
+        },
+        {
+          "start": 89.7,
+          "end": 89.8,
+          "word": " when",
+          "probability": 0.9581695795059204
+        },
+        {
+          "start": 89.8,
+          "end": 89.94,
+          "word": " we",
+          "probability": 0.9984521865844727
+        },
+        {
+          "start": 89.94,
+          "end": 90.16,
+          "word": " thought",
+          "probability": 0.7548273205757141
+        },
+        {
+          "start": 90.16,
+          "end": 90.46,
+          "word": " about",
+          "probability": 0.9990966320037842
+        },
+        {
+          "start": 90.46,
+          "end": 90.62,
+          "word": " who",
+          "probability": 0.9264923334121704
+        },
+        {
+          "start": 90.62,
+          "end": 90.78,
+          "word": " we",
+          "probability": 0.9962361454963684
+        },
+        {
+          "start": 90.78,
+          "end": 90.96,
+          "word": " wanted",
+          "probability": 0.8723464012145996
+        },
+        {
+          "start": 90.96,
+          "end": 91.08,
+          "word": " to",
+          "probability": 0.996475875377655
+        },
+        {
+          "start": 91.08,
+          "end": 91.26,
+          "word": " share",
+          "probability": 0.9990900754928589
+        },
+        {
+          "start": 91.26,
+          "end": 91.46,
+          "word": " this",
+          "probability": 0.9875895977020264
+        },
+        {
+          "start": 91.46,
+          "end": 91.66,
+          "word": " with",
+          "probability": 0.9922128319740295
+        },
+        {
+          "start": 91.66,
+          "end": 92.32,
+          "word": " first,",
+          "probability": 0.8553877472877502
+        }
+      ]
+    },
+    {
+      "start": 92.46,
+      "end": 93.18,
+      "text": " we thought of you.",
+      "words": [
+        {
+          "start": 92.46,
+          "end": 92.5,
+          "word": " we",
+          "probability": 0.9911419153213501
+        },
+        {
+          "start": 92.5,
+          "end": 92.64,
+          "word": " thought",
+          "probability": 0.9895381927490234
+        },
+        {
+          "start": 92.64,
+          "end": 92.8,
+          "word": " of",
+          "probability": 0.9975862503051758
+        },
+        {
+          "start": 92.8,
+          "end": 93.18,
+          "word": " you.",
+          "probability": 0.9987441301345825
+        }
+      ]
+    },
+    {
+      "start": 93.64,
+      "end": 96.14,
+      "text": " It means so much to have you here with us from the beginning.",
+      "words": [
+        {
+          "start": 93.64,
+          "end": 93.86,
+          "word": " It",
+          "probability": 0.9859484434127808
+        },
+        {
+          "start": 93.86,
+          "end": 94.14,
+          "word": " means",
+          "probability": 0.9859861135482788
+        },
+        {
+          "start": 94.14,
+          "end": 94.5,
+          "word": " so",
+          "probability": 0.9968637228012085
+        },
+        {
+          "start": 94.5,
+          "end": 94.78,
+          "word": " much",
+          "probability": 0.9994126558303833
+        },
+        {
+          "start": 94.78,
+          "end": 94.94,
+          "word": " to",
+          "probability": 0.9923054575920105
+        },
+        {
+          "start": 94.94,
+          "end": 95.08,
+          "word": " have",
+          "probability": 0.9983325600624084
+        },
+        {
+          "start": 95.08,
+          "end": 95.2,
+          "word": " you",
+          "probability": 0.9954664707183838
+        },
+        {
+          "start": 95.2,
+          "end": 95.34,
+          "word": " here",
+          "probability": 0.9668003916740417
+        },
+        {
+          "start": 95.34,
+          "end": 95.5,
+          "word": " with",
+          "probability": 0.9899886250495911
+        },
+        {
+          "start": 95.5,
+          "end": 95.66,
+          "word": " us",
+          "probability": 0.9969155788421631
+        },
+        {
+          "start": 95.66,
+          "end": 95.86,
+          "word": " from",
+          "probability": 0.945402979850769
+        },
+        {
+          "start": 95.86,
+          "end": 95.88,
+          "word": " the",
+          "probability": 0.9964080452919006
+        },
+        {
+          "start": 95.88,
+          "end": 96.14,
+          "word": " beginning.",
+          "probability": 0.9990215301513672
+        }
+      ]
+    },
+    {
+      "start": 96.86,
+      "end": 98.44,
+      "text": " We love you.",
+      "words": [
+        {
+          "start": 96.86,
+          "end": 96.86,
+          "word": " We",
+          "probability": 0.9221193194389343
+        },
+        {
+          "start": 96.86,
+          "end": 97.0,
+          "word": " love",
+          "probability": 0.9954047203063965
+        },
+        {
+          "start": 97.0,
+          "end": 98.44,
+          "word": " you.",
+          "probability": 0.9978013634681702
+        }
+      ]
+    },
+    {
+      "start": 99.5,
+      "end": 100.12,
+      "text": " That's a good one.",
+      "words": [
+        {
+          "start": 99.5,
+          "end": 99.74,
+          "word": " That's",
+          "probability": 0.8389356136322021
+        },
+        {
+          "start": 99.74,
+          "end": 99.86,
+          "word": " a",
+          "probability": 0.6573461294174194
+        },
+        {
+          "start": 99.86,
+          "end": 99.96,
+          "word": " good",
+          "probability": 0.08857555687427521
+        },
+        {
+          "start": 99.96,
+          "end": 100.17999999999999,
+          "word": " one.",
+          "probability": 0.16170743107795715
+        }
+      ]
+    },
+    {
+      "start": 104.5,
+      "end": 108.12,
+      "text": " Let's fucking go, baby, let's fucking go.",
+      "words": [
+        {
+          "start": 104.5,
+          "end": 104.94,
+          "word": " Let's",
+          "probability": 0.6563333719968796
+        },
+        {
+          "start": 104.94,
+          "end": 105.38,
+          "word": " fucking",
+          "probability": 0.5485156178474426
+        },
+        {
+          "start": 105.38,
+          "end": 105.92,
+          "word": " go,",
+          "probability": 0.9655452370643616
+        },
+        {
+          "start": 105.98,
+          "end": 106.64,
+          "word": " baby,",
+          "probability": 0.7937589287757874
+        },
+        {
+          "start": 106.9,
+          "end": 107.4,
+          "word": " let's",
+          "probability": 0.9804885685443878
+        },
+        {
+          "start": 107.4,
+          "end": 107.46,
+          "word": " fucking",
+          "probability": 0.9855222702026367
+        },
+        {
+          "start": 107.46,
+          "end": 108.12,
+          "word": " go.",
+          "probability": 0.997633695602417
+        }
+      ]
+    },
+    {
+      "start": 108.96,
+      "end": 109.74,
+      "text": " Let's ride.",
+      "words": [
+        {
+          "start": 108.96,
+          "end": 109.32,
+          "word": " Let's",
+          "probability": 0.7858082354068756
+        },
+        {
+          "start": 109.32,
+          "end": 109.74,
+          "word": " ride.",
+          "probability": 0.2788521945476532
+        }
+      ]
+    },
+    {
+      "start": 111.4,
+      "end": 112.22,
+      "text": " And we're out.",
+      "words": [
+        {
+          "start": 111.4,
+          "end": 111.7,
+          "word": " And",
+          "probability": 0.7091122269630432
+        },
+        {
+          "start": 111.7,
+          "end": 111.92,
+          "word": " we're",
+          "probability": 0.9832955598831177
+        },
+        {
+          "start": 111.92,
+          "end": 112.22,
+          "word": " out.",
+          "probability": 0.9878339767456055
+        }
+      ]
+    },
+    {
+      "start": 112.22,
+      "end": 113.24,
+      "text": " Cut.",
+      "words": [
+        {
+          "start": 112.22,
+          "end": 113.24,
+          "word": " Cut.",
+          "probability": 0.6249001026153564
+        }
+      ]
+    }
+  ]
+}

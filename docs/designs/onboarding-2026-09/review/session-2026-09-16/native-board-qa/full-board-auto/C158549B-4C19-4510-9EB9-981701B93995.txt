@@ -1,0 +1,81 @@
+Attributes: Other, 0x10740cea0, {{175.0, 705.0}, {52.0, 7.0}}, identifier: 'onboarding.carouselPage', label: 'Carousel page', value: 1
+Element subtree:
+ →Other, 0x10740cea0, {{175.0, 705.0}, {52.0, 7.0}}, identifier: 'onboarding.carouselPage', label: 'Carousel page', value: 1
+Path to element:
+ →Application, 0x10720a8f0, pid: 46602, label: 'Astir'
+  ↳Window (Main), 0x107405b20, {{0.0, 0.0}, {402.0, 874.0}}
+   ↳Other, 0x10740d920, {{0.0, 0.0}, {402.0, 874.0}}
+    ↳Other, 0x10740ff00, {{0.0, 0.0}, {402.0, 874.0}}
+     ↳Other, 0x107410f10, {{0.0, 0.0}, {402.0, 874.0}}
+      ↳Other, 0x107411270, {{0.0, 0.0}, {402.0, 874.0}}
+       ↳Other, 0x10740cea0, {{175.0, 705.0}, {52.0, 7.0}}, identifier: 'onboarding.carouselPage', label: 'Carousel page', value: 1
+Query chain:
+ →Find: Target Application 'com.grayline.wander'
+  Output: {
+    Application, 0x103357130, pid: 46602, label: 'Astir'
+  }
+  ↪︎Find: Descendants matching type Any
+    Output: {
+      Window (Main), 0x10750f920, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x103643a30, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x103659fd0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1036486d0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x10365bc10, {{0.0, 0.0}, {402.0, 874.0}}
+      StaticText, 0x1036475e0, {{15.6, 69.6}, {99.4, 49.1}}, label: 'Astir, Ocean Park'
+      Button, 0x10720ac40, {{342.0, 72.3}, {44.0, 44.0}}, identifier: 'onboarding.pause', label: 'Play introduction'
+      Other, 0x10364dc50, {{16.0, 261.4}, {370.0, 230.6}}, identifier: 'onboarding.ticker', label: 'What you can do with Astir'
+      StaticText, 0x10740f4e0, {{427.3, 635.0}, {351.3, 44.0}}, identifier: 'onboarding.openingDescription', label: 'What you can do with Astir'
+      Other, 0x10335d490, {{-386.0, 147.7}, {370.0, 370.0}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Image, 0x10335e5d0, {{-212.3, 380.0}, {22.3, 19.3}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Image, 0x10335e6f0, {{-374.0, 159.0}, {346.0, 461.3}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      StaticText, 0x10335e810, {{-356.0, 291.7}, {160.0, 26.3}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      StaticText, 0x10335e930, {{-356.0, 325.0}, {23.7, 16.7}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Button, 0x10700c5b0, {{-374.0, 273.7}, {272.0, 232.0}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Button, 0x10700adb0, {{-86.0, 287.7}, {44.0, 44.0}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Button, 0x107008c60, {{-86.0, 335.7}, {44.0, 44.0}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Button, 0x10700cc70, {{-86.0, 383.7}, {44.0, 44.0}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Image, 0x10700c920, {{-71.3, 302.3}, {15.0, 15.0}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Image, 0x10700b100, {{-73.3, 350.3}, {19.0, 14.7}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Image, 0x103658c40, {{-71.7, 395.3}, {15.3, 20.7}}, identifier: 'onboarding.nativeMap', label: 'What you can do with Astir'
+      Other, 0x103655ca0, {{-788.5, 156.8}, {371.0, 352.0}}, identifier: 'onboarding.nativePostcard', label: 'What you can do with Astir'
+      Other, 0x103751e90, {{-386.0, 535.7}, {370.0, 133.3}}, identifier: 'onboarding.benefitCopy', label: 'What you can do with Astir'
+      Other, 0x1037520d0, {{175.0, 705.0}, {52.0, 7.0}}, identifier: 'onboarding.carouselPage', label: 'Carousel page', value: 1
+      Button, 0x1037521f0, {{16.0, 728.0}, {370.0, 52.0}}, identifier: 'onboarding.next', label: 'Next'
+      Button, 0x103752550, {{89.0, 799.7}, {224.0, 20.7}}, identifier: 'onboarding.logIn', label: 'Already have an account? Log in'
+      StaticText, 0x10365b180, {{28.0, 78.0}, {74.7, 21.7}}, label: 'ASTIR'
+      StaticText, 0x103659c50, {{28.0, 100.7}, {52.0, 9.7}}, label: 'OCEAN PARK'
+      StaticText, 0x10364dfe0, {{87.2, 261.4}, {227.7, 37.0}}, label: 'Connect with your'
+      Other, 0x103647cd0, {{16.0, 314.3}, {370.0, 177.7}}
+      Other, 0x10335d8b0, {{-216.7, 297.7}, {31.3, 34.9}}, label: 'Hotchkiss Park'
+      Other, 0x10335dcd0, {{-386.0, 147.7}, {370.0, 370.0}}
+      Link, 0x10335e4b0, {{-315.8, 496.9}, {28.6, 10.7}}, label: 'Legal'
+      Image, 0x10374b460, {{-788.0, 157.3}, {370.0, 154.0}}, identifier: 'fork.knife', label: 'Food'
+      Image, 0x10374b880, {{-788.0, 49.3}, {370.0, 370.0}}
+      Image, 0x10374bff0, {{-764.7, 178.7}, {10.7, 10.3}}, identifier: 'onboarding.nativePostcard.badge', label: 'Checked In', Selected
+      StaticText, 0x10374c110, {{-776.0, 169.3}, {103.7, 30.0}}, identifier: 'onboarding.nativePostcard.badge', label: 'Checked In'
+      StaticText, 0x10374c230, {{-772.0, 325.3}, {266.7, 44.0}}, label: 'Marigold Table'
+      Image, 0x103751590, {{-475.0, 342.3}, {14.7, 14.0}}, identifier: 'star.fill', label: 'Rating 5 out of 5'
+      StaticText, 0x1037516b0, {{-485.3, 341.4}, {51.3, 24.0}}, label: 'Rating 5 out of 5'
+      Image, 0x1037517d0, {{-770.7, 374.3}, {8.7, 14.3}}, identifier: 'fork.knife', label: 'Food'
+      StaticText, 0x1037518f0, {{-770.7, 374.3}, {135.3, 16.7}}, label: 'Santa Monica · Restaurant'
+      StaticText, 0x103751a10, {{-761.7, 415.8}, {11.3, 14.3}}, label: 'M'
+      StaticText, 0x103751b30, {{-732.0, 404.5}, {104.3, 19.3}}, label: 'Mina checked in'
+      StaticText, 0x103751c50, {{-732.0, 424.8}, {130.0, 16.7}}, label: '2h ago · someone you follow'
+      StaticText, 0x103751d70, {{-772.0, 455.0}, {338.0, 39.3}}, label: 'Note: The patio at golden hour. Get the focaccia!'
+      Other, 0x103751fb0, {{-386.0, 535.7}, {370.0, 133.3}}
+      Image, 0x103752310, {{173.0, 748.3}, {14.3, 11.7}}, identifier: 'arrow.right', label: 'Right'
+      StaticText, 0x103752430, {{197.5, 743.7}, {33.3, 20.7}}, label: 'Next'
+      Map, 0x10335ddf0, {{-386.0, 147.7}, {370.0, 370.0}}
+      Other, 0x107209070, {{-386.0, 147.7}, {370.0, 370.0}}, identifier: 'AnnotationContainer'
+      Other, 0x107412470, {{-73.2, 160.0}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'Joslyn Park'
+      Other, 0x10335df10, {{-92.2, 293.8}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'Los Amigos Park'
+      Other, 0x10335e030, {{-216.0, 317.7}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'Hotchkiss Park, Hotchkiss Park'
+      Other, 0x10335e150, {{-322.1, 371.7}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'DOM Dancing Space'
+      Other, 0x10335e270, {{-298.0, 411.3}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'Urth Caffé, Cafe'
+      Other, 0x10335e390, {{-283.9, 450.9}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'Not No Bar'
+      Other, 0x10365b890, {{-208.7, 501.6}, {30.0, 30.0}}, identifier: 'VKPointFeature', label: 'Color Me Mine, Store'
+    }
+    ↪︎Find: Elements matching predicate '"onboarding.carouselPage" IN identifiers'
+      Output: {
+        Other, 0x103356540, {{175.0, 705.0}, {52.0, 7.0}}, identifier: 'onboarding.carouselPage', label: 'Carousel page', value: 1
+      }

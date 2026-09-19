@@ -18,8 +18,8 @@ struct OnboardingFriendSuggestionsView: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 OnboardingHeadline(
                     eyebrow: "YOUR PEOPLE",
-                    title: "Connect with the people you love",
-                    message: "Follow a few familiar people. See where life takes them."
+                    title: "Keep up with the people you love",
+                    message: ""
                 )
                 .padding(.horizontal, WanderTheme.spacing4)
 
@@ -169,10 +169,10 @@ private struct OnboardingFriendRow: View {
                         Text(isFollowing ? "Following" : "Follow")
                             .font(AstirTypography.label)
                     }
-                    .foregroundStyle(isFollowing ? brandMode.secondaryText : brandMode.background)
+                    .foregroundStyle(isFollowing ? brandMode.secondaryText : brandMode.accentForeground)
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minWidth: 88, minHeight: WanderTheme.tapMinimum)
-                    .background(isFollowing ? brandMode.border.opacity(0.3) : brandMode.primaryText, in: Capsule())
+                    .background(isFollowing ? brandMode.border.opacity(0.3) : brandMode.accent, in: RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
                 .disabled(isFollowing || isPending)

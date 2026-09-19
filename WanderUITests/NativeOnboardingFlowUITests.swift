@@ -85,7 +85,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         keepScreenshot("N08-after-auth", app: app, settleSeconds: 1.3)
     }
 
-    func testProfilePreviewUpdatesAndRequiresARealPhoto() {
+    func testProfilePreviewUpdatesWithOptionalPhoto() {
         let app = launchReview("identity")
         let name = app.textFields["How friends know you"]
         let username = app.textFields["your_username"]
@@ -101,7 +101,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         dismissKeyboardIfPresent(in: app)
         XCTAssertTrue(app.staticTexts["Jordan Lee"].exists)
         XCTAssertEqual(app.staticTexts["onboarding.identity.previewHandle"].label, "@jordan_review")
-        XCTAssertFalse(continueButton.isEnabled, "A valid name and available handle still require a photo.")
+        XCTAssertTrue(continueButton.isEnabled, "A valid name and available handle can continue without a photo.")
         keepScreenshot("N08-filled", app: app)
 
         replaceText(in: username, with: "taken")
@@ -116,7 +116,7 @@ final class NativeOnboardingFlowUITests: XCTestCase {
 
         let photo = app.buttons["onboarding.identity.photo"]
         reveal(photo, in: app, direction: .down)
-        XCTAssertEqual(photo.label, "Add a required profile photo")
+        XCTAssertEqual(photo.label, "Add an optional profile photo")
         photo.tap()
         // The recording setup imports the app's public-safe bundled avatar
         // artwork into this simulator's Photos library. Selection and crop both
@@ -304,8 +304,8 @@ final class NativeOnboardingFlowUITests: XCTestCase {
     }
 
     private func dismissKeyboardIfPresent(in app: XCUIApplication) {
-        guard app.keyboards.firstMatch.exists else { return }
         let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists, keyboard.frame.intersects(app.frame) else { return }
         let scrollView = app.scrollViews.firstMatch
         if scrollView.exists {
             // The ScrollView AX frame can extend behind the keyboard. Begin
@@ -316,7 +316,12 @@ final class NativeOnboardingFlowUITests: XCTestCase {
             let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.95))
             start.press(forDuration: 0.05, thenDragTo: end)
         } else { app.swipeDown() }
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "Keyboard dismissal must finish before the next field action.")
+        // iOS can retain the dismissed keyboard in AX below the window. Wait
+        // for it to leave the visible screen, not for that cached node to die.
+        let dismissed = NSPredicate { _, _ in
+            !keyboard.exists || !keyboard.frame.intersects(app.frame)
+        }
+        XCTAssertTrue(waitFor(dismissed, on: app, timeout: 3), "Keyboard dismissal must finish before the next field action.")
     }
 
     private func waitFor(_ predicate: NSPredicate, on object: Any, timeout: TimeInterval = 5) -> Bool {

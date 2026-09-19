@@ -2460,6 +2460,75 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(next.waitForExistence(timeout: 5))
     }
 
+    func testFilmExplorationsAutoAdvanceToInteractiveAccount() {
+        for treatment in ["film", "film-type"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+            app.launchEnvironment["WANDER_ONBOARDING_TREATMENT"] = treatment
+            app.launch()
+            XCTAssertTrue(app.buttons["onboarding.next"].waitForExistence(timeout: 10))
+            let email = app.textFields["auth.email"]
+            XCTAssertTrue(email.waitForExistence(timeout: 50))
+            let landed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: email)
+            XCTAssertEqual(XCTWaiter.wait(for: [landed], timeout: 5), .completed)
+            XCTAssertEqual(app.state, .runningForeground)
+            XCTAssertFalse(app.buttons["auth.close"].exists)
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = "\(treatment) automatic playback complete"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            app.terminate()
+        }
+    }
+
+    func testFilmExplorationsKeepSignupAndLoginInteractive() {
+        func keepScreenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        for treatment in ["film", "film-type"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+            app.launchEnvironment["WANDER_ONBOARDING_TREATMENT"] = treatment
+            app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
+            app.launch()
+            let next = app.buttons["onboarding.next"]
+            XCTAssertTrue(next.waitForExistence(timeout: 10))
+            keepScreenshot("\(treatment) — opening")
+            // Move toward Places with the film running, then interrupt the
+            // handoff through the persistent login action.
+            next.tap()
+            XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
+            app.buttons["onboarding.logIn"].tap()
+            XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
+            app.buttons["auth.close"].tap()
+            XCTAssertTrue(next.waitForExistence(timeout: 8))
+            next.tap(); next.tap(); next.tap()
+            let email = app.textFields["auth.email"]
+            XCTAssertTrue(email.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Create your account"].exists)
+            XCTAssertFalse(app.buttons["auth.close"].exists)
+            XCTAssertTrue(app.buttons["auth.continueWithApple"].exists)
+            keepScreenshot("\(treatment) — signup")
+            email.tap()
+            email.typeText("film@example.test")
+            let send = app.buttons["auth.continueWithEmail"]
+            if !send.isHittable { app.swipeUp() }
+            send.tap()
+            let code = app.textFields["auth.emailCode"]
+            XCTAssertTrue(code.waitForExistence(timeout: 8))
+            code.tap(); code.typeText("123")
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            XCTAssertTrue(code.waitForExistence(timeout: 8))
+            XCTAssertEqual(code.value as? String, "123")
+            keepScreenshot("\(treatment) — live verification after foreground")
+            app.terminate()
+        }
+    }
+
     func testLoggedOutLoginExposesAppleGoogleEmailAndPasswordWithoutClerkSheet() {
         let app = XCUIApplication()
         app.terminate()
