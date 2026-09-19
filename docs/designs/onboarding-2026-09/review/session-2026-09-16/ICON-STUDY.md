@@ -1,0 +1,9 @@
+# Icon material study
+
+New exploration requested in the recording, not an approved production asset. Built-in image-generation tool; generated September 16, 2026. Saved as `icon-material-study.png` in this directory. Rows compare limestone, Signal coral, and limestone with Signal accents. Columns compare envelope, lock and notification bell. The approved Astir wordmark is unchanged.
+
+Review: silhouettes, tactile stone, color consistency and readability at small sizes. This comparison sheet is not an export-ready set of individual alpha icons; selected icons still require asset preparation and native-size testing.
+
+## Final prompt
+
+Use case: stylized-concept. Asset type: premium visual design comparison sheet for Astir onboarding icons, not a logo redesign. Create a beautifully restrained wide 3-by-3 material study, on a solid very dark green-black #080A09 background. Nine isolated sculptural icons arranged with precise generous equal spacing. Columns: 1 sealed envelope with V-shaped flap, 2 classic simple closed padlock, 3 simple notification bell with visible clapper. Rows: 1 warm ivory aged limestone #E6DDCD carved with tactile rough chisel marks inspired by ancient figurative stone sculpture; 2 Signal coral #F05A3C sculpted mineral with same rough texture; 3 warm ivory stone body plus small restrained coral accent such as bell clapper, lock shackle inner detail, envelope flap edge. Same consistent shape design, camera angle, size and studio light across every icon. Minimal softly beveled silhouettes, distinct instantly readable icons, slightly imperfect hand-carved faces, strong high contrast. Orthographic front view with tiny three-quarter depth. Subtle physically realistic shadows on dark backdrop. No text, no captions, no logos, no wordmark, no decoration, no frame lines, no watermark. This is a new exploration; do not depict humans or alter any brand identity.

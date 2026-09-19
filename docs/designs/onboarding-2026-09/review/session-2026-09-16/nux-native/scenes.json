@@ -1,0 +1,101 @@
+[
+  {
+    "id": "M01",
+    "title": "Featured",
+    "subtitle": "Populated demonstration Map",
+    "body": "The Map stays visible. A short coach enters and Featured is emphasized. Example pins exist only for the tour.",
+    "transcript": "T05",
+    "note": "Map at your location; Ocean Park fallback.",
+    "target": "mapFeatured"
+  },
+  {
+    "id": "M02",
+    "title": "Friends",
+    "subtitle": "The map changes with the source",
+    "body": "Switch the real filter to Friends and visibly change the example places.",
+    "transcript": "T05",
+    "note": "Places saved by people you follow.",
+    "target": "mapFriends"
+  },
+  {
+    "id": "M03",
+    "title": "More",
+    "subtitle": "Open, move through, close",
+    "body": "Open the actual More panel. Automatic playback scrolls through it, returns to the top, and closes it on Next.",
+    "transcript": "T05",
+    "note": "The coach does not require choosing a filter.",
+    "target": "mapMoreFilters"
+  },
+  {
+    "id": "M04",
+    "title": "Search",
+    "subtitle": "Point to the real search field",
+    "body": "Explain Search without bringing up the keyboard or requiring a search.",
+    "transcript": "T05",
+    "note": "Next immediately advances.",
+    "target": "mapSearch"
+  },
+  {
+    "id": "M05",
+    "title": "Plus",
+    "subtitle": "A brief introduction to saving",
+    "body": "Point to + and explain saving/importing in a short block. The import form stays closed.",
+    "transcript": "T05",
+    "note": "Replaces N13, N23 and N24.",
+    "target": "mapAdd"
+  },
+  {
+    "id": "M06",
+    "title": "Pin meanings",
+    "subtitle": "Solid Check In \u00b7 dotted Wanna",
+    "body": "Show the actual pin legend. Line style communicates status; color is not the visited/wanted distinction.",
+    "transcript": "T05",
+    "note": "Replaces the forced N15 save lesson.",
+    "target": "mapPinLegend"
+  },
+  {
+    "id": "N25",
+    "title": "The ending",
+    "subtitle": "Stay over the same Map",
+    "body": "A subtle material layer keeps the Map beneath the connection line. Skip works immediately; automatic playback returns to the usable Map.",
+    "transcript": "T04",
+    "note": "\u201cLife happens between us.\u201d is review copy; six seconds is the current proposal.",
+    "target": "mapSendoff"
+  },
+  {
+    "id": "C01",
+    "title": "Nearby Places",
+    "subtitle": "Only when the person opens +",
+    "body": "Stationary handwriting, a circle and an arrow point to Nearby Places. Black in light mode, white in dark. Next, about five seconds, or a real tap dismisses it.",
+    "transcript": "T04",
+    "note": "\u201cYour nearby places will show up here.\u201d",
+    "target": "addNearby"
+  },
+  {
+    "id": "C02",
+    "title": "Feed",
+    "subtitle": "Only on a voluntary Feed visit",
+    "body": "An optional native scroll reveal uses up to twenty available activity groups, slows down and settles into the normal Feed. Dragging interrupts it. Short/empty feeds use their real content.",
+    "transcript": "T05",
+    "note": "The review account is a local fixture. No real social activity is invented.",
+    "target": "feedActivity"
+  },
+  {
+    "id": "C03",
+    "title": "Lists",
+    "subtitle": "One block, three purposes",
+    "body": "Share recommendations, organize your own places and keep imports together. No forced creation.",
+    "transcript": "T04",
+    "note": "Four localized starter lists remain a content proposal; this pass does not seed user data.",
+    "target": "listsScope"
+  },
+  {
+    "id": "C04",
+    "title": "Check In / Wanna",
+    "subtitle": "On the place profile itself",
+    "body": "Stationary handwriting points to the actual two actions. The buttons remain usable while the annotation is visible.",
+    "transcript": "T04",
+    "note": "Places you\u2019ve been / places you want to go.",
+    "target": "placeSaveActions"
+  }
+]

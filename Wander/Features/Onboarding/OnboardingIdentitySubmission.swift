@@ -1,12 +1,10 @@
 import Foundation
 
 enum OnboardingIdentityPhotoError: Error {
-    case required
     case uploadFailed
 
     var message: String {
         switch self {
-        case .required: "Add a photo so your people can recognize you."
         case .uploadFailed: "Your photo couldn’t be saved. Check your connection and try again."
         }
     }
@@ -22,10 +20,8 @@ enum OnboardingIdentitySubmission {
         uploadPhoto: (Data) async throws -> Void
     ) async throws {
         if let validation = draft.validationError { throw validation }
-        let hasStoredPhoto = !(existingAvatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        guard draft.usesAppleSignIn || photoData?.isEmpty == false || hasStoredPhoto else { throw OnboardingIdentityPhotoError.required }
         try await updateIdentity(ProfileDetailsUpdate(displayName: draft.normalizedDisplayName, handle: draft.normalizedHandle))
-        if let photoData {
+        if let photoData, !photoData.isEmpty {
             do {
                 try await uploadPhoto(photoData)
             } catch {

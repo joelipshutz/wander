@@ -1,0 +1,11 @@
+{
+  "file": "a.mp4",
+  "damage": 0.62,
+  "durationSeconds": 8,
+  "frames": 192,
+  "shaderSha256": "643599e746f1fc5bedc9d129d7968f750f33688f54168de0de78e804ce5ddc91",
+  "sourceSha256": "4d98d12ee32b10b0b5d3a4b96318980f1fb36fd7fb724e9c07823e0d24467374",
+  "sha256": "56ec053997fac88128bddca90ac32ce1443db7acab767f65ddea0891ee7b9d1c",
+  "audio": "unchanged cleaned-source AAC packets",
+  "higgsfieldCredits": 0
+}

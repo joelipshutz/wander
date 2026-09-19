@@ -1,0 +1,1898 @@
+{
+  "cards": [
+    {
+      "id": "R01",
+      "title": "Welcome · ticker concept",
+      "group": "01 · Welcome",
+      "baseline": [
+        "N01"
+      ],
+      "tasks": [
+        "OB03"
+      ],
+      "kind": "welcome",
+      "decision": "Compare a description present immediately with one that slides in after a short ticker-only beat.",
+      "dependency": "Select exact ticker words and pacing. Preserve Reduce Motion/static equivalent and a fast returning-user route.",
+      "image": "welcome-1.png",
+      "variants": [
+        {
+          "label": "A · Immediate description",
+          "lines": [
+            {
+              "role": "Stable text",
+              "text": "Connect with"
+            },
+            {
+              "role": "Changing word · proposed sequence",
+              "text": "your people → your places → your neighborhood"
+            },
+            {
+              "role": "Description",
+              "text": "A place for your places. A little closer to your people."
+            },
+            {
+              "role": "Final lockup",
+              "text": "A local experiment."
+            }
+          ],
+          "note": "PROPOSAL. Original stable phrase and ticker word list are not recoverable from the recording. These are transparent prototype words, not approved wording. Description begins visible; one word changes until the full lockup changes."
+        },
+        {
+          "label": "B · Description slides in",
+          "lines": [
+            {
+              "role": "Stable text",
+              "text": "Connect with"
+            },
+            {
+              "role": "Changing word · proposed sequence",
+              "text": "your people → your places → your neighborhood"
+            },
+            {
+              "role": "Description",
+              "text": "Remember where you’ve been. Find somewhere to go together."
+            },
+            {
+              "role": "Final lockup",
+              "text": "A local experiment."
+            }
+          ],
+          "note": "PROPOSAL. Begin with ticker only; description slides in after a brief beat; then the entire slide moves into the UI benefit sequence. Compare timing rather than treating this as a chosen line."
+        },
+        {
+          "label": "C · More direct opening",
+          "lines": [
+            {
+              "role": "Stable text",
+              "text": "Make more of"
+            },
+            {
+              "role": "Changing word · proposed sequence",
+              "text": "your days → your neighborhood → your time together"
+            },
+            {
+              "role": "Description",
+              "text": "Keep your places. Follow your people. Make plans together."
+            },
+            {
+              "role": "Final lockup",
+              "text": "A local experiment."
+            }
+          ],
+          "note": "PROPOSAL. More explicit original alternative. The “a local experiment” ending is a spoken direction; its exact animation remains undecided."
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "title": "Welcome · the benefits",
+      "group": "01 · Welcome",
+      "baseline": [
+        "N01",
+        "N02",
+        "N03"
+      ],
+      "tasks": [
+        "OB04"
+      ],
+      "kind": "welcome",
+      "decision": "Replace the current three stories with short benefits shown beside real app UI.",
+      "dependency": "Choose slide count and actual UI sequences. No invented event availability in the Plans slide.",
+      "image": "welcome-1.png",
+      "variants": [
+        {
+          "label": "A · Closest to the recording",
+          "lines": [
+            {
+              "role": "Places",
+              "text": "Keep track of everywhere you’ve been."
+            },
+            {
+              "role": "People",
+              "text": "Keep up with the people you love."
+            },
+            {
+              "role": "Plans",
+              "text": "Make plans together."
+            }
+          ],
+          "note": "PROPOSAL. Closest to the spoken lines. Use Map / Feed / shared planning UI in sequence; no extra paragraph by default."
+        },
+        {
+          "label": "B · Warm and concise",
+          "lines": [
+            {
+              "role": "Places",
+              "text": "Keep the places worth remembering."
+            },
+            {
+              "role": "People",
+              "text": "Stay close to your people."
+            },
+            {
+              "role": "Plans",
+              "text": "Turn someday into a plan."
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        },
+        {
+          "label": "C · Direct utility",
+          "lines": [
+            {
+              "role": "Places",
+              "text": "Your places, all in one place."
+            },
+            {
+              "role": "People",
+              "text": "See where your people go."
+            },
+            {
+              "role": "Plans",
+              "text": "Find your next place together."
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        }
+      ]
+    },
+    {
+      "id": "R03",
+      "title": "Welcome · account transition and login",
+      "group": "01 · Welcome",
+      "baseline": [
+        "N01",
+        "N02",
+        "N03",
+        "N04",
+        "N06"
+      ],
+      "tasks": [
+        "OB05"
+      ],
+      "kind": "auth",
+      "decision": "Remove Get started from the proposed story sequence; advance into account creation and retain an obvious returning-account route.",
+      "dependency": "Do not lock returning or QR/event users into a no-skip introduction. Exact timing remains a review choice.",
+      "image": "welcome-1.png",
+      "variants": [
+        {
+          "label": "A · Login appears early",
+          "lines": [
+            {
+              "role": "Returning account",
+              "text": "Already have an account? Log in"
+            },
+            {
+              "role": "Destination headline",
+              "text": "Create your account"
+            }
+          ],
+          "note": "PROPOSAL. Show Log in from the opening. Repeat on account creation. Account copy otherwise stays exactly as approved in R05."
+        },
+        {
+          "label": "B · Login enters with the benefits",
+          "lines": [
+            {
+              "role": "Returning account",
+              "text": "Already have an account? Log in"
+            },
+            {
+              "role": "Destination headline",
+              "text": "Create your account"
+            }
+          ],
+          "note": "PROPOSAL. Log in slides/fades in around the third/fourth beat and remains on account creation. This compares placement/timing, not wording."
+        }
+      ]
+    },
+    {
+      "id": "R04",
+      "title": "Events · visibly coming soon",
+      "group": "02 · Events",
+      "baseline": [],
+      "tasks": [
+        "OB06",
+        "OB07"
+      ],
+      "kind": "events",
+      "decision": "Explore an Events welcome preview and a separate coming-soon tab; keep tab consolidation as a follow-up.",
+      "dependency": "Presentation only until Events ships. No active RSVP, event inventory, availability or notification promise. Separate Events tab task; global app flicker was rejected.",
+      "image": null,
+      "variants": [
+        {
+          "label": "A · Neighborhood",
+          "lines": [
+            {
+              "role": "Badge",
+              "text": "Coming soon"
+            },
+            {
+              "role": "Headline",
+              "text": "Experience Ocean Park together."
+            },
+            {
+              "role": "Body",
+              "text": "Good things to do. People to do them with."
+            }
+          ],
+          "note": "PROPOSAL. Riff on the spoken Ocean Park/together line. Use existing Events UI as a clearly marked preview."
+        },
+        {
+          "label": "B · Community",
+          "lines": [
+            {
+              "role": "Badge",
+              "text": "Coming soon"
+            },
+            {
+              "role": "Headline",
+              "text": "Experience Ocean Park with your community."
+            },
+            {
+              "role": "Body",
+              "text": "A reason to go out. A chance to get to know each other."
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        },
+        {
+          "label": "C · Invitation",
+          "lines": [
+            {
+              "role": "Badge",
+              "text": "Coming soon"
+            },
+            {
+              "role": "Headline",
+              "text": "Something’s happening around here."
+            },
+            {
+              "role": "Body",
+              "text": "Make room for a little more time together."
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "title": "N04–N07 · refresh the auth icon family",
+      "group": "03 · Account",
+      "baseline": [
+        "N04",
+        "N05",
+        "N06",
+        "N07"
+      ],
+      "tasks": [
+        "OB08"
+      ],
+      "kind": "auth",
+      "decision": "Keep accepted authentication wording and behavior; compare stone, ink relief, and warm Signal icon treatments.",
+      "dependency": "Choose one coherent material family. Approved wordmark remains flat outlined lettering with warm statue; do not turn all lettering into stone.",
+      "image": "signup-component.png",
+      "variants": [
+        {
+          "label": "N04 · Accepted create-account copy",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Create your account"
+            },
+            {
+              "role": "Body",
+              "text": "Keep your places synced and discover recommendations from people you trust."
+            },
+            {
+              "role": "Apple",
+              "text": "Continue with Apple"
+            },
+            {
+              "role": "Google",
+              "text": "Continue with Google"
+            },
+            {
+              "role": "Divider",
+              "text": "or"
+            },
+            {
+              "role": "Field",
+              "text": "Email"
+            },
+            {
+              "role": "Placeholder",
+              "text": "you@example.com"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue with email"
+            },
+            {
+              "role": "Helper",
+              "text": "If Apple or Google returns the same verified email, it connects to your existing Astir account."
+            },
+            {
+              "role": "Legal",
+              "text": "By continuing, you agree to the Terms of Use and Community Guidelines, and acknowledge the Privacy Policy."
+            }
+          ],
+          "note": "EXACT BASELINE. Compare the approved Astir artwork above this copy; do not alter provider/legal text. Icon studies: warm stone, ink relief, restrained Signal accent."
+        },
+        {
+          "label": "N05 · Accepted email-code copy",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Check your email"
+            },
+            {
+              "role": "Body",
+              "text": "Enter the verification code sent to {address}."
+            },
+            {
+              "role": "Primary",
+              "text": "Verify and continue"
+            },
+            {
+              "role": "Resend",
+              "text": "Send a new code"
+            },
+            {
+              "role": "Back",
+              "text": "Use another sign-in method"
+            },
+            {
+              "role": "Placeholder",
+              "text": "Verification code"
+            }
+          ],
+          "note": "EXACT BASELINE. Envelope icon uses the same selected material family as lock/bell; native dynamic address stays dynamic."
+        },
+        {
+          "label": "N06 · Accepted returning-account copy",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Welcome back"
+            },
+            {
+              "role": "Body",
+              "text": "Sign in to get back to your saved places and people."
+            },
+            {
+              "role": "Apple",
+              "text": "Sign in with Apple"
+            },
+            {
+              "role": "Google",
+              "text": "Sign in with Google"
+            },
+            {
+              "role": "Divider",
+              "text": "or"
+            },
+            {
+              "role": "Field",
+              "text": "Email"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue with email"
+            },
+            {
+              "role": "Secondary",
+              "text": "Use a password"
+            },
+            {
+              "role": "Helper",
+              "text": "If Apple or Google returns the same verified email, it connects to your existing Astir account."
+            },
+            {
+              "role": "Legal",
+              "text": "By continuing, you agree to the Terms of Use and Community Guidelines, and acknowledge the Privacy Policy."
+            }
+          ],
+          "note": "Accepted current wording, copied exactly from content.json. Visual refresh only; no copy rewrite proposed."
+        },
+        {
+          "label": "N07 · Accepted password copy",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Sign in with password"
+            },
+            {
+              "role": "Body",
+              "text": "Use the email and password for this account."
+            },
+            {
+              "role": "Email",
+              "text": "Email"
+            },
+            {
+              "role": "Password",
+              "text": "Password"
+            },
+            {
+              "role": "Primary",
+              "text": "Sign in"
+            },
+            {
+              "role": "Back",
+              "text": "Use another sign-in method"
+            }
+          ],
+          "note": "Accepted current wording, copied exactly from content.json. Visual refresh only; no copy rewrite proposed."
+        }
+      ]
+    },
+    {
+      "id": "R06",
+      "title": "N08 · your profile while you build it",
+      "group": "03 · Account",
+      "baseline": [
+        "N08"
+      ],
+      "tasks": [
+        "OB09",
+        "OB10"
+      ],
+      "kind": "profile",
+      "decision": "Use a live profile-header preview; name, username and photo are required in the requested flow.",
+      "dependency": "Implement photo upload/retry, required-field validation and username availability; profile metric inclusion remains undecided.",
+      "image": "identity.png",
+      "variants": [
+        {
+          "label": "A · Editorial preview",
+          "lines": [
+            {
+              "role": "Photo",
+              "text": "Add a photo"
+            },
+            {
+              "role": "Name",
+              "text": "Name"
+            },
+            {
+              "role": "Name placeholder",
+              "text": "How friends know you"
+            },
+            {
+              "role": "Username",
+              "text": "Username"
+            },
+            {
+              "role": "Username placeholder",
+              "text": "your_username"
+            },
+            {
+              "role": "Hint",
+              "text": "2–39 letters, numbers, or underscores"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. Editorial name in the preview, Avenir fields below; photo at top. Every edit updates the header. Remove “Optional — you can always do this later.” because mandatory photo is settled direction."
+        },
+        {
+          "label": "B · Native and quiet",
+          "lines": [
+            {
+              "role": "Photo",
+              "text": "Add a photo"
+            },
+            {
+              "role": "Name",
+              "text": "Name"
+            },
+            {
+              "role": "Name placeholder",
+              "text": "How friends know you"
+            },
+            {
+              "role": "Username",
+              "text": "Username"
+            },
+            {
+              "role": "Username placeholder",
+              "text": "your_username"
+            },
+            {
+              "role": "Hint",
+              "text": "2–39 letters, numbers, or underscores"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. Native field treatment, Avenir throughout; serif reserved for profile name. Same words and required fields. Preview follower metrics omitted."
+        },
+        {
+          "label": "C · More expressive header",
+          "lines": [
+            {
+              "role": "Photo",
+              "text": "Add a photo"
+            },
+            {
+              "role": "Name",
+              "text": "Name"
+            },
+            {
+              "role": "Name placeholder",
+              "text": "How friends know you"
+            },
+            {
+              "role": "Username",
+              "text": "Username"
+            },
+            {
+              "role": "Username placeholder",
+              "text": "your_username"
+            },
+            {
+              "role": "Hint",
+              "text": "2–39 letters, numbers, or underscores"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. Larger serif profile name; compact underlined field treatment; photo at top. Compare scale and fields, not competing invented requirements."
+        }
+      ]
+    },
+    {
+      "id": "R07",
+      "title": "N09 · why share location",
+      "group": "04 · Connection",
+      "baseline": [
+        "N09"
+      ],
+      "tasks": [
+        "OB11"
+      ],
+      "kind": "location",
+      "decision": "Compare direct and quote-led benefits above actual map motion; retain neutral Continue.",
+      "dependency": "Final privacy wording requires implementation verification. “Your location is yours” is a requested tone direction, not proof of any data-handling fact.",
+      "image": "location.png",
+      "variants": [
+        {
+          "label": "A · Find your place",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Find your place."
+            },
+            {
+              "role": "Body",
+              "text": "Find the good stuff nearby. Make plans with your people."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            },
+            {
+              "role": "Privacy",
+              "text": "Your location is yours."
+            }
+          ],
+          "note": "PROPOSAL / recommended. Closest to the spoken direction. Privacy slot remains unresolved until exact behavior is verified; do not inherit the baseline’s absolute claim. Privacy line preserves the session’s preferred tone; do not add an unverified “private forever” claim."
+        },
+        {
+          "label": "B · Know your here",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Get to know your here."
+            },
+            {
+              "role": "Body",
+              "text": "Discover nearby places worth making part of your life."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            },
+            {
+              "role": "Privacy",
+              "text": "Your location is yours."
+            }
+          ],
+          "note": "PROPOSAL. More authored and neighborhood-focused. No new privacy claim supplied. Privacy line preserves the session’s preferred tone; do not add an unverified “private forever” claim."
+        },
+        {
+          "label": "C · A different way to see",
+          "lines": [
+            {
+              "role": "Quote",
+              "text": "“The question is not what you look at, but what you see.”"
+            },
+            {
+              "role": "Attribution",
+              "text": "— Henry David Thoreau"
+            },
+            {
+              "role": "Body",
+              "text": "Find the good stuff nearby."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            },
+            {
+              "role": "Privacy",
+              "text": "Your location is yours."
+            }
+          ],
+          "note": "PROPOSAL. PH031 was a strong IG favorite, not an onboarding selection. Exact wording verified September 16: https://www.walden.org/what-we-do/library/thoreau/mis-quotations/ (Journal, August 5, 1851). Privacy line preserves the session’s preferred tone; do not add an unverified “private forever” claim."
+        }
+      ]
+    },
+    {
+      "id": "R08",
+      "title": "N10 · contacts are for connection",
+      "group": "04 · Connection",
+      "baseline": [
+        "N10"
+      ],
+      "tasks": [
+        "OB12"
+      ],
+      "kind": "contacts",
+      "decision": "Separate finding people from sending invitations; choose a short find/follow primer only after matching exists.",
+      "dependency": "Current Contacts provider is invite-only; it cannot find members. See contacts-evidence.md. Retain neutral Continue and do not ship new promises as a copy-only patch.",
+      "image": "contacts.png",
+      "variants": [
+        {
+          "label": "A · Find your people",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Find your people"
+            },
+            {
+              "role": "Body",
+              "text": "Find people you know on Astir."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL / recommended; requires real contact-to-member matching."
+        },
+        {
+          "label": "B · Start your circle",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Start your circle"
+            },
+            {
+              "role": "Body",
+              "text": "Find familiar people and follow the places they share."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL; requires matching. Does not imply an invitation is sent."
+        },
+        {
+          "label": "C · Better together",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "We’re better together"
+            },
+            {
+              "role": "Body",
+              "text": "Connect your contacts to find people you know."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL; requires matching and a defined data flow. Keep the invitation action on its own row in N11."
+        }
+      ]
+    },
+    {
+      "id": "R09",
+      "title": "N11 · follow, search, connect",
+      "group": "04 · Connection",
+      "baseline": [
+        "N11"
+      ],
+      "tasks": [
+        "OB13",
+        "OB15"
+      ],
+      "kind": "people",
+      "decision": "Use name/username search and immediate per-row Follow → Following; show Invite only for nonmembers.",
+      "dependency": "Matching, real search, ranking and per-row failure/retry handling are new work. Do not label fabricated contacts as members or claim relationship signals the app lacks.",
+      "image": "friends-loaded-component.png",
+      "variants": [
+        {
+          "label": "A · People you love",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Connect with the people you love"
+            },
+            {
+              "role": "Body",
+              "text": "Follow a few familiar people. See where life takes them."
+            },
+            {
+              "role": "Search",
+              "text": "Search name or username"
+            },
+            {
+              "role": "Member action",
+              "text": "Follow"
+            },
+            {
+              "role": "Followed state",
+              "text": "Following"
+            },
+            {
+              "role": "Nonmember action",
+              "text": "Invite"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. Callback to the welcome benefit. Real member/nonmember states required; remove preselection and “suggested for you” reason filler."
+        },
+        {
+          "label": "B · Your circle",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Create your Astir circle"
+            },
+            {
+              "role": "Body",
+              "text": "Your people make this place feel like yours."
+            },
+            {
+              "role": "Search",
+              "text": "Search name or username"
+            },
+            {
+              "role": "Member action",
+              "text": "Follow"
+            },
+            {
+              "role": "Followed state",
+              "text": "Following"
+            },
+            {
+              "role": "Nonmember action",
+              "text": "Invite"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        },
+        {
+          "label": "C · First connections",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Astir is better together"
+            },
+            {
+              "role": "Body",
+              "text": "Start with a couple of people you know. There’s more to discover together."
+            },
+            {
+              "role": "Search",
+              "text": "Search name or username"
+            },
+            {
+              "role": "Member action",
+              "text": "Follow"
+            },
+            {
+              "role": "Followed state",
+              "text": "Following"
+            },
+            {
+              "role": "Nonmember action",
+              "text": "Invite"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. “A couple” expresses the founders’ activation aspiration; it is not a measured magic threshold or a mandatory minimum."
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "title": "Invitation · three messages",
+      "group": "04 · Connection",
+      "baseline": [
+        "N11"
+      ],
+      "tasks": [
+        "OB14"
+      ],
+      "kind": "invite",
+      "decision": "An explicit Invite tap opens the system composer; the person chooses whether to send.",
+      "dependency": "Real invite/deep-link destination and composer behavior; handle cancel/unavailable Messages. The preview must not imply automatic sending.",
+      "image": "friends-loaded-component.png",
+      "variants": [
+        {
+          "label": "A · Direct",
+          "lines": [
+            {
+              "role": "Message",
+              "text": "Join me on Astir. Let’s keep up with each other’s places and find somewhere to go together. {inviteLink}"
+            }
+          ],
+          "note": "PROPOSAL / recommended. {inviteLink} must resolve to the actual app invitation; no message is sent by this review."
+        },
+        {
+          "label": "B · Short",
+          "lines": [
+            {
+              "role": "Message",
+              "text": "Let’s connect on Astir. Your places, my places, our next plan. {inviteLink}"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        },
+        {
+          "label": "C · A local experiment",
+          "lines": [
+            {
+              "role": "Message",
+              "text": "A local experiment. Come find your people, share your places, and make plans with us on Astir. {inviteLink}"
+            }
+          ],
+          "note": "PROPOSAL. Uses the founders’ liked phrase while adding enough context to explain the invitation."
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "title": "N12 · show what is worth hearing",
+      "group": "04 · Connection",
+      "baseline": [
+        "N12"
+      ],
+      "tasks": [
+        "OB16"
+      ],
+      "kind": "notifications",
+      "decision": "Use a consistent icon family and two or three animated, legible notification examples.",
+      "dependency": "Verify notification types actually implemented before choosing examples. Compare stone/ink/Signal icon colorways; keep neutral Continue.",
+      "image": "notifications.png",
+      "variants": [
+        {
+          "label": "A · Stay close",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Stay close to your people"
+            },
+            {
+              "role": "Body",
+              "text": "A heads-up when there’s something worth knowing."
+            },
+            {
+              "role": "Example notification",
+              "text": "Ryan checked in"
+            },
+            {
+              "role": "Example notification",
+              "text": "Your Instagram import is complete"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. Fictional demonstration notifications, not delivered activity. Show friend check-in and completed import only once actual notification capabilities are verified."
+        },
+        {
+          "label": "B · Good things are happening",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Good things are happening"
+            },
+            {
+              "role": "Body",
+              "text": "Keep up with your people and the places you’re saving."
+            },
+            {
+              "role": "Example notification",
+              "text": "Ryan checked in"
+            },
+            {
+              "role": "Example notification",
+              "text": "Your Instagram import is complete"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        },
+        {
+          "label": "C · Keep up",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Keep up with the people you love"
+            },
+            {
+              "role": "Body",
+              "text": "Their latest check-ins. Your next discovery."
+            },
+            {
+              "role": "Example notification",
+              "text": "Ryan checked in"
+            },
+            {
+              "role": "Example notification",
+              "text": "Your Instagram import is complete"
+            },
+            {
+              "role": "Future example · Coming soon",
+              "text": "An event nearby is happening soon"
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL. The third example belongs only in a clearly marked coming-soon Events preview; it must not imply current event notifications."
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "title": "Map · replace the forced save walkthrough",
+      "group": "05 · First map",
+      "baseline": [
+        "N13",
+        "N14",
+        "N15",
+        "N16",
+        "N17",
+        "N18",
+        "N19",
+        "N20",
+        "N21",
+        "N22",
+        "N23",
+        "N24"
+      ],
+      "tasks": [
+        "OB17",
+        "OB19"
+      ],
+      "kind": "map",
+      "decision": "Replace the long forced save tour with a short map overview and end on the usable map.",
+      "dependency": "Use visibly labeled demo data rather than invented friend activity. Make Next legible and accessible even if visually quiet; retain static/Reduce Motion path.",
+      "image": "mapAdd.png",
+      "variants": [
+        {
+          "label": "A · Overview sequence",
+          "lines": [
+            {
+              "role": "Introduction",
+              "text": "A quick look around"
+            },
+            {
+              "role": "Sequence",
+              "text": "Featured → Friends → More → Search → + → Check-in / Wanna pins"
+            },
+            {
+              "role": "Advance",
+              "text": "Next"
+            },
+            {
+              "role": "Finish",
+              "text": "You’re ready to explore."
+            }
+          ],
+          "note": "PROPOSAL. Overview runs at a readable pace; Next advances immediately. Demo map near the person, Ocean Park fallback. Sequence is review scaffolding, not a paragraph shown to users."
+        },
+        {
+          "label": "B · Compact overview",
+          "lines": [
+            {
+              "role": "Introduction",
+              "text": "Here’s your map"
+            },
+            {
+              "role": "Sequence",
+              "text": "Featured / Friends → More → Search → + → pins"
+            },
+            {
+              "role": "Advance",
+              "text": "Next"
+            }
+          ],
+          "note": "PROPOSAL. Combine the first two filter explanations and omit a final explanation. Exit directly to usable Map. No forced save, rating, tags, import, Feed, Lists or Profile."
+        }
+      ]
+    },
+    {
+      "id": "R13",
+      "title": "Map · one line for each control",
+      "group": "05 · First map",
+      "baseline": [
+        "N13",
+        "N24",
+        "R54",
+        "R65",
+        "R66"
+      ],
+      "tasks": [
+        "OB18",
+        "OB19"
+      ],
+      "kind": "map",
+      "decision": "Explain controls briefly while the full map stays visible; animate the targeted control without a blocking veil.",
+      "dependency": "Choose coach entrance/exit A/B and target highlight. Pin legend must demonstrate simple states while preserving combined-state rings in the actual app.",
+      "image": "mapAdd.png",
+      "variants": [
+        {
+          "label": "A · Plain and accurate",
+          "lines": [
+            {
+              "role": "Featured",
+              "text": "Recommendations based on your taste."
+            },
+            {
+              "role": "Friends",
+              "text": "All places from everyone you follow."
+            },
+            {
+              "role": "More",
+              "text": "Narrow down what you’re looking for."
+            },
+            {
+              "role": "Search",
+              "text": "Find places by name, area, or person."
+            },
+            {
+              "role": "Plus",
+              "text": "Save a place or manage imports from Instagram, TikTok, Google Maps, and more."
+            },
+            {
+              "role": "Solid ring",
+              "text": "Check-in · places you’ve been"
+            },
+            {
+              "role": "Dashed ring",
+              "text": "Wanna · places you want to go"
+            },
+            {
+              "role": "Advance",
+              "text": "Next"
+            }
+          ],
+          "note": "PROPOSAL. Featured is broader than followed people: local source filters check-ins and ranks taste/relationships/support/rating. Friends wording matches MapSource.subtitle. Solid/dashed status verified in MapPinOutline; ring color indicates ownership separately. Map Search matches owner names/handles to place results; it does not return member profiles. Source: TrustedPlaceSearch.swift:982 and MapScreen.swift:8852."
+        },
+        {
+          "label": "B · Warmer voice",
+          "lines": [
+            {
+              "role": "Featured",
+              "text": "Find something that fits your taste."
+            },
+            {
+              "role": "Friends",
+              "text": "See the places your people have saved."
+            },
+            {
+              "role": "More",
+              "text": "Find what fits right now."
+            },
+            {
+              "role": "Search",
+              "text": "Search for a place—or places from your people."
+            },
+            {
+              "role": "Plus",
+              "text": "Keep a place. Bring your saved links and lists with you."
+            },
+            {
+              "role": "Solid ring",
+              "text": "Been there? Check in."
+            },
+            {
+              "role": "Dashed ring",
+              "text": "Want to go? Save a Wanna."
+            },
+            {
+              "role": "Advance",
+              "text": "Next"
+            }
+          ],
+          "note": "PROPOSAL. Keep import-source names visible in the Plus supporting line if the shorter phrasing loses that discovery. Do not call Featured only “the best places from your people.” Map Search matches owner names/handles to place results; it does not return member profiles. Source: TrustedPlaceSearch.swift:982 and MapScreen.swift:8852."
+        }
+      ]
+    },
+    {
+      "id": "R14",
+      "title": "Feed + People · first voluntary visit",
+      "group": "06 · First-use moments",
+      "baseline": [
+        "R40",
+        "R41",
+        "R42",
+        "R43"
+      ],
+      "tasks": [
+        "OB15",
+        "OB20",
+        "OB21"
+      ],
+      "kind": "feed",
+      "decision": "Make first Feed entry compelling when opened voluntarily; keep people discovery prominent for small networks.",
+      "dependency": "Forced Feed navigation deferred. Low-network fallback must be labeled and based on real available content. Server/caching hypothesis is separate measured work, not a settled cause.",
+      "image": null,
+      "variants": [
+        {
+          "label": "A · Your people, lately",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Your people, lately"
+            },
+            {
+              "role": "Body",
+              "text": "See where they’ve been and what they’re saving."
+            },
+            {
+              "role": "People tab",
+              "text": "Find your people"
+            },
+            {
+              "role": "People support",
+              "text": "Follow someone you know. See more of their world."
+            },
+            {
+              "role": "Primary",
+              "text": "Explore"
+            }
+          ],
+          "note": "PROPOSAL. Compare a quick scroll that decelerates into actual UI with a static reveal. Never use fabricated activity as a user’s feed."
+        },
+        {
+          "label": "B · More than a map",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "A little closer to your people"
+            },
+            {
+              "role": "Body",
+              "text": "Their check-ins. Their finds. A reason to catch up."
+            },
+            {
+              "role": "People tab",
+              "text": "Build your circle"
+            },
+            {
+              "role": "People support",
+              "text": "Find familiar people and follow along."
+            },
+            {
+              "role": "Primary",
+              "text": "Explore"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        }
+      ]
+    },
+    {
+      "id": "R15",
+      "title": "N25 · leave them with connection",
+      "group": "06 · First-use moments",
+      "baseline": [
+        "N25"
+      ],
+      "tasks": [
+        "OB22"
+      ],
+      "kind": "closing",
+      "decision": "End with a short connection-first line over the actual page; compare brief auto-dismiss timing and optional CTA.",
+      "dependency": "Select line, blur/static treatment, optional CTA and 4s versus 6s. Use actual underlying map/feed colors; do not create another full-screen detour.",
+      "image": "mapSendoff.png",
+      "variants": [
+        {
+          "label": "A · Ram Dass",
+          "lines": [
+            {
+              "role": "Quote",
+              "text": "“We’re all just walking each other home.”"
+            },
+            {
+              "role": "Attribution",
+              "text": "— Ram Dass"
+            },
+            {
+              "role": "Optional primary",
+              "text": "Have fun"
+            },
+            {
+              "role": "Skip",
+              "text": "Skip"
+            }
+          ],
+          "note": "PROPOSAL. SP042 was a strong IG favorite, not an onboarding approval. Exact text/attribution verified September 16 on the official source: https://shop.ramdass.org/products/walking-each-other-home-tee . Original lecture not established."
+        },
+        {
+          "label": "B · Original / recommended",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Life happens between us."
+            },
+            {
+              "role": "Optional primary",
+              "text": "Get out there"
+            },
+            {
+              "role": "Skip",
+              "text": "Skip"
+            }
+          ],
+          "note": "PROPOSAL. Original copy; do not attribute to a philosopher. Connection is the final feeling rather than more feature instruction."
+        },
+        {
+          "label": "C · Original / neighborhood",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Make this place a little more yours. Together."
+            },
+            {
+              "role": "Optional primary",
+              "text": "Have fun"
+            },
+            {
+              "role": "Skip",
+              "text": "Skip"
+            }
+          ],
+          "note": "PROPOSAL. Original copy; directly reflects becoming part of a neighborhood through shared experiences."
+        },
+        {
+          "label": "Baseline · Bourdain for comparison",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Your map is yours now"
+            },
+            {
+              "role": "Eyebrow",
+              "text": "A thought for the road"
+            },
+            {
+              "role": "Quote",
+              "text": "“As you move through this life and this world you change things slightly. You leave marks behind, however small”"
+            },
+            {
+              "role": "Attribution",
+              "text": "— Anthony Bourdain"
+            },
+            {
+              "role": "Closing",
+              "text": "Keep the places that move you. Your map will remember the rest"
+            },
+            {
+              "role": "Primary",
+              "text": "Finish"
+            }
+          ],
+          "note": "EXACT BASELINE, retained for comparison only. Existing Bourdain excerpt/attribution was not independently reverified in this pass; this is not a new quotation recommendation or a claim that the wording is approved."
+        }
+      ]
+    },
+    {
+      "id": "R16",
+      "title": "Lists · explain once, offer a start",
+      "group": "06 · First-use moments",
+      "baseline": [
+        "R47",
+        "R48",
+        "R57",
+        "R58"
+      ],
+      "tasks": [
+        "OB23"
+      ],
+      "kind": "lists",
+      "decision": "Introduce organizing, importing, collaborating and sharing in one block; propose four useful local starter lists.",
+      "dependency": "Define list ownership, editability, privacy, sourcing and real places. No forced list-creation task. Explicit/joke list names in the session were exploratory, not approved seed content.",
+      "image": null,
+      "variants": [
+        {
+          "label": "A · Build and share",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Build and share lists of recommendations"
+            },
+            {
+              "role": "Body",
+              "text": "Organize your places, bring in saved lists, and plan together."
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Coffee around here"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Date night, close to home"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "A day outside"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Places we’d take a friend"
+            }
+          ],
+          "note": "PROPOSAL / recommended. Four starter titles only: no fake place counts or fabricated listings. Local content still requires curation; fallback Ocean Park/LA when location is absent."
+        },
+        {
+          "label": "B · Pass your places on",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Your good places, ready to share"
+            },
+            {
+              "role": "Body",
+              "text": "Collect your favorites, import a list, and build the next one with friends."
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Coffee around here"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Date night, close to home"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "A day outside"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Places we’d take a friend"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        },
+        {
+          "label": "C · A place for your plans",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Keep a list. Make a plan. Pass it on."
+            },
+            {
+              "role": "Body",
+              "text": "Organize your places, import what you’ve saved, and share recommendations with your people."
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Coffee around here"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Date night, close to home"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "A day outside"
+            },
+            {
+              "role": "Starter list · proposed",
+              "text": "Places we’d take a friend"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        }
+      ]
+    },
+    {
+      "id": "R17",
+      "title": "Plus · nearby places annotation",
+      "group": "06 · First-use moments",
+      "baseline": [
+        "N14"
+      ],
+      "tasks": [
+        "OB24"
+      ],
+      "kind": "annotation",
+      "decision": "On first voluntary Plus entry, point out Nearby with a static handwritten annotation.",
+      "dependency": "Dismiss on Next, about 5 seconds, or a real action; do not swallow that action. Drag dismissal remains unresolved. Use actual section location.",
+      "image": "addSearch.png",
+      "variants": [
+        {
+          "label": "A · Direct",
+          "lines": [
+            {
+              "role": "Annotation",
+              "text": "Your nearby places show up here."
+            },
+            {
+              "role": "Dismiss",
+              "text": "Next"
+            }
+          ],
+          "note": "PROPOSAL. Arrow/circle points to actual nearby section. White annotation on dark UI; black on light UI. No blocking overlay."
+        },
+        {
+          "label": "B · In the moment",
+          "lines": [
+            {
+              "role": "Annotation",
+              "text": "Right here? Find it right here."
+            },
+            {
+              "role": "Dismiss",
+              "text": "Next"
+            }
+          ],
+          "note": "PROPOSAL. More playful option; use only if the target remains immediately obvious."
+        }
+      ]
+    },
+    {
+      "id": "R18",
+      "title": "Place profile · Check in / Wanna annotations",
+      "group": "06 · First-use moments",
+      "baseline": [
+        "N15"
+      ],
+      "tasks": [
+        "OB25"
+      ],
+      "kind": "annotation",
+      "decision": "Explain the two actions on the actual place profile, where those actions exist.",
+      "dependency": "Same nonblocking 5s/Next/action dismissal as Nearby. Do not replace the normal form or require a sample save.",
+      "image": "saveStatus.png",
+      "variants": [
+        {
+          "label": "A · Familiar definitions",
+          "lines": [
+            {
+              "role": "Check in annotation",
+              "text": "For places you’ve been."
+            },
+            {
+              "role": "Wanna annotation",
+              "text": "For places you want to go."
+            },
+            {
+              "role": "Dismiss",
+              "text": "Next"
+            }
+          ],
+          "note": "PROPOSAL / recommended. Static handwriting with separate arrows to the two real actions. This is not an Add-sheet overlay."
+        },
+        {
+          "label": "B · Short prompts",
+          "lines": [
+            {
+              "role": "Check in annotation",
+              "text": "Been here? Check in."
+            },
+            {
+              "role": "Wanna annotation",
+              "text": "Want to go? Save it here."
+            },
+            {
+              "role": "Dismiss",
+              "text": "Next"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        }
+      ]
+    },
+    {
+      "id": "R19",
+      "title": "N26 · remove the repeat-launch import lesson",
+      "group": "07 · Return visits",
+      "baseline": [
+        "N26"
+      ],
+      "tasks": [
+        "OB26"
+      ],
+      "kind": "decision",
+      "decision": "Remove the second-launch interruption; move useful import discovery into the Plus overview.",
+      "dependency": "Preserve eligibility/completion/analytics semantics when deleting the campaign; no production change made in this deck.",
+      "image": "import-lesson.png",
+      "variants": [
+        {
+          "label": "Settled direction · remove",
+          "lines": [
+            {
+              "role": "Replacement location",
+              "text": "Plus overview"
+            },
+            {
+              "role": "Replacement copy",
+              "text": "Save a place or manage imports from Instagram, TikTok, Google Maps, and more."
+            }
+          ],
+          "note": "DIRECTION SETTLED; replacement sentence remains a proposal. The removed lesson’s copy remains in the baseline archive, not in the new journey."
+        }
+      ]
+    },
+    {
+      "id": "R20",
+      "title": "N27 · real shortcuts, real setup",
+      "group": "07 · Return visits",
+      "baseline": [
+        "N27"
+      ],
+      "tasks": [
+        "OB27"
+      ],
+      "kind": "guide",
+      "decision": "Keep a real setup guide and explore hardware/app motion for Action Button, sharing and widgets.",
+      "dependency": "Verify supported device/OS capabilities and exact guide instructions. Calendar-widget ideas require capability confirmation; do not promise a new widget in copy.",
+      "image": "device-features.png",
+      "variants": [
+        {
+          "label": "A · One press away",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Astir, one press away"
+            },
+            {
+              "role": "Body",
+              "text": "Make room for Astir in the way you use your phone."
+            },
+            {
+              "role": "Action Button",
+              "text": "Save a place from your Action Button."
+            },
+            {
+              "role": "Share extension",
+              "text": "Send a place straight to Astir."
+            },
+            {
+              "role": "Widgets",
+              "text": "Keep your places within reach."
+            },
+            {
+              "role": "Guide",
+              "text": "Setup guide"
+            },
+            {
+              "role": "Primary",
+              "text": "Got it"
+            }
+          ],
+          "note": "PROPOSAL. Hardware gestures and app responses require actual capture. Guide currently exists at https://getrec.me/extensions and still uses rec.me branding."
+        },
+        {
+          "label": "B · Less between you and a place",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Keep Astir close"
+            },
+            {
+              "role": "Body",
+              "text": "A shortcut for the moment you find somewhere good."
+            },
+            {
+              "role": "Action Button",
+              "text": "One press to start a save."
+            },
+            {
+              "role": "Share extension",
+              "text": "Share it to Astir."
+            },
+            {
+              "role": "Widgets",
+              "text": "Your map, a little closer."
+            },
+            {
+              "role": "Guide",
+              "text": "See how to set it up"
+            },
+            {
+              "role": "Primary",
+              "text": "Got it"
+            }
+          ],
+          "note": "Proposal for review; no final wording selected."
+        }
+      ]
+    },
+    {
+      "id": "R21",
+      "title": "N28/N29 · decide after explaining the trigger",
+      "group": "07 · Return visits",
+      "baseline": [
+        "N28",
+        "N29"
+      ],
+      "tasks": [
+        "OB28"
+      ],
+      "kind": "decision",
+      "decision": "Hold deletion until reviewed: these are conditional prompts when permission or Astir push delivery is off, not successful-grant acknowledgments.",
+      "dependency": "Eligibility depends on OS permission (authorized, provisional or ephemeral) AND app pushEnabled. A prior OS grant does not suppress these prompts if app push is off. Frequency caps are one lifetime impression per trigger and three campaign impressions, stored under a local account key. Choose retain, consolidate or remove after showing eligibility and caps; use the selected N12 styling for any retained primer.",
+      "image": "place_saved.png",
+      "variants": [
+        {
+          "label": "N28 · Current after-save prompt",
+          "lines": [
+            {
+              "role": "Eyebrow",
+              "text": "STAY IN THE LOOP"
+            },
+            {
+              "role": "Headline",
+              "text": "See when your friends check in"
+            },
+            {
+              "role": "Body",
+              "text": "Get a heads-up when people you follow save a place or check in somewhere worth knowing."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "EXACT BASELINE for semantics review, not newly approved copy. The campaign is eligibility-gated, not mandatory after every save. It can appear after a prior OS permission grant when Astir pushEnabled is false; it is not a successful-grant acknowledgment."
+        },
+        {
+          "label": "N29 · Current after-follow prompt",
+          "lines": [
+            {
+              "role": "Eyebrow",
+              "text": "STAY IN THE LOOP"
+            },
+            {
+              "role": "Headline",
+              "text": "Keep up with people you follow"
+            },
+            {
+              "role": "Body",
+              "text": "Get a heads-up when they save a place or check in somewhere worth knowing."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            }
+          ],
+          "note": "EXACT BASELINE for semantics review. Eligible when OS permission or Astir push delivery is not enabled, including a prior OS grant with app push off. It is not confirmation that access was granted."
+        }
+      ]
+    },
+    {
+      "id": "R22",
+      "title": "N31 · location denied, UI only",
+      "group": "08 · Accepted states",
+      "baseline": [
+        "N31"
+      ],
+      "tasks": [
+        "OB29",
+        "OB30"
+      ],
+      "kind": "system",
+      "decision": "Retain the accepted words; refresh shared type, spacing and controls.",
+      "dependency": "Denied and restricted permissions are different states; retain each action’s actual routing.",
+      "image": "location-denied.png",
+      "variants": [
+        {
+          "label": "Baseline · N31",
+          "lines": [
+            {
+              "role": "Primary",
+              "text": "Open Settings"
+            },
+            {
+              "role": "Secondary",
+              "text": "Not now"
+            },
+            {
+              "role": "Restricted",
+              "text": "Continue without location"
+            }
+          ],
+          "note": "Accepted current wording, copied exactly from content.json. Visual refresh only; no copy rewrite proposed."
+        }
+      ]
+    },
+    {
+      "id": "R23",
+      "title": "N32 · notifications denied, UI only",
+      "group": "08 · Accepted states",
+      "baseline": [
+        "N32"
+      ],
+      "tasks": [
+        "OB30"
+      ],
+      "kind": "system",
+      "decision": "Retain the accepted words; refresh shared type, spacing and controls.",
+      "dependency": "Keep working-state wording and Settings behavior. No new permission coercion or copy promise.",
+      "image": "notifications-denied-component.png",
+      "variants": [
+        {
+          "label": "Baseline · N32",
+          "lines": [
+            {
+              "role": "Primary",
+              "text": "Open Settings"
+            },
+            {
+              "role": "Secondary",
+              "text": "Not now"
+            },
+            {
+              "role": "Working",
+              "text": "Turning on notifications…"
+            }
+          ],
+          "note": "Accepted current wording, copied exactly from content.json. Visual refresh only; no copy rewrite proposed."
+        }
+      ]
+    },
+    {
+      "id": "R24",
+      "title": "N33 · no people yet, UI only",
+      "group": "08 · Accepted states",
+      "baseline": [
+        "N33"
+      ],
+      "tasks": [
+        "OB30"
+      ],
+      "kind": "system",
+      "decision": "Retain the accepted words; make the empty state visually consistent.",
+      "dependency": "Use shared brand typography and layout; preserve Continue/Skip behavior.",
+      "image": "friends-empty-component.png",
+      "variants": [
+        {
+          "label": "Baseline · N33",
+          "lines": [
+            {
+              "role": "Headline",
+              "text": "Your people will show up here"
+            },
+            {
+              "role": "Body",
+              "text": "Skip for now — we’ll keep finding trusted people as Astir grows."
+            },
+            {
+              "role": "Primary",
+              "text": "Continue"
+            },
+            {
+              "role": "Secondary",
+              "text": "Skip"
+            }
+          ],
+          "note": "Accepted current wording, copied exactly from content.json. Visual refresh only; no copy rewrite proposed."
+        }
+      ]
+    },
+    {
+      "id": "R25",
+      "title": "N36 · concise Contacts purpose",
+      "group": "08 · Accepted states",
+      "baseline": [
+        "N36"
+      ],
+      "tasks": [
+        "OB12"
+      ],
+      "kind": "system",
+      "decision": "Explain finding/following people concisely once matching is real; keep a truthful current-behavior alternative.",
+      "dependency": "See contacts-evidence.md: the long disclosure answered a real App Review concern; exact sentences were not proven mandated. Final purpose must match implemented data flow and synchronized reviewer/privacy descriptions.",
+      "image": "system-contacts-component.png",
+      "variants": [
+        {
+          "label": "A · Requested future behavior",
+          "lines": [
+            {
+              "role": "Purpose",
+              "text": "Astir uses your contacts to help you find and follow people you know."
+            },
+            {
+              "role": "iOS headline",
+              "text": "“Astir” would like to access your Contacts."
+            },
+            {
+              "role": "iOS option",
+              "text": "Don’t Allow"
+            },
+            {
+              "role": "iOS option",
+              "text": "Continue"
+            }
+          ],
+          "note": "PROPOSAL / product direction. Requires actual contact-to-member matching. Exact OS headline/options shown here are baseline context, not app-authored text."
+        },
+        {
+          "label": "B · Current-behavior fallback",
+          "lines": [
+            {
+              "role": "Purpose",
+              "text": "Astir uses contact names and phone numbers so you can choose people to invite."
+            },
+            {
+              "role": "iOS headline",
+              "text": "“Astir” would like to access your Contacts."
+            },
+            {
+              "role": "iOS option",
+              "text": "Don’t Allow"
+            },
+            {
+              "role": "iOS option",
+              "text": "Continue"
+            }
+          ],
+          "note": "INTERIM PROPOSAL aligned with the current invite-only provider, not the selected future product direction. Removes the detailed no-upload/Messages sentences without pretending matching exists."
+        }
+      ]
+    }
+  ]
+}

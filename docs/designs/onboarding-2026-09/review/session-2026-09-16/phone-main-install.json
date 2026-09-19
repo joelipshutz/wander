@@ -1,0 +1,37 @@
+{
+  "info" : {
+    "arguments" : [
+      "devicectl",
+      "device",
+      "install",
+      "app",
+      "--device",
+      "E0C1F5F2-1609-5FB7-8CF7-DF59C10A63C3",
+      "/Users/joelipshutz/Documents/ChatGPT/New project/.dev-cache/xcode/92a60a1159736360e173/Build/Products/Debug-iphoneos/Wander.app",
+      "--json-output",
+      "/Users/joelipshutz/Documents/ChatGPT/New project/onboarding-copy-review/session-2026-09-16/phone-main-install.json"
+    ],
+    "commandType" : "devicectl.device.install.app",
+    "environment" : {
+      "TERM" : "dumb"
+    },
+    "jsonVersion" : 3,
+    "outcome" : "success",
+    "version" : "506.7"
+  },
+  "result" : {
+    "deviceIdentifier" : "E0C1F5F2-1609-5FB7-8CF7-DF59C10A63C3",
+    "installedApplications" : [
+      {
+        "bundleID" : "com.grayline.wander",
+        "databaseSequenceNumber" : 4152,
+        "databaseUUID" : "B8BBC431-03DA-40D8-8089-0C62F9DEA0D5",
+        "installationURL" : "file:///private/var/containers/Bundle/Application/DB44C9EC-25C7-40B2-B86A-3600862EBF50/Wander.app/",
+        "launchServicesIdentifier" : "unknown",
+        "options" : {
+
+        }
+      }
+    ]
+  }
+}

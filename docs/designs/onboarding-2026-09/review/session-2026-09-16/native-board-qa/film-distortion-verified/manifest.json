@@ -1,0 +1,62 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+        "deviceName" : "iPhone 16e",
+        "exportedFileName" : "1D863C2C-7532-4397-A6F8-494C2074E06C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "film-type — live verification after foreground_0_6251F46B-7D01-4650-8336-06E206CD3995.png",
+        "timestamp" : 1789740288.454
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+        "deviceName" : "iPhone 16e",
+        "exportedFileName" : "0AB6FF57-5ABD-421E-AB7F-4F6D75F5DF63.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "film-type — signup_0_7A597454-7CCF-49F3-8574-DD41A42404FA.png",
+        "timestamp" : 1789740281.649
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+        "deviceName" : "iPhone 16e",
+        "exportedFileName" : "EF14FA71-224C-4A09-97D9-4D224E1CEE4B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "film-type — opening_0_25827381-7AFD-4553-B0B5-DBF062C3DB16.png",
+        "timestamp" : 1789740273.483
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+        "deviceName" : "iPhone 16e",
+        "exportedFileName" : "CD3F332F-6911-44A2-9C90-59A87F917703.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "film — live verification after foreground_0_CD355E50-4B32-47FE-AB1E-D7817167A67D.png",
+        "timestamp" : 1789740268.755
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+        "deviceName" : "iPhone 16e",
+        "exportedFileName" : "A999BD5B-DC8D-4577-B33D-9E30AD72460C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "film — signup_0_B1B3969E-5FAD-4D91-A34E-EA483F934174.png",
+        "timestamp" : 1789740262.775
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+        "deviceName" : "iPhone 16e",
+        "exportedFileName" : "2DCDEC0C-4695-4D33-A7F2-982ED8419157.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "film — opening_0_18A4004D-C27A-43F5-A040-A863EC56D01B.png",
+        "timestamp" : 1789740254.457
+      }
+    ],
+    "testIdentifier" : "OnboardingUITests/testFilmExplorationsKeepSignupAndLoginInteractive()",
+    "testIdentifierURL" : "test://com.apple.xcode/Wander/WanderUITests/OnboardingUITests/testFilmExplorationsKeepSignupAndLoginInteractive"
+  }
+]

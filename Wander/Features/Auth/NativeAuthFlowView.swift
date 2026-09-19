@@ -6,6 +6,7 @@ struct NativeAuthFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.onboardingVisualTreatment) private var treatment
 
     let isDismissable: Bool
     let mode: NativeAuthMode
@@ -62,7 +63,21 @@ struct NativeAuthFlowView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(WanderTheme.surfaceBone.color.ignoresSafeArea())
+            .background {
+                ZStack {
+                    (treatment.isFilm ? OnboardingVisualTreatment.background : WanderTheme.surfaceBone.color)
+                    if treatment.isFilm {
+                        // Retain the custom film field beneath the real form.
+                        // A still background cannot wash out or flicker controls.
+                        OnboardingFilmTexture(isPlaying: false, reduceMotion: true)
+                            .blendMode(.screen)
+                            .opacity(0.48)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .ignoresSafeArea()
+            }
             .toolbar {
                 if isDismissable && mode != .signUp {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -206,12 +221,13 @@ struct NativeAuthFlowView: View {
                 .frame(width: 172)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(AstirLaunchArtwork.background)
+                .background(treatment.isFilm ? Color.clear : AstirLaunchArtwork.background)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(title)
-                    .font(AstirTypography.screenTitle)
+                    .font(treatment.headline(size: 34, approved: AstirTypography.screenTitle))
+                    .foregroundStyle(treatment.isFilm ? OnboardingVisualTreatment.signal : WanderTheme.textInk.color)
                     .multilineTextAlignment(.center)
 
                 Text(subtitle)

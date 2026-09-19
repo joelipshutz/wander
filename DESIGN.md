@@ -69,6 +69,12 @@ across production surfaces by this provisional grammar:
   episodes and pauses while covered, offscreen, backgrounded, or Reduce Motion
   is enabled. Returning to an eligible Map starts a fresh 3-second initial delay.
 
+## Selected onboarding treatment — September 19, 2026
+
+Joe selected film C for the pre-account opening: Astir Ink background, Signal type, the original Events distortion cadence, condensed bold headlines and italic “Connect with your.” On Create your account only the Astir artwork animates; headings, fields and buttons remain static native controls. Setup N08–N12 uses the approved dark editorial app surfaces, with a profile photo optional. After setup the optional founders’ welcome uses native video controls and hands off to the existing NUX. The separate VHS founders clips remain unselected explorations. This scoped onboarding decision takes precedence over the general adaptive/type defaults above; the authenticated app retains those defaults.
+
+The complete source/capture/copy history and linked archived explorations are in `docs/designs/onboarding-2026-09/`. Current device instructions are in `docs/designs/onboarding-device-review.md`.
+
 ## Product Context
 
 - **What this is:** rec.me is a native iOS social map for remembering places worth returning to and discovering places through trusted people.

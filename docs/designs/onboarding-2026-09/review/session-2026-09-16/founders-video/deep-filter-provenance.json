@@ -1,0 +1,6 @@
+{
+  "version": "0.5.6",
+  "source": "https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/deep-filter-0.5.6-aarch64-apple-darwin",
+  "sha256": "4601e7f4e4c03e59a4c5b5000216ef3add3e808799cfccd95e14e83ea4611081",
+  "purpose": "Local speech denoising; no recording upload"
+}

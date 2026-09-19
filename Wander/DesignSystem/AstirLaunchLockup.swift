@@ -81,6 +81,9 @@ struct AstirLaunchLockup: View {
                     .blendMode(.screen)
                 }
             }
+            // The original transparent artwork is the entire native signal:
+            // statue, STIR letters and bar. Ordinary launches remain unchanged.
+            .onboardingFilmInk()
             .accessibilityHidden(true)
             .allowsHitTesting(false)
             .onAppear { isVisible = true }

@@ -1,0 +1,473 @@
+{
+  "sourceCommit": "2ef36f9312639b712673481d1d1b7a0ece1904d5",
+  "native": true,
+  "higgsfieldGenerationUsed": false,
+  "motionRevision": "independent-v1",
+  "flipsPerOpeningCell": {
+    "minimum": 12,
+    "maximum": 16
+  },
+  "independentCellTiming": true,
+  "visibleOpeningRows": 3,
+  "faceAppearance": {
+    "light": "white or off-white",
+    "dark": "black",
+    "letters": "Signal in both"
+  },
+  "finishes": [
+    {
+      "id": "station",
+      "name": "Station",
+      "summary": "Crisp, mechanical faces.",
+      "detail": "A restrained bevel, deep center cut, and a quick weighted landing.",
+      "appearances": {
+        "dark": {
+          "file": "native-captures/finishes-independent/station-dark.mp4",
+          "poster": "native-captures/finishes-independent/station-dark.png",
+          "startSeconds": 2.75,
+          "accountConfirmed": true,
+          "durationSeconds": 49.725,
+          "sha256": "c2b7ab454c01f9f4f55cd9d575fa54d154f16232462673235fe38d22c0589b97",
+          "phaseSeconds": {
+            "wordPlaces": 6.8,
+            "final": 14.4,
+            "places": 17,
+            "people": 25
+          },
+          "phaseTextProof": {
+            "wordPlaces": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Connect with your",
+              "PLACES",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "final": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "LOCAL",
+              "EXPERIMENT",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "places": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              ") Josly",
+              "e]",
+              "Pol",
+              "Hotchkiss Park",
+              "Park",
+              "+",
+              "nig",
+              "AAlAnNA",
+              "Min\u0430",
+              "KEEP. \"TRACK OF",
+              "\"EVERYWHERE\"",
+              "YOUIVE BEEN",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "people": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "V CHECKED IN",
+              "Marigold Table",
+              "Y( Santa Monica \u2022 Restaurant",
+              "M",
+              "Mina checked in",
+              "2h ago \u2022 someone you follow",
+              "\"The patio at golden hour. Get the focaccia!\"",
+              "5",
+              "KEEP. UP WITH",
+              "THE PEOPLE*",
+              "\"YOU",
+              "\"LOV\"E.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ]
+          }
+        },
+        "light": {
+          "file": "native-captures/finishes-independent/station-light.mp4",
+          "poster": "native-captures/finishes-independent/station-light.png",
+          "startSeconds": 2.5,
+          "accountConfirmed": true,
+          "durationSeconds": 49.295,
+          "sha256": "5e7dfc4542495d4a3cb3e26715eed696a9dfd70b6400ce51ddee46d939add97b",
+          "phaseSeconds": {
+            "wordPlaces": 6.8,
+            "final": 14.4,
+            "places": 17,
+            "people": 25
+          },
+          "phaseTextProof": {
+            "wordPlaces": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Connect with your",
+              "PLACES",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "final": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "LOCAL",
+              "EXPERIMENT",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "places": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Hotchkiss Park",
+              "Park",
+              "KEEPTRACKOF",
+              "EVERYWHERE-",
+              "YOULVE BEEN",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "people": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "V CHECKED IN",
+              "Marigold Table",
+              "W( Santa Monica \u2022 Restaurant",
+              "M",
+              "Mina checked in",
+              "2h ago \u2022 someone you follow",
+              "\"The patio at golden hour. Get the focaccia!\"",
+              "5",
+              "KEEP UP. WITH",
+              "THE PEOPLE",
+              "OU-LOVE",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "sculpted",
+      "name": "Sculpted",
+      "summary": "More depth in the face.",
+      "detail": "Rounder edges and stronger light and shadow, with the same natural letterforms.",
+      "appearances": {
+        "dark": {
+          "file": "native-captures/finishes-independent/sculpted-dark.mp4",
+          "poster": "native-captures/finishes-independent/sculpted-dark.png",
+          "startSeconds": 2.75,
+          "accountConfirmed": true,
+          "durationSeconds": 49.318333333333335,
+          "sha256": "776f007e3ad7adb1738bb7b039a6c69990d7f29abc447ba0a43a230f86c0b90d",
+          "phaseSeconds": {
+            "wordPlaces": 6.8,
+            "final": 14.4,
+            "places": 17,
+            "people": 25
+          },
+          "phaseTextProof": {
+            "wordPlaces": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Connect with your",
+              "PLACES",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "final": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "LOCAL",
+              "EXPERIMENT",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "places": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Hotchkiss Park",
+              "Park",
+              "KEEP TRACK\" OF",
+              "EVERYWHERE\"",
+              "YOUIVE BEEN",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "people": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "V CHECKED IN",
+              "Marigold Table",
+              "Y1 Santa Monica \u2022 Restaurant",
+              "M",
+              "Mina checked in",
+              "2h ago \u2022 someone you follow",
+              "\"The patio at golden hour. Get the focaccia!\"",
+              "*",
+              "5",
+              "KEEP UP WITH",
+              "THE PEOPLE\"",
+              "\"YOU",
+              "\"LOV\"E",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ]
+          }
+        },
+        "light": {
+          "file": "native-captures/finishes-independent/sculpted-light.mp4",
+          "poster": "native-captures/finishes-independent/sculpted-light.png",
+          "startSeconds": 2.5,
+          "accountConfirmed": true,
+          "durationSeconds": 49.46,
+          "sha256": "38cbd27a50ca9912151b226604ea6457c7b817cddb4b412c14d62770cf27f8d3",
+          "phaseSeconds": {
+            "wordPlaces": 6.8,
+            "final": 14.4,
+            "places": 17,
+            "people": 25
+          },
+          "phaseTextProof": {
+            "wordPlaces": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Connect with your",
+              "PLACES",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "final": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "LOCAL",
+              "EXPERIMENT",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "places": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Hotchkiss Park",
+              "Park",
+              "KEEPTRACK-OF",
+              "EVERYWHERE-",
+              "YOULVE BEEN",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "people": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "V CHECKED IN",
+              "Marigold Table",
+              "Y( Santa Monica \u2022 Restaurant",
+              "M",
+              "Mina checked in",
+              "2h ago \u2022 someone you follow",
+              "\"The patio at golden hour. Get the focaccia!\"",
+              "5",
+              "KEEP_UP WITH",
+              "THE PEOPLE",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "graphic",
+      "name": "Graphic",
+      "summary": "Flat, clean faces.",
+      "detail": "A matte treatment around the same natural monospaced caps.",
+      "appearances": {
+        "dark": {
+          "file": "native-captures/finishes-independent/graphic-dark.mp4",
+          "poster": "native-captures/finishes-independent/graphic-dark.png",
+          "startSeconds": 2.75,
+          "accountConfirmed": true,
+          "durationSeconds": 49.751666666666665,
+          "sha256": "2ff5284d171f9ce73d2c193b9761f82d62374a7a214da1051b8178a9a8927b72",
+          "phaseSeconds": {
+            "wordPlaces": 6.8,
+            "final": 14.4,
+            "places": 17,
+            "people": 25
+          },
+          "phaseTextProof": {
+            "wordPlaces": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Connect with your",
+              "PLACES",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "final": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "A",
+              "LOCAL",
+              "EXPERIMENT",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "..",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "places": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Josly",
+              "el",
+              "Hotchkiss Park",
+              "Park",
+              "nig",
+              "CAiAAMA",
+              "Mina",
+              "KEEP TRACK OF",
+              "EVERYWHERE",
+              "YOU'VE",
+              "BEEN",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "people": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "V CHECKED IN",
+              "Marigold Table",
+              "Y( Santa Monica \u2022 Restaurant",
+              "M",
+              "Mina checked in",
+              "2h ago \u2022 someone you follow",
+              "\"The patio at golden hour. Get the focaccia!\"",
+              "5",
+              "KEEP UP WITH",
+              "THE PEOPLE",
+              "YOU",
+              "LOVE",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ]
+          }
+        },
+        "light": {
+          "file": "native-captures/finishes-independent/graphic-light.mp4",
+          "poster": "native-captures/finishes-independent/graphic-light.png",
+          "startSeconds": 4.5,
+          "accountConfirmed": true,
+          "durationSeconds": 50.45333333333333,
+          "sha256": "4043ce5f3debe71f9e4e80c4634273c02d3533efaa26a7f8ead7a5568d4f37bf",
+          "phaseSeconds": {
+            "wordPlaces": 6.8,
+            "final": 14.4,
+            "places": 17,
+            "people": 26
+          },
+          "phaseTextProof": {
+            "wordPlaces": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "Connect with your",
+              "PLACES",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "final": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "LOCAL",
+              "EXPERIMENT",
+              "Keep track of everywhere you've been. Keep up",
+              "with the people you love.",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "places": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "e]",
+              "iol",
+              "Hotchkiss Park",
+              "Park",
+              "n. Keep up",
+              "K\u0415\u0415\u0420 \u0422\u0422\u0410\u0421\u041a",
+              "EVERYWHERP",
+              "TYOULVE BEE",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ],
+            "people": [
+              "9:41",
+              "ASTIR",
+              "OCEAN PARK",
+              "V CHECKED IN",
+              "Marigold Table",
+              "Y( Santa Monica \u2022 Restaurant",
+              "M",
+              "Mina checked in",
+              "2h ago \u2022 someone you follow",
+              "\"The patio at golden hour. Get the focaccia!\"",
+              "*",
+              "5",
+              "KEEP UP WITH",
+              "THE PEOPLE",
+              "YOULOVE",
+              "\u2192 Next",
+              "Already have an account? Log in"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

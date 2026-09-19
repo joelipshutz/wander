@@ -2153,10 +2153,12 @@ private struct FeedEmptyState: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(recommendation.profile.displayName)
                                 .font(AstirTypography.cardTitle)
-                            Text(recommendation.reason.displayText(for: recommendation.profile))
-                                .font(AstirTypography.caption)
-                                .foregroundStyle(brandMode.secondaryText)
-                                .lineLimit(1)
+                            if !recommendation.reason.compactDisplayText.isEmpty {
+                                Text(recommendation.reason.displayText(for: recommendation.profile))
+                                    .font(AstirTypography.caption)
+                                    .foregroundStyle(brandMode.secondaryText)
+                                    .lineLimit(1)
+                            }
                         }
 
                         Spacer(minLength: 0)

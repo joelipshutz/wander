@@ -1,0 +1,57 @@
+{
+  "sourceCommit": "945c2806f55a433ef4f7c525b7b8dae9ff9c470c",
+  "native": true,
+  "movieSHA256": "738a2a6a23e28d4b9139c87be8ae7e0941e329f0b82410da6ab4a6204cdb89ec",
+  "accountPixelEvidence": {
+    "dimensions": [
+      1170,
+      2532
+    ],
+    "framesSeparatedSeconds": 1.25,
+    "emailButtonRGB": [
+      240,
+      90,
+      60
+    ],
+    "emailButtonRows": [
+      1613,
+      1769
+    ],
+    "buttonChangedPixels": 0,
+    "controlsAndCopyChangedPixels": 0,
+    "heroChangedPixels": 99631,
+    "backgroundSampleRGB": [
+      39,
+      36,
+      35
+    ]
+  },
+  "tests": {
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0
+  },
+  "browser": {
+    "width": 1170,
+    "height": 2532,
+    "readyState": 4,
+    "error": null,
+    "consoleErrors": 0,
+    "accountLoopVerified": true,
+    "tvModeVerified": true
+  },
+  "videoColorCheck": {
+    "nativeButtonRGB": [
+      240,
+      90,
+      60
+    ],
+    "decodedMovieButtonRGB": [
+      239,
+      90,
+      61
+    ],
+    "note": "One-level video compression difference; no palette substitution."
+  },
+  "ownedSimulatorShutdown": true
+}

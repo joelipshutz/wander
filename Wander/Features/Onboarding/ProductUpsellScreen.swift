@@ -17,10 +17,12 @@ struct ProductUpsellScreen: View {
         Group {
             if presentation.isOnboarding {
                 OnboardingStepScaffold(step: .notifications) {
-                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking)
+                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking, showsOnboardingExamples: true)
                 } footer: {
                     footer
                 }
+                .environment(\.astirBrandMode, .editorial)
+                .preferredColorScheme(.dark)
             } else {
                 VStack(spacing: 0) {
                     ProductUpsellContentView(content: presentation.content, isWorking: isWorking)
@@ -148,12 +150,30 @@ struct ProductUpsellScreen: View {
 struct ProductUpsellContentView: View {
     let content: ProductUpsellContent
     let isWorking: Bool
+    var showsOnboardingExamples = false
+    private var accent: Color { AstirTheme.signal.color }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: WanderTheme.spacing6) {
-                OnboardingNotificationExamples()
-                    .padding(.top, WanderTheme.spacing6)
+                if showsOnboardingExamples {
+                    OnboardingNotificationExamples()
+                        .padding(.top, WanderTheme.spacing6)
+                } else {
+                Spacer(minLength: WanderTheme.spacing4)
+                ZStack {
+                    Circle()
+                        .fill(accent.opacity(0.18))
+                        .frame(width: 220, height: 220)
+                    Image(systemName: content.systemImage)
+                        .font(.system(size: 86, weight: .medium))
+                        .foregroundStyle(accent)
+                        .symbolEffect(.bounce, value: isWorking)
+                }
+                .accessibilityHidden(true)
+
+                }
+
                 OnboardingHeadline(
                     eyebrow: content.eyebrow,
                     title: content.title,
@@ -167,13 +187,14 @@ struct ProductUpsellContentView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 560)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, WanderTheme.spacing6)
         }
     }
 }
 
 /// Illustrative examples of supported notification types, rendered natively in
-/// both onboarding and contextual primers. They are not live account activity.
+/// the signup notification primer. They are not live account activity.
 struct OnboardingNotificationExamples: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -182,7 +203,7 @@ struct OnboardingNotificationExamples: View {
 
     private let examples: [(icon: String, title: String, message: String)] = [
         ("mappin.and.ellipse", "Ryan checked in", "A new place to discover."),
-        ("square.and.arrow.down", "Your import is ready", "Your places are ready to review."),
+        ("square.and.arrow.down", "Your Instagram import is ready", "Your places are ready to review."),
         ("person.crop.circle.badge.checkmark", "Mina followed you", "Your circle is growing.")
     ]
 
@@ -190,12 +211,10 @@ struct OnboardingNotificationExamples: View {
         VStack(spacing: WanderTheme.spacing3) {
             ForEach(examples.indices, id: \.self) { index in
                 let example = examples[index]
-                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                    Image(systemName: example.icon)
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(brandMode.primaryText)
-                        .frame(width: 42, height: 42)
-                        .background(brandMode.border.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                    Image("InvitationAppIcon")
+                        .resizable().scaledToFit().frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text("ASTIR").font(AstirTypography.metadata).tracking(0.8)
@@ -211,7 +230,7 @@ struct OnboardingNotificationExamples: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(WanderTheme.spacing3)
-                .background(brandMode.background, in: RoundedRectangle(cornerRadius: 20))
+                .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: 20))
                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(brandMode.border, lineWidth: 1))
                 .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
                 .opacity(reduceMotion || index < visibleCount ? 1 : 0)
@@ -221,7 +240,7 @@ struct OnboardingNotificationExamples: View {
         }
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Example Astir notifications: Ryan checked in. Your import is ready. Mina followed you.")
+        .accessibilityLabel("Example Astir notifications: Ryan checked in. Your Instagram import is ready. Mina followed you.")
         .accessibilityIdentifier("onboarding.notificationExamples")
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }

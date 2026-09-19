@@ -1,0 +1,160 @@
+{
+  "sourceCommit": "945c2806f55a433ef4f7c525b7b8dae9ff9c470c",
+  "native": true,
+  "newHiggsfieldGenerations": 0,
+  "textureSource": "Original unlettered Coming Soon / Ocean Park Higgsfield texture",
+  "device": "iPhone 16e, iOS 26.3.1",
+  "takes": {
+    "film-type-dark": {
+      "file": "native-captures/film-app-palette/film-type-dark.mp4",
+      "poster": "native-captures/film-app-palette/film-type-dark.png",
+      "startSeconds": 3.25,
+      "durationSeconds": 53.495,
+      "accountConfirmed": true,
+      "sha256": "738a2a6a23e28d4b9139c87be8ae7e0941e329f0b82410da6ab4a6204cdb89ec",
+      "sourceCommit": "945c2806f55a433ef4f7c525b7b8dae9ff9c470c",
+      "phaseSeconds": {
+        "community": 2.0,
+        "tracking": 1.57,
+        "wordChange": 2.95,
+        "placesWord": 8.4,
+        "localExperiment": 15.8,
+        "sceneChange": 17.5,
+        "places": 22.5,
+        "peopleChange": 26.3,
+        "people": 31.5
+      },
+      "phaseTextProof": {
+        "community": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "COMMUNITY",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "tracking": [
+          "9:41",
+          "CD\u2022",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "COMMUNITY",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "wordChange": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "COMMUNITY",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "placesWord": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Connect with your",
+          "PLACES",
+          "Keep track of everywhere you've been.",
+          "Keep up with the people you love.",
+          "Already have an account? Log in"
+        ],
+        "localExperiment": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "LOCAL",
+          "EXPERIMENT",
+          "Keep track of everywhere you've been.",
+          "Keep up with the people you love.",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "sceneChange": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "rel",
+          "Hotchkiss Park",
+          "Park",
+          "ENT",
+          "AAiAr",
+          "KEEP TRACI",
+          "EVERYWHE",
+          "YOU'VE BE",
+          "you've been.",
+          "e you love.",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "places": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Josly",
+          "re]",
+          "Hotchkiss Park",
+          "Park",
+          "+",
+          "iAr Ma Mina",
+          "KEEP TRACK OF",
+          "EVERYWHERE",
+          "YOU'VE BEEN",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "peopleChange": [
+          "9:41",
+          "ASTIR",
+          "OCEAN PARK",
+          "Josly",
+          "V CHECKEDIN",
+          "hig",
+          "Marigold Table",
+          "11 Santa Monica \u2022 Restaurant",
+          "M",
+          "Mina checked in",
+          "2h ago \u2022 someone you follow",
+          "\"The patio at golden hour. Get the focacc",
+          "KEEP UP WITH",
+          "THE PEOPLE",
+          "YOU LOVE",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ],
+        "people": [
+          "9:41",
+          "ASTIR",
+          "DCEAN PARX",
+          "V CHECKED IN",
+          "Marigold Table",
+          "Y1 Santa Monica \u2022 Restaurant",
+          "M",
+          "Mina checked in",
+          "2h ago \u2022 someone you follow",
+          "\"The patio at golden hour. Get the focaccia!\"",
+          "5",
+          "KEEP LPWITH",
+          "THE PEOPLE",
+          "YOLALOVE",
+          "\u2192 Next",
+          "Already have an account? Log in"
+        ]
+      },
+      "accountStartSeconds": 40.5
+    }
+  },
+  "validation": {
+    "testsPassed": 24,
+    "testsFailed": 0,
+    "testSummary": "native-film-app-palette-test-summary.json",
+    "accountPixelCheck": "native-board-qa/film-app-palette-account-pixels.json",
+    "nativeInteractions": "Automatic flow, Next during slides, Log in, email and verification/background recovery passed for both film styles.",
+    "browser": "Full native video loads 1170x2532; play/pause, account loop, seeking and TV mode verified; no browser errors.",
+    "coverage": "Fresh iPhone 16e / iOS 26.3.1 capture. No new standard-size, iPad or physical-device frame-rate check."
+  }
+}

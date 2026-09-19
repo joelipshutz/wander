@@ -1,0 +1,30 @@
+[
+  {
+    "finish": "station",
+    "mode": "dark",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CONNECT WITH YOUR",
+      "COMMUNITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-dark-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "light",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CONNECT WITH YOUR",
+      "COMMUNITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-light-compact.png"
+  }
+]

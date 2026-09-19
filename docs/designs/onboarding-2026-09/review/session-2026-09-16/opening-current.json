@@ -1,0 +1,36 @@
+{
+  "takes": [
+    {
+      "id": "D",
+      "mode": "dark",
+      "name": "Dark mode",
+      "words": [
+        "COMMUNITY",
+        "PEOPLE",
+        "PLACES",
+        "LOVED ONES"
+      ],
+      "stableText": "CONNECT WITH YOUR",
+      "description": "Keep track of everywhere you\u2019ve been. Keep up with the people you love.",
+      "finalLockup": "A / LOCAL / EXPERIMENT",
+      "timing": "Slides in after 3.6 seconds \u00b7 above pagination",
+      "delayed": true
+    },
+    {
+      "id": "L",
+      "mode": "light",
+      "name": "Light mode",
+      "words": [
+        "COMMUNITY",
+        "PEOPLE",
+        "PLACES",
+        "LOVED ONES"
+      ],
+      "stableText": "CONNECT WITH YOUR",
+      "description": "Keep track of everywhere you\u2019ve been. Keep up with the people you love.",
+      "finalLockup": "A / LOCAL / EXPERIMENT",
+      "timing": "Slides in after 3.6 seconds \u00b7 above pagination",
+      "delayed": true
+    }
+  ]
+}

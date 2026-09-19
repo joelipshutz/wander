@@ -1,0 +1,88 @@
+[
+  {
+    "finish": "station",
+    "mode": "dark",
+    "text": [
+      "9:41",
+      "CD\u2022",
+      "ASTIR",
+      "OCEAN PARK",
+      "YO",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-dark-compact.png"
+  },
+  {
+    "finish": "station",
+    "mode": "light",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CONNECT WITH YOUR",
+      "CO",
+      "TTY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "station-light-compact.png"
+  },
+  {
+    "finish": "sculpted",
+    "mode": "dark",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "Y",
+      "CO",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "sculpted-dark-compact.png"
+  },
+  {
+    "finish": "sculpted",
+    "mode": "light",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "COTECTWTAYOUR",
+      "COT",
+      "\u041fITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "sculpted-light-compact.png"
+  },
+  {
+    "finish": "graphic",
+    "mode": "dark",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CONHECT WITH YOUR",
+      "ITY",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "graphic-dark-compact.png"
+  },
+  {
+    "finish": "graphic",
+    "mode": "light",
+    "text": [
+      "9:41",
+      "ASTIR",
+      "OCEAN PARK",
+      "CONNECT WITH YOUR",
+      "MUNTTY-",
+      "\u2192 Next",
+      "Already have an account? Log in"
+    ],
+    "file": "graphic-light-compact.png"
+  }
+]

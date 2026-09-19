@@ -1,0 +1,2110 @@
+{
+  "title": "Astir · Onboarding & NUX",
+  "date": "September 16, 2026",
+  "build": "174",
+  "commit": "4a9f122c062d04db2f06e7b75226a9e85999169b",
+  "nodes": [
+    {
+      "id": "N69",
+      "key": "launch-opening",
+      "title": "Opening Astir",
+      "group": "01 · Welcome",
+      "lines": [
+        {
+          "role": "Artwork",
+          "text": "ASTIR"
+        },
+        {
+          "role": "Accessibility label",
+          "text": "Opening Astir"
+        }
+      ],
+      "image": "launch-opening-component.png",
+      "captureKind": "Native component reference · approved static splash",
+      "note": "Static opening/loading artwork. Opening Astir is an accessibility label, not visible copy. Native component layout reference from the approved source package.",
+      "state": "Active",
+      "source": "LoggedOutCarouselView.swift · OnboardingLaunchView",
+      "after": null
+    },
+    {
+      "id": "N70",
+      "key": "launch-loading",
+      "title": "Loading your map",
+      "group": "01 · Welcome",
+      "lines": [
+        {
+          "role": "Artwork",
+          "text": "ASTIR"
+        },
+        {
+          "role": "Loading",
+          "text": "Loading your map…"
+        }
+      ],
+      "image": "launch-loading-component.png",
+      "captureKind": "Native component reference · approved static splash",
+      "note": "Loading your map… appears below the fixed artwork. Native component layout reference from the approved source package.",
+      "state": "Active",
+      "source": "LoggedOutCarouselView.swift · OnboardingLaunchView",
+      "after": null
+    },
+    {
+      "key": "welcome-1",
+      "title": "Your place diary",
+      "group": "01 · Welcome",
+      "lines": [
+        {
+          "role": "Brand",
+          "text": "ASTIR · OCEAN PARK"
+        },
+        {
+          "role": "Eyebrow",
+          "text": "YOUR PLACE DIARY"
+        },
+        {
+          "role": "Headline",
+          "text": "Everywhere you’ve been"
+        },
+        {
+          "role": "Body",
+          "text": "Build a map of the places worth remembering — with notes that bring every visit back."
+        },
+        {
+          "role": "Primary",
+          "text": "Get started"
+        },
+        {
+          "role": "Secondary",
+          "text": "Already have an account? Log in"
+        }
+      ],
+      "image": "welcome-1.png",
+      "note": "Carousel: auto-advances every 7 seconds; swipe manually. Get started is available from any slide.",
+      "state": "Active",
+      "source": "LoggedOutCarouselView.swift",
+      "after": null,
+      "id": "N01"
+    },
+    {
+      "key": "welcome-2",
+      "title": "Stay connected",
+      "group": "01 · Welcome",
+      "lines": [
+        {
+          "role": "Brand",
+          "text": "ASTIR · OCEAN PARK"
+        },
+        {
+          "role": "Eyebrow",
+          "text": "STAY CONNECTED"
+        },
+        {
+          "role": "Headline",
+          "text": "Places your friends love"
+        },
+        {
+          "role": "Body",
+          "text": "Follow the people you know and keep their best finds close at hand."
+        },
+        {
+          "role": "Primary",
+          "text": "Get started"
+        },
+        {
+          "role": "Secondary",
+          "text": "Already have an account? Log in"
+        }
+      ],
+      "image": "welcome-2.png",
+      "note": "Carousel: auto-advances every 7 seconds; swipe manually. Get started is available from any slide.",
+      "state": "Active",
+      "source": "LoggedOutCarouselView.swift",
+      "after": null,
+      "id": "N02"
+    },
+    {
+      "key": "welcome-3",
+      "title": "Trusted discovery",
+      "group": "01 · Welcome",
+      "lines": [
+        {
+          "role": "Brand",
+          "text": "ASTIR · OCEAN PARK"
+        },
+        {
+          "role": "Eyebrow",
+          "text": "TRUSTED DISCOVERY"
+        },
+        {
+          "role": "Headline",
+          "text": "Places through people you trust"
+        },
+        {
+          "role": "Body",
+          "text": "Skip anonymous reviews. Discover the spots that matter to people whose taste you know."
+        },
+        {
+          "role": "Primary",
+          "text": "Get started"
+        },
+        {
+          "role": "Secondary",
+          "text": "Already have an account? Log in"
+        }
+      ],
+      "image": "welcome-3.png",
+      "note": "Carousel: auto-advances every 7 seconds; swipe manually. Get started is available from any slide.",
+      "state": "Active",
+      "source": "LoggedOutCarouselView.swift",
+      "after": null,
+      "id": "N03"
+    },
+    {
+      "key": "signup",
+      "title": "Create your account",
+      "group": "02 · Account",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Create your account"
+        },
+        {
+          "role": "Body",
+          "text": "Keep your places synced and discover recommendations from people you trust."
+        },
+        {
+          "role": "Apple",
+          "text": "Continue with Apple"
+        },
+        {
+          "role": "Google",
+          "text": "Continue with Google"
+        },
+        {
+          "role": "Divider",
+          "text": "or"
+        },
+        {
+          "role": "Field",
+          "text": "Email"
+        },
+        {
+          "role": "Placeholder",
+          "text": "you@example.com"
+        },
+        {
+          "role": "Primary",
+          "text": "Continue with email"
+        },
+        {
+          "role": "Helper",
+          "text": "If Apple or Google returns the same verified email, it connects to your existing Astir account."
+        },
+        {
+          "role": "Legal",
+          "text": "By continuing, you agree to the Terms of Use and Community Guidelines, and acknowledge the Privacy Policy."
+        }
+      ],
+      "image": "signup-component.png",
+      "note": "Email and Apple / Google are alternative paths; provider UI varies. Native Swift component preview with local fixture data.",
+      "state": "Active",
+      "source": "NativeAuthFlowView.swift",
+      "after": null,
+      "id": "N04",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "verify",
+      "title": "Verify email",
+      "group": "02 · Account",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Check your email"
+        },
+        {
+          "role": "Body",
+          "text": "Enter the verification code sent to {address}."
+        },
+        {
+          "role": "Primary",
+          "text": "Verify and continue"
+        },
+        {
+          "role": "Resend",
+          "text": "Send a new code"
+        },
+        {
+          "role": "Back",
+          "text": "Use another sign-in method"
+        },
+        {
+          "role": "Placeholder",
+          "text": "Verification code"
+        }
+      ],
+      "image": "verify-component.png",
+      "note": "Email route only. {address} is the email entered by the person signing up. Native Swift component preview with local fixture data.",
+      "state": "Active",
+      "source": "NativeAuthFlowView.swift",
+      "after": null,
+      "id": "N05",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "auth",
+      "title": "Returning account",
+      "group": "02 · Account",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Welcome back"
+        },
+        {
+          "role": "Body",
+          "text": "Sign in to get back to your saved places and people."
+        },
+        {
+          "role": "Apple",
+          "text": "Sign in with Apple"
+        },
+        {
+          "role": "Google",
+          "text": "Sign in with Google"
+        },
+        {
+          "role": "Divider",
+          "text": "or"
+        },
+        {
+          "role": "Field",
+          "text": "Email"
+        },
+        {
+          "role": "Primary",
+          "text": "Continue with email"
+        },
+        {
+          "role": "Secondary",
+          "text": "Use a password"
+        },
+        {
+          "role": "Helper",
+          "text": "If Apple or Google returns the same verified email, it connects to your existing Astir account."
+        },
+        {
+          "role": "Legal",
+          "text": "By continuing, you agree to the Terms of Use and Community Guidelines, and acknowledge the Privacy Policy."
+        }
+      ],
+      "image": "auth.png",
+      "note": "Branch from “Already have an account? Log in”.",
+      "state": "Branch",
+      "source": "NativeAuthFlowView.swift",
+      "after": null,
+      "id": "N06"
+    },
+    {
+      "key": "password",
+      "title": "Password sign-in",
+      "group": "02 · Account",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Sign in with password"
+        },
+        {
+          "role": "Body",
+          "text": "Use the email and password for this account."
+        },
+        {
+          "role": "Email",
+          "text": "Email"
+        },
+        {
+          "role": "Password",
+          "text": "Password"
+        },
+        {
+          "role": "Primary",
+          "text": "Sign in"
+        },
+        {
+          "role": "Back",
+          "text": "Use another sign-in method"
+        }
+      ],
+      "image": "password.png",
+      "note": "Alternative returning-account route.",
+      "state": "Branch",
+      "source": "NativeAuthFlowView.swift",
+      "after": null,
+      "id": "N07"
+    },
+    {
+      "key": "identity",
+      "title": "Your profile",
+      "group": "03 · Profile & permissions",
+      "lines": [
+        {
+          "role": "Photo",
+          "text": "Add a photo"
+        },
+        {
+          "role": "Helper",
+          "text": "Optional — you can always do this later."
+        },
+        {
+          "role": "Name",
+          "text": "Name"
+        },
+        {
+          "role": "Username",
+          "text": "Username"
+        },
+        {
+          "role": "Hint",
+          "text": "2–39 letters, numbers, or underscores"
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        },
+        {
+          "role": "Name placeholder",
+          "text": "How friends know you"
+        },
+        {
+          "role": "Username placeholder",
+          "text": "your_username"
+        }
+      ],
+      "image": "identity.png",
+      "note": "",
+      "state": "Active",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N08"
+    },
+    {
+      "key": "location",
+      "title": "Location primer",
+      "group": "03 · Profile & permissions",
+      "lines": [
+        {
+          "role": "Eyebrow",
+          "text": "AROUND YOU"
+        },
+        {
+          "role": "Headline",
+          "text": "Find the good stuff nearby"
+        },
+        {
+          "role": "Body",
+          "text": "See places your friends recommend and save spots around you without searching for an address."
+        },
+        {
+          "role": "Privacy",
+          "text": "Your location is never shown to friends."
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        }
+      ],
+      "image": "location.png",
+      "note": "Skipped if already authorized. The system prompt follows Continue.",
+      "state": "Active",
+      "source": "OnboardingLocationMapPreview.swift",
+      "after": null,
+      "id": "N09"
+    },
+    {
+      "key": "contacts",
+      "title": "Contacts primer",
+      "group": "03 · Profile & permissions",
+      "lines": [
+        {
+          "role": "Eyebrow",
+          "text": "ONE QUICK THING"
+        },
+        {
+          "role": "Headline",
+          "text": "Invite your people"
+        },
+        {
+          "role": "Body",
+          "text": "Choose someone to invite from your contacts. Your address book stays on this device and is not uploaded."
+        },
+        {
+          "role": "Benefit1",
+          "text": "You choose each person"
+        },
+        {
+          "role": "Benefit2",
+          "text": "Invites open in Messages for you to send"
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        }
+      ],
+      "image": "contacts.png",
+      "note": "",
+      "state": "Active",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N10"
+    },
+    {
+      "key": "friends",
+      "title": "Choose people to follow",
+      "group": "03 · Profile & permissions",
+      "lines": [
+        {
+          "role": "Eyebrow",
+          "text": "YOUR TRUSTED MAP"
+        },
+        {
+          "role": "Headline",
+          "text": "Astir is better with people"
+        },
+        {
+          "role": "Body",
+          "text": "Start with a few people whose taste you’d like to see. You’re always in control of who you follow."
+        },
+        {
+          "role": "Loading",
+          "text": "Finding good people to follow…"
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        },
+        {
+          "role": "Selected",
+          "text": "Follow {count} person / people"
+        },
+        {
+          "role": "Secondary",
+          "text": "Skip"
+        },
+        {
+          "role": "Recommendation reason",
+          "text": "suggested for you"
+        },
+        {
+          "role": "Recommendation reason",
+          "text": "{count} mutual connections"
+        },
+        {
+          "role": "Recommendation reason",
+          "text": "follows you"
+        }
+      ],
+      "image": "friends-loaded-component.png",
+      "note": "Successful selection state using fictional demo people. Real recommendations and reasons vary by account. Empty and loading-failure states follow in the conditional section.",
+      "state": "Active",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N11",
+      "captureKind": "Native component preview · fictional people"
+    },
+    {
+      "key": "notifications",
+      "title": "Notifications primer",
+      "group": "03 · Profile & permissions",
+      "lines": [
+        {
+          "role": "Eyebrow",
+          "text": "STAY IN THE LOOP"
+        },
+        {
+          "role": "Headline",
+          "text": "See when your friends check in"
+        },
+        {
+          "role": "Body",
+          "text": "Get a heads-up when people you follow save a place or check in somewhere worth knowing."
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        }
+      ],
+      "image": "notifications.png",
+      "note": "System permission prompt follows. Already-enabled notifications skip this step.",
+      "state": "Active",
+      "source": "ProductUpsellCoordinator.swift",
+      "after": null,
+      "id": "N12"
+    },
+    {
+      "key": "mapAdd",
+      "title": "Saving a place",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Saving a place"
+        },
+        {
+          "role": "Body",
+          "text": "Tap + and we’ll show you how a place becomes part of your map"
+        }
+      ],
+      "image": "mapAdd.png",
+      "note": "Advance by tapping the highlighted action.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:147",
+      "after": null,
+      "id": "N13"
+    },
+    {
+      "key": "addSearch",
+      "title": "Finding a park near you",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Finding a park near you"
+        },
+        {
+          "role": "Body",
+          "text": "We’ll choose a popular nearby park and show you how saving works"
+        },
+        {
+          "role": "Sheet title",
+          "text": "add a place"
+        },
+        {
+          "role": "Body copy",
+          "text": "find it nearby, search, or import"
+        },
+        {
+          "role": "Section",
+          "text": "Suggested"
+        },
+        {
+          "role": "Placeholder",
+          "text": "Search for a place"
+        },
+        {
+          "role": "Section",
+          "text": "Import"
+        },
+        {
+          "role": "Action",
+          "text": "Import from"
+        }
+      ],
+      "image": "addSearch.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:164 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N14"
+    },
+    {
+      "key": "saveStatus",
+      "title": "Have you been here before?",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Have you been here before?"
+        },
+        {
+          "role": "Body",
+          "text": "If so, select Check In. If not, select Wanna Go"
+        },
+        {
+          "role": "Choice1",
+          "text": "Check in"
+        },
+        {
+          "role": "Choice2",
+          "text": "Wanna go"
+        },
+        {
+          "role": "Form prompt",
+          "text": "what do you want to do?"
+        }
+      ],
+      "image": "saveStatus.png",
+      "note": "Branches into Check In or Wanna Go. Visited-only controls are skipped for Wanna Go.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:183 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N15"
+    },
+    {
+      "key": "saveDate",
+      "title": "A date makes it a memory",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "A date makes it a memory"
+        },
+        {
+          "role": "Body",
+          "text": "We’ll choose one for this demo"
+        },
+        {
+          "role": "Field",
+          "text": "when"
+        }
+      ],
+      "image": "saveDate.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:189 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N16"
+    },
+    {
+      "key": "saveNote",
+      "title": "Leave a note for future you",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Leave a note for future you"
+        },
+        {
+          "role": "Body",
+          "text": "We’ll add one useful detail you’ll recognize later"
+        },
+        {
+          "role": "Field",
+          "text": "a note for future you"
+        },
+        {
+          "role": "Placeholder",
+          "text": "what you'll want to remember, who told you..."
+        }
+      ],
+      "image": "saveNote.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:198 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N17"
+    },
+    {
+      "key": "saveRating",
+      "title": "A rating helps future you",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "A rating helps future you"
+        },
+        {
+          "role": "Body",
+          "text": "Watch how a quick score captures how this place felt"
+        }
+      ],
+      "image": "saveRating.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:207",
+      "after": null,
+      "id": "N18"
+    },
+    {
+      "key": "saveMoreOptions",
+      "title": "Add the detail you’ll remember",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Add the detail you’ll remember"
+        },
+        {
+          "role": "Body",
+          "text": "A useful tag and short note make this place easier to rediscover"
+        },
+        {
+          "role": "Section",
+          "text": "more options"
+        },
+        {
+          "role": "Privacy",
+          "text": "stealth mode"
+        }
+      ],
+      "image": "saveMoreOptions.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:216 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N19"
+    },
+    {
+      "key": "saveQuestions",
+      "title": "Why this place fits",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Why this place fits"
+        },
+        {
+          "role": "Body",
+          "text": "We’ll choose one useful answer in each section for this park"
+        },
+        {
+          "role": "Question",
+          "text": "best for?"
+        },
+        {
+          "role": "Selection",
+          "text": "multi"
+        },
+        {
+          "role": "Section",
+          "text": "tags"
+        }
+      ],
+      "image": "saveQuestions.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:225 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N20"
+    },
+    {
+      "key": "saveTags",
+      "title": "Tag it for later",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Tag it for later"
+        },
+        {
+          "role": "Body",
+          "text": "One accurate tag makes this park easier to rediscover"
+        },
+        {
+          "role": "Section",
+          "text": "your tags"
+        },
+        {
+          "role": "Helper",
+          "text": "Tap any that fit. Selected tags stay in place so you can review or change them."
+        },
+        {
+          "role": "Custom",
+          "text": "Add your own tag"
+        }
+      ],
+      "image": "saveTags.png",
+      "note": "Captured during the native automatic tag lesson. The coach extends below the simulator viewport; the full source copy is shown alongside for review.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:234 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N21"
+    },
+    {
+      "key": "saveSubmit",
+      "title": "Ready to save",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Ready to save"
+        },
+        {
+          "role": "Body",
+          "text": "The highlighted button puts everything you just watched onto your map"
+        },
+        {
+          "role": "Primary action",
+          "text": "Check in"
+        },
+        {
+          "role": "Alternative action",
+          "text": "Wanna go"
+        }
+      ],
+      "image": "saveSubmit.png",
+      "note": "Auto demonstration; advances after its reading interval.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:243 · MapScreen.swift / AddScreen.swift",
+      "after": null,
+      "id": "N22"
+    },
+    {
+      "key": "mapAddAgain",
+      "title": "One more shortcut",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "One more shortcut"
+        },
+        {
+          "role": "Body",
+          "text": "Tap + again and we’ll show you where imports live"
+        }
+      ],
+      "image": "mapAddAgain.png",
+      "note": "Advance by tapping the highlighted action.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:148",
+      "after": null,
+      "id": "N23"
+    },
+    {
+      "key": "addImport",
+      "title": "Bring saves with you",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Bring saves with you"
+        },
+        {
+          "role": "Body",
+          "text": "Import your places and lists from Google Maps, Instagram, Tiktok, and more here"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": "addImport.png",
+      "note": "Tap Next to continue to the sendoff.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:173",
+      "after": null,
+      "id": "N24"
+    },
+    {
+      "key": "mapSendoff",
+      "title": "Your map is yours now",
+      "group": "04 · First save walkthrough",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Your map is yours now"
+        },
+        {
+          "role": "Eyebrow",
+          "text": "A thought for the road"
+        },
+        {
+          "role": "Quote",
+          "text": "“As you move through this life and this world you change things slightly. You leave marks behind, however small”"
+        },
+        {
+          "role": "Attribution",
+          "text": "— Anthony Bourdain"
+        },
+        {
+          "role": "Closing",
+          "text": "Keep the places that move you. Your map will remember the rest"
+        },
+        {
+          "role": "Primary",
+          "text": "Finish"
+        }
+      ],
+      "image": "mapSendoff.png",
+      "note": "End of the current first-visit journey.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:151",
+      "after": null,
+      "id": "N25"
+    },
+    {
+      "key": "import-lesson",
+      "title": "Return visit · Import",
+      "group": "05 · Return visits & contextual",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Bring every saved place with you"
+        },
+        {
+          "role": "Body",
+          "text": "Paste one place, a few links, or a whole list from Maps, Instagram, TikTok, or Notes. Choose what to keep and mark each Check In or Wanna before anything reaches your map"
+        },
+        {
+          "role": "Primary",
+          "text": "Open import form"
+        },
+        {
+          "role": "Help",
+          "text": "Import help"
+        }
+      ],
+      "image": "import-lesson.png",
+      "note": "Eligible on launch 2 or later, after the primary journey and before completion of this lesson.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:1932",
+      "after": null,
+      "id": "N26"
+    },
+    {
+      "key": "device-features",
+      "title": "Return visit · Device features",
+      "group": "05 · Return visits & contextual",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Astir, one press away"
+        },
+        {
+          "role": "Body",
+          "text": "Set these up once for faster saves"
+        },
+        {
+          "role": "Feature1",
+          "text": "Action Button + Controls"
+        },
+        {
+          "role": "Instruction1",
+          "text": "Choose Astir Check In for a one-press save"
+        },
+        {
+          "role": "Feature2",
+          "text": "Home + Lock Screen widgets"
+        },
+        {
+          "role": "Instruction2",
+          "text": "Keep Quick Add, Search, Activity, or Nearby in view"
+        },
+        {
+          "role": "Feature3",
+          "text": "Share extension"
+        },
+        {
+          "role": "Instruction3",
+          "text": "Send places from Maps, Instagram, TikTok, or Safari"
+        },
+        {
+          "role": "Guide",
+          "text": "Setup guide"
+        },
+        {
+          "role": "Primary",
+          "text": "Got it"
+        }
+      ],
+      "image": "device-features.png",
+      "note": "Eligible on launch 3 or later; shown once per enrolled account.",
+      "state": "Active",
+      "source": "FirstVisitWalkthrough.swift:2013",
+      "after": null,
+      "id": "N27"
+    },
+    {
+      "key": "place_saved",
+      "title": "Notifications · After saving",
+      "group": "05 · Return visits & contextual",
+      "lines": [
+        {
+          "role": "Eyebrow",
+          "text": "STAY IN THE LOOP"
+        },
+        {
+          "role": "Headline",
+          "text": "See when your friends check in"
+        },
+        {
+          "role": "Body",
+          "text": "Get a heads-up when people you follow save a place or check in somewhere worth knowing."
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        }
+      ],
+      "image": "place_saved.png",
+      "note": "Contextual campaign, gated by notification state and impression limits. Not an extra mandatory onboarding step.",
+      "state": "Conditional",
+      "source": "ProductUpsellCoordinator.swift",
+      "after": null,
+      "id": "N28"
+    },
+    {
+      "key": "follow_created",
+      "title": "Notifications · After following",
+      "group": "05 · Return visits & contextual",
+      "lines": [
+        {
+          "role": "Eyebrow",
+          "text": "STAY IN THE LOOP"
+        },
+        {
+          "role": "Headline",
+          "text": "Keep up with people you follow"
+        },
+        {
+          "role": "Body",
+          "text": "Get a heads-up when they save a place or check in somewhere worth knowing."
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        }
+      ],
+      "image": "follow_created.png",
+      "note": "Contextual campaign, gated by notification state and impression limits. Not an extra mandatory onboarding step.",
+      "state": "Conditional",
+      "source": "ProductUpsellCoordinator.swift",
+      "after": null,
+      "id": "N29"
+    },
+    {
+      "key": "system-location",
+      "title": "iOS · Location permission",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Allow “Astir” to use your location?"
+        },
+        {
+          "role": "Purpose",
+          "text": "Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location."
+        },
+        {
+          "role": "Option1",
+          "text": "Allow Once"
+        },
+        {
+          "role": "Option2",
+          "text": "Allow While Using App"
+        },
+        {
+          "role": "Option3",
+          "text": "Don’t Allow"
+        }
+      ],
+      "image": "system-location.png",
+      "note": "iOS owns the headline and choices. The purpose string is app-owned.",
+      "state": "System",
+      "source": "project.yml:100",
+      "after": null,
+      "id": "N30"
+    },
+    {
+      "key": "location-denied",
+      "title": "Location denied",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Primary",
+          "text": "Open Settings"
+        },
+        {
+          "role": "Secondary",
+          "text": "Not now"
+        },
+        {
+          "role": "Restricted",
+          "text": "Continue without location"
+        }
+      ],
+      "image": "location-denied.png",
+      "note": "Denied permission: Open Settings / Not now. Restricted permission uses Continue without location.",
+      "state": "Conditional",
+      "source": "OnboardingPermissionManagers.swift",
+      "after": null,
+      "id": "N31"
+    },
+    {
+      "key": "notification-denied",
+      "title": "Notifications denied",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Primary",
+          "text": "Open Settings"
+        },
+        {
+          "role": "Secondary",
+          "text": "Not now"
+        },
+        {
+          "role": "Working",
+          "text": "Turning on notifications…"
+        }
+      ],
+      "image": "notifications-denied-component.png",
+      "note": " Native Swift component preview with local fixture data.",
+      "state": "Conditional",
+      "source": "ProductUpsellScreen.swift",
+      "after": null,
+      "id": "N32",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "friends-empty",
+      "title": "No people yet",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Your people will show up here"
+        },
+        {
+          "role": "Body",
+          "text": "Skip for now — we’ll keep finding trusted people as Astir grows."
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        },
+        {
+          "role": "Secondary",
+          "text": "Skip"
+        }
+      ],
+      "image": "friends-empty-component.png",
+      "note": " Native Swift component preview with local fixture data.",
+      "state": "Conditional",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N33",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "friends-failed",
+      "title": "People loading failed",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Suggestions are taking a minute"
+        },
+        {
+          "role": "Body",
+          "text": "You can skip this and find people from Discover anytime."
+        },
+        {
+          "role": "Primary",
+          "text": "Continue"
+        },
+        {
+          "role": "Secondary",
+          "text": "Skip"
+        }
+      ],
+      "image": "friends.png",
+      "note": "The captured demo shows this loading-failure fallback.",
+      "state": "Conditional",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N34"
+    },
+    {
+      "key": "identity-state",
+      "title": "Username & saving states",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Checking",
+          "text": "Checking username…"
+        },
+        {
+          "role": "Available",
+          "text": "Username available"
+        },
+        {
+          "role": "Taken",
+          "text": "That username is taken"
+        },
+        {
+          "role": "Saving",
+          "text": "Creating your profile…"
+        }
+      ],
+      "image": "identity-checking-component.png",
+      "note": "Checking-username state shown here. The next three cards show the remaining states separately; these original line references are preserved.",
+      "state": "Conditional",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N35",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "identity-available",
+      "title": "Username · available",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Status",
+          "text": "Username available"
+        }
+      ],
+      "image": "identity-available-component.png",
+      "note": "Native Swift identity view with this state held for review. Sample name and username are fixture content.",
+      "state": "Conditional",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N71",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "identity-taken",
+      "title": "Username · taken",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Status",
+          "text": "That username is taken"
+        }
+      ],
+      "image": "identity-taken-component.png",
+      "note": "Native Swift identity view with this state held for review. Sample name and username are fixture content.",
+      "state": "Conditional",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N72",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "identity-saving",
+      "title": "Creating your profile",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Status",
+          "text": "Creating your profile…"
+        }
+      ],
+      "image": "identity-saving-component.png",
+      "note": "Native Swift identity view with this state held for review. Sample name and username are fixture content.",
+      "state": "Conditional",
+      "source": "OnboardingFlowView.swift",
+      "after": null,
+      "id": "N73",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "system-contacts",
+      "title": "iOS · Contacts purpose",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Purpose",
+          "text": "Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select."
+        },
+        {
+          "role": "iOS headline",
+          "text": "“Astir” would like to access your Contacts."
+        },
+        {
+          "role": "iOS option",
+          "text": "Don’t Allow"
+        },
+        {
+          "role": "iOS option",
+          "text": "Continue"
+        }
+      ],
+      "image": "system-contacts-component.png",
+      "note": "App-owned system permission purpose. Only shown when the related feature is used; not an additional onboarding step. Native Swift component preview with local fixture data. OS dialog rendered by the isolated preview app using the current app purpose string.",
+      "state": "Conditional",
+      "source": "project.yml:99",
+      "after": null,
+      "id": "N36",
+      "captureKind": "Native iOS prompt · isolated preview app"
+    },
+    {
+      "key": "system-camera",
+      "title": "Camera purpose",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Purpose",
+          "text": "Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place."
+        },
+        {
+          "role": "iOS headline",
+          "text": "“Astir” would like to access the Camera."
+        },
+        {
+          "role": "iOS option",
+          "text": "Don’t Allow"
+        },
+        {
+          "role": "iOS option",
+          "text": "Allow"
+        }
+      ],
+      "image": "system-camera-component.png",
+      "note": "App-owned system permission purpose. Only shown when the related feature is used; not an additional onboarding step. Native Swift component preview with local fixture data. OS dialog rendered by the isolated preview app using the current app purpose string.",
+      "state": "Conditional",
+      "source": "project.yml:97",
+      "after": null,
+      "id": "N37",
+      "captureKind": "Native iOS prompt · isolated preview app"
+    },
+    {
+      "key": "system-calendar",
+      "title": "Calendar purpose",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Purpose",
+          "text": "Astir reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses."
+        },
+        {
+          "role": "iOS headline",
+          "text": "“Astir” would like full access to your Calendar."
+        },
+        {
+          "role": "iOS option",
+          "text": "Allow Full Access"
+        },
+        {
+          "role": "iOS option",
+          "text": "Don’t Allow"
+        }
+      ],
+      "image": "system-calendar-component.png",
+      "note": "App-owned system permission purpose. Only shown when the related feature is used; not an additional onboarding step. Native Swift component preview with local fixture data. OS dialog rendered by the isolated preview app using the current app purpose string.",
+      "state": "Conditional",
+      "source": "project.yml:98",
+      "after": null,
+      "id": "N38",
+      "captureKind": "Native iOS prompt · isolated preview app"
+    },
+    {
+      "key": "system-photos",
+      "title": "Save to Photos purpose",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Purpose",
+          "text": "Astir saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok."
+        },
+        {
+          "role": "iOS headline",
+          "text": "“Astir” would like to add to your Photos."
+        },
+        {
+          "role": "iOS option",
+          "text": "Don’t Allow"
+        },
+        {
+          "role": "iOS option",
+          "text": "Allow"
+        }
+      ],
+      "image": "system-photos-component.png",
+      "note": "App-owned system permission purpose. Only shown when the related feature is used; not an additional onboarding step. Native Swift component preview with local fixture data. OS dialog rendered by the isolated preview app using the current app purpose string.",
+      "state": "Conditional",
+      "source": "project.yml:101",
+      "after": null,
+      "id": "N39",
+      "captureKind": "Native iOS prompt · isolated preview app"
+    },
+    {
+      "key": "retained-feedActivity",
+      "title": "See your friend's check-ins in real time",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "See your friend's check-ins in real time"
+        },
+        {
+          "role": "Body",
+          "text": "Interact with your trusted feed with a like, comment, or share"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:254",
+      "after": null,
+      "id": "R40"
+    },
+    {
+      "key": "retained-feedDiscoverSearch",
+      "title": "Ask your circle for a place",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Ask your circle for a place"
+        },
+        {
+          "role": "Body",
+          "text": "Tap search to open Discover and find places through the context your people saved"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:261",
+      "after": null,
+      "id": "R41"
+    },
+    {
+      "key": "retained-feedPeopleSearch",
+      "title": "Find people you trust",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Find people you trust"
+        },
+        {
+          "role": "Body",
+          "text": "Search a name or @username to build the circle behind your map and feed"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:269",
+      "after": null,
+      "id": "R42"
+    },
+    {
+      "key": "retained-feedInvite",
+      "title": "Astir gets better with your circle",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Astir gets better with your circle"
+        },
+        {
+          "role": "Body",
+          "text": "Invite people whose taste you trust. The more people that join from your circle, the more useful your Astir space becomes"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:278",
+      "after": null,
+      "id": "R43"
+    },
+    {
+      "key": "retained-feedSearchField",
+      "title": "Search with the details you remember",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Search with the details you remember"
+        },
+        {
+          "role": "Body",
+          "text": "Try a place name, category, neighborhood, person or @handle—or a saved tag like date night or work-friendly"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:288",
+      "after": null,
+      "id": "R44"
+    },
+    {
+      "key": "retained-feedSmartSearch",
+      "title": "Search the way you think",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Search the way you think"
+        },
+        {
+          "role": "Body",
+          "text": "Tap an example or type your own search to turn a real-life need into trusted results"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:296",
+      "after": null,
+      "id": "R45"
+    },
+    {
+      "key": "retained-feedSearchResultsBack",
+      "title": "Results preview",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": ""
+        },
+        {
+          "role": "Body",
+          "text": ""
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:304",
+      "after": null,
+      "id": "R46"
+    },
+    {
+      "key": "retained-listsScope",
+      "title": "Every kind of plan, one tap away",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Every kind of plan, one tap away"
+        },
+        {
+          "role": "Body",
+          "text": "My Lists keeps your plans, Friends shows lists people share, and Collabs keeps shared planning together"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:317",
+      "after": null,
+      "id": "R47"
+    },
+    {
+      "key": "retained-listsOpenPlan",
+      "title": "Turn saved places into a plan",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Turn saved places into a plan"
+        },
+        {
+          "role": "Body",
+          "text": "Keep trips, date nights, neighborhoods, and anything else you want to revisit together"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:328",
+      "after": null,
+      "id": "R48"
+    },
+    {
+      "key": "retained-placeRatings",
+      "title": "Three ratings, three jobs",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Three ratings, three jobs"
+        },
+        {
+          "role": "Body",
+          "text": "Your rating is the average of your check-ins. Astir rating averages your network's ratings. And fit score predicts how well this place matches your taste"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:344",
+      "after": null,
+      "id": "R49"
+    },
+    {
+      "key": "retained-placeActions",
+      "title": "Everything you need to go",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Everything you need to go"
+        },
+        {
+          "role": "Body",
+          "text": "Directions, Call, Website, and Reservation appear here whenever a place supports them"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:352",
+      "after": null,
+      "id": "R50"
+    },
+    {
+      "key": "retained-placeHistory",
+      "title": "Every visit stays useful",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Every visit stays useful"
+        },
+        {
+          "role": "Body",
+          "text": "Ever forget if that surf break you saved is left or right breaking? Check-in history captures that experience in memory with dates, ratings, notes, photos, friends, and tags"
+        },
+        {
+          "role": "Primary",
+          "text": "Keep going"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:360",
+      "after": null,
+      "id": "R51"
+    },
+    {
+      "key": "retained-mapYou",
+      "title": "Only your Check Ins and Wanna places",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Only your Check Ins and Wanna places"
+        },
+        {
+          "role": "Body",
+          "text": ""
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:381",
+      "after": null,
+      "id": "R52"
+    },
+    {
+      "key": "retained-mapMoreFilters",
+      "title": "Narrow in with More",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Narrow in with More"
+        },
+        {
+          "role": "Body",
+          "text": "Filter by category, specific friends in your network, and distinguish between a check-in, wanna go, or both"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:382",
+      "after": null,
+      "id": "R53"
+    },
+    {
+      "key": "retained-mapSearch",
+      "title": "Search your trusted map",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Search your trusted map"
+        },
+        {
+          "role": "Body",
+          "text": "Try a place, neighborhood, or person"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:390",
+      "after": null,
+      "id": "R54"
+    },
+    {
+      "key": "retained-mapTabs",
+      "title": "Your places, all connected",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Your places, all connected"
+        },
+        {
+          "role": "Body",
+          "text": "Map, Feed, Lists, and Profile work together to help you find, plan, and remember"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:391",
+      "after": null,
+      "id": "R55"
+    },
+    {
+      "key": "retained-mapMemory",
+      "title": "Open the place memory",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Open the place memory"
+        },
+        {
+          "role": "Body",
+          "text": "Tap the highlighted place to revisit everything you just saved"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:399",
+      "after": null,
+      "id": "R56"
+    },
+    {
+      "key": "retained-listsCreate",
+      "title": "Make a list",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Make a list"
+        },
+        {
+          "role": "Body",
+          "text": "Tap + to turn saved places into a plan you can use"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:425",
+      "after": null,
+      "id": "R57"
+    },
+    {
+      "key": "retained-listsScope-legacy",
+      "title": "Plans from your people",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Plans from your people"
+        },
+        {
+          "role": "Body",
+          "text": "Switch between your own lists, friends' lists, and shared collabs"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:426",
+      "after": null,
+      "id": "R58"
+    },
+    {
+      "key": "retained-listsOpenPlan-legacy",
+      "title": "Open a plan",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Open a plan"
+        },
+        {
+          "role": "Body",
+          "text": "Tap any list to see its places, map, privacy, and collaborators"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:427",
+      "after": null,
+      "id": "R59"
+    },
+    {
+      "key": "retained-listMap",
+      "title": "See the whole plan",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "See the whole plan"
+        },
+        {
+          "role": "Body",
+          "text": "Open the map to understand how every place fits together"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:430",
+      "after": null,
+      "id": "R60"
+    },
+    {
+      "key": "retained-listMapPlace",
+      "title": "A place card at a glance",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "A place card at a glance"
+        },
+        {
+          "role": "Body",
+          "text": "The focused card keeps the place type, who saved it, and whether it’s a Check In or Wanna Go together"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:431",
+      "after": null,
+      "id": "R61"
+    },
+    {
+      "key": "retained-listEditorTitle",
+      "title": "Name the plan",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Name the plan"
+        },
+        {
+          "role": "Body",
+          "text": "Give this list a title you'll recognize when the moment comes"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:441",
+      "after": null,
+      "id": "R62"
+    },
+    {
+      "key": "retained-listEditorCollaborators",
+      "title": "Plan it together",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Plan it together"
+        },
+        {
+          "role": "Body",
+          "text": "Add collaborators so everyone can keep the list current"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:448",
+      "after": null,
+      "id": "R63"
+    },
+    {
+      "key": "retained-listEditorPrivacy",
+      "title": "Choose who can see it",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Choose who can see it"
+        },
+        {
+          "role": "Body",
+          "text": "Stealth is the final choice: keep the list private or share it with people who follow you"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained in Swift but suppressed in the current live NUX. Included for completeness; not part of the active route.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:455",
+      "after": null,
+      "id": "R64"
+    },
+    {
+      "key": "retained-mapFeatured",
+      "title": "Featured shows you recommendations based on your taste",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Featured shows you recommendations based on your taste"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained Map exploration lesson. Disabled in the current NUX.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:379; WanderEnums.swift:37",
+      "after": null,
+      "id": "R65"
+    },
+    {
+      "key": "retained-mapFriends",
+      "title": "All places from everyone you follow",
+      "group": "07 · Retained lessons · disabled",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "All places from everyone you follow"
+        },
+        {
+          "role": "Primary",
+          "text": "Next"
+        }
+      ],
+      "image": null,
+      "note": "Retained Map exploration lesson. Disabled in the current NUX.",
+      "state": "Disabled",
+      "source": "FirstVisitWalkthrough.swift:379; WanderEnums.swift:37",
+      "after": null,
+      "id": "R66"
+    },
+    {
+      "key": "photo-crop",
+      "title": "Crop profile photo",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Crop photo"
+        },
+        {
+          "role": "Instruction",
+          "text": "Pinch to zoom. Drag to reposition."
+        },
+        {
+          "role": "Cancel",
+          "text": "Cancel"
+        },
+        {
+          "role": "Primary",
+          "text": "Choose"
+        },
+        {
+          "role": "Saving",
+          "text": "Saving…"
+        }
+      ],
+      "image": "crop-component.png",
+      "note": "Optional branch from Add a photo. Native photo picker precedes crop. Native Swift component preview with local fixture data.",
+      "state": "Conditional",
+      "source": "ProfilePhotoCropView.swift",
+      "after": null,
+      "id": "N67",
+      "captureKind": "Native component preview · fixed demo state"
+    },
+    {
+      "key": "entry-recovery",
+      "title": "Account recovery",
+      "group": "06 · System & recovery states",
+      "lines": [
+        {
+          "role": "Headline",
+          "text": "Your map is still here"
+        },
+        {
+          "role": "Primary",
+          "text": "Try again"
+        },
+        {
+          "role": "Offline",
+          "text": "Continue offline"
+        },
+        {
+          "role": "Unavailable",
+          "text": "Sign in isn’t available"
+        }
+      ],
+      "image": "recovery-component.png",
+      "note": "Alternative recovery states. Error detail is supplied by the failed request. Continue offline appears only when eligible. Native Swift component preview with local fixture data.",
+      "state": "Conditional",
+      "source": "AppEntryView.swift",
+      "after": null,
+      "id": "N68",
+      "captureKind": "Native component preview · fixed demo state"
+    }
+  ]
+}

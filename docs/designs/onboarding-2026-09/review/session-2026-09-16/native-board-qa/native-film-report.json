@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "64324018242bc2c20db9f66b31fd28fa96607f9a",
+  "review": "opening-film-comparison.html?v=6432401",
+  "nativeDevice": "iPhone 16e / iOS 26.3.1",
+  "nativeTestResults": {"passed": 22, "failed": 0, "skipped": 0, "unitTests": 19, "uiTests": 3, "bundle": "native-film-final-tests.xcresult"},
+  "captures": ["approved-dark", "approved-light", "film-dark", "film-type-dark"],
+  "allCaptureAccountEndpointsConfirmed": true,
+  "nativeManualChecks": ["Style menu offers all three treatments", "Approved and matching-font switching", "Next advances to Places", "Replay returns to opening with treatment retained"],
+  "browserChecks": ["Three full phones with object-fit contain", "Play all and pause all", "Restart all plays all three videos", "Scene seeking", "All three account endpoints show complete signup without X", "Individual focus", "TV layout", "Approved light/dark selector", "Return to opening at content second 2"],
+  "videoDimensions": {"width": 1170, "height": 2532},
+  "videoRangeHTTPStatus": 206,
+  "browserWarningsAndErrors": [],
+  "xcodeBranchVerified": "codex/rec-529-onboarding-film-exploration",
+  "newHiggsfieldGenerations": 0,
+  "handoff": "Comparison tab retained; existing iPhone 16e left open for user review with local test auth and native Style menu.",
+  "publication": "Local commit only. Automatic approval review rejected GitHub push/draft PR and detailed Linear handoff. User approval requested; no push or merge occurred.",
+  "limitations": ["Physical-device frame pacing is unmeasured", "Additional device sizes were not newly verified", "No fresh full-suite claim", "Browser omits part of raw static recording tails; complete account endpoints verified"]
+}

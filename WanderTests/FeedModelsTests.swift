@@ -8,7 +8,7 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(DiscoverPeopleRecommendationReason.followsYou.compactDisplayText, "Follows you")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(1).compactDisplayText, "Followed by 1 person you follow")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(3).compactDisplayText, "Followed by 3 people you follow")
-        XCTAssertEqual(DiscoverPeopleRecommendationReason.suggested.compactDisplayText, "Suggested by Astir")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.suggested.compactDisplayText, "")
     }
 
     func testGroupsNearbyActionsChronologicallyWithCheckInAsHeadline() throws {

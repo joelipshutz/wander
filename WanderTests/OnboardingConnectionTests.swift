@@ -132,7 +132,7 @@ final class OnboardingConnectionTests: XCTestCase {
 final class OnboardingIdentitySubmissionTests: XCTestCase {
     private let draft = ProfileIdentityDraft(displayName: " Maya Chen ", handle: " @MAYA ")
 
-    func testPrefilledNameAndHandleCannotBypassRequiredPhotoOffline() {
+    func testAuthNameAndHandleCannotBypassUnsavedIdentityOffline() {
         let session = AuthSession(userID: "new-user", displayName: "Maya", handle: "maya")
         XCTAssertEqual(
             AppEntryStateResolver.offlineState(session: session, localState: .fresh, message: "Offline"),
@@ -159,18 +159,16 @@ final class OnboardingIdentitySubmissionTests: XCTestCase {
         XCTAssertEqual(writes.first?.displayName, "apple_user")
     }
 
-    func testMissingRequiredPhotoNeverWritesIdentity() async {
-        var writes = 0
-        do {
-            try await OnboardingIdentitySubmission.save(
-                draft: draft, photoData: nil, existingAvatarURL: nil,
-                updateIdentity: { _ in writes += 1 }, uploadPhoto: { _ in writes += 1 }
-            )
-            XCTFail("Missing required photo must block submission")
-        } catch let error as OnboardingIdentityPhotoError {
-            guard case .required = error else { return XCTFail("Expected required photo error") }
-        } catch { XCTFail("Unexpected error: \(error)") }
-        XCTAssertEqual(writes, 0)
+    func testIdentityWithoutPhotoSavesAndDoesNotUpload() async throws {
+        var writes: [ProfileDetailsUpdate] = []
+        try await OnboardingIdentitySubmission.save(
+            draft: draft, photoData: nil, existingAvatarURL: nil,
+            updateIdentity: { writes.append($0) },
+            uploadPhoto: { _ in XCTFail("An optional absent photo must not be uploaded") }
+        )
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertEqual(writes.first?.displayName, "Maya Chen")
+        XCTAssertEqual(writes.first?.handle, "maya")
     }
 
     func testAvatarUploadFailureBlocksSuccessAndSupportsRetry() async throws {
@@ -224,7 +222,7 @@ final class OnboardingIdentitySubmissionTests: XCTestCase {
 
 @MainActor
 final class OnboardingEntryRegressionTests: XCTestCase {
-    func testProfileFetchFailureCannotBypassMissingPhotoWithAuthIdentity() async throws {
+    func testProfileFetchFailureCannotBypassUnsavedIdentityWithAuthIdentity() async throws {
         let session = AuthSession(userID: "new-user", displayName: "Maya", handle: "maya")
         let provider = PreviewAuthSessionProvider(state: .signedIn(session))
         let auth = AuthSessionStore(provider: provider)
@@ -245,7 +243,7 @@ final class OnboardingEntryRegressionTests: XCTestCase {
         XCTAssertEqual(coordinator.state, failure)
     }
 
-    func testUnfinishedLegacyPhotoIsRevisitedButCompletedUsersRemainReady() throws {
+    func testValidIdentityWithoutPhotoPreservesProgressAndCompletedUsersRemainReady() throws {
         let session = AuthSession(userID: "legacy-user", displayName: "Maya", handle: "maya")
         let legacy = try JSONDecoder().decode(OnboardingLocalState.self, from: Data(
             #"{"nextStep":"friends","isComplete":false,"needsServerCompletion":false}"#.utf8
@@ -255,7 +253,7 @@ final class OnboardingEntryRegressionTests: XCTestCase {
         XCTAssertFalse(AppEntryStateResolver.canContinueOffline(localState: legacy))
         XCTAssertEqual(
             AppEntryStateResolver.signedInState(session: session, localState: legacy, remoteProfile: profile),
-            .onboarding(session: session, step: .identity)
+            .onboarding(session: session, step: .friends)
         )
         profile.onboardingCompletedAt = .now
         XCTAssertEqual(

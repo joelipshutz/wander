@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "checks": [
+    "Only the active native-auth recording fetched",
+    "Paused seeking lands at requested forward/backward times; variable-frame-rate source holds unchanged UI between frames",
+    "Returning to the same timestamp gives the identical native frame",
+    "Space plays and pauses the active recording",
+    "Switching to a still releases the active Blob",
+    "Reopening reloads only that clip",
+    "Closing TV revokes the final Blob",
+    "No JavaScript errors"
+  ],
+  "frames": [
+    {
+      "target": 3,
+      "currentTime": 3,
+      "mediaTime": 2.968333,
+      "paused": true,
+      "hash": 1392377979,
+      "duration": 38.411667
+    },
+    {
+      "target": 10,
+      "currentTime": 10,
+      "mediaTime": 8.885,
+      "paused": true,
+      "hash": 10975672,
+      "duration": 38.411667
+    },
+    {
+      "target": 3,
+      "currentTime": 3,
+      "mediaTime": 2.968333,
+      "paused": true,
+      "hash": 1392377979,
+      "duration": 38.411667
+    }
+  ],
+  "screenshot": "native-auth-seek-tv.png",
+  "verifiedAt": "2026-09-17T17:48:59.043Z"
+}

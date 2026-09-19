@@ -15,6 +15,7 @@ struct LoggedOutCarouselView: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.onboardingVisualTreatment) private var treatment
     let analytics: AnalyticsClient
     let getStarted: () -> Void
     let logIn: () -> Void
@@ -44,15 +45,19 @@ struct LoggedOutCarouselView: View {
         #endif
         return reduceMotion || voiceOverEnabled
     }
-    private var isPlaying: Bool {
-        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish && previousSelection == nil
+    // Reading holds wait for a slide to land. Film keeps running across the
+    // handoff so the incoming scene never becomes a clean, frozen frame.
+    private var motionIsPlaying: Bool {
+        scenePhase == .active && !accessibilityPausesAutoAdvance && !isPaused && !didFinish
     }
+    private var isPlaying: Bool { motionIsPlaying && previousSelection == nil }
     private var step: OnboardingWelcomeStep { configuration.steps[selection] }
     private var previousStep: OnboardingWelcomeStep? { previousSelection.map { configuration.steps[$0] } }
 
     var body: some View {
         ZStack {
-            OnboardingWelcomeColors.background(isDark: colorScheme == .dark).ignoresSafeArea()
+            (treatment.isFilm ? OnboardingVisualTreatment.background
+                : OnboardingWelcomeColors.background(isDark: colorScheme == .dark)).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack {
                     AstirMastheadLockup(isCompact: true)
@@ -102,6 +107,7 @@ struct LoggedOutCarouselView: View {
                         moveTo(selection + (drag.translation.width < 0 ? 1 : -1), source: "swipe")
                     })
                 }
+                .onboardingFilmSurface()
                 HStack(spacing: 7) {
                     ForEach(configuration.steps.indices, id: \.self) { index in
                         Capsule().fill(index == selection ? brandMode.primaryText : brandMode.secondaryText.opacity(0.4))
@@ -113,7 +119,7 @@ struct LoggedOutCarouselView: View {
                 .accessibilityIdentifier("onboarding.carouselPage")
                 .padding(.bottom, WanderTheme.spacing4)
                 VStack(spacing: WanderTheme.spacing2) {
-                    WanderPrimaryButton(title: "Next", systemImage: "arrow.right") { advance(source: "manual") }
+                    nextButton
                         .accessibilityIdentifier("onboarding.next")
                     Button("Already have an account? Log in") { startAuth(mode: .signIn) }
                         .font(AstirTypography.control).foregroundStyle(brandMode.secondaryText)
@@ -123,6 +129,25 @@ struct LoggedOutCarouselView: View {
                 .padding(.horizontal, WanderTheme.spacing4).padding(.bottom, WanderTheme.spacing2)
             }
         }
+        // Move the film with the outgoing carousel. The incoming account form
+        // has its own background beneath its controls, so this cannot tint it.
+        .overlay {
+            if treatment.isFilm {
+                ZStack {
+                    OnboardingFilmTexture(
+                        isPlaying: scenePhase == .active && (motionIsPlaying || didFinish),
+                        reduceMotion: reduceMotion
+                    )
+                    .blendMode(.screen)
+                    .opacity(0.48)
+                    OnboardingFilmArtifacts()
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
+        .preference(key: OnboardingMotionPreferenceKey.self, value: motionIsPlaying)
         .onAppear { trackViewed() }
         .onChange(of: selection) { _, _ in autoAdvanceGeneration += 1; trackViewed() }
         .task(id: slideGeneration) {
@@ -158,6 +183,22 @@ struct LoggedOutCarouselView: View {
                 guard !Task.isCancelled, isPlaying else { return }
                 advance(source: "timer")
             } catch { }
+        }
+    }
+    @ViewBuilder private var nextButton: some View {
+        if treatment.isFilm {
+            Button { advance(source: "manual") } label: {
+                Label("Next", systemImage: "arrow.right")
+                    .font(AstirTypography.control)
+                    .foregroundStyle(AstirTheme.ink.color)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(OnboardingVisualTreatment.signal)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .onboardingFilmInk()
+            }
+            .buttonStyle(.plain)
+        } else {
+            WanderPrimaryButton(title: "Next", systemImage: "arrow.right") { advance(source: "manual") }
         }
     }
     private func moveTo(_ next: Int, source: String) {
@@ -286,7 +327,7 @@ private struct OnboardingWelcomeParkPreview: View {
     }
 }
 
-private struct OnboardingWelcomePostcard: View {
+struct OnboardingWelcomePostcard: View {
     // The existing public-safe onboarding activity fixture. It is clearly
     // identified in the review inventory and cannot invoke signed-in actions or requests.
     private let context = ActivityEngagementContext(
@@ -332,6 +373,7 @@ struct OnboardingTickerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.onboardingVisualTreatment) private var treatment
     let content: OnboardingTickerContent
     let descriptionIsDelayed: Bool
     let isPlaying: Bool
@@ -376,10 +418,14 @@ struct OnboardingTickerView: View {
                             .frame(width: width, height: width * 0.50)
                             .overlay {
                                 Text(content.stableText)
-                                    .font(.system(size: width * 0.108, weight: .semibold, design: .serif))
+                                    .font(treatment.leadFont(size: width * 0.108,
+                                        approved: .system(size: width * 0.108, weight: .semibold, design: .serif)))
                                     .foregroundStyle(brandMode.primaryText)
                                     .lineLimit(1)
-                                    .fixedSize(horizontal: true, vertical: false)
+                                    .minimumScaleFactor(0.75)
+                                    .fixedSize(horizontal: !treatment.matchesFilmType, vertical: false)
+                                    .frame(width: treatment.matchesFilmType ? width : nil)
+                                    .onboardingFilmInk()
                                     .offset(y: -width * 0.145)
                                     .opacity(leadOpacity)
                                     .accessibilityHidden(true)
@@ -391,7 +437,8 @@ struct OnboardingTickerView: View {
                         .accessibilityIdentifier("onboarding.ticker")
                     Spacer(minLength: 30)
                     if let description = content.description {
-                        Text(description).font(AstirTypography.body)
+                        Text(description).font(treatment.matchesFilmType
+                            ? .custom("HelveticaNeue-BoldItalic", size: 17, relativeTo: .body) : AstirTypography.body)
                             .foregroundStyle(brandMode.secondaryText)
                             .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                             .frame(width: min(width, 360))
@@ -400,6 +447,7 @@ struct OnboardingTickerView: View {
                             .animation(animates ? OnboardingCarouselTiming.slideAnimation : nil, value: descriptionHasArrived)
                             .padding(.bottom, 26)
                             .accessibilityIdentifier("onboarding.openingDescription")
+                            .onboardingFilmInk()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -416,6 +464,7 @@ struct OnboardingTickerView: View {
 /// Each Text is one naturally spaced label. The retained outgoing and incoming
 /// labels share a distance and progress, including reverse navigation.
 private struct OnboardingSlidingText: View, @MainActor Animatable {
+    @Environment(\.onboardingVisualTreatment) private var treatment
     let from: String
     let to: String
     var progress: Double
@@ -439,16 +488,20 @@ private struct OnboardingSlidingText: View, @MainActor Animatable {
 
     private func label(_ text: String) -> some View {
         Text(text)
-            .font(.custom("AvenirNext-Bold", size: fontSize))
-            .foregroundStyle(AstirTheme.signal.color)
+            .font(treatment.headline(size: fontSize, approved: .custom("AvenirNext-Bold", size: fontSize)))
+            .foregroundStyle(treatment.isFilm ? OnboardingVisualTreatment.signal : AstirTheme.signal.color)
             .multilineTextAlignment(.center)
             .lineLimit(3).minimumScaleFactor(0.75)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onboardingFilmInk()
     }
 }
 
 struct OnboardingLaunchView: View {
+    @Environment(\.onboardingVisualTreatment) private var treatment
+    @Environment(\.onboardingFilmMotion) private var filmMotion
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let message: String?
 
     init(message: String? = nil) {
@@ -457,7 +510,16 @@ struct OnboardingLaunchView: View {
 
     var body: some View {
         ZStack {
-            AstirLaunchArtwork.background.ignoresSafeArea()
+            (treatment.isFilm ? OnboardingVisualTreatment.background : AstirLaunchArtwork.background)
+                .ignoresSafeArea()
+            if treatment.isFilm {
+                OnboardingFilmTexture(isPlaying: filmMotion, reduceMotion: reduceMotion)
+                    .blendMode(.screen)
+                    .opacity(0.48)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             GeometryReader { proxy in
                 // Center the artwork alone. Loading copy must not change its frame.
                 AstirLaunchLockup(animationsEnabled: false)

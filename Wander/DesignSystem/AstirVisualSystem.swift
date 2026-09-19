@@ -194,6 +194,7 @@ struct AstirMastheadLockup: View {
 
     var body: some View {
         masthead
+            .onboardingFilmInk()
             .modifier(
                 AstirMastheadPresentationModifier(
                     presentation: presentation,

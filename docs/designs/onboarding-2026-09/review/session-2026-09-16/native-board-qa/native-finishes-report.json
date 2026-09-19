@@ -1,0 +1,60 @@
+{
+  "takes": [
+    {
+      "mode": "dark",
+      "src": "http://127.0.0.1:8766/session-2026-09-16/native-captures/finishes/station-dark.mp4",
+      "duration": 43.951667,
+      "start": 11,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "mode": "dark",
+      "src": "http://127.0.0.1:8766/session-2026-09-16/native-captures/finishes/sculpted-dark.mp4",
+      "duration": 51.168333,
+      "start": 4.25,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "mode": "dark",
+      "src": "http://127.0.0.1:8766/session-2026-09-16/native-captures/finishes/graphic-dark.mp4",
+      "duration": 38.113333,
+      "start": 4.25,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "mode": "light",
+      "src": "http://127.0.0.1:8766/session-2026-09-16/native-captures/finishes/station-light.mp4",
+      "duration": 40.908333,
+      "start": 5,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "mode": "light",
+      "src": "http://127.0.0.1:8766/session-2026-09-16/native-captures/finishes/sculpted-light.mp4",
+      "duration": 44.511667,
+      "start": 10.5,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "mode": "light",
+      "src": "http://127.0.0.1:8766/session-2026-09-16/native-captures/finishes/graphic-light.mp4",
+      "duration": 38.991667,
+      "start": 6.25,
+      "width": 1206,
+      "height": 2622
+    }
+  ],
+  "errors": [],
+  "bad": [],
+  "checks": [
+    "dark load/play/pause/synchronized seek/account end",
+    "light load/play/pause/synchronized seek/account end",
+    "individual focus / TV fit / letter zoom / full screen / keyboard shortcuts",
+    "compact browser width"
+  ]
+}

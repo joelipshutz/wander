@@ -2235,15 +2235,17 @@ struct PeopleRecommendationCard: View {
             .accessibilityLabel("Open \(profile.displayName)'s profile")
             .accessibilityIdentifier("people.recommendation.\(profile.id).profile")
 
-            Text(recommendation.reason.compactDisplayText)
-                .font(AstirTypography.caption)
-                .foregroundStyle(brandMode.secondaryText)
-                .multilineTextAlignment(.center)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 28, alignment: .top)
-                .padding(.top, 4)
-                .accessibilityLabel(recommendation.reason.displayText(for: profile))
+            if !recommendation.reason.compactDisplayText.isEmpty {
+                Text(recommendation.reason.compactDisplayText)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: 28, alignment: .top)
+                    .padding(.top, 4)
+                    .accessibilityLabel(recommendation.reason.displayText(for: profile))
+            }
 
             Spacer(minLength: 10)
 

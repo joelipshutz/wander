@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "original Vestaboard movie loads and seeks",
+    "creator finished render loads; original Vimeo film linked",
+    "original Codrops embed loads and navigation operates",
+    "TV view",
+    "compact layout no horizontal overflow"
+  ],
+  "errors": [],
+  "verifiedAt": "2026-09-17T23:22:36.545Z",
+  "remoteMedia": "Streamed from creators; no remote media copied into workspace."
+}

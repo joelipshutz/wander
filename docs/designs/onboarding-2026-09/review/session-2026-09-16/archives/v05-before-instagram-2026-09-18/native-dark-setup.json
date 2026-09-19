@@ -1,0 +1,132 @@
+{
+  "sourceCheckout": "/Users/joelipshutz/Documents/ChatGPT/New project/wander-native-onboarding-review",
+  "sourceCommit": "5eac124249dc81c84f875af67ad2ebce1b7275e4",
+  "device": "6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+  "captureNote": "Actual Swift app \u00b7 iPhone 16e \u00b7 September 18 dark setup \u00b7 local review build.",
+  "screens": {
+    "N31": {
+      "image": "native-captures/dark-setup/N31.png",
+      "sha256": "e7705f9342a215813fe8adde775cf26a437dbe8b5faedc1a90d3ef5f8150b114",
+      "source": "Wander/Features/Onboarding/OnboardingLocationMapPreview.swift"
+    },
+    "N32": {
+      "image": "native-captures/dark-setup/N32.png",
+      "sha256": "fc97f25ce1c59a2f87cc8933a82c9a141de62b2da0c93cb860c1bec40f229a60",
+      "source": "Wander/Features/Onboarding/ProductUpsellScreen.swift"
+    },
+    "N08": {
+      "image": "native-captures/dark-setup/N08.png",
+      "sha256": "8e9dd1c1b96934525aa0b7e3c68fbd90e100dab2095816210a3b8af6d38e58cc",
+      "source": "Wander/Features/Onboarding/OnboardingFlowView.swift"
+    },
+    "N09": {
+      "image": "native-captures/dark-setup/N09.png",
+      "sha256": "c38ae3286ab5f52ebb2f3f12a60060d42d7a0264b8416be73062766e176ee0c1",
+      "source": "Wander/Features/Onboarding/OnboardingLocationMapPreview.swift",
+      "video": "native-captures/dark-setup/N09.mp4"
+    },
+    "N10": {
+      "image": "native-captures/dark-setup/N10.png",
+      "sha256": "748c264f6c31cb2b5b8c819f3d90da64fa1079230051c2acc16ce33356201bef",
+      "source": "Wander/Features/Onboarding/OnboardingFlowView.swift"
+    },
+    "N11": {
+      "image": "native-captures/n11-headline-only/N11.png",
+      "sha256": "8ccc72652704746c79e7b8a859ab6d854f61c617032a9df612f913fca47a5024",
+      "source": "Wander/Features/Onboarding/OnboardingFriendSuggestionsView.swift",
+      "sourceCommit": "27ce60a3295952461f855e0c69280d7f1fcc2f56"
+    },
+    "N12": {
+      "image": "native-captures/dark-setup/N12.png",
+      "sha256": "fc97f25ce1c59a2f87cc8933a82c9a141de62b2da0c93cb860c1bec40f229a60",
+      "source": "Wander/Features/Onboarding/ProductUpsellScreen.swift",
+      "video": "native-captures/dark-setup/N12.mp4"
+    },
+    "N33": {
+      "image": "native-captures/n11-headline-only/N33.png",
+      "sha256": "ee67f9dc14bc02e49ce794f8d2473f6e673b4020f9854a25a2dfd1bcb1b234d1",
+      "source": "Wander/Features/Onboarding/OnboardingFriendSuggestionsView.swift",
+      "sourceCommit": "27ce60a3295952461f855e0c69280d7f1fcc2f56"
+    },
+    "N34": {
+      "image": "native-captures/n11-headline-only/N34.png",
+      "sha256": "2c4e9bde6b3f2b1b84f950466c22cdb30413bdc44ad079577c37d720285d708c",
+      "source": "Wander/Features/Onboarding/OnboardingFriendSuggestionsView.swift",
+      "sourceCommit": "27ce60a3295952461f855e0c69280d7f1fcc2f56"
+    },
+    "N67": {
+      "image": "native-captures/dark-setup/N67.png",
+      "sha256": "a1114187c0a292b9fff985b5de1f6c4f364b0f9184b6fc0ce6697bbb6c22f506",
+      "sourceCommit": "8051f8d5be8528033a2e79f4854888d97363858d",
+      "source": "Wander/Features/Onboarding/ProfilePhotoCropView.swift"
+    },
+    "N35": {
+      "image": "native-captures/dark-setup/N35.png",
+      "sha256": "7a260c0c83023cb5ae8c454164e8c99d8025fd35af647c0dbf450958a7a7a446",
+      "sourceCommit": "8051f8d5be8528033a2e79f4854888d97363858d",
+      "source": "Wander/Features/Onboarding/OnboardingFlowView.swift"
+    }
+  },
+  "latestSourceCommit": "27ce60a3295952461f855e0c69280d7f1fcc2f56",
+  "validation": {
+    "unitPassed": 67,
+    "priorUnchangedUIPathsPassed": 5,
+    "finalProfileUIPassed": 2,
+    "scope": "Unit suite before final binding fix; final photo/crop/validation/background UI checks at 8051f8d. No full final all-target suite claimed."
+  },
+  "n11CopyRevision": {
+    "sourceCommit": "27ce60a3295952461f855e0c69280d7f1fcc2f56",
+    "screens": [
+      "N11",
+      "N33",
+      "N34"
+    ],
+    "headline": "Keep up with the people you love",
+    "subtitle": null,
+    "ocr": {
+      "N11": [
+        "9:41",
+        "YOUR PEOPLE",
+        "Keep up with the",
+        "people you love",
+        "Search name or username",
+        "Mina Park",
+        "@mina",
+        "Theo Chen",
+        "@theo",
+        "Jules Rivera",
+        "@jules",
+        "Sam Lee",
+        "@sam",
+        "Continue",
+        "Follow",
+        "Follow",
+        "Follow",
+        "Follow"
+      ],
+      "N33": [
+        "9:41",
+        "YOUR PEOPLE",
+        "Keep up with the",
+        "people you love",
+        "Search name or username",
+        "Your people will show up here",
+        "Skip for now - we'll keep finding trusted people as",
+        "Astir grows.",
+        "Continue"
+      ],
+      "N34": [
+        "9:41",
+        "YOUR PEOPLE",
+        "Keep up with the",
+        "people you love",
+        "Search name or username",
+        "Suggestions are taking a minute",
+        "You can skip this and find people from",
+        "Discover anytime.",
+        "Try again",
+        "Continue"
+      ]
+    }
+  }
+}

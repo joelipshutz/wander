@@ -1,0 +1,36 @@
+{
+  "publishedAt": "2026-09-17T18:23:08.386923+00:00",
+  "status": "First native mechanical split-flap pass ready for creative review",
+  "source": "Actual compiled Swift iPhone simulator recording; per-letter clipped faces rotate around a center hinge.",
+  "trimStartsSeconds": {
+    "a": 2.0,
+    "b": 2.0,
+    "c": 1.8
+  },
+  "stateTimeSource": "staging/opening-a.mp4",
+  "states": {
+    "01": 2.5,
+    "02": 7.5,
+    "03": 13.5,
+    "04": 18
+  },
+  "motion": "Five staggered physical flips per changing letter; lead steady until whole-headline change. Supporting copy slides in; complete pages slide into native Places, People and account creation.",
+  "validation": "1,989 unit tests and three affected welcome UI tests passed on this build. Main and compact opening frames inspected. Earlier broad UI Map timing/selection failures remain outside focused clearance.",
+  "takes": [
+    {
+      "file": "opening-a.mp4",
+      "bytes": 7941373,
+      "sha256": "60ad98c89ec2ba1e8bbf68902466d6f1744f7aac9322de6a929e6f5882f4995f"
+    },
+    {
+      "file": "opening-b.mp4",
+      "bytes": 7934077,
+      "sha256": "5e2014929ce3474dbe1a02ffef9f24c67641b2ceab264f664c474e4864d54c7e"
+    },
+    {
+      "file": "opening-c.mp4",
+      "bytes": 7801316,
+      "sha256": "6bab97a9894297d23b942c0739b6f58c0722a51a5d80ab342b89b50fb504e059"
+    }
+  ]
+}
