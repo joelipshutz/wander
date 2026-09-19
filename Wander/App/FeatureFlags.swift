@@ -67,6 +67,7 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     case semanticPlaceSearchV1 = "semantic_place_search_v1"
     case socialImportApifyGeminiV1 = "social_import_apify_gemini_v1"
     case placeProfileActionVariant = "place_profile_action_variant"
+    case profileFeedbackV1 = "profile_feedback_v1"
 
     var definition: FeatureFlagDefinition {
         switch self {
@@ -121,6 +122,15 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
                 summary: "Selects the place-profile floating action layout.",
                 bundledDefault: .integer(5),
                 integerRange: 1 ... 5,
+                allowsRemoteAccountOverride: true,
+                isEditableOnDevice: true
+            )
+        case .profileFeedbackV1:
+            FeatureFlagDefinition(
+                title: "Profile feedback",
+                summary: "Shows the profile feedback button. Enable after delivery setup is verified.",
+                bundledDefault: .boolean(false),
+                integerRange: nil,
                 allowsRemoteAccountOverride: true,
                 isEditableOnDevice: true
             )
@@ -230,7 +240,8 @@ struct FeatureFlagOverrideStore {
         case .debugSettings,
              .placeProfileSaveTrayV1,
              .semanticPlaceSearchV1,
-             .socialImportApifyGeminiV1:
+             .socialImportApifyGeminiV1,
+             .profileFeedbackV1:
             nil
         }
     }

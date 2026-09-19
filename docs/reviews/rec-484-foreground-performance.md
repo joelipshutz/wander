@@ -1,14 +1,76 @@
 # REC-484: Foreground and cold-start responsiveness
 
 Issue: [REC-484](https://linear.app/recme/issue/REC-484/eliminate-prolonged-foreground-and-cold-start-stalls).
-Initial profiled baseline: `1666093fb`. Current integrated base: `5bf0870da`.
+Initial profiled baseline: `1666093fb`. Current integrated base: `266f749c1`.
 Branch: `codex/rec-484-foreground-performance`.
 
-## Launch preparation and refresh follow-up
+## Landing integration — September 19, 2026
 
-This pass integrates `origin/main` through `5bf0870da`, including REC-534's
-Profile responsiveness work. Earlier sections below describe historical
-captures and candidates, not validation of this implementation.
+The landing candidate integrates main through `266f749c1`, including native
+onboarding and the disabled Profile feedback entry. The retained and base map
+projection caches now use the same separate demo/live source partitions, so
+leaving the onboarding demonstration cannot reuse demo projections as live data.
+The tab bar follows current main's explicit visibility after reveal and stays
+hidden while launch or a full place profile blocks interaction. Location-aware
+initial viewport selection, private Check-in answers, import selections, and
+recipient notifications are preserved.
+
+Review found no remaining blocking issue in the REC-484 diff. This change adds
+no backend migration or analytics contract change. The category comparison
+preserved all 32,504 baseline cases; host timing under concurrent compilation
+is not evidence of physical-device frame-rate improvement.
+
+At the `8fce99038` integration, all 2,319 unit tests passed, plus 30 of 38 UI
+checks. All map checks and all four new native-onboarding integration checks
+passed. The generic arm64 Simulator build passed. The current launch-cover
+screenshot was inspected and preserves the artwork without exposing Map or tabs.
+Earlier current/smaller-phone launch checks and screenshots remain historical
+evidence for the unchanged cover design.
+
+All eight failing UI cases were then run on unchanged main `8fce99038`, using
+the same iPhone 17 / iOS 26.5 simulator. All eight failed there with matching
+failure messages:
+
+- Dark and light Events visits: missing `main.tabBar` accessibility identifier.
+- Import inline details: the expected more-options control is not hittable.
+- Calendar presentation: expected form controls are absent before latency can
+  be measured; this is not a passing calendar performance result.
+- Compact Wanna scrolling: the expected legacy note label is absent.
+- Feed inline search/back: the UI query times out (existing REC-536).
+- First Map Check-in and Wanna drafts: legacy form/copy assertions fail.
+
+These are baseline limitations, not passing checks. They agree with the
+onboarding PR's recorded main comparison and REC-536. No threshold or assertion
+was relaxed to obtain a pass. The earlier broad run against `f3d9cb6e` had 2,327
+unit and 161 UI passes, 11 assertion failures, one canceled test, and two skips;
+it was interrupted after main replaced onboarding tests, so it is not a
+full-suite green result.
+
+After integrating the final `266f749c1` Profile feedback commit, the full unit
+run passed 2,328 tests; two newly introduced voice-playback tests failed because
+the Simulator audio device repeatedly timed out starting its audio queue. Both
+failed again in one focused retry after booting the task simulator fresh. The
+audio implementation and its test source are byte-for-byte unchanged from main,
+and the feedback feature remains disabled. Further environment retries stopped;
+these two cases remain unvalidated here, not counted as passes. This is a narrow
+environment exception for unrelated, disabled upstream functionality, not a
+waiver of any REC-484 regression or required GitHub check.
+
+All three final Profile integration UI checks passed: feedback hidden by default,
+fixture-backed feedback submission, and cold/warm Profile scrolling. The final
+generic arm64 Simulator build passed. XcodeGen and whitespace checks passed;
+generated target-order churn was discarded. No extra backend or analytics changes
+were made beyond integrating already-landed main.
+
+Physical-device cold launch, first-tab visits, and 5/35-second background returns
+remain the next manual acceptance checks. The automated checks do not establish
+that every post-reveal stutter is gone. No TestFlight build or upload is included.
+
+## Historical launch preparation and refresh follow-up
+
+The launch-preparation pass below was first integrated through `5bf0870da`,
+including REC-534's Profile responsiveness work. Its captures, test counts,
+and phone candidate describe that earlier checkpoint.
 
 The launch artwork now stays visible for a minimum of two seconds. Local map
 content remains mounted and source hydration starts underneath the cover,
@@ -63,7 +125,7 @@ reveal. The interactive glass Add button is removed while More Filters is open,
 with an inert placeholder preserving dock geometry; its regression verifies
 that it leaves the accessibility tree and becomes usable again after returning.
 
-Final validation:
+Validation at the earlier phone checkpoint:
 
 - The corrected-source recheck passed all 2,072 unit tests, including all 18
   foreground regressions and root-removal cancellation. Its 39 UI cases passed
@@ -84,7 +146,7 @@ Final validation:
   verification passed: version 1.0, build 175, arm64 debug UUID
   `7BC99740-932D-3A28-8EF3-8E8BFB0B9172`. XcodeGen and whitespace checks passed.
 
-The PR remains a draft phone-test candidate. Next manual checks are cold launch,
+At that checkpoint the PR was a draft phone-test candidate. Manual checks were cold launch,
 first visits and returns to each tab, and a 35-second background return, watching
 the first 30 seconds after reveal. Device profiling is not required for this
 pass unless severe lag remains. These automated results do not prove sustained

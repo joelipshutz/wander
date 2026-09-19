@@ -4702,7 +4702,7 @@ final class RemoteRepositoryTests: XCTestCase {
     func testFeatureFlagRepositoryAppliesSupportedOverridesAndKeepsSemanticGlobal() async throws {
         let table = RecordingTable()
         table.responses["GET:feature_flags"] = Data(
-            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"social_import_apify_gemini_v1","user_id":null,"enabled":false},{"key":"social_import_apify_gemini_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"social_import_apify_gemini_v1","user_id":null,"enabled":false},{"key":"social_import_apify_gemini_v1","user_id":"user_test","enabled":true},{"key":"profile_feedback_v1","user_id":null,"enabled":false},{"key":"profile_feedback_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
         )
         let repository = SupabaseFeatureFlagRepository(table: table)
 
@@ -4734,6 +4734,10 @@ final class RemoteRepositoryTests: XCTestCase {
                 .placeProfileActionVariant: ResolvedFeatureFlagValue(
                     value: .integer(2),
                     source: .accountOverride
+                ),
+                .profileFeedbackV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
                 )
             ]
         )
@@ -4749,7 +4753,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 ),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant,profile_feedback_v1)"
                 )
             ]
         )

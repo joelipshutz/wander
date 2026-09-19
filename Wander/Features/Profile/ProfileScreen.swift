@@ -165,6 +165,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var showsSettings = false
+    @State private var showsFeedback = false
     @State private var showsProfilePhotoViewer = false
     @State private var socialGraphTab: ProfileSocialGraphTab?
     @State private var listMode: GraphListMode?
@@ -263,8 +264,12 @@ struct ProfileScreen: View {
                     showsYourMapPrototype = true
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
-                onCalendarScrollRequestHandled: completeCalendarLaunchRequest
+                onCalendarScrollRequestHandled: completeCalendarLaunchRequest,
+                feedbackAction: isFeedbackEnabled ? { showsFeedback = true } : nil
             )
+                .sheet(isPresented: $showsFeedback) {
+                    FeedbackSheet(repository: feedbackRepository, analytics: store.productAnalytics)
+                }
                 .accessibilityHidden(showsSettings)
                 .allowsHitTesting(!showsSettings)
                 .overlay {
@@ -434,6 +439,7 @@ struct ProfileScreen: View {
     }
 
     private func resetProfilePresentations() {
+        showsFeedback = false
         activeCalendarLaunchRequest = nil
         visitInvitationInboxRequestID = nil
         showsSettings = false
@@ -452,6 +458,24 @@ struct ProfileScreen: View {
         withAnimation(.easeOut(duration: 0.24)) {
             showsSettings = true
         }
+    }
+
+    private var isFeedbackEnabled: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderFeedbackUITest") { return true }
+        #endif
+        return backend.featureFlag(.profileFeedbackV1, for: store.currentUser.id) == true
+    }
+
+    private var feedbackRepository: (any FeedbackRepository)? {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderFeedbackUITest") {
+            return FeedbackUITestRepository()
+        }
+        #endif
+        return backend.feedbackRepository
     }
 
     private func dismissSettings() {

@@ -466,3 +466,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/refresh-place-embeddings/deno.json"
 entrypoint = "./functions/refresh-place-embeddings/index.ts"
+
+[functions.feedback-email-worker]
+enabled = true
+# Dedicated cron secret checked by the handler. No client access or JWT bypass.
+verify_jwt = false
+entrypoint = "./functions/feedback-email-worker/index.ts"

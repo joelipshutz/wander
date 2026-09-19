@@ -107,6 +107,7 @@ targets:
           - snssdk1180
           - snssdk1233
         NSCameraUsageDescription: Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.
+        NSMicrophoneUsageDescription: Astir uses your microphone only when you choose to record a voice note for the Astir team with your feedback.
         NSCalendarsFullAccessUsageDescription: Astir reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.
         NSContactsUsageDescription: Astir uses your contacts to help you connect with people you know.
         NSLocationWhenInUseUsageDescription: Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.

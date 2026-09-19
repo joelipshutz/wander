@@ -60,6 +60,8 @@
 	<string>Astir uses your contacts to help you connect with people you know.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Astir uses your microphone only when you choose to record a voice note for the Astir team with your feedback.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Astir saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
 	<key>TikTokClientKey</key>
