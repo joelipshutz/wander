@@ -110,6 +110,12 @@ async function main() {
         await client.query("rollback to savepoint launch_profile_smoke");
         await client.query("release savepoint launch_profile_smoke");
         console.log("ok - launch follows and suggestion controls preserve account and privacy boundaries");
+        await client.query("savepoint featured_taste_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/featured_saved_interests.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint featured_taste_smoke");
+        await client.query("release savepoint featured_taste_smoke");
+        console.log("ok - Featured saved-interest recall preserves privacy, cold start and discovery capacity");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -1283,6 +1289,10 @@ function runLinkedSmokeChecks(
   const discoverPreviewSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(discoverSmokeSQL, "rollback")}\nrollback;`;
   const launchProfileSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/launch_profile_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
+  const featuredTasteSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(new URL("../supabase/tests/featured_saved_interests.sql", import.meta.url)),
+    "rollback",
+  )}\nrollback;`;
   const socialImportAdmissionSmokeSQL = migrationPreviewPaths.length === 0
     ? loadStrictPgTapSQL(
       new URL("../supabase/tests/social_import_paid_work_admission.sql", import.meta.url),
@@ -1317,7 +1327,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}\n${featuredTasteSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");

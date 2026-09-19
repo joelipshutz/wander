@@ -3630,6 +3630,86 @@ final class MapFeaturedSelectionTests: XCTestCase {
         XCTAssertEqual(featured.map(\.place.canonicalName), ["High Fit Community"])
     }
 
+    func testCoffeeTasteOutranksPopularFollowedBakeryInSameCategory() {
+        let viewer = profile(id: "viewer")
+        let taste = visiblePlace(owner: viewer, name: "Saved Cafe",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Cafe", status: .wannaGo)
+        let bakery = visiblePlace(owner: profile(id: "friend"), name: "Popular Bakery",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Bakery",
+            status: .been, ratingScore: 4, communitySaveCount: 5)
+        let coffee = visiblePlace(owner: profile(id: "community"), name: "Coffee Pick",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop",
+            status: .been, ratingScore: 4)
+        let featured = MapFeaturedSelection.places(from: [bakery, coffee],
+            currentUserID: viewer.id, followedOwnerIDs: ["friend"], in: losAngelesRegion,
+            refinements: MapMoreFilterSelection(),
+            tasteSaves: [PlaceSaveSummary(visiblePlace: taste, attributes: [])])
+        XCTAssertEqual(featured.first?.id, coffee.id)
+        XCTAssertEqual(Set(featured.map(\.id)), [coffee.id, bakery.id])
+    }
+
+    func testIgnoredTasteDoesNotChangeColdStartOrder() {
+        let viewer = profile(id: "viewer")
+        let lowRating = visiblePlace(owner: viewer, name: "Disliked Coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop",
+            status: .been, ratingScore: 2)
+        let strangerTaste = visiblePlace(owner: profile(id: "stranger"), name: "Their Coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop", status: .wannaGo)
+        let deleted = visiblePlace(owner: viewer, name: "Deleted Coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop", status: .wannaGo)
+        deleted.userPlace.deletedAt = .now
+        let bakery = visiblePlace(owner: profile(id: "friend"), name: "Bakery",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Bakery", status: .been, ratingScore: 4)
+        let coffee = visiblePlace(owner: profile(id: "community"), name: "Coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop", status: .been, ratingScore: 4)
+        func ranked(_ taste: [VisiblePlace]) -> [String] {
+            MapFeaturedSelection.places(from: [coffee, bakery], currentUserID: viewer.id,
+                followedOwnerIDs: ["friend"], in: losAngelesRegion, refinements: MapMoreFilterSelection(),
+                tasteSaves: taste.map { PlaceSaveSummary(visiblePlace: $0, attributes: []) }).map(\.id)
+        }
+        XCTAssertEqual(ranked([]).first, bakery.id)
+        XCTAssertEqual(ranked([lowRating, strangerTaste, deleted]), ranked([]))
+    }
+
+    func testCoffeeTasteSurvivesCandidateCapAndDuplicateTasteSaves() {
+        let viewer = profile(id: "viewer")
+        let owner = profile(id: "community")
+        let taste = visiblePlace(owner: viewer, name: "Saved Coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop", status: .wannaGo)
+        let candidates = (0..<600).map { index in
+            visiblePlace(owner: owner, name: "Bakery \(index)",
+                category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Bakery", status: .been)
+        }
+        let coffee = visiblePlace(owner: owner, name: "Last Coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Roastery", status: .been)
+        func ranked(_ saves: [VisiblePlace]) -> [String] {
+            MapFeaturedSelection.places(from: candidates + [coffee], currentUserID: viewer.id,
+                followedOwnerIDs: [], in: losAngelesRegion, refinements: MapMoreFilterSelection(),
+                tasteSaves: saves.map { PlaceSaveSummary(visiblePlace: $0, attributes: []) }).map(\.id)
+        }
+        XCTAssertEqual(ranked([taste]).first, coffee.id)
+        XCTAssertEqual(ranked([taste, taste]), ranked([taste]))
+    }
+
+    func testMixedTasteRanksDominantSubtypeBeforeMinoritySubtype() {
+        let viewer = profile(id: "viewer")
+        let owner = profile(id: "community")
+        let coffee = visiblePlace(owner: owner, name: "Coffee Pick",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop", status: .been)
+        let bakery = visiblePlace(owner: owner, name: "Bakery Pick",
+            category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Bakery", status: .been)
+        let tastes = (0..<4).map { index in
+            visiblePlace(owner: viewer, name: "Taste \(index)",
+                category: WanderPlaceCategory.coffeeTeaSweets,
+                subcategory: index == 0 ? "Bakery" : "Coffee shop", status: .wannaGo)
+        }
+        let result = MapFeaturedSelection.places(from: [bakery, coffee], currentUserID: viewer.id,
+            followedOwnerIDs: [], in: losAngelesRegion, refinements: MapMoreFilterSelection(),
+            tasteSaves: tastes.map { PlaceSaveSummary(visiblePlace: $0, attributes: []) })
+        XCTAssertEqual(result.first?.id, coffee.id)
+        XCTAssertEqual(result.count, 2)
+    }
+
     func testFeaturedPeopleRefinementNarrowsWithoutChangingSource() {
         let joe = profile(id: "user_joe")
         let ben = profile(id: "user_ben")
@@ -3831,6 +3911,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
         longitude: Double = -118.25,
         providerID: String? = nil,
         category: String = WanderPlaceCategory.restaurantsFood,
+        subcategory: String? = nil,
         status: PlaceStatus,
         ratingScore: Double? = nil,
         visitedAt: Date? = nil,
@@ -3843,6 +3924,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
             canonicalName: name,
             category: category,
             primaryCategory: category,
+            subcategory: subcategory,
             latitude: latitude,
             longitude: longitude,
             sourceProvider: "mapkit",

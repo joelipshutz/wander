@@ -1,7 +1,7 @@
 # Search and Featured Retrieval Platform
 
 Status: canonical architecture and product contract
-Last updated: 2026-08-16
+Last updated: 2026-09-19
 Implementation issue: REC-280
 
 Read this document first before changing Discover Search retrieval, Map
@@ -113,17 +113,34 @@ saves of the same canonical place and currently scores each group with:
 
 - self relationship boost: `1.8`;
 - followed-person relationship boost: `1.35`;
-- viewer taste fit: category up to `1.1`, cuisine up to `0.75`, matching tags
-  up to `0.75`;
+- viewer taste fit: category up to `1.1`, specific subtype up to `3.0`, cuisine
+  up to `0.75`, matching tags up to `0.75`;
 - distinct/community support: logarithmic, capped at `2.4`;
 - average rating: capped at `1.25`;
 - recency and stable canonical key as deterministic tie-breakers.
 
-For large viewports, candidate work is bounded to 480 rows while reserving up
-to 240 rows for the viewer and followed people. Community rows fill the
-remaining capacity. Consequently, a dense network receives explicit ranking
-and capacity advantages, while sparse viewports can still surface useful
-places from the wider rec.me pool.
+REC-550 uses the viewer's active Wanna saves and Been saves rated at least four
+stars as positive taste. Each canonical place contributes once. Category and
+subtype affinity use `maximum × min(1, 0.35 + matching / liked saves)`; absent
+matches contribute zero. Coffee shop, Cafe/Café, Coffee stand, Coffee lounge and
+Roastery share a coffee affinity; bakery, tea, juice and desserts retain their
+own subtype affinity. Low-rated, deleted and other people's saves are not
+positive taste. Viewer taxonomy overrides and frozen defaults remain private.
+
+The server reserves up to 60 of its 120 place groups for positive category/subtype
+matches before applying the existing social/community ordering to the remaining
+capacity. This prevents popular unrelated places from exhausting the candidate
+pool before client personalization runs. With no positive taste, the original
+candidate selection is unchanged. Eligibility still requires real Been saves;
+this change does not add review-only or administrator-added place eligibility.
+
+For large responses, client candidate work remains bounded to 480 rows. It
+reserves up to 120 rows for category/subtype fit and then up to 240 additional
+rows for the viewer and followed people; other candidates fill unused capacity.
+Final ranking still uses the full relationship, taste, support and rating score.
+Preferences bias results rather than acting as a hard filter. The regression
+suites cover coffee vs bakery, mixed taste, candidate starvation, cold start,
+private taxonomy, blocks and anonymous aggregate privacy.
 
 Do not add embeddings or LLM calls to the map-pan path without a new evaluated
 decision. The real-corpus Featured trial was too small and too dominated by the
