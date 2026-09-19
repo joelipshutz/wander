@@ -221,6 +221,7 @@ struct AcquisitionAttribution: Equatable {
 }
 
 enum WanderAnalyticsEvents {
+    static let feedbackSubmitted = "feedback_submitted"
     static let appFirstOpened = "app_first_opened"
     static let appSessionStarted = "app_session_started"
     static let acquisitionLinkOpened = "acquisition_link_opened"
