@@ -77,8 +77,11 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     case sharedProfile(profileID: String)
     case sharedPlace(placeID: String)
     case sharedActivity(activityID: String)
+    // Internal notification route; existing pushes identify a visit, not its event.
+    case checkInActivity(userPlaceID: String, visitID: String)
     case sharedList(listID: String)
     case listInvite(token: String)
+    case placePlanInvitation(token: String)
 
     var url: URL? {
         switch self {
@@ -104,10 +107,14 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             Self.sharedEntityURL(root: "places", identifier: placeID)
         case .sharedActivity(let activityID):
             Self.sharedEntityURL(root: "activities", identifier: activityID)
+        case .checkInActivity:
+            nil
         case .sharedList(let listID):
             Self.sharedEntityURL(root: "lists", identifier: listID)
         case .listInvite(let token):
             Self.sharedEntityURL(root: "invites", identifier: token)
+        case .placePlanInvitation(let token):
+            Self.sharedEntityURL(root: "plans", identifier: token)
         }
     }
 
@@ -242,6 +249,12 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             }
             return .sharedList(listID: listID)
 
+        case ("plans", let segments):
+            guard segments.count == 1, let token = segments.first,
+                  isValidSharedIdentifier(token, root: "plans", components: components)
+            else { return nil }
+            return .placePlanInvitation(token: token)
+
         case ("invites", let segments):
             guard segments.count == 1,
                   let token = segments.first,
@@ -287,6 +300,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             return .sharedList(listID: identifier)
         case "invites":
             return .listInvite(token: identifier)
+        case "plans":
+            return .placePlanInvitation(token: identifier)
         default:
             return nil
         }
@@ -411,6 +426,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             return true
         case "places", "activities", "lists":
             return UUID(uuidString: identifier) != nil
+        case "plans":
+            return identifier.range(of: "^[a-f0-9]{48}$", options: .regularExpression) != nil
         case "invites":
             return identifier.range(
                 of: "^[a-fA-F0-9]{48}$",

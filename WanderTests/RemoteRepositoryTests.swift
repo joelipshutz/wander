@@ -1955,6 +1955,137 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(rpc.calls[0].body["storage_path"] as Any?)
     }
 
+    func testVisitReadsHydrateOwnAnswersByStableIDAndKeepUnknownValues() async throws {
+        let table = RecordingTable()
+        let rpc = RecordingRPC()
+        table.responses["GET:place_visits"] = visitRowsData([("newer", "parent"), ("older", "parent")])
+        rpc.responses["own_place_visit_details"] = """
+        [
+          {"id":"older","user_place_id":"parent","attribute_answers":[],"created_at":"2026-07-01T12:00:00Z","updated_at":"2026-07-02T12:00:00Z"},
+          {"id":"newer","user_place_id":"parent","attribute_answers":[
+            {"question_key":"place_detail_outlets","value_type":"single_choice","value":"None found"},
+            {"question_key":"future_private_answer","value_type":"future_type","value":{"nested":[true,"kept"]}}
+          ],"created_at":"2026-07-03T12:00:00Z","updated_at":"2026-07-04T12:00:00Z"}
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseVisitRepository(table: table, storage: RecordingStorage(), rpc: rpc)
+
+        let visits = try await repository.visits(for: "parent")
+
+        XCTAssertEqual(visits.map(\.visitID), ["newer", "older"])
+        let json = try XCTUnwrap(visits[0].attributeAnswersJSON?.data(using: .utf8))
+        let answers = try JSONDecoder().decode([VisitAttributeAnswer].self, from: json)
+        XCTAssertEqual(answers[0].value, .string("None found"))
+        XCTAssertEqual(answers[1].value, .object(["nested": .array([.bool(true), .string("kept")])]))
+        XCTAssertEqual(visits[1].attributeAnswersJSON, "[]")
+        XCTAssertEqual(visits[0].updatedAt, ISO8601DateFormatter().date(from: "2026-07-04T12:00:00Z"))
+        XCTAssertFalse(table.calls[0].queryItems.first { $0.name == "select" }?.value?.contains("attribute_answers") == true)
+        XCTAssertEqual(rpc.rawBodies[0]["input_user_place_ids"] as? [String], ["parent"])
+    }
+
+    func testSocialVisitAnswerOmissionStaysUnknown() async throws {
+        let table = RecordingTable()
+        let rpc = RecordingRPC()
+        table.responses["GET:place_visits"] = visitRowsData([("social", "parent")])
+        rpc.responses["own_place_visit_details"] = Data("[]".utf8)
+        let repository = SupabaseVisitRepository(table: table, storage: RecordingStorage(), rpc: rpc)
+
+        let visits = try await repository.visits(for: "parent")
+
+        XCTAssertEqual(visits.count, 1)
+        XCTAssertNil(visits[0].attributeAnswersJSON)
+    }
+
+    func testMissingOwnerDetailsRPCDoesNotBecomeEmptyAnswers() async throws {
+        let table = RecordingTable()
+        table.responses["GET:place_visits"] = visitRowsData([("own", "parent")])
+        let repository = SupabaseVisitRepository(table: table, storage: RecordingStorage(), rpc: RecordingRPC())
+
+        do {
+            _ = try await repository.visits(for: "parent")
+            XCTFail("A missing migration must fail the refresh, preserving the existing cache")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .invalidResponse("Missing fake response for own_place_visit_details"))
+        }
+    }
+
+    func testEmptyVisitReadDoesNotCallAnswerRPC() async throws {
+        let table = RecordingTable()
+        let rpc = RecordingRPC()
+        table.responses["GET:place_visits"] = Data("[]".utf8)
+        let repository = SupabaseVisitRepository(table: table, storage: RecordingStorage(), rpc: rpc)
+        let visits = try await repository.visits(for: "parent")
+
+        XCTAssertTrue(visits.isEmpty)
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
+
+    func testVisitHydrationRejectsWrongParentsAndDuplicateIDs() async throws {
+        for rows in [
+            [["id": "own", "user_place_id": "wrong"]],
+            [["id": "own", "user_place_id": "parent"], ["id": "own", "user_place_id": "parent"]]
+        ] {
+            let table = RecordingTable()
+            let rpc = RecordingRPC()
+            table.responses["GET:place_visits"] = visitRowsData([("own", "parent")])
+            rpc.responses["own_place_visit_details"] = try JSONSerialization.data(withJSONObject: rows.map { row -> [String: Any] in
+                var result: [String: Any] = row
+                result["attribute_answers"] = [] as [String]
+                result["created_at"] = "2026-07-01T12:00:00Z"
+                result["updated_at"] = "2026-07-01T12:00:00Z"
+                return result
+            })
+            let repository = SupabaseVisitRepository(table: table, storage: RecordingStorage(), rpc: rpc)
+            do {
+                _ = try await repository.visits(for: "parent")
+                XCTFail("Mismatched details must never be attached to a visit")
+            } catch {
+                XCTAssertNotNil(error as? WanderRemoteError)
+            }
+        }
+    }
+
+    func testOwnerCalendarRejectsMissingAnswersInsteadOfClearingThem() async throws {
+        let rpc = RecordingRPC()
+        let rows = try JSONSerialization.jsonObject(with: visitRowsData([("own", "parent")]))
+        rpc.responses["current_user_calendar_snapshot"] = try JSONSerialization.data(withJSONObject: ["places": [], "visits": rows])
+        rpc.responses["own_place_visit_details"] = Data("[]".utf8)
+        do {
+            _ = try await SupabaseSurfaceSnapshotRepository(rpc: rpc).currentUserCalendarSnapshot()
+            XCTFail("Owner snapshots require a complete answer response")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .invalidResponse("Visit details were incomplete"))
+        }
+    }
+
+    func testLargeOwnerCalendarChunksDistinctParentIDsAtTwoHundred() async throws {
+        let rpc = RecordingRPC()
+        let identities = (0..<201).map { ("visit-\($0)", String(format: "parent-%03d", $0)) }
+        let rows = try JSONSerialization.jsonObject(with: visitRowsData(identities))
+        rpc.responses["current_user_calendar_snapshot"] = try JSONSerialization.data(withJSONObject: ["places": [], "visits": rows])
+        rpc.responseQueues["own_place_visit_details"] = try [Array(identities.prefix(200)), Array(identities.suffix(1))].map { chunk in
+            try JSONSerialization.data(withJSONObject: chunk.map { id, parent -> [String: Any] in
+                ["id": id, "user_place_id": parent, "attribute_answers": [],
+                 "created_at": "2026-07-01T12:00:00Z", "updated_at": "2026-07-01T12:00:00Z"]
+            })
+        }
+
+        let snapshot = try await SupabaseSurfaceSnapshotRepository(rpc: rpc).currentUserCalendarSnapshot()
+
+        XCTAssertEqual(snapshot.visits.count, 201)
+        XCTAssertTrue(snapshot.visits.allSatisfy { $0.attributeAnswersJSON == "[]" })
+        let sizes = rpc.rawBodies.compactMap { ($0["input_user_place_ids"] as? [String])?.count }
+        XCTAssertEqual(sizes, [200, 1])
+    }
+
+    private func visitRowsData(_ identities: [(String, String)]) -> Data {
+        try! JSONSerialization.data(withJSONObject: identities.map { id, parent -> [String: Any] in
+            ["id": id, "user_place_id": parent, "visited_at": "2026-07-01T12:00:00Z",
+             "tags": [], "backfilled_from_user_place": false,
+             "created_at": "2026-07-01T12:00:00Z", "updated_at": "2026-07-01T12:00:00Z"]
+        })
+    }
+
     func testVisitRepositoryUpsertsVisitViaPostgRESTTable() async throws {
         let table = RecordingTable()
         let storage = RecordingStorage()
@@ -1974,7 +2105,7 @@ final class RemoteRepositoryTests: XCTestCase {
           }
         ]
         """.data(using: .utf8)
-        let repository = SupabaseVisitRepository(table: table, storage: storage)
+        let repository = SupabaseVisitRepository(table: table, storage: storage, rpc: RecordingRPC())
         let visitedAt = ISO8601DateFormatter().date(from: "2026-07-09T20:00:00Z")!
 
         let result = try await repository.upsertVisit(
@@ -2004,7 +2135,7 @@ final class RemoteRepositoryTests: XCTestCase {
     func testVisitRepositoryUploadsAndDeletesVisitPhotoStorage() async throws {
         let table = RecordingTable()
         let storage = RecordingStorage()
-        let repository = SupabaseVisitRepository(table: table, storage: storage)
+        let repository = SupabaseVisitRepository(table: table, storage: storage, rpc: RecordingRPC())
         let data = Data([0x01, 0x02, 0x03])
 
         let url = try await repository.uploadPhotoData(
@@ -2074,7 +2205,7 @@ final class RemoteRepositoryTests: XCTestCase {
           }
         ]
         """.data(using: .utf8)
-        let repository = SupabaseVisitRepository(table: table, storage: storage)
+        let repository = SupabaseVisitRepository(table: table, storage: storage, rpc: RecordingRPC())
 
         let photos = try await repository.visibleUploadedPhotos(for: "visit_386")
 
@@ -2986,7 +3117,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[1].body["input_list_id"] as? String, listID)
     }
 
-    func testSurfaceSnapshotRepositoryUsesOneRPCPerSurface() async throws {
+    func testSurfaceSnapshotRepositoryBatchesCalendarAnswerHydration() async throws {
         let rpc = RecordingRPC()
         rpc.responses["current_user_calendar_snapshot"] = """
         {
@@ -3003,6 +3134,15 @@ final class RemoteRepositoryTests: XCTestCase {
             }
           ]
         }
+        """.data(using: .utf8)
+        rpc.responses["own_place_visit_details"] = """
+        [{
+          "id": "93000000-0000-0000-0000-000000000001",
+          "user_place_id": "92000000-0000-0000-0000-000000000001",
+          "attribute_answers": [{"question_key":"place_detail_outlets","value_type":"single_choice","value":"None found"}],
+          "created_at":"2026-07-29T12:00:00Z",
+          "updated_at":"2026-07-30T12:00:00Z"
+        }]
         """.data(using: .utf8)
         rpc.responses["visible_place_lists_snapshot"] = """
         {
@@ -3055,6 +3195,7 @@ final class RemoteRepositoryTests: XCTestCase {
 
         XCTAssertTrue(calendar.visiblePlaces.isEmpty)
         XCTAssertEqual(calendar.visits.map(\.visitID), ["93000000-0000-0000-0000-000000000001"])
+        XCTAssertTrue(calendar.visits[0].attributeAnswersJSON?.contains("None found") == true)
         XCTAssertTrue(lists.summaries.isEmpty)
         XCTAssertTrue(lists.details.isEmpty)
         XCTAssertEqual(social.following.map(\.id), ["user_friend"])
@@ -3069,16 +3210,18 @@ final class RemoteRepositoryTests: XCTestCase {
             rpc.calls.map(\.name),
             [
                 "current_user_calendar_snapshot",
+                "own_place_visit_details",
                 "visible_place_lists_snapshot",
                 "social_surface_snapshot"
             ]
         )
         XCTAssertTrue(rpc.rawBodies[0].isEmpty)
-        XCTAssertTrue(rpc.rawBodies[1].isEmpty)
-        XCTAssertEqual(rpc.calls[2].body["min_lat"] as? Double, 34)
-        XCTAssertEqual(rpc.calls[2].body["min_lng"] as? Double, -119)
-        XCTAssertEqual(rpc.calls[2].body["max_lat"] as? Double, 35)
-        XCTAssertEqual(rpc.calls[2].body["max_lng"] as? Double, -118)
+        XCTAssertEqual(rpc.rawBodies[1]["input_user_place_ids"] as? [String], ["92000000-0000-0000-0000-000000000001"])
+        XCTAssertTrue(rpc.rawBodies[2].isEmpty)
+        XCTAssertEqual(rpc.calls[3].body["min_lat"] as? Double, 34)
+        XCTAssertEqual(rpc.calls[3].body["min_lng"] as? Double, -119)
+        XCTAssertEqual(rpc.calls[3].body["max_lat"] as? Double, 35)
+        XCTAssertEqual(rpc.calls[3].body["max_lng"] as? Double, -118)
     }
 
     func testPlaceListRepositoryWritesExpectedRPCs() async throws {
@@ -4382,6 +4525,31 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testPostIdentityOverridesLegacyPlaceDeeplink() {
+        for kind in ["activity_commented", "activity_liked", "followed_place_visit", "place_saved_from_your_map"] {
+            let destination = PushNotificationManager.destination(from: ["recme": [
+                "notification_type": kind, "deeplink_url": "recme://places/place-1",
+                "data": ["activity_id": "activity-1", "place_id": "place-1"]
+            ]])
+            XCTAssertEqual(destination, .activityComments(id: "activity-1"))
+        }
+    }
+
+    func testCheckInNotificationKeepsExactVisitIdentityAndLegacyFallback() {
+        let parent = UUID().uuidString, visit = UUID().uuidString
+        let destination = PushNotificationManager.destination(from: ["recme": [
+            "notification_type": "followed_place_visit", "deeplink_url": "recme://places/place-1",
+            "data": ["user_place_id": parent, "visit_id": visit, "place_id": "place-1"]
+        ]])
+        XCTAssertEqual(destination, .checkInComments(userPlaceID: parent, visitID: visit))
+        XCTAssertEqual(WanderRootView.notificationTab(for: try! XCTUnwrap(destination)), .discover)
+        let malformed = PushNotificationManager.destination(from: ["recme": [
+            "notification_type": "followed_place_visit", "deeplink_url": "recme://places/place-1",
+            "data": ["user_place_id": parent, "visit_id": "", "activity_id": " "]
+        ]])
+        XCTAssertEqual(malformed, .place(id: "place-1"))
+    }
+
     func testEveryNotificationTypeHasAnAppDestination() {
         func destination(_ type: String, data: [String: Any] = [:]) -> NotificationDestination? {
             PushNotificationManager.destination(from: [
@@ -5290,6 +5458,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
     }
 
     var responses: [String: Data] = [:]
+    var responseQueues: [String: [Data]] = [:]
     var delays: [String: Duration] = [:]
     var errors: [Error] = []
     private(set) var rawBodies: [[String: Any]] = []
@@ -5310,7 +5479,8 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
             return EmptyRPCResponse() as! Value
         }
 
-        guard let data = responses[name] else {
+        let queued = responseQueues[name]?.isEmpty == false ? responseQueues[name]?.removeFirst() : nil
+        guard let data = queued ?? responses[name] else {
             throw WanderRemoteError.invalidResponse("Missing fake response for \(name)")
         }
 

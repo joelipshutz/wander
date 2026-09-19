@@ -8,7 +8,14 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case initialPresentation
     case profileSettings
     case sharedProfile
+    case placePlanInvitation
     case feedPlaceProfile
+    case feedProfile
+    case feedSave
+    case activityPhoto
+    case activityShare
+    case activityReport
+    case activitySave
 }
 
 struct WanderDeepLinkPresentationToken: Hashable, Sendable {
@@ -285,6 +292,17 @@ struct WanderRootPresentationLifecycle<Content: View>: View {
     }
 }
 
+// Keep tab construction out of the root's presentation/observer builder stack.
+// A computed `some View` property is still evaluated eagerly by its caller;
+// this View boundary lets SwiftUI evaluate the large tab subtree separately.
+private struct WanderRootTabContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+    }
+}
+
 @MainActor
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -296,6 +314,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
+    @State private var nuxFeedEntranceProgress: CGFloat = 0
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
@@ -314,6 +333,7 @@ struct WanderRootView: View {
     @State private var handledDeepLinkLaunchRequestID: UUID?
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
+    @State private var sharedPlan: PlacePlanInvitationRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
     @State private var signedInMaintenanceRunID: UUID?
     @State private var signedInMaintenanceUserID: String?
@@ -355,6 +375,9 @@ struct WanderRootView: View {
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var activityNavigation = ActivityNavigationCoordinator()
+    #if DEBUG
+    @State private var seededNotificationFixture = false
+    #endif
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -472,10 +495,6 @@ struct WanderRootView: View {
         systemColorScheme == .dark ? .editorial : .editorialLight
     }
 
-    private var tabBarBrandMode: AstirBrandMode {
-        selectedTab == .events ? .editorial : astirBrandMode
-    }
-
     private var mapAppearanceColorScheme: ColorScheme {
         selectedTab == .map && store.isDarkMapEnabled && !isPresentingAdd
             ? .dark
@@ -484,59 +503,71 @@ struct WanderRootView: View {
 
     private var tabRoot: some View {
         TabView(selection: tabSelection) {
-            MapScreen(
-                defaultSource: store.defaultMapFilter,
-                isMapTabActive: selectedTab == .map,
-                isAddPresented: isPresentingAdd,
-                presentationResetRequest: presentationResetRequest,
-                searchLaunchRequest: mapSearchLaunchRequest,
-                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
-                onAdd: presentAddSheet
-            )
-                .tabItem { tabItemLabel(for: .map) }
-                .tag(WanderTab.map)
+            Group {
+                MapScreen(
+                    defaultSource: store.defaultMapFilter,
+                    isMapTabActive: selectedTab == .map,
+                    isAddPresented: isPresentingAdd,
+                    presentationResetRequest: presentationResetRequest,
+                    searchLaunchRequest: mapSearchLaunchRequest,
+                    onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                    onAdd: presentAddSheet
+                )
+                    .tabItem { tabItemLabel(for: .map) }
+                    .tag(WanderTab.map)
 
-            FeedScreen(
-                presentationResetRequest: presentationResetRequest,
-                onPlaceProfilePresentation: handleDeepLinkPresentation,
-                onPlaceProfileWillDismiss: handleDeepLinkPresentationWillDismiss,
-                onPlaceProfileDidDismiss: {
-                    handleDeepLinkPresentationDismissal(of: .feedPlaceProfile)
-                },
-                onAdd: presentAddSheet
-            )
-                .tabItem { tabItemLabel(for: .discover) }
-                .tag(WanderTab.discover)
+                FeedScreen(
+                    presentationResetRequest: presentationResetRequest,
+                    onPresentation: handleDeepLinkPresentation,
+                    onWillDismiss: handleDeepLinkPresentationWillDismiss,
+                    onDidDismiss: { surface in
+                        handleDeepLinkPresentationDismissal(of: surface)
+                    },
+                    onAdd: presentAddSheet
+                )
+                    .visualEffect { [nuxFeedEntranceProgress] content, geometry in
+                        content.offset(x: geometry.size.width * nuxFeedEntranceProgress)
+                    }
+                    .tabItem { tabItemLabel(for: .discover) }
+                    .tag(WanderTab.discover)
 
-            EventsComingSoonScreen(isSelected: selectedTab == .events && !isPresentingAdd)
-                .tabItem { tabItemLabel(for: .events) }
-                .tag(WanderTab.events)
+                EventsComingSoonScreen(
+                    isSelected: selectedTab == .events && !isPresentingAdd,
+                    userID: auth.state.session?.userID,
+                    repository: backend.eventsInterestRepository
+                )
+                    .tabItem { tabItemLabel(for: .events) }
+                    .tag(WanderTab.events)
 
-            ListsScreen()
-                .tabItem { tabItemLabel(for: .lists) }
-                .tag(WanderTab.lists)
+                ListsScreen()
+                    .tabItem { tabItemLabel(for: .lists) }
+                    .tag(WanderTab.lists)
 
-            ProfileScreen(
-                visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
-                presentationResetRequest: presentationResetRequest,
-                calendarLaunchRequest: profileCalendarLaunchRequest,
-                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
-                onSettingsPresentation: handleDeepLinkPresentation,
-                onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
-                onSettingsDidDismiss: {
-                    handleDeepLinkPresentationDismissal(of: .profileSettings)
+                ProfileScreen(
+                    visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
+                    presentationResetRequest: presentationResetRequest,
+                    calendarLaunchRequest: profileCalendarLaunchRequest,
+                    onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
+                    onSettingsPresentation: handleDeepLinkPresentation,
+                    onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
+                    onSettingsDidDismiss: {
+                        handleDeepLinkPresentationDismissal(of: .profileSettings)
+                    }
+                ) {
+                    selectedTab = .discover
                 }
-            ) {
-                selectedTab = .discover
+                    .tabItem { tabItemLabel(for: .profile) }
+                    .tag(WanderTab.profile)
             }
-                .tabItem { tabItemLabel(for: .profile) }
-                .tag(WanderTab.profile)
+            .toolbarBackground(.visible, for: .tabBar)
+            .toolbarColorScheme(astirBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
         }
-        .preferredColorScheme(selectedTab == .events ? .dark : nil)
-        .tint(tabBarBrandMode.accent)
-        .toolbarBackground(tabBarBrandMode.background, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
-        .toolbarColorScheme(tabBarBrandMode.prefersDarkInterface ? .dark : .light, for: .tabBar)
+        .tint(astirBrandMode.accent)
+        .background {
+            WanderNativeTabAppearance(selection: selectedTab)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -586,6 +617,18 @@ struct WanderRootView: View {
             surface: walkthroughSurface(for: selectedTab),
             externalTargetFrames: nativeTabItemControlsFrame.map { [.mapTabs: $0] } ?? [:]
         )
+        .overlay(alignment: .bottomTrailing) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-WanderNUXReview"),
+               walkthroughs.activeSurface != .placeDetail {
+                NUXReviewControls { target in
+                    walkthroughs.prepareDebugReplay(at: target)
+                    if let surface = walkthroughs.activeSurface { routeWalkthrough(to: surface) }
+                }
+                .padding(.trailing, 16).padding(.bottom, 94)
+            }
+            #endif
+        }
         .walkthroughLaunchLessonOverlay(
             walkthroughs,
             onOpenImport: presentWalkthroughImportHub
@@ -659,7 +702,13 @@ struct WanderRootView: View {
 
     @ViewBuilder
     private func tabItemLabel(for tab: WanderTab) -> some View {
-        if tab == .lists {
+        if tab == .events {
+            Label {
+                Text(tab.title)
+            } icon: {
+                Image(uiImage: EventsTabSymbol.tabImage)
+            }
+        } else if tab == .lists {
             Label {
                 Text(tab.title)
             } icon: {
@@ -703,7 +752,9 @@ struct WanderRootView: View {
     }
 
     private var presentedRoot: some View {
-        tabRoot
+        WanderRootTabContent {
+            tabRoot
+        }
         .sheet(isPresented: $isPresentingImportHub) {
             NavigationStack {
                 PlaceImportHubScreen(
@@ -804,6 +855,15 @@ struct WanderRootView: View {
                 }
             }
         }
+        .fullScreenCover(item: $sharedPlan) { route in
+            WanderRootPresentationLifecycle(
+                surface: .placePlanInvitation,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationDismissalImmediately
+            ) {
+                PlacePlanInvitationScreen(token: route.token, repository: backend.placePlanInvitationRepository)
+            }
+        }
         .fullScreenCover(item: $sharedProfile) { route in
             WanderRootPresentationLifecycle(
                 surface: .sharedProfile,
@@ -820,8 +880,7 @@ struct WanderRootView: View {
     }
 
     private var shouldDimBehindAddWalkthrough: Bool {
-        walkthroughs.activeSurface == .add
-            || walkthroughs.activeSurface == .saveFlow
+        walkthroughs.activeSurface == .saveFlow
             || walkthroughs.requestedSurface == .map
     }
 
@@ -858,6 +917,24 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            // A tapped notification must not wait for permission, calendar or
+            // background-maintenance network work on a cold authenticated launch.
+            applyAuthStateIfNeeded(auth.state)
+            #if DEBUG
+            if fixtureMode != .empty, !seededNotificationFixture,
+               ProcessInfo.processInfo.arguments.contains("-WanderNotificationPostUITest") {
+                seededNotificationFixture = true
+                await store.refreshFeedSurface(backend: nil, force: true)
+                WanderAppDelegate.setAuthenticatedSessionActive(userID: store.currentUser.id)
+                _ = WanderAppDelegate.receiveAuthenticatedNotificationUserInfo([
+                    "recme": [
+                        "notification_type": "activity_commented",
+                        "data": ["activity_id": "fixture-feed-maya-been-bar-nido"]
+                    ]
+                ])
+            }
+            #endif
+            drainPendingNotificationResponses()
             if let userID = auth.state.session?.userID {
                 importStore.bind(to: userID)
             }
@@ -1176,10 +1253,12 @@ struct WanderRootView: View {
         Binding {
             selectedTab
         } set: { newTab in
+            guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
                 presentAddSheet()
             } else {
-                walkthroughs.perform(.mapTabs)
+                walkthroughs.finishOverviewForUserNavigation()
+                walkthroughs.dismissCurrentContext()
                 // Preserve the system Liquid Glass bar while committing the
                 // destination content without its long selection transition.
                 withTransaction(Transaction(animation: nil)) {
@@ -1193,11 +1272,8 @@ struct WanderRootView: View {
 
     private func presentAddSheet() {
         dismissKeyboard()
-        if walkthroughs.currentStep?.target == .mapAddAgain {
-            walkthroughs.perform(.mapAddAgain)
-        } else {
-            walkthroughs.perform(.mapAdd)
-        }
+        walkthroughs.finishOverviewForUserNavigation()
+        walkthroughs.dismissCurrentContext()
         walkthroughs.transition(to: .add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
@@ -1878,11 +1954,14 @@ struct WanderRootView: View {
             return
         }
         if case .activityComments(let activityID) = request.destination {
-            isPresentingAdd = false
-            initialPresentation = nil
-            selectedTab = .discover
-            activityNavigation.openComments(activityID: activityID)
             pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .sharedActivity(activityID: activityID))
+            return
+        }
+
+        if case .checkInComments(let userPlaceID, let visitID) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .checkInActivity(userPlaceID: userPlaceID, visitID: visitID))
             return
         }
 
@@ -1930,7 +2009,7 @@ struct WanderRootView: View {
         case .importReview: .map
         case .list, .listInvite: .lists
         case .place, .sharedVisit, .calendarReservation: .map
-        case .activityComments: .discover
+        case .activityComments, .checkInComments: .discover
         case .discover: .discover
         }
     }
@@ -1976,7 +2055,7 @@ struct WanderRootView: View {
             awaitingDismissals: deepLinkPresentationTokensAwaitingDismissal()
         )
         #if DEBUG
-        WanderDebugLog.remote.debug("deep link handoff began route=\(String(describing: route), privacy: .public) awaiting=\(deepLinkHandoff.awaitingDismissals.count, privacy: .public)")
+        WanderDebugLog.remote.debug("deep link handoff began awaiting=\(deepLinkHandoff.awaitingDismissals.count, privacy: .public)")
         #endif
         presentationResetRequest = resetRequest
         resetRootPresentationsForDeepLink()
@@ -2047,6 +2126,7 @@ struct WanderRootView: View {
             isPresentingAuth: auth.activeGate != nil || auth.isPresentingNativeAuth,
             isPresentingDeepLink: initialPresentation != nil
                 || sharedProfile != nil
+                || sharedPlan != nil
                 || !deepLinkPresentations.presentedTokens.isEmpty,
             isPresentingSaveFlow: store.isSaveFlowPresented,
             isPresentingWalkthrough: walkthroughs.hasActivePresentation,
@@ -2190,7 +2270,20 @@ struct WanderRootView: View {
             isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
             isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         )
-        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePresentation
+        // Enroll only the new-user cohort (or an explicit enabled debug replay).
+        // Its independent marker keeps unfinished hints available after the
+        // primary tour retires, without introducing NUX to established users.
+        walkthroughs.setContextualEnabled(FirstVisitWalkthroughFeatureFlag.isEnabled(
+            isEligible: isEnabled || walkthroughs.hasContextualEnrollment,
+            isUsingLiveData: fixtureMode == .empty,
+            launchArguments: launchArguments,
+            resolvedValue: resolvedFlag?.isEnabled,
+            entitledDebugOverride: debugNUXOverride,
+            isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
+            isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
+        ), enrollCurrentUser: isEnabled)
+        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePrimaryJourney
+            || walkthroughs.isPresentingLaunchLesson
         walkthroughs.setEnabled(isEnabled)
 
         guard isEnabled else {
@@ -2215,6 +2308,7 @@ struct WanderRootView: View {
                     forceRootCleanup: hadActiveWalkthroughPresentation
                 )
             }
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
             return
         }
 
@@ -2308,7 +2402,7 @@ struct WanderRootView: View {
     }
 
     private func presentLaunchLessonIfAppropriate() {
-        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil else { return }
+        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil, sharedPlan == nil else { return }
         walkthroughs.presentLaunchLessonIfEligible()
     }
 
@@ -2376,8 +2470,15 @@ struct WanderRootView: View {
                 isPresentingAdd = false
             }
         case .feed:
+            nuxFeedEntranceProgress = selectedTab == .map && !accessibilityReduceMotion ? 1 : 0
             selectedTab = .discover
             isPresentingAdd = false
+            Task { @MainActor in
+                await Task.yield()
+                withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.4)) {
+                    nuxFeedEntranceProgress = 0
+                }
+            }
         case .events:
             selectedTab = .events
             isPresentingAdd = false
@@ -2421,8 +2522,9 @@ struct WanderRootView: View {
             if isPresentingAdd {
                 await Task.yield()
             } else {
-                try? await Task.sleep(for: .milliseconds(220))
+                try? await Task.sleep(for: .milliseconds(surface == .feed ? 450 : 220))
             }
+            guard walkthroughSurface(for: selectedTab) == surface || isPresentingAdd else { return }
             walkthroughs.consumeRequestedSurface(surface)
             walkthroughs.activate(surface)
         }
@@ -2551,11 +2653,13 @@ struct WanderRootView: View {
         isPresentingAdd = false
         initialPresentation = nil
         sharedProfile = nil
+        sharedPlan = nil
         auth.activeGate = nil
         auth.isPresentingNativeAuth = false
     }
 
     private func activateDeepLink(_ route: WanderDeepLinkRoute) {
+        activityNavigation.reset()
         switch route {
         case .quickCapture:
             selectedTab = .map
@@ -2623,9 +2727,14 @@ struct WanderRootView: View {
         case .sharedActivity(let activityID):
             selectedTab = .discover
             activityNavigation.openComments(activityID: activityID)
+        case .checkInActivity(let userPlaceID, let visitID):
+            selectedTab = .discover
+            activityNavigation.openCheckIn(userPlaceID: userPlaceID, visitID: visitID)
         case .sharedList(let listID):
             selectedTab = .lists
             pushNotifications.route(to: .list(id: listID))
+        case .placePlanInvitation(let token):
+            sharedPlan = PlacePlanInvitationRoute(token: token)
         case .listInvite(let token):
             selectedTab = .lists
             pushNotifications.route(to: .listInvite(token: token))
@@ -3232,6 +3341,132 @@ enum WanderTabBarWalkthroughTargetGeometry {
     }
 }
 
+/// A single root-owned coordinator configures the native bar across all tabs.
+/// A stable material behind the native bar prevents Liquid Glass from switching
+/// contrast modes when the selected content changes from paper to black film.
+private struct WanderNativeTabAppearance: UIViewRepresentable {
+    let selection: WanderTab
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WanderTabFrameAnchorView {
+        let anchor = WanderTabFrameAnchorView()
+        anchor.isUserInteractionEnabled = false
+        anchor.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: WanderTabFrameAnchorView, _: UITraitCollection) in
+            view.onGeometryChange?(view)
+        }
+        anchor.onGeometryChange = { [weak coordinator = context.coordinator] anchor in
+            coordinator?.apply(from: anchor)
+        }
+        return anchor
+    }
+
+    func updateUIView(_ anchor: WanderTabFrameAnchorView, context: Context) {
+        context.coordinator.apply(from: anchor)
+        context.coordinator.afterSelection(from: anchor)
+    }
+
+    static func dismantleUIView(_ anchor: WanderTabFrameAnchorView, coordinator: Coordinator) {
+        anchor.onGeometryChange = nil
+        coordinator.detach()
+    }
+
+    @MainActor final class Coordinator {
+        private weak var bar: UITabBar?
+        private let material = UIVisualEffectView()
+        private var selectionUpdate: Task<Void, Never>?
+        private var observations: [NSKeyValueObservation] = []
+
+        init() {
+            material.isUserInteractionEnabled = false
+            material.accessibilityElementsHidden = true
+            material.clipsToBounds = true
+        }
+
+        func afterSelection(from anchor: UIView) {
+            selectionUpdate?.cancel()
+            selectionUpdate = Task { @MainActor [weak self, weak anchor] in
+                await Task.yield()
+                guard !Task.isCancelled, let anchor else { return }
+                self?.apply(from: anchor)
+            }
+        }
+
+        func detach() {
+            selectionUpdate?.cancel()
+            material.removeFromSuperview()
+            observations.removeAll()
+            bar = nil
+        }
+
+        func apply(from anchor: UIView) {
+            guard let window = anchor.window,
+                  let bar = WanderNativeTabFrameReader.Coordinator.findTabBar(in: window) else { return }
+            if self.bar !== bar {
+                self.bar = bar
+                observations = [
+                    bar.observe(\.isHidden, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.alpha, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.center, options: [.new]) { [weak self] _, _ in self?.syncGeometry() },
+                    bar.observe(\.bounds, options: [.new]) { [weak self] _, _ in self?.syncGeometry() }
+                ]
+            }
+            if let parent = bar.superview, material.superview !== parent {
+                material.removeFromSuperview()
+                parent.insertSubview(material, belowSubview: bar)
+            }
+            bar.accessibilityIdentifier = "main.tabBar"
+            let style: UIUserInterfaceStyle = window.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+            if bar.overrideUserInterfaceStyle != style { bar.overrideUserInterfaceStyle = style }
+            if material.overrideUserInterfaceStyle != style || material.effect == nil {
+                material.overrideUserInterfaceStyle = style
+                material.effect = UIBlurEffect(style: style == .dark ? .systemThinMaterialDark : .systemThinMaterialLight)
+            }
+            let mode: AstirBrandMode = style == .dark ? .editorial : .editorialLight
+            let traits = UITraitCollection(userInterfaceStyle: style)
+            let ink = UIColor(cgColor: UIColor(mode.primaryText).resolvedColor(with: traits).cgColor)
+            let accent = UIColor(cgColor: UIColor(mode.accent).resolvedColor(with: traits).cgColor)
+            func matches(_ appearance: UITabBarAppearance?) -> Bool {
+                appearance?.stackedLayoutAppearance.normal.iconColor?.isEqual(ink) == true &&
+                appearance?.stackedLayoutAppearance.selected.iconColor?.isEqual(accent) == true
+            }
+            let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
+            for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
+                item.normal.iconColor = ink
+                item.normal.titleTextAttributes[.foregroundColor] = ink
+                item.selected.iconColor = accent
+                item.selected.titleTextAttributes[.foregroundColor] = accent
+            }
+            if !matches(bar.standardAppearance) { bar.standardAppearance = appearance }
+            if !matches(bar.scrollEdgeAppearance) { bar.scrollEdgeAppearance = appearance }
+            for item in bar.items ?? [] {
+                if !matches(item.standardAppearance) { item.standardAppearance = appearance }
+                if !matches(item.scrollEdgeAppearance) { item.scrollEdgeAppearance = appearance }
+            }
+            bar.unselectedItemTintColor = ink
+            bar.tintColor = accent
+            syncGeometry()
+        }
+
+        private func syncGeometry() {
+            guard let bar, let parent = bar.superview else { material.isHidden = true; return }
+            guard #available(iOS 26.0, *),
+                  let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: WanderTab.primaryTabs),
+                  let first = controls.first else { material.isHidden = true; return }
+            let controlsFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
+                $0.union(bar.convert($1.bounds, from: $1))
+            }
+            let frame = controlsFrame.insetBy(dx: -4, dy: -4).intersection(bar.bounds)
+            guard !frame.isEmpty else { material.isHidden = true; return }
+            material.frame = parent.convert(frame, from: bar)
+            material.layer.cornerRadius = frame.height / 2
+            material.isHidden = bar.isHidden
+            material.alpha = bar.alpha
+        }
+    }
+}
+
 private struct WanderNativeTabFrameReader: UIViewRepresentable {
     let tabs: [WanderTab]
     let onItemControlsFrameChange: (CGRect?) -> Void
@@ -3332,7 +3567,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
             }
         }
 
-        private static func itemControls(
+        fileprivate static func itemControls(
             in tabBar: UITabBar,
             tabs: [WanderTab]
         ) -> [UIControl]? {
@@ -3367,7 +3602,7 @@ private struct WanderNativeTabFrameReader: UIViewRepresentable {
             }
         }
 
-        private static func findTabBar(in root: UIView) -> UITabBar? {
+        fileprivate static func findTabBar(in root: UIView) -> UITabBar? {
             if let tabBar = root as? UITabBar, !tabBar.isHidden, tabBar.alpha > 0 {
                 return tabBar
             }

@@ -32,14 +32,24 @@ final class MapFilterInteractionUITests: XCTestCase {
             .matching(identifier: "map.initialLoading")
             .firstMatch
         XCTAssertTrue(loading.waitForExistence(timeout: 3))
+        XCTAssertEqual(loading.label, "Opening Astir")
         XCTAssertFalse(app.staticTexts["Loading your map…"].exists)
+        XCTAssertFalse(loading.progressIndicators.firstMatch.exists)
         XCTAssertFalse(app.tabBars.firstMatch.isHittable)
         XCTAssertFalse(app.maps.firstMatch.isHittable)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.68))
+            .press(forDuration: 0.7)
+        XCTAssertTrue(loading.exists)
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-381 graceful large-account Map loading"
+        screenshot.name = "REC-537 uninterrupted launch artwork while Map loads"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 35))
+        XCTAssertFalse(app.buttons["map.selectedPlaceCard"].exists)
+        XCTAssertTrue(app.maps.firstMatch.isHittable)
     }
 
     func testPerformanceFixtureRevealsUsableMapAfterInitialLoading() {
@@ -62,6 +72,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 3))
         XCTAssertTrue(map.isHittable)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["map.filter.friends"].waitForExistence(timeout: 3))
     }
 

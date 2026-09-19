@@ -1214,7 +1214,7 @@ final class MapHitTestingTests: XCTestCase {
         )
         let invalidation = map[invalidationStart.lowerBound..<invalidationEnd.lowerBound]
         XCTAssertTrue(invalidation.contains("deferredMapNavigationGate.invalidate()"))
-        XCTAssertTrue(invalidation.contains("didResolveInitialCamera = true"))
+        XCTAssertTrue(invalidation.contains("initialCameraState.resolve()"))
         XCTAssertTrue(invalidation.contains("case .place, .sharedVisit:"))
 
         for userIntentHandler in [
@@ -2840,7 +2840,8 @@ final class MapSelectionMotionTests: XCTestCase {
         )
         XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
         XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
-        XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
+        XCTAssertTrue(map.contains("MapLaunchLocationResolver().location()"))
+        XCTAssertTrue(map.contains("CoreLocationProvider(purpose: .map)"))
     }
 
     private func densityProfile() -> LocalProfile {

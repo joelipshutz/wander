@@ -23,6 +23,7 @@ struct ImportImplementationCaptureRoot: View {
     @StateObject private var productUpsells = ProductUpsellCoordinator()
     @StateObject private var importStore: PlaceImportStore
     @State private var showsImportEntry = false
+    @State private var showsReport = true
 
     init(page: ImportImplementationCapturePage) {
         self.page = page
@@ -37,7 +38,8 @@ struct ImportImplementationCaptureRoot: View {
             let original = snapshot.items.filter { $0.batchID == "capture-instagram" }
             snapshot.items.removeAll { $0.batchID == "capture-instagram" }
             var savedUserPlaceID: String?
-            for index in 0..<10 {
+            let placeCount = ProcessInfo.processInfo.arguments.contains("-WanderImportCompactReport") ? 3 : 10
+            for index in 0..<placeCount {
                 var item = original[index % original.count]
                 let candidate = PlaceCandidate(id: "report-candidate-\(index)", name: index == 0 ? "Maru Coffee" : "Neighborhood Cafe \(index)", category: "coffee shop", address: "\(1936 + index) Hillhurst Avenue", locality: "Los Angeles", region: "CA", latitude: 34.104 + Double(index) * 0.01, longitude: -118.287, sourceProvider: "mapkit", confidence: 0.96)
                 if index == 0 {
@@ -90,6 +92,10 @@ struct ImportImplementationCaptureRoot: View {
                     selectedCandidateID: index == 0 ? candidate.id : nil)
             }
         }
+        if page == .report {
+            snapshot.batches.removeAll { $0.id != "capture-instagram" }
+            snapshot.items.removeAll { $0.batchID != "capture-instagram" }
+        }
         try? persistence.save(snapshot)
         _importStore = StateObject(wrappedValue: PlaceImportStore(persistence: persistence))
     }
@@ -115,7 +121,17 @@ struct ImportImplementationCaptureRoot: View {
                 ImportShareHostCaptureView()
             } else if page == .history {
                 PlaceImportHistoryScreen(importStore: importStore)
-            } else if page == .report || page == .recovery || page == .partial {
+            } else if page == .report {
+                VStack(spacing: 20) {
+                    Text("\(importStore.recentImportBadgeCount)")
+                        .accessibilityIdentifier("import.capture-badge")
+                    Button("Open import report") { showsReport = true }
+                        .accessibilityIdentifier("import.open-report")
+                }
+                .navigationDestination(isPresented: $showsReport) {
+                    PlaceImportHistoryDestination(importStore: importStore, batchID: "capture-instagram")
+                }
+            } else if page == .recovery || page == .partial {
                 PlaceImportHistoryDestination(importStore: importStore, batchID: "capture-instagram")
             } else {
                 PlaceImportCanonicalReviewScreen(

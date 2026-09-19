@@ -19,6 +19,38 @@ export const allowedPlaceCategories = [
 
 export type PlaceCategory = typeof allowedPlaceCategories[number];
 
+// Exact provider/subtype tokens take precedence over broad words such as
+// beach and school. Keep these aligned with Swift's explicit type mappings;
+// this classifies categories only and never manufactures a precise subtype.
+const specificProviderCategories: Record<string, PlaceCategory> = {
+  volleyball: "wellness_fitness",
+  volleyballcourt: "wellness_fitness",
+  pilates: "wellness_fitness",
+  pilatesstudio: "wellness_fitness",
+  crossfit: "wellness_fitness",
+  crossfitgym: "wellness_fitness",
+  functionalfitness: "wellness_fitness",
+  functionalfitnessstudio: "wellness_fitness",
+  beachtennis: "wellness_fitness",
+  beachtenniscourt: "wellness_fitness",
+  beachvolleyball: "wellness_fitness",
+  beachvolleyballcourt: "wellness_fitness",
+  padel: "wellness_fitness",
+  padelcourt: "wellness_fitness",
+  climbinggym: "wellness_fitness",
+  rockclimbinggym: "wellness_fitness",
+  stadium: "things_to_do",
+  arena: "things_to_do",
+  surf: "outdoors_nature",
+  surfing: "outdoors_nature",
+  surfbreak: "outdoors_nature",
+  surfschool: "wellness_fitness",
+  surfshop: "shopping",
+  kayakrental: "outdoors_nature",
+  canoerental: "outdoors_nature",
+  kayakcanoerental: "outdoors_nature",
+};
+
 const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
     category: "restaurants_food",
@@ -59,7 +91,7 @@ const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
     category: "wellness_fitness",
     patterns: [
-      /\b(health|wellness|fitness|gym|yoga|sports\s+club|sports\s+complex|hospital|medical|clinic|doctor|dentist|pharmacy|drugstore|spa|massage|sauna|therapy|veterinary)\b/,
+      /\b(health|wellness|fitness|gym|yoga|pilates|crossfit|sports\s+club|sports\s+complex|hospital|medical|clinic|doctor|dentist|pharmacy|drugstore|spa|massage|sauna|therapy|veterinary)\b/,
     ],
   },
   {
@@ -111,6 +143,12 @@ export function isPlaceCategory(value: string): value is PlaceCategory {
 }
 
 export function inferPlaceCategory(value: string | null | undefined): PlaceCategory {
+  const providerKey = (value ?? "").toLowerCase()
+    .replace(/mkpoicategory/g, "")
+    .replace(/[^a-z0-9]/g, "");
+  if (Object.hasOwn(specificProviderCategories, providerKey)) {
+    return specificProviderCategories[providerKey];
+  }
   const normalized = normalizeCategoryText(value);
   if (!normalized) return "place";
 

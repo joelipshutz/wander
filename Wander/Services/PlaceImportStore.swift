@@ -1294,15 +1294,14 @@ final class PlaceImportStore: ObservableObject {
         }.count
     }
 
-    /// Each import contributes once while matching or awaiting its first review.
-    /// Keep this separate from review acknowledgement: opening an in-flight
-    /// report must not mark results that have not arrived yet as reviewed.
+    /// Each import contributes once until its returned places are resolved.
+    /// Opening the report acknowledges its completion notice without clearing
+    /// unfinished work from the badge.
     var recentImportBadgeCount: Int {
         let itemsByBatch = Dictionary(grouping: items, by: \.batchID)
         return batches.filter { batch in
             let batchItems = itemsByBatch[batch.id] ?? []
-            return PlaceImportHistoryPresentation.isMatching(batch: batch, items: batchItems)
-                || PlaceImportHistoryPresentation.needsReview(batch: batch, items: batchItems)
+            return PlaceImportHistoryPresentation.contributesToBadge(batch: batch, items: batchItems)
         }.count
     }
 

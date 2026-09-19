@@ -14,11 +14,14 @@ struct PlaceWannaSave: Identifiable, Codable, Equatable {
     var isSynced: Bool = false
     var editedAt: Date? = nil
     var isHistoricalOriginal: Bool? = nil
+    /// Durable deletion revision; retained to reject stale reads and retries.
+    var deletedAt: Date? = nil
 }
 
 @MainActor
 protocol WannaSaveRepository {
     func saveWanna(_ wanna: PlaceWannaSave) async throws
     func updateWanna(_ wanna: PlaceWannaSave) async throws -> PlaceWannaSave
+    func deleteWanna(_ wanna: PlaceWannaSave) async throws
     func wannaSaves(userPlaceIDs: [String]) async throws -> [PlaceWannaSave]
 }

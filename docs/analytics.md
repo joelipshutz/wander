@@ -69,6 +69,9 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
 | `onboarding_step_completed` | Each step advances successfully or is explicitly skipped | `step` |
 | `onboarding_completed` | Local completion is persisted | `server_confirmed` |
+| `onboarding_identity_submitted` | Required identity and any selected photo finish saving | `photo_selected` |
+| `onboarding_identity_failed` | Identity or required-photo submission fails | coarse `reason`, including `photo_save_failed` |
+| `onboarding_friend_suggestions_completed` | User continues after explicit per-person actions | aggregate `selected_count`, `followed_count`; both count successful follows in this visit |
 | `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
 | `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number` |
 | `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number` |
@@ -89,7 +92,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |
 | `contact_invite_delivery_started` | Messages/share sheet begins | `surface`, `delivery_mode`, `recipient_count` |
 | `contact_invite_completed` | Invite handoff sends, cancels, or fails | `surface`, `delivery_mode`, `outcome`, `sent_count` |
-| `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
+| `notification_opened` | A routable local/remote notification response is accepted, or a received plan successfully opens from Notifications | allowlisted `notification_type`; `delivery_channel` (`local`, `remote`, `in_app`, `unknown`); coarse `route` |
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
 
@@ -201,3 +204,5 @@ For every analytics change:
 - When adding a notification type, update its iOS analytics allowlist and keep
   the server worker payload aggregate-only. Never solve frequency distribution
   by sending recipient IDs or per-recipient rows to PostHog.
+
+Place invitation opens from Notifications use `notification_type=place_plan_invitation`, `delivery_channel=in_app`, and `route=place_plan`. Emit only after the recipient resolver succeeds. Reopening is a new open; refreshes and failed/unavailable requests emit nothing. No invitation ID, token, sender, place, date, message, or artwork URL is sent. These in-app opens are excluded from the existing remote push-delivery funnel.

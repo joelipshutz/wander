@@ -288,6 +288,7 @@ enum NotificationDestination: Equatable {
     case listInvite(token: String)
     case place(id: String)
     case activityComments(id: String)
+    case checkInComments(userPlaceID: String, visitID: String)
     case sharedVisit(participantID: String, generation: Int)
     case calendarReservation(id: String)
     case drafts(extractionJobID: String?)
@@ -916,6 +917,22 @@ final class PushNotificationManager: ObservableObject {
         let deeplink = (payload?["deeplink_url"] as? String).flatMap(URL.init(string:))
         let data = payload?["data"] as? [String: Any]
 
+        // Older pushes carry a place URL even when the exact post/visit is in
+        // data. Prefer that identity so repeat check-ins never open another post.
+        if ["activity_liked", "activity_commented", "followed_place_visit",
+            "place_saved_from_your_map", "followed_activity_digest"].contains(notificationType ?? "") {
+            if let activityID = data?["activity_id"] as? String,
+               !activityID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .activityComments(id: activityID)
+            }
+            if notificationType == "followed_place_visit",
+               let userPlaceID = data?["user_place_id"] as? String,
+               let visitID = data?["visit_id"] as? String,
+               UUID(uuidString: userPlaceID) != nil, UUID(uuidString: visitID) != nil {
+                return .checkInComments(userPlaceID: userPlaceID, visitID: visitID)
+            }
+        }
+
         if let deeplink, let destination = destination(from: deeplink, notificationType: notificationType) {
             return destination
         }
@@ -976,6 +993,7 @@ final class PushNotificationManager: ObservableObject {
             "list_place_added",
             "mutual_follow",
             "place_saved_from_your_map",
+            "place_plan_invitation",
             "save_streak_reminder",
             "shared_visit",
             "wanna_go_reminder"
@@ -1002,7 +1020,7 @@ final class PushNotificationManager: ObservableObject {
             return "list_invite"
         case .place:
             return "place"
-        case .activityComments:
+        case .activityComments, .checkInComments:
             return "activity_comments"
         case .sharedVisit:
             return "shared_visit"

@@ -10,6 +10,12 @@ enum OnboardingLocationContent {
 }
 
 struct OnboardingLocationMapPreview: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+
+    var isPlaying = true
+
     private static let region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.085, longitude: -118.276),
         span: MKCoordinateSpan(latitudeDelta: 0.045, longitudeDelta: 0.045)
@@ -19,42 +25,42 @@ struct OnboardingLocationMapPreview: View {
         PreviewPin(
             id: "larchmont-noodles",
             name: "Larchmont Noodles",
-            emoji: "🍜",
+            systemImage: "fork.knife",
             coordinate: CLLocationCoordinate2D(latitude: 34.073, longitude: -118.323),
             ownership: .social
         ),
         PreviewPin(
             id: "griffith-trail",
             name: "Griffith Observatory Trail",
-            emoji: "🥾",
+            systemImage: "figure.hiking",
             coordinate: CLLocationCoordinate2D(latitude: 34.119, longitude: -118.300),
             ownership: .social
         ),
         PreviewPin(
             id: "woodcat-coffee",
             name: "Woodcat Coffee",
-            emoji: "☕️",
+            systemImage: "cup.and.saucer.fill",
             coordinate: CLLocationCoordinate2D(latitude: 34.077, longitude: -118.260),
             ownership: .currentUser
         ),
         PreviewPin(
             id: "bar-nido",
             name: "Bar Nido",
-            emoji: "🍝",
+            systemImage: "fork.knife",
             coordinate: CLLocationCoordinate2D(latitude: 34.079, longitude: -118.260),
             ownership: .social
         ),
         PreviewPin(
             id: "elysian-picnic",
             name: "Elysian Picnic Steps",
-            emoji: "🌳",
+            systemImage: "tree.fill",
             coordinate: CLLocationCoordinate2D(latitude: 34.082, longitude: -118.237),
             ownership: .currentUser
         ),
         PreviewPin(
             id: "circuit-coffee",
             name: "Circuit Coffee",
-            emoji: "☕️",
+            systemImage: "cup.and.saucer.fill",
             coordinate: CLLocationCoordinate2D(latitude: 34.094, longitude: -118.273),
             ownership: .currentUser,
             isSelected: true
@@ -62,13 +68,28 @@ struct OnboardingLocationMapPreview: View {
     ]
 
     @State private var position = MapCameraPosition.region(Self.region)
+    @State private var revealedPinCount = 0
+    @State private var cardIsVisible = false
+
+    private var shouldAnimate: Bool {
+        isPlaying && scenePhase == .active && !reduceMotion && !voiceOverEnabled
+    }
+
+    private static var entranceRegion: MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.082, longitude: -118.280),
+            span: MKCoordinateSpan(latitudeDelta: 0.052, longitudeDelta: 0.052)
+        )
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Map(position: $position, interactionModes: []) {
-                ForEach(Self.pins) { pin in
+                ForEach(Array(Self.pins.enumerated()), id: \.element.id) { index, pin in
                     Annotation(pin.name, coordinate: pin.coordinate, anchor: .center) {
                         OnboardingLocationMapPin(pin: pin)
+                            .opacity(!shouldAnimate || index < revealedPinCount ? 1 : 0)
+                            .scaleEffect(!shouldAnimate || index < revealedPinCount ? 1 : 0.92)
                     }
                 }
             }
@@ -77,6 +98,8 @@ struct OnboardingLocationMapPreview: View {
 
             OnboardingLocationSelectedPlaceCard()
                 .padding(WanderTheme.spacing3)
+                .opacity(!shouldAnimate || cardIsVisible ? 1 : 0)
+                .offset(y: !shouldAnimate || cardIsVisible ? 0 : 18)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
@@ -87,6 +110,56 @@ struct OnboardingLocationMapPreview: View {
         .accessibilityLabel(
             "An Astir map with nearby recommendations and Circuit Coffee selected. Maya and two friends rated it 4.7."
         )
+        .task(id: shouldAnimate) {
+            guard shouldAnimate else {
+                settleEntrance()
+                return
+            }
+            await playEntrance()
+        }
+    }
+
+    @MainActor
+    private func playEntrance() async {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            position = .region(Self.entranceRegion)
+            revealedPinCount = 0
+            cardIsVisible = false
+        }
+        do {
+            try await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 2.2)) {
+                position = .region(Self.region)
+            }
+            for index in Self.pins.indices {
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.28)) {
+                    revealedPinCount = index + 1
+                }
+                try await Task.sleep(for: .milliseconds(90))
+            }
+            try await Task.sleep(for: .milliseconds(480))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.4)) {
+                cardIsVisible = true
+            }
+        } catch {
+            // SwiftUI cancels on page changes, backgrounding and disappearance.
+        }
+    }
+
+    @MainActor
+    private func settleEntrance() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            position = .region(Self.region)
+            revealedPinCount = Self.pins.count
+            cardIsVisible = true
+        }
     }
 }
 
@@ -105,7 +178,7 @@ private struct PreviewPin: Identifiable {
 
     let id: String
     let name: String
-    let emoji: String
+    let systemImage: String
     let coordinate: CLLocationCoordinate2D
     let ownership: Ownership
     var isSelected = false
@@ -115,8 +188,10 @@ private struct OnboardingLocationMapPin: View {
     let pin: PreviewPin
 
     var body: some View {
-        Text(pin.emoji)
-            .font(.system(size: pin.isSelected ? 20 : 17))
+        Image(systemName: pin.systemImage)
+            .font(.system(size: pin.isSelected ? 20 : 17, weight: .semibold))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(pin.ownership.color)
             .frame(width: pin.isSelected ? 48 : 40, height: pin.isSelected ? 48 : 40)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
@@ -146,8 +221,10 @@ private struct OnboardingLocationMapPin: View {
 private struct OnboardingLocationSelectedPlaceCard: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            Text("☕️")
-                .font(.system(size: 38))
+            Image(systemName: "cup.and.saucer.fill")
+                .font(.system(size: 32, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(WanderTheme.terracotta.color)
                 .frame(width: 78, height: 78)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))

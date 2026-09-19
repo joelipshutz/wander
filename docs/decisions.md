@@ -21,6 +21,60 @@ root teardown cancels owned reads before their results can apply. The cover
 provides preparation time; it does not establish that post-reveal responsiveness
 has passed device validation.
 
+## Native onboarding review (REC-529)
+
+Onboarding review uses the production Swift views and simulator recordings. The
+review host supplies local sample data through the existing repository interfaces;
+it does not recreate phone screens in HTML or create real accounts/follows.
+
+The welcome sequence retains the September 18 Signal treatment from main:
+“Connect with your” introduces community, people, places, and loved ones with
+whole-word slides before the final “a local experiment” phrase. Supporting
+copy slides in separately; the entire composition slides into the next screen.
+The flow advances once through
+the places and people benefits into account creation, with Next, pause, and
+direct Log in. Profile setup requires a
+name, available username, and saved photo; its header previews the profile live.
+Following is an explicit action on each person, with search and retry states.
+
+The first-visit tour explains Map controls in order: Featured, Friends, More,
+Search, Plus, then pin meanings. It continues directly into the user's current
+Feed and ends at the Feed top without forcing a save. Independent first-use
+annotations remain for Plus and place profiles; Lists and scheduled follow-on
+NUX are retired. Established accounts are not newly enrolled by this change.
+
+The delayed supporting line “Keep track of everywhere you’ve been. Keep up with
+the people you love.” is the current review baseline; supporting-copy alternatives
+and timing remain open. The lead-in, four words and final phrase are confirmed.
+Explicit empty preview/test configurations can omit the opening; the production
+default includes it. Broader explorations remain in the REC-529 open questions.
+Native capture routes are DEBUG-only. Validation and native media evidence are
+recorded in the implementation PR and `docs/reviews/rec-529-native-onboarding.md`.
+
+### September 18 post-onboarding NUX selections
+
+Slide/fade remains selected. The quote/Enjoy ending is removed. After Map rings,
+the app slides into the user's actual current Feed. A people tile stays sharp
+with “Connect with your circle,” then the blur clears and the Feed scrolls to
+center the latest actual activity tile. Its entire bounds—including the footer—
+remain unblurred with “Keep up with their moments.” Both beats have Next and
+finite automatic playback, with 2.7-second reading holds and 6.6 seconds total
+once targets are ready. The page clears and returns to the top to finish.
+Completion is account-scoped and does not repeat on later visits. Missing data
+is not replaced with example content. The old multi-card scroll is not restored.
+
+On the first voluntary + opening, guide nearby search and the import entry with
+“Search nearby places” and “Import your saved places from Instagram, TikTok and
+Google Maps.” Wait for nearby loading and sheet layout to settle. Keep the page
+unblurred and outline the entire Nearby section, including its header, results
+and See more. Without location/results, outline only the search bar. The two
+reading windows total eight seconds. Normal source actions remain usable; the
+lesson itself never requests location access. On first place-profile entry,
+keep the 3.5-second moderate blur, static annotations and real floating buttons,
+then one 1.4-second diagonal glimmer. Wanna copy is “Places you wanna go.” No
+Next/Skip on the profile; Reduce Motion omits its sweep. Later visits are normal.
+The More highlight continues to hug only its dropdown. Starter lists are deferred.
+
 ## Astir Events engineering direction (REC-467)
 
 The September 15 [conditional handoff](designs/astir-events/engineering-handoff.md)
@@ -93,7 +147,7 @@ and a refresh recomputes it solely from currently visible events.
 | Dark-mode rating colors | Locked for REC-499 | Use the approved neon palette for the liquid rating slider in dark appearance: electric blue at 1, orange at 3, and neon red at 5, interpolating across the existing half-point rating scale. Light appearance retains its original palette; rating values and interaction are unchanged. |
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | Import review details and source identity | Locked for REC-409 | Import row details expand inline using the same save-editor components, mode switching, validation, and local persistence as ordinary Wanna and Check-in saves. A source mention may select up to five concrete candidates with one shared save mode. Place imagery comes from the place-photo pipeline; history uses preserved source artwork when available and monochrome source-brand assets shared by the app and Share extension. History labels remain Matching while either the batch or an item is processing. |
-| Import attention and progress | Locked for REC-409 | The History badge counts each matching import plus each finished import awaiting its first review, once per import rather than per place. Finished outcomes include successful matches, failed source scans, empty results, and saved reports; explicitly cancelled imports are excluded. It sits at the history button’s top right. Opening the grid or dismissing the toast does not clear it; opening that finished import through its history tile or Review action does, including the saved-report destination. Opening a still-matching report does not pre-acknowledge its future results. The optional review timestamp uses the existing owner-scoped device snapshot and remains compatible with older snapshots. Matching progress is transient, based on actual source/hint/row completion; a source URL is not counted as one place, and unknown totals stay indeterminate until extraction returns. No timer simulates resolved places. Each import-sheet presentation selects the content-fit detent afresh while retaining manual expansion. |
+| Import attention and progress | Locked for REC-409, revised for REC-540 | The History badge counts each matching import and each import with unresolved returned places once. Opening a report acknowledges its completion notice but keeps its badge until all returned places are saved, already exist, or are explicitly dismissed. Failed scans and empty results count until opened; cancelled imports never count. History shows Partially imported when more than half of known source places matched and returned places remain unresolved, then Done once those returned places are resolved. Source-level retry markers and unmatched hints do not keep an otherwise resolved import open. The review timestamp remains an independent, owner-scoped completion-notice acknowledgement. Matching progress is transient and based on actual source/hint/row completion; unknown totals remain indeterminate until extraction returns. Each import-sheet presentation selects the content-fit detent afresh while retaining manual expansion. |
 | XcodeGen | Locked | `project.yml` is source of truth. |
 | Instagram Feed direct handoff | Provisional for REC-271 | Ryan explicitly accepted the risk of trying the undocumented `instagram://library?LocalIdentifier=` route first so the rendered ticket can open already selected in Instagram. The app must save the ticket to Photos, keep `.igo` plus `com.instagram.exclusivegram` as the automatic fallback when the deep link cannot open, and retain the system share fallback behind that. Remove or revise this experiment if physical-device testing fails or Instagram/App Review rejects it. |
 | Clerk + Supabase | Locked | Clerk for identity/account, Supabase for data/RLS/PostGIS/storage/functions. |
@@ -131,8 +185,21 @@ and a refresh recomputes it solely from currently visible events.
 | Product analytics dashboard | Locked for REC-170 | The acquisition-to-referral dashboard lives in PostHog and is provisioned from `scripts/posthog-product-dashboard.mjs`. Explicit, privacy-safe events are the source of truth; PostHog autocapture remains disabled. Engagement is normalized to Connect, Expression, and Status. Referral measurement stops at invite handoff until attributed links exist, and Monetization remains visibly blank until a product decision defines it. |
 | Analytics provider | Locked for alpha | Use PostHog through the vendor-neutral analytics interface. Keep sync/auth diagnostics non-PII: counts, enum metadata, and internal auth user id only; no place names, notes, coordinates, emails, or handles. |
 | Sync conflict behavior | Locked v0.1 | Simple `updated_at`/server-wins plus local retry queue. |
-| Full onboarding | Locked for REC-132 Phase A; revised for REC-396 and REC-425 on 2026-09-03 | Logged-out users see a three-slide real-map carousel, then Clerk auth, required display name/username, optional photo, and location, Contacts, trusted-friend, and notification steps. A permission primer that immediately precedes a system alert has one neutral Continue action and no skip path; denied state recovery may open Settings or continue without the optional capability. Apple Calendar setup stays in Profile → Settings → Privacy and trust until the NUX reaches the relevant social experience. Existing users remain complete. Contextual notification enrollment reuses the central campaign after new saves/follows. |
+| Full onboarding | Locked for REC-132 Phase A; permissions revised for REC-396 and REC-425; opening revised for REC-529 on 2026-09-18 | Logged-out users see the Signal word sequence, then native Places and People previews. Next and Log in remain available throughout; the final scene advances into native Clerk-backed account entry with a horizontal slide, and sign-up has no close button. Closing Log in restarts the welcome flow. Required display name/username and a saved profile photo (including an existing provider avatar), followed by location, Contacts, trusted-friend, and notification steps, complete account setup. A permission primer that immediately precedes a system alert has one neutral Continue action and no skip path; denied state recovery may open Settings or continue without the optional capability. Apple Calendar setup stays in Profile → Settings → Privacy and trust until the NUX reaches the relevant social experience. Existing users remain complete. Contextual notification enrollment reuses the central campaign after new saves/follows. |
 | M3 backend schema/RLS/profile foundation | Project created, migrations applied, webhook verified | New Supabase project `rugmtlgufrhlxwfkumhw` and new Clerk app `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9` are created. Migrations `20260602131500`, `20260602140304`, `20260602143000`, `20260602210000`, and `20260604185000` are applied remotely. Hosted pgTAP tests passed with 29 assertions. Clerk profile mirroring is deployed through Svix -> Supabase Edge Function -> PostgREST RPC, and real create/delete webhook flow was verified. Schema includes custom `question_definitions` plus JSON-backed `place_attributes` so future user-created questions/inputs can be added without answer-column churn. |
+
+## Check-in details (REC-485, revised 2026-09-17)
+
+- Each selectable place subcategory has three deliberately curated, optional default questions. Cuisine alone does not change dining logistics: ordinary restaurants share parking, outdoor seating and dietary options; vegan/vegetarian, gluten-free, tabletop cooking, takeaway and fine dining get practical exceptions. Coffee, tea and sweets always include dogs. Synonymous gym, cafe, lodging and station types can share defaults, while genuine differences such as Pilates, CrossFit, beach courts and hostels remain distinct. Shared questions are reused when the practical need is the same; functional subtypes receive their own selection. The complete inventory is in [the question catalog](product/check-in-question-catalog.md).
+- A fresh Check-in starts with no answers. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
+- Wanna leads with one introduction/context note, with its optional date above categories. Check-in orders rating, note, date, categories, Useful details, then friends/photos. Optional tags stay at the bottom. Adding a visit retains the original Wanna note.
+- Customize belongs beside Useful details and in Settings → Check-in questions. A person can search subtypes, reorder, remove, restore, add catalog questions, or create recurring yes/no questions. Configuration is account-scoped on the current device. Removing a question retains its previous answers. Not useful persists a hidden ID for that account and subtype, including when editing an older save; the current row grays out with Undo. Explicit re-add or confirmed Restore brings a prompt back. Restoring suggestions requires a native confirmation; existing customizations do not silently adopt changed defaults.
+- Each recurring question has an inline eye button (signal open eye for shared, gray slashed eye for private), with no separate Stealth page. Each question has a Stealth setting: on keeps its answer owner-private on this device; off shares it only with that Check-in's audience. New custom questions default to Stealth on; catalog questions default off. Add/create screens omit privacy controls; the recurring-list eye is the single place to change them. The Check-in shows its gray Stealth badge beside the question. Changing a default in Settings never republishes historical answers. Only an explicit audience change in the visit editor moves its draft answer between channels.
+- Most built-in observations use Yes/No with the existing `single_choice` type. Older qualified values remain readable and selectable when already answered. Dietary options use the existing `multi_tag` array contract (Vegan, Vegetarian, Gluten free), preserving every selection across shared/private transitions. Explicitly shared custom answers use a versioned prompt/yes-no JSON envelope with the existing `text` value type and a distinct `place_detail_custom_` key. Legacy private custom keys never imply publication consent. Search uses explicit answer semantics: a negative answer does not become a positive amenity match. Existing labels and unknown attributes remain intact when edited.
+- Shared Visit invitations preserve their established note, rating, tags, and photos, but omit the source owner's question answers. Recipients answer firsthand details themselves. New snapshot construction and reads of older pending snapshots use the same filter; stored history is not rewritten.
+- Tag suggestions describe uses and occasions rather than repeating question facts. Each category offers a small curated set; exact duplicates and an explicit list of near-synonyms render as one chip. Existing personal labels remain stored unchanged unless the person explicitly removes their chip.
+- Synced owner visits hydrate complete answer JSON through `own_place_visit_details`, an authenticated owner-only read. Raw table-column grants remain restricted. Unknown remote answers cannot be edited or synchronized as an empty answer set. This endpoint exposes no other person's answer history.
+- Voice capture and semantic personal recall remain separate follow-up work (REC-490, REC-491, REC-492). This change preserves useful narrative context without introducing those features.
 
 ## Release Decisions
 
@@ -149,6 +216,10 @@ and a refresh recomputes it solely from currently visible events.
 
 | Decision | Status | Notes |
 |---|---|---|
+| In Common naming | Accepted for REC-486, 2026-09-16 | **In Common** is the user-facing name for the member-profile feature and its curated place page, replacing Common Ground and In good company. Keep internal type, file, and accessibility identifiers unchanged. |
+| In Common Wanna evidence | Accepted for REC-486, 2026-09-16 | Match Wannas and check-ins independently for each person and canonical place. Inspect every visible Wanna event, including repeat events attached to a Been summary; deduplicate event IDs. A previous check-in remains compatible with a Wanna recommendation. Copy must allow returning to a place. The live adapter groups all authorized rows and consumes REC-497 repeat-Wanna events from every matching user-place record without changing the checked-in summary. |
+| In Common invitation inbox | Accepted for REC-486, 2026-09-18 | Creating a shared plan adds it to the recipient's Profile → Notifications → Plans. The authenticated recipient can reopen the same read-only invitation without its external link. Opening marks it read without removing it; expired invitations, deleted accounts, and blocks make it unavailable. External sharing remains optional after creation. The inbox returns up to 100 newest active plans and never returns bearer tokens. Read state persists on the server; the client cache is account-scoped and does not persist invitation contents on disk. |
+| Notifications bell badge | Accepted for REC-486, 2026-09-18 | The numeric bell badge counts unseen received plans and pending check-in invitation deliveries. Entering Notifications clears the badge without opening plans or accepting/declining check-ins, including items that finish loading while the inbox is visible. Seen opaque IDs persist per account on the device; new plan IDs and new check-in invitation generations count again. Individual plan read state remains server-owned and separate from this local badge acknowledgment. |
 | Handoff package is source of truth | Revised provisionally for REC-383 / REC-397 | Keep `preview/follow-profile-settings-mocks/` as the interaction, layout, and functionality reference. Joe's explicit Astir exploration direction supersedes its visual palette and typography across production surfaces. The Astir public name is now approved in REC-475. |
 | `tokens.css` is canonical | Revised provisionally for REC-397 | Its spacing, radius, and functional component guidance remain useful. Production color and type now resolve through the adaptive Astir semantic tokens while this exploration is evaluated in-app. |
 | Adaptive Astir editorial style | Provisional for REC-383 / REC-397 | Light Mode is warm paper with ink; Dark Mode is ink-black with paper. Astir signal coral `#F05A3C` is the brand-action/selection accent. Semantic status colors remain distinct. These adaptive editorial variants are the only live Astir modes; launch arguments do not select a separate palette. |
@@ -171,8 +242,8 @@ and a refresh recomputes it solely from currently visible events.
 | Unified save-place tags | Locked for REC-155 implementation | The save flow merges place tags and legacy `My Labels` into one user-facing field named **Tags**. It uses Option D's selected-tag shelf plus one uncategorized, symmetrical suggestion grid inside the existing More Options disclosure. Suggestions are normalized, deduplicated case-insensitively, and recomputed with every optional question when status or taxonomy changes: category + cuisine for Restaurants & Food, or category + subcategory otherwise. Incompatible generated values are removed while custom tags and answers survive; edited legacy labels are folded into the active tag attribute instead of writing a second user-facing field. The rest of the Check-in page remains unchanged. |
 | Save More Options controls | Locked for REC-173 | Every option-based contextual question inside Check-in and Wanna More Options uses the Tag Shelf's structured card language instead of free-wrapping chips. Three-value single-choice scales use equal-width icon-over-label tiles; multi-select questions use a two-column add/check grid plus the same full-width dashed custom-entry affordance as Tags. Accessibility Dynamic Type collapses grids to one column. This is a rendering contract only: question templates, taxonomy refresh, single/multi selection semantics, stored values, and content outside More Options remain unchanged. |
 | Place attribute value-type contract | Locked | iOS `PlaceAttributeDraft.valueType`, `question_definitions.value_type`, and `place_attributes.value_type` are one cross-layer contract. Semantic `personal_label` and `restaurant_cuisine` types are first-class alongside generic input types. Every new type must update both constraints and pass the authenticated hosted `public.save_own_place` smoke transaction before merge/release. |
-| Import report confirmation | Locked for REC-442, 2026-09-06 | Wanna, Check In, list membership, and inline details remain editable selections until the report’s bottom Save action. Bulk status controls select matching actions down the review tiles. Successful Save publishes the updated saved section together, above remaining matches. List membership is independent of Wanna or Check In. History tiles show the post title; the author/account belongs below the report cover. |
-| Import completion frequency | Locked for REC-442, 2026-09-07 | Each import completion is surfaced once through a toast or notification, with the consumed state retained across launches. Historical completed imports remain available in History without a fresh alert; dismissal does not clear the unopened badge. Explicit retries reset completion eligibility. A grouped completion opens History so each post retains its own report. |
+| Import report confirmation | Locked for REC-442, revised for REC-540 | Wanna, Check In, lists, and inline details stay staged until Save. Ready to add appears before Saved and disappears when empty. Both sections use the same card layout and controls; saved cards have a visible soft green border, removed while edits are pending. Successful Save persists the choices and closes the import flow. Toggling off a saved selection requires a metadata-loss confirmation and remains staged until Save. Each tile has one Wanna OR Check In plus optional lists. Switching confirms removal of the old action and its metadata, then creates a new action; independent visits remain. Check-in removal targets the captured visit; Wanna removal targets its event or original Wanna; list removal targets the confirmed lists. Explicitly cleared selections remain cleared when reopening. Receipt snapshots retain Wanna, visit, candidate, and list identities and any unfinished confirmed replacement removal; legacy receipts infer the currently displayed selections, and check-in confirmation identifies the visit date. List membership is independent of Wanna or Check In. Source artwork fits the entire image; the post title appears in History, with the author below the report cover. |
+| Import completion frequency | Locked for REC-442, 2026-09-07 | Each import completion is surfaced once through a toast or notification, with the consumed state retained across launches. Historical completed imports remain available in History without a fresh alert; dismissal does not clear the unresolved-import badge. Explicit retries reset completion eligibility. A grouped completion opens History so each post retains its own report. |
 
 ## Reset Decisions
 
@@ -223,11 +294,19 @@ existing horizontal rail margins. Accessibility sizes widen cards to 240 points
 and allow content to grow vertically. Following and retry feedback stays inside
 the button so standard cards do not jump in height.
 
-Tapping Follow gives one light haptic and immediately shows Following while
+Tapping Follow gives one medium-impact haptic and immediately shows Following while
 the request syncs in the background. A pending card uses the same appearance as
 a confirmed follow, prevents duplicate taps, and keeps its profile accessible.
 Failed requests restore the in-button retry action; server completion does not
 generate another haptic.
+
+September 17 device feedback increased that single tap to medium impact at full
+intensity. Feed postcard photos use the existing background image decoder with
+a separate 48 MiB / 24-entry cache. Decode dimensions follow the card's display
+size in 64-pixel buckets, capped at 2,048 pixels. Local visit photos retain
+priority over authorized remote URLs; missing local files fall back remotely.
+A changed source or layout request cannot display an earlier request's image.
+Original upload data and full-screen photo behavior are unchanged.
 
 Featured's views, models, and original database projection remain available.
 `FeedPresentation.showsFeaturedPlaces` controls both presentation and the remote
@@ -260,3 +339,25 @@ Do not add a live shader, network dependency, playback UI, or per-frame SwiftUI
 state to this decorative surface. No event data, waitlist, booking, or RSVP
 behavior is implied by the teaser. The source and asset handoff are documented
 in `docs/designs/events-coming-soon/README.md`.
+
+## 2026-09-17 — Map opening location precedence (REC-539)
+
+On ordinary app opening, center Map on a fresh authorized device location. While
+acquiring it, or when permission is unavailable or acquisition fails, use the
+most recently shared location. With no recorded location, center on Ocean Park,
+Santa Monica, California. Saved places and Featured results never choose the
+launch camera. Explicit place navigation and gestures take precedence over a
+late location response.
+
+Retain one timestamped valid location locally on the device, including locations
+obtained through Allow Once. Keep it after temporary permission expires or
+permission is disabled; only a newer authorized fix replaces it. This is a map
+fallback, not a live location indicator or a location history. Do not sync this
+record or put coordinates in analytics. Older installations without a recorded fix
+cannot reconstruct a past one-time share.
+
+Map location acquisition does not prompt for permission on launch. Approximate
+permission is sufficient for centering the map; nearby POI resolution retains
+its stricter accuracy requirement. Cancel obsolete launch requests and retry
+when the app returns from the background or authorization changes. Preserve the
+existing deterministic Los Angeles viewport only for explicit debug fixtures.

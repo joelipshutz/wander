@@ -2,6 +2,55 @@ import XCTest
 
 final class CompactPeopleCardsUITests: XCTestCase {
     @MainActor
+    func testFollowPaddingAcceptsTapAndPendingRequestKeepsRailScrollable() {
+        let app = launch(delayedFollow: true)
+        let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 15))
+        let originalX = follow.frame.minX
+
+        // This is inside the painted button, well outside the text glyphs.
+        follow.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5)).tap()
+        XCTAssertEqual(follow.label, "Following Alex Rivera")
+        XCTAssertFalse(follow.isEnabled)
+
+        let start = follow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 25, dy: follow.frame.midY))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        XCTAssertLessThan(follow.frame.minX, originalX - 40,
+                          "A pending Follow must not capture horizontal scrolling")
+        capture("compact-people-pending-follow-horizontal-scroll")
+    }
+
+    @MainActor
+    func testDraggingFromFollowScrollsWithoutSubmitting() {
+        let app = launch(delayedFollow: true)
+        let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 15))
+        let originalX = follow.frame.minX
+        let end = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 25, dy: follow.frame.midY))
+        follow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: end)
+        XCTAssertLessThan(follow.frame.minX, originalX - 40)
+        XCTAssertEqual(follow.label, "Follow Alex Rivera",
+                       "Dragging across the button must cancel the follow action")
+    }
+
+    @MainActor
+    func testTopRightAndBottomFollowPaddingAcceptTaps() {
+        for point in [CGVector(dx: 0.5, dy: 0.08), CGVector(dx: 0.94, dy: 0.5), CGVector(dx: 0.5, dy: 0.92)] {
+            let app = launch(delayedFollow: true)
+            let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
+            XCTAssertTrue(follow.waitForExistence(timeout: 15))
+            follow.coordinate(withNormalizedOffset: point).tap()
+            XCTAssertEqual(follow.label, "Following Alex Rivera")
+            XCTAssertFalse(follow.isEnabled)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testFollowShowsFollowingBeforeRequestCompletesAndRecoversOnFailure() {
         let app = launch(delayedFollow: true)
         let follow = app.buttons["people.recommendation.user_compact_alex.follow"]

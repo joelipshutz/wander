@@ -10,20 +10,21 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
+        let activity = app.cells.matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
         if !activity.waitForExistence(timeout: 5) {
             let more = app.buttons["More"].firstMatch
             if more.exists { more.tap() }
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         activity.tap()
-        XCTAssertTrue(app.buttons["share-extension-start-import"].waitForExistence(timeout: 5))
+        let countdownAvailable = app.buttons["share-extension-start-import"].waitForExistence(timeout: 5)
         keepScreenshot("Share extension — countdown begins")
         let sharedInboxUnavailable = app.staticTexts["Astir could not access its shared inbox. Check the app and extension App Group signing."]
         if sharedInboxUnavailable.waitForExistence(timeout: 6) {
             keepScreenshot("Share extension — appearance without Simulator App Group signing")
             throw XCTSkip("This Simulator build has no App Group container; durable extension capture requires a signed App Group build.")
         }
+        XCTAssertTrue(countdownAvailable)
         let captured = app.staticTexts["Captured: 1"]
         XCTAssertTrue(captured.waitForExistence(timeout: 20), "The real extension should durably capture once after its timer")
         XCTAssertFalse(app.staticTexts["Captured: 2"].exists)
@@ -147,14 +148,14 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
         app.launch()
         let action = app.buttons["import.checkin.report-place-1"]
-        for _ in 0..<5 where !action.isHittable { app.swipeUp() }
-        XCTAssertTrue(action.isHittable)
-        action.tap()
+        scrollToImportControl(action, in: app)
+        keepScreenshot("Import report — single save before physical tap")
+        action.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(action.value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (2)"].exists)
         XCTAssertTrue(app.buttons["import.wanna.report-place-2"].isEnabled)
-        app.buttons["import.save"].tap()
-        for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(app.staticTexts["Saved (2)"], in: app)
         XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
         XCTAssertTrue(app.staticTexts["8 places matched and ready"].exists)
     }
@@ -169,12 +170,14 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertEqual(all.value as? String, "Selected")
         XCTAssertEqual(app.buttons["import.wanna.report-place-1"].value as? String, "Selected")
         XCTAssertFalse(app.staticTexts["Saved (10)"].exists)
-        app.buttons["import.checkin.report-place-1"].tap()
-        XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
+        let checkIn = app.buttons["import.checkin.report-place-1"]
+        scrollToImportControl(checkIn, in: app)
+        checkIn.tap()
+        XCTAssertEqual(checkIn.value as? String, "Selected")
         XCTAssertTrue(app.buttons["import.save"].isEnabled)
         keepScreenshot("Import report — staged choices")
-        app.buttons["import.save"].tap()
-        for _ in 0..<5 where !app.staticTexts["Saved (10)"].isHittable { app.swipeDown() }
+        saveAndReopenImport(app, expectedBadge: "0")
+        scrollToImportControl(app.staticTexts["Saved (10)"], in: app)
         XCTAssertTrue(app.staticTexts["Saved (10)"].exists)
         XCTAssertFalse(app.buttons["import.save"].exists)
         XCTAssertFalse(app.buttons["import.all.wanna"].exists)
@@ -193,6 +196,179 @@ final class ImportFormRefinementUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["@coffeeguide"].exists)
         keepScreenshot("History — left edge opens the selected post")
+    }
+
+    func testSavedImportKeepsCardLayoutAndSelectionsUntilResaved() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 15))
+
+        let itemID = "report-place-1"
+        let checkIn = app.buttons["import.checkin.\(itemID)"]
+        scrollToImportControl(checkIn, in: app)
+        let readyCard = app.otherElements["import.ready-card.\(itemID)"]
+        let readyHeight = readyCard.frame.height
+        XCTAssertGreaterThan(readyHeight, 100)
+        XCTAssertLessThan(app.staticTexts["Ready to add"].frame.minY, app.staticTexts["Saved (1)"].frame.minY)
+
+        checkIn.tap()
+        let list = app.buttons["import.list.\(itemID)"]
+        list.tap()
+        let listRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(listRow.waitForExistence(timeout: 5))
+        listRow.tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(checkIn.value as? String, "Selected")
+        XCTAssertEqual(list.value as? String, "Selected")
+        saveAndReopenImport(app)
+
+        let savedCard = app.otherElements["import.saved-card.\(itemID)"]
+        let savedCheckIn = app.buttons["import.saved-checkin.\(itemID)"]
+        scrollToImportControl(savedCheckIn, in: app)
+        XCTAssertEqual(savedCard.value as? String, "Saved")
+        XCTAssertEqual(savedCard.frame.height, readyHeight, accuracy: 1)
+        XCTAssertEqual(savedCheckIn.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["import.saved-list.\(itemID)"].value as? String, "Selected")
+        keepScreenshot("Import report — green saved edge and preserved selections")
+
+        let savedWanna = app.buttons["import.saved-wanna.\(itemID)"]
+        savedWanna.tap()
+        XCTAssertTrue(app.alerts["Change to Wanna?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Change to Wanna"].tap()
+        XCTAssertEqual(savedCard.value as? String, "Unsaved changes")
+        XCTAssertEqual(savedWanna.value as? String, "Selected")
+        XCTAssertTrue(app.buttons["import.save"].isEnabled)
+        keepScreenshot("Import report — changed selection removes saved edge")
+        saveAndReopenImport(app)
+        scrollToImportControl(savedWanna, in: app)
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 5))
+        XCTAssertEqual(savedCard.value as? String, "Saved")
+        XCTAssertEqual(savedWanna.value as? String, "Selected")
+        XCTAssertEqual(app.buttons["import.saved-list.\(itemID)"].value as? String, "Selected")
+        keepScreenshot("Import report — resaved Wanna restores green edge")
+    }
+
+    func testListOnlyEditRemovesSavedEdgeUntilSaveAndEmptyReadySectionDisappears() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport", "-WanderImportDarkAppearance"]
+        app.launch()
+        let all = app.buttons["import.all.wanna"]
+        scrollToImportControl(all, in: app)
+        all.tap()
+        saveAndReopenImport(app)
+        XCTAssertTrue(app.staticTexts["Saved (3)"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Ready to add"].exists)
+        XCTAssertFalse(app.buttons["import.all.wanna"].exists)
+        XCTAssertFalse(app.buttons["import.save"].exists)
+
+        let itemID = "report-place-0"
+        let list = app.buttons["import.saved-list.\(itemID)"]
+        scrollToImportControl(list, in: app)
+        let card = app.otherElements["import.saved-card.\(itemID)"]
+        XCTAssertEqual(card.value as? String, "Saved")
+        list.tap()
+        let listRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(listRow.waitForExistence(timeout: 5))
+        listRow.tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(card.value as? String, "Unsaved changes")
+        XCTAssertEqual(list.value as? String, "Selected")
+        saveAndReopenImport(app)
+        scrollToImportControl(list, in: app)
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertEqual(card.value as? String, "Saved")
+        XCTAssertEqual(list.value as? String, "Selected")
+        XCTAssertFalse(app.buttons["import.save"].exists)
+        keepScreenshot("Import report — dark saved list-only edit complete")
+    }
+
+    func testSavedWannaCanBeCancelledThenRemovedAndReselectedAfterReopening() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport"]
+        app.launch()
+        let wanna = app.buttons["import.saved-wanna.report-place-0"]
+        scrollToImportControl(wanna, in: app)
+        let card = app.otherElements["import.saved-card.report-place-0"]
+        wanna.tap()
+        XCTAssertTrue(app.alerts["Remove Wanna?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertEqual(wanna.value as? String, "Selected")
+        XCTAssertEqual(card.value as? String, "Saved")
+        wanna.tap()
+        app.alerts.buttons["Remove Wanna"].tap()
+        XCTAssertEqual(wanna.value as? String, "Not selected")
+        XCTAssertEqual(card.value as? String, "Unsaved changes")
+        keepScreenshot("Import report — confirmed Wanna removal is staged")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(wanna, in: app)
+        XCTAssertEqual(wanna.value as? String, "Not selected")
+        XCTAssertEqual(card.value as? String, "Saved")
+        wanna.tap()
+        XCTAssertEqual(wanna.value as? String, "Selected")
+        XCTAssertEqual(card.value as? String, "Unsaved changes")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(wanna, in: app)
+        XCTAssertEqual(wanna.value as? String, "Selected")
+        XCTAssertEqual(card.value as? String, "Saved")
+    }
+
+    func testSavedCheckInAndListsCanBeRemovedWithConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport", "-WanderImportCompactReport"]
+        app.launch()
+        let checkIn = app.buttons["import.checkin.report-place-1"]
+        scrollToImportControl(checkIn, in: app)
+        checkIn.tap()
+        app.buttons["import.list.report-place-1"].tap()
+        let listRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
+        XCTAssertTrue(listRow.waitForExistence(timeout: 5))
+        listRow.tap()
+        app.buttons["Done"].tap()
+        saveAndReopenImport(app, expectedBadge: "1")
+
+        let savedCheckIn = app.buttons["import.saved-checkin.report-place-1"]
+        let savedList = app.buttons["import.saved-list.report-place-1"]
+        scrollToImportControl(savedCheckIn, in: app)
+        savedCheckIn.tap()
+        XCTAssertTrue(app.alerts["Remove Check In?"].waitForExistence(timeout: 5))
+        keepScreenshot("Import report — check-in metadata warning")
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertEqual(savedCheckIn.value as? String, "Selected")
+        savedCheckIn.tap()
+        app.alerts.buttons["Remove Check In"].tap()
+        XCTAssertEqual(savedCheckIn.value as? String, "Not selected")
+        XCTAssertEqual(savedList.value as? String, "Selected")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(savedList, in: app)
+        XCTAssertEqual(savedCheckIn.value as? String, "Not selected")
+        savedList.tap()
+        XCTAssertTrue(app.alerts["Remove from lists?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertEqual(savedList.value as? String, "Selected")
+        savedList.tap()
+        app.alerts.buttons["Remove from lists"].tap()
+        XCTAssertEqual(savedList.value as? String, "Not selected")
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(savedList, in: app)
+        XCTAssertEqual(savedCheckIn.value as? String, "Not selected")
+        XCTAssertEqual(savedList.value as? String, "Not selected")
+    }
+
+    private func saveAndReopenImport(_ app: XCUIApplication, expectedBadge: String? = nil) {
+        app.buttons["import.save"].tap()
+        let reopen = app.buttons["import.open-report"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 5), "Save closes the report")
+        if let expectedBadge { XCTAssertEqual(app.staticTexts["import.capture-badge"].label, expectedBadge) }
+        reopen.tap()
+        XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 5))
+    }
+
+    private func scrollToImportControl(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<10 where !element.isHittable || element.frame.maxY > app.frame.height - 120 {
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.isHittable)
     }
 
     func testSavedImportPlaceOpensItsProfile() {
@@ -225,8 +401,8 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["import.checkin.report-place-1"].tap()
         XCTAssertEqual(lists.value as? String, "Selected")
         XCTAssertEqual(app.buttons["import.checkin.report-place-1"].value as? String, "Selected")
-        app.buttons["import.save"].tap()
-        for _ in 0..<5 where !app.staticTexts["Saved (2)"].isHittable { app.swipeDown() }
+        saveAndReopenImport(app, expectedBadge: "1")
+        scrollToImportControl(app.staticTexts["Saved (2)"], in: app)
         XCTAssertTrue(app.staticTexts["Saved (2)"].exists)
     }
 
@@ -577,7 +753,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(alert.staticTexts.matching(
             NSPredicate(
                 format: "label == %@",
-                "Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select."
+                "Astir uses your contacts to help you connect with people you know."
             )
         ).firstMatch.exists)
 
@@ -694,508 +870,278 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testSecondLaunchImportLessonOpensImportFromPage() {
+    func testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving() {
         let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderShowImportWalkthrough"
-        ]
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderNUXFeedFixture"]
         app.launch()
-
-        let lesson = app.descendants(matching: .any)["walkthrough.importLesson"]
-        let openImport = app.buttons["Open import form"]
-        XCTAssertTrue(lesson.waitForExistence(timeout: 5))
-        XCTAssertTrue(openImport.isHittable)
-        XCTAssertTrue(app.buttons["Import help"].exists)
-        XCTAssertFalse(app.buttons["walkthrough.dismiss.importLesson"].exists)
-        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
-
-        let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        promptScreenshot.name = "REC-236 second-launch Import From prompt"
-        promptScreenshot.lifetime = .keepAlways
-        add(promptScreenshot)
-
-        openImport.tap()
-
-        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 4))
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 second-launch Import From destination"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        for target in ["mapFeatured", "mapFriends", "mapMoreFilters", "mapSearch", "mapAdd", "mapPinLegend"] {
+            let coach = app.descendants(matching: .any)["walkthrough.map.\(target)"]
+            XCTAssertTrue(coach.waitForExistence(timeout: 18), "Missing native \(target)")
+            XCTAssertFalse(app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"].exists)
+            if target == "mapMoreFilters" {
+                XCTAssertTrue(app.descendants(matching: .any)["map.moreFilters.popover"].exists)
+            }
+            if target == "mapSearch" {
+                XCTAssertFalse(app.descendants(matching: .any)["map.moreFilters.popover"].exists)
+                XCTAssertEqual(app.keyboards.count, 0)
+            }
+            if target == "mapPinLegend" {
+                XCTAssertTrue(app.descendants(matching: .any)["map.walkthrough.pinLegend"].exists)
+            }
+            captureNUX("\(target)")
+            app.buttons["walkthrough.next.map.\(target)"].tap()
+        }
+        let people = app.staticTexts["walkthrough.feed.feedActivity.circle"]
+        XCTAssertTrue(people.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Feed"].isSelected)
+        XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
+        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForExistence(timeout: 6))
+        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["people.recommendation.user_ryan.profile"].isHittable)
     }
 
-    func testImportLessonIsUnskippableAndKeepsItsPrimaryActionAvailable() {
+    func testMapRingsAutomaticallyContinueIntoFeedAndFinishAtTop() {
         let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderShowImportWalkthrough"
-        ]
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "mapPinLegend"]
         app.launch()
-
-        let lesson = app.descendants(matching: .any)["walkthrough.importLesson"]
-        let openImport = app.buttons["Open import form"]
-        XCTAssertTrue(lesson.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["walkthrough.dismiss.importLesson"].exists)
-        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
-        XCTAssertTrue(openImport.isHittable)
-        XCTAssertTrue(app.buttons["Import help"].isHittable)
-
-        let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        promptScreenshot.name = "REC-236 unskippable import walkthrough"
-        promptScreenshot.lifetime = .keepAlways
-        add(promptScreenshot)
-
-        openImport.tap()
-        XCTAssertTrue(app.textFields["import.input"].waitForExistence(timeout: 4))
-    }
-
-    func testCoachMarkIsUnskippableAndOnlyTheHighlightedAddActionAdvances() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderAuthenticatedUITest",
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs"
-        ]
-        app.launch()
-
-        let coachMark = app.descendants(matching: .any)["walkthrough.map.mapAdd"]
-        let addButton = app.buttons["map.headerAdd"]
-        XCTAssertTrue(coachMark.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["walkthrough.dismiss.map.mapAdd"].exists)
-        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
-        XCTAssertTrue(addButton.isHittable)
-
-        let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        promptScreenshot.name = "REC-236 unskippable Saving a place coach mark"
-        promptScreenshot.lifetime = .keepAlways
-        add(promptScreenshot)
-
-        addButton.tap()
-
-        XCTAssertTrue(coachMark.waitForNonExistence(timeout: 3))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addSearch"]
-                .waitForExistence(timeout: 5)
-        )
-    }
-
-    func testFirstMapCoachMarkPointsToAddButtonWithoutOversizedCard() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs"
-        ]
-        app.launch()
-
-        let addButton = app.buttons["map.headerAdd"]
-        let coachMark = app.descendants(matching: .any)["walkthrough.map.mapAdd"]
-        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(coachMark.waitForExistence(timeout: 5))
-        XCTAssertLessThanOrEqual(coachMark.frame.width, 326)
-        XCTAssertLessThan(coachMark.frame.height, 190)
-        XCTAssertGreaterThanOrEqual(coachMark.frame.minX, 0)
-        XCTAssertLessThanOrEqual(coachMark.frame.maxX, app.frame.maxX)
-        XCTAssertGreaterThanOrEqual(coachMark.frame.minY, 0)
-        XCTAssertLessThanOrEqual(coachMark.frame.maxY, app.frame.maxY)
-        XCTAssertFalse(app.staticTexts["No featured check-ins here yet."].exists)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 compact connected add coach mark"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-    }
-
-    func testSuppressedBottomTabCoachMarkDoesNotReplay() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderWalkthroughTarget",
-            "mapTabs"
-        ]
-        app.launch()
-
-        let coachMark = app.descendants(matching: .any)["walkthrough.map.mapTabs"]
-        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 5))
-        XCTAssertFalse(coachMark.exists)
-        XCTAssertFalse(app.buttons["Next"].exists)
-    }
-
-    func testAddImportShortcutShowsPassiveHighlight() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderOpenAdd",
-            "-WanderWalkthroughTarget",
-            "addImport"
-        ]
-        app.launch()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addImport"]
-                .waitForExistence(timeout: 5)
-        )
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-
-        let importScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        importScreenshot.name = "REC-236 passive Import From highlight"
-        importScreenshot.lifetime = .keepAlways
-        add(importScreenshot)
-
-        app.buttons["Next"].tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
-                .waitForExistence(timeout: 6)
-        )
+        XCTAssertTrue(app.buttons["Feed"].waitForExistence(timeout: 20))
+        let selected = expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: app.buttons["Feed"])
+        wait(for: [selected], timeout: 12)
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
         XCTAssertFalse(app.buttons["Close add place"].exists)
     }
 
-    func testAddWalkthroughTypesAndSelectsTheTutorialParkAutomatically() {
+    func testRealMapFilterActionCanExitOverviewImmediately() {
         let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderOpenAdd",
-            "-WanderWalkthroughTarget",
-            "addSearch"
-        ]
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep"]
         app.launch()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addSearch"]
-                .waitForExistence(timeout: 5)
-        )
-        let searchField = app.textFields.firstMatch
-        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
-        XCTAssertFalse(searchField.isEnabled)
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
-                .waitForExistence(timeout: 12)
-        )
-        XCTAssertTrue(app.staticTexts["Hotchkiss Park"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 automatically selected tutorial park"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-
-        XCTAssertTrue(app.staticTexts["Hotchkiss Park"].exists)
+        let coach = app.descendants(matching: .any)["walkthrough.map.mapFeatured"]
+        XCTAssertTrue(coach.waitForExistence(timeout: 18))
+        let you = app.buttons["map.filter.you"]
+        let ready = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: you)
+        wait(for: [ready], timeout: 4)
+        XCTAssertTrue(you.isHittable)
+        you.tap()
+        XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(you.value as? String == "Selected" || you.isSelected)
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
     }
 
-    func testMapFilterLessonsStayCompiledButCannotBeForcedIntoTheLiveNUX() {
+    func testMorePanelScrollReachesExplanationAndNextClosesIt() {
         let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderWalkthroughTarget",
-            "mapFeatured"
-        ]
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapMoreFilters"]
         app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.map.mapFeatured"]
-                .waitForExistence(timeout: 1)
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.map.mapSearch"].exists)
-    }
-
-    func testFeedWalkthroughOpensDiscoverAndExplainsSupportedSearches() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "discover",
-            "-WanderWalkthroughTarget",
-            "feedDiscoverSearch"
-        ]
-        app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
-                .waitForExistence(timeout: 1),
-            "Feed and Discover lessons must remain dormant even when an old target is forced."
-        )
-        if !app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"].exists { return }
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
-                .waitForExistence(timeout: 6)
-        )
-        let launcher = app.buttons["feed.searchLauncher"]
-        XCTAssertTrue(launcher.isHittable)
-        XCTAssertFalse(app.buttons["Previous walkthrough step"].exists)
-        launcher.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertTrue(app.textFields["discover.placesSearchField"].exists)
-        XCTAssertFalse(app.keyboards.firstMatch.exists)
-
-        let fieldScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        fieldScreenshot.name = "REC-257 Discover search field lesson"
-        fieldScreenshot.lifetime = .keepAlways
-        add(fieldScreenshot)
-
-        let nextButton = app.buttons["Next"]
-        XCTAssertTrue(nextButton.isHittable)
-        XCTAssertLessThanOrEqual(nextButton.frame.width, 52)
-        nextButton.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSmartSearch"]
-                .waitForExistence(timeout: 4)
-        )
-        let suggestedSearch = app.buttons["Search coffee worth crossing town for"]
-        XCTAssertTrue(suggestedSearch.isHittable)
-
-        let examplesScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        examplesScreenshot.name = "REC-257 natural-language search examples lesson"
-        examplesScreenshot.lifetime = .keepAlways
-        add(examplesScreenshot)
-
-        suggestedSearch.tap()
-        XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 6))
-
-        let backButton = app.buttons["discover.searchBack"]
-        XCTAssertTrue(backButton.waitForExistence(timeout: 2))
-        backButton.tap()
-        XCTAssertTrue(
-            app.staticTexts["Understood as"].exists,
-            "The first Back action stays blocked while the results preview is playing."
-        )
-        XCTAssertFalse(app.buttons["Lists"].isSelected)
-
-        let resultsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        resultsScreenshot.name = "REC-236 guided Discover results stay in NUX"
-        resultsScreenshot.lifetime = .keepAlways
-        add(resultsScreenshot)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
-                .waitForExistence(timeout: 6)
-        )
-        expectation(
-            for: NSPredicate(format: "hittable == true"),
-            evaluatedWith: backButton
-        )
-        waitForExpectations(timeout: 3)
-        backButton.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertTrue(app.buttons["Feed"].isSelected)
-        let feedSectionButtons = app.buttons.matching(
-            NSPredicate(format: "label == %@", "Feed section")
-        )
-        XCTAssertEqual(feedSectionButtons.count, 2)
-        XCTAssertFalse(feedSectionButtons.element(boundBy: 0).isSelected)
-        XCTAssertTrue(feedSectionButtons.element(boundBy: 1).isSelected)
-        XCTAssertTrue(app.descendants(matching: .any)["Search people"].exists)
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-
-        app.buttons["walkthrough.next.feed.feedPeopleSearch"].tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
-                .waitForExistence(timeout: 4)
-        )
-        app.buttons["walkthrough.next.feed.feedInvite"].tap()
-        let inviteNext = app.buttons["invite.primaryAction"]
-        XCTAssertTrue(inviteNext.waitForExistence(timeout: 4))
-        inviteNext.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"]
-                .waitForExistence(timeout: 8)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
-                .waitForExistence(timeout: 10)
-        )
-        XCTAssertTrue(app.buttons["walkthrough.next.sendoff.mapSendoff"].isHittable)
-    }
-
-    func testSignedInLiveAccountCompletesFeedListsAndSendoffWalkthrough() throws {
-        #if targetEnvironment(simulator)
-        throw XCTSkip("This diagnostic requires the signed-in physical test device.")
-        #else
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderUseLiveAuth",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "discover",
-            "-WanderWalkthroughTarget",
-            "feedDiscoverSearch"
-        ]
-        app.launch()
-
-        let launcher = app.buttons["feed.searchLauncher"]
-        XCTAssertTrue(
-            launcher.waitForExistence(timeout: 20),
-            "The normal app did not reach the signed-in Feed."
-        )
-        XCTAssertFalse(app.buttons["Continue offline"].exists)
-        XCTAssertFalse(app.buttons["Get started"].exists)
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
-                .waitForExistence(timeout: 1),
-            "The live signed-in app must not reactivate the dormant Feed/List NUX."
-        )
-        if !app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"].exists { return }
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
-                .waitForExistence(timeout: 8)
-        )
-        launcher.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"]
-                .waitForExistence(timeout: 8)
-        )
-        app.buttons["walkthrough.next.feedSearch.feedSearchField"].tap()
-
-        let suggestedSearch = app.buttons["Search coffee worth crossing town for"]
-        XCTAssertTrue(suggestedSearch.waitForExistence(timeout: 8))
-        suggestedSearch.tap()
-
-        let backButton = app.buttons["discover.searchBack"]
-        XCTAssertTrue(backButton.waitForExistence(timeout: 12))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
-                .waitForExistence(timeout: 12)
-        )
-        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: backButton)
-        waitForExpectations(timeout: 6)
-        backButton.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
-                .waitForExistence(timeout: 8)
-        )
-        app.buttons["walkthrough.next.feed.feedPeopleSearch"].tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
-                .waitForExistence(timeout: 8)
-        )
-        app.buttons["walkthrough.next.feed.feedInvite"].tap()
-
-        let inviteAction = app.buttons["invite.primaryAction"]
-        if inviteAction.waitForExistence(timeout: 6) {
-            inviteAction.tap()
-        } else if app.buttons["continue to contacts"].waitForExistence(timeout: 2) {
-            throw XCTSkip("Contacts permission is undecided on the signed-in device.")
+        let popover = app.descendants(matching: .any)["map.moreFilters.popover"]
+        XCTAssertTrue(popover.waitForExistence(timeout: 18))
+        let explanation = app.staticTexts["map.more.explanation"]
+        // XCTest waits for animation idleness after launch and can miss the
+        // short automatic scroll entirely. Hold the beat to exercise the real
+        // panel and Next deterministically; recordings cover automatic timing.
+        // This is reading copy, not a tappable control. UIKit can report it as
+        // non-hittable behind the decorative coach even when fully visible.
+        for _ in 0..<3 where !popover.frame.contains(explanation.frame) {
+            let start = popover.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.85))
+            let end = popover.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.2))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-                .waitForExistence(timeout: 10)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"]
-                .waitForExistence(timeout: 12)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
-                .waitForExistence(timeout: 14)
-        )
-        XCTAssertTrue(app.buttons["walkthrough.next.sendoff.mapSendoff"].isHittable)
-        #endif
+        XCTAssertTrue(explanation.exists)
+        XCTAssertTrue(popover.frame.contains(explanation.frame), "The complete explanation must be visible inside the dropdown.")
+        captureNUX("M03-scrolled")
+        app.buttons["walkthrough.next.map.mapMoreFilters"].tap()
+        XCTAssertTrue(app.buttons["walkthrough.next.map.mapSearch"].waitForExistence(timeout: 8))
+        XCTAssertFalse(popover.exists)
+        XCTAssertEqual(app.keyboards.count, 0)
     }
 
-    func testTypedDiscoverQueryAlsoStaysInGuidedResults() {
+    func testMoreFilterInteractionExitsDemoAndKeepsTheChoice() {
         let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "discover",
-            "-WanderWalkthroughTarget",
-            "feedDiscoverSearch"
-        ]
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapMoreFilters"]
         app.launch()
+        let coach = app.buttons["walkthrough.next.map.mapMoreFilters"]
+        XCTAssertTrue(coach.waitForExistence(timeout: 18))
+        let category = app.buttons["Coffee, Tea, & Sweets"]
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
+        // Verify a real touch and its resulting selection, since the native
+        // glass popover's accessibility hit point can be absent during NUX.
+        category.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
+        let more = app.buttons["map.filter.more"]
+        XCTAssertTrue((more.value as? String)?.contains("1 selected filter") == true)
+        more.tap()
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
+        XCTAssertTrue(category.isSelected, "The native category choice must survive leaving the demonstration.")
+        XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
+    }
 
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
-                .waitForExistence(timeout: 1)
-        )
-        if !app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"].exists { return }
+    func testPlusRemainsVoluntaryAndDoesNotStartForcedSave() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapAdd"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["walkthrough.map.mapAdd"].waitForExistence(timeout: 18))
+        app.buttons["map.headerAdd"].tap()
+        let coach = app.descendants(matching: .any)["walkthrough.add.addNearby"]
+        XCTAssertTrue(coach.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addSearch"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"].exists)
+        captureNUX("C01")
+        app.buttons["walkthrough.next.add.addNearby"].tap()
+        XCTAssertTrue(coach.waitForNonExistence(timeout: 3))
+        let imports = app.staticTexts["walkthrough.add.addImport"]
+        XCTAssertTrue(imports.waitForExistence(timeout: 5))
+        XCTAssertTrue(imports.label.contains("Instagram, TikTok"))
+        captureNUX("C01-import")
+        app.buttons["walkthrough.next.add.addImport"].tap()
+        XCTAssertTrue(imports.waitForNonExistence(timeout: 3))
+        app.buttons["Close add place"].tap()
+        app.buttons["map.headerAdd"].tap()
+        XCTAssertTrue(app.buttons["Close add place"].waitForExistence(timeout: 5))
+        XCTAssertFalse(coach.exists)
+        XCTAssertFalse(imports.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
+    }
 
-        let launcher = app.buttons["feed.searchLauncher"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: 6))
-        launcher.tap()
+    func testAddIntroductionWaitsForWholeNearbySectionThenShowsImport() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderUseStorefrontFixtures", "-WanderOpenAdd",
+            "-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "addNearby"]
+        app.launch()
+        let annotation = app.staticTexts["walkthrough.add.addNearby"]
+        XCTAssertTrue(annotation.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Nearby places"].isHittable)
+        XCTAssertTrue(app.buttons["Add Sparrow Bakery"].isHittable)
+        XCTAssertTrue(app.buttons["add.nearbySeeMore"].isHittable)
+        XCTAssertFalse(app.staticTexts["Finding places near you…"].exists)
+        captureNUX("C01-full-nearby")
+        app.buttons["walkthrough.next.add.addNearby"].tap()
+        XCTAssertTrue(app.staticTexts["walkthrough.add.addImport"].waitForExistence(timeout: 5))
+        captureNUX("C01-unblurred-import")
+        app.buttons["walkthrough.next.add.addImport"].tap()
+        XCTAssertFalse(annotation.exists)
+        XCTAssertFalse(app.staticTexts["walkthrough.add.addImport"].exists)
+    }
 
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"]
-                .waitForExistence(timeout: 6)
-        )
-        app.buttons["Next"].tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSmartSearch"]
-                .waitForExistence(timeout: 5)
-        )
-        let searchField = app.textFields["discover.placesSearchField"]
-        XCTAssertTrue(searchField.isHittable)
-        searchField.tap()
-        let keyboardTutorialContinue = app.buttons["Continue"]
-        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
-            keyboardTutorialContinue.tap()
-        }
-        searchField.typeText("quiet cafes with wifi\n")
-
-        XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 6))
-        let backButton = app.buttons["discover.searchBack"]
-        RunLoop.current.run(until: Date().addingTimeInterval(4.2))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertEqual(backButton.label, "Back to Feed")
-        XCTAssertTrue(backButton.isHittable)
-        XCTAssertFalse(app.buttons["Lists"].isSelected)
-        backButton.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
-                .waitForExistence(timeout: 6)
-        )
+    func testFeedHintEndsOnFeedWithoutOpeningDiscoverOrInvites() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity"]
+        app.launch()
+        let annotation = app.staticTexts["walkthrough.feed.feedActivity.circle"]
+        XCTAssertTrue(app.buttons["Feed"].waitForExistence(timeout: 20))
+        // A cold launch may finish its first short beat before XCTest attaches.
+        // The sequence test below checks both beats; this checks the usable end state.
+        XCTAssertTrue(annotation.waitForNonExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 6))
+        XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
+        XCTAssertTrue(app.buttons["people.recommendation.user_ryan.profile"].isHittable)
+        app.buttons["Map"].tap()
+        app.buttons["Feed"].tap()
+        XCTAssertFalse(annotation.exists)
+        XCTAssertFalse(app.staticTexts["walkthrough.feed.feedActivity.recent"].exists)
         XCTAssertTrue(app.buttons["Feed"].isSelected)
-        XCTAssertTrue(app.descendants(matching: .any)["Search people"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"].exists)
+        XCTAssertFalse(app.buttons["invite.primaryAction"].exists)
+    }
+
+    func testFeedIntroductionCentersWholeLatestTileThenReturnsToTopWithoutRepeating() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity"]
+        app.launch()
+        let circle = app.staticTexts["walkthrough.feed.feedActivity.circle"]
+        let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
+        XCTAssertTrue(circle.waitForExistence(timeout: 20))
+        let headingY = app.staticTexts["Recent"].frame.minY
+        XCTAssertTrue(recent.waitForExistence(timeout: 6))
+        XCTAssertFalse(circle.exists)
+        captureNUX("C02-recent")
+        XCTAssertLessThan(app.staticTexts["Recent"].frame.minY, headingY - 50,
+                          "Only the latest card should be brought into view.")
+        XCTAssertEqual(recent.label, "Keep up with their moments")
+        XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
+        XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
+        let returned = expectation(for: NSPredicate(format: "hittable == true"),
+                                   evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
+        wait(for: [returned], timeout: 4)
+        XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
+        app.buttons["Map"].tap()
+        app.buttons["Feed"].tap()
+        XCTAssertFalse(circle.exists)
+        XCTAssertFalse(recent.exists)
+    }
+
+    func testListsHasNoNUXAfterThePrimaryTour() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderWalkthroughTarget", "feedActivity"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Lists"].waitForExistence(timeout: 20))
+        app.buttons["Lists"].tap()
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.lists.listsScope"].exists)
+    }
+
+    func testRetiredImportLaunchArgumentDoesNotPresentN26() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderShowImportWalkthrough"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["walkthrough.map.mapFeatured"].waitForExistence(timeout: 18))
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.importLesson"].exists)
+        XCTAssertFalse(app.buttons["Open import form"].exists)
+    }
+
+    private func captureNUX(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "NUX-" + name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testNativeCheckInWannaAnnotationLeavesActionsUsable() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXReview", "-WanderHoldWalkthroughStep",
+            "-WanderPlaceProfileSaveTrayV1", "-WanderWalkthroughTarget", "placeSaveActions"]
+        app.launch()
+        let annotation = app.staticTexts["walkthrough.placeDetail.placeSaveActions"]
+        XCTAssertTrue(annotation.waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["walkthrough.next.placeDetail.placeSaveActions"].exists)
+        XCTAssertFalse(app.buttons["Skip"].exists)
+        captureNUX("C04")
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isHittable)
+        checkIn.tap()
+        XCTAssertTrue(annotation.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["save.close"].waitForExistence(timeout: 5),
+                      "The annotation must allow the real Check In editor to open.")
+    }
+
+    func testPlaceIntroductionAutomaticallyFinishesAndDoesNotReturnAfterEditor() {
+        let app = XCUIApplication()
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXReview",
+            "-WanderPlaceProfileSaveTrayV1", "-WanderWalkthroughTarget", "placeSaveActions"]
+        app.launch()
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 20))
+        let annotation = app.staticTexts["walkthrough.placeDetail.placeSaveActions"]
+        XCTAssertTrue(annotation.waitForNonExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["walkthrough.next.placeDetail.placeSaveActions"].exists)
+        XCTAssertTrue(checkIn.isHittable)
+        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isHittable)
+        checkIn.tap()
+        let close = app.buttons["save.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        // The Map-hosted editor returns to the selected compact place card.
+        // Reopen that real profile to verify the lesson was consumed.
+        let place = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(place.waitForExistence(timeout: 5))
+        place.tap()
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertFalse(annotation.exists)
+    }
+
+    private var nativeOverviewArguments: [String] {
+        ["-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderUseDemoFixtures",
+         "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs"]
     }
 
     func testMapMoreSectionsAndResetFollowTheActiveSource() {
@@ -1279,79 +1225,6 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testFeedActivityExplanationUsesNext() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "discover",
-            "-WanderWalkthroughTarget",
-            "feedActivity"
-        ]
-        app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
-                .waitForExistence(timeout: 1)
-        )
-        if !app.descendants(matching: .any)["walkthrough.feed.feedActivity"].exists { return }
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 Feed activity passive coach mark"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-    }
-
-    func testFeedOverviewRoutesStraightToDiscoverSearch() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "discover",
-            "-WanderWalkthroughTarget",
-            "feedActivity"
-        ]
-        app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
-                .waitForExistence(timeout: 1)
-        )
-        if !app.descendants(matching: .any)["walkthrough.feed.feedActivity"].exists { return }
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertTrue(app.staticTexts["Activity"].exists)
-        XCTAssertTrue(app.staticTexts["See your friend's check-ins in real time"].exists)
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-        app.buttons["Next"].tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
-                .waitForExistence(timeout: 4)
-        )
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].isHittable)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 condensed Feed NUX"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-    }
-
     func testWalkthroughInviteUsesAddButtonsAndKeepsNextAvailable() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderInviteMockup", "walkthroughContacts"]
@@ -1373,420 +1246,6 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-236 per-contact walkthrough Add actions"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-    }
-
-    func testWalkthroughContactInviteIsUnskippableAndNextContinuesToLists() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "discover",
-            "-WanderWalkthroughTarget",
-            "feedInvite"
-        ]
-        app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
-                .waitForExistence(timeout: 1)
-        )
-        if !app.descendants(matching: .any)["walkthrough.feed.feedInvite"].exists { return }
-
-        let coachMark = app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
-        XCTAssertTrue(coachMark.waitForExistence(timeout: 6))
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-        app.buttons["Next"].tap()
-
-        let primaryAction = app.buttons["invite.primaryAction"]
-        XCTAssertTrue(primaryAction.waitForExistence(timeout: 4))
-        XCTAssertFalse(app.buttons["walkthrough.dismiss.contactInvite"].exists)
-        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
-        XCTAssertEqual(primaryAction.label, "Next")
-        XCTAssertTrue(primaryAction.isHittable)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 unskippable contact invite walkthrough"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-
-        primaryAction.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertFalse(coachMark.exists)
-    }
-
-    func testListsUsesTwoClearPageAutoAdvancingLessons() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "lists",
-            "-WanderWalkthroughTarget",
-            "listsScope"
-        ]
-        app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-                .waitForExistence(timeout: 1),
-            "Lists lessons must remain dormant even when an old target is forced."
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"].exists)
-        if !app.descendants(matching: .any)["walkthrough.lists.listsScope"].exists { return }
-
-        let startedAt = Date()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-                .waitForExistence(timeout: 4)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"]
-                .waitForExistence(timeout: 7)
-        )
-        let mapTab = app.buttons["Map"]
-        XCTAssertTrue(mapTab.exists)
-        let profileTab = app.buttons["Profile"]
-        XCTAssertTrue(profileTab.exists)
-        XCTAssertFalse(profileTab.isSelected)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileShare"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileActivity"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileCalendar"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileMap"].exists)
-
-        let selectionDeadline = Date().addingTimeInterval(8)
-        while !mapTab.isSelected, Date() < selectionDeadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        }
-        XCTAssertTrue(mapTab.isSelected)
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
-                .waitForExistence(timeout: 5)
-        )
-        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 30)
-        let finish = app.buttons["walkthrough.next.sendoff.mapSendoff"]
-        XCTAssertEqual(finish.label, "Finish")
-        XCTAssertTrue(finish.isHittable)
-        finish.tap()
-        XCTAssertFalse(finish.waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["map.headerAdd"].exists)
-    }
-
-    func testProfileNeverPresentsAFirstVisitWalkthrough() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "profile",
-            "-WanderWalkthroughTarget",
-            "profileShare"
-        ]
-        app.launch()
-
-        XCTAssertTrue(app.buttons["Profile"].waitForExistence(timeout: 6))
-        XCTAssertTrue(app.buttons["Profile"].isSelected)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileShare"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileActivity"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileCalendar"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.profile.profileMap"].exists)
-
-        RunLoop.current.run(until: Date().addingTimeInterval(5))
-
-        XCTAssertTrue(app.buttons["Profile"].isSelected)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"].exists)
-    }
-
-    func testFirstAddActionGuidesThroughSaveBeforeReturningToMap() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs"
-        ]
-        app.launch()
-
-        let addButton = app.buttons["map.headerAdd"]
-        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
-        addButton.tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addSearch"]
-                .waitForExistence(timeout: 5)
-        )
-        let searchField = app.textFields.firstMatch
-        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
-        XCTAssertFalse(searchField.isEnabled)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
-                .waitForExistence(timeout: 12)
-        )
-        XCTAssertTrue(app.staticTexts["Hotchkiss Park"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
-        let wannaGoChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
-        XCTAssertEqual(checkInChoice.value as? String, "not selected")
-        XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
-        XCTAssertFalse(app.buttons["continue to details"].exists)
-
-        let statusScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        statusScreenshot.name = "REC-236 neutral Check In or Wanna Go choice"
-        statusScreenshot.lifetime = .keepAlways
-        add(statusScreenshot)
-
-        checkInChoice.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveDate"]
-                .waitForExistence(timeout: 4)
-        )
-        XCTAssertFalse(app.buttons["continue to details"].exists)
-        XCTAssertFalse(app.buttons["walkthrough.back.saveFlow.saveDate"].exists)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveNote"]
-                .waitForExistence(timeout: 10)
-        )
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveRating"]
-                .waitForExistence(timeout: 12)
-        )
-        XCTAssertFalse(app.buttons["Next"].exists)
-        let rating = app.otherElements["place-rating-slider"]
-        XCTAssertTrue(rating.waitForExistence(timeout: 3))
-        XCTAssertFalse(rating.isEnabled)
-
-        let ratingScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        ratingScreenshot.name = "REC-236 automated save-flow rating demo"
-        ratingScreenshot.lifetime = .keepAlways
-        add(ratingScreenshot)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
-                .waitForExistence(timeout: 20)
-        )
-        let moreOptionsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        moreOptionsScreenshot.name = "REC-236 automated tag and note demo"
-        moreOptionsScreenshot.lifetime = .keepAlways
-        add(moreOptionsScreenshot)
-        let expandedMoreOptions = app.buttons["Hide more options"]
-        XCTAssertTrue(expandedMoreOptions.waitForExistence(timeout: 3))
-        XCTAssertFalse(expandedMoreOptions.isEnabled)
-        XCTAssertFalse(app.buttons["Next"].exists)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveQuestions"]
-                .waitForExistence(timeout: 10)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveTags"]
-                .waitForExistence(timeout: 20)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
-                .waitForExistence(timeout: 16)
-        )
-        XCTAssertFalse(
-            app.buttons.matching(NSPredicate(
-                format: "label == %@ AND identifier != %@", "Check in", "save.statusSelector"
-            )).element.isEnabled
-        )
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
-                .waitForExistence(timeout: 12)
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.saveFlow.saveReview"].exists)
-
-        app.buttons["map.headerAdd"].tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addImport"]
-                .waitForExistence(timeout: 6)
-        )
-        app.buttons["walkthrough.next.add.addImport"].tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
-                .waitForExistence(timeout: 6)
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.feed.feedActivity"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.lists.listsScope"].exists)
-    }
-
-    func testAddWalkthroughUsesAPartialSheetAndKeepsSeeMoreOutOfFocus() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs"
-        ]
-        app.launch()
-
-        XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 5))
-        app.buttons["map.headerAdd"].tap()
-        let coach = app.descendants(matching: .any)["walkthrough.add.addSearch"]
-        XCTAssertTrue(coach.waitForExistence(timeout: 5))
-        let addHeader = app.staticTexts["add a place"].firstMatch
-        XCTAssertTrue(addHeader.waitForExistence(timeout: 3))
-        XCTAssertGreaterThan(addHeader.frame.minY, app.frame.height * 0.2)
-        XCTAssertFalse(app.buttons["See more"].exists)
-        XCTAssertFalse(app.buttons["Close add place"].exists)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 partial unskippable Add walkthrough"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-    }
-
-    func testWannaGoCanCompleteTheWalkthroughSaveFlow() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs"
-        ]
-        app.launch()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.map.mapAdd"]
-                .waitForExistence(timeout: 5)
-        )
-        app.buttons["map.headerAdd"].tap()
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addSearch"]
-                .waitForExistence(timeout: 5)
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
-                .waitForExistence(timeout: 14)
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.add.addPlace"].exists)
-        let checkInChoice = app.scrollViews["save.editorScroll"].buttons["Check in"]
-        let wannaGoChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
-        XCTAssertEqual(checkInChoice.value as? String, "not selected")
-        XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
-        XCTAssertFalse(app.buttons["continue to details"].exists)
-        wannaGoChoice.tap()
-        XCTAssertFalse(app.buttons["continue to details"].exists)
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveDate"]
-                .waitForExistence(timeout: 4)
-        )
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
-                .waitForExistence(timeout: 75)
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.saveFlow.saveReview"].exists)
-    }
-
-    func testListDetailWalkthroughIsSuppressedForNow() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderInitialTab",
-            "lists",
-            "-WanderListsScenario",
-            "detail",
-            "-WanderWalkthroughTarget",
-            "listMap"
-        ]
-        app.launch()
-
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.listDetail.listMap"]
-                .waitForExistence(timeout: 1)
-        )
-        let viewMapButton = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "View map for")
-        ).firstMatch
-        XCTAssertTrue(viewMapButton.waitForExistence(timeout: 5))
-        XCTAssertFalse(
-            app.descendants(matching: .any)["walkthrough.listDetail.listMapPlace"]
-                .exists
-        )
-        XCTAssertFalse(app.buttons["Next"].exists)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 full Lists detail NUX suppressed"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-    }
-
-    func testPlaceMemoryFallsBackWhenTutorialSaveIsUnavailable() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-WanderMapCapture",
-            "-WanderUseDemoFixtures",
-            "-WanderEnableWalkthroughs",
-            "-WanderResetWalkthroughs",
-            "-WanderWalkthroughTarget",
-            "mapMemory"
-        ]
-        app.launch()
-
-        let memoryCoach = app.descendants(matching: .any)["walkthrough.map.mapMemory"]
-        XCTAssertFalse(
-            memoryCoach.waitForExistence(timeout: 1),
-            "The place-memory chapter is dormant in the shortened NUX."
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.placeDetail.placeRatings"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.feed.feedActivity"].exists)
-        if !memoryCoach.exists { return }
-
-        XCTAssertTrue(memoryCoach.waitForExistence(timeout: 6))
-        XCTAssertTrue(app.staticTexts["Open the place memory"].exists)
-        let openPlace = app.buttons["map.placeMemory.open"]
-        XCTAssertTrue(openPlace.isHittable)
-        XCTAssertFalse(app.buttons["Previous walkthrough step"].exists)
-        XCTAssertFalse(app.buttons["walkthrough.next.map.mapMemory"].exists)
-        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
-        XCTAssertLessThan(memoryCoach.frame.maxY, app.buttons["Map"].frame.minY)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 seeded place memory fallback"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-
-        openPlace.tap()
-        for target in ["placeRatings", "placeActions", "placeHistory"] {
-            XCTAssertTrue(
-                app.descendants(matching: .any)["walkthrough.placeDetail.\(target)"]
-                    .waitForExistence(timeout: 6),
-                "Expected place detail walkthrough step \(target)"
-            )
-            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-            screenshot.name = "REC-257 place detail \(target)"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-            let buttonTitle = target == "placeHistory" ? "Keep going" : "Next"
-            XCTAssertTrue(app.buttons[buttonTitle].isHittable)
-            app.buttons[buttonTitle].tap()
-        }
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
-                .waitForExistence(timeout: 8)
-        )
-        XCTAssertTrue(app.buttons["Feed"].isSelected)
     }
 
     func testThirdLaunchDeviceLessonIncludesExtensionsGuide() {
@@ -1953,7 +1412,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(openComments.isHittable)
         openComments.tap()
 
-        XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 4))
 
         let commentsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         commentsScreenshot.name = "Comments native navigation destination"
@@ -1965,7 +1424,7 @@ final class OnboardingUITests: XCTestCase {
         leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
 
         XCTAssertTrue(feedSearch.waitForExistence(timeout: 4))
-        XCTAssertFalse(app.navigationBars["comments"].exists)
+        XCTAssertFalse(app.buttons["activity.comment.send"].exists)
 
         let returnedFeedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         returnedFeedScreenshot.name = "Feed restored after comments back-swipe"
@@ -2878,6 +2337,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
         app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
         app.launch()
 
         let page = app.descendants(matching: .any)["onboarding.carouselPage"]
@@ -2885,7 +2345,7 @@ final class OnboardingUITests: XCTestCase {
         for index in 1...3 {
             expectation(for: NSPredicate(format: "value == %@", String(index)), evaluatedWith: page)
             waitForExpectations(timeout: 3)
-            XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
+            XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
             XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
             let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             screenshot.name = "REC-447 splash page \(index)"
@@ -2896,30 +2356,108 @@ final class OnboardingUITests: XCTestCase {
             }
         }
         // Manual paging must remain available in both directions.
-        app.swipeRight()
-        expectation(for: NSPredicate(format: "value == %@", "2"), evaluatedWith: page)
-        waitForExpectations(timeout: 3)
+        for index in [2, 1] {
+            app.swipeRight()
+            expectation(for: NSPredicate(format: "value == %@", String(index)), evaluatedWith: page)
+            waitForExpectations(timeout: 3)
+        }
     }
 
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
-        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "2"
+        // The opening takes 17.1 seconds, then both real benefit
+        // pages receive their reading time before the finite flow opens signup.
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
+        // Start the timed observation with the real Play control. Simulator
+        // automation setup can take longer than the opening's reading interval.
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
         app.launch()
 
-        XCTAssertTrue(app.buttons["onboarding.getStarted"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
         let carouselPage = app.descendants(matching: .any)["onboarding.carouselPage"]
-        XCTAssertTrue(carouselPage.waitForExistence(timeout: 2))
-        let startingPage = carouselPage.value as? String ?? ""
-        XCTAssertTrue(["1", "2", "3"].contains(startingPage))
+        XCTAssertTrue(carouselPage.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["onboarding.next"].exists)
+        XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
+        app.buttons["onboarding.pause"].tap()
+        let signupDeadline = Date().addingTimeInterval(39)
         expectation(
-            for: NSPredicate(format: "value != %@", startingPage),
+            for: NSPredicate(format: "value == %@", "2"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 3)
-        XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
+        XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
+        expectation(
+            for: NSPredicate(format: "value == %@", "3"),
+            evaluatedWith: carouselPage
+        )
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
+        XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
+        XCTAssertTrue(app.textFields["auth.email"].waitForExistence(
+            timeout: max(0.1, signupDeadline.timeIntervalSinceNow)
+        ))
+        XCTAssertTrue(app.staticTexts["Create your account"].exists)
+        XCTAssertTrue(app.buttons["auth.continueWithApple"].exists)
+        XCTAssertFalse(carouselPage.exists)
+    }
+
+    func testWelcomeLoginVerificationSurvivesBackground() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
+        app.launch()
+        let login = app.buttons["onboarding.logIn"]
+        XCTAssertTrue(login.waitForExistence(timeout: 8))
+        login.tap()
+        let email = app.textFields["auth.email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 8))
+        email.tap()
+        email.typeText("opening@example.test")
+        let send = app.buttons["auth.continueWithEmail"]
+        if !send.isHittable { app.swipeUp() }
+        send.tap()
+        let code = app.textFields["auth.emailCode"]
+        XCTAssertTrue(code.waitForExistence(timeout: 8))
+        code.tap()
+        code.typeText("123")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(code.waitForExistence(timeout: 8))
+        XCTAssertEqual(code.value as? String, "123")
+        XCTAssertTrue(app.staticTexts["Enter the verification code sent to opening@example.test."].exists)
+        app.buttons["auth.close"].tap()
+        XCTAssertTrue(login.waitForExistence(timeout: 8))
+        login.tap()
+        XCTAssertTrue(email.waitForExistence(timeout: 8))
+        XCTAssertFalse(code.exists)
+    }
+
+    func testWelcomeNextAndLoginOpenActualAuthFlows() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "600"
+        app.launchEnvironment["WANDER_ONBOARDING_PAUSED"] = "1"
+        app.launch()
+        let next = app.buttons["onboarding.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        next.tap()
+        next.tap()
+        next.tap()
+        XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["auth.continueWithApple"].exists)
+        XCTAssertTrue(app.staticTexts["Create your account"].exists)
+        XCTAssertFalse(app.buttons["auth.close"].exists)
+        let login = app.buttons["auth.logIn"]
+        XCTAssertTrue(login.exists)
+        if !login.isHittable { app.swipeUp() }
+        login.tap()
+        XCTAssertTrue(app.buttons["auth.usePassword"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Welcome back"].exists)
+        XCTAssertTrue(app.buttons["auth.close"].exists)
+        app.buttons["auth.close"].tap()
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
     }
 
     func testLoggedOutLoginExposesAppleGoogleEmailAndPasswordWithoutClerkSheet() {

@@ -44,7 +44,7 @@ struct ListsScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     private let scenario: ListsScreenScenario
-    private let scenarioList: PlaceListMock
+    private let scenarioList: PlaceListMock?
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
     @State private var selectedScopeID: String
@@ -67,7 +67,9 @@ struct ListsScreen: View {
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
-        let featuredList = PlaceListMock.fixture(for: scenario)
+        // Live/empty screens never use preview lists. Building the nested demo
+        // catalog here can exhaust the physical device's Debug launch stack.
+        let featuredList = scenario.usesMockData ? PlaceListMock.fixture(for: scenario) : nil
         self.scenarioList = featuredList
         self.editorStartsWithFriendSearch = scenario == .createCollaboratorsSearch
         self.editorStartsWithDeleteConfirmation = scenario == .editDeleteConfirm || scenario == .collabEditDeleteConfirm
@@ -75,7 +77,7 @@ struct ListsScreen: View {
         case .create, .createCollaboratorsSearch:
             .create
         case .edit, .editDeleteConfirm:
-            .edit(featuredList)
+            featuredList.map(ListEditorPresentation.edit)
         case .collabEdit, .collabEditDeleteConfirm:
             .edit(PlaceListMock.collabs[0])
         default:
@@ -93,7 +95,7 @@ struct ListsScreen: View {
     var body: some View {
         NavigationStack {
             Group {
-                if scenario.showsDetailRoot {
+                if let scenarioList, scenario.showsDetailRoot {
                     detailScreen(
                         for: scenarioList,
                         initialSelectedPlace: scenario == .placeDetail ? scenarioList.places.first : nil
@@ -692,7 +694,8 @@ struct ListsScreen: View {
 
     @MainActor
     private func runListsWalkthroughAnimationIfNeeded() async {
-        guard walkthroughs.activeSurface == .lists else { return }
+        guard walkthroughs.activeSurface == .lists,
+              walkthroughs.currentStep?.presentationStyle != .contextual else { return }
 
         switch walkthroughs.currentStep?.target {
         case .listsScope:

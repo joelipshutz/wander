@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -14,6 +15,7 @@ struct FeedScreen: View {
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
+    @State private var presentationGeneration = UUID()
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
@@ -28,21 +30,21 @@ struct FeedScreen: View {
     @Namespace private var searchTransitionNamespace
     private let onAdd: () -> Void
     private let presentationResetRequest: WanderPresentationResetRequest?
-    private let onPlaceProfilePresentation: (WanderDeepLinkPresentationToken) -> Void
-    private let onPlaceProfileWillDismiss: (WanderDeepLinkPresentationToken) -> Void
-    private let onPlaceProfileDidDismiss: () -> Void
+    private let onPresentation: (WanderDeepLinkPresentationToken) -> Void
+    private let onWillDismiss: (WanderDeepLinkPresentationToken) -> Void
+    private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
 
     init(
         presentationResetRequest: WanderPresentationResetRequest? = nil,
-        onPlaceProfilePresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
-        onPlaceProfileWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
-        onPlaceProfileDidDismiss: @escaping () -> Void = {},
+        onPresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         onAdd: @escaping () -> Void = {}
     ) {
         self.presentationResetRequest = presentationResetRequest
-        self.onPlaceProfilePresentation = onPlaceProfilePresentation
-        self.onPlaceProfileWillDismiss = onPlaceProfileWillDismiss
-        self.onPlaceProfileDidDismiss = onPlaceProfileDidDismiss
+        self.onPresentation = onPresentation
+        self.onWillDismiss = onWillDismiss
+        self.onDidDismiss = onDidDismiss
         self.onAdd = onAdd
         let initialSurface = FeedSurface.resolvedInitialSurface()
         _selectedSurface = State(initialValue: initialSurface)
@@ -141,17 +143,21 @@ struct FeedScreen: View {
                 guard !Task.isCancelled else { return }
                 await refresh(force: false)
             }
-            .fullScreenCover(item: $selectedProfile) { route in
-                ProfileDetailView(profileID: route.id)
-                    .environmentObject(store)
-                    .environmentObject(auth)
-                    .environmentObject(backend)
+            .fullScreenCover(item: $selectedProfile, onDismiss: { onDidDismiss(.feedProfile) }) { route in
+                WanderRootPresentationLifecycle(
+                    surface: .feedProfile, onPresent: onPresentation, onDismiss: onWillDismiss
+                ) {
+                    ProfileDetailView(profileID: route.id)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
             }
-            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: onPlaceProfileDidDismiss) {
+            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) }) {
                 WanderRootPresentationLifecycle(
                     surface: .feedPlaceProfile,
-                    onPresent: onPlaceProfilePresentation,
-                    onDismiss: onPlaceProfileWillDismiss
+                    onPresent: onPresentation,
+                    onDismiss: onWillDismiss
                 ) {
                     NavigationStack {
                         selectedPlaceDestination
@@ -166,6 +172,7 @@ struct FeedScreen: View {
                     openPlace: openPlace,
                     openList: openListByID
                 )
+                .id(route.id)
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
@@ -174,11 +181,16 @@ struct FeedScreen: View {
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
+                onDidDismiss(.feedSave)
             }) { context in
-                MapPlaceSaveFlowSheet(context: context) { submission in
-                    await saveFeedFlowSubmission(submission)
-                } onRemove: { _ in
-                    false
+                WanderRootPresentationLifecycle(
+                    surface: .feedSave, onPresent: onPresentation, onDismiss: onWillDismiss
+                ) {
+                    MapPlaceSaveFlowSheet(context: context) { submission in
+                        await saveFeedFlowSubmission(submission)
+                    } onRemove: { _ in
+                        false
+                    }
                 }
             }
             .alert("Map updated", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
@@ -229,11 +241,23 @@ struct FeedScreen: View {
                     restoreFeedWalkthroughAfterDiscoverDismissal()
                 }
             }
-            .onChange(of: presentationResetRequest?.id) { _, requestID in
+            .onChange(of: presentationResetRequest?.id, initial: true) { _, requestID in
                 guard requestID != nil else { return }
+                presentationGeneration = UUID()
                 selectedPlace = nil
+                selectedProfile = nil
+                placeSaveFlow = nil
+                savedMessage = nil
+                isShowingSearch = false
+                selectedSurface = .places
+                peopleSearchFieldFocused = false
+                resetFloatingHeaderScrollTracking(revealHeader: true)
             }
         }
+        .environment(\.activityPresentationHandoff, ActivityPresentationHandoff(
+            resetID: presentationResetRequest?.id,
+            onPresent: onPresentation, onWillDismiss: onWillDismiss, onDidDismiss: onDidDismiss
+        ))
     }
 
     private var floatingHeader: some View {
@@ -303,6 +327,8 @@ struct FeedScreen: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
+                .walkthroughTarget(.feedActivity)
+                .id("nux.feed.top")
             }
             .coordinateSpace(name: FeedScrollCoordinateSpace.places)
             .astirScrollTracking(
@@ -314,6 +340,14 @@ struct FeedScreen: View {
                 )
             }
             .accessibilityIdentifier("feed.places.scroll")
+            .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                if walkthroughs.currentStep?.target == .feedActivity {
+                    walkthroughs.dismissCurrentContext()
+                }
+            })
+            .onChange(of: walkthroughs.feedIntroductionScrollTarget, initial: true) { _, target in
+                scrollForIntroduction(target, proxy: proxy)
+            }
             .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 await refresh()
@@ -323,6 +357,24 @@ struct FeedScreen: View {
             }
             .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
+                scrollForIntroduction(walkthroughs.feedIntroductionScrollTarget, proxy: proxy)
+            }
+        }
+    }
+
+    private func scrollForIntroduction(_ target: NUXFeedScrollTarget?, proxy: ScrollViewProxy) {
+        guard let target, walkthroughs.currentStep?.target == .feedActivity else { return }
+        switch target {
+        case .top:
+            resetFloatingHeaderScrollTracking(revealHeader: true)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo("nux.feed.top", anchor: .top)
+            }
+        case .recent:
+            guard let id = FeedPresentation.groupedActivity(page?.activity ?? []).first?.id else { return }
+            setFloatingHeaderHidden(true)
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo(id, anchor: .center)
             }
         }
     }
@@ -336,6 +388,7 @@ struct FeedScreen: View {
         surface: FeedSurface
     ) {
         guard selectedSurface == surface, !isShowingSearch else { return }
+        if walkthroughs.feedIntroductionScrollTarget == .recent { return }
 
         if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
             lastFeedScrollOffset = scrollOffset
@@ -474,38 +527,55 @@ struct FeedScreen: View {
                 openProfile: openProfile,
                 follow: follow
             )
-            .walkthroughTarget(.feedActivity)
 
         }
     }
 
+    private var feedPeopleRecommendations: [DiscoverPeopleRecommendation] {
+        #if DEBUG
+        // Explicit, local-only review fixture; use the existing native cards.
+        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedFixture"),
+           ProcessInfo.processInfo.arguments.contains("-WanderUseDemoFixtures") {
+            return ["user_ryan", "user_maya"].enumerated().compactMap { index, id in
+                guard let profile = store.profile(for: id) else { return nil }
+                return DiscoverPeopleRecommendation(profile: store.shell(for: profile),
+                                                    reason: .sharedFollows(3), rank: index)
+            }
+        }
+        #endif
+        return store.visibleDiscoverPeopleRecommendations
+    }
+
     @ViewBuilder
     private var peopleRail: some View {
-        switch store.discoverPeopleRecommendationsState {
-        case .loaded where !store.visibleDiscoverPeopleRecommendations.isEmpty:
+        if !feedPeopleRecommendations.isEmpty {
             PeopleRecommendationShelf(
-                recommendations: store.visibleDiscoverPeopleRecommendations,
+                recommendations: feedPeopleRecommendations,
                 isFollowing: { store.hasAcknowledgedFollow(to: $0) },
                 isFollowInFlight: { followingProfileIDs.contains($0) },
                 didFollowFail: { followFailedProfileIDs.contains($0) },
                 open: { openProfile($0.profile) },
-                follow: follow
+                follow: follow,
+                walkthroughProfileID: feedPeopleRecommendations.first?.id
             )
-        case .idle, .loading:
-            if auth.isSignedIn {
-                PeopleRecommendationLoadingShelf()
-            }
-        case .failed:
-            FeedRetryRow(
-                title: "Suggestions couldn't load",
-                subtitle: "Your feed can still load below.",
-                actionTitle: "Try again",
-                retry: {
-                    await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+        } else {
+            switch store.discoverPeopleRecommendationsState {
+            case .idle, .loading:
+                if auth.isSignedIn {
+                    PeopleRecommendationLoadingShelf()
                 }
-            )
-        case .loaded:
-            EmptyView()
+            case .failed:
+                FeedRetryRow(
+                    title: "Suggestions couldn't load",
+                    subtitle: "Your feed can still load below.",
+                    actionTitle: "Try again",
+                    retry: {
+                        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+                    }
+                )
+            case .loaded:
+                EmptyView()
+            }
         }
     }
 
@@ -549,17 +619,19 @@ struct FeedScreen: View {
         let allowsCachedContext = !auth.isSignedIn
             || backend.activityEngagementRepository == nil
             || UUID(uuidString: route.activityID) == nil
-        focusedActivityID = route.activityID
-
         if !allowsCachedContext {
             activityNavigation.resolve(requestID: route.id, activity: nil)
         }
 
-        let activity = await store.activity(
-            id: route.activityID,
-            backend: auth.isSignedIn ? backend : nil
-        )
+        let activity: FeedActivity?
+        if let target = route.checkInTarget {
+            activity = await store.activity(checkIn: target, backend: auth.isSignedIn ? backend : nil)
+        } else {
+            activity = await store.activity(id: route.activityID, backend: auth.isSignedIn ? backend : nil)
+        }
         guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+        guard activityNavigation.commentsRoute?.id == route.id else { return }
+        focusedActivityID = activity?.id
         activityNavigation.resolve(
             requestID: route.id,
             activity: activity,
@@ -631,14 +703,20 @@ struct FeedScreen: View {
         }
 
         selectedPlace = nil
+        let generation = presentationGeneration
+        let userID = store.currentUser.id
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled, presentationGeneration == generation,
+                  store.currentUser.id == userID else { return }
             placeSaveFlow = context
         }
     }
 
     @MainActor
     private func saveFeedFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let generation = presentationGeneration
+        let userID = store.currentUser.id
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
@@ -655,7 +733,9 @@ struct FeedScreen: View {
             ) else { return nil }
 
             await refresh()
-            savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            if presentationGeneration == generation, store.currentUser.id == userID {
+                savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            }
             return result
 
         case .addVisit, .editVisit, .editWant:
@@ -673,7 +753,9 @@ struct FeedScreen: View {
                 backend: visitBackend
             )
             await refresh()
-            savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            if presentationGeneration == generation, store.currentUser.id == userID {
+                savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
+            }
             return result
 
         case .sharedVisit:
@@ -775,15 +857,13 @@ struct FeedScreen: View {
             followingProfileIDs.insert(recommendation.profile.id)
             followFailedProfileIDs.remove(recommendation.profile.id)
             Task { @MainActor in
-                let succeeded = await store.follow(
+                await Task.yield()
+                let succeeded = await store.followRecommendation(
                     userID: recommendation.profile.id,
-                    source: .profile,
                     backend: auth.isSignedIn ? backend : nil
                 )
                 followingProfileIDs.remove(recommendation.profile.id)
-                if succeeded {
-                    await refresh()
-                } else {
+                if !succeeded {
                     followFailedProfileIDs.insert(recommendation.profile.id)
                 }
             }
@@ -1090,9 +1170,9 @@ private struct FeedPeopleSurface: View {
             followFailedProfileIDs.remove(profileID)
 
             Task { @MainActor in
-                let succeeded = await store.follow(
+                await Task.yield()
+                let succeeded = await store.followRecommendation(
                     userID: profileID,
-                    source: .profile,
                     backend: backend
                 )
                 followInFlightProfileIDs.remove(profileID)
@@ -1608,7 +1688,7 @@ private struct FeedActivityList: View {
                 )
                 .id(group.id)
                 .walkthroughTarget(
-                    group.id == groups.first?.id ? .feedActivity : nil
+                    group.id == groups.first?.id ? .feedRecent : nil
                 )
             }
         }

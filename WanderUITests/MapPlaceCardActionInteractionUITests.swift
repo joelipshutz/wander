@@ -274,12 +274,12 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         let commentButton = app.buttons["Open comments"].firstMatch
         XCTAssertTrue(commentButton.isHittable)
         commentButton.tap()
-        XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.otherElements["comments.activity.postcard"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["Unlike activity"].firstMatch.exists)
         XCTAssertFalse(app.buttons["Open comments"].exists)
         capture("rec-337-comments-postcard")
-        app.navigationBars["comments"].buttons.firstMatch.tap()
+        app.navigationBars.buttons.firstMatch.tap()
 
         let saveButton = app.buttons.matching(
             NSPredicate(format: "label == %@ AND value == %@", "Add to Wanna", "Not in Wanna")
@@ -340,7 +340,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         inCommonButton.tap()
 
         XCTAssertTrue(app.staticTexts["In Common"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["you both keep coming back for"].exists)
+        XCTAssertTrue(app.staticTexts["common-ground.collection-title"].exists)
         let sharedMapButton = app.buttons["Open your shared map"]
         XCTAssertTrue(sharedMapButton.waitForExistence(timeout: 4))
         capture("rec-335-in-common-release")
@@ -349,6 +349,50 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Shared map"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["where you agree"].exists)
         capture("rec-335-in-common-shared-map-release")
+
+        let sharedPlace = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "in-common.map-place.")).firstMatch
+        reveal(sharedPlace, in: app)
+        XCTAssertTrue(sharedPlace.isHittable)
+        sharedPlace.tap()
+        XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 5))
+        let linkage = app.staticTexts["common-ground.invitation.heading"]
+        XCTAssertTrue(linkage.exists)
+        XCTAssertNotEqual(linkage.label, "ASTIR’s taking the wheel")
+        XCTAssertTrue(app.buttons["Share invitation"].exists)
+        capture("rec486-shared-map-invitation")
+    }
+
+    func testLiveInCommonOpensRealPlaceAndPersonalizedComposer() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
+        let actor = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"]
+        reveal(actor, in: app)
+        XCTAssertTrue(actor.waitForExistence(timeout: 5))
+        actor.tap()
+        let inCommon = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "places in common with Mina")
+        ).firstMatch
+        reveal(inCommon, in: app)
+        XCTAssertTrue(inCommon.waitForExistence(timeout: 5))
+        inCommon.tap()
+        XCTAssertTrue(app.staticTexts["common-ground.collection-title"].waitForExistence(timeout: 5))
+        let photo = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "common-ground.place.")).firstMatch
+        reveal(photo, in: app)
+        XCTAssertTrue(photo.isHittable)
+        photo.tap()
+        let placeBack = app.buttons["place-profile.back"]
+        XCTAssertTrue(placeBack.waitForExistence(timeout: 5))
+        capture("rec486-live-place-profile")
+        placeBack.tap()
+        let invite = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "common-ground.invite.")).firstMatch
+        reveal(invite, in: app)
+        XCTAssertTrue(invite.isHittable)
+        XCTAssertTrue(invite.label.contains("Mina"))
+        invite.tap()
+        XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Share invitation"].exists)
+        XCTAssertFalse(app.staticTexts["Design preview · nothing is sent"].exists)
+        capture("rec486-live-compose")
     }
 
     func testWannaBadgeVisualScale() {

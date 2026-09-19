@@ -260,20 +260,28 @@ struct ActivityEngagementMedia: Identifiable, Equatable {
     }
 }
 
+struct ActivityCheckInTarget: Equatable, Hashable {
+    let userPlaceID: String
+    let visitID: String
+}
+
 struct ActivityCommentsRoute: Identifiable, Hashable {
     let id: UUID
-    let activityID: String
+    var activityID: String
+    let checkInTarget: ActivityCheckInTarget?
     var context: ActivityEngagementContext?
     var visiblePlace: VisiblePlace?
 
     init(
         id: UUID = UUID(),
         activityID: String,
+        checkInTarget: ActivityCheckInTarget? = nil,
         context: ActivityEngagementContext? = nil,
         visiblePlace: VisiblePlace? = nil
     ) {
         self.id = id
         self.activityID = activityID
+        self.checkInTarget = checkInTarget
         self.context = context
         self.visiblePlace = visiblePlace
     }
@@ -306,6 +314,17 @@ final class ActivityNavigationCoordinator: ObservableObject {
         commentsRoute = ActivityCommentsRoute(activityID: activityID)
     }
 
+    func openCheckIn(userPlaceID: String, visitID: String) {
+        commentsRoute = ActivityCommentsRoute(
+            activityID: visitID,
+            checkInTarget: ActivityCheckInTarget(userPlaceID: userPlaceID, visitID: visitID)
+        )
+    }
+
+    func reset() {
+        commentsRoute = nil
+    }
+
     func resolve(
         requestID: UUID,
         activity: FeedActivity?,
@@ -316,6 +335,7 @@ final class ActivityNavigationCoordinator: ObservableObject {
         // ticket. Only local fixture routes may retain their supplied preview.
         route.context = activity?.activityEngagementContext
             ?? (allowsCachedContext ? route.context : nil)
+        if let activity { route.activityID = activity.id }
         route.visiblePlace = activity?.place
             ?? (allowsCachedContext ? route.visiblePlace : nil)
         commentsRoute = route
