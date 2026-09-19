@@ -6,6 +6,9 @@ import {
   assertDefinition,
   insights,
   sections,
+  retentionSQL,
+  clientProperties,
+  verifyDashboard,
 } from "./posthog-product-dashboard.mjs";
 
 test("dashboard contract has every requested lifecycle section", () => {
@@ -18,6 +21,7 @@ test("dashboard contract has every requested lifecycle section", () => {
       "Retention",
       "Referrals",
       "Monetization",
+      "Data Quality",
       "Notification Operations",
     ],
   );
@@ -65,7 +69,7 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
   const originalFetch = globalThis.fetch;
   const originalProjectID = process.env.WANDER_POSTHOG_PROJECT_ID;
   const originalAPIKey = process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
-  process.env.WANDER_POSTHOG_PROJECT_ID = "170";
+  process.env.WANDER_POSTHOG_PROJECT_ID = "557259";
   process.env.WANDER_POSTHOG_PERSONAL_API_KEY = "test-only";
 
   const requests = [];
@@ -156,5 +160,79 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
     else process.env.WANDER_POSTHOG_PROJECT_ID = originalProjectID;
     if (originalAPIKey === undefined) delete process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
     else process.env.WANDER_POSTHOG_PERSONAL_API_KEY = originalAPIKey;
+  }
+});
+
+
+test("core activation does not require an optional follow or count raw save/check-in twice", () => {
+  const activation = insights.find(({ key }) => key === "activation-first-value");
+  assert.deepEqual(activation.query.series.map(({ event }) => event), ["onboarding_completed", "core_action_performed"]);
+  const core = insights.find(({ key }) => key === "engagement-core-actions");
+  assert.deepEqual(core.query.series.map(({ event }) => event), ["core_action_performed"]);
+});
+
+test("retention joins merged people and separately matures every horizon", () => {
+  const query = retentionSQL("core_action_performed", "core_action_performed");
+  assert.match(query, /cohort.person_id = return_events.person_id/);
+  assert.doesNotMatch(query, /distinct_id/);
+  for (const day of [1, 7, 14, 30]) {
+    assert.ok(query.includes(`started_at + interval ${day + 1} day <= now()`));
+    assert.ok(query.includes(`as d${day}_eligible`));
+    assert.ok(query.includes(`as d${day}_returned`));
+    assert.ok(query.includes(`as d${day}_percent`));
+    assert.ok(query.includes(`timestamp >= cohort.started_at + interval ${day} day`));
+    assert.ok(query.includes(`timestamp < cohort.started_at + interval ${day + 1} day`));
+  }
+  assert.match(query, /nullIf\(countIf/);
+});
+
+test("behavioral tiles require the new production baseline while server metrics remain aggregate", () => {
+  for (const insight of insights) {
+    if (["TrendsQuery", "FunnelsQuery"].includes(insight.query.kind) && !insight.key.startsWith("notifications-")) {
+      assert.deepEqual(insight.query.properties, clientProperties, insight.key);
+    }
+  }
+  for (const key of ["engagement-actions", "retention-activation-cohorts", "retention-core-cohorts"]) {
+    const sql = insights.find(item => item.key === key).query.query;
+    assert.match(sql, /analytics_schema_version = '3'/);
+    assert.match(sql, /analytics_environment = 'production'/);
+    assert.match(sql, /internal_or_test_user/);
+  }
+  const inventory = insights.find(item => item.key === "instrumentation-coverage").query.query;
+  assert.doesNotMatch(inventory, /analytics_schema_version =/);
+});
+
+test("every dashboard event is backed by the client or aggregate server contract", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const swift = await readFile(new URL("../Wander/Services/AnalyticsEvent.swift", import.meta.url), "utf8");
+  const server = new Set(["notification_delivery_processed", "notification_frequency_snapshot", "notification_frequency_bucket_snapshot"]);
+  const names = new Set([...swift.matchAll(/static let \w+ = "([^"\n]+)"/g)].map(match => match[1]));
+  for (const insight of insights) {
+    for (const series of insight.query.series || []) assert.ok(names.has(series.event) || server.has(series.event), series.event);
+  }
+});
+
+
+test("live verification refuses another project and fails on missing managed coverage", async () => {
+  const oldID = process.env.WANDER_POSTHOG_PROJECT_ID;
+  const oldKey = process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
+  const oldFetch = globalThis.fetch;
+  try {
+    process.env.WANDER_POSTHOG_PROJECT_ID = "another-project";
+    await assert.rejects(verifyDashboard(), /belong to Astir/);
+    process.env.WANDER_POSTHOG_PROJECT_ID = "557259";
+    process.env.WANDER_POSTHOG_PERSONAL_API_KEY = "test-only";
+    globalThis.fetch = async url => ({ ok: true, json: async () =>
+      new URL(url).pathname.endsWith("/dashboards/")
+        ? { results: [{ id: 42, tags: ["recme:iac:dashboard:product-funnel"] }] }
+        : { id: 42, tiles: [] }
+    });
+    await assert.rejects(verifyDashboard(), /Missing managed insight/);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldID === undefined) delete process.env.WANDER_POSTHOG_PROJECT_ID;
+    else process.env.WANDER_POSTHOG_PROJECT_ID = oldID;
+    if (oldKey === undefined) delete process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
+    else process.env.WANDER_POSTHOG_PERSONAL_API_KEY = oldKey;
   }
 });

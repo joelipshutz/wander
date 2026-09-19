@@ -95,7 +95,7 @@ struct WanderApp: App {
         let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
         let forcedOnboardingStep = SimulatorTestSessionPolicy.forcedOnboardingStep()
         let analyticsClient: AnalyticsClient
-        if !usesNativeOnboardingReview,
+        if !usesNativeOnboardingReview, !usesSimulatorTestSession,
            let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
         } else {

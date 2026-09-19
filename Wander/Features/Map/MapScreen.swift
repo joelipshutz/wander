@@ -13214,6 +13214,7 @@ struct MapPlaceSaveEditor: View {
     @State private var customQuestionAnswers: [String: String]
     @State private var privateAnswersOwnerID: String?
     @State private var editorOwnerID: String?
+    @State private var saveAnalytics = SaveFlowAnalyticsTracker()
     @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
@@ -13701,8 +13702,20 @@ struct MapPlaceSaveEditor: View {
         return true
     }
 
+    private var analyticsSaveMode: AnalyticsSaveMode {
+        switch context.mode {
+        case .add: .add
+        case .addVisit: .repeatCheckIn
+        case .sharedVisit: .sharedVisit
+        case .editVisit, .editWant: .edit
+        }
+    }
+
     private func prepareEditor(isSheet: Bool) {
         guard bindEditorOwnerIfNeeded() else { return }
+        if let event = saveAnalytics.opened(mode: analyticsSaveMode, status: selectedStatus.rawValue) {
+            store.productAnalytics.track(event)
+        }
         if isSheet {
             store.saveFlowDidPresent(.saveSheet)
             restoreWalkthroughSavePresentationIfNeeded()
@@ -15206,12 +15219,24 @@ struct MapPlaceSaveEditor: View {
         errorMessage = nil
 
         let submission = currentSubmission
+        let analyticsMode = analyticsSaveMode
+        store.productAnalytics.track(SaveFlowAnalyticsTracker.event(
+            WanderAnalyticsEvents.saveFlowSubmitted, mode: analyticsMode, status: selectedStatus.rawValue))
 
         Task {
             guard editorOwnerID == store.currentUser.id else { return }
             let result = await onSave(submission)
             await MainActor.run {
                 guard editorOwnerID == store.currentUser.id else { return }
+                let outcome: AnalyticsSaveOutcome
+                switch result?.syncState {
+                case .synced: outcome = .synced
+                case .localOnly, .pendingCreate, .pendingUpdate: outcome = .pending
+                default: outcome = .failed
+                }
+                store.productAnalytics.track(SaveFlowAnalyticsTracker.event(
+                    WanderAnalyticsEvents.saveFlowCompleted, mode: analyticsMode,
+                    status: submission.status.rawValue, outcome: outcome))
                 isSaving = false
                 if let result {
                     if result.localDetailsWarning != nil {
