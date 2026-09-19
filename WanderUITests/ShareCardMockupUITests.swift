@@ -11,7 +11,7 @@ final class ShareCardMockupUITests: XCTestCase {
     func testLinkGalleryAndRecipientReturn() {
         for kind in ["profile", "map", "list", "place", "checkIn", "wanna", "invitation"] {
             let app = launch(kind)
-            XCTAssertTrue(app.staticTexts["share-mock.headline"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.descendants(matching: .any)["share-mock.headline"].waitForExistence(timeout: 10))
             capture("link-\(kind)")
             let open = app.buttons["share-mock.open"]
             if !open.isHittable { app.swipeUp() }
@@ -39,14 +39,51 @@ final class ShareCardMockupUITests: XCTestCase {
 
     func testSelectorsAndAccessibilityText() {
         let app = launch("profile", additional: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
-        let title = app.staticTexts["share-mock.headline"]
+        let title = app.descendants(matching: .any)["share-mock.headline"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Discover Ryan’s world")
+        XCTAssertEqual(title.label, "Discover Ryan’s world. View")
         for _ in 0..<4 where !title.isHittable { app.swipeUp() }
         XCTAssertTrue(title.isHittable)
         capture("profile-accessibility")
         app.buttons["Toggle preview appearance"].tap()
         XCTAssertTrue(title.exists)
+        app.terminate()
+    }
+
+
+    func testWannaDateReplacesRadarAndKeepsLetsGo() {
+        let app = launch("wanna")
+        let card = app.descendants(matching: .any)["share-mock.headline"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        XCTAssertTrue(card.label.contains("On Ryan’s radar"))
+        XCTAssertTrue(card.label.contains("Let’s Go"))
+        let dateToggle = app.switches["share-mock.dated"]
+        // SwiftUI exposes the whole labeled row as the switch. Target its
+        // trailing control rather than the inert center of that row.
+        dateToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        let dated = NSPredicate(format: "label CONTAINS %@ AND NOT (label CONTAINS %@)", "2026", "radar")
+        expectation(for: dated, evaluatedWith: card)
+        waitForExpectations(timeout: 4)
+        XCTAssertFalse(card.label.contains("radar"))
+        XCTAssertTrue(card.label.contains("2026"))
+        XCTAssertTrue(card.label.contains("Let’s Go"))
+        capture("wanna-dated")
+        app.terminate()
+    }
+
+    func testProductionShareSheetUsesAllFormatsAndKeepsCanonicalLink() {
+        let app = launch("wanna", additional: ["-ShareCardDated"])
+        app.buttons["share-mock.try"].tap()
+        let formats = app.segmentedControls["share.format"]
+        XCTAssertTrue(formats.waitForExistence(timeout: 10))
+        for format in ["Link", "Story", "Post"] {
+            let segment = formats.buttons[format]
+            segment.tap()
+            expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: segment)
+            waitForExpectations(timeout: 4)
+            XCTAssertTrue(app.descendants(matching: .any)["share.card"].exists)
+            capture("production-sheet-\(format)")
+        }
         app.terminate()
     }
 

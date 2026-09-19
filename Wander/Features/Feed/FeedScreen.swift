@@ -1807,6 +1807,15 @@ private struct FeedActivityModule: View {
 }
 
 extension FeedActivity {
+    // Original saves predate the repeat-Wanna table; only their own save date
+    // can supply a fallback. Repeat entries resolve by their immutable event ID.
+    private var originalWannaPlannedDate: Date? {
+        guard resolvedTicketKind == .wanna, let userPlace = place?.userPlace,
+              userPlace.status == .wannaGo,
+              abs(occurredAt.timeIntervalSince(userPlace.savedAt)) < 1 else { return nil }
+        return userPlace.plannedDate
+    }
+
     var activityEngagementContext: ActivityEngagementContext? {
         let subjectName: String
         let subjectServerID: String?
@@ -1833,6 +1842,8 @@ extension FeedActivity {
             placeDetail: detail,
             ticketKind: resolvedTicketKind,
             occurredAt: occurredAt,
+            plannedDate: originalWannaPlannedDate,
+            sourceUserPlaceID: place?.userPlace.serverID ?? place?.userPlace.id,
             note: note,
             rating: rating,
             ticketEyebrow: postcardTicketEyebrow,

@@ -18,7 +18,7 @@ struct WanderShareContent: Equatable {
         else { return nil }
         return WanderShareContent(
             item: item,
-            subject: displayName,
+            subject: "Discover \(displayName.split(separator: " ").first.map(String.init) ?? displayName)’s world",
             message: "See @\(handle) on Astir"
         )
     }
@@ -68,7 +68,6 @@ struct WanderShareContent: Equatable {
         else { return nil }
         return WanderShareContent(
             item: activityURL,
-            additionalItems: [publicTestFlightURL],
             subject: placeName,
             message: message
         )

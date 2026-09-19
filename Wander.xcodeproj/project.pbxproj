@@ -145,6 +145,7 @@
 		52B8AC44581CEA630201DEB3 /* SyncStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0925F17F5640CFD88F70EBA /* SyncStateMachine.swift */; };
 		52D02001E5ABD10E7917EFFF /* VisitPhotoLocalFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */; };
 		52D446DE712D614FF29C56D0 /* OnboardingCommentsCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18244466AAA64D03A3B75227 /* OnboardingCommentsCaptureView.swift */; };
+		52DB8A084E2DAFF18AC7DE3B /* ShareCardArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43FBC04B73D9521BDD8A523A /* ShareCardArtwork.swift */; };
 		5330B6E14E9F96F97AF8A104 /* ProductUpsellCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 565539FC71458DE4B9B58AEB /* ProductUpsellCoordinatorTests.swift */; };
 		53AA029A980413C3B4E3A372 /* OnboardingPermissionManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1202D211E41D76B3D0CB2D31 /* OnboardingPermissionManagers.swift */; };
 		540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */; };
@@ -564,6 +565,7 @@
 		3EA6591C2750C3AB8B3E33C6 /* ActivityEngagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEngagementTests.swift; sourceTree = "<group>"; };
 		4017467979764DBA4C407626 /* simulator-test-session-relaunch-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "simulator-test-session-relaunch-pre.json"; sourceTree = "<group>"; };
 		434F9135EE74E6DCD197B803 /* PlaceVisitAnswerSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceVisitAnswerSafetyTests.swift; sourceTree = "<group>"; };
+		43FBC04B73D9521BDD8A523A /* ShareCardArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardArtwork.swift; sourceTree = "<group>"; };
 		44E8FD81270D945CFB6C0000 /* CheckInQuestionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInQuestionPanel.swift; sourceTree = "<group>"; };
 		455002E5CE44493FF0A47191 /* WanderCalendarWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderCalendarWidgetSnapshot.swift; sourceTree = "<group>"; };
 		466618F8405CE4321114C0D7 /* ProfileRedesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRedesignMockups.swift; sourceTree = "<group>"; };
@@ -1345,6 +1347,7 @@
 			children = (
 				981D76A8E140702A7FD7AFB7 /* ActivityEngagementViews.swift */,
 				EBC33DCB35C37A5C6742CF56 /* ActivitySharePreview.swift */,
+				43FBC04B73D9521BDD8A523A /* ShareCardArtwork.swift */,
 				E94B6F88C15DD3C749623A67 /* ShareCardDesignMockups.swift */,
 			);
 			path = Activity;
@@ -1975,6 +1978,7 @@
 				FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */,
 				03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */,
 				13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */,
+				52DB8A084E2DAFF18AC7DE3B /* ShareCardArtwork.swift in Sources */,
 				082F64B2798DFD3CC49A4CBD /* ShareCardDesignMockups.swift in Sources */,
 				7DEF7563B13704B7AA76A6D2 /* ShareExtensionItemLoader.swift in Sources */,
 				CFF69A48E9FB3ED216B463A0 /* SharedCheckInQuestion.swift in Sources */,

@@ -455,13 +455,19 @@ struct ProfileOwnerHome: View {
                     displayName: profile.displayName,
                     handle: profile.handle
                 ) {
-                    WanderShareButton(
+                    ShareCardButton(
                         content: shareContent,
-                        preview: SharePreview(
-                            profile.displayName,
-                            image: Image(uiImage: WanderSharePreviewArtwork.profile)
-                        ),
-                        onTap: shareAction
+                        card: ShareCardContent(kind: .profile, name: profile.displayName,
+                                               ownerName: profile.displayName, detail: "@\(profile.handle)"),
+                        onTap: shareAction,
+                        loadImages: {
+                            let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: profile.avatarURL)
+                            let request = ProfileMapSnapshotRequest(points: insights.mapPoints,
+                                size: CGSize(width: 390, height: 238), displayScale: 3,
+                                colorScheme: brandMode == .editorial ? .dark : .light)
+                            let map = await ProfileMapSnapshotCache.shared.image(for: request)
+                            return ShareCardImages(avatar: avatar, map: map)
+                        }
                     ) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }

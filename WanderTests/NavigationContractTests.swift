@@ -1007,7 +1007,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20joe")
         XCTAssertEqual(content.items, [content.item])
-        XCTAssertEqual(content.subject, "Joe Example")
+        XCTAssertEqual(content.subject, "Discover Joe’s world")
         XCTAssertEqual(content.message, "See @joe on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
         XCTAssertNil(WanderShareContent.profile(serverID: nil, displayName: "Guest", handle: "you"))
@@ -4396,7 +4396,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(resultCard.contains("isDisabled: currentUserStatus != nil"))
         XCTAssertFalse(resultCard.contains("\"Add visit\""))
         XCTAssertTrue(resultCard.contains("title: \"Add to list\""))
-        XCTAssertTrue(resultCard.contains("WanderShareButton(content: shareContent)"))
+        XCTAssertTrue(resultCard.contains("ShareCardButton(content: shareContent,"))
         XCTAssertTrue(resultCard.contains("serverID: place.id"))
         XCTAssertFalse(resultCard.contains("googleMapsSearchURL"))
         XCTAssertTrue(discoverScreen.contains("guard currentUserSave(matching: visiblePlace) == nil"))

@@ -897,7 +897,7 @@ private struct CommonGroundAvatarPair: View {
     }
 }
 
-@MainActor private enum CommonGroundMockImages {
+@MainActor enum CommonGroundMockImages {
     static let avatars = tiles("PlaceCarouselAvatars")
     static let photos = tiles("PlaceCarouselPhotos")
     private static func tiles(_ name: String) -> [UIImage] {

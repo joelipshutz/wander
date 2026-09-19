@@ -361,3 +361,18 @@ permission is sufficient for centering the map; nearby POI resolution retains
 its stricter accuracy requirement. Cancel obsolete launch requests and retry
 when the app returns from the background or authorization changes. Preserve the
 existing deterministic Los Angeles viewport only for explicit debug fixtures.
+
+
+## 2026-09-19 — Share cards use topic-specific content (REC-546)
+
+One native SwiftUI renderer powers previews and exported Link, Story and Post
+artwork. Profiles use “Discover <first name>’s world” without a footer subtitle.
+Named map snapshots use the saved list name. Lists use a place collage for two
+or more places, one cover for one place, and an empty state for zero. Missing
+photos keep their slots. View remains visible in the link card footer.
+
+Check-ins use their visit date. Wanna cards use the exact event’s planned date
+when present, otherwise “On <first name>’s radar”; their action is “Let’s Go”.
+List invitations omit a repeated list-name subtitle and use “Join”. Native
+sharing keeps the canonical entity/event link alongside the artwork. Instagram
+and TikTok photo handoffs copy the link for captions or stickers.

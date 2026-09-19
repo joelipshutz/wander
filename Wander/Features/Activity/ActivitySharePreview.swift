@@ -179,8 +179,12 @@ struct ActivitySharePreviewScreen: View {
     @AppStorage(ActivityShareInstagramPhotoAccessGuidance.acknowledgementKey)
     private var hasAcknowledgedInstagramFullPhotoAccess = false
 
-    let context: ActivityEngagementContext
+    let context: ActivityEngagementContext?
     let content: WanderShareContent
+    private let customCard: ShareCardContent?
+    private let loadImages: (() async -> ShareCardImages)?
+    private var completion: ((Bool) -> Void)? = nil
+    @EnvironmentObject private var backend: WanderBackend
     let initiallyVisibleDestination: ActivityShareDestination?
     let analytics: AnalyticsClient
 
@@ -192,13 +196,30 @@ struct ActivitySharePreviewScreen: View {
     ) {
         self.context = context
         self.content = content
+        self.customCard = nil
+        self.loadImages = nil
         self.initiallyVisibleDestination = initiallyVisibleDestination
         self.analytics = analytics
     }
 
+    init(card: ShareCardContent, content: WanderShareContent, completion: ((Bool) -> Void)? = nil, loadImages: @escaping () async -> ShareCardImages) {
+        self.context = nil
+        self.content = content
+        self.customCard = card
+        self.loadImages = loadImages
+        self.completion = completion
+        self.initiallyVisibleDestination = nil
+        self.analytics = NoopAnalyticsClient()
+    }
+
+    private var card: ShareCardContent { resolvedCard ?? customCard ?? context!.shareCard }
+    @State private var resolvedCard: ShareCardContent?
+    @State private var images = ShareCardImages()
+    @State private var hasLoadedImages = false
+    @State private var selectedFormat: ShareCardFormat = .link
+    @State private var renderedFormat: ShareCardFormat?
     @State private var renderedImage: UIImage?
     @State private var renderedImageURL: URL?
-    @State private var resolvedAvatarImage: UIImage?
     @State private var isPreparingArtwork = false
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
@@ -215,11 +236,24 @@ struct ActivitySharePreviewScreen: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ActivityShareArtwork(
-                context: context,
-                avatarImage: resolvedAvatarImage
-            )
-                .ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    Picker("Format", selection: $selectedFormat) {
+                        ForEach(ShareCardFormat.allCases) { format in Text(format.rawValue).tag(format) }
+                    }.pickerStyle(.segmented).accessibilityIdentifier("share.format")
+                    GeometryReader { geometry in
+                        ShareCardArtwork(content: card, images: images, format: selectedFormat)
+                            .frame(width: selectedFormat.size.width, height: selectedFormat.size.height)
+                            .scaleEffect(geometry.size.width / selectedFormat.size.width, anchor: .topLeading)
+                    }
+                    .aspectRatio(selectedFormat.size, contentMode: .fit)
+                    .accessibilityIdentifier("share.card")
+                    if selectedFormat != .link {
+                        Text("Messages and More include the item’s link. For Instagram and TikTok posts, we copy the link so you can paste it into a caption or link sticker.")
+                            .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
+                    }
+                }.padding(20).padding(.top, 52)
+            }.background(brandMode.background)
 
             topBar
 
@@ -309,7 +343,7 @@ struct ActivitySharePreviewScreen: View {
         .alert("Couldn't make the share image", isPresented: $isShowingExportError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Try sharing this ticket again.")
+            Text("Try sharing this item again.")
         }
         .alert(
             "Couldn't share to TikTok",
@@ -326,14 +360,14 @@ struct ActivitySharePreviewScreen: View {
         } message: {
             Text(tikTokFailureMessage ?? "TikTok could not finish this share.")
         }
-        .task(id: context.activityID) {
+        .task(id: content.item) {
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.activityShareOpened,
                     properties: ["ticket_kind": ticketKindAnalyticsValue]
                 )
             )
-            _ = await prepareArtworkIfNeeded()
+            _ = await prepareArtworkIfNeeded(format: .link)
         }
         .onDisappear {
             guard let renderedImageURL else { return }
@@ -429,40 +463,42 @@ struct ActivitySharePreviewScreen: View {
     }
 
     @MainActor
-    private func prepareArtworkIfNeeded() async -> Bool {
-        if renderedImage != nil, renderedImageURL != nil {
-            return true
-        }
+    private func prepareArtworkIfNeeded(format: ShareCardFormat = .story) async -> Bool {
+        if renderedImage != nil, renderedImageURL != nil, renderedFormat == format { return true }
         guard !isPreparingArtwork else { return false }
-
         isPreparingArtwork = true
         defer { isPreparingArtwork = false }
-
-        let avatarImage = await ActivityShareArtworkRenderer.resolveAvatarImage(
-            avatarURL: context.actor.avatarURL
-        )
-        resolvedAvatarImage = avatarImage
-
-        guard let image = ActivityShareArtworkRenderer.render(
-            context: context,
-            avatarImage: avatarImage,
-            brandMode: brandMode
-        ),
-              let pngData = image.pngData(),
-              let fileURL = await WanderShareAttachmentStore.preparePNG(pngData)
-        else {
-            isShowingExportError = true
-            return false
+        if !hasLoadedImages {
+            if let loadImages { images = await loadImages() }
+            else if let context {
+                if context.ticketKind == .wanna, let parentID = context.sourceUserPlaceID,
+                   let repository = backend.userPlaceRepository as? any WannaSaveRepository {
+                    do {
+                        let wannas = try await repository.wannaSaves(userPlaceIDs: [parentID])
+                        resolvedCard = context.shareCard(resolving: wannas)
+                    } catch {
+                        isShowingExportError = true
+                        return false
+                    }
+                }
+                images = await ShareCardRenderer.activityImages(context, backend: backend)
+            }
+            guard !Task.isCancelled else { return false }
+            hasLoadedImages = true
         }
-
+        guard let image = ShareCardRenderer.render(card, images: images, format: format, brand: brandMode),
+              let fileURL = await WanderShareAttachmentStore.preparePNG(image)
+        else { isShowingExportError = true; return false }
+        if let oldURL = renderedImageURL { await WanderShareAttachmentStore.removePreparedPNG(at: oldURL) }
         renderedImage = image
         renderedImageURL = fileURL
+        renderedFormat = format
         return true
     }
 
     @MainActor
-    private func preparedShareContent() async -> WanderShareContent? {
-        guard await prepareArtworkIfNeeded(), let renderedImageURL else { return nil }
+    private func preparedShareContent(format: ShareCardFormat = .link) async -> WanderShareContent? {
+        guard await prepareArtworkIfNeeded(format: format), let renderedImageURL else { return nil }
         return content.attachingPNG(at: renderedImageURL)
     }
 
@@ -515,7 +551,7 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentSystemShare() async {
-        guard let shareContent = await preparedShareContent() else { return }
+        guard let shareContent = await preparedShareContent(format: selectedFormat) else { return }
         systemSharePresentation = ActivityShareSystemPresentation(content: shareContent)
     }
 
@@ -534,8 +570,9 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentInstagramPost() async {
-        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
 
+        UIPasteboard.general.url = content.item
         if ActivityShareProviderLauncher.canOpenInstagramPostLibrary,
            await ensurePhotoLibraryAccess() {
             do {
@@ -557,7 +594,8 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentCompatibleInstagramPost() async {
-        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
+        UIPasteboard.general.url = content.item
         do {
             let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
             instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
@@ -569,7 +607,7 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentTikTok() async {
-        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
         guard ActivityShareProviderLauncher.canOpenTikTok else {
             await presentSystemShare()
             return
@@ -583,6 +621,7 @@ struct ActivitySharePreviewScreen: View {
             isShowingExportError = true
             return
         }
+        UIPasteboard.general.url = content.item
         guard await ActivityShareProviderLauncher.openTikTok(
             localIdentifier: localIdentifier,
             onCompletion: handleTikTokOutcome
@@ -625,7 +664,7 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func saveArtworkToPhotos() async {
-        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard await prepareArtworkIfNeeded(format: selectedFormat), let renderedImage else { return }
 
         guard await ensurePhotoLibraryAccess() else { return }
 
@@ -674,6 +713,7 @@ struct ActivitySharePreviewScreen: View {
     }
 
     private func trackShareCompleted(destination: String, outcome: String) {
+        completion?(["copied", "draft", "handoff", "saved", "sent", "shared"].contains(outcome))
         let properties = ["destination": destination, "outcome": outcome]
         analytics.track(
             AnalyticsEvent(
@@ -694,175 +734,12 @@ struct ActivitySharePreviewScreen: View {
     }
 
     private var ticketKindAnalyticsValue: String {
-        switch context.ticketKind {
+        switch context?.ticketKind {
+        case nil: "saved"
         case .checkIn: "check_in"
         case .wanna: "wanna"
         case .list: "list"
         case .saved: "saved"
-        }
-    }
-}
-
-private struct ActivityShareArtwork: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let context: ActivityEngagementContext
-    let avatarImage: UIImage?
-
-    var body: some View {
-        ZStack {
-            ActivityShareBackdrop()
-
-            VStack(spacing: 0) {
-                Spacer(minLength: WanderTheme.spacing12)
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    ActivityShareTicket(
-                        context: context,
-                        avatarImage: avatarImage
-                    )
-
-                    Text("a place worth remembering")
-                        .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.accentForeground.opacity(0.78))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, WanderTheme.spacing6)
-
-                Spacer(minLength: WanderTheme.spacing12)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "Share preview. \(context.actor.displayName) \(context.actionTitle) \(context.placeName). \(context.placeDetail)"
-        )
-    }
-}
-
-private struct ActivityShareBackdrop: View {
-    @Environment(\.astirBrandMode) private var brandMode
-
-    var body: some View {
-        brandMode.accent
-    }
-}
-
-private struct ActivityShareTicket: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let context: ActivityEngagementContext
-    let avatarImage: UIImage?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                avatar
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(context.actor.displayName)
-                        .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-
-                    Text("@\(context.actor.handle)")
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: WanderTheme.spacing2)
-
-                Text("ASTIR")
-                    .font(AstirTypography.metadata)
-                    .tracking(2.2)
-                    .foregroundStyle(brandMode.accentText)
-            }
-
-            Rectangle()
-                .fill(brandMode.border)
-                .frame(height: 1)
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                (Text(context.actor.displayName).fontWeight(.regular)
-                    + Text(" \(context.actionTitle) ")
-                    + Text(context.placeName).fontWeight(.black))
-                    .font(AstirTypography.sectionTitle)
-                    .foregroundStyle(brandMode.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
-                    Image(systemName: ticketIcon)
-                        .font(AstirTypography.caption)
-
-                    Text(context.placeDetail)
-                        .font(AstirTypography.bodySmall)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .foregroundStyle(brandMode.secondaryText)
-
-                if let note = context.note {
-                    Text("“\(note)”")
-                        .font(AstirTypography.bodySmall)
-                        .italic()
-                        .foregroundStyle(brandMode.secondaryText)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(WanderTheme.spacing4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(brandMode.raisedBackground)
-        .checkInTicketSurface(
-            accent: ticketAccent,
-            surface: brandMode.raisedBackground,
-            notchEdges: .both,
-            castsShadow: true,
-            borderWidth: 1.5
-        )
-    }
-
-    private var initials: String {
-        context.actor.displayName
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap(\.first)
-            .map(String.init)
-            .joined()
-            .uppercased()
-    }
-
-    private var avatar: some View {
-        Group {
-            if let avatarImage {
-                Image(uiImage: avatarImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Text(initials)
-                    .font(AstirTypography.cardTitle)
-                    .foregroundStyle(brandMode.accentForeground)
-            }
-        }
-        .frame(width: 54, height: 54)
-        .background(brandMode.accent)
-        .clipShape(Circle())
-        .overlay(Circle().stroke(brandMode.raisedBackground, lineWidth: 2))
-    }
-
-    private var ticketIcon: String {
-        switch context.ticketKind {
-        case .checkIn: "checkmark.circle.fill"
-        case .wanna: "bookmark.fill"
-        case .list: PlaceListSymbol.systemImage
-        case .saved: "mappin.circle.fill"
-        }
-    }
-
-    private var ticketAccent: Color {
-        switch context.ticketKind {
-        case .checkIn: WanderTheme.pinSocial.color
-        case .wanna: WanderTheme.stateWarning.color
-        case .list: brandMode.accent
-        case .saved: WanderTheme.categorySage.color
         }
     }
 }
@@ -876,7 +753,7 @@ private struct ActivityShareDestinationTray: View {
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing3) {
-            Text("share this ticket")
+            Text("Share")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
 
@@ -1254,17 +1131,8 @@ enum ActivityShareArtworkRenderer {
         avatarImage: UIImage? = nil,
         brandMode: AstirBrandMode = .editorial
     ) -> UIImage? {
-        let artwork = ActivityShareArtwork(
-            context: context,
-            avatarImage: avatarImage
-        )
-            .environment(\.astirBrandMode, brandMode)
-            .frame(width: pointSize.width, height: pointSize.height)
-        let renderer = ImageRenderer(content: artwork)
-        renderer.proposedSize = ProposedViewSize(pointSize)
-        renderer.scale = 3
-        renderer.isOpaque = true
-        return renderer.uiImage
+        ShareCardRenderer.render(context.shareCard, images: ShareCardImages(avatar: avatarImage),
+                                 format: .story, brand: brandMode)
     }
 }
 

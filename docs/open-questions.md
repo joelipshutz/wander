@@ -116,3 +116,12 @@ Reference: [Apple background transfers for extensions](https://developer.apple.c
 - App-facing Supabase RPCs must stay available through `public.*` wrappers unless `app` is explicitly added to exposed PostgREST schemas.
 - Link/photo/social extraction is a moat only if it reduces capture work; it is not the first product wedge by itself.
 - The Clerk CLI disposable-user test stored `username` differently than the flag passed in that command. The current webhook mirrors Clerk's stored `username`; product username claim/edit UX still needs to be explicit later.
+
+
+## Share-card public previews (REC-546)
+
+Should explicit sharing publish a link-accessible snapshot of a restricted
+list/activity card, including the selected names, photos and date? Existing
+anonymous web previews do not expose those items. Until this is resolved,
+native exports can include the card while restricted website previews remain
+generic. Track the decision and implementation in REC-546.
