@@ -4,6 +4,23 @@ Last updated: 2026-09-18
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Initial map preparation and retained returns (REC-484)
+
+The approved launch artwork covers the mounted initial map for a two-second
+minimum while local rendering and source refresh begin underneath it. The
+cover blocks both touch and accessibility interaction, including bottom tabs.
+Reveal does not wait for remote refresh completion, so offline or stalled
+requests cannot hold the user behind an unbounded loading screen. A retained,
+prepared map remains immediately available on ordinary foreground or tab
+returns; those returns do not add another fixed splash delay.
+
+Same-account refresh callers share work. Unchanged responses should not rebuild
+presentations or rewrite persistence. Reuse must remain bounded and invalidate
+for local edits, remote changes, and access revocation. Account replacement or
+root teardown cancels owned reads before their results can apply. The cover
+provides preparation time; it does not establish that post-reveal responsiveness
+has passed device validation.
+
 ## Native onboarding review (REC-529)
 
 Onboarding review uses the production Swift views and simulator recordings. The

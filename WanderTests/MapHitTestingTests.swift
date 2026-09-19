@@ -378,7 +378,7 @@ final class MapHitTestingTests: XCTestCase {
     func testInitialMapLoadingPolicyPreventsFlashesAndSupportsDeterministicUITests() {
         XCTAssertEqual(
             MapInitialLoadingPolicy.minimumVisibleInterval(arguments: []),
-            0.35,
+            2,
             accuracy: 0.001
         )
         XCTAssertEqual(
@@ -386,10 +386,10 @@ final class MapHitTestingTests: XCTestCase {
                 arguments: [
                     "Wander",
                     MapInitialLoadingPolicy.testDelayArgument,
-                    "1750"
+                    "2750"
                 ]
             ),
-            1.75,
+            2.75,
             accuracy: 0.001
         )
         for invalidArguments in [
@@ -402,22 +402,22 @@ final class MapHitTestingTests: XCTestCase {
         ] {
             XCTAssertEqual(
                 MapInitialLoadingPolicy.minimumVisibleInterval(arguments: invalidArguments),
-                0.35,
+                2,
                 accuracy: 0.001
             )
         }
         XCTAssertEqual(
             MapInitialLoadingPolicy.remainingVisibleInterval(
                 elapsed: 0.2,
-                minimumVisibleInterval: 0.35
+                minimumVisibleInterval: 2
             ),
-            0.15,
+            1.8,
             accuracy: 0.001
         )
         XCTAssertEqual(
             MapInitialLoadingPolicy.remainingVisibleInterval(
-                elapsed: 1,
-                minimumVisibleInterval: 0.35
+                elapsed: 3,
+                minimumVisibleInterval: 2
             ),
             0,
             accuracy: 0.001
@@ -425,12 +425,11 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertEqual(
             MapInitialLoadingPolicy.remainingVisibleInterval(
                 elapsed: -1,
-                minimumVisibleInterval: 0.35
+                minimumVisibleInterval: 2
             ),
-            0.35,
+            2,
             accuracy: 0.001
         )
-        XCTAssertEqual(MapInitialLoadingPolicy.postRevealHydrationDelay, 0.25, accuracy: 0.001)
         XCTAssertEqual(
             MapInitialLoadingPolicy.refreshStallInterval(arguments: []),
             0,
@@ -2651,7 +2650,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("mapView.view(for: mapView.userLocation)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
-        XCTAssertTrue(map.contains("retainingGroup: authorized.group"))
+        XCTAssertTrue(map.contains("authorizedSelection: authorized"))
         XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
         XCTAssertFalse(map.contains("Dropped pin. Tap + to add it."))
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))

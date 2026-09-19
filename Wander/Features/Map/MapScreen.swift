@@ -142,8 +142,7 @@ private struct MapLocationActivation: Equatable {
 }
 
 enum MapInitialLoadingPolicy {
-    static let defaultMinimumVisibleInterval: TimeInterval = 0.35
-    static let postRevealHydrationDelay: TimeInterval = 0.25
+    static let defaultMinimumVisibleInterval: TimeInterval = 2
     static let testDelayArgument = "-WanderMapInitialLoadingDelayMilliseconds"
     static let testRefreshStallArgument = "-WanderMapInitialLoadingRefreshStallMilliseconds"
 
@@ -1442,6 +1441,8 @@ struct MapScreen: View {
     @State private var initialMapSourceLoadID: UUID?
     @State private var isLoadingMapSources = true
     @State private var hasRevealedInitialMap = false
+    @State private var preparedInitialMapAccount: String?
+    @State private var initialMapPreparationStartedAt: TimeInterval?
     @State private var compactCardPhase = MapCompactCardPhase.hidden
     @State private var compactCardReadyIdentity: String?
     @State private var compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
@@ -1480,6 +1481,11 @@ struct MapScreen: View {
         MapRenderProjectionKey,
         MapRenderProjection
     >()
+
+    @State private var retainedProjectionCache = MapRenderProjectionCache<
+        MapRetainedProjectionKey<MapRenderProjectionKey>,
+        MapRetainedProjection
+    >(capacity: 1)
 
     private static let defaultRegion = MKCoordinateRegion(
         center: MapLaunchLocationResolver.oceanPark,
@@ -1546,12 +1552,12 @@ struct MapScreen: View {
         }
     }
 
-    private var renderProjection: MapRenderProjection {
+    private var renderProjectionKey: MapRenderProjectionKey {
         let currentUserID = store.currentUser.id
         let rankingRegion = mapFilterState.source == .featured
             ? featuredRankingRegion
             : Self.defaultRegion
-        let key = MapRenderProjectionKey(
+        return MapRenderProjectionKey(
             storeRevision: store.presentationRevision,
             featuredPlacesRevision: mapFilterState.source == .featured
                 ? featuredPlacesRevision
@@ -1564,10 +1570,18 @@ struct MapScreen: View {
             rankingLatitudeDelta: rankingRegion.span.latitudeDelta,
             rankingLongitudeDelta: rankingRegion.span.longitudeDelta
         )
+    }
 
+    private var renderProjectionPartition: String {
+        (isShowingNUXDemo ? "nux-demo-" : "live-") + mapFilterState.source.rawValue
+    }
+
+    private var renderProjection: MapRenderProjection {
+        let key = renderProjectionKey
+        let currentUserID = key.currentUserID
         return renderProjectionCache.value(
             for: key,
-            partition: (isShowingNUXDemo ? "nux-demo-" : "live-") + mapFilterState.source.rawValue
+            partition: renderProjectionPartition
         ) {
             let followedOwnerIDs = Set(store.following(of: currentUserID).map(\.id))
             let currentUserPlaces = store.currentUserVisiblePlaces
@@ -1665,31 +1679,43 @@ struct MapScreen: View {
         )
     }
 
-    private var authorizedRetainedSelection: MapRetainedSelectionCache.Selection {
-        retainedSelectionCache.value(
-            sourceIdentity: ObjectIdentifier(store),
-            revision: store.presentationRevision,
-            featuredRevision: featuredPlacesRevision,
-            featuredAccountID: featuredViewportAccountID,
-            currentUserID: store.currentUser.id,
-            retainedPlace: routedVisiblePlace,
+    private var retainedProjection: MapRetainedProjection {
+        let key = MapRetainedProjectionKey(
+            base: renderProjectionKey,
+            authorizationRevision: featuredPlacesRevision,
+            activePlace: routedVisiblePlace,
             retainedGroup: routedVisiblePlaceGroup,
-            submittedGroups: submittedSavedSearchGroups,
-            authorizedPlaces: { authorizedSelectionPlaces }
+            submittedGroups: submittedSavedSearchGroups
         )
+        return retainedProjectionCache.value(for: key, partition: renderProjectionPartition) {
+            let interval = WanderDebugLog.beginPerformanceInterval("Map Retained Projection")
+            defer { WanderDebugLog.endPerformanceInterval("Map Retained Projection", id: interval) }
+            let base = renderProjection
+            let authorized = retainedSelectionCache.value(
+                sourceIdentity: ObjectIdentifier(store),
+                revision: store.presentationRevision,
+                featuredRevision: featuredPlacesRevision,
+                featuredAccountID: featuredViewportAccountID,
+                currentUserID: store.currentUser.id,
+                retainedPlace: routedVisiblePlace,
+                retainedGroup: routedVisiblePlaceGroup,
+                submittedGroups: submittedSavedSearchGroups,
+                authorizedPlaces: { authorizedSelectionPlaces },
+                authorizedGroups: { places in
+                    places.count == store.visiblePlaces().count ? store.visiblePlaceGroups() : nil
+                }
+            )
+            return MapRetainedProjection(
+                places: base.visiblePlaces,
+                groups: base.visiblePlaceGroups,
+                authorizedSelection: authorized,
+                currentUserID: store.currentUser.id
+            )
+        }
     }
 
     private var visiblePlaces: [VisiblePlace] {
-        let authorized = authorizedRetainedSelection
-        let activeRetainedPlaces = MapActivePinRetention.places(
-            from: renderProjection.visiblePlaces,
-            retaining: authorized.place,
-            retainingGroup: authorized.group
-        )
-        return MapActivePinRetention.places(
-            from: activeRetainedPlaces,
-            retainingGroups: authorized.submittedGroups
-        )
+        retainedProjection.places
     }
 
     /// Search spans every save the viewer is authorized to see, independent of
@@ -1716,18 +1742,7 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        let authorized = authorizedRetainedSelection
-        let activeRetainedGroups = MapActivePinRetention.groups(
-            from: renderProjection.visiblePlaceGroups,
-            retaining: authorized.place,
-            retainingGroup: authorized.group,
-            currentUserID: store.currentUser.id
-        )
-        return MapActivePinRetention.groups(
-            from: activeRetainedGroups,
-            retainingGroups: authorized.submittedGroups,
-            currentUserID: store.currentUser.id
-        )
+        retainedProjection.groups
     }
 
     private func projectedGroupKey(for visiblePlace: VisiblePlace) -> String? {
@@ -1973,9 +1988,10 @@ struct MapScreen: View {
             }
         )
         NavigationStack {
-            ZStack(alignment: .bottom) {
+            let mapCanvas = ZStack(alignment: .bottom) {
                 NativeMapView(
                     attributionBottomClearance: mapSearchDockClearance,
+                    isInteractionEnabled: hasRevealedInitialMap,
                     annotations: nativeAnnotations,
                     cameraRequest: nativeCameraRequest,
                     nativeFeatureClearRevision: nativeMapFeatureClearRevision,
@@ -2214,7 +2230,7 @@ struct MapScreen: View {
 
                                 if isMapSearchFocused {
                                     MapSearchCancelButton(action: cancelMapSearch)
-                                } else {
+                                } else if !isMoreFiltersPresented {
                                     MapGlassAddButton {
                                             dismissMoreFilters()
                                             onAdd()
@@ -2228,6 +2244,13 @@ struct MapScreen: View {
                                             isActive: walkthroughs.currentStep?.target == .mapAdd
                                                 || walkthroughs.currentStep?.target == .mapAddAgain
                                     )
+                                } else {
+                                    // The interactive glass button can remain an
+                                    // accessibility target under a hidden parent.
+                                    // Keep the dock geometry without a live action.
+                                    Color.clear
+                                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                                        .allowsHitTesting(false)
                                 }
                             }
                             .frame(maxWidth: .infinity)
@@ -2291,6 +2314,9 @@ struct MapScreen: View {
                     .accessibilityHidden(compactCardPhase == .hidden)
             }
             .background(astirBrandMode.background)
+            // Hide this container during preparation without overriding the
+            // accessibility visibility of individual controls after reveal.
+            .accessibilityElement(children: .contain)
             .allowsHitTesting(hasRevealedInitialMap)
             .accessibilityHidden(!hasRevealedInitialMap)
             .overlay {
@@ -2301,7 +2327,11 @@ struct MapScreen: View {
                         .transition(.opacity)
                 }
             }
-            .toolbar(hasRevealedInitialMap ? .visible : .hidden, for: .tabBar)
+            let activeMap = mapCanvas
+            .toolbar(
+                hasRevealedInitialMap && !isPlaceProfileOverlayBlockingInteraction ? .visible : .hidden,
+                for: .tabBar
+            )
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
@@ -2343,16 +2373,23 @@ struct MapScreen: View {
             .task(id: searchLaunchRequest?.id) {
                 await handleMapSearchLaunchRequest(searchLaunchRequest)
             }
-            .task {
+            .task(id: initialMapAccountKey) {
                 await revealInitialMapThenRefreshSources()
+                guard !Task.isCancelled else { return }
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
                 }
+                await handleNotificationRoute(pushNotifications.navigationRequest)
                 resolveInitialSelection()
                 resolvePerformanceFixtureSelectionIfNeeded()
             }
+            .onChange(of: store.currentUser.id) { _, _ in
+                preparedInitialMapAccount = nil
+                initialMapPreparationStartedAt = nil
+            }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard isSignedIn else {
+                    preparedInitialMapAccount = nil
                     featuredViewportLoader.cancel()
                     initialMapSourceLoadID = nil
                     updateFeaturedViewportPlaces(store.visiblePlaces())
@@ -2361,12 +2398,6 @@ struct MapScreen: View {
                     isLoadingMapSources = false
                     hasRevealedInitialMap = true
                     return
-                }
-                Task {
-                    await refreshInitialMapSources()
-                    await store.refreshSharedVisitInbox(backend: backend)
-                    await handleNotificationRoute(pushNotifications.navigationRequest)
-                    resolveInitialSelection()
                 }
             }
             .onChange(of: mapFilterState.more) { _, _ in
@@ -2468,6 +2499,7 @@ struct MapScreen: View {
                 compactCardMotionTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
+            activeMap
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
                 if let result = mapSaveFlowSelection.saveFlowDidDismiss() {
@@ -3396,7 +3428,8 @@ struct MapScreen: View {
         initialCameraState.resolve()
     }
 
-    private func refreshInitialMapSources() async {
+    @discardableResult
+    private func refreshInitialMapSources() async -> Bool {
         featuredViewportLoader.cancel()
         let loadID = UUID()
         initialMapSourceLoadID = loadID
@@ -3406,10 +3439,11 @@ struct MapScreen: View {
         let refreshStallInterval = MapInitialLoadingPolicy.refreshStallInterval()
         if refreshStallInterval > 0 {
             try? await Task.sleep(for: .seconds(refreshStallInterval))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
         }
 
         let requestedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: currentSearchRegion)
+        var didRefreshSocial = false
         let didLoadFeatured = await MapInitialSourceLoader.load(
             fetchFeatured: {
                 await store.fetchRemoteFeaturedViewportPlaces(
@@ -3418,10 +3452,11 @@ struct MapScreen: View {
                 )
             },
             refreshSocial: {
-                await store.refreshRemoteSocialSurfaces(
+                didRefreshSocial = await store.refreshRemoteSocialSurfaces(
                     in: requestedViewport,
                     backend: auth.isSignedIn ? backend : nil
                 )
+                return didRefreshSocial
             },
             onFeatured: { places in
                 guard initialMapSourceLoadID == loadID,
@@ -3437,7 +3472,7 @@ struct MapScreen: View {
         guard !Task.isCancelled,
               initialMapSourceLoadID == loadID,
               store.currentUser.id == requestUserID
-        else { return }
+        else { return false }
         initialMapSourceLoadID = nil
         if !didLoadFeatured {
             updateFeaturedViewportPlaces(store.visiblePlaces())
@@ -3448,31 +3483,37 @@ struct MapScreen: View {
             isLoadingMapSources = false
             handleFeaturedCameraChange(currentSearchRegion)
         }
+        return didLoadFeatured && (!auth.isSignedIn || didRefreshSocial)
+    }
+
+    private var initialMapAccountKey: String {
+        "\(store.currentUser.id)|\(auth.isSignedIn)"
     }
 
     private func revealInitialMapThenRefreshSources() async {
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
-        let remainingInterval = MapInitialLoadingPolicy.remainingVisibleInterval(
-            elapsed: elapsed,
-            minimumVisibleInterval: MapInitialLoadingPolicy.minimumVisibleInterval()
-        )
-        if remainingInterval > 0 {
-            try? await Task.sleep(
-                nanoseconds: UInt64(remainingInterval * 1_000_000_000)
-            )
+        let account = initialMapAccountKey
+        guard preparedInitialMapAccount != account else { return }
+        let startedAt = initialMapPreparationStartedAt ?? ProcessInfo.processInfo.systemUptime
+        initialMapPreparationStartedAt = startedAt
+        // Mount local Map content and begin hydration behind the artwork. The
+        // reveal remains bounded even when the network is offline or stalled.
+        async let refresh: Bool = refreshInitialMapSources()
+        if !hasRevealedInitialMap {
+            do {
+                let remaining = MapInitialLoadingPolicy.remainingVisibleInterval(
+                    elapsed: ProcessInfo.processInfo.systemUptime - startedAt,
+                    minimumVisibleInterval: MapInitialLoadingPolicy.minimumVisibleInterval()
+                )
+                try await Task.sleep(for: .seconds(remaining))
+            } catch { return }
+            guard !Task.isCancelled, initialMapAccountKey == account else { return }
+            revealInitialMapIfNeeded()
         }
-        guard !Task.isCancelled else { return }
-
-        revealInitialMapIfNeeded()
-        do {
-            try await Task.sleep(for: .seconds(MapInitialLoadingPolicy.postRevealHydrationDelay))
-        } catch {
-            return
-        }
-        guard !Task.isCancelled else { return }
-
-        await refreshInitialMapSources()
+        let prepared = await refresh
+        guard prepared, !Task.isCancelled, initialMapAccountKey == account,
+              initialMapSourceLoadID == nil, loadedFeaturedViewport != nil
+        else { return }
+        preparedInitialMapAccount = account
     }
 
     private func revealInitialMapIfNeeded() {
@@ -6642,11 +6683,31 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 
 }
 
+/// A native parent hides MapKit's own accessibility container as well as its
+/// descendants during preparation, without removing or dimming the renderer.
+private final class NativeMapContainerView: UIView {
+    let mapView = MKMapView(frame: .zero)
+
+    init() {
+        super.init(frame: .zero)
+        mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(mapView)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setInteractionEnabled(_ enabled: Bool) {
+        isUserInteractionEnabled = enabled
+        accessibilityElementsHidden = !enabled
+    }
+}
+
 /// A MapKit-owned annotation surface. MapKit virtualizes and reuses these views
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
 private struct NativeMapView: UIViewRepresentable {
     let attributionBottomClearance: CGFloat
+    let isInteractionEnabled: Bool
     let annotations: [NativeMapAnnotationDescriptor]
     let cameraRequest: NativeMapCameraRequest
     let nativeFeatureClearRevision: UInt64
@@ -6665,8 +6726,10 @@ private struct NativeMapView: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView(frame: .zero)
+    func makeUIView(context: Context) -> NativeMapContainerView {
+        let container = NativeMapContainerView()
+        container.setInteractionEnabled(isInteractionEnabled)
+        let mapView = container.mapView
         // MapKit adds the safe area to these margins and renders its own attribution.
         mapView.layoutMargins = UIEdgeInsets(
             top: 0, left: 0, bottom: attributionBottomClearance + 10, right: 0
@@ -6692,16 +6755,17 @@ private struct NativeMapView: UIViewRepresentable {
         }
         context.coordinator.attachGestureObservers(to: mapView)
         context.coordinator.update(parent: self, mapView: mapView)
-        return mapView
+        return container
     }
 
-    func updateUIView(_ mapView: MKMapView, context: Context) {
-        context.coordinator.update(parent: self, mapView: mapView)
+    func updateUIView(_ container: NativeMapContainerView, context: Context) {
+        container.setInteractionEnabled(isInteractionEnabled)
+        context.coordinator.update(parent: self, mapView: container.mapView)
     }
 
-    static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
-        coordinator.detachGestureObservers(from: mapView)
-        mapView.delegate = nil
+    static func dismantleUIView(_ container: NativeMapContainerView, coordinator: Coordinator) {
+        coordinator.detachGestureObservers(from: container.mapView)
+        container.mapView.delegate = nil
     }
 
     @MainActor
@@ -6742,6 +6806,8 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            mapView.isUserInteractionEnabled = parent.isInteractionEnabled
+            mapView.accessibilityElementsHidden = !parent.isInteractionEnabled
             if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
                 mapView.layoutMargins = UIEdgeInsets(
                     top: 0, left: 0, bottom: parent.attributionBottomClearance + 10, right: 0
@@ -10529,6 +10595,86 @@ enum MapPinSelectionMotionStyle {
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
+/// The base key includes the store revision/account and every map filter input.
+/// Featured authorization has its own revision even under Friends/You filters.
+/// Retained membership is refreshed from these authorized revisions.
+struct MapRetainedProjectionKey<Base: Equatable>: Equatable {
+    let base: Base
+    let authorizationRevision: UInt64
+    let activeSaveID: String?
+    let retainedSaveIDs: [String]?
+    let submittedSaveIDs: [[String]]
+
+    init(
+        base: Base,
+        authorizationRevision: UInt64 = 0,
+        activePlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup]
+    ) {
+        self.base = base
+        self.authorizationRevision = authorizationRevision
+        activeSaveID = activePlace?.userPlace.id
+        retainedSaveIDs = retainedGroup?.places.map(\.userPlace.id)
+        submittedSaveIDs = submittedGroups.map { $0.places.map(\.userPlace.id) }
+    }
+}
+
+struct MapRetainedProjection {
+    let places: [VisiblePlace]
+    let groups: [VisiblePlaceGroup]
+
+    init(
+        places: [VisiblePlace],
+        groups: [VisiblePlaceGroup],
+        activePlace: VisiblePlace?,
+        retainedGroup: VisiblePlaceGroup?,
+        submittedGroups: [VisiblePlaceGroup],
+        authorizedPlaces: [VisiblePlace],
+        authorizedGroups: @autoclosure () -> [VisiblePlaceGroup]?,
+        currentUserID: String
+    ) {
+        let authorizedRoutedPlace = MapActivePinRetention.authorizedPlace(activePlace, within: authorizedPlaces)
+        let authorizedRoutedGroup = MapActivePinRetention.authorizedGroup(
+            retainedGroup,
+            requiring: authorizedRoutedPlace,
+            within: authorizedPlaces,
+            currentUserID: currentUserID,
+            cachedGroups: authorizedGroups()
+        )
+        let authorizedSubmittedGroups = MapActivePinRetention.authorizedGroups(
+            submittedGroups,
+            within: authorizedPlaces,
+            currentUserID: currentUserID
+        )
+        self.init(
+            places: places, groups: groups,
+            authorizedSelection: MapRetainedSelectionCache.Selection(
+                place: authorizedRoutedPlace, group: authorizedRoutedGroup, submittedGroups: authorizedSubmittedGroups
+            ),
+            currentUserID: currentUserID
+        )
+    }
+
+    init(places: [VisiblePlace], groups: [VisiblePlaceGroup],
+         authorizedSelection: MapRetainedSelectionCache.Selection, currentUserID: String) {
+        let authorizedRoutedPlace = authorizedSelection.place
+        let authorizedRoutedGroup = authorizedSelection.group
+        let authorizedSubmittedGroups = authorizedSelection.submittedGroups
+        self.places = MapActivePinRetention.places(
+            from: MapActivePinRetention.places(from: places, retaining: authorizedRoutedPlace, retainingGroup: authorizedRoutedGroup),
+            retainingGroups: authorizedSubmittedGroups
+        )
+        self.groups = MapActivePinRetention.groups(
+            from: MapActivePinRetention.groups(
+                from: groups, retaining: authorizedRoutedPlace, retainingGroup: authorizedRoutedGroup, currentUserID: currentUserID
+            ),
+            retainingGroups: authorizedSubmittedGroups,
+            currentUserID: currentUserID
+        )
+    }
+}
+
 /// One authorized selection snapshot per store revision. No cross-account or
 /// historical entries are retained; changed access is checked before reuse.
 @MainActor
@@ -10562,7 +10708,8 @@ final class MapRetainedSelectionCache {
         retainedPlace: VisiblePlace?,
         retainedGroup: VisiblePlaceGroup?,
         submittedGroups: [VisiblePlaceGroup],
-        authorizedPlaces: () -> [VisiblePlace]
+        authorizedPlaces: () -> [VisiblePlace],
+        authorizedGroups: ([VisiblePlace]) -> [VisiblePlaceGroup]? = { _ in nil }
     ) -> Selection {
         let nextKey = Key(
             sourceIdentity: sourceIdentity,
@@ -10580,7 +10727,8 @@ final class MapRetainedSelectionCache {
         let result = Selection(
             place: place,
             group: MapActivePinRetention.authorizedGroup(
-                retainedGroup, requiring: place, within: places, currentUserID: currentUserID
+                retainedGroup, requiring: place, within: places, currentUserID: currentUserID,
+                cachedGroups: authorizedGroups(places)
             ),
             submittedGroups: MapActivePinRetention.authorizedGroups(
                 submittedGroups, within: places, currentUserID: currentUserID
@@ -10626,10 +10774,15 @@ enum MapActivePinRetention {
         _ retainedGroup: VisiblePlaceGroup?,
         requiring activePlace: VisiblePlace?,
         within authorizedPlaces: [VisiblePlace],
-        currentUserID: String
+        currentUserID: String,
+        cachedGroups: @autoclosure () -> [VisiblePlaceGroup]? = nil
     ) -> VisiblePlaceGroup? {
         guard let activePlace else { return nil }
         guard let retainedGroup else {
+            if let groups = cachedGroups() {
+                let aliases = VisiblePlaceGrouping.matchingAliases(for: activePlace)
+                return groups.first { !$0.aliases.isDisjoint(with: aliases) }
+            }
             return VisiblePlaceGrouping.matchingGroup(
                 for: activePlace,
                 in: authorizedPlaces,
@@ -10652,6 +10805,7 @@ enum MapActivePinRetention {
         within authorizedPlaces: [VisiblePlace],
         currentUserID: String
     ) -> [VisiblePlaceGroup] {
+        guard !retainedGroups.isEmpty else { return [] }
         var authorizedByUserPlaceID: [String: VisiblePlace] = [:]
         authorizedByUserPlaceID.reserveCapacity(authorizedPlaces.count)
         for place in authorizedPlaces {
