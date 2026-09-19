@@ -122,6 +122,12 @@ async function main() {
         await client.query("rollback to savepoint events_interest_smoke");
         await client.query("release savepoint events_interest_smoke");
         console.log("ok - Events interest persists once per authenticated account and keeps its roster private");
+        await client.query("savepoint profile_feedback_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/profile_feedback.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint profile_feedback_smoke");
+        await client.query("release savepoint profile_feedback_smoke");
+        console.log("ok - private feedback storage, authenticated attachments and idempotent email outbox");
         // Isolate pgTAP's per-transaction plan from the later history suite.
         await client.query("savepoint question_snapshot_smoke");
         try {
@@ -2615,6 +2621,10 @@ savepoint events_interest_smoke;
 ${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
 rollback to savepoint events_interest_smoke;
 release savepoint events_interest_smoke;
+savepoint profile_feedback_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/profile_feedback.sql", import.meta.url)), "rollback")}
+rollback to savepoint profile_feedback_smoke;
+release savepoint profile_feedback_smoke;
 rollback;
 `;
 }

@@ -284,6 +284,7 @@ struct ProfileOwnerHome: View {
     let yourMapAction: (() -> Void)?
     let calendarScrollRequestID: UUID?
     let onCalendarScrollRequestHandled: (UUID) -> Void
+    var feedbackAction: (() -> Void)? = nil
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
     @Environment(\.resolvedProfileHeaderMotion) private var profileHeaderMotion
@@ -434,6 +435,10 @@ struct ProfileOwnerHome: View {
                 Spacer(minLength: 0)
 
                 if mode.isOwner {
+                    if let feedbackAction {
+                        ProfileHeaderActionButton(systemImage: "ladybug.fill", accessibilityLabel: "Feedback", action: feedbackAction)
+                            .accessibilityIdentifier("profile.feedback")
+                    }
                     ProfileInvitationButton(
                         pendingInvitationCount: sharedVisitInvitationCount,
                         action: sharedVisitInvitationsAction

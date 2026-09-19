@@ -193,7 +193,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Astir")
         XCTAssertEqual(plist["CFBundleName"] as? String, "$(PRODUCT_NAME)")
 
-        for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription"] {
+        for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription", "NSMicrophoneUsageDescription"] {
             let usageDescription = try XCTUnwrap(plist[key] as? String)
             XCTAssertTrue(usageDescription.contains("Astir"), "\(key) must use the public app name")
             XCTAssertFalse(usageDescription.contains("Wander"), "\(key) must not expose the internal app name")
@@ -561,6 +561,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(
             try collectedDataTypes(in: manifest),
             [
+                "NSPrivacyCollectedDataTypeAudioData",
                 "NSPrivacyCollectedDataTypeContacts",
                 "NSPrivacyCollectedDataTypeDeviceID",
                 "NSPrivacyCollectedDataTypeEmailAddress",

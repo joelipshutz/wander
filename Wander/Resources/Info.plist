@@ -60,6 +60,8 @@
 	<string>Astir reads names and phone numbers on this device so you can choose someone to invite. Your address book is not uploaded; Messages receives only a number you select.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Astir uses your microphone only when you choose to record a voice note for the Astir team with your feedback.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Astir saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
 	<key>TikTokClientKey</key>
