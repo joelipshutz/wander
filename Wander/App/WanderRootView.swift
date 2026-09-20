@@ -3090,17 +3090,20 @@ struct WanderRootView: View {
         )
     }
 
-    static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {
+    static func resolvedInitialTab(
+        from arguments: [String] = ProcessInfo.processInfo.arguments,
+        defaultTab: WanderTab = .map
+    ) -> WanderTab {
         guard let flagIndex = arguments.firstIndex(of: "-WanderInitialTab") else {
-            return .map
+            return defaultTab
         }
 
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else {
-            return .map
+            return defaultTab
         }
 
-        let tab = WanderTab(rawValue: arguments[valueIndex]) ?? .map
+        let tab = WanderTab(rawValue: arguments[valueIndex]) ?? defaultTab
         return tab == .add ? .map : tab
     }
 
