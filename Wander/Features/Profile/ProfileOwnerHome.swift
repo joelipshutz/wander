@@ -424,6 +424,11 @@ struct ProfileOwnerHome: View {
                     ProfileBackButton(action: backAction)
                 }
 
+                if mode.isOwner, let feedbackAction {
+                    ProfileHeaderActionButton(systemImage: "ladybug.fill", accessibilityLabel: "Feedback", action: feedbackAction)
+                        .accessibilityIdentifier("profile.feedback")
+                }
+
                 if !isProfileMotionActive {
                     Text("@\(profile.handle)")
                         .font(AstirTypography.sectionTitle)
@@ -435,49 +440,18 @@ struct ProfileOwnerHome: View {
                 Spacer(minLength: 0)
 
                 if mode.isOwner {
-                    if let feedbackAction {
-                        ProfileHeaderActionButton(systemImage: "ladybug.fill", accessibilityLabel: "Feedback", action: feedbackAction)
-                            .accessibilityIdentifier("profile.feedback")
-                    }
                     ProfileInvitationButton(
                         pendingInvitationCount: sharedVisitInvitationCount,
                         action: sharedVisitInvitationsAction
                     )
-                    ProfileHeaderActionButton(
-                        systemImage: "pencil",
-                        accessibilityLabel: "Edit profile",
-                        action: editAction
-                    )
                 }
 
-                if let shareContent = WanderShareContent.profile(
-                    serverID: profile.serverID,
-                    displayName: profile.displayName,
-                    handle: profile.handle
-                ) {
-                    ShareCardButton(
-                        content: shareContent,
-                        card: ShareCardContent(kind: .profile, name: profile.displayName,
-                                               ownerName: profile.displayName, detail: "@\(profile.handle)"),
-                        onTap: shareAction,
-                        loadImages: {
-                            let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: profile.avatarURL)
-                            let request = ProfileMapSnapshotRequest(points: insights.mapPoints,
-                                size: CGSize(width: 390, height: 238), displayScale: 3,
-                                colorScheme: brandMode == .editorial ? .dark : .light)
-                            let map = await ProfileMapSnapshotCache.shared.image(for: request)
-                            return ShareCardImages(avatar: avatar, map: map)
-                        }
-                    ) {
-                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share profile")
-                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                if !mode.isOwner {
+                    profileShareButton
                 }
 
                 if mode.isOwner {
-                    ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                    ProfileHeaderActionButton(systemImage: "line.3.horizontal", accessibilityLabel: "Settings", action: settingsAction)
                         .walkthroughTarget(.profileSettings)
                 } else if let memberActions {
                     ProfileHeaderActionButton(
@@ -514,7 +488,40 @@ struct ProfileOwnerHome: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+    }
+
+    @ViewBuilder
+    private var profileShareButton: some View {
+        if let shareContent = WanderShareContent.profile(
+            serverID: profile.serverID,
+            displayName: profile.displayName,
+            handle: profile.handle
+        ) {
+            ShareCardButton(
+                content: shareContent,
+                card: ShareCardContent(kind: .profile, name: profile.displayName,
+                                       ownerName: profile.displayName, detail: "@\(profile.handle)"),
+                onTap: shareAction,
+                loadImages: {
+                    let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: profile.avatarURL)
+                    let request = ProfileMapSnapshotRequest(points: insights.mapPoints,
+                        size: CGSize(width: 390, height: 238), displayScale: 3,
+                        colorScheme: brandMode == .editorial ? .dark : .light)
+                    let map = await ProfileMapSnapshotCache.shared.image(for: request)
+                    return ShareCardImages(avatar: avatar, map: map)
+                }
+            ) {
+                if mode.isOwner {
+                    AstirIdentityActionLabel(title: "Share profile")
+                } else {
+                    ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Share profile")
+            .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+            .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+        }
     }
 
     private var profileIdentityBlock: some View {
@@ -561,6 +568,16 @@ struct ProfileOwnerHome: View {
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
                     .profileMotionSource(normalized(profile.bio) == nil ? .bio : nil)
+            }
+
+            if mode.isOwner {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Button(action: editAction) {
+                        AstirIdentityActionLabel(title: "Edit profile")
+                    }
+                    .buttonStyle(.plain)
+                    profileShareButton
+                }
             }
 
             if let relationship = mode.relationship {

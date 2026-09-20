@@ -1129,15 +1129,6 @@ private struct ListDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ListDetailHeaderToolbar {
-                if let listShareContent {
-                    ShareCardButton(content: listShareContent,
-                                    card: displayList.shareCard(owner: displayList.isOwnedByCurrentUser ? store.currentUser.displayName : displayList.ownerName),
-                                    loadImages: { await displayList.shareImages(backend: backend) }) {
-                        ListDetailHeaderActionLabel(systemImage: "square.and.arrow.up")
-                    }
-                    .accessibilityLabel("Share list")
-                }
-
                 if canAddPlaces {
                     Button {
                         isAddingPlaces = true
@@ -1146,16 +1137,6 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
-                }
-
-                if canManageList {
-                    Button {
-                        onEdit(renderedList)
-                    } label: {
-                        ListDetailHeaderActionLabel(systemImage: "pencil")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Edit list")
                 }
 
                 if !renderedList.isOwnedByCurrentUser {
@@ -1296,6 +1277,30 @@ private struct ListDetailScreen: View {
         }
     }
 
+    private func identityActions(for renderedList: PlaceListMock) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            if canManageList {
+                Button {
+                    onEdit(renderedList)
+                } label: {
+                    AstirIdentityActionLabel(title: "Edit list")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Edit list")
+            }
+            if let listShareContent {
+                ShareCardButton(content: listShareContent,
+                                card: displayList.shareCard(owner: displayList.isOwnedByCurrentUser ? store.currentUser.displayName : displayList.ownerName),
+                                loadImages: { await displayList.shareImages(backend: backend) }) {
+                    AstirIdentityActionLabel(title: "Share list")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Share list")
+            }
+        }
+        .padding(.top, WanderTheme.spacing2)
+    }
+
     private func detailHeader(for renderedList: PlaceListMock) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .top) {
@@ -1376,6 +1381,10 @@ private struct ListDetailScreen: View {
                     .foregroundStyle(brandMode.accentText)
             }
             .padding(.top, WanderTheme.spacing1)
+
+            if canManageList || listShareContent != nil {
+                identityActions(for: renderedList)
+            }
         }
     }
 
