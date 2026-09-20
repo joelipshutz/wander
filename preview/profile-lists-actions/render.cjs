@@ -10,12 +10,12 @@ const { pathToFileURL } = require('node:url');
     await page.goto(pathToFileURL(path.join(__dirname, 'index.html')).href);
     await page.evaluate(() => document.fonts.ready);
     for (const theme of ['light', 'dark']) {
-      for (const screen of ['profile', 'list']) {
+      for (const screen of ['profile', 'list', 'member']) {
         await page.locator(`#${screen}-${theme}`).screenshot({ path: path.join(__dirname, `${screen}-${theme}.png`) });
       }
     }
     await page.screenshot({ path: path.join(__dirname, 'comparison.png'), fullPage: true });
-    console.log('Rendered Profile and List detail in Light and Dark. Design mockups only.');
+    console.log('Rendered owner Profile, member Profile and List detail in Light and Dark. Design mockups only.');
   } finally {
     await browser.close();
   }

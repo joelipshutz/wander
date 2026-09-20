@@ -446,10 +446,6 @@ struct ProfileOwnerHome: View {
                     )
                 }
 
-                if !mode.isOwner {
-                    profileShareButton
-                }
-
                 if mode.isOwner {
                     ProfileHeaderActionButton(systemImage: "line.3.horizontal", accessibilityLabel: "Settings", action: settingsAction)
                         .walkthroughTarget(.profileSettings)
@@ -511,11 +507,7 @@ struct ProfileOwnerHome: View {
                     return ShareCardImages(avatar: avatar, map: map)
                 }
             ) {
-                if mode.isOwner {
-                    AstirIdentityActionLabel(title: "Share profile")
-                } else {
-                    ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
-                }
+                AstirIdentityActionLabel(title: "Share profile")
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Share profile")
@@ -581,22 +573,13 @@ struct ProfileOwnerHome: View {
             }
 
             if let relationship = mode.relationship {
-                Button(action: relationshipAction) {
-                    Label(relationshipTitle(relationship), systemImage: relationshipSymbol(relationship))
-                        .font(AstirTypography.control)
-                        .padding(.horizontal, WanderTheme.spacing4)
-                        .frame(minHeight: WanderTheme.tapMinimum)
-                        .foregroundStyle(
-                            relationship == .nonFollower
-                                ? brandMode.accent
-                                : brandMode.primaryText
-                        )
-                        .astirOutlinedSurface(
-                            selected: relationship == .nonFollower,
-                            castsShadow: true
-                        )
+                HStack(spacing: WanderTheme.spacing2) {
+                    Button(action: relationshipAction) {
+                        AstirIdentityActionLabel(title: relationshipTitle(relationship))
+                    }
+                    .buttonStyle(.plain)
+                    profileShareButton
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -646,10 +629,6 @@ struct ProfileOwnerHome: View {
         case .follower: "Following"
         case .nonFollower: "Follow"
         }
-    }
-
-    private func relationshipSymbol(_ relationship: ViewerRelationship) -> String {
-        relationship == .nonFollower ? "person.badge.plus" : "checkmark"
     }
 
     private var memberSinceText: String {
