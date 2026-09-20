@@ -69,6 +69,14 @@ across production surfaces by this provisional grammar:
   episodes and pauses while covered, offscreen, backgrounded, or Reduce Motion
   is enabled. Returning to an eligible Map starts a fresh 3-second initial delay.
 
+## Profile navigation — September 20, 2026 (REC-559)
+
+Opening a place or person profile moves the full page in from the right.
+Back and a completed left-edge swipe move it off to the right; a cancelled
+swipe restores the same page and scroll position. Feed, Map, search, lists,
+social graphs, photo attribution and shared-profile links follow this rule.
+Reduce Motion avoids the full-screen translation.
+
 ## Selected onboarding treatment — September 19, 2026
 
 Joe selected film C for the pre-account opening: Astir Ink background, Signal type, the original Events distortion cadence, condensed bold headlines and italic “Connect with your.” On Create your account only the Astir artwork animates; headings, fields and buttons remain static native controls. Setup N08–N12 uses the approved dark editorial app surfaces, with a profile photo optional. After setup the optional founders’ welcome uses native video controls and hands off to the existing NUX. The separate VHS founders clips remain unselected explorations. This scoped onboarding decision takes precedence over the general adaptive/type defaults above; the authenticated app retains those defaults.

@@ -501,48 +501,60 @@ struct PlaceProfileFullScreen: View {
     }
 }
 
-struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
+struct ProfileSlideContainer<Content: View>: UIViewControllerRepresentable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isPresented: Bool
     let isAccessibilityModal: Bool
+    let isInteractiveDismissEnabled: Bool
+    let onRequestDismiss: @MainActor () -> Void
     let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
 
     init(
         isPresented: Bool,
         isAccessibilityModal: Bool = true,
+        isInteractiveDismissEnabled: Bool = true,
+        onRequestDismiss: @escaping @MainActor () -> Void = {},
         onTransitionCompleted: @escaping @MainActor (Bool) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
         self.isPresented = isPresented
         self.isAccessibilityModal = isAccessibilityModal
+        self.isInteractiveDismissEnabled = isInteractiveDismissEnabled
+        self.onRequestDismiss = onRequestDismiss
         self.onTransitionCompleted = onTransitionCompleted
         self.content = content()
     }
 
-    func makeUIViewController(context: Context) -> PlaceProfileSlidingHostingController<Content> {
-        PlaceProfileSlidingHostingController(
-            rootView: content,
+    func makeUIViewController(context: Context) -> PlaceProfileSlidingHostingController<AnyView> {
+        let controller = PlaceProfileSlidingHostingController(
+            rootView: AnyView(content.environment(\.self, context.environment)),
             isPresented: isPresented,
             isAccessibilityModal: isAccessibilityModal,
             onTransitionCompleted: onTransitionCompleted
         )
+        controller.isInteractiveDismissEnabled = isInteractiveDismissEnabled
+        controller.onRequestDismiss = onRequestDismiss
+        controller.reduceMotion = reduceMotion
+        return controller
     }
 
     func updateUIViewController(
-        _ controller: PlaceProfileSlidingHostingController<Content>,
+        _ controller: PlaceProfileSlidingHostingController<AnyView>,
         context: Context
     ) {
+        controller.isInteractiveDismissEnabled = isInteractiveDismissEnabled
+        controller.onRequestDismiss = onRequestDismiss
+        controller.reduceMotion = reduceMotion
         controller.onTransitionCompleted = onTransitionCompleted
         controller.setAccessibilityModal(isAccessibilityModal)
         if controller.isPresented == isPresented {
-            controller.updateRootView(content)
+            if isPresented { controller.updateRootView(AnyView(content.environment(\.self, context.environment))) }
         } else if isPresented {
-            controller.updateRootView(content)
+            controller.updateRootView(AnyView(content.environment(\.self, context.environment)))
             controller.setPresented(isPresented, animated: !reduceMotion)
         } else {
             controller.setPresented(isPresented, animated: !reduceMotion)
-            controller.updateRootView(content)
         }
     }
 }
@@ -563,13 +575,29 @@ private struct PlaceProfileHostedContent<Content: View>: View {
 }
 
 @MainActor
-final class PlaceProfileSlidingHostingController<Content: View>: UIViewController {
+final class PlaceProfileSlidingHostingController<Content: View>: UIViewController, UIGestureRecognizerDelegate {
     private let contentState: PlaceProfileHostedContentState<Content>
     private let hostingController: UIHostingController<PlaceProfileHostedContent<Content>>
     private var hostingConstraints: [NSLayoutConstraint] = []
     private var animator: UIViewPropertyAnimator?
     private var pendingRootView: Content?
     private var appliesInitialPosition = true
+    private(set) var isInteracting = false
+    var isInteractiveDismissEnabled = true {
+        didSet {
+            if !isInteractiveDismissEnabled && isInteracting {
+                endInteractiveDismissal(translation: 0, velocity: 0, cancelled: true)
+            }
+        }
+    }
+    var reduceMotion = false
+    var onRequestDismiss: @MainActor () -> Void = {}
+    private lazy var backGesture: UIScreenEdgePanGestureRecognizer = {
+        let gesture = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleBackGesture(_:)))
+        gesture.edges = .left
+        gesture.delegate = self
+        return gesture
+    }()
     private(set) var isPresented: Bool
     private var isAccessibilityModal: Bool
     var onTransitionCompleted: @MainActor (Bool) -> Void
@@ -598,6 +626,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         super.viewDidLoad()
         view.backgroundColor = .clear
         view.isOpaque = false
+        view.addGestureRecognizer(backGesture)
         updateAccessibilityVisibility(isPresented: isPresented)
         hostingController.view.backgroundColor = UIColor(WanderTheme.surfaceBone.color)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
@@ -609,7 +638,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        guard view.bounds.height > 0 else { return }
+        guard view.bounds.width > 0 else { return }
         if appliesInitialPosition {
             appliesInitialPosition = false
             hostingController.view.transform = targetTransform(isPresented: isPresented)
@@ -620,7 +649,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
     }
 
     func updateRootView(_ rootView: Content) {
-        if animator != nil {
+        if animator != nil || isInteracting {
             pendingRootView = rootView
         } else {
             contentState.content = rootView
@@ -637,13 +666,16 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
     func setPresented(_ isPresented: Bool, animated: Bool) {
         guard self.isPresented != isPresented else { return }
+        loadViewIfNeeded()
+        view.layoutIfNeeded()
         self.isPresented = isPresented
+        isInteracting = false
         if isPresented {
             attachHostingViewIfNeeded()
             hostingController.view.isHidden = false
         }
         updateAccessibilityVisibility(isPresented: isPresented)
-        view.layoutIfNeeded()
+        if isPresented { view.layoutIfNeeded() }
         configureRasterization(isEnabled: true)
         if let animator {
             self.animator = nil
@@ -651,7 +683,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
             animator.finishAnimation(at: .current)
         }
 
-        guard animated, view.bounds.height > 0 else {
+        guard animated, view.bounds.width > 0 else {
             hostingController.view.transform = targetTransform(isPresented: isPresented)
             configureRasterization(isEnabled: !isPresented)
             hostingController.view.isHidden = !isPresented
@@ -664,15 +696,18 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
         let timing = isPresented
             ? UICubicTimingParameters(
-                controlPoint1: PlaceProfileVerticalMotionStyle.presentationControlPoint1,
-                controlPoint2: PlaceProfileVerticalMotionStyle.presentationControlPoint2
+                controlPoint1: ProfileSlideMotionStyle.presentationControlPoint1,
+                controlPoint2: ProfileSlideMotionStyle.presentationControlPoint2
             )
             : UICubicTimingParameters(
-                controlPoint1: PlaceProfileVerticalMotionStyle.dismissalControlPoint1,
-                controlPoint2: PlaceProfileVerticalMotionStyle.dismissalControlPoint2
+                controlPoint1: ProfileSlideMotionStyle.dismissalControlPoint1,
+                controlPoint2: ProfileSlideMotionStyle.dismissalControlPoint2
             )
+        let remainingDistance = abs(
+            targetTransform(isPresented: isPresented).tx - hostingController.view.transform.tx
+        ) / view.bounds.width
         let animator = UIViewPropertyAnimator(
-            duration: PlaceProfileVerticalMotionStyle.duration,
+            duration: ProfileSlideMotionStyle.duration * max(0.15, min(1, remainingDistance)),
             timingParameters: timing
         )
         animator.addAnimations { [weak self] in
@@ -688,20 +723,98 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
             if !isPresented {
                 detachHostingView()
             }
-            if let pendingRootView {
-                self.pendingRootView = nil
-                contentState.content = pendingRootView
-            }
+            if isPresented { applyPendingRootView() } else { pendingRootView = nil }
             onTransitionCompleted(isPresented)
         }
         self.animator = animator
         animator.startAnimation()
     }
 
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard isPresented, isInteractiveDismissEnabled, animator == nil,
+              !isInteracting, view.window != nil,
+              let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              FullPageBackSwipePolicy.canBegin(velocity: pan.velocity(in: view))
+        else { return false }
+        return !hasNestedPresentation(hostingController)
+    }
+
+    private func hasNestedPresentation(_ controller: UIViewController) -> Bool {
+        if controller.presentedViewController != nil { return true }
+        if let navigation = controller as? UINavigationController,
+           navigation.viewControllers.count > 1 || navigation.transitionCoordinator != nil { return true }
+        return controller.children.contains { hasNestedPresentation($0) }
+    }
+
+    @objc private func handleBackGesture(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            beginInteractiveDismissal()
+        case .changed:
+            updateInteractiveDismissal(translation: gesture.translation(in: view).x)
+        case .ended:
+            endInteractiveDismissal(
+                translation: gesture.translation(in: view).x,
+                velocity: gesture.velocity(in: view).x,
+                cancelled: false
+            )
+        case .cancelled, .failed:
+            endInteractiveDismissal(translation: 0, velocity: 0, cancelled: true)
+        default:
+            break
+        }
+    }
+
+    func beginInteractiveDismissal() {
+        guard isPresented, animator == nil, isInteractiveDismissEnabled else { return }
+        isInteracting = true
+        configureRasterization(isEnabled: !reduceMotion)
+    }
+
+    func updateInteractiveDismissal(translation: CGFloat) {
+        guard isInteracting, !reduceMotion else { return }
+        hostingController.view.transform = CGAffineTransform(
+            translationX: min(view.bounds.width, max(0, translation)), y: 0
+        )
+    }
+
+    func endInteractiveDismissal(translation: CGFloat, velocity: CGFloat, cancelled: Bool) {
+        guard isInteracting else { return }
+        isInteracting = false
+        let completes = !cancelled && FullPageBackSwipePolicy.shouldComplete(
+            translation: translation, velocity: velocity, width: view.bounds.width
+        )
+        if completes {
+            // Publish the request before a Reduce Motion dismissal can finish
+            // synchronously. SwiftUI's next update sees the completed target.
+            onRequestDismiss()
+            setPresented(false, animated: !reduceMotion)
+        } else {
+            let animator = UIViewPropertyAnimator(duration: reduceMotion ? 0 : 0.2, curve: .easeOut) {
+                self.hostingController.view.transform = .identity
+            }
+            animator.addCompletion { [weak self, weak animator] _ in
+                guard let self, self.animator === animator else { return }
+                self.animator = nil
+                configureRasterization(isEnabled: false)
+                applyPendingRootView()
+            }
+            self.animator = animator
+            animator.startAnimation()
+        }
+    }
+
+    private func applyPendingRootView() {
+        if let pendingRootView {
+            self.pendingRootView = nil
+            contentState.content = pendingRootView
+        }
+    }
+
     private func targetTransform(isPresented: Bool) -> CGAffineTransform {
         isPresented
             ? .identity
-            : CGAffineTransform(translationX: 0, y: view.bounds.height)
+            : CGAffineTransform(translationX: view.bounds.width, y: 0)
     }
 
     private func configureRasterization(isEnabled: Bool) {
@@ -2828,7 +2941,7 @@ private struct PlacePhotoGalleryViewer: View {
             }
             selectedPhotoID = ids.first
         }
-        .fullScreenCover(item: $selectedProfileRoute) { route in
+        .profileCover(item: $selectedProfileRoute) { route in
             ProfileDetailView(profileID: route.id)
                 .environmentObject(store)
                 .environmentObject(auth)

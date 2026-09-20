@@ -553,7 +553,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
                 ".sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal)"
             )
         )
-        XCTAssertTrue(root.contains(".fullScreenCover(item: $sharedProfile)"))
+        XCTAssertTrue(root.contains(".profileCover(item: $sharedProfile)"))
         XCTAssertTrue(root.contains("WanderRootPresentationLifecycle("))
         XCTAssertTrue(root.contains("case profileSettings"))
         XCTAssertTrue(root.contains("onSettingsPresentation: handleDeepLinkPresentation"))

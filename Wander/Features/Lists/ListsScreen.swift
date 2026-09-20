@@ -152,7 +152,7 @@ struct ListsScreen: View {
                     initialSelectedPlaceID: scenario.startsWithFocusedMapPlace ? list.mappedPlaces.first?.id : nil
                 )
             }
-            .fullScreenCover(isPresented: profileDestinationBinding) {
+            .profileCover(isPresented: profileDestinationBinding) {
                 if let selectedProfileID {
                     ProfileDetailView(profileID: selectedProfileID)
                         .environmentObject(store)

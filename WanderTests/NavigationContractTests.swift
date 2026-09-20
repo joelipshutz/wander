@@ -936,7 +936,7 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
-        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) })"))
+        XCTAssertTrue(feed.contains(".profileCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) })"))
         XCTAssertTrue(feed.contains("surface: .feedPlaceProfile"))
         XCTAssertTrue(feed.contains(".onChange(of: presentationResetRequest?.id, initial: true)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
@@ -2729,14 +2729,14 @@ final class NavigationContractTests: XCTestCase {
 
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
-            ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
-            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile, onDismiss:"),
-            ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
-            ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
-            ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
-            ("Wander/Features/Map/PlaceProfileMapSurface.swift", ".fullScreenCover(item: $selectedProfileRoute)"),
-            ("Wander/Features/Profile/ProfileScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
-            ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".fullScreenCover(item: $selectedProfileID)")
+            ("Wander/App/WanderRootView.swift", ".profileCover(item: $sharedProfile)"),
+            ("Wander/Features/Feed/FeedScreen.swift", ".profileCover(item: $selectedProfile, onDismiss:"),
+            ("Wander/Features/Discover/DiscoverScreen.swift", ".profileCover(item: $selectedProfile)"),
+            ("Wander/Features/Lists/ListsScreen.swift", ".profileCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/MapScreen.swift", ".profileCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/PlaceProfileMapSurface.swift", ".profileCover(item: $selectedProfileRoute)"),
+            ("Wander/Features/Profile/ProfileScreen.swift", ".profileCover(item: $selectedProfile)"),
+            ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".profileCover(item: $selectedProfileID)")
         ]
 
         for (file, presentation) in presentations {
@@ -2790,14 +2790,10 @@ final class NavigationContractTests: XCTestCase {
             before: "private enum GraphListMode"
         )
 
-        XCTAssertTrue(detail.contains(".offset(x: backSwipeOffset)"))
-        XCTAssertTrue(detail.contains(".simultaneousGesture(interactiveBackSwipeGesture"))
-        XCTAssertTrue(detail.contains("DragGesture(minimumDistance: 8, coordinateSpace: .global)"))
-        XCTAssertTrue(detail.contains("guard !hasNestedNavigationDestination"))
-        XCTAssertTrue(detail.contains("backSwipeOffset = 0"))
-        XCTAssertTrue(detail.contains("backSwipeOffset = containerWidth"))
-        XCTAssertTrue(detail.contains("DispatchQueue.main.asyncAfter"))
-        XCTAssertTrue(detail.contains("backAction: { dismiss() }"))
+        XCTAssertFalse(detail.contains("backSwipeOffset"))
+        XCTAssertFalse(detail.contains("interactiveBackSwipeGesture"))
+        XCTAssertTrue(detail.contains("backAction: closeProfile"))
+        XCTAssertTrue(detail.contains("if let dismissProfile { dismissProfile() } else { dismiss() }"))
         XCTAssertTrue(detail.contains("accessibilityLabel: \"Back\""))
     }
 
@@ -4148,14 +4144,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
     }
 
-    func testMapPlaceProfileSlidesTheEntireNavigationSurfaceUpFromTheBottom() throws {
+    func testMapPlaceProfileSlidesTheEntireNavigationSurfaceFromTheRight() throws {
         let mapScreen = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift"))
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
 
         XCTAssertFalse(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer"))
+        XCTAssertTrue(mapScreen.contains("ProfileSlideContainer"))
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
         XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)"))
@@ -4187,13 +4183,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
-        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable"))
+        XCTAssertTrue(placeProfile.contains("struct ProfileSlideContainer<Content: View>: UIViewControllerRepresentable"))
         XCTAssertTrue(placeProfile.contains("let isPresented: Bool"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
         XCTAssertTrue(placeProfile.contains("onTransitionCompleted: onTransitionCompleted"))
         XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: !reduceMotion)"))
         XCTAssertTrue(placeProfile.contains("controller.setAccessibilityModal(isAccessibilityModal)"))
-        XCTAssertTrue(placeProfile.contains("controller.updateRootView(content)"))
+        XCTAssertTrue(placeProfile.contains("controller.updateRootView(AnyView(content.environment(\\.self, context.environment)))"))
         XCTAssertTrue(placeProfile.contains("UIHostingController<PlaceProfileHostedContent<Content>>"))
         XCTAssertFalse(placeProfile.contains("hostingController.rootView ="), "Native presentations must retain a stable hosting root.")
         XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
