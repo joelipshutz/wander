@@ -499,9 +499,6 @@ private struct OnboardingSlidingText: View, @MainActor Animatable {
 }
 
 struct OnboardingLaunchView: View {
-    @Environment(\.onboardingVisualTreatment) private var treatment
-    @Environment(\.onboardingFilmMotion) private var filmMotion
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let message: String?
 
     init(message: String? = nil) {
@@ -510,16 +507,7 @@ struct OnboardingLaunchView: View {
 
     var body: some View {
         ZStack {
-            (treatment.isFilm ? OnboardingVisualTreatment.background : AstirLaunchArtwork.background)
-                .ignoresSafeArea()
-            if treatment.isFilm {
-                OnboardingFilmTexture(isPlaying: filmMotion, reduceMotion: reduceMotion)
-                    .blendMode(.screen)
-                    .opacity(0.48)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+            AstirLaunchArtwork.background.ignoresSafeArea()
             GeometryReader { proxy in
                 // Center the artwork alone. Loading copy must not change its frame.
                 AstirLaunchLockup(animationsEnabled: false)
@@ -548,6 +536,10 @@ struct OnboardingLaunchView: View {
             .ignoresSafeArea(.container)
         }
         .environment(\.colorScheme, .dark)
+        // Launch and map loading always use the original still artwork,
+        // even when a surrounding onboarding screen uses the film treatment.
+        .environment(\.onboardingVisualTreatment, .approved)
+        .environment(\.onboardingFilmMotion, false)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(message ?? "Opening Astir")
     }

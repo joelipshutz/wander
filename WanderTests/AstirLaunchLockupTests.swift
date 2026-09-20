@@ -82,6 +82,26 @@ final class AstirLaunchLockupTests: XCTestCase {
     }
 
     @MainActor
+    func testLaunchKeepsOriginalArtworkEvenInsideFilmOnboarding() throws {
+        func render(_ treatment: OnboardingVisualTreatment) throws -> Data {
+            let renderer = ImageRenderer(content:
+                OnboardingLaunchView()
+                    .environment(\.onboardingVisualTreatment, treatment)
+                    .environment(\.onboardingFilmMotion, true)
+                    .frame(width: 393, height: 852)
+            )
+            renderer.scale = 1
+            return try XCTUnwrap(renderer.uiImage?.pngData())
+        }
+        let original = try render(.approved)
+        XCTAssertEqual(original, try render(.filmType))
+        let screenshot = XCTAttachment(image: try XCTUnwrap(UIImage(data: original)))
+        screenshot.name = "Original black Astir splash"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
     func testLoadingMessageDoesNotMoveSplashArtwork() throws {
         // Compare the actual artwork pixels, not a duplicated layout formula.
         // The former centered VStack shifts it when the status gains height.
