@@ -100,6 +100,11 @@ struct AppEntryView: View {
             case .ready(let session, let firstVisitWalkthroughEligible):
                 FoundersWelcomeGate(userID: session.userID, isEligible: firstVisitWalkthroughEligible) {
                     WanderRootView(
+                        // Only seed the root selection; the mounted tab state and
+                        // onboarding/NUX routing continue to own later navigation.
+                        initialTab: WanderRootView.resolvedInitialTab(
+                            defaultTab: firstVisitWalkthroughEligible ? .map : .discover
+                        ),
                         initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
                         initialSession: session,
                         isSessionValidated: auth.isSessionValidated,
