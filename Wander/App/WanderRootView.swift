@@ -865,7 +865,7 @@ struct WanderRootView: View {
                 PlacePlanInvitationScreen(token: route.token, repository: backend.placePlanInvitationRepository, analytics: analytics)
             }
         }
-        .fullScreenCover(item: $sharedProfile) { route in
+        .profileCover(item: $sharedProfile) { route in
             WanderRootPresentationLifecycle(
                 surface: .sharedProfile,
                 onPresent: handleDeepLinkPresentation,

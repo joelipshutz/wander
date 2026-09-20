@@ -849,6 +849,7 @@ enum ProfileDetailBackSwipePolicy {
 
 struct ProfileDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissProfile) private var dismissProfile
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -868,8 +869,6 @@ struct ProfileDetailView: View {
     @State private var isLoading = true
     @State private var profileInsightsCache = ProfileInsightsCache()
     @State private var profilePresentationCache = ProfilePresentationCache()
-    @State private var backSwipeOffset: CGFloat = 0
-    @State private var isCompletingBackSwipe = false
 
     init(profileID: String, onBlock: @escaping (String) -> Void = { _ in }) {
         self.profileID = profileID
@@ -881,13 +880,11 @@ struct ProfileDetailView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            profileNavigationStack
-                .offset(x: backSwipeOffset)
-                .contentShape(Rectangle())
-                .simultaneousGesture(interactiveBackSwipeGesture(containerWidth: geometry.size.width))
-        }
-        .presentationBackground(.clear)
+        profileNavigationStack
+    }
+
+    private func closeProfile() {
+        if let dismissProfile { dismissProfile() } else { dismiss() }
     }
 
     private var profileNavigationStack: some View {
@@ -915,7 +912,7 @@ struct ProfileDetailView: View {
                             settingsAction: {},
                             shareAction: {},
                             relationshipAction: handleRelationshipAction,
-                            backAction: { dismiss() },
+                            backAction: closeProfile,
                             memberActions: ProfileMemberActions(
                                 canUnfollow: presentation.relationship == .follower || presentation.relationship == .mutual,
                                 isMuted: presentation.isMuted,
@@ -965,7 +962,7 @@ struct ProfileDetailView: View {
                     ProfileHeaderActionButton(
                         systemImage: "chevron.left",
                         accessibilityLabel: "Back",
-                        action: { dismiss() }
+                        action: closeProfile
                     )
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, WanderTheme.spacing3)
@@ -1048,56 +1045,6 @@ struct ProfileDetailView: View {
         }
         .tint(brandMode.accent)
         .background(brandMode.background.ignoresSafeArea())
-    }
-
-    private var hasNestedNavigationDestination: Bool {
-        savedListMode != nil
-            || activityListFilter != nil
-            || selectedActivityItem != nil
-            || placeCollectionRoute != nil
-            || showsYourMapPrototype
-    }
-
-    private func interactiveBackSwipeGesture(containerWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .global)
-            .onChanged { value in
-                guard !hasNestedNavigationDestination, !isCompletingBackSwipe else { return }
-                guard let offset = ProfileDetailBackSwipePolicy.interactiveOffset(
-                    startX: value.startLocation.x,
-                    translation: value.translation,
-                    containerWidth: containerWidth
-                ) else { return }
-
-                backSwipeOffset = offset
-            }
-            .onEnded { value in
-                guard !hasNestedNavigationDestination,
-                      !isCompletingBackSwipe,
-                      backSwipeOffset > 0
-                else { return }
-
-                let shouldDismiss = ProfileDetailBackSwipePolicy.shouldComplete(
-                    startX: value.startLocation.x,
-                    translation: value.translation,
-                    predictedEndTranslation: value.predictedEndTranslation,
-                    containerWidth: containerWidth
-                )
-
-                guard shouldDismiss else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                        backSwipeOffset = 0
-                    }
-                    return
-                }
-
-                isCompletingBackSwipe = true
-                withAnimation(.easeOut(duration: 0.14)) {
-                    backSwipeOffset = containerWidth
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                    dismiss()
-                }
-            }
     }
 
     private var profilePresentation: ProfilePresentation {
@@ -1263,7 +1210,7 @@ struct ProfileDetailView: View {
                 }
                 await MainActor.run {
                     onBlock(profileID)
-                    dismiss()
+                    closeProfile()
                 }
             }
         }
@@ -3426,7 +3373,7 @@ private struct GraphListScreen: View {
             .scrollContentBackground(.hidden)
             .astirScreen()
             .navigationTitle(mode.rawValue.capitalized)
-            .fullScreenCover(item: $selectedProfile) { selection in
+            .profileCover(item: $selectedProfile) { selection in
                 ProfileDetailView(profileID: selection.id)
                     .environmentObject(store)
                     .environmentObject(auth)

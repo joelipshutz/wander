@@ -413,7 +413,7 @@ struct DiscoverScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
-            .fullScreenCover(item: $selectedProfile) { profile in
+            .profileCover(item: $selectedProfile) { profile in
                 ProfileDetailView(profileID: profile.id) { blockedProfileID in
                     handleMemberBlocked(profileID: blockedProfileID)
                 }

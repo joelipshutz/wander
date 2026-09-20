@@ -145,8 +145,8 @@ enum PlaceCardPresentation {
     }
 }
 
-enum PlaceProfileVerticalMotionStyle {
-    static let duration: TimeInterval = 0.52
+enum ProfileSlideMotionStyle {
+    static let duration: TimeInterval = 0.34
     static let presentationControlPoint1 = CGPoint(x: 0.22, y: 1)
     static let presentationControlPoint2 = CGPoint(x: 0.36, y: 1)
     static let dismissalControlPoint1 = CGPoint(x: 0.4, y: 0)

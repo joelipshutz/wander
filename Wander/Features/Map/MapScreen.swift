@@ -1405,7 +1405,6 @@ struct MapScreen: View {
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var mapActivityEditFlow: PlaceActivityEditPresentation?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
-    @State private var placeProfileBackSwipeOffset: CGFloat = 0
     @State private var mapPlaceListTarget: MapPlaceListTarget?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
@@ -4045,21 +4044,18 @@ struct MapScreen: View {
     @ViewBuilder
     private var selectedPlaceProfileOverlay: some View {
         if isPlaceProfileMounted && hasSelectedProfile {
-            PlaceProfileVerticalContainer(
+            ProfileSlideContainer(
                 isPresented: isPlaceProfilePresented,
                 isAccessibilityModal: isPlaceProfileAccessibilityModal,
+                isInteractiveDismissEnabled: isPlaceProfilePresented && attachedMapSaveFlow == nil
+                    && mapSaveFlow == nil && mapActivityEditFlow == nil
+                    && mapPlaceListTarget == nil
+                    && !walkthroughs.isPresentingLegacyPlaceWalkthrough,
+                onRequestDismiss: { collapseSelectedPlaceProfile() },
                 onTransitionCompleted: handlePlaceProfileTransitionCompleted
             ) {
                 NavigationStack {
                     selectedPlaceProfileDestination
-                        .fullPageBackSwipe(
-                            isEnabled: isPlaceProfilePresented && attachedMapSaveFlow == nil
-                                && mapSaveFlow == nil && mapActivityEditFlow == nil
-                                && mapPlaceListTarget == nil
-                                && !walkthroughs.isPresentingLegacyPlaceWalkthrough,
-                            containerOffset: $placeProfileBackSwipeOffset,
-                            onBack: { collapseSelectedPlaceProfile() }
-                        )
                 }
                 .accessibilityHidden(!isPlaceProfilePresented)
                 .environmentObject(store)
@@ -4079,7 +4075,6 @@ struct MapScreen: View {
             }
             .ignoresSafeArea()
             .allowsHitTesting(isPlaceProfilePresented)
-            .offset(x: placeProfileBackSwipeOffset)
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(isPlaceProfileAccessibilityModal ? .isModal : [])
             .accessibilityHidden(!isPlaceProfilePresented)
@@ -18631,7 +18626,7 @@ private struct PlaceActivityCard: View {
                 await importPhotos(from: items)
             }
         }
-        .fullScreenCover(isPresented: profileDestinationBinding) {
+        .profileCover(isPresented: profileDestinationBinding) {
             if let selectedProfileID {
                 ProfileDetailView(profileID: selectedProfileID)
                     .environmentObject(store)

@@ -143,7 +143,7 @@ struct ProfileSocialGraphScreen: View {
             }
             .task { await refresh() }
             .refreshable { await refresh() }
-            .fullScreenCover(item: $selectedProfileID) { selection in
+            .profileCover(item: $selectedProfileID) { selection in
                 ProfileDetailView(profileID: selection.id)
                     .environmentObject(store)
                     .environmentObject(auth)

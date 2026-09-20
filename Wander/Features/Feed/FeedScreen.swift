@@ -143,7 +143,7 @@ struct FeedScreen: View {
                 guard !Task.isCancelled else { return }
                 await refresh(force: false)
             }
-            .fullScreenCover(item: $selectedProfile, onDismiss: { onDidDismiss(.feedProfile) }) { route in
+            .profileCover(item: $selectedProfile, onDismiss: { onDidDismiss(.feedProfile) }) { route in
                 WanderRootPresentationLifecycle(
                     surface: .feedProfile, onPresent: onPresentation, onDismiss: onWillDismiss
                 ) {
@@ -153,7 +153,7 @@ struct FeedScreen: View {
                         .environmentObject(backend)
                 }
             }
-            .fullScreenCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) }) {
+            .profileCover(isPresented: selectedPlaceDestinationBinding, onDismiss: { onDidDismiss(.feedPlaceProfile) }) {
                 WanderRootPresentationLifecycle(
                     surface: .feedPlaceProfile,
                     onPresent: onPresentation,
@@ -792,6 +792,7 @@ struct FeedScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: selectedPlace)),
+                usesInteractiveHorizontalDismissal: true,
                 onBack: {
                     self.selectedPlace = nil
                 },
