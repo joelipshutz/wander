@@ -1,65 +1,74 @@
-/* REC-557: reuse the selected Events 03C signal; draw the approved PNG, never type. */
+/* REC-557 v2. The approved Events signal, adapted to intact raster artwork. */
 'use strict';
-const $ = selector => document.querySelector(selector);
-const canvas = $('#splash'), artwork = $('#original'), texture = $('#texture');
-const reference = $('#reference'), phone = $('.phone'), status = $('#status');
-const scene = document.createElement('canvas'), ctx = scene.getContext('2d', {alpha:false});
-const grain = document.createElement('canvas'); grain.width=180; grain.height=320;
-const gc=grain.getContext('2d'), noise=gc.createImageData(180,320);
-const devices={standard:{w:393,h:852},compact:{w:375,h:667},large:{w:440,h:956}};
-const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
-let device=devices.standard, mode='splash', elapsed=0, previous=performance.now(), lastFrame=-1;
-let paused=reduceMotion.matches, ready=false, seed=987123, renderTape;
-try { renderTape=createTapeRenderer(canvas); } catch(error) { status.textContent=error.message; }
-function rand(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296;}
-function updateGrain(t){seed=987123+Math.floor(t*24)*131;for(let i=0;i<noise.data.length;i+=4){const l=rand()*110;noise.data[i]=l+rand()*22;noise.data[i+1]=l+rand()*26;noise.data[i+2]=l+rand()*24;noise.data[i+3]=255;}gc.putImageData(noise,0,0);}
-function resize(){canvas.width=scene.width=720;canvas.height=scene.height=Math.round(720*device.h/device.w);phone.style.setProperty('--ratio',device.w/device.h);phone.dataset.viewport=device.w+'x'+device.h;artwork.style.width=(Math.min(460,device.w-32)/device.w*100)+'%';lastFrame=-1;if(ready)draw(elapsed);}
-function cover(video,w,h){const s=Math.max(w/video.videoWidth,h/video.videoHeight);ctx.drawImage(video,(w-video.videoWidth*s)/2,(h-video.videoHeight*s)/2,video.videoWidth*s,video.videoHeight*s);}
-// The spatial degradation remains 03C. Move its brief faults into launch time
-// and across the central artwork so even a sub-second opening shows tape wear.
-function faultAt(t){
-  if(t<.08)return[0,.5];
-  if(t<.29)return[1,.53+(t-.08)*.18];
-  if(t>=.46&&t<.59)return[1,.44];
-  if(t>=.86&&t<1.05)return[1,.57-(t-.86)*.32];
-  if(t>=1.31&&t<1.44)return[1,.49];
-  return[0,.5];
+const $=s=>document.querySelector(s), art=$('#artwork'), texture=$('#texture'), reference=$('#reference');
+const status=$('#status'), reduced=matchMedia('(prefers-reduced-motion: reduce)');
+const W=393,H=852,R=720/W, LEAD=6.6, STATIC_TIME=.4;
+const frames=['splash','account'].map(id=>{const canvas=$('#'+id);canvas.width=720;canvas.height=1560;const scene=document.createElement('canvas');scene.width=720;scene.height=1560;const signal=scene.cloneNode();return{id,canvas,ctx:canvas.getContext('2d'),scene,sc:scene.getContext('2d'),signal,render:createBrandTapeRenderer(signal)};});
+const detail=$('#detail');detail.width=1000;detail.height=478;const dc=detail.getContext('2d');
+const grain=document.createElement('canvas');grain.width=180;grain.height=320;const gc=grain.getContext('2d'),pixels=gc.createImageData(180,320);
+let seed=987123,treatment=reduced.matches?'static':'motion',paused=reduced.matches,ready=false,recording=false,cycleElapsed=0,lastNow=performance.now(),lastTick=-1;
+function random(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296;}
+function makeGrain(t){seed=987123+Math.round(t*24)*131;for(let i=0;i<pixels.data.length;i+=4){const l=random()*110;pixels.data[i]=l+random()*22;pixels.data[i+1]=l+random()*26;pixels.data[i+2]=l+random()*24;pixels.data[i+3]=255;}gc.putImageData(pixels,0,0);}
+// Verbatim density sequence from the original 03C composition.
+function signal(t){t%=12;for(const[a,b,p]of[[.72,.81,.35],[.81,.86,.94],[.86,.99,.16],[1.04,1.13,.58],[3.20,3.28,.12],[3.31,3.45,.43],[5.74,5.88,.35],[5.88,5.94,1.08],[5.94,6.08,.18],[8.64,8.76,.38],[8.79,8.91,.06],[9.00,9.13,.51],[10.47,10.60,.28]])if(t>=a&&t<b)return p;return .94;}
+function artRect(kind){const w=kind==='splash'?361:172,h=w/(1600/764);return{x:(W-w)/2,y:kind==='splash'?(H-h)/2:72,w,h};}
+function cover(c,video){const scale=Math.max(W/video.videoWidth,H/video.videoHeight);c.drawImage(video,(W-video.videoWidth*scale)/2,(H-video.videoHeight*scale)/2,video.videoWidth*scale,video.videoHeight*scale);}
+function background(c,t){c.fillStyle='#0c1010';c.fillRect(0,0,W,H);if(texture.readyState>=2){c.globalAlpha=.78;c.filter='brightness(.88) saturate(1.15)';cover(c,texture);c.filter='none';c.globalAlpha=1;}const cloud=c.createRadialGradient(W*(.45+.2*Math.sin(t*.12)),H*.43,0,W*.45,H*.48,H*.65);cloud.addColorStop(0,'rgba(25,36,29,.25)');cloud.addColorStop(1,'rgba(0,0,0,.48)');c.fillStyle=cloud;c.fillRect(0,0,W,H);c.imageSmoothingEnabled=false;c.globalCompositeOperation='screen';c.globalAlpha=.11;c.drawImage(grain,0,0,W,H);c.globalAlpha=1;c.globalCompositeOperation='source-over';c.imageSmoothingEnabled=true;}
+function label(c,text,x,y,font,color='#e6ddcd',align='center'){c.font=font;c.fillStyle=color;c.textAlign=align;c.textBaseline='alphabetic';c.fillText(text,x,y);}
+function round(c,x,y,w,h,r,fill,stroke){c.beginPath();c.roundRect(x,y,w,h,r);c.fillStyle=fill;c.fill();if(stroke){c.strokeStyle=stroke;c.lineWidth=.8;c.stroke();}}
+// A representative native layout. Only the logo is under review; form ink is
+// drawn after the signal pass, keeping controls legible and stationary.
+function accountUI(c){
+ label(c,'Create your account',W/2,207,'900 38px FilmGrotesk','#f05a3c');
+ label(c,'Keep your places synced and discover',W/2,239,'14px AppBody','#a6a797');label(c,'recommendations from people you trust.',W/2,259,'14px AppBody','#a6a797');
+ round(c,16,281,361,54,12,'#000');label(c,' Continue with Apple',W/2,315,'22px system-ui','#fff');
+ round(c,16,347,361,52,12,'#21271f','#69705d');label(c,'G',39,381,'600 22px system-ui','#4285f4');label(c,'Continue with Google',W/2+7,379,'17px AppDemi');
+ c.strokeStyle='#717765';c.lineWidth=.8;c.beginPath();c.moveTo(16,424);c.lineTo(178,424);c.moveTo(214,424);c.lineTo(377,424);c.stroke();label(c,'or',W/2,428,'13px AppBody','#aaa995');
+ label(c,'Email',16,466,'15px AppDemi','#e6ddcd','left');round(c,16,482,361,52,12,'#20261f','#626b55');label(c,'you@example.com',32,515,'17px AppBody','#929987','left');
+ round(c,16,550,361,52,12,'#f05a3c');label(c,'Continue with email',W/2,583,'17px AppDemi','#10160e');
+ label(c,'If Apple or Google returns the same verified email,',W/2,639,'12px AppBody','#a6a797');label(c,'it connects to your existing Astir account.',W/2,657,'12px AppBody','#a6a797');
+ label(c,'By continuing, you agree to the Terms of Use and',W/2,690,'12px AppBody','#a6a797');label(c,'Community Guidelines, and acknowledge',W/2,708,'12px AppBody','#a6a797');label(c,'the Privacy Policy.',W/2,726,'12px AppBody','#a6a797');
+ label(c,'Already have an account? Log in',W/2,771,'16px AppDemi');
 }
-function density(t){for(const[a,b,p]of[[.08,.16,.35],[.16,.20,.94],[.20,.29,.16],[.31,.39,.58],[.46,.53,.35],[.53,.59,.58],[.86,.95,.35],[.95,1.05,.58],[1.31,1.38,.35]])if(t>=a&&t<b)return p;return .94;}
-function draw(t){
-  if(!ready||!renderTape)return;
-  const still=reduceMotion.matches, w=device.w,h=device.h,r=720/w;
-  updateGrain(t);ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#0c1010';ctx.fillRect(0,0,scene.width,scene.height);ctx.save();ctx.scale(r,r);
-  if(texture.readyState>=2){ctx.globalAlpha=.78;ctx.filter='brightness(.88) saturate(1.15)';cover(texture,w,h);ctx.filter='none';ctx.globalAlpha=1;}
-  const hue=still?0:t*.12,cloud=ctx.createRadialGradient(w*(.45+.2*Math.sin(hue)),h*.43,0,w*.45,h*.48,h*.65);
-  cloud.addColorStop(0,'rgba(25,36,29,.25)');cloud.addColorStop(1,'rgba(0,0,0,.48)');ctx.fillStyle=cloud;ctx.fillRect(0,0,w,h);
-  ctx.imageSmoothingEnabled=false;ctx.globalCompositeOperation='screen';ctx.globalAlpha=.11;ctx.drawImage(grain,0,0,w,h);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.imageSmoothingEnabled=true;
-  const artW=Math.min(460,w-32),artH=artW/(1600/764);
-  ctx.globalAlpha=still?.94:density(t);ctx.drawImage(artwork,(w-artW)/2,(h-artH)/2,artW,artH);ctx.globalAlpha=1;
-  ctx.globalCompositeOperation='multiply';ctx.globalAlpha=.23;ctx.imageSmoothingEnabled=false;ctx.drawImage(grain,0,0,w,h);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.restore();
-  renderTape(scene,t+.17,1,still,still?[0,.5]:faultAt(t));
-  canvas.dataset.time=t.toFixed(3);canvas.dataset.fault=String(!still&&faultAt(t)[0]===1);
+function draw(t){if(!ready)return;makeGrain(t);for(const f of frames){const c=f.sc,box=artRect(f.id);c.setTransform(R,0,0,1560/H,0,0);background(c,t);c.save();c.globalAlpha=treatment==='clean'?1:signal(t+.23);if(treatment!=='clean'){c.shadowColor='rgba(176,55,40,.38)';c.shadowBlur=1.5*R;c.shadowOffsetX=.4*R;}c.drawImage(art,box.x,box.y,box.w,box.h);c.restore();
+ if(treatment!=='clean'){c.globalCompositeOperation='multiply';c.globalAlpha=.23;c.imageSmoothingEnabled=false;c.drawImage(grain,0,0,W,H);c.globalAlpha=1;c.globalCompositeOperation='source-over';c.imageSmoothingEnabled=true;}
+ if(treatment==='clean')f.ctx.drawImage(f.scene,0,0);else{f.render(f.scene,t+.17,1,false,[box.x/W,1-(box.y+box.h)/H,box.w/W,box.h/H]);f.ctx.drawImage(f.signal,0,0);}
+ if(f.id==='account'){f.ctx.save();f.ctx.scale(R,1560/H);accountUI(f.ctx);f.ctx.restore();}
+ f.canvas.dataset.sourceTime=t.toFixed(3);f.canvas.dataset.treatment=treatment;
+ }
+ const b=artRect('splash');dc.drawImage(frames[0].canvas,b.x*R,b.y*1560/H,b.w*R,b.h*1560/H,0,0,detail.width,detail.height);
+ $('#time').value=t.toFixed(2)+' s';$('#scrub').value=t;$('#detail-label').textContent=treatment==='clean'?'Original artwork pixels. No replacement font.':treatment==='static'?'Static material: the same grain, softened density and registration, held still.':'Actual logo pixels: inspect a tracking fault to see the silhouette tear.';
 }
-function updateStatus(text){status.textContent=text;}
-function syncPlayback(){
-  const playing=ready&&!paused&&!document.hidden&&!reduceMotion.matches;
-  if(playing&&mode==='splash')texture.play().catch(()=>{});else texture.pause();
-  if(playing&&mode==='reference')reference.play().catch(()=>{});else reference.pause();
-  $('#pause').textContent=paused?'Play':'Pause';
+function loaded(el,event){return new Promise((resolve,reject)=>{el.addEventListener(event,resolve,{once:true});el.addEventListener('error',reject,{once:true});});}
+async function seek(t){texture.pause();reference.pause();await Promise.all([texture,reference].map(async v=>{if(Math.abs(v.currentTime-t)>.002){const done=loaded(v,'seeked');v.currentTime=t;await done;}}));draw(t);lastTick=Math.floor(t*24);}
+function mediaPlayback(){const play=ready&&treatment==='motion'&&!paused&&!document.hidden;for(const v of[texture,reference])play?v.play().catch(()=>{status.textContent='Press Play to begin.';}):v.pause();$('#play').textContent=paused?'Play':'Pause';$('#play').disabled=treatment!=='motion';}
+async function setTreatment(value){if(recording)return;treatment=value;paused=value!=='motion'||reduced.matches;document.querySelectorAll('[data-treatment]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.treatment===value)));await seek(value==='motion'?LEAD:STATIC_TIME);cycleElapsed=0;lastNow=performance.now();mediaPlayback();status.textContent=value==='motion'?'Events and both logos share the source clock.':value==='static'?'Static material only. No moving grain, jitter, flicker or tears.':'Original raster artwork on the same tape field.';}
+async function restart(){if(recording)return;await seek(LEAD);paused=reduced.matches;cycleElapsed=0;lastNow=performance.now();mediaPlayback();}
+let seeking=false;
+async function tick(now){const dt=Math.min((now-lastNow)/1000,.15);lastNow=now;if(ready&&treatment==='motion'&&!paused&&!document.hidden&&!seeking){cycleElapsed+=dt;const max=Number($('#cycle').value);if(cycleElapsed>=max){cycleElapsed=0;seeking=true;await seek(LEAD);seeking=false;mediaPlayback();}const t=reference.currentTime,n=Math.floor(t*24);if(n!==lastTick){draw(t);lastTick=n;}}requestAnimationFrame(tick);}
+$('#tear').addEventListener('click',async()=>{if(recording)return;await setTreatment('motion');paused=true;mediaPlayback();await seek(6.9166667);status.textContent='Tracking fault at 6.92 s. The original object is displaced row by row.';});
+$('#enlarge').addEventListener('click',e=>{const on=document.body.classList.toggle('large');e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent=on?'Fit previews':'Larger previews';});
+$('#play').addEventListener('click',()=>{if(recording)return;paused=!paused;lastNow=performance.now();mediaPlayback();});$('#restart').addEventListener('click',restart);$('#cycle').addEventListener('change',restart);
+for(const b of document.querySelectorAll('[data-treatment]'))b.addEventListener('click',()=>setTreatment(b.dataset.treatment));
+let seekQueue=Promise.resolve();$('#scrub').addEventListener('input',e=>{if(recording)return;paused=true;mediaPlayback();const t=Number(e.target.value);seekQueue=seekQueue.then(()=>seek(t));status.textContent='Paused on a source frame. Play resumes from here.';});
+document.addEventListener('visibilitychange',()=>{lastNow=performance.now();mediaPlayback();});reduced.addEventListener('change',()=>setTreatment(reduced.matches?'static':'motion'));
+async function save(name,blob){const response=await fetch('/__export/'+name,{method:'POST',body:blob});if(!response.ok)throw new Error('Start this page with serve.py to save media.');}
+const png=c=>new Promise(resolve=>c.toBlob(resolve,'image/png'));
+async function exportMedia(){
+ if(!ready||recording)return;const button=$('#export');button.disabled=true;
+ try{
+  await setTreatment('static');for(const f of frames)await save(f.id+'-static.png',await png(f.canvas));await save('logo-static.png',await png(detail));
+  await setTreatment('motion');paused=true;await seek(6.9166667);await save('logo-tear.png',await png(detail));
+  const mime=['video/mp4','video/webm;codecs=vp9','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));if(!mime)throw new Error('Video recording is unavailable in this browser.');
+  const extension=mime.startsWith('video/mp4')?'mp4':'webm';
+  await seek(LEAD);cycleElapsed=0;$('#cycle').value='8';recording=true;paused=false;lastNow=performance.now();
+  const sessions=frames.map(f=>{const stream=f.canvas.captureStream(24),recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:4500000}),chunks=[];const done=new Promise((resolve,reject)=>{recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());resolve(new Blob(chunks,{type:mime}));};recorder.onerror=reject;});recorder.start();return{f,recorder,done};});
+  status.textContent='Recording both preview videos · 8 seconds…';mediaPlayback();
+  await new Promise(resolve=>setTimeout(resolve,8000));for(const s of sessions)s.recorder.stop();
+  for(const s of sessions)await save(s.f.id+'-v2.'+extension,await s.done);
+  document.querySelectorAll('.saved-link').forEach((a,i)=>a.href='media/'+frames[i].id+'-v2.'+extension);
+  status.textContent='Saved both videos and four stills into the branch media folder.';
+ }catch(error){status.textContent='Export: '+error.message;}finally{recording=false;button.disabled=false;}
 }
-function replay(){mode='splash';elapsed=0;previous=performance.now();lastFrame=-1;paused=reduceMotion.matches;texture.currentTime=0;setMode('splash');draw(0);syncPlayback();}
-function setMode(next){mode=next;canvas.hidden=mode!=='splash';artwork.hidden=mode!=='original';reference.hidden=mode!=='reference';phone.style.background=mode==='original'?'#080a09':'#0c1010';document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));$('#pause').disabled=mode==='original'||reduceMotion.matches;updateStatus(mode==='original'?'Exact approved artwork.':mode==='reference'?'Approved Coming Soon film · original 8-second loop.':reduceMotion.matches?'Reduce Motion · static tape treatment.':'VHS splash · 1.8-second preview.');syncPlayback();}
-function tick(now){const delta=Math.min((now-previous)/1000,.1);previous=now;if(ready&&!paused&&!document.hidden&&mode==='splash'){
-  elapsed+=delta;const duration=Number($('#duration').value);if(elapsed>=duration+.65&&$('#loop').checked){elapsed=0;texture.currentTime=0;syncPlayback();}
-  const t=Math.min(elapsed,duration),frame=Math.floor(t*24);if(frame!==lastFrame){draw(t);lastFrame=frame;}
-  if(elapsed>=duration){texture.pause();updateStatus($('#loop').checked?'End of splash · replaying…':'End of splash · replay to watch again.');}else updateStatus(`${t.toFixed(1)} / ${duration.toFixed(1)} seconds`);
-}requestAnimationFrame(tick);}
-document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
-$('#replay').addEventListener('click',replay);$('#pause').addEventListener('click',()=>{paused=!paused;previous=performance.now();if(!paused&&mode==='splash'&&elapsed>=Number($('#duration').value))elapsed=0;syncPlayback();updateStatus(paused?'Paused.':'Playing.');});
-$('#duration').addEventListener('change',replay);$('#size').addEventListener('change',e=>{device=devices[e.target.value];resize();});
-document.addEventListener('visibilitychange',()=>{previous=performance.now();syncPlayback();});reduceMotion.addEventListener('change',()=>{paused=reduceMotion.matches;elapsed=0;draw(0);setMode(mode);});
-function loaded(element,event){return new Promise((resolve,reject)=>{element.addEventListener(event,resolve,{once:true});element.addEventListener('error',reject,{once:true});});}
-resize();$('#pause').textContent=paused?'Play':'Pause';
-Promise.all([artwork.decode(),texture.readyState>=2?Promise.resolve():loaded(texture,'loadeddata')]).then(()=>{ready=true;if(!renderTape){setMode('original');updateStatus('WebGL unavailable. Showing the original artwork.');return;}replay();requestAnimationFrame(tick);}).catch(()=>{setMode('original');updateStatus('A preview asset could not load. Serve from the repository root.');});
-// Deterministic inspection hook for local visual verification and exports.
-window.splashPreview={renderAt:async t=>{paused=true;elapsed=t;syncPlayback();const target=t%8;if(Math.abs(texture.currentTime-target)>.001){const seeking=loaded(texture,'seeked');texture.currentTime=target;await seeking;}draw(t);return{time:t,fault:faultAt(t),viewport:device,artwork:[artwork.naturalWidth,artwork.naturalHeight]};},getState:()=>({ready,paused,mode,elapsed,reduceMotion:reduceMotion.matches,webgl:!!renderTape,viewport:device})};
+$('#export').addEventListener('click',exportMedia);
+Promise.all([art.decode(),document.fonts.load('900 38px FilmGrotesk'),document.fonts.load('14px AppBody'),document.fonts.load('17px AppDemi'),... [texture,reference].map(v=>v.readyState>=2?Promise.resolve():loaded(v,'loadeddata'))]).then(async()=>{ready=true;await setTreatment(treatment);requestAnimationFrame(tick);}).catch(error=>{status.textContent='Unable to load the local study assets: '+error.message;});

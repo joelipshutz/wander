@@ -1,52 +1,57 @@
-# Astir VHS splash preview — REC-557
+# Astir shared tape study — REC-557, revision 2
 
-Branch-only browser motion study requested by Joe, September 19, 2026. No
-native app code, splash readiness gates, fonts, or bundled assets are changed.
+Branch-only visual review of Events, the launch splash and the create-account
+logo. Uses the exact logo PNG and the approved Events texture/signal source.
+No native app or timing changes. Keep draft PR #686 unmerged.
 
-From the repository root, run `python3 -m http.server 65363 --bind 127.0.0.1`
-and open <http://127.0.0.1:65363/preview/splash-vhs/>.
+```sh
+python3 preview/splash-vhs/serve.py --port 65364
+```
 
-The default 1.8-second preview repeats with a 0.65-second hold. Replay, pause,
-single playback, 1.2/1.8/3-second timing and compact/standard/large viewports
-are available. Original and Coming Soon provide direct comparisons. These are
-study durations; production launch timing remains untouched.
+Open <http://127.0.0.1:65364/preview/splash-vhs/>. Compare Motion, Static material
+and Original logos. “Show a tear” pauses at a strong source frame; the slider
+inspects any frame. The full eight-second and short 1.8-second cycles begin at
+source 6.60 seconds. “Larger previews” expands the phone frames.
 
-## Preserved sources
+The account form is an inert browser illustration of the current native layout.
+The decorative logo is rendered through the same actual shader as the splash.
+The brand logo is never re-typeset. In production, form controls should stay
+native and outside the decorative effect.
 
-- The image is loaded directly from the existing `AstirLaunchWordmark` asset,
-  preserving the statue, all glyphs including ONENESS, spacing, color and
-  proportions. No text is re-typeset and no font is loaded for the artwork.
-- The PNG SHA256 remains
-  `ca42b250579fcd9571ba05520a4940ef8148a199e97aa6aeb16e918ec67e9ae8`.
-- The texture is the bundled `onboarding-film-texture.mp4`, the same unlettered
-  Higgsfield source used by Events; no new generation or credits.
-- `tape-shader.js` derives from the approved 03C renderer in
-  `docs/designs/events-coming-soon/render-source.zip`, also retained in the
-  workspace's `astir-motion-study/2026-09-17/vhs-study/`.
-- The earlier chat's inspiration is Luke Edom's VHS Nostalgia Typography,
-  especially the rough section near 0:48 and the composition at 1:12–1:18:
-  <https://vimeo.com/60692354>. No original reference footage is included.
+[Detailed library](../../docs/brand/analog-tape/README.md) includes separate static
+and motion briefs, original prompt, preserved original shader/compositor,
+iteration history and asset hashes. The exact Events movie and source texture
+are linked from their existing tracked paths.
 
-## Adaptation
+“Save preview videos & stills” writes two locally recorded videos and four PNGs
+into `media/` via the loopback-only helper. It is not a network upload or native
+app build. The videos are real-time canvas captures at a requested 24 fps;
+they are visual-review artifacts, not the deterministic 192-frame Events master.
+Use the preserved offline exporter as a starting point for production-quality
+frame-exact outputs if the visual direction is approved.
 
-The selected source's YIQ chroma delay, grain, speckles, scanline wear,
-head-switching noise, luminance dropout, horizontal tears, shadow field and
-texture composite are reused. Hue rotation stays disabled. The only shader
-addition is an optional `launchFault` uniform: it places tracking hits at
-0.08–0.29, 0.46–0.59, 0.86–1.05 and 1.31–1.44 seconds through the central
-wordmark. Original Events timing remains the renderer's default when omitted.
-Density interruptions are moved into the same brief opening. The artwork uses
-the native `min(460, width - 32)` width and `1600 / 764` aspect ratio.
+The previous study remains in git history at `9e2ae5b`. This revision replaces
+its custom flicker sequence with the original source timing and moves the band
+into object-relative coordinates. It does not modify the original renderer in
+`docs/brand/analog-tape/source/`.
 
-Reduced Motion starts with static wear and disables moving playback. Hidden
-pages pause the texture and reference film. A missing WebGL context shows the
-original image with an explanatory status. Media is silent and local.
+## Review verification — September 20, 2026
 
-## Verification
-
-- Both JavaScript files pass `node --check`; `git diff --check` passes.
-- Original asset hash matches the approved source.
-- Browser visual checks cover the standard and compact compositions, replay,
-  pause, original comparison, and playback of the actual Coming Soon film.
-- Native iOS integration and device performance are outside this motion study.
-  Keep the branch unmerged pending Joe's visual direction.
+- In-app browser: Events and both canvas surfaces rendered together; Motion,
+  Static material, Original logos, Show a tear, and the short 1.8-second cycle
+  were exercised. Static output held the same source time across observations.
+- The source 6.92-second still visibly displaces the sculpture and STIR edges.
+  The 0.40-second still retains object wear without moving noise.
+- Both saved MP4 files decoded with AVFoundation; extracted frames were checked.
+  Each is 720 × 1560, silent, about 8.264 seconds and approximately 23 fps nominal
+  from a requested 24-fps live capture. They are review recordings, not exact
+  192-frame production exports.
+- Browser error/warning log was empty at verification. JavaScript syntax checks,
+  Python server compilation and git whitespace checks passed.
+- Original artwork, Events movie and texture checksums match the existing
+  resources. The three readable original source files match the preserved ZIP
+  byte for byte. `docs/brand/analog-tape/assets.json` records every media hash.
+- No native build was run: this change contains only browser study code, review
+  media and the requested documentation. Native performance is untested.
+- Account UI is an illustrative composition and uses local macOS font faces;
+  the saved videos preserve this reviewed rendering on other platforms.

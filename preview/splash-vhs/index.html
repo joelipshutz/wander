@@ -1,46 +1,16 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Astir · VHS splash preview</title>
-  <link rel="stylesheet" href="preview.css">
-  <link rel="icon" href="data:,">
-</head>
-<body>
-  <main>
-    <section class="stage" aria-label="Splash animation preview">
-      <div class="phone">
-        <canvas id="splash" width="720" height="1561" role="img" aria-label="The original Astir statue and serif wordmark with worn VHS tape effects"></canvas>
-        <img id="original" hidden alt="Original unchanged Astir splash artwork" src="../../Wander/Resources/Assets.xcassets/AstirLaunchWordmark.imageset/AstirLaunchWordmark.png">
-        <video id="reference" hidden muted loop playsinline preload="none" src="../../Wander/Resources/Events/events-coming-soon.mp4"></video>
-        <div class="island" aria-hidden="true"></div><div class="home" aria-hidden="true"></div>
-      </div>
-    </section>
-    <aside>
-      <p class="eyebrow">ASTIR / MOTION STUDY</p>
-      <h1>Same signal.<br>Worn tape.</h1>
-      <p class="description">The original splash, through the Coming Soon tape treatment. Heavy tracking tears arrive immediately; the lettering stays yours.</p>
-      <div class="modes" role="group" aria-label="Preview surface">
-        <button data-mode="splash" aria-pressed="true">VHS splash</button>
-        <button data-mode="original" aria-pressed="false">Original</button>
-        <button data-mode="reference" aria-pressed="false">Coming Soon</button>
-      </div>
-      <div class="controls">
-        <button id="replay" class="primary">Replay splash</button>
-        <button id="pause">Pause</button>
-      </div>
-      <div class="settings">
-        <label>Preview length<select id="duration"><option value="1.2">1.2 seconds</option><option value="1.8" selected>1.8 seconds</option><option value="3">3 seconds</option></select></label>
-        <label>Phone size<select id="size"><option value="standard">Standard</option><option value="compact">Compact</option><option value="large">Large</option></select></label>
-      </div>
-      <label class="loop"><input type="checkbox" id="loop" checked> Repeat preview</label>
-      <p id="status">Loading the original artwork…</p>
-      <p class="note">Branch preview · Font and artwork unchanged.<br>Preview timing only; app launch duration is unchanged.</p>
-    </aside>
-  </main>
-  <video id="texture" muted loop playsinline preload="auto" hidden src="../../Wander/Resources/OnboardingFilm/onboarding-film-texture.mp4"></video>
-  <script src="tape-shader.js"></script>
-  <script src="preview.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Astir — the tape system</title><link rel="stylesheet" href="preview.css"><link rel="icon" href="data:,"></head>
+<body><main>
+<header><div><p class="eyebrow">ASTIR · MOTION & MATERIAL / 02</p><h1>One tape. Three surfaces.</h1><p class="intro">The same worn signal passes through the Events title, the sculpture, the lettering, and the account logo.</p></div><a class="brief-link" href="../../docs/brand/analog-tape/README.md">Saved style briefs ↗</a></header>
+<div class="toolbar"><div class="modes" role="group" aria-label="Treatment"><button data-treatment="motion" aria-pressed="true">Motion</button><button data-treatment="static" aria-pressed="false">Static material</button><button data-treatment="clean" aria-pressed="false">Original logos</button></div><div class="playback"><button id="play">Pause</button><button id="restart">Replay</button><button id="tear">Show a tear</button><button id="enlarge" aria-pressed="false">Larger previews</button><label>Cycle <select id="cycle"><option value="8">Full film · 8s</option><option value="1.8">Short splash · 1.8s</option></select></label></div></div>
+<section class="board" aria-label="Events, splash and create-account comparison">
+<article><div class="card-heading"><span>01 / THE SOURCE</span><h2>Events</h2></div><div class="phone"><video id="reference" muted loop playsinline disablepictureinpicture preload="auto" src="../../Wander/Resources/Events/events-coming-soon.mp4"></video><div class="island"></div><div class="home"></div></div><p>Approved 03C film. The reference for every texture and every tracking fault.</p><a href="../../Wander/Resources/Events/events-coming-soon.mp4">Open original video ↗</a></article>
+<article><div class="card-heading"><span>02 / THE OPENING</span><h2>Splash</h2></div><div class="phone"><canvas id="splash" role="img" aria-label="Astir splash: the statue, lettering and orange plinth all pass through the tape distortion"></canvas><div class="island"></div><div class="home"></div></div><p>Damage crosses the object itself. The original glyphs, sculpture and proportions stay intact.</p><a class="saved-link" href="media/splash-v2.mp4">Open splash video ↗</a></article>
+<article><div class="card-heading"><span>03 / THE ENTRY</span><h2>Create account</h2></div><div class="phone"><canvas id="account" role="img" aria-label="Create account layout preview with the same distressed Astir logo; controls are illustrations"></canvas><div class="island"></div><div class="home"></div></div><p>The same material and signal faults on the smaller logo. The form stays steady.</p><a class="saved-link" href="media/account-v2.mp4">Open account video ↗</a></article>
+</section>
+<div class="timeline"><label for="scrub">Inspect a frame</label><input id="scrub" type="range" min="0" max="7.958333" step="0.0416667" value="6.6"><output id="time">6.60 s</output></div>
+<p id="status" class="status">Loading the original source film…</p>
+<section class="material"><div><p class="eyebrow">LOOK CLOSER</p><h2>The material stays.<br>The signal moves.</h2><p>Static wear is built into the image: rough density, softened edges, grain and chroma registration. Motion adds row tearing, tracking displacement and brief signal loss.</p><p>Use the frame slider to see the statue and letter edges break apart. “Static material” shows a stable, damaged print without flicker.</p></div><figure><canvas id="detail" aria-label="Magnified Astir logo material"></canvas><figcaption id="detail-label">The actual logo pixels, enlarged for inspection.</figcaption></figure></section>
+<section class="library"><p class="eyebrow">REUSABLE LIBRARY</p><h2>Keep the source. Reuse the system.</h2><div class="library-grid"><article><video muted playsinline controls preload="metadata" src="../../Wander/Resources/OnboardingFilm/onboarding-film-texture.mp4"></video><h3>Unlettered tape texture</h3><p>The original eight-second source. Use as the field beneath native artwork, then apply the signal treatment to the artwork too.</p><a href="../../Wander/Resources/OnboardingFilm/onboarding-film-texture.mp4">Open texture video ↗</a></article><article><img src="../../Wander/Resources/Events/events-coming-soon.jpg" alt="Poster frame from the approved Events 03C film"><h3>Static reference</h3><p>The approved palette, density, uneven edges and material. The splash continues to use its existing cream and Signal colors.</p><a href="../../docs/brand/analog-tape/STATIC-TEXTURE.md">Read static texture brief ↗</a></article><article class="briefs"><h3>Saved in the repository</h3><a href="../../docs/brand/analog-tape/MOTION.md">Motion & timing brief ↗</a><a href="../../docs/brand/analog-tape/HISTORY.md">Origins, choices & iteration history ↗</a><a href="../../docs/brand/analog-tape/source/texture-generation-prompt.txt">Original generation prompt ↗</a><a href="https://vimeo.com/60692354#t=1m12s" target="_blank" rel="noopener">VHS Nostalgia inspiration · 1:12 ↗</a><button id="export">Save preview videos & stills</button><p>Local export writes the two preview clips and stills into this branch’s media folder.</p></article></div></section>
+<footer>Remote branch preview · Nothing merged into main. Native artwork and logo font unchanged. Account layout is a visual study, not a working sign-up form.</footer>
+</main><img id="artwork" hidden src="../../Wander/Resources/Assets.xcassets/AstirLaunchWordmark.imageset/AstirLaunchWordmark.png" alt=""><video id="texture" hidden muted loop playsinline preload="auto" src="../../Wander/Resources/OnboardingFilm/onboarding-film-texture.mp4"></video><script src="tape-shader.js"></script><script src="preview.js"></script></body></html>
