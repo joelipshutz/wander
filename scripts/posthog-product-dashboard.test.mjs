@@ -11,6 +11,9 @@ import {
   retentionSQL,
   clientProperties,
   verifyDashboard,
+  staffExclusionSQL,
+  INTERNAL_USER_IDS,
+  withStaffExclusions,
 } from "./posthog-product-dashboard.mjs";
 
 test("dashboard contract has every requested lifecycle section", () => {
@@ -37,6 +40,11 @@ test("activation funnel exposes every onboarding step", () => {
     .filter(({ event }) => event === "onboarding_step_completed")
     .map(({ properties }) => properties[0].value[0]);
   assert.deepEqual(steps, ["identity", "location", "contacts", "friends", "notifications"]);
+  assert.deepEqual(funnel.query.series.map(step => step.custom_name), [
+    "First app open", "Started sign-up", "Started profile setup", "Profile details saved",
+    "Location step completed", "Contacts step completed", "Follow suggestions completed",
+    "Notifications step completed", "Onboarding completed",
+  ]);
 });
 
 test("engagement and retention queries use canonical events", () => {
@@ -82,6 +90,7 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
     tags: ["recme:managed"],
   };
   let insightWriteInFlight = false;
+  let transientReadFailure = true;
   const insightTiles = insights.map((definition, index) => ({
     id: 300 + index,
     insight: { tags: [`recme:iac:insight:${definition.key}`] },
@@ -92,9 +101,13 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
     const body = options.body ? JSON.parse(options.body) : undefined;
     requests.push({ path: parsed.pathname, method, body });
 
+    if (method === "GET" && parsed.pathname.endsWith("/insights/") && transientReadFailure) {
+      transientReadFailure = false;
+      return { ok: false, status: 503, text: async () => "temporary upstream failure" };
+    }
     let responseBody;
     if (method === "GET" && parsed.pathname.endsWith("/insights/")) {
-      responseBody = { results: [partialInsight], next: null };
+      responseBody = { results: [partialInsight, {id: 88, tags: ["recme:iac:insight:activation-first-day-follows-per-user"], dashboards: [42, 99]}], next: null };
     } else if (method === "GET" && parsed.pathname.endsWith("/dashboards/")) {
       responseBody = { results: [], next: null };
     } else if (method === "POST" && parsed.pathname.endsWith("/dashboards/")) {
@@ -105,6 +118,11 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
       await new Promise((resolve) => setTimeout(resolve, 0));
       insightWriteInFlight = false;
       responseBody = { id: 100 + requests.filter(({ path }) => path.endsWith("/insights/")).length };
+    } else if (method === "PATCH" && parsed.pathname.endsWith("/insights/88/")) {
+      assert.deepEqual(body.dashboards, [99]);
+      assert.ok(body.query.source.query.includes(staffExclusionSQL));
+      assert.equal(body.deleted, undefined);
+      responseBody = {id: 88};
     } else if (method === "PATCH" && parsed.pathname.endsWith("/insights/77/")) {
       responseBody = { id: 77 };
     } else if (method === "GET" && parsed.pathname.endsWith("/dashboards/42/")) {
@@ -130,6 +148,7 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
   try {
     const result = await applyDashboard();
     assert.equal(result.dashboardID, 42);
+    assert.ok(requests.some(r => r.path.endsWith("/insights/88/") && r.method === "PATCH"));
     const dashboardCreate = requests.find(
       ({ path, method }) => path.endsWith("/dashboards/") && method === "POST",
     );
@@ -170,7 +189,7 @@ test("activation includes a successful follow OR core action, including during o
   const activation = insights.find(({ key }) => key === "activation-first-value");
   assert.equal(activation.query.source.query, activationSQL());
   assert.match(activationSQL(), /event = 'onboarding_completed'/);
-  assert.match(activationSQL(), /event = 'core_action_performed'\s+or \(event = 'follow_created' and properties.outcome = 'succeeded'\)/);
+  assert.match(activationSQL(), /event = 'core_action_performed'\s+or \(event = 'follow_created' and properties.outcome = 'succeeded'/);
   assert.match(activationSQL(), /cohort left join actions on cohort.person_id = actions.person_id/);
   assert.match(activationSQL(), /completed_at - interval 14 day/);
   assert.match(activationSQL(), /completed_at \+ interval 14 day/);
@@ -192,18 +211,18 @@ test("first-day follow cohorts preserve zeroes, mature denominators, and exact 2
   assert.match(sql, /if\(eligible_users = 0, null, sumIf/);
   assert.match(sql, /users_who_followed \/ nullIf\(eligible_users, 0\)/);
   assert.match(sql, /first_day_follows \/ nullIf\(eligible_users, 0\)/);
-  assert.doesNotMatch(sql, /distinct_id|followed_count|onboarding_completed/);
+  assert.doesNotMatch(sql, /followed_count|onboarding_completed/);
+  assert.match(sql, /source\), ''\) != 'signup_default'/);
   for (const filter of ["analytics_schema_version = '3'", "analytics_environment = 'production'", "person_id not in cohort 481950", "internal_or_test_user"]) {
     assert.equal(sql.split(filter).length - 1, 2, `Both cohort and follow events need ${filter}`);
   }
 });
 
-test("first-day follow dashboard charts share a cohort query and expose rate, total and mean separately", () => {
+test("first-day follow dashboard charts share a cohort query and expose rate and per-user mean without a duplicate average tile", () => {
   const section = sections.find(({ title }) => title === "Activation");
   for (const [key, column] of [
     ["activation-first-day-follow-rate", "follow_rate_percent"],
-    ["activation-first-day-follow-count", "first_day_follows"],
-    ["activation-first-day-follows-per-user", "follows_per_user"],
+    ["activation-first-day-follow-count", "follows_per_user"],
   ]) {
     assert.ok(section.insightKeys.includes(key));
     const { query } = insights.find(item => item.key === key);
@@ -218,7 +237,7 @@ test("first-day follow dashboard charts share a cohort query and expose rate, to
 test("retention joins merged people and separately matures every horizon", () => {
   const query = retentionSQL("core_action_performed", "core_action_performed");
   assert.match(query, /cohort.person_id = return_events.person_id/);
-  assert.doesNotMatch(query, /distinct_id/);
+  assert.ok(query.includes(staffExclusionSQL));
   for (const day of [1, 7, 14, 30]) {
     assert.ok(query.includes(`started_at + interval ${day + 1} day <= now()`));
     assert.ok(query.includes(`as d${day}_eligible`));
@@ -281,4 +300,55 @@ test("live verification refuses another project and fails on missing managed cov
     if (oldKey === undefined) delete process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
     else process.env.WANDER_POSTHOG_PERSONAL_API_KEY = oldKey;
   }
+});
+
+
+test("every person-level tile explicitly excludes both staff accounts and merged anonymous activity", () => {
+  for (const id of INTERNAL_USER_IDS) assert.ok(staffExclusionSQL.includes(id));
+  assert.match(staffExclusionSQL, /person_id not in/);
+  assert.match(staffExclusionSQL, /select person_id from events where distinct_id in/);
+  for (const insight of insights.filter(item => !item.key.startsWith("notifications-"))) {
+    if (insight.query.series) {
+      assert.ok(insight.query.properties.some(p => p.type === "hogql" && p.key === staffExclusionSQL), insight.key);
+    } else {
+      assert.ok((insight.query.source?.query || insight.query.query).includes(staffExclusionSQL), insight.key);
+    }
+  }
+  assert.ok(insights.find(item => item.key === "notifications-open-rate").query.query.includes(staffExclusionSQL));
+  assert.ok(!sections.flatMap(section => section.insightKeys).includes("activation-first-day-follows-per-user"));
+});
+
+
+test("auto-follow provenance is excluded from every client metric and legacy mixed recipient aggregates stay out", () => {
+  assert.ok(clientProperties.some(p => p.key === "source" && p.operator === "is_not" && p.value[0] === "signup_default"));
+  for (const insight of insights.filter(item => !item.key.startsWith("notifications-"))) {
+    const sql = insight.query.source?.query || insight.query.query;
+    if (sql) assert.ok(sql.includes("coalesce(toString(properties.source), '') != 'signup_default'"), insight.key);
+  }
+  for (const insight of insights.filter(item => item.key.startsWith("notifications-"))) {
+    if (insight.query.series) {
+      assert.ok(insight.query.properties.some(p => p.key === "analytics_audience" && p.value[0] === "external_recipients_v1"));
+    } else {
+      assert.ok((insight.query.source?.query || insight.query.query).includes("analytics_audience = 'external_recipients_v1'"), insight.key);
+    }
+  }
+  assert.match(insights.find(item => item.key === "notifications-open-rate").query.query, /timestamp >= \(select reporting_started_at from delivery\)/);
+});
+
+
+test("existing-insight maintenance preserves scope and is idempotent", () => {
+  const original = {kind: "InsightVizNode", source: {
+    kind: "TrendsQuery", series: [{kind:"EventsNode", event:"$pageview"}],
+    properties: [{key:"existing", type:"event", value:["keep"], operator:"exact"}],
+    filterTestAccounts: false, interval: "week",
+  }};
+  const result = withStaffExclusions(original);
+  assert.deepEqual(result.source.properties.slice(0, 1), original.source.properties);
+  assert.equal(result.source.properties.length, 3);
+  assert.equal(result.source.filterTestAccounts, false);
+  assert.deepEqual(result.source.series, original.source.series);
+  assert.deepEqual(withStaffExclusions(result), result);
+  assert.equal(original.source.properties.length, 1);
+  assert.equal(withStaffExclusions({kind:"HogQLQuery",query:"select 1"}), null);
+  assert.throws(() => withStaffExclusions({kind:"TrendsQuery",properties:{type:"OR",values:[]}}), /Review grouped/);
 });

@@ -54,6 +54,7 @@ type DeliverySettlement = {
 };
 
 export type NotificationOperationsSnapshot = {
+  analytics_audience?: string;
   window_days: number;
   eligible_recipient_count: number;
   accepted_notification_count: number;
@@ -154,9 +155,8 @@ async function processEvent(
       input_results: results,
     },
   );
-  await capturePostHogEvents([
-    notificationDeliveryAnalyticsEvent(event, settlement),
-  ]);
+  const analyticsEvent = notificationDeliveryAnalyticsEvent(event, settlement);
+  if (analyticsEvent) await capturePostHogEvents([analyticsEvent]);
   const acceptedCount =
     results.filter((result) => result.status === "accepted").length;
   const permanentTokenFailureCount = results.filter(
@@ -184,10 +184,19 @@ async function processEvent(
   };
 }
 
+// Analytics exclusion only: sending and settling notifications still runs for
+// every recipient. Keep IDs inside the worker, never in exported aggregates.
+export const INTERNAL_ANALYTICS_USER_IDS = new Set([
+  "user_3EhATWssjvHxwGiUaoWR5VTgeoy", // Joe
+  "user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc", // Ryan
+]);
+export const NOTIFICATION_ANALYTICS_AUDIENCE = "external_recipients_v1";
+
 export function notificationDeliveryAnalyticsEvent(
   event: PushEvent,
   settlement: DeliverySettlement,
-): PostHogCaptureEvent {
+): PostHogCaptureEvent | null {
+  if (INTERNAL_ANALYTICS_USER_IDS.has(event.recipient_user_id)) return null;
   const deliveryOutcome = settlement.status === "pending"
     ? "retrying"
     : settlement.status === "stale_claim"
@@ -216,6 +225,7 @@ export function notificationDeliveryAnalyticsEvent(
     properties: {
       distinct_id: "notification_operations",
       analytics_schema_version: "2",
+      analytics_audience: NOTIFICATION_ANALYTICS_AUDIENCE,
       platform: "server",
       source: "push_notification_worker",
       notification_type: normalizedNotificationType(event.notification_type),
@@ -236,9 +246,14 @@ export function notificationDeliveryAnalyticsEvent(
 export function notificationFrequencyAnalyticsEvents(
   snapshot: NotificationOperationsSnapshot,
 ): PostHogCaptureEvent[] {
+  // Refuse old/mixed snapshots during an out-of-order deployment.
+  if (snapshot.analytics_audience !== NOTIFICATION_ANALYTICS_AUDIENCE) {
+    return [];
+  }
   const common = {
     distinct_id: "notification_operations",
     analytics_schema_version: "2",
+    analytics_audience: NOTIFICATION_ANALYTICS_AUDIENCE,
     platform: "server",
     source: "push_notification_worker",
     window_days: snapshot.window_days,

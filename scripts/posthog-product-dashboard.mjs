@@ -7,15 +7,32 @@ const INSIGHT_TAG_PREFIX = "recme:iac:insight:";
 const MANAGED_TAG = "recme:managed";
 const DEFAULT_HOST = "https://us.posthog.com";
 
+// Verified Astir account IDs. Resolve to merged people so pre-login events are
+// excluded too; keep this guard independent of mutable cohort membership.
+const INTERNAL_USER_IDS = [
+  "user_3EhATWssjvHxwGiUaoWR5VTgeoy", // Joe
+  "user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc", // Ryan
+];
+const staffExclusionSQL = `person_id not in (
+  select person_id from events where distinct_id in (${INTERNAL_USER_IDS.map(id => `'${id}'`).join(", ")})
+)`;
+const notificationAudience = "external_recipients_v1";
+const notificationAudienceSQL = `properties.analytics_audience = '${notificationAudience}'`;
+const RETIRED_INSIGHT_KEYS = ["activation-first-day-follows-per-user"];
+
 // Schema 3 is the launch measurement baseline. Old unclassified traffic is
 // visible in Data Quality, never silently mixed with production cohorts.
 const clientProperties = [
+  { key: staffExclusionSQL, type: "hogql" },
+  { key: "source", value: ["signup_default"], operator: "is_not", type: "event" },
   { key: "analytics_schema_version", value: ["3"], operator: "exact", type: "event" },
   { key: "analytics_environment", value: ["production"], operator: "exact", type: "event" },
   { key: "$internal_or_test_user", value: ["true"], operator: "is_not", type: "person" },
   { key: "id", value: 481950, operator: "not_in", type: "cohort" },
 ];
-const productionSQL = `properties.analytics_schema_version = '3'
+const productionSQL = `${staffExclusionSQL}
+  and coalesce(toString(properties.source), '') != 'signup_default'
+  and properties.analytics_schema_version = '3'
   and properties.analytics_environment = 'production'
   and person_id not in cohort 481950
   and coalesce(toString(person.properties.$internal_or_test_user), 'false') != 'true'`;
@@ -27,6 +44,8 @@ const event = (name, properties = []) => ({
   math: "dau",
   properties,
 });
+
+const labeledEvent = (name, label, properties = []) => ({ ...event(name, properties), custom_name: label });
 
 const eventTotal = (name, properties = []) => ({
   kind: "EventsNode",
@@ -45,7 +64,7 @@ const property = (key, value) => ({
 const trends = (series, { breakdown, interval = "day" } = {}) => ({
   kind: "TrendsQuery",
   series,
-  properties: isServerSeries(series) ? [] : clientProperties,
+  properties: isServerSeries(series) ? [property("analytics_audience", notificationAudience)] : clientProperties,
   interval,
   dateRange: { date_from: "-90d", date_to: null, explicitDate: false },
   trendsFilter: { display: "ActionsLineGraph", showLegend: true },
@@ -210,16 +229,23 @@ const insights = [
     key: "onboarding-full-funnel", name: "Onboarding — new-install sign-up funnel",
     description: "Strict first-open → sign-up → identity/photo → permissions → friends → completion, within 14 days. A skipped permission still completes that step. Resumed onboarding is diagnosed separately.",
     query: funnel([
-      event("app_first_opened"), event("onboarding_auth_started", [property("mode", "sign_up")]),
-      event("onboarding_started"),
-      ...["identity", "location", "contacts", "friends", "notifications"].map(step => event("onboarding_step_completed", [property("step", step)])),
-      event("onboarding_completed"),
+      labeledEvent("app_first_opened", "First app open"),
+      labeledEvent("onboarding_auth_started", "Started sign-up", [property("mode", "sign_up")]),
+      labeledEvent("onboarding_started", "Started profile setup"),
+      ...[
+        ["identity", "Profile details saved"],
+        ["location", "Location step completed"],
+        ["contacts", "Contacts step completed"],
+        ["friends", "Follow suggestions completed"],
+        ["notifications", "Notifications step completed"],
+      ].map(([step, label]) => labeledEvent("onboarding_step_completed", label, [property("step", step)])),
+      labeledEvent("onboarding_completed", "Onboarding completed"),
     ]),
   },
   {
     key: "onboarding-resumed", name: "Onboarding — started to completed",
     description: "Includes resumed onboarding; does not require the original first-open or an optional follow. Compare with the strict acquisition funnel.",
-    query: funnel([event("onboarding_started"), event("onboarding_completed")]),
+    query: funnel([labeledEvent("onboarding_started", "Started profile setup"), labeledEvent("onboarding_completed", "Onboarding completed")]),
   },
   {
     key: "onboarding-permissions", name: "Onboarding — permission decisions",
@@ -230,22 +256,17 @@ from events where event = 'onboarding_permission_result' and ${productionSQL}
   },
   {
     key: "activation-first-value", name: "Activation — onboarding + follow, Wanna or check-in",
-    description: "Completed onboarding users who also successfully follow someone, save a Wanna, or create a check-in within 14 days before/after their first onboarding completion. Includes onboarding follows. Each person counts once; action-only users and automatic defaults excluded. Fixed last 90 days of onboarding cohorts; recent cohorts can still convert. Saves/check-ins are local completion.",
+    description: "Completed onboarding plus a successful chosen follow, Wanna, or check-in within 14 days before/after first completion. Includes deliberate onboarding follows; automatic follows never qualify. Each person counts once; action-only users excluded. Fixed 90-day cohorts; recent cohorts can still convert. Saves/check-ins are local completion.",
     query: hogqlBar(activationSQL(), "step", "people"),
   },
   {
-    key: "activation-first-day-follow-rate", name: "First day — follow rate (%) over time",
-    description: "Percent of new onboarding users who successfully follow at least one person in [first onboarding start, start + 24h). Includes onboarding follows and zero-follow users. Only fully observed users enter the rate; immature cohorts are blank. Cohort date in UTC; fixed last 90 days. Automatic default follows excluded.",
+    key: "activation-first-day-follow-rate", name: "First day — follow rate by daily cohort (%)",
+    description: "Users who choose to follow at least one person in their first 24h from onboarding start, divided by all fully observed users. Includes deliberate onboarding follows and zero-follow users. Automatic follows never qualify. Daily UTC cohorts, last 90 days. Immature cohorts are blank.",
     query: hogqlDailyBars(firstDayFollowSQL(), "follow_rate_percent"),
   },
   {
-    key: "activation-first-day-follow-count", name: "First day — total follow count over time",
-    description: "Total successful follow actions in each user's first 24h from first onboarding start, grouped by onboarding cohort date (UTC), not action date. Only fully observed users; immature cohorts are blank. Fixed last 90 days. Excludes automatic defaults; re-follows count again. Not current following balance or distinct people followed.",
-    query: hogqlDailyBars(firstDayFollowSQL(), "first_day_follows"),
-  },
-  {
-    key: "activation-first-day-follows-per-user", name: "First day — average follows per new user over time",
-    description: "Successful first-24h follow actions divided by all fully observed onboarding users, including those who followed nobody. Cohorts start at first onboarding start (UTC); includes onboarding follows, excludes automatic defaults. Fixed last 90 days. Blank means no mature users; re-follows count again.",
+    key: "activation-first-day-follow-count", name: "First day — follows per user by daily cohort",
+    description: "Total successful chosen follow actions in the first 24h from onboarding start / all fully observed users in that daily cohort, including zero-follow users. Automatic follows never count. Daily UTC cohorts; last 90 days. Immature cohorts are blank. Re-follows count again; this is not current following balance.",
     query: hogqlDailyBars(firstDayFollowSQL(), "follows_per_user"),
   },
   {
@@ -360,6 +381,10 @@ from events where event = 'engagement_action_performed' and ${productionSQL}
     query: hogql(`select event, properties.build_number as build, properties.analytics_schema_version as schema,
   properties.analytics_environment as environment, count() as events, uniqExact(person_id) as people, max(timestamp) as last_seen
 from events where timestamp >= now() - interval 30 day and event not like '$%'
+  and coalesce(toString(properties.source), '') != 'signup_default'
+  and ${staffExclusionSQL}
+  and (event not in ('notification_delivery_processed', 'notification_frequency_snapshot', 'notification_frequency_bucket_snapshot')
+    or ${notificationAudienceSQL})
 group by event, build, schema, environment order by last_seen desc limit 500`),
   },
   {
@@ -391,18 +416,20 @@ select
   sum(if(properties.delivery_outcome = 'retrying', 1, 0)) as retry_passes
 from events
 where event = 'notification_delivery_processed'
+  and ${notificationAudienceSQL}
   and timestamp >= now() - interval 30 day
 `.trim()),
   },
   {
     key: "notifications-open-rate",
     name: "Notifications — remote open rate",
-    description: "Routable remote notification taps divided by APNs-accepted notifications over the last 30 days. This is an aggregate directional rate; no notification or recipient identifier is exported by the server analytics path.",
+    description: "Routable remote taps divided by APNs-accepted notifications, excluding Joe and Ryan. Uses the last 30 days from the first staff-excluded acceptance; legacy mixed-recipient deliveries are excluded. This is an aggregate directional rate; no notification or recipient identifier is exported by the server analytics path.",
     query: hogql(`
 with delivery as (
-  select count() as accepted_notifications
+  select count() as accepted_notifications, min(timestamp) as reporting_started_at
   from events
   where event = 'notification_delivery_processed'
+  and ${notificationAudienceSQL}
     and properties.delivery_outcome = 'sent'
     and timestamp >= now() - interval 30 day
 ), opens as (
@@ -410,6 +437,9 @@ with delivery as (
   from events
   where event = 'notification_opened'
     and properties.delivery_channel = 'remote'
+    and timestamp >= (select reporting_started_at from delivery)
+    and (select accepted_notifications from delivery) > 0
+    and ${productionSQL}
     and timestamp >= now() - interval 30 day
 )
 select
@@ -436,7 +466,7 @@ select
   toInt(properties.p90_per_recipient) as p90_per_recipient,
   toInt(properties.max_per_recipient) as max_per_recipient
 from events
-where event = 'notification_frequency_snapshot'
+where event = 'notification_frequency_snapshot' and ${notificationAudienceSQL}
 order by timestamp desc
 limit 1
 `.trim()),
@@ -451,7 +481,7 @@ select
   argMax(toInt(properties.recipient_count), timestamp) as recipients,
   argMax(toInt(properties.bucket_order), timestamp) as bucket_order
 from events
-where event = 'notification_frequency_bucket_snapshot'
+where event = 'notification_frequency_bucket_snapshot' and ${notificationAudienceSQL}
 group by notification_count_bucket
 order by bucket_order asc
 `.trim(), "notification_count_bucket", "recipients"),
@@ -461,7 +491,7 @@ order by bucket_order asc
 const sections = [
   {
     "title": "Acquisition",
-    "body": "Schema 3 production baseline (release device builds, including TestFlight). Debug/simulator traffic is excluded. First open is an install marker, not a download. App Store attribution and internal-person labeling remain explicit operational checks.",
+    "body": "Schema 3 production baseline (release device builds, including TestFlight). Debug/simulator traffic is excluded. First open is an install marker, not a download. Joe and Ryan are excluded from every user-behavior tile, including historical merged activity. App Store attribution remains an explicit operational check.",
     "insightKeys": [
       "acquisition-first-opens",
       "acquisition-campaign-links"
@@ -469,7 +499,7 @@ const sections = [
   },
   {
     "title": "Activation",
-    "body": "Activation requires completed onboarding plus a successful follow, Wanna, or check-in within 14 days, in either order so onboarding follows count. First-day follow charts use the first 24 hours from first onboarding start, including onboarding follows. Only fully observed users enter rates/counts; automatic default follows are excluded. Daily cohorts use UTC; fixed last 90 days.",
+    "body": "Activation requires completed onboarding plus a successful follow, Wanna, or check-in within 14 days, in either order so onboarding follows count. First-day follow charts use the first 24 hours from first onboarding start, including onboarding follows. Follows per user divides cohort follow actions by all fully observed cohort users, including zero-follow users. Joe, Ryan, and automatic default follows are excluded. Daily cohorts use UTC; fixed last 90 days.",
     "insightKeys": [
       "onboarding-full-funnel",
       "onboarding-resumed",
@@ -477,7 +507,6 @@ const sections = [
       "activation-first-value",
       "activation-first-day-follow-rate",
       "activation-first-day-follow-count",
-      "activation-first-day-follows-per-user",
       "activation-first-day-follow-cohorts"
     ]
   },
@@ -523,7 +552,7 @@ const sections = [
   },
   {
     "title": "Data Quality",
-    "body": "Check ingestion, environments, auth results and sync failures before interpreting behavior. Behavioral tiles require schema 3 and production; they remain empty until the instrumented release ships. The existing Internal / Test users cohort (481950) is excluded, plus the internal/test-person marker. The cohort had zero members at audit; classify staff/review accounts before interpreting launch behavior. The inventory deliberately includes all traffic and uses a fixed 30-day SQL window.",
+    "body": "Check ingestion, environments, auth results and sync failures before interpreting behavior. Behavioral tiles require schema 3 and production; they remain empty until the instrumented release ships. The existing Internal / Test users cohort (481950) is excluded, plus the internal/test-person marker. Joe and Ryan also have an explicit merged-person exclusion in every client query. The inventory includes historical and development traffic, excluding Joe and Ryan, and uses a fixed 30-day SQL window.",
     "insightKeys": [
       "save-sync-health",
       "auth-health",
@@ -532,7 +561,7 @@ const sections = [
   },
   {
     "title": "Notification Operations",
-    "body": "Aggregate server operations retain historical coverage. APNs acceptance is not display. Opens/acceptances is a directional ratio, not recipient conversion, and may cross time windows. No recipient IDs or notification payloads are exported.",
+    "body": "Joe and Ryan are excluded as recipients before server aggregation. Delivery trends start with external-recipient reporting; old mixed totals cannot be separated retrospectively. Frequency snapshots recompute the full last 30 days for eligible external recipients. APNs acceptance is not display. Opens/acceptances is a directional ratio, not recipient conversion, and may cross time windows. No recipient IDs or notification payloads are exported.",
     "insightKeys": [
       "notifications-accepted-volume",
       "notifications-delivery-health",
@@ -545,6 +574,11 @@ const sections = [
 
 function assertDefinition() {
   const keys = new Set(insights.map(({ key }) => key));
+  for (const definition of insights) {
+    if ((definition.description + " Joe and Ryan excluded.").length > 400) {
+      throw new Error(`Insight description exceeds PostHog's 400-character limit: ${definition.key}`);
+    }
+  }
   if (keys.size !== insights.length) throw new Error("Duplicate insight key");
   for (const section of sections) {
     for (const key of section.insightKeys) {
@@ -566,6 +600,7 @@ function parseArgs(args) {
     apply: args.includes("--apply"),
     check: args.includes("--check"),
     verify: args.includes("--verify"),
+    excludeExisting: args.includes("--exclude-staff-from-existing"),
   };
 }
 
@@ -573,18 +608,20 @@ async function api(path, { method = "GET", body } = {}) {
   const host = (process.env.WANDER_POSTHOG_API_HOST || DEFAULT_HOST).replace(/\/$/, "");
   const key = process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
   if (!key) throw new Error("Missing WANDER_POSTHOG_PERSONAL_API_KEY");
-  const response = await fetch(`${host}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!response.ok) {
+  const maxAttempts = ["GET", "PATCH"].includes(method) ? 3 : 1;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const response = await fetch(`${host}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (response.ok) return response.json();
+    if ([429, 502, 503, 504].includes(response.status) && attempt < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+      continue;
+    }
     throw new Error(`${method} ${path} failed (${response.status}): ${await response.text()}`);
   }
-  return response.json();
 }
 
 async function listAll(path) {
@@ -602,7 +639,7 @@ async function upsertInsight(projectID, dashboardID, definition, existing) {
   const tag = `${INSIGHT_TAG_PREFIX}${definition.key}`;
   const payload = {
     name: definition.name,
-    description: definition.description,
+    description: definition.description + " Joe and Ryan excluded.",
     query: definition.query,
     tags: [MANAGED_TAG, tag],
     dashboards: [dashboardID],
@@ -676,6 +713,45 @@ async function verifyDashboard() {
   return { dashboardID: dashboard.id, verifiedInsights: results.length, results };
 }
 
+// An explicit maintenance operation for Joe's existing legacy dashboard. This
+// changes only the two named staff exclusions and automatic-follow provenance;
+// it does not enable the broader project-wide internal/test-user default.
+function withStaffExclusions(query) {
+  if (query?.kind === "InsightVizNode") {
+    const source = withStaffExclusions(query.source);
+    return source ? { ...query, source } : null;
+  }
+  if (!["TrendsQuery", "FunnelsQuery", "RetentionQuery", "StickinessQuery", "LifecycleQuery", "PathsQuery"].includes(query?.kind)) return null;
+  if (query.properties && !Array.isArray(query.properties)) throw new Error("Review grouped properties before adding exclusions");
+  const properties = [...(query.properties || [])];
+  for (const guard of clientProperties.slice(0, 2)) {
+    if (!properties.some(p => JSON.stringify(p) === JSON.stringify(guard))) properties.push(guard);
+  }
+  return { ...query, properties };
+}
+
+async function excludeStaffFromExistingInsights() {
+  const projectID = configuredProjectID();
+  const existing = await listAll(`/api/projects/${projectID}/insights/?limit=200`);
+  const updated = [], unsupported = [];
+  for (const item of existing) {
+    if (item.tags?.includes(MANAGED_TAG) || (!item.saved && !item.dashboards?.length)) continue;
+    const query = withStaffExclusions(item.query);
+    if (!query) { unsupported.push({ id: item.id, name: item.name }); continue; }
+    if (JSON.stringify(query) !== JSON.stringify(item.query)) {
+      await api(`/api/projects/${projectID}/insights/${item.id}/`, { method: "PATCH", body: { query } });
+    }
+    const verified = await api(`/api/projects/${projectID}/insights/${item.id}/?refresh=force_blocking`);
+    const saved = verified.query?.source || verified.query;
+    if (verified.error || !Array.isArray(verified.result) || !verified.last_refresh
+        || !saved?.properties?.some(p => p.key === staffExclusionSQL)) {
+      throw new Error(`Legacy insight verification failed: ${item.id}`);
+    }
+    updated.push({ id: item.id, name: item.name, refreshedAt: verified.last_refresh });
+  }
+  return { updated, unsupported };
+}
+
 async function applyDashboard() {
   const projectID = configuredProjectID();
 
@@ -685,7 +761,7 @@ async function applyDashboard() {
   ]);
   const dashboardPayload = {
     name: "Astir Launch — Product Behavior",
-    description: "Launch analytics: acquisition, onboarding, core actions, feature adoption, mature retention, referrals, data quality, and notification operations. Managed by scripts/posthog-product-dashboard.mjs; do not hand-edit managed tiles.",
+    description: "Joe and Ryan excluded from user-behavior metrics. Launch analytics: acquisition, onboarding, core actions, feature adoption, mature retention, referrals, data quality, and notification operations. Managed by scripts/posthog-product-dashboard.mjs; do not hand-edit managed tiles.",
     pinned: true,
     tags: [MANAGED_TAG, DASHBOARD_TAG],
   };
@@ -699,6 +775,21 @@ async function applyDashboard() {
         method: "POST",
         body: dashboardPayload,
       });
+
+  // Retire the duplicate average tile without deleting its saved insight or
+  // removing it from other dashboards. Repeated applies are safe.
+  for (const item of existingInsights) {
+    if (RETIRED_INSIGHT_KEYS.some(key => item.tags?.includes(`${INSIGHT_TAG_PREFIX}${key}`))) {
+      await api(`/api/projects/${projectID}/insights/${item.id}/`, {
+        method: "PATCH",
+        body: {
+          dashboards: (item.dashboards || []).filter(id => id !== dashboard.id),
+          query: hogqlDailyBars(firstDayFollowSQL(), "follows_per_user"),
+          description: "Retired duplicate: see First day — follows per user by daily cohort. Same first-24h metric including zero-follow users, excluding Joe, Ryan, and automatic follows.",
+        },
+      });
+    }
+  }
 
   // PostHog creates missing tags while saving an insight. Concurrent writes for
   // several new managed tags can race and leave an otherwise-created insight
@@ -739,7 +830,9 @@ async function applyDashboard() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseArgs(process.argv.slice(2));
   const summary = assertDefinition();
-  if (options.verify) {
+  if (options.excludeExisting) {
+    console.log(JSON.stringify({ mode: "exclude-staff-from-existing", ...(await excludeStaffFromExistingInsights()) }, null, 2));
+  } else if (options.verify) {
     console.log(JSON.stringify({ mode: "verify", ...(await verifyDashboard()) }, null, 2));
   } else if (options.check || !options.apply) {
     console.log(JSON.stringify({ mode: "check", ...summary }, null, 2));
@@ -748,4 +841,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 }
 
-export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, clientProperties, verifyDashboard };
+export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };
