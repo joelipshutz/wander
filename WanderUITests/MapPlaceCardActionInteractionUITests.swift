@@ -220,6 +220,11 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertTrue(checkIn.waitForExistence(timeout: 10))
         XCTAssertTrue(checkIn.isHittable)
         XCTAssertLessThan(checkIn.frame.maxY, app.frame.maxY)
+        let profileScroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(profileScroll.waitForExistence(timeout: 5))
+        // The scrolling history must meet the floating rail, leaving only
+        // its own padding rather than an extra strip of unused viewport.
+        XCTAssertGreaterThanOrEqual(profileScroll.frame.maxY, checkIn.frame.minY - 24)
         capture("REC495 Feed full profile top")
         for _ in 0..<5 { app.swipeUp() }
         XCTAssertTrue(checkIn.isHittable)

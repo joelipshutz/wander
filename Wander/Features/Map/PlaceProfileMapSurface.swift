@@ -1723,7 +1723,9 @@ private struct PlaceProfileFullView: View {
             .overlay(alignment: .top) {
                 headerNavigationControls(topInset: headerTopInset)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            // Let the scroll viewport grow with safe-area expansion instead of
+            // pinning it to the geometry measured before that expansion.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(astirBrandMode.background)
             .ignoresSafeArea(.container, edges: .top)
         }
@@ -2714,7 +2716,8 @@ private struct PlacePhotoContributorProfileRoute: Identifiable {
 
 private struct PlacePhotoGalleryViewer: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.astirBrandMode) private var brandMode
+    // Photo chrome is always dark, independently of the presenting app theme.
+    private let brandMode = AstirBrandMode.editorial
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
@@ -2806,7 +2809,11 @@ private struct PlacePhotoGalleryViewer: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        // A presentation preference can recolor the presenter during the cover
+        // transition. Scope both palettes to the photo content instead. Keep
+        // contributor profiles and report sheets outside these overrides.
+        .environment(\.colorScheme, .dark)
+        .environment(\.astirBrandMode, .editorial)
         .task {
             await onRefresh()
             if let selectedPhotoID {

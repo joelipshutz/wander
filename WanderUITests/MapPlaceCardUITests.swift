@@ -1,7 +1,112 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testREC570HistoryViewportReachesBottomWithoutFloatingActions() throws {
+        let app = launchPhotoHistoryFixture()
+        let scroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["place-profile.floating-action.checkIn"].exists)
+        // Allow the home-indicator safe area, but not a second inset or a
+        // viewport shortened by the top safe area.
+        XCTAssertGreaterThanOrEqual(scroll.frame.maxY, app.frame.maxY - 40)
+        let historyActions = scroll.buttons.matching(identifier: "Share activity")
+        XCTAssertTrue(historyActions.firstMatch.waitForExistence(timeout: 5))
+        let lastHistoryAction = try XCTUnwrap(historyActions.allElementsBoundByIndex.last)
+        scrollUp(in: scroll, until: lastHistoryAction)
+        XCTAssertTrue(lastHistoryAction.isHittable)
+        XCTAssertLessThanOrEqual(lastHistoryAction.frame.maxY, scroll.frame.maxY)
+        capture("REC-570 final history row without floating actions")
+    }
+
+    func testREC576PhotoViewerPreservesLightPresenter() throws {
+        try verifyPhotoViewerAppearance(initialAppearance: .light)
+    }
+
+    func testREC576PhotoViewerPreservesDarkPresenter() throws {
+        try verifyPhotoViewerAppearance(initialAppearance: .dark)
+    }
+
+    private func verifyPhotoViewerAppearance(initialAppearance: XCUIDevice.Appearance) throws {
+        let previousAppearance = XCUIDevice.shared.appearance
+        addTeardownBlock { @MainActor in
+            XCUIDevice.shared.appearance = previousAppearance
+        }
+        XCUIDevice.shared.appearance = initialAppearance
+        let app = launchPhotoHistoryFixture()
+        let title = app.staticTexts["Dudley Market QA"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        // Only wait for the initial OS/launch transition. Later dismissals
+        // are measured immediately, without retrying away a wrong theme.
+        let initialTheme = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let luminance = try? self.meanLuminance(title.screenshot().image) else { return false }
+            return initialAppearance == .light ? luminance > 0.55 : luminance < 0.45
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [initialTheme], timeout: 5), .completed)
+        capture("REC-576 presenter before photos — \(initialAppearance)")
+        let photo = app.buttons["Open place photo by Ryan full screen"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 6))
+
+        for visit in 1...3 {
+            photo.tap()
+            let close = app.buttons["Close photo viewer"]
+            XCTAssertTrue(close.waitForExistence(timeout: 5))
+            capture("REC-576 photo viewer — \(initialAppearance) — \(visit)")
+            // A system appearance change while the cover is open must reach
+            // the presenter, even though the photo chrome stays dark.
+            let expectedAppearance: XCUIDevice.Appearance = visit == 3
+                ? (initialAppearance == .light ? .dark : .light)
+                : initialAppearance
+            if visit == 3 { XCUIDevice.shared.appearance = expectedAppearance }
+            close.tap()
+            XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+            // A heading is not an interactive accessibility target. Verify
+            // return to the same place through its actual controls instead.
+            XCTAssertTrue(photo.isHittable)
+            XCTAssertTrue(app.buttons["place-profile.back"].isHittable)
+            let luminance = try meanLuminance(title.screenshot().image)
+            if expectedAppearance == .light {
+                XCTAssertGreaterThan(luminance, 0.55, "Photo dismissal changed the light presenter.")
+            } else {
+                XCTAssertLessThan(luminance, 0.45, "Photo dismissal changed the dark presenter.")
+            }
+            capture("REC-576 presenter after photos — \(expectedAppearance) — \(visit)")
+        }
+    }
+
+    private func launchPhotoHistoryFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderREC386PhotoFixture",
+            "-WanderMapPlace", "Dudley Market QA", "-WanderMapSheetExpanded",
+        ]
+        app.launch()
+        return app
+    }
+
+    /// Sample rendered title pixels so this checks the visible palette,
+    /// rather than repeating the implementation's environment value.
+    private func meanLuminance(_ image: UIImage) throws -> Double {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let size = 32
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        try pixels.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(
+                data: buffer.baseAddress, width: size, height: size,
+                bitsPerComponent: 8, bytesPerRow: size * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size, height: size))
+        }
+        return stride(from: 0, to: pixels.count, by: 4).reduce(0.0) { sum, offset in
+            sum + (0.2126 * Double(pixels[offset]) + 0.7152 * Double(pixels[offset + 1])
+                + 0.0722 * Double(pixels[offset + 2])) / 255
+        } / Double(size * size)
+    }
+
     func testREC352AdaptiveCategorySearchEvidence() {
         let app = launchREC352AdaptiveSearchFixture()
         let searchField = app.textFields["map.searchField"]
