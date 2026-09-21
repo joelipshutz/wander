@@ -1129,15 +1129,6 @@ private struct ListDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ListDetailHeaderToolbar {
-                if let listShareContent {
-                    ShareCardButton(content: listShareContent,
-                                    card: displayList.shareCard(owner: displayList.isOwnedByCurrentUser ? store.currentUser.displayName : displayList.ownerName),
-                                    loadImages: { await displayList.shareImages(backend: backend) }) {
-                        ListDetailHeaderActionLabel(systemImage: "square.and.arrow.up")
-                    }
-                    .accessibilityLabel("Share list")
-                }
-
                 if canAddPlaces {
                     Button {
                         isAddingPlaces = true
@@ -1148,22 +1139,11 @@ private struct ListDetailScreen: View {
                     .accessibilityLabel("Add places to list")
                 }
 
-                if canManageList {
-                    Button {
-                        onEdit(renderedList)
-                    } label: {
-                        ListDetailHeaderActionLabel(systemImage: "pencil")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Edit list")
-                }
-
                 if !renderedList.isOwnedByCurrentUser {
                     if isLeavingList {
                         ProgressView()
                             .tint(brandMode.accent)
                             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                            .wanderGlassCapsule()
                             .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
@@ -1296,6 +1276,30 @@ private struct ListDetailScreen: View {
         }
     }
 
+    private func identityActions(for renderedList: PlaceListMock) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            if canManageList {
+                Button {
+                    onEdit(renderedList)
+                } label: {
+                    AstirIdentityActionLabel(title: "Edit list")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Edit list")
+            }
+            if let listShareContent {
+                ShareCardButton(content: listShareContent,
+                                card: displayList.shareCard(owner: displayList.isOwnedByCurrentUser ? store.currentUser.displayName : displayList.ownerName),
+                                loadImages: { await displayList.shareImages(backend: backend) }) {
+                    AstirIdentityActionLabel(title: "Share list")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Share list")
+            }
+        }
+        .padding(.top, WanderTheme.spacing2)
+    }
+
     private func detailHeader(for renderedList: PlaceListMock) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .top) {
@@ -1376,6 +1380,10 @@ private struct ListDetailScreen: View {
                     .foregroundStyle(brandMode.accentText)
             }
             .padding(.top, WanderTheme.spacing1)
+
+            if canManageList || listShareContent != nil {
+                identityActions(for: renderedList)
+            }
         }
     }
 
@@ -2493,6 +2501,7 @@ private struct ListMapPreview: View {
                     }
                 }
                 .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                .sessionReplayMasked()
                 .environment(
                     \.colorScheme,
                     store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
@@ -3473,6 +3482,7 @@ private struct ListMapFullScreen: View {
                         }
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .sessionReplayMasked()
                     .environment(
                         \.colorScheme,
                         store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
@@ -6034,11 +6044,10 @@ struct ListDetailHeaderActionLabel: View {
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .foregroundStyle(brandMode.primaryText)
             .contentShape(Circle())
-            .wanderGlassCapsule()
     }
 }
 
-/// The toolbar owns placement; each action owns its glass surface.
+/// Keep header actions unfilled, including the system toolbar background.
 struct ListDetailHeaderToolbar<Content: View>: ToolbarContent {
     @ViewBuilder let content: () -> Content
 

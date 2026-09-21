@@ -28,6 +28,7 @@ struct OnboardingLocationMapPreview: View {
                 Marker(candidate.name, coordinate: Self.coordinate).tint(AstirTheme.signal.color)
             }
             .mapStyle(.standard(elevation: .flat))
+            .sessionReplayMasked()
             PlaceProfileMapSurface(
                 place: PlaceSheetPlace(candidate: candidate), saves: [], tasteSaves: [],
                 currentUserID: store.currentUser.id, viewerLocation: nil, action: .add,
