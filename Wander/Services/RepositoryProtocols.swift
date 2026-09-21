@@ -2004,12 +2004,17 @@ protocol ActivityEngagementRepository {
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary]
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch]
     func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary
+    func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult
     func deleteComment(commentID: String) async throws -> ActivityEngagementSummary
 }
 
 extension ActivityEngagementRepository {
+    func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
+        throw WanderRemoteError.notImplemented("comment likes")
+    }
+
     func activity(id: String) async throws -> FeedActivity {
         throw WanderRemoteError.notImplemented("activity detail")
     }

@@ -1031,8 +1031,12 @@ struct ActivityCommentsScreen: View {
 
     @ViewBuilder
     private func commentRow(_ comment: ActivityComment) -> some View {
-        if store.canDeleteActivityComment(comment) {
-            ActivityCommentRow(comment: comment, onDelete: { delete(comment) })
+        if comment.author.id == store.currentUser.id {
+            ActivityCommentRow(comment: comment,
+                               canLike: store.canLikeActivityComment(comment),
+                               isLikePending: store.isActivityCommentLikePending(comment.id),
+                               onLike: { toggleLike(comment) },
+                               onDelete: store.canDeleteActivityComment(comment) ? { delete(comment) } : nil)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         delete(comment)
@@ -1040,12 +1044,16 @@ struct ActivityCommentsScreen: View {
                         Label("Delete", systemImage: "trash")
                     }
                     .accessibilityLabel("Delete comment")
+                    .disabled(!store.canDeleteActivityComment(comment))
                 }
                 .accessibilityAction(named: "Delete comment") {
                     delete(comment)
                 }
         } else {
-            ActivityCommentRow(comment: comment, onReport: { presentReport(for: comment) })
+            ActivityCommentRow(comment: comment,
+                               canLike: store.canLikeActivityComment(comment),
+                               isLikePending: store.isActivityCommentLikePending(comment.id),
+                               onLike: { toggleLike(comment) }, onReport: { presentReport(for: comment) })
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button {
                         presentReport(for: comment)
@@ -1084,6 +1092,19 @@ struct ActivityCommentsScreen: View {
                 sharePreviewPresentation = presentation
             }
         )
+    }
+
+    private func toggleLike(_ comment: ActivityComment) {
+        auth.requireSignIn(for: .socialActivity) {
+            Task { @MainActor in
+                let userID = store.currentUser.id
+                let succeeded = await store.toggleActivityCommentLike(
+                    comment, backend: auth.isSignedIn ? backend : nil
+                )
+                guard !Task.isCancelled, userID == store.currentUser.id else { return }
+                commentError = succeeded ? nil : store.activityEngagementError(for: context.activityID)
+            }
+        }
     }
 
     private var metadataIcon: String {
@@ -1509,15 +1530,24 @@ struct ActivityCommentsRouteScreen: View {
 private struct ActivityCommentRow: View {
     @Environment(\.astirBrandMode) private var brandMode
     let comment: ActivityComment
+    let canLike: Bool
+    let isLikePending: Bool
+    let onLike: () -> Void
     var onDelete: (() -> Void)?
     var onReport: (() -> Void)?
 
     init(
         comment: ActivityComment,
+        canLike: Bool,
+        isLikePending: Bool,
+        onLike: @escaping () -> Void,
         onDelete: (() -> Void)? = nil,
         onReport: (() -> Void)? = nil
     ) {
         self.comment = comment
+        self.canLike = canLike
+        self.isLikePending = isLikePending
+        self.onLike = onLike
         self.onDelete = onDelete
         self.onReport = onReport
     }
@@ -1533,23 +1563,44 @@ private struct ActivityCommentRow: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: WanderTheme.spacing1) {
-                    Text(comment.author.displayName)
-                        .font(AstirTypography.label)
-                        .foregroundStyle(brandMode.primaryText)
-                    Text(FeedPresentation.timestampText(for: comment.createdAt))
-                        .font(AstirTypography.metadata)
-                        .foregroundStyle(brandMode.secondaryText)
-                }
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: WanderTheme.spacing1) {
+                        Text(comment.author.displayName)
+                            .font(AstirTypography.label)
+                            .foregroundStyle(brandMode.primaryText)
+                        Text(FeedPresentation.timestampText(for: comment.createdAt))
+                            .font(AstirTypography.metadata)
+                            .foregroundStyle(brandMode.secondaryText)
+                    }
 
-                Text(comment.body)
-                    .font(AstirTypography.bodySmall)
-                    .foregroundStyle(brandMode.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(comment.body)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
+
+                Button(action: onLike) {
+                    HStack(spacing: 5) {
+                        Image(systemName: comment.viewerHasLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(comment.likeCount.formatted())
+                            .font(AstirTypography.metadata)
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(comment.viewerHasLiked ? brandMode.accent : brandMode.secondaryText)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canLike || isLikePending)
+                .opacity(isLikePending ? 0.6 : 1)
+                .accessibilityIdentifier("activity.comment.like.\(comment.id)")
+                .accessibilityLabel(comment.viewerHasLiked ? "Unlike comment" : "Like comment")
+                .accessibilityValue(comment.likeCount == 1 ? "1 like" : "\(comment.likeCount) likes")
             }
             .opacity(comment.isPending ? 0.58 : 1)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
 
             Spacer(minLength: 0)
 

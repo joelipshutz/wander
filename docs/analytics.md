@@ -67,7 +67,7 @@ engagement_action_performed
 
 | Human need | Current action values | Product behavior |
 |---|---|---|
-| Connect | `follow_created`, `activity_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared` | Build and interact with a trusted people graph. |
+| Connect | `follow_created`, `activity_liked`, `activity_comment_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared` | Build and interact with a trusted people graph. |
 | Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
@@ -115,6 +115,7 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | `place_saved` | A new place save or independent repeat Wanna is created; retries of the same Wanna do not emit again | `source_type`, `visibility`, `status` |
 | `check_in_created` | A visit is created | `is_repeat`, `visibility`, `date_bucket` |
 | `activity_like_changed` | Like state succeeds locally/remotely | `is_liked`, `outcome` |
+| `activity_comment_like_changed` | Comment like/unlike succeeds locally/remotely | `is_liked`, `outcome`; no comment, activity, author IDs or content |
 | `activity_comment_created` | Comment succeeds locally/remotely | `outcome` |
 | `activity_share_opened` | Share preview opens | `ticket_kind` |
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |

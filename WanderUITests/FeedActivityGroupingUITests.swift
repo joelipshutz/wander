@@ -92,6 +92,40 @@ final class FeedActivityGroupingUITests: XCTestCase {
     }
 
     @MainActor
+    func testCommentHeartLikesAndUnlikesWithoutChangingActivityLike() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderNotificationPostUITest", "-WanderInitialTab", "map"
+        ]
+        app.launch()
+        let send = app.buttons["activity.comment.send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 20))
+        let composer = app.descendants(matching: .any)["activity.comment.input"].firstMatch
+        composer.tap()
+        composer.typeText("A place worth returning to.")
+        send.tap()
+        let heart = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity.comment.like.")).firstMatch
+        XCTAssertTrue(heart.waitForExistence(timeout: 5))
+        XCTAssertEqual(heart.label, "Like comment")
+        XCTAssertEqual(heart.value as? String, "0 likes")
+        XCTAssertGreaterThanOrEqual(heart.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(heart.frame.height, 44)
+        let activity = app.buttons["Like activity"].firstMatch
+        let activityValue = activity.value as? String
+        capture("REC-564-comment-unliked")
+        heart.tap()
+        XCTAssertEqual(heart.label, "Unlike comment")
+        XCTAssertEqual(heart.value as? String, "1 like")
+        XCTAssertEqual(activity.value as? String, activityValue)
+        capture("REC-564-comment-liked")
+        heart.tap()
+        XCTAssertEqual(heart.label, "Like comment")
+        XCTAssertEqual(heart.value as? String, "0 likes")
+        capture("REC-564-comment-unliked-again")
+    }
+
+    @MainActor
     func testNotificationPostEdgeSwipeReturnsFeed() {
         let app = XCUIApplication()
         app.launchArguments = [

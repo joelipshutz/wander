@@ -7653,6 +7653,29 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
     }
 
+    func testCommentLikeAnalyticsAreDistinctAndContainNoCommentContent() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: .empty(), analytics: analytics)
+        _ = await store.addActivityComment(activityID: "private-activity-id", body: "Private comment text", backend: nil)
+        let comment = try XCTUnwrap(store.activityComments(for: "private-activity-id").first)
+        _ = await store.toggleActivityCommentLike(comment, backend: nil)
+        _ = await store.toggleActivityCommentLike(comment, backend: nil)
+        let changes = analytics.events.filter { $0.name == WanderAnalyticsEvents.activityCommentLikeChanged }
+        XCTAssertEqual(changes.map { $0.properties["is_liked"] }, ["true", "false"])
+        XCTAssertTrue(changes.allSatisfy { Set($0.properties.keys) == ["is_liked", "outcome"] })
+        XCTAssertFalse(analytics.events.contains { $0.name == WanderAnalyticsEvents.activityLikeChanged })
+        let engagement = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.engagementActionPerformed && $0.properties["action"] == "activity_comment_liked"
+        }
+        XCTAssertEqual(engagement.count, 1)
+        XCTAssertEqual(engagement.first?.properties["need"], "connect")
+        XCTAssertEqual(engagement.first?.properties["surface"], "activity_comments")
+        let values = (changes + engagement).flatMap(\.properties.values).joined(separator: " ")
+        for privateValue in [comment.id, comment.activityID, comment.author.id, comment.body] {
+            XCTAssertFalse(values.contains(privateValue))
+        }
+    }
+
     func testProductActionsEmitCanonicalHumanNeedAnalyticsWithoutContent() async throws {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.seed(), analytics: analytics)
