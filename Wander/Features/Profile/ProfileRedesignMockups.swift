@@ -476,6 +476,7 @@ private struct ProfileDiningMapMockup: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            .sessionReplayMasked()
             .frame(height: 205)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             .allowsHitTesting(false)
