@@ -12,7 +12,7 @@ existing Location step after its permission primer. The onboarding step order,
 founders welcome, first-visit walkthrough and their landing behavior stay intact.
 The country code is separate from the national number; US numbers have ten
 national digits. Other countries use their numbering plan through PhoneNumberKit
-5.0.0. Phone remains optional pending any explicit decision to require it.
+5.0.8. Phone remains optional pending any explicit decision to require it.
 
 The home selector contains major metro areas. Los Angeles follows Los Angeles
 County, including its smaller cities, with separate Orange County and Inland
@@ -25,8 +25,19 @@ Home metro and optional unverified phone are private account data in separate
 owner-only RPCs, not public profile fields or verified contact-match identifiers.
 Only the coarse metro key is cached locally per account. Phone is excluded from
 analytics, session replay, raw RPC errors and local defaults. Hard and soft
-account deletion purge the private record. This collection provides the remembered
-home selection for LA Events gating; tab visibility is unchanged by this change.
+account deletion purge the private record. The public profile's freeform home
+area remains separate; Events uses the private confirmed metro.
+
+Events is visible only when the saved home metro is Los Angeles. Orange County,
+Inland Empire, other metros and unknown home areas have four tabs, preserving
+their order. Existing members can confirm their city in Settings → City & phone.
+A request for a hidden Events tab falls back to Feed. Eligible first-visit
+walkthroughs still land on Map and follow the existing Map → Feed sequence.
+The per-account cached home keeps eligibility stable while offline or traveling;
+launch and foreground refresh the server's saved choice without requesting GPS.
+Settings saves update visibility immediately. The server independently restricts
+Events interest reads and registration to the saved Los Angeles metro. Previous
+interest survives a home edit and is restored if the member changes back to LA.
 
 ## Initial map preparation and retained returns (REC-484)
 

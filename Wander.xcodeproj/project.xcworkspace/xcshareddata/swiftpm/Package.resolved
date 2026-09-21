@@ -29,15 +29,6 @@
       }
     },
     {
-      "identity" : "phonenumberkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/PhoneNumberKit/PhoneNumberKit",
-      "state" : {
-        "revision" : "52bd68dffa07ec7fc42b9851911c59e9d57fc906",
-        "version" : "5.0.0"
-      }
-    },
-    {
       "identity" : "posthog-ios",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PostHog/posthog-ios.git",

@@ -43,6 +43,7 @@ struct AccountContactDetails: Codable, Equatable {
 
 /// Only the coarse home selection is cached. Phone numbers stay out of defaults.
 @MainActor struct HomeMetroSelectionStore {
+    static let didChange = Notification.Name("astir.homeMetro.didChange")
     let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -51,7 +52,9 @@ struct AccountContactDetails: Codable, Equatable {
     }
 
     func remember(_ metroID: String?, for userID: String) {
+        guard self.metroID(for: userID) != metroID else { return }
         defaults.set(metroID, forKey: key(userID))
+        NotificationCenter.default.post(name: Self.didChange, object: userID)
     }
 
     private func key(_ userID: String) -> String { "astir.homeMetro.v1.\(userID)" }
@@ -60,6 +63,7 @@ struct AccountContactDetails: Codable, Equatable {
 #if DEBUG && targetEnvironment(simulator)
 @MainActor final class SimulatorAccountContactDetailsRepository: AccountContactDetailsRepository {
     private var details: AccountContactDetails?
+    init(details: AccountContactDetails? = nil) { self.details = details }
     func currentDetails() async throws -> AccountContactDetails? { details }
     func save(_ details: AccountContactDetails) async throws -> AccountContactDetails {
         self.details = details

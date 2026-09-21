@@ -218,6 +218,7 @@ final class WanderBackend: ObservableObject {
     let notificationRepository: (any NotificationRepository)?
     let eventsInterestRepository: (any EventsInterestRepository)?
     let accountContactDetailsRepository: (any AccountContactDetailsRepository)?
+    let eventsAccessRepository: (any EventsAccessRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
     let shareCardPreviewRepository: (any ShareCardPreviewRepository)?
     let placePlanInvitationRepository: (any PlacePlanInvitationRepository)?
@@ -270,6 +271,7 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
             self.eventsInterestRepository = SupabaseEventsInterestRepository(rpc: client)
             self.accountContactDetailsRepository = SupabaseAccountContactDetailsRepository(rpc: client)
+            self.eventsAccessRepository = SupabaseEventsAccessRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
             self.shareCardPreviewRepository = SupabaseShareCardPreviewRepository(rpc: client, storage: client, authSession: authSession)
             self.placePlanInvitationRepository = SupabasePlacePlanInvitationRepository(rpc: client, storage: client)
@@ -297,6 +299,7 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = nil
             self.eventsInterestRepository = nil
             self.accountContactDetailsRepository = nil
+            self.eventsAccessRepository = nil
             self.sharedVisitRepository = nil
             self.shareCardPreviewRepository = nil
             self.placePlanInvitationRepository = nil
@@ -334,6 +337,7 @@ final class WanderBackend: ObservableObject {
         placePlanInvitationRepository: (any PlacePlanInvitationRepository)? = nil,
         eventsInterestRepository: (any EventsInterestRepository)? = nil,
         accountContactDetailsRepository: (any AccountContactDetailsRepository)? = nil,
+        eventsAccessRepository: (any EventsAccessRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
         featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
         placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
@@ -368,6 +372,7 @@ final class WanderBackend: ObservableObject {
         self.notificationRepository = notificationRepository
         self.eventsInterestRepository = eventsInterestRepository
         self.accountContactDetailsRepository = accountContactDetailsRepository
+        self.eventsAccessRepository = eventsAccessRepository
         self.sharedVisitRepository = sharedVisitRepository
     }
 
@@ -395,6 +400,7 @@ final class WanderBackend: ObservableObject {
             || sharedVisitRepository != nil
             || eventsInterestRepository != nil
             || accountContactDetailsRepository != nil
+            || eventsAccessRepository != nil
     }
 
     func socialImportUnderstandingProvider(

@@ -18,7 +18,7 @@ settings:
 packages:
   PhoneNumberKit:
     url: https://github.com/PhoneNumberKit/PhoneNumberKit
-    exactVersion: 5.0.0
+    exactVersion: 5.0.8
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git
     from: 3.59.3
@@ -32,6 +32,52 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  City and Phone Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        "-WanderOnboardingUITestStep location": true
+        -WanderAccountContactDetailsUITest: true
+  Events LA Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        "-WanderHomeMetroUITest los-angeles": true
+        "-WanderInitialTab events": true
+  Events Outside LA Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        "-WanderHomeMetroUITest orange-county": true
+        "-WanderInitialTab discover": true
+  Events Unknown Home Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        "-WanderHomeMetroUITest unknown": true
+        "-WanderInitialTab discover": true
   ShareCardMock:
     build:
       targets:

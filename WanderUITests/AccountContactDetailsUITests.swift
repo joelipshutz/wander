@@ -15,9 +15,11 @@ import XCTest
         let app = launch()
         XCTAssertTrue(app.buttons["accountContactDetails.metro"].label.contains("Los Angeles"))
         XCTAssertTrue(app.buttons["accountContactDetails.country"].label.contains("+1"))
+        capture(app, name: "01 — Prefilled city and phone")
         let phone = app.textFields["accountContactDetails.phone"]
         phone.tap()
         phone.typeText("2025550123")
+        capture(app, name: "02 — Phone keyboard")
         app.buttons["Done"].tap()
         app.buttons["accountContactDetails.continue"].tap()
         XCTAssertTrue(app.staticTexts["Connect with your people"].waitForExistence(timeout: 5))
@@ -32,6 +34,7 @@ import XCTest
         XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
         app.buttons["Done"].tap()
         app.buttons["accountContactDetails.country"].tap()
+        capture(app, name: "03 — Country code picker")
         let search = app.searchFields.firstMatch
         search.tap()
         search.typeText("United Kingdom")
@@ -42,6 +45,7 @@ import XCTest
     func testMetroOptionsUseMajorAreasAndCanBeChanged() {
         let app = launch()
         app.buttons["accountContactDetails.metro"].tap()
+        capture(app, name: "04 — Major metro picker")
         app.searchFields.firstMatch.tap()
         app.searchFields.firstMatch.typeText("Orange County")
         app.buttons["accountContactDetails.option.orange-county"].tap()
@@ -56,5 +60,12 @@ import XCTest
         let app = launch()
         app.buttons["accountContactDetails.skip"].tap()
         XCTAssertTrue(app.staticTexts["Connect with your people"].waitForExistence(timeout: 5))
+    }
+
+    private func capture(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
