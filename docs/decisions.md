@@ -394,3 +394,35 @@ stay outside AASA associations. Existing app visibility rules remain authoritati
 Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
+
+## Joint check-ins and historical records (REC-566)
+
+September 21, 2026: Joe approved the shared-card direction and delegated edge-case
+and migration decisions. The [engineering contract](designs/joint-checkins/engineering-plan.md)
+and [acceptance matrix](designs/joint-checkins/test-plan.md) define the next implementation.
+This decision does not execute a production migration or ship the feature.
+
+New explicitly composed joint check-ins use one canonical card and conversation,
+with individually owned accepted contributions. Each profile shows that same card
+with its subject’s contribution first; personal stats still count one owned visit.
+New groups permit ten total people including the starter and reserved pending
+invitations. Pending people are never presented as accepted coauthors.
+
+Preserve all legacy groups, pending invitations, visits, engagement and links.
+Use an additive versioned cutover; never infer joint intent from matching venue
+or time or silently move old comments into a shared audience. Existing groups
+retain their old limits/behavior. Previously published solo events are not
+automatically promoted to the new model.
+
+Acceptance preserves an existing saved place’s privacy and unrelated metadata.
+Everyone/Friends visibility continues to apply separately to each contribution;
+Self offers a private personal save without membership. Shared comments use a
+disclosed changing audience from the first publication and every comment composer.
+Old clients cannot mutate a new group through legacy RPCs without this contract.
+
+Leaving/removal preserves the person’s visit and original date. Rejoining reuses
+the surviving visit with new consent, preserves any standalone conversation, and
+never merges engagement. Starter deletion or Self/private transition permanently
+closes the joint conversation while preserving other people’s independent visits.
+A surviving starter visit gets a distinct solo engagement identity; the old group
+URL stays closed. These lifecycle and privacy rules are server release gates.
