@@ -1555,6 +1555,29 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertTrue(repository.commentLikeRequests.isEmpty)
     }
 
+    func testBlockDuringCommentLikeDoesNotRestoreAnOptimisticRowAfterUnblock() async {
+        for fail in [false, true] {
+            let store = WanderStore(fixtures: .empty())
+            let comment = activityComment(id: UUID().uuidString, activityID: UUID().uuidString,
+                                          authorID: "comment_author", relationship: .follower)
+            let repository = ActivityEngagementRepositoryStub(commentsPage: ActivityCommentsPage(
+                comments: [comment], nextCursor: nil, engagement: .empty(activityID: comment.activityID)))
+            let backend = WanderBackend(activityEngagementRepository: repository)
+            _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+            repository.suspendCommentLikes = true
+            repository.commentLikeError = fail ? ActivityEngagementTestError.expected : nil
+            let task = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+            for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+            store.block(userID: comment.author.id)
+            repository.suspendCommentLikes = false
+            let result = await task.value
+            XCTAssertFalse(result)
+            store.unblock(userID: comment.author.id)
+            XCTAssertTrue(store.activityComments(for: comment.activityID).isEmpty)
+            XCTAssertFalse(store.isActivityCommentLikePending(comment.id))
+        }
+    }
+
     private func commentLikeFixture() async -> (WanderStore, ActivityEngagementRepositoryStub, ActivityComment, WanderBackend) {
         let store = WanderStore(fixtures: .empty())
         let comment = activityComment(id: UUID().uuidString, activityID: UUID().uuidString,

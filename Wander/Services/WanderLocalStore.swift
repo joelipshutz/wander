@@ -2049,9 +2049,14 @@ final class WanderStore: ObservableObject {
             }
             let result = try await repository.setCommentLike(commentID: comment.id, isLiked: requestedLike)
             guard generation == activityCommentsGeneration, currentUser.id == requestUserID,
-                  activityCommentLikeRevisions[comment.id] == revision,
-                  canLikeActivityComment(previous)
+                  activityCommentLikeRevisions[comment.id] == revision
             else { return false }
+            guard canLikeActivityComment(previous) else {
+                // A block or authoritative removal during the write must not
+                // leave an optimistic row to reappear after access changes.
+                activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
+                return false
+            }
             guard result.commentID.caseInsensitiveCompare(comment.id) == .orderedSame,
                   result.activityID.caseInsensitiveCompare(comment.activityID) == .orderedSame
             else { throw WanderRemoteError.invalidResponse("Comment like response did not match the request") }
@@ -2060,9 +2065,12 @@ final class WanderStore: ObservableObject {
             return true
         } catch {
             guard generation == activityCommentsGeneration, currentUser.id == requestUserID,
-                  activityCommentLikeRevisions[comment.id] == revision,
-                  canLikeActivityComment(previous)
+                  activityCommentLikeRevisions[comment.id] == revision
             else { return false }
+            guard canLikeActivityComment(previous) else {
+                activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
+                return false
+            }
             updateActivityCommentLikes(previous)
             activityEngagementErrorByID[comment.activityID] = "Couldn't update this comment's like. Try again."
             return false
