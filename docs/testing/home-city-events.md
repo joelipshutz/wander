@@ -14,6 +14,19 @@ The review schemes are simulator-only. Their saved form values last for the app
 process and reset on the next fixture launch. Use a dedicated test account after
 the migrations are deployed to verify cross-launch and cross-device persistence.
 
+For full-app manual testing, select the normal **Wander** scheme and use the
+simulator app packaged by the native workflow. The workflow keeps Xcode's
+simulator signing enabled so native authentication has its Keychain entitlements.
+An unsigned test-only build can pass fixture flows but crash during Clerk startup;
+adding a signature after linking does not restore Xcode's embedded simulator
+entitlements. The native suite therefore also cold-launches the normal app and
+opens real authentication without submitting credentials or creating an account.
+
+If the simulator previously used a review scheme, launch once with
+`-WanderUseLiveAuth` to clear its persisted fixture selection, then launch with
+no arguments. This preserves existing app data and real account state. Full city
+save/relaunch and Events acceptance still require the backend deployment below.
+
 On Joe's Mac, run builds and tests through the workspace resource helper. It
 requires 50 GiB free and reserves the selected existing simulator. From this
 checkout, run:

@@ -1,6 +1,24 @@
 import XCTest
 
 @MainActor final class AccountContactDetailsUITests: XCTestCase {
+    func testNormalAppLaunchReachesLiveAuthentication() {
+        let app = XCUIApplication()
+        // Clear the persisted simulator fixture selection, then exercise a
+        // normal cold launch with the real Clerk and backend configuration.
+        app.launchArguments = ["-WanderUseLiveAuth"]
+        app.launch()
+        XCTAssertTrue(app.buttons["onboarding.logIn"].waitForExistence(timeout: 20))
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        let logIn = app.buttons["onboarding.logIn"]
+        XCTAssertTrue(logIn.waitForExistence(timeout: 20))
+        logIn.tap()
+        XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["auth.usePassword"].exists)
+        capture(app, name: "Full app — Live authentication entry")
+    }
+
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestStep", "location", "-WanderAccountContactDetailsUITest", "-WanderHomeCitySearchFixtures"]
