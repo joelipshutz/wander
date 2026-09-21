@@ -616,7 +616,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(placeProfile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 2)
         XCTAssertTrue(placeProfile.contains("WanderGlassButtonCluster(mergeSpacing: 0)"))
         XCTAssertTrue(placeProfile.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
-        XCTAssertEqual(profile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 2)
+        XCTAssertEqual(profile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 1)
         XCTAssertTrue(walkthrough.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
     }
 

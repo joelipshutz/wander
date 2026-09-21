@@ -56,6 +56,7 @@ enum ContactDiscoveryError: Error, LocalizedError {
     private let defaults: UserDefaults
     private let activeUserID: () -> String?
     private var revision = 0
+    private var disableOperations: [String: (id: UUID, task: Task<Void, Error>)] = [:]
 
     init(repository: (any ContactDiscoveryRepository)?, provider: any ContactProvider = SystemContactProvider(),
          defaults: UserDefaults = .standard, activeUserID: @escaping () -> String?) {
@@ -67,11 +68,15 @@ enum ContactDiscoveryError: Error, LocalizedError {
         try Task.checkCancellation()
         guard activeUserID() == userID else { throw AuthSessionError.notSignedIn }
     }
+    func invalidateContactAccess() { revision += 1 }
     private func changed() {
         revision += 1
         NotificationCenter.default.post(name: Self.didChange, object: nil)
     }
     func enable(userID: String) async throws {
+        try requireUser(userID)
+        if let pending = disableOperations[userID] { try await pending.task.value }
+        if defaults.bool(forKey: key(userID) + ".pendingDisable") { try await disable(userID: userID) }
         try requireUser(userID)
         guard let repository else { throw ContactDiscoveryError.unavailable }
         guard await provider.requestAccess() == .authorized else { throw ContactDiscoveryError.permissionDenied }
@@ -88,11 +93,19 @@ enum ContactDiscoveryError: Error, LocalizedError {
         defaults.removeObject(forKey: key(userID))
         defaults.set(true, forKey: key(userID) + ".pendingDisable")
         if needsNotification { changed() }
+        if let pending = disableOperations[userID] { try await pending.task.value; return }
         try requireUser(userID)
         guard let repository else { throw ContactDiscoveryError.unavailable }
-        try await repository.setEnabled(false)
-        try requireUser(userID)
-        defaults.removeObject(forKey: key(userID) + ".pendingDisable")
+        let operationID = UUID()
+        let operation = Task { @MainActor in
+            try self.requireUser(userID)
+            try await repository.setEnabled(false)
+            try self.requireUser(userID)
+            self.defaults.removeObject(forKey: self.key(userID) + ".pendingDisable")
+        }
+        disableOperations[userID] = (operationID, operation)
+        defer { if disableOperations[userID]?.id == operationID { disableOperations.removeValue(forKey: userID) } }
+        try await operation.value
     }
     func reconcile(userID: String) async throws -> Bool {
         try requireUser(userID)
@@ -100,16 +113,20 @@ enum ContactDiscoveryError: Error, LocalizedError {
         if defaults.bool(forKey: key(userID) + ".pendingDisable") { try await disable(userID: userID) }
         if hasConsent(userID: userID), await provider.authorization() != .authorized { try await disable(userID: userID) }
         try requireUser(userID)
+        let requestedRevision = revision
         let enabled = try await repository.isEnabled()
         try requireUser(userID)
+        guard requestedRevision == revision else { return hasConsent(userID: userID) }
         if !enabled, hasConsent(userID: userID) {
             defaults.removeObject(forKey: key(userID)); changed()
         }
         return enabled
     }
     func canUseResults(userID: String) async -> Bool {
-        guard activeUserID() == userID, hasConsent(userID: userID) else { return false }
-        return await provider.authorization() == .authorized
+        let requestedRevision = revision
+        let authorization = await provider.authorization()
+        return activeUserID() == userID && hasConsent(userID: userID)
+            && requestedRevision == revision && authorization == .authorized
     }
     func matches(userID: String) async throws -> [ProfileShell] {
         try requireUser(userID)
@@ -122,20 +139,23 @@ enum ContactDiscoveryError: Error, LocalizedError {
         let requestedRevision = revision
         let enabled = try await repository.isEnabled()
         try requireUser(userID)
+        guard requestedRevision == revision else { return [] }
         guard enabled else {
             defaults.removeObject(forKey: key(userID)); changed()
             return []
         }
         guard hasConsent(userID: userID), requestedRevision == revision else { return [] }
         let identifiers = try await provider.discoveryIdentifiers()
+        let uploadAuthorization = await provider.authorization()
         try requireUser(userID)
         guard hasConsent(userID: userID), requestedRevision == revision,
-              await provider.authorization() == .authorized else { return [] }
+              uploadAuthorization == .authorized else { return [] }
         guard !identifiers.isEmpty else { return [] }
         let results = try await repository.match(identifiers, region: Locale.current.region?.identifier)
+        let resultAuthorization = await provider.authorization()
         try requireUser(userID)
         guard hasConsent(userID: userID), requestedRevision == revision,
-              await provider.authorization() == .authorized else { return [] }
+              resultAuthorization == .authorized else { return [] }
         return results.filter { $0.id != userID && $0.isPrivateProfile != true }
     }
 }
@@ -144,7 +164,9 @@ enum PeopleRecommendationMerge {
     static func combine(contacts: [ProfileShell], general: [DiscoverPeopleRecommendation], limit: Int) -> [DiscoverPeopleRecommendation] {
         var seen = Set<String>()
         let ordered = contacts.map { DiscoverPeopleRecommendation(profile: $0, reason: .contacts, rank: 0) } + general
-        return ordered.filter { seen.insert($0.id).inserted }.prefix(max(0, limit)).enumerated().map {
+        let unique = Array(ordered.filter { seen.insert($0.id).inserted }.prefix(max(0, limit)))
+        guard !contacts.isEmpty else { return unique }
+        return unique.enumerated().map {
             DiscoverPeopleRecommendation(profile: $0.element.profile, reason: $0.element.reason, rank: $0.offset + 1)
         }
     }

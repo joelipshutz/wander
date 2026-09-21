@@ -11,7 +11,7 @@ const request = (body: unknown, bearer = token) => new Request("https://example.
 function fixture(overrides: Record<string, unknown> = {}) {
   const calls: { endpoint: string; body: any; authorization: string | null }[] = [];
   const responses: Record<string, unknown> = {
-    current_profile: { id: "user_canonical" }, own_contact_discovery_enabled: true,
+    current_profile: [{ id: "user_canonical" }], own_contact_discovery_enabled: true,
     set_contact_discovery_enabled: true, admit_contact_discovery: true,
     sync_contact_discovery_identity: null, match_contact_discovery: [{ id: "user_friend" }],
     user_clerk: { id: "user_clerk", updated_at: 1790000000000, email_addresses: [
@@ -127,4 +127,17 @@ Deno.test("private service errors are never reflected in responses", async () =>
   const f = fixture({ match_contact_discovery: new Error("email:private@example.test secret") });
   const response = await handleRequest(request({ action: "match", identifiers: [] }), f.deps);
   equal(response.status, 503); equal(await response.json(), { error: "unavailable" });
+});
+
+Deno.test("current_profile must return exactly one valid table row", async () => {
+  for (const current_profile of [[], [{ id: "a" }, { id: "b" }], {}, { id: "wrong_shape" }, [null], [{ id: 123 }], [{ id: "deleted", deleted_at: "2026-09-21" }]]) {
+    const f = fixture({ current_profile });
+    equal((await handleRequest(request({ action: "enable" }), f.deps)).status, 401);
+    equal(f.calls.map(c => c.endpoint), ["current_profile"]);
+  }
+});
+Deno.test("enable admission precedes Clerk lookup and cannot be bypassed by consent cycling", async () => {
+  const f = fixture({ admit_contact_discovery: false });
+  equal((await handleRequest(request({ action: "enable" }), f.deps)).status, 429);
+  equal(f.calls.map(c => c.endpoint), ["current_profile", "admit_contact_discovery"]);
 });

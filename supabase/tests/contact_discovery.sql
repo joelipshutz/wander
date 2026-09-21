@@ -32,7 +32,7 @@ select set_config('request.jwt.claims','{}',true);
 select set_config('request.jwt.claim.canonical_user_id','',true);
 select set_config('request.jwt.claim.sub','user_cd_viewer',true);
 select pg_temp.require(not public.own_contact_discovery_enabled(), 'new accounts default off');
-select pg_temp.require(not public.admit_contact_discovery(1), 'no matching without consent');
+select pg_temp.require(public.admit_contact_discovery(0), 'enable can be admitted before consent');
 select public.set_contact_discovery_enabled(true);
 select pg_temp.require(public.own_contact_discovery_enabled(), 'viewer consent');
 select set_config('request.jwt.claim.sub','user_cd_match',true);
@@ -70,6 +70,8 @@ select public.sync_contact_discovery_identity('user_cd_match','user_cd_match','2
 select public.sync_contact_discovery_identity('user_cd_match','user_cd_match','2026-09-20T00:00:00Z',array['email:friend@example.test']);
 select pg_temp.require(not exists(select 1 from public.match_contact_discovery('user_cd_viewer',array['email:friend@example.test'])), 'old webhook cannot resurrect removed identifiers');
 select pg_temp.require((select count(*)=1 from public.match_contact_discovery('user_cd_viewer',array['email:new@example.test'])), 'new identifier matches');
+select public.sync_contact_discovery_identity('user_cd_match','user_cd_match','2026-09-21T01:00:00Z','{}'::text[]);
+select pg_temp.require(not exists(select 1 from app.contact_discovery_identifiers where clerk_user_id='user_cd_match'), 'removing every verified identifier clears the index');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','user_cd_match',true);
 select public.set_contact_discovery_enabled(false);

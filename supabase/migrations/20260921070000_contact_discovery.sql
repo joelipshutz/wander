@@ -107,8 +107,8 @@ create function public.admit_contact_discovery(input_count integer) returns bool
 language plpgsql security definer set search_path = pg_catalog, app, public as $$
 declare viewer text := app.current_user_id(); usage app.contact_discovery_usage;
 begin
-  if not public.own_contact_discovery_enabled() then return false; end if;
-  if input_count < 0 or input_count > 5000 then return false; end if;
+  if viewer is null or not exists(select 1 from public.profiles where id = viewer and deleted_at is null) then return false; end if;
+  if input_count is null or input_count < 0 or input_count > 5000 then return false; end if;
   insert into app.contact_discovery_usage values(viewer, now(), 0, 0) on conflict do nothing;
   select * into usage from app.contact_discovery_usage where user_id = viewer for update;
   if usage.window_start < now() - interval '24 hours' then

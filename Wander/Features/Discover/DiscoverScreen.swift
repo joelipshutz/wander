@@ -7,7 +7,6 @@ enum DiscoverSection: String, Equatable {
 }
 
 struct DiscoverScreen: View {
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -332,14 +331,6 @@ struct DiscoverScreen: View {
                 await refreshDiscoverDefaultContent()
                 lastHandledAuthState = auth.isSignedIn
                 lastHandledVisiblePlaceRevision = store.presentationRevision
-            }
-            .onReceive(NotificationCenter.default.publisher(for: ContactDiscoveryService.didChange)) { _ in
-                store.clearContactRecommendations()
-                Task { await refreshRecommendationsIfNeeded(force: true) }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                store.clearContactRecommendations()
-                if phase == .active { Task { await refreshRecommendationsIfNeeded(force: true) } }
             }
             .task(id: auth.isSignedIn) {
                 let requestedAuthState = auth.isSignedIn

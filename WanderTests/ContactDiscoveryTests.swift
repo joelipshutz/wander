@@ -5,7 +5,19 @@ private actor DiscoveryContacts: ContactProvider {
     var status: ContactProviderAuthorization = .authorized
     var identifiers: [ContactDiscoveryIdentifier] = [.init(kind: .email, value: "friend@example.test")]
     var reads = 0
-    func authorization() async -> ContactProviderAuthorization { status }
+    private var authorizationCalls = 0
+    private var pauseCall: Int?
+    private var paused: XCTestExpectation?
+    private var authorizationContinuation: CheckedContinuation<ContactProviderAuthorization, Never>?
+    func suspendAuthorization(call: Int, started: XCTestExpectation) { pauseCall = call; paused = started }
+    func resumeAuthorization() { authorizationContinuation?.resume(returning: status); authorizationContinuation = nil }
+    func authorization() async -> ContactProviderAuthorization {
+        authorizationCalls += 1
+        if authorizationCalls == pauseCall {
+            return await withCheckedContinuation { authorizationContinuation = $0; paused?.fulfill() }
+        }
+        return status
+    }
     func requestAccess() async -> ContactProviderAuthorization { status }
     func matches() async throws -> [ContactMatch] { [] }
     func discoveryIdentifiers() async throws -> [ContactDiscoveryIdentifier] { reads += 1; return identifiers }
@@ -21,10 +33,13 @@ private actor DiscoveryContacts: ContactProvider {
     var shouldFail = false
     var results: [ProfileShell] = []
     var matchAction: (() async -> [ProfileShell])?
-    func isEnabled() async throws -> Bool { enabled }
+    var statusAction: (() async -> Bool)?
+    var disableAction: (() async -> Void)?
+    func isEnabled() async throws -> Bool { if let statusAction { return await statusAction() }; return enabled }
     func setEnabled(_ value: Bool) async throws {
         writes.append(value)
         if shouldFail { throw ContactDiscoveryError.unavailable }
+        if !value, let disableAction { await disableAction() }
         enabled = value
     }
     func match(_ identifiers: [ContactDiscoveryIdentifier], region: String?) async throws -> [ProfileShell] {
@@ -130,6 +145,87 @@ private actor DiscoveryContacts: ContactProvider {
         activeID = "other"; continuation?.resume(returning: [friend])
         do { _ = try await task.value; XCTFail("Old account results must be rejected") } catch {}
         XCTAssertFalse(service.hasConsent(userID: "other"))
+    }
+    func testAccountSwitchDuringAuthorizationPreventsUpload() async throws {
+        let provider = DiscoveryContacts(); let repo = DiscoveryRepository()
+        let started = expectation(description: "upload authorization suspended")
+        await provider.suspendAuthorization(call: 2, started: started)
+        var activeID = "viewer"
+        let service = ContactDiscoveryService(repository: repo, provider: provider, defaults: defaults, activeUserID: { activeID })
+        try await service.enable(userID: "viewer")
+        let task = Task { try await service.matches(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        activeID = "other"; await provider.resumeAuthorization()
+        do { _ = try await task.value; XCTFail("Account changed before upload") } catch {}
+        XCTAssertEqual(repo.matchCalls, 0)
+    }
+    func testDisableDuringFinalAuthorizationDiscardsResults() async throws {
+        let provider = DiscoveryContacts(); let repo = DiscoveryRepository(); repo.results = [person("friend")]
+        let started = expectation(description: "result authorization suspended")
+        await provider.suspendAuthorization(call: 3, started: started)
+        let service = ContactDiscoveryService(repository: repo, provider: provider, defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let task = Task { try await service.matches(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        try await service.disable(userID: "viewer"); await provider.resumeAuthorization()
+        let results = try await task.value
+        XCTAssertTrue(results.isEmpty)
+    }
+    func testDisableDuringResultEligibilityCheckRejectsResults() async throws {
+        let provider = DiscoveryContacts(); let repo = DiscoveryRepository()
+        let started = expectation(description: "eligibility authorization suspended")
+        await provider.suspendAuthorization(call: 1, started: started)
+        let service = ContactDiscoveryService(repository: repo, provider: provider, defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let task = Task { await service.canUseResults(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        try await service.disable(userID: "viewer"); await provider.resumeAuthorization()
+        let permitted = await task.value
+        XCTAssertFalse(permitted)
+    }
+    func testStaleDisabledStatusCannotUndoNewConsent() async throws {
+        let repo = DiscoveryRepository()
+        let started = expectation(description: "status suspended")
+        var continuation: CheckedContinuation<Bool, Never>?
+        repo.statusAction = { await withCheckedContinuation { continuation = $0; started.fulfill() } }
+        let service = ContactDiscoveryService(repository: repo, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        let task = Task { try await service.reconcile(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        try await service.enable(userID: "viewer")
+        continuation?.resume(returning: false)
+        let enabled = try await task.value
+        XCTAssertTrue(enabled); XCTAssertTrue(service.hasConsent(userID: "viewer"))
+    }
+    func testChangedContactSelectionInvalidatesPendingMatch() async throws {
+        let repo = DiscoveryRepository(); let friend = person("removed")
+        let started = expectation(description: "match suspended")
+        var continuation: CheckedContinuation<[ProfileShell], Never>?
+        repo.matchAction = { await withCheckedContinuation { continuation = $0; started.fulfill() } }
+        let service = ContactDiscoveryService(repository: repo, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let task = Task { try await service.matches(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        service.invalidateContactAccess(); continuation?.resume(returning: [friend])
+        let results = try await task.value
+        XCTAssertTrue(results.isEmpty)
+    }
+    func testDuplicateDisableIsCoalescedAndReenableWaitsForIt() async throws {
+        let repo = DiscoveryRepository()
+        let started = expectation(description: "disable suspended")
+        var continuation: CheckedContinuation<Void, Never>?
+        repo.disableAction = { await withCheckedContinuation { continuation = $0; started.fulfill() } }
+        let service = ContactDiscoveryService(repository: repo, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let first = Task { try await service.disable(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        let second = Task { try await service.matches(userID: "viewer") }
+        let enable = Task { try await service.enable(userID: "viewer") }
+        await Task.yield()
+        XCTAssertEqual(repo.writes, [true, false])
+        continuation?.resume()
+        try await first.value; _ = try await second.value; try await enable.value
+        XCTAssertEqual(repo.writes, [true, false, true])
+        XCTAssertTrue(repo.enabled); XCTAssertTrue(service.hasConsent(userID: "viewer"))
     }
     func testContactsRankBeforeGeneralAndDeduplicateWithoutFollowing() {
         let friend = person("friend"); let general = person("general")

@@ -977,6 +977,14 @@ private struct FeedPeopleSurface: View {
                 }
                 .walkthroughTarget(.feedInvite)
 
+                NavigationLink {
+                    ContactDiscoverySettingsScreen()
+                } label: {
+                    Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
+                        .font(AstirTypography.control).frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("feed.contactDiscovery")
+
                 if isMemberSearchActive {
                     memberSearchResultsSection
                 } else {

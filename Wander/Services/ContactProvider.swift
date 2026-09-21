@@ -61,6 +61,7 @@ struct FakeContactProvider: ContactProvider {
 }
 
 actor SystemContactProvider: ContactProvider {
+    static let didChange = Notification.Name.CNContactStoreDidChange
     private let store: CNContactStore
 
     init(store: CNContactStore = CNContactStore()) {

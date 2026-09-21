@@ -52,6 +52,59 @@ import XCTest
         general.tap()
         XCTAssertTrue(app.buttons["Following General Friend"].waitForExistence(timeout: 5))
     }
+    private func launchFeed(_ extras: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderMapCapture", "-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
+            "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover",
+            "-WanderFeedSurface", "people"] + extras
+        app.launch()
+        return app
+    }
+    private func openContactSettings(_ app: XCUIApplication) {
+        let link = app.buttons["feed.contactDiscovery"]
+        XCTAssertTrue(link.waitForExistence(timeout: 15)); link.tap()
+    }
+    private func backToFeed(_ app: XCUIApplication) {
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
+    }
+    func testFollowingScreenEnableDisableAndExistingFollowSurvives() {
+        let app = launchFeed()
+        openContactSettings(app)
+        let enable = app.buttons["contacts.settings.enable"]
+        XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
+        XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
+        backToFeed(app)
+        let friend = app.buttons["people.recommendation.user_contact_friend.follow"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["In your contacts"].exists)
+        capture("Following screen contact suggestions")
+        friend.tap()
+        XCTAssertEqual(friend.label, "Following Contact Friend")
+        openContactSettings(app)
+        app.buttons["contacts.settings.disable"].tap()
+        XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
+        backToFeed(app)
+        XCTAssertFalse(app.staticTexts["In your contacts"].exists)
+        XCTAssertTrue(app.staticTexts["Contact Friend"].firstMatch.waitForExistence(timeout: 5))
+        capture("Following screen after contact matching disabled")
+    }
+    func testFollowingScreenRechecksRevokedAccessOnForeground() {
+        let app = launchFeed(["-WanderContactDiscoveryRevokeOnForeground"])
+        openContactSettings(app)
+        let enable = app.buttons["contacts.settings.enable"]
+        XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
+        XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
+        backToFeed(app)
+        XCTAssertTrue(app.staticTexts["In your contacts"].waitForExistence(timeout: 10))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"])
+        wait(for: [gone], timeout: 10)
+        openContactSettings(app)
+        XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 5))
+    }
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)

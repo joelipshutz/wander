@@ -6,7 +6,10 @@ on:
       - '**/*ContactDiscovery*'
       - '**/ContactProvider.swift'
       - '**/OnboardingFriendSuggestions*'
-      - 'supabase/**/contact*'
+      - 'supabase/functions/contact-discovery/**'
+      - 'supabase/functions/clerk-profile-webhook/**'
+      - 'supabase/migrations/*contact_discovery.sql'
+      - 'supabase/tests/contact_discovery.sql'
       - 'supabase/functions/_shared/contact-identifiers.ts'
       - '.github/workflows/contact-discovery-validation.yml'
   workflow_dispatch:
@@ -60,10 +63,16 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests -only-testing:WanderUITests/ContactDiscoveryUITests
           -resultBundlePath "$RUNNER_TEMP/ContactDiscovery.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Summarize native tests
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ContactDiscovery.xcresult" --format json | tee "$RUNNER_TEMP/contact-discovery-summary.json"
       - name: Save native evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: contact-discovery-native-results
-          path: ${{ runner.temp }}/ContactDiscovery.xcresult
+          path: |
+            ${{ runner.temp }}/ContactDiscovery.xcresult
+            ${{ runner.temp }}/contact-discovery-summary.json
           retention-days: 14

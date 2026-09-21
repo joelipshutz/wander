@@ -101,6 +101,8 @@ struct ContactDiscoverySettingsScreen: View {
 
     private func refresh() async {
         guard let userID = auth.state.session?.userID, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
         do { enabled = try await backend.contactDiscovery.reconcile(userID: userID) }
         catch { errorMessage = "Couldn’t check contact matching. Try again when you’re connected." }
     }

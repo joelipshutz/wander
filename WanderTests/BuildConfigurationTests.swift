@@ -204,7 +204,10 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(cameraUsage.contains("restaurant photo"))
 
         let contactsUsage = try XCTUnwrap(plist["NSContactsUsageDescription"] as? String)
-        XCTAssertEqual(contactsUsage, "Astir uses your contacts to help you connect with people you know.")
+        XCTAssertTrue(contactsUsage.contains("contacts you allow"))
+        XCTAssertTrue(contactsUsage.contains("If you choose Find friends"))
+        XCTAssertTrue(contactsUsage.contains("phone numbers and emails"))
+        XCTAssertTrue(contactsUsage.contains("not saved on our servers"))
 
         for (relativePath, expectedName) in [
             ("WanderShareExtension/Info.plist", "Save to Astir"),

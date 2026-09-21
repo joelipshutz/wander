@@ -25,7 +25,9 @@ export async function handleRequest(request: Request, deps: Dependencies): Promi
     // contents are read only AFTER this authenticated check succeeds.
     const auth = await rpc("current_profile", {});
     if (!auth.ok) return reply({ error: "unauthorized" }, 401);
-    const profile = await auth.json();
+    const rows = await auth.json();
+    if (!Array.isArray(rows) || rows.length !== 1) return reply({ error: "unauthorized" }, 401);
+    const profile = rows[0];
     if (!profile || typeof profile.id !== "string" || profile.deleted_at) return reply({ error: "unauthorized" }, 401);
     let claims: { sub?: string; iss?: string };
     try {
@@ -62,6 +64,9 @@ export async function handleRequest(request: Request, deps: Dependencies): Promi
     }
 
     if (body.action === "enable") {
+      const admitted = await rpc("admit_contact_discovery", { input_count: 0 });
+      if (!admitted.ok) return reply({ error: "unavailable" }, 503);
+      if (await admitted.json() !== true) return reply({ error: "try_later" }, 429);
       // This existing environment alias contains Astir's production Clerk key;
       // no contact data is sent to Clerk. Only the signed-in user is fetched.
       const clerkKey = deps.env("ASTIR_FEEDBACK_CLERK_SECRET_KEY");

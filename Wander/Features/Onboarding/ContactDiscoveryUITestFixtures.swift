@@ -1,5 +1,6 @@
 #if DEBUG && targetEnvironment(simulator)
 import Foundation
+import UIKit
 
 /// Fictional data injected only by an explicit authenticated UI test launch.
 @MainActor final class ContactDiscoveryUITestRepository: ProfileRepository, FollowRepository, ContactDiscoveryRepository {
@@ -35,9 +36,18 @@ import Foundation
     }
 }
 
-private struct ContactDiscoveryUITestProvider: ContactProvider {
+@MainActor private final class ContactDiscoveryUITestProvider: ContactProvider {
+    private var revoked = false
+    private var foregroundObserver: NSObjectProtocol?
+    init() {
+        if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryRevokeOnForeground") {
+            foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.revoked = true }
+            }
+        }
+    }
     func authorization() async -> ContactProviderAuthorization {
-        ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryDenied") ? .denied : .authorized
+        revoked || ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryDenied") ? .denied : .authorized
     }
     func requestAccess() async -> ContactProviderAuthorization { await authorization() }
     func matches() async throws -> [ContactMatch] { [] }
