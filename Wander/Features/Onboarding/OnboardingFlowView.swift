@@ -16,6 +16,7 @@ struct OnboardingFlowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step: OnboardingStep
     @State private var didTrackStart = false
+    @State private var showsLocationDetails = false
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
     @StateObject private var contactsPermission = OnboardingContactsPermissionManager()
 
@@ -32,6 +33,10 @@ struct OnboardingFlowView: View {
         self.saveProgress = saveProgress
         self.complete = complete
         _step = State(initialValue: initialStep)
+        #if DEBUG && targetEnvironment(simulator)
+        _showsLocationDetails = State(initialValue: ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest")
+            && ProcessInfo.processInfo.arguments.contains("-WanderAccountContactDetailsUITest"))
+        #endif
     }
 
     var body: some View {
@@ -42,16 +47,22 @@ struct OnboardingFlowView: View {
                     advance(from: .identity)
                 }
             case .location:
-                if OnboardingLocationPermissionPolicy.action(
+                if showsLocationDetails || OnboardingLocationPermissionPolicy.action(
                     for: locationPermission.authorizationStatus
                 ) == .skip {
-                    Color.clear
-                        .task { advance(from: .location) }
+                    AccountContactDetailsView(model: AccountContactDetailsModel(
+                        userID: session.userID,
+                        repository: backend.accountContactDetailsRepository,
+                        location: contactDetailsLocation,
+                        defaultCountry: contactDetailsDefaultCountry,
+                        isCurrentAccount: { auth.state.session?.userID == session.userID }
+                    ), continueAction: { advance(from: .location) })
+                    .id(session.userID)
                 } else {
                     OnboardingLocationPermissionView(
                         permission: locationPermission,
                         analytics: analytics,
-                        continueAction: { advance(from: .location) }
+                        continueAction: { showsLocationDetails = true }
                     )
                 }
             case .contacts:
@@ -119,6 +130,24 @@ struct OnboardingFlowView: View {
         )
         saveProgress(next)
         step = next
+    }
+
+    private var contactDetailsLocation: any HomeMetroLocationProviding {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderAccountContactDetailsUITest") {
+            return SimulatorHomeMetroLocationProvider()
+        }
+        #endif
+        return HomeMetroLocationProvider()
+    }
+
+    private var contactDetailsDefaultCountry: String {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderAccountContactDetailsUITest") { return "US" }
+        #endif
+        return Locale.current.region?.identifier ?? "US"
     }
 
     @MainActor

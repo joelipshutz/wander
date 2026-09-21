@@ -16,6 +16,9 @@ settings:
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
     WANDER_TIKTOK_CLIENT_KEY: sbawa5efdmmcvrudh7
 packages:
+  PhoneNumberKit:
+    url: https://github.com/PhoneNumberKit/PhoneNumberKit
+    exactVersion: 5.0.0
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git
     from: 3.59.3
@@ -172,6 +175,8 @@ targets:
         product: Supabase
       - package: tiktok-opensdk-ios
         product: TikTokOpenShareSDK
+      - package: PhoneNumberKit
+        product: PhoneNumberKit
       - target: WanderWidgets
         embed: true
         link: false

@@ -29,6 +29,7 @@ struct ProfileSettingsHome: View {
     @EnvironmentObject private var importStore: PlaceImportStore
 
     @State private var showsAccountManagement = false
+    @State private var showsContactDetails = false
     @State private var showsNotifications = false
     @State private var showsDeleteWarning = false
     @State private var showsFinalDeleteWarning = false
@@ -72,6 +73,25 @@ struct ProfileSettingsHome: View {
                 .environmentObject(auth)
                 .environmentObject(backend)
                 .environmentObject(pushNotifications)
+        }
+        .sheet(isPresented: $showsContactDetails) {
+            if let session = auth.state.session {
+                NavigationStack {
+                    AccountContactDetailsView(model: AccountContactDetailsModel(
+                        userID: session.userID,
+                        repository: backend.accountContactDetailsRepository,
+                        isCurrentAccount: { auth.state.session?.userID == session.userID }
+                    ), isOnboarding: false, continueAction: { showsContactDetails = false })
+                    .id(session.userID)
+                    .navigationTitle("City & phone")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showsContactDetails = false }
+                        }
+                    }
+                }
+            }
         }
         .alert("You are deleting your account", isPresented: $showsDeleteWarning) {
             Button("Yes", role: .destructive) { showsFinalDeleteWarning = true }
@@ -186,6 +206,10 @@ struct ProfileSettingsHome: View {
             switch auth.state {
             case .signedIn(let session):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
+                Button { showsContactDetails = true } label: {
+                    Label("City & phone", systemImage: "house")
+                }
+                .accessibilityIdentifier("settings.account.contactDetails")
                 ProfileSettingsAccountActions(session: session) {
                     showsAccountManagement = true
                 }

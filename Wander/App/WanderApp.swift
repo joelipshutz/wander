@@ -155,7 +155,8 @@ struct WanderApp: App {
                 notificationRepository: SimulatorNotificationRepository(),
                 placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
                     ? SimulatorPlacePlanInvitationRepository() : nil,
-                eventsInterestRepository: SimulatorEventsInterestRepository()
+                eventsInterestRepository: SimulatorEventsInterestRepository(),
+                accountContactDetailsRepository: SimulatorAccountContactDetailsRepository()
             )
             : WanderBackend(configuration: configuration, authSession: authStore)
         #else

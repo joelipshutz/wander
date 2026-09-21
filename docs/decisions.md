@@ -4,6 +4,30 @@ Last updated: 2026-09-18
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Onboarding home metro and phone (REC-584)
+
+Joe approved an editable home city prefilled from location and a phone input with
+the country dialing code selected from the detected country. These share the
+existing Location step after its permission primer. The onboarding step order,
+founders welcome, first-visit walkthrough and their landing behavior stay intact.
+The country code is separate from the national number; US numbers have ten
+national digits. Other countries use their numbering plan through PhoneNumberKit
+5.0.0. Phone remains optional pending any explicit decision to require it.
+
+The home selector contains major metro areas. Los Angeles follows Los Angeles
+County, including its smaller cities, with separate Orange County and Inland
+Empire choices. Approximate location is a suggestion, never proof of residence;
+no phone area code is used to infer home. Unavailable location leaves manual
+selection available. A saved choice wins over current travel location and can be
+edited in Settings → City & phone. A late geocoder result cannot replace edits.
+
+Home metro and optional unverified phone are private account data in separate
+owner-only RPCs, not public profile fields or verified contact-match identifiers.
+Only the coarse metro key is cached locally per account. Phone is excluded from
+analytics, session replay, raw RPC errors and local defaults. Hard and soft
+account deletion purge the private record. This collection provides the remembered
+home selection for LA Events gating; tab visibility is unchanged by this change.
+
 ## Initial map preparation and retained returns (REC-484)
 
 The approved launch artwork covers the mounted initial map for a two-second
