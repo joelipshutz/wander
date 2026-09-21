@@ -586,6 +586,32 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(repository.deletedCommentIDs, [comment.id])
     }
 
+    func testDeletingOwnCommentAfterHiddenBlockedCommentRemovesCorrectRow() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = UUID().uuidString
+        let hidden = activityComment(id: UUID().uuidString, activityID: activityID,
+                                     authorID: "blocked_author", relationship: .follower)
+        let own = activityComment(id: UUID().uuidString, activityID: activityID,
+                                  authorID: store.currentUser.id, relationship: .owner)
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(comments: [hidden, own], nextCursor: nil,
+                                              engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 2)),
+            deleteResult: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        store.block(userID: hidden.author.id)
+        XCTAssertEqual(store.activityComments(for: activityID), [own])
+
+        let deleted = await store.deleteActivityComment(own, backend: backend)
+
+        XCTAssertTrue(deleted)
+        XCTAssertTrue(store.activityComments(for: activityID).isEmpty)
+        XCTAssertEqual(repository.deletedCommentIDs, [own.id])
+        store.unblock(userID: hidden.author.id)
+        XCTAssertEqual(store.activityComments(for: activityID), [hidden])
+    }
+
     func testFailedRemoteCommentDeleteRestoresRowAndCount() async {
         let store = WanderStore(fixtures: .empty())
         let activityID = "40000000-0000-0000-0000-000000000102"
@@ -827,7 +853,7 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: .saved), 10)
     }
 
-    func testCommentsContextPreservesNoteAndPhotosForEveryTicketKind() {
+    func testCommentsContextPreservesPostcardFieldsForEveryTicketKind() {
         let actor = ProfileShell(
             id: "user_friend",
             handle: "friend",
@@ -859,6 +885,7 @@ final class ActivityEngagementTests: XCTestCase {
                 ticketKind: ticketKind,
                 occurredAt: .now,
                 note: "  Found god.  ",
+                rating: 4.5,
                 media: media
             )
 
@@ -869,6 +896,10 @@ final class ActivityEngagementTests: XCTestCase {
             coordinator.openComments(context: context, visiblePlace: nil)
             XCTAssertEqual(coordinator.commentsRoute?.context?.note, "Found god.")
             XCTAssertEqual(coordinator.commentsRoute?.context?.media, media)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.rating, 4.5)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.placeName, context.placeName)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.placeDetail, context.placeDetail)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.actor, actor)
         }
     }
 

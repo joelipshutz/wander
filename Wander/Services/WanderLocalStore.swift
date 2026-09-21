@@ -2412,7 +2412,7 @@ final class WanderStore: ObservableObject {
         else { return false }
 
         let previousSummary = activityEngagement(for: comment.activityID)
-        activityCommentsByID[comment.activityID]?.remove(at: previousIndex)
+        activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
         activityEngagementByID[comment.activityID] = previousSummary.removingComment()
         activityEngagementErrorByID[comment.activityID] = nil
 

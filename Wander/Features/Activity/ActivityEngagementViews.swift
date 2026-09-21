@@ -562,7 +562,13 @@ struct ActivityPostcardView: View {
     @ViewBuilder
     private var ratingBadge: some View {
         if let rating = context.rating {
-            Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+            HStack(spacing: 5) {
+                Image(systemName: "star.fill")
+                    .accessibilityHidden(true)
+                Text(PlaceRating.averageDisplay(rating))
+                    .accessibilityIdentifier("\(postcardAccessibilityIdentifier).rating.value")
+                    .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
+            }
                 .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
                 .padding(.horizontal, 9)
@@ -574,7 +580,6 @@ struct ActivityPostcardView: View {
                     }
                 }
                 .fixedSize(horizontal: true, vertical: false)
-                .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
         }
     }
 
@@ -1563,24 +1568,27 @@ private struct ActivityCommentRow: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Text(comment.author.displayName)
-                            .font(AstirTypography.label)
-                            .foregroundStyle(brandMode.primaryText)
-                        Text(FeedPresentation.timestampText(for: comment.createdAt))
-                            .font(AstirTypography.metadata)
-                            .foregroundStyle(brandMode.secondaryText)
-                    }
-
-                    Text(comment.body)
-                        .font(AstirTypography.bodySmall)
+                HStack(spacing: WanderTheme.spacing1) {
+                    Text(comment.author.displayName)
+                        .font(AstirTypography.label)
                         .foregroundStyle(brandMode.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(FeedPresentation.timestampText(for: comment.createdAt))
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(brandMode.secondaryText)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
 
+                Text(comment.body)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(brandMode.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
+            .opacity(comment.isPending ? 0.58 : 1)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 0) {
                 Button(action: onLike) {
                     HStack(spacing: 5) {
                         Image(systemName: comment.viewerHasLiked ? "heart.fill" : "heart")
@@ -1590,7 +1598,7 @@ private struct ActivityCommentRow: View {
                             .monospacedDigit()
                     }
                     .foregroundStyle(comment.viewerHasLiked ? brandMode.accent : brandMode.secondaryText)
-                    .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1599,32 +1607,30 @@ private struct ActivityCommentRow: View {
                 .accessibilityIdentifier("activity.comment.like.\(comment.id)")
                 .accessibilityLabel(comment.viewerHasLiked ? "Unlike comment" : "Like comment")
                 .accessibilityValue(comment.likeCount == 1 ? "1 like" : "\(comment.likeCount) likes")
-            }
-            .opacity(comment.isPending ? 0.58 : 1)
-
-            Spacer(minLength: 0)
-
-            if onDelete != nil || onReport != nil {
-                Menu {
-                    if let onReport {
-                        Button(action: onReport) {
-                            Label("Report comment", systemImage: "exclamationmark.bubble")
+                if onDelete != nil || onReport != nil {
+                    Menu {
+                        if let onReport {
+                            Button(action: onReport) {
+                                Label("Report comment", systemImage: "exclamationmark.bubble")
+                            }
                         }
-                    }
-                    if let onDelete {
-                        Button(role: .destructive, action: onDelete) {
-                            Label("Delete comment", systemImage: "trash")
+                        if let onDelete {
+                            Button(role: .destructive, action: onDelete) {
+                                Label("Delete comment", systemImage: "trash")
+                            }
                         }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(brandMode.secondaryText)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(brandMode.secondaryText)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    .accessibilityLabel("Comment actions")
+                    .accessibilityIdentifier("activity.comment.actions.\(comment.id)")
                 }
-                .accessibilityLabel("Comment actions")
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, WanderTheme.spacing1)
         .accessibilityElement(children: .contain)

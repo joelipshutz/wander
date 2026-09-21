@@ -101,6 +101,12 @@ final class FeedActivityGroupingUITests: XCTestCase {
         app.launch()
         let send = app.buttons["activity.comment.send"]
         XCTAssertTrue(send.waitForExistence(timeout: 20))
+        let rating = app.staticTexts["comments.activity.postcard.rating.value"]
+        XCTAssertTrue(rating.waitForExistence(timeout: 5))
+        XCTAssertEqual(rating.label, "Rating 4 out of 5")
+        XCTAssertTrue(rating.isHittable)
+        XCTAssertGreaterThan(rating.frame.width, 0)
+        capture("REC-564-postcard-rating")
         let composer = app.descendants(matching: .any)["activity.comment.input"].firstMatch
         composer.tap()
         composer.typeText("A place worth returning to.")
@@ -111,6 +117,11 @@ final class FeedActivityGroupingUITests: XCTestCase {
         XCTAssertEqual(heart.value as? String, "0 likes")
         XCTAssertGreaterThanOrEqual(heart.frame.width, 44)
         XCTAssertGreaterThanOrEqual(heart.frame.height, 44)
+        let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity.comment.actions.")).firstMatch
+        XCTAssertTrue(actions.exists)
+        XCTAssertLessThanOrEqual(heart.frame.maxX, actions.frame.minX + 1)
+        XCTAssertEqual(heart.frame.midY, actions.frame.midY, accuracy: 1)
+        XCTAssertGreaterThan(heart.frame.midX, app.frame.midX)
         let activity = app.buttons["Like activity"].firstMatch
         let activityValue = activity.value as? String
         capture("REC-564-comment-unliked")
