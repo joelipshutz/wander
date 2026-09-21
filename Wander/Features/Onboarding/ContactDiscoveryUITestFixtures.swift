@@ -54,18 +54,27 @@ import UIKit
 
 @MainActor private final class ContactDiscoveryUITestProvider: ContactProvider {
     private var revoked = false
+    private var hasRequestedAccess = false
     private var foregroundObserver: NSObjectProtocol?
     init() {
         if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryRevokeOnForeground") {
             foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.revoked = true }
+                Task { @MainActor in
+                    // Cold launch also enters the foreground. Simulate a Settings
+                    // revocation only after the test has explicitly enabled access.
+                    guard let self, self.hasRequestedAccess else { return }
+                    self.revoked = true
+                }
             }
         }
     }
     func authorization() async -> ContactProviderAuthorization {
         revoked || ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryDenied") ? .denied : .authorized
     }
-    func requestAccess() async -> ContactProviderAuthorization { await authorization() }
+    func requestAccess() async -> ContactProviderAuthorization {
+        hasRequestedAccess = true
+        return await authorization()
+    }
     func matches() async throws -> [ContactMatch] { [] }
     func discoveryIdentifiers() async throws -> [ContactDiscoveryIdentifier] { [.init(kind: .email, value: "friend@example.test")] }
 }
