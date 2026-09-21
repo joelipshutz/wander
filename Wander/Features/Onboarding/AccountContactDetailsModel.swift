@@ -94,18 +94,20 @@ import Combine
             guard !Task.isCancelled, isCurrentAccount() else { return }
             didLoad = true
             if let saved {
-                if !didEditMetro {
-                    homeCity = saved.homeCity ?? HomeCity.legacy(saved.metroID)
-                    cityText = homeCity?.name ?? ""
+                let savedCity = saved.homeCity ?? HomeCity.legacy(saved.metroID)
+                if !didEditMetro, let savedCity {
+                    applyCity(savedCity)
                     metroID = saved.metroID
-                    homeCountryCode = saved.homeCountryCode
                 }
                 if !didEditPhone {
                     phoneCountryCode = OnboardingPhoneNumber.country(saved.phoneCountryCode).id
                     phoneText = saved.phoneE164.map { OnboardingPhoneNumber.nationalDisplay($0, country: phoneCountryCode) } ?? ""
+                    didEditPhone = true // Keep the saved number paired with its country.
                 }
                 cache.remember(saved.metroID, for: userID)
-                return // Saved home takes precedence over the current travel location.
+                if savedCity != nil || didEditMetro { return }
+                // A legacy phone-only / unlisted-metro record has no known city.
+                // Keep the immediate fallback and allow location to suggest one.
             }
         } catch {
             guard !Task.isCancelled, isCurrentAccount() else { return }

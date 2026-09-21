@@ -49,6 +49,17 @@ import CoreLocation
         XCTAssertEqual(traveling.homeCity, kyoto)
     }
 
+    func testLegacyUnknownHomeCanPrefillWithoutChangingSavedPhoneCountry() async {
+        let repo = CityDetailsRepository()
+        repo.details = .init(metroID: "other", homeCountryCode: nil, phoneCountryCode: "GB", phoneE164: "+442079460123")
+        let model = AccountContactDetailsModel(userID: "legacyUnknown", repository: repo,
+            location: CityLocation(.init(metroID: "other", countryCode: "JP", city: kyoto)))
+        await model.load()
+        XCTAssertEqual(model.homeCity, kyoto)
+        XCTAssertEqual(model.phoneCountryCode, "GB")
+        XCTAssertEqual(OnboardingPhoneNumber.normalized(model.phoneText, country: model.phoneCountryCode), "+442079460123")
+    }
+
     func testUnresolvedOrClearedTextCannotBeSavedAndPhoneChoiceIsPreserved() async {
         let model = AccountContactDetailsModel(userID: "editing", repository: CityDetailsRepository(), location: CityLocation(nil))
         await model.load()
