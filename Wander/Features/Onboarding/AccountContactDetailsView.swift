@@ -80,7 +80,7 @@ struct AccountContactDetailsView: View {
             OnboardingHeadline(eyebrow: "A LITTLE ABOUT YOU", title: "Make yourself at home", message: "Check your home city and add your phone number.")
             citySection
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("Phone number · optional").font(AstirTypography.label)
+                Text("Phone number").font(AstirTypography.label)
                 HStack(spacing: WanderTheme.spacing2) {
                     Button {
                         phoneIsFocused = false
