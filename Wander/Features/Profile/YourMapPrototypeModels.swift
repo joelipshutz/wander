@@ -92,8 +92,13 @@ struct YourMapPrototypeLens: Equatable {
         now: Date,
         calendar: Calendar = .current
     ) -> Bool {
-        guard timeRange.contains(place.lastVisitedAt, now: now, calendar: calendar) else { return false }
-        guard statuses.isEmpty || statuses.contains(place.status) else { return false }
+        let matchingStatuses = statuses.isEmpty ? place.statuses : place.statuses.intersection(statuses)
+        guard !matchingStatuses.isEmpty else { return false }
+        let matchesVisitDate = matchingStatuses.contains(.been)
+            && timeRange.contains(place.lastVisitedAt, now: now, calendar: calendar)
+        let matchesWannaDate = matchingStatuses.contains(.wanna)
+            && timeRange.contains(place.lastWantedAt ?? place.lastVisitedAt, now: now, calendar: calendar)
+        guard matchesVisitDate || matchesWannaDate else { return false }
         guard categories.isEmpty || categories.contains(place.category) else { return false }
         guard cities.isEmpty || cities.contains(place.city) else { return false }
         guard countries.isEmpty || countries.contains(place.country) else { return false }
@@ -186,6 +191,61 @@ struct YourMapPrototypePlace: Identifiable, Equatable {
     let rating: Double
     let visitCount: Int
     let lastVisitedAt: Date
+    var secondaryStatus: YourMapPrototypeStatus? = nil
+    var lastWantedAt: Date? = nil
+
+    var statuses: Set<YourMapPrototypeStatus> {
+        Set([status, secondaryStatus].compactMap { $0 })
+    }
+}
+
+/// Both Profile's snapshot and Explore start from the same audience-scoped
+/// saves. One canonical place can carry both a Check-in and a Wanna.
+struct ProfileMapSavedPlace {
+    let place: LocalPlace
+    let saves: [LocalUserPlace]
+
+    var primary: LocalUserPlace { saves[0] }
+    var hasWanna: Bool { saves.contains { $0.status == .wannaGo } }
+    var secondaryStatus: PlaceStatus? {
+        primary.status == .been && hasWanna ? .wannaGo : nil
+    }
+    var category: String {
+        WanderPlaceCategory.normalizedPrimaryCategory(
+            primary.categoryOverride ?? primary.viewerPrimaryCategory ?? place.primaryCategory
+        )
+    }
+
+    static func groups(
+        ownerID: String, userPlaces: [LocalUserPlace], places: [LocalPlace]
+    ) -> [Self] {
+        var placeByReference: [String: LocalPlace] = [:]
+        for place in places {
+            let references: [String?] = [place.id, place.localID, place.serverID]
+            for reference in references.compactMap({ $0 }) {
+                placeByReference[reference] = place
+            }
+        }
+        var savesByPlace: [String: [String: LocalUserPlace]] = [:]
+        for save in userPlaces where save.userID == ownerID && save.deletedAt == nil {
+            guard let place = placeByReference[save.placeID] else { continue }
+            if let existing = savesByPlace[place.id]?[save.id], existing.updatedAt > save.updatedAt {
+                continue
+            }
+            savesByPlace[place.id, default: [:]][save.id] = save
+        }
+        return savesByPlace.keys.sorted().compactMap { placeID in
+            guard let place = placeByReference[placeID], let saves = savesByPlace[placeID] else { return nil }
+            let ordered = saves.values.sorted { lhs, rhs in
+                // Match the main Map's Been-first, mixed-status presentation.
+                if lhs.status != rhs.status { return lhs.status == .been }
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                if (lhs.serverID != nil) != (rhs.serverID != nil) { return lhs.serverID != nil }
+                return lhs.id < rhs.id
+            }
+            return Self(place: place, saves: ordered)
+        }
+    }
 }
 
 enum YourMapPrototypeDataVolume: String, CaseIterable, Identifiable {
@@ -309,42 +369,19 @@ struct YourMapPrototypeDataset {
         visiblePlaces: [VisiblePlace] = [],
         now: Date = .now
     ) -> Self {
-        var placesByReferenceID: [String: LocalPlace] = [:]
-        for place in places {
-            var referenceIDs = [place.id, place.localID]
-            if let serverID = place.serverID {
-                referenceIDs.append(serverID)
-            }
-            for referenceID in referenceIDs {
-                placesByReferenceID[referenceID] = place
-            }
-        }
-
-        var latestSaveByPlaceID: [String: (userPlace: LocalUserPlace, place: LocalPlace)] = [:]
-        for userPlace in userPlaces where userPlace.userID == ownerID && userPlace.deletedAt == nil {
-            guard let place = placesByReferenceID[userPlace.placeID],
-                  validCoordinate(latitude: place.latitude, longitude: place.longitude)
-            else { continue }
-
-            if let existing = latestSaveByPlaceID[place.id],
-               existing.userPlace.updatedAt >= userPlace.updatedAt {
-                continue
-            }
-            latestSaveByPlaceID[place.id] = (userPlace, place)
-        }
+        let savedPlaces = ProfileMapSavedPlace.groups(
+            ownerID: ownerID, userPlaces: userPlaces, places: places
+        ).filter { validCoordinate(latitude: $0.place.latitude, longitude: $0.place.longitude) }
 
         let activeVisitsByUserPlaceID = Dictionary(
             grouping: visits.lazy.filter { $0.deletedAt == nil },
             by: \.userPlaceID
         )
 
-        let mappedPlaces = latestSaveByPlaceID.values.compactMap { saved -> YourMapPrototypePlace? in
-            let userPlace = saved.userPlace
+        let mappedPlaces = savedPlaces.map { saved -> YourMapPrototypePlace in
+            let userPlace = saved.primary
             let place = saved.place
-            var savedReferenceIDs = [userPlace.id, userPlace.localID]
-            if let serverID = userPlace.serverID {
-                savedReferenceIDs.append(serverID)
-            }
+            let savedReferenceIDs = Set(saved.saves.filter { $0.status == .been }.flatMap(referenceIDs))
             let matchingVisits = savedReferenceIDs
                 .flatMap { activeVisitsByUserPlaceID[$0, default: []] }
                 .reduce(into: [String: LocalPlaceVisit]()) { result, visit in
@@ -361,11 +398,8 @@ struct YourMapPrototypeDataset {
                 .max { $0.visitedAt < $1.visitedAt }
             let tags = Set(
                 matchingVisits.flatMap(\.tags)
-                    + userPlace.historicalWantTags
+                    + saved.saves.flatMap(\.historicalWantTags)
             )
-            let resolvedCategory = userPlace.categoryOverride
-                ?? userPlace.viewerPrimaryCategory
-                ?? place.primaryCategory
             let city = normalized(place.locality, fallback: "Unknown city")
             let country = CountryCanonicalizer.canonicalName(place.country)
                 ?? normalized(place.country, fallback: "Unknown country")
@@ -380,13 +414,15 @@ struct YourMapPrototypeDataset {
                 latitude: place.latitude,
                 longitude: place.longitude,
                 status: status,
-                category: WanderPlaceCategory.broadCategory(for: resolvedCategory),
+                category: WanderPlaceCategory.broadCategory(for: saved.category),
                 city: city,
                 country: country,
                 tags: tags,
                 rating: latestRatedVisit?.ratingScore ?? userPlace.ratingScore ?? 0,
                 visitCount: status == .been ? max(matchingVisits.count, 1) : 0,
-                lastVisitedAt: lastVisitedAt
+                lastVisitedAt: lastVisitedAt,
+                secondaryStatus: saved.secondaryStatus == .wannaGo ? .wanna : nil,
+                lastWantedAt: saved.saves.filter { $0.status == .wannaGo }.map(\.savedAt).max()
             )
         }
         .sorted { lhs, rhs in
@@ -401,12 +437,12 @@ struct YourMapPrototypeDataset {
         }
 
         var visiblePlaceByPlaceID: [String: VisiblePlace] = [:]
-        for (placeID, saved) in latestSaveByPlaceID {
-            let visiblePlace = referenceIDs(for: saved.userPlace).lazy
+        for saved in savedPlaces {
+            let visiblePlace = referenceIDs(for: saved.primary).lazy
                 .compactMap { visiblePlacesByUserPlaceReferenceID[$0] }
                 .first
             if let visiblePlace {
-                visiblePlaceByPlaceID[placeID] = visiblePlace
+                visiblePlaceByPlaceID[saved.place.id] = visiblePlace
             }
         }
 

@@ -1,4 +1,6 @@
 import XCTest
+import MapKit
+import SwiftUI
 @testable import Wander
 
 final class YourMapPrototypeTests: XCTestCase {
@@ -381,10 +383,10 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertFalse(profileScreen.contains("handledYourMapPrototypeLaunch"))
         XCTAssertFalse(profileScreen.contains("WanderShowYourMapPrototype"))
         XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? mapTitle : \"Patterns\")"))
-        XCTAssertTrue(yourMapScreen.contains("MapPinOutlineStroke"))
-        XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeSelectablePin"))
+        XCTAssertTrue(yourMapScreen.contains("MapPinOutlineBuilder"))
+        XCTAssertTrue(yourMapScreen.contains("NativeMapView("))
         XCTAssertTrue(yourMapScreen.contains("PlaceProfileMapSurface("))
-        XCTAssertTrue(yourMapScreen.contains("Text(place.name)"))
+        XCTAssertTrue(yourMapScreen.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeSavedLensRow"))
         XCTAssertTrue(yourMapScreen.contains("trash.fill"))
         XCTAssertTrue(yourMapScreen.contains(".highPriorityGesture(swipeGesture)"))
@@ -429,7 +431,7 @@ final class YourMapPrototypeTests: XCTestCase {
         let yourMapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/YourMapPrototypeScreen.swift")
         )
-        XCTAssertTrue(yourMapScreen.contains("currentUserID: viewerID ?? selectedVisiblePlace.owner.id"))
+        XCTAssertTrue(yourMapScreen.contains("currentUserID: viewerID ?? store.currentUser.id"))
         XCTAssertTrue(yourMapScreen.contains("pinOwnership: MapPinSaveOwnership = .currentUser"))
         XCTAssertTrue(yourMapScreen.contains("ownership: pinOwnership"))
         XCTAssertTrue(yourMapScreen.contains("ActivitySharePreviewScreen("))
@@ -474,5 +476,168 @@ final class YourMapPrototypeTests: XCTestCase {
             yourMapScreen.contains("#if DEBUG"),
             "Your Map UI must compile into Release builds."
         )
+    }
+}
+
+@MainActor
+final class ProfileMapRegressionTests: XCTestCase {
+    func testMixedPlaceTimeFilterUsesTheSelectedStatusDate() {
+        let now = Date(timeIntervalSince1970: 1_787_623_200)
+        let oldVisit = now.addingTimeInterval(-400 * 24 * 60 * 60)
+        let place = YourMapPrototypePlace(
+            id: "mixed", name: "Fixture", latitude: 34, longitude: -118,
+            status: .been, category: "Coffee", city: "City", country: "Country",
+            tags: [], rating: 4, visitCount: 1, lastVisitedAt: oldVisit,
+            secondaryStatus: .wanna, lastWantedAt: now
+        )
+        XCTAssertTrue(YourMapPrototypeLens(timeRange: .thisMonth, statuses: [.wanna]).matches(place, now: now))
+        XCTAssertTrue(YourMapPrototypeLens(timeRange: .thisMonth).matches(place, now: now))
+        XCTAssertFalse(YourMapPrototypeLens(timeRange: .thisMonth, statuses: [.been]).matches(place, now: now))
+    }
+
+    func testPreviewAndExploreKeepBothStatusesOnceAndRefreshAfterDeletion() throws {
+        let date = Date(timeIntervalSince1970: 1_787_623_200)
+        let place = LocalPlace(localID: "local-place", serverID: "server-place", canonicalName: "Fixture Cafe",
+                               category: "cafe", locality: "Los Angeles", country: "US", latitude: 34.05, longitude: -118.25)
+        let been = LocalUserPlace(localID: "been", userID: "owner", placeID: place.localID,
+                                  status: .been, visibility: .followers, sourceType: "manual")
+        let wanna = LocalUserPlace(localID: "wanna", userID: "owner", placeID: place.id,
+                                   status: .wannaGo, visibility: .followers, sourceType: "manual")
+        let repeatVisit = LocalUserPlace(localID: "repeat", userID: "owner", placeID: place.id,
+                                         status: .been, visibility: .followers, sourceType: "manual")
+        let stranger = LocalUserPlace(localID: "stranger", userID: "stranger", placeID: place.id,
+                                       status: .wannaGo, visibility: .selfOnly, sourceType: "manual")
+        let visits = [
+            LocalPlaceVisit(localID: "v1", userPlaceID: been.id, visitedAt: date, tags: ["first"]),
+            LocalPlaceVisit(localID: "v2", userPlaceID: repeatVisit.id, visitedAt: date, tags: ["second"]),
+        ]
+        let saves = [wanna, stranger, repeatVisit, been, been]
+        func projection() -> (ProfileInsights, YourMapPrototypeDataset) {
+            (ProfileInsightsPresenter.present(ownerID: "owner", userPlaces: saves, visits: visits,
+                                               places: [place], month: date),
+             YourMapPrototypeDataset.make(ownerID: "owner", userPlaces: saves, visits: visits,
+                                           places: [place], now: date))
+        }
+        let (preview, explore) = projection()
+        XCTAssertEqual(preview.mapPlaceCount, 1)
+        XCTAssertEqual(preview.mapPoints.map(\.id), explore.places.map(\.id))
+        XCTAssertEqual(preview.mapPoints.first?.status, .been)
+        XCTAssertEqual(preview.mapPoints.first?.secondaryStatus, .wannaGo)
+        XCTAssertEqual(explore.places.first?.statuses, [.been, .wanna])
+        XCTAssertEqual(explore.places.first?.visitCount, 2)
+        XCTAssertEqual(explore.places.first?.tags, ["first", "second"])
+        XCTAssertEqual(preview.monthVisitCount, 2)
+        XCTAssertEqual(preview.countrySummaries.first?.count, 1)
+        let mixed = try XCTUnwrap(explore.places.first)
+        for statuses: Set<YourMapPrototypeStatus> in [[.wanna], [.been], [.wanna, .been], []] {
+            XCTAssertTrue(YourMapPrototypeLens(statuses: statuses).matches(mixed, now: date))
+        }
+
+        been.deletedAt = date
+        repeatVisit.deletedAt = date
+        let (wannaPreview, wannaExplore) = projection()
+        XCTAssertEqual(wannaPreview.mapPlaceCount, 1)
+        XCTAssertEqual(wannaPreview.monthVisitCount, 0)
+        XCTAssertEqual(wannaPreview.mapPoints.first?.status, .wannaGo)
+        XCTAssertNil(wannaPreview.mapPoints.first?.secondaryStatus)
+        XCTAssertEqual(wannaExplore.places.first?.statuses, [.wanna])
+        XCTAssertEqual(wannaExplore.places.first?.visitCount, 0)
+        XCTAssertFalse(YourMapPrototypeLens(statuses: [.been]).matches(try XCTUnwrap(wannaExplore.places.first), now: date))
+
+        wanna.statusRaw = PlaceStatus.been.rawValue
+        XCTAssertEqual(projection().0.mapPoints.first?.status, .been)
+        wanna.deletedAt = date
+        let (emptyPreview, emptyExplore) = projection()
+        XCTAssertEqual(emptyPreview.mapPlaceCount, 0)
+        XCTAssertTrue(emptyPreview.mapPoints.isEmpty)
+        XCTAssertTrue(emptyPreview.countrySummaries.isEmpty)
+        XCTAssertTrue(emptyExplore.places.isEmpty)
+    }
+
+    func testSnapshotCacheIncludesStatusAndMixedStatusWithoutDependingOnPointOrder() {
+        let point = ProfileMapPoint(id: "one", name: "Fixture", city: "City", latitude: 34, longitude: -118)
+        var wanna = point
+        wanna.status = .wannaGo
+        var mixed = point
+        mixed.secondaryStatus = .wannaGo
+        func key(_ points: [ProfileMapPoint]) -> String {
+            ProfileMapSnapshotRequest(points: points, size: CGSize(width: 300, height: 178),
+                                      displayScale: 3, colorScheme: .light).cacheKey
+        }
+        XCTAssertNotEqual(key([point]), key([wanna]))
+        XCTAssertNotEqual(key([point]), key([mixed]))
+        XCTAssertNotEqual(key([wanna]), key([mixed]))
+        XCTAssertEqual(key([wanna, point]), key([point, wanna]))
+        XCTAssertNotEqual(key([point]), key([]))
+    }
+
+    func testSelectionAndDetailReturnPreserveCameraWhilePanDismissesAndZoomDoesNot() {
+        let region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+                                         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2))
+        let state = YourMapInteractionState(region: region)
+        state.select("one")
+        state.select("two")
+        XCTAssertEqual(state.selectedPlaceID, "two")
+        XCTAssertEqual(state.cameraRequest.revision, 0)
+        var zoom = region
+        zoom.span = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+        zoom.center.latitude += 0.01 // Moving the pinch center still counts as zoom.
+        state.camera.recordCameraChange(zoom)
+        state.finishCameraChange(zoom, isUserInitiated: true)
+        XCTAssertEqual(state.selectedPlaceID, "two")
+        XCTAssertEqual(state.cameraRequest.revision, 0)
+        state.openSelectedPlace()
+        let rotatedCamera = MKMapCamera(lookingAtCenter: zoom.center, fromDistance: 5_000, pitch: 35, heading: 70)
+        state.recordCameraSnapshot(rotatedCamera)
+        state.suspend()
+        state.presentedPlaceID = nil
+        XCTAssertEqual(state.selectedPlaceID, "two")
+        XCTAssertEqual(state.cameraRequest.region.span.latitudeDelta, zoom.span.latitudeDelta)
+        XCTAssertEqual(state.cameraRequest.region.center.latitude, zoom.center.latitude)
+        XCTAssertEqual(state.cameraRequest.restoredCamera?.heading, 70)
+        XCTAssertEqual(state.cameraRequest.restoredCamera?.pitch, 35)
+        var pan = zoom
+        pan.center.latitude += 0.03
+        state.camera.recordCameraChange(pan)
+        state.finishCameraChange(pan, isUserInitiated: true)
+        XCTAssertNil(state.selectedPlaceID)
+        XCTAssertEqual(state.camera.region.center.latitude, pan.center.latitude)
+        state.select("one")
+        state.finishCameraChange(region, isUserInitiated: false)
+        XCTAssertEqual(state.selectedPlaceID, "one", "Programmatic camera restoration must not dismiss a pin")
+    }
+
+    func testDelayedEmptyTapCannotDismissAReselectedOrOpenedPlace() async throws {
+        let state = YourMapInteractionState(region: MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+            span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)))
+        state.select("one")
+        state.tapEmptyMap()
+        state.select("two")
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(state.selectedPlaceID, "two")
+        state.tapEmptyMap()
+        state.openSelectedPlace()
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(state.presentedPlaceID, "two")
+        XCTAssertEqual(state.selectedPlaceID, "two")
+        state.presentedPlaceID = nil
+        state.tapEmptyMap()
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertNil(state.selectedPlaceID)
+    }
+
+    func testDoubleTapZoomAndDataReconciliationRespectSelectionLifetime() async throws {
+        let state = YourMapInteractionState(region: MKCoordinateRegion())
+        state.select("one")
+        let now = Date.now
+        state.tapEmptyMap(now: now)
+        state.tapEmptyMap(now: now.addingTimeInterval(0.1))
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(state.selectedPlaceID, "one")
+        state.openSelectedPlace()
+        state.reconcile(placeIDs: ["two"])
+        XCTAssertNil(state.selectedPlaceID)
+        XCTAssertNil(state.presentedPlaceID)
     }
 }

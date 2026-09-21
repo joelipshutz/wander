@@ -2610,7 +2610,8 @@ final class MapSelectionMotionTests: XCTestCase {
 
         XCTAssertTrue(map.contains("NativeMapView("))
         XCTAssertTrue(map.contains("MKMapView(frame: .zero)"))
-        XCTAssertTrue(map.contains("mapView.selectableMapFeatures = [.pointsOfInterest]"))
+        XCTAssertTrue(map.contains("var allowsNativeFeatureSelection = true"))
+        XCTAssertTrue(map.contains("mapView.selectableMapFeatures = allowsNativeFeatureSelection ? [.pointsOfInterest] : []"))
         XCTAssertTrue(map.contains("mapView.showsUserLocation = parent.showsUserLocation"))
         XCTAssertTrue(map.contains("PassiveMapTapGestureRecognizer"))
         XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))

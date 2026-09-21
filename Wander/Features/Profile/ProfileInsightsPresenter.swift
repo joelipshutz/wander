@@ -77,6 +77,8 @@ struct ProfileMapPoint: Identifiable, Equatable {
     let city: String?
     let latitude: Double
     let longitude: Double
+    var status: PlaceStatus = .been
+    var secondaryStatus: PlaceStatus? = nil
 }
 
 struct ProfileSummaryItem: Identifiable, Equatable {
@@ -263,6 +265,8 @@ private struct UserPlaceFingerprint: Equatable {
     let placeID: String
     let statusRaw: String
     let categoryOverride: String?
+    let viewerPrimaryCategory: String?
+    let updatedAt: Date
     let savedAt: Date
     let historicalWantedAt: Date?
     let deletedAt: Date?
@@ -274,6 +278,8 @@ private struct UserPlaceFingerprint: Equatable {
         placeID = userPlace.placeID
         statusRaw = userPlace.statusRaw
         categoryOverride = userPlace.categoryOverride
+        viewerPrimaryCategory = userPlace.viewerPrimaryCategory
+        updatedAt = userPlace.updatedAt
         savedAt = userPlace.savedAt
         historicalWantedAt = userPlace.historicalWantedAt
         deletedAt = userPlace.deletedAt
@@ -385,16 +391,20 @@ enum ProfileInsightsPresenter {
         })
         let distinctMonthCities = Set(monthPlaces.compactMap { CityCanonicalizer.comparisonKey($0.locality) })
 
-        let uniqueBeen = uniqueUserPlaces(activeBeen)
-        let beenPlaces = canonicalBeenPlaces(uniqueBeen, placeByID: placeByID)
-        let mapPoints = beenPlaces.compactMap { _, place -> ProfileMapPoint? in
+        let mapPlaces = ProfileMapSavedPlace.groups(
+            ownerID: ownerID, userPlaces: userPlaces, places: places
+        )
+        let mapPoints = mapPlaces.compactMap { saved -> ProfileMapPoint? in
+            let place = saved.place
             guard validCoordinate(latitude: place.latitude, longitude: place.longitude) else { return nil }
             return ProfileMapPoint(
                 id: place.id,
                 name: place.canonicalName,
                 city: normalized(place.locality),
                 latitude: place.latitude,
-                longitude: place.longitude
+                longitude: place.longitude,
+                status: saved.primary.status,
+                secondaryStatus: saved.secondaryStatus
             )
         }
         .sorted { lhs, rhs in
@@ -409,25 +419,25 @@ enum ProfileInsightsPresenter {
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,
             monthCityCount: distinctMonthCities.count,
-            mapPlaceCount: beenPlaces.count,
+            mapPlaceCount: mapPlaces.count,
             mapPoints: mapPoints,
             placeSummaries: summaries(
-                values: beenPlaces.map { (resolvedCategory(userPlace: $0.0, place: $0.1), $0.1.id) },
+                values: mapPlaces.map { ($0.category, $0.place.id) },
                 title: { WanderPlaceCategory.broadCategory(for: $0) },
-                total: beenPlaces.count
+                total: mapPlaces.count
             ),
             citySummaries: citySummaries(
-                values: beenPlaces.compactMap { item in
-                    normalized(item.1.locality).map { ($0, item.1.id) }
+                values: mapPlaces.compactMap { item in
+                    normalized(item.place.locality).map { ($0, item.place.id) }
                 },
-                total: beenPlaces.count
+                total: mapPlaces.count
             ),
             countrySummaries: summaries(
-                values: beenPlaces.compactMap { item in
-                    CountryCanonicalizer.canonicalName(item.1.country).map { ($0, item.1.id) }
+                values: mapPlaces.compactMap { item in
+                    CountryCanonicalizer.canonicalName(item.place.country).map { ($0, item.place.id) }
                 },
                 title: { $0 },
-                total: beenPlaces.count
+                total: mapPlaces.count
             )
         )
     }
@@ -459,29 +469,6 @@ enum ProfileInsightsPresenter {
     private static func uniqueUserPlaces(_ values: [LocalUserPlace]) -> [LocalUserPlace] {
         var seen: Set<String> = []
         return values.filter { seen.insert($0.id).inserted }
-    }
-
-    private static func canonicalBeenPlaces(
-        _ userPlaces: [LocalUserPlace],
-        placeByID: [String: LocalPlace]
-    ) -> [(LocalUserPlace, LocalPlace)] {
-        let resolved = userPlaces.compactMap { userPlace -> (LocalUserPlace, LocalPlace)? in
-            guard let place = placeByID[userPlace.placeID] else { return nil }
-            return (userPlace, place)
-        }
-        let groups = Dictionary(grouping: resolved, by: { $0.1.id })
-
-        return groups.keys.sorted().compactMap { placeID in
-            groups[placeID]?.sorted { lhs, rhs in
-                if lhs.0.updatedAt != rhs.0.updatedAt {
-                    return lhs.0.updatedAt > rhs.0.updatedAt
-                }
-                if (lhs.0.serverID != nil) != (rhs.0.serverID != nil) {
-                    return lhs.0.serverID != nil
-                }
-                return lhs.0.id < rhs.0.id
-            }.first
-        }
     }
 
     private static func uniqueVisits(_ values: [LocalPlaceVisit]) -> [LocalPlaceVisit] {

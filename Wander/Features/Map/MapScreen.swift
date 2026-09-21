@@ -1249,6 +1249,7 @@ struct NativeMapCameraRequest {
     let region: MKCoordinateRegion
     let revision: UInt64
     let animated: Bool
+    var restoredCamera: MKMapCamera? = nil
 }
 
 enum NativeMapAnnotationKind: Equatable {
@@ -1270,8 +1271,10 @@ struct NativeMapAnnotationDescriptor: Equatable {
     let entranceDelay: TimeInterval
     let accessibilityLabel: String
     let bounceRevision: UInt64
+    var accessibilityIdentifierOverride: String? = nil
 
     var accessibilityIdentifier: String? {
+        if let accessibilityIdentifierOverride { return accessibilityIdentifierOverride }
         switch kind {
         case let .saved(groupKey):
             return isSelected ? "map.pin.active.saved.\(groupKey)" : nil
@@ -1311,6 +1314,7 @@ struct NativeMapAnnotationDescriptor: Equatable {
             && lhs.entranceDelay == rhs.entranceDelay
             && lhs.accessibilityLabel == rhs.accessibilityLabel
             && lhs.bounceRevision == rhs.bounceRevision
+            && lhs.accessibilityIdentifierOverride == rhs.accessibilityIdentifierOverride
     }
 }
 
@@ -6686,7 +6690,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 
 /// A native parent hides MapKit's own accessibility container as well as its
 /// descendants during preparation, without removing or dimming the renderer.
-private final class NativeMapContainerView: UIView {
+final class NativeMapContainerView: UIView {
     let mapView = MKMapView(frame: .zero)
 
     init() {
@@ -6709,7 +6713,7 @@ private final class NativeMapContainerView: UIView {
 /// A MapKit-owned annotation surface. MapKit virtualizes and reuses these views
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
-private struct NativeMapView: UIViewRepresentable {
+struct NativeMapView: UIViewRepresentable {
     let attributionBottomClearance: CGFloat
     let isInteractionEnabled: Bool
     let annotations: [NativeMapAnnotationDescriptor]
@@ -6725,6 +6729,8 @@ private struct NativeMapView: UIViewRepresentable {
     let onUserInteraction: () -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
     let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
+    var allowsNativeFeatureSelection = true
+    var onCameraSnapshot: ((MKMapCamera) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -6744,7 +6750,7 @@ private struct NativeMapView: UIViewRepresentable {
         )
         configuration.pointOfInterestFilter = .includingAll
         mapView.preferredConfiguration = configuration
-        mapView.selectableMapFeatures = [.pointsOfInterest]
+        mapView.selectableMapFeatures = allowsNativeFeatureSelection ? [.pointsOfInterest] : []
         mapView.delegate = context.coordinator
         mapView.showsScale = false
         mapView.showsCompass = false
@@ -6912,6 +6918,7 @@ private struct NativeMapView: UIViewRepresentable {
             let isUserInitiated = !isProgrammaticCameraChangeInFlight
             isProgrammaticCameraChangeInFlight = false
             synchronizeAnnotations(in: mapView)
+            parent.onCameraSnapshot?(mapView.camera.copy() as! MKMapCamera)
             parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
         }
 
@@ -7019,6 +7026,11 @@ private struct NativeMapView: UIViewRepresentable {
             guard lastCameraRevision != parent.cameraRequest.revision else { return }
             let isInitialRequest = lastCameraRevision == nil
             lastCameraRevision = parent.cameraRequest.revision
+            if let camera = parent.cameraRequest.restoredCamera {
+                isProgrammaticCameraChangeInFlight = true
+                mapView.setCamera(camera, animated: false)
+                return
+            }
             isProgrammaticCameraChangeInFlight = MapSelectionGesturePolicy.classify(
                 from: mapView.region,
                 to: parent.cameraRequest.region
