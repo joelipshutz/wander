@@ -312,6 +312,9 @@ final class WanderStore: ObservableObject {
     private var loadedRemotePlaceActivityIDs = Set<String>()
     private var pendingActivityLikeIDs = Set<String>()
     private var pendingActivityCommentDeletionIDs = Set<String>()
+    @Published private var pendingActivityCommentLikeIDs = Set<String>()
+    private var activityCommentLikeRevisions: [String: UUID] = [:]
+    private var activityCommentsGeneration = UUID()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
     private var discoverPeopleRecommendationsGeneration = 0
@@ -1272,6 +1275,9 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID = [:]
             pendingActivityLikeIDs = []
             pendingActivityCommentDeletionIDs = []
+            pendingActivityCommentLikeIDs = []
+            activityCommentLikeRevisions = [:]
+            activityCommentsGeneration = UUID()
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -1561,6 +1567,9 @@ final class WanderStore: ObservableObject {
         activityEngagementErrorByID = [:]
         pendingActivityLikeIDs = []
         pendingActivityCommentDeletionIDs = []
+        pendingActivityCommentLikeIDs = []
+        activityCommentLikeRevisions = [:]
+        activityCommentsGeneration = UUID()
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1981,7 +1990,9 @@ final class WanderStore: ObservableObject {
     }
 
     func activityComments(for activityID: String) -> [ActivityComment] {
-        activityCommentsByID[activityID, default: []]
+        activityCommentsByID[activityID, default: []].filter {
+            !isBlockedBetweenCurrentUser(and: $0.author.id)
+        }
     }
 
     func activityEngagementError(for activityID: String) -> String? {
@@ -1992,10 +2003,98 @@ final class WanderStore: ObservableObject {
         comment.author.id == currentUser.id
             && !comment.isPending
             && !pendingActivityCommentDeletionIDs.contains(comment.id)
+            && !pendingActivityCommentLikeIDs.contains(comment.id)
     }
 
     func isActivityLikePending(_ activityID: String) -> Bool {
         pendingActivityLikeIDs.contains(activityID)
+    }
+
+    func isActivityCommentLikePending(_ commentID: String) -> Bool {
+        pendingActivityCommentLikeIDs.contains(commentID)
+    }
+
+    func canLikeActivityComment(_ comment: ActivityComment) -> Bool {
+        !comment.isPending
+            && !pendingActivityCommentDeletionIDs.contains(comment.id)
+            && !isBlockedBetweenCurrentUser(and: comment.author.id)
+            && activityComments(for: comment.activityID).contains { $0.id == comment.id }
+    }
+
+    @discardableResult
+    func toggleActivityCommentLike(_ comment: ActivityComment, backend: WanderBackend?) async -> Bool {
+        guard canLikeActivityComment(comment),
+              !isActivityCommentLikePending(comment.id),
+              let previous = activityComments(for: comment.activityID).first(where: { $0.id == comment.id })
+        else { return false }
+
+        let requestUserID = currentUser.id
+        let generation = activityCommentsGeneration
+        let revision = UUID()
+        let requestedLike = !previous.viewerHasLiked
+        activityCommentLikeRevisions[comment.id] = revision
+        updateActivityCommentLikes(previous.settingLike(requestedLike))
+        activityEngagementErrorByID[comment.activityID] = nil
+
+        if UUID(uuidString: comment.id) == nil, UUID(uuidString: comment.activityID) == nil {
+            trackActivityCommentLike(requestedLike, outcome: "local_only")
+            return true
+        }
+
+        pendingActivityCommentLikeIDs.insert(comment.id)
+        defer {
+            if generation == activityCommentsGeneration, activityCommentLikeRevisions[comment.id] == revision {
+                pendingActivityCommentLikeIDs.remove(comment.id)
+            }
+        }
+        do {
+            guard let repository = backend?.activityEngagementRepository else {
+                throw WanderRemoteError.notAuthenticated
+            }
+            let result = try await repository.setCommentLike(commentID: comment.id, isLiked: requestedLike)
+            guard generation == activityCommentsGeneration, currentUser.id == requestUserID,
+                  activityCommentLikeRevisions[comment.id] == revision
+            else { return false }
+            guard canLikeActivityComment(previous) else {
+                // A block or authoritative removal during the write must not
+                // leave an optimistic row to reappear after access changes.
+                activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
+                return false
+            }
+            guard result.commentID.caseInsensitiveCompare(comment.id) == .orderedSame,
+                  result.activityID.caseInsensitiveCompare(comment.activityID) == .orderedSame
+            else { throw WanderRemoteError.invalidResponse("Comment like response did not match the request") }
+            updateActivityCommentLikes(previous.withLikes(count: result.likeCount, isLiked: result.viewerHasLiked))
+            trackActivityCommentLike(requestedLike, outcome: "succeeded")
+            return true
+        } catch {
+            guard generation == activityCommentsGeneration, currentUser.id == requestUserID,
+                  activityCommentLikeRevisions[comment.id] == revision
+            else { return false }
+            guard canLikeActivityComment(previous) else {
+                activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
+                return false
+            }
+            updateActivityCommentLikes(previous)
+            activityEngagementErrorByID[comment.activityID] = "Couldn't update this comment's like. Try again."
+            return false
+        }
+    }
+
+    private func updateActivityCommentLikes(_ comment: ActivityComment) {
+        // Never resurrect a comment deleted or removed by an authoritative refresh.
+        activityCommentsByID[comment.activityID] = activityComments(for: comment.activityID).map {
+            $0.id == comment.id ? $0.withLikes(count: comment.likeCount, isLiked: comment.viewerHasLiked) : $0
+        }
+    }
+
+    private func trackActivityCommentLike(_ isLiked: Bool, outcome: String) {
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.activityCommentLikeChanged,
+                                       properties: ["is_liked": isLiked ? "true" : "false", "outcome": outcome]))
+        if isLiked {
+            analytics.track(.engagement(need: .connect, action: .activityCommentLiked,
+                                        surface: "activity_comments", properties: ["outcome": outcome]))
+        }
     }
 
     func refreshActivityEngagement(activityIDs: [String], backend: WanderBackend?) async {
@@ -2155,6 +2254,9 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
         let requestUserID = currentUser.id
+        let generation = activityCommentsGeneration
+        let likeRevisions = activityCommentLikeRevisions
+        let pendingLikesAtRead = pendingActivityCommentLikeIDs
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
         else { return true }
@@ -2164,11 +2266,22 @@ final class WanderStore: ObservableObject {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.comments(activityID: activityID, before: nil, limit: 50)
             }
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  generation == activityCommentsGeneration else { return false }
             let pendingDeletedComments = page.comments.filter {
                 pendingActivityCommentDeletionIDs.contains($0.id)
             }
-            activityCommentsByID[activityID] = page.comments.filter {
+            let currentComments = Dictionary(uniqueKeysWithValues: activityComments(for: activityID).map { ($0.id, $0) })
+            activityCommentsByID[activityID] = page.comments.map { comment in
+                // Reads started before a write (or during one) cannot replace its newer state.
+                if (pendingActivityCommentLikeIDs.contains(comment.id)
+                    || pendingLikesAtRead.contains(comment.id)
+                    || likeRevisions[comment.id] != activityCommentLikeRevisions[comment.id]),
+                   let current = currentComments[comment.id] {
+                    return comment.withLikes(count: current.likeCount, isLiked: current.viewerHasLiked)
+                }
+                return comment
+            }.filter {
                 !pendingActivityCommentDeletionIDs.contains($0.id)
             }.sorted { lhs, rhs in
                 if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
@@ -2191,7 +2304,8 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = nil
             return true
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  generation == activityCommentsGeneration else { return false }
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
         }
@@ -2298,7 +2412,7 @@ final class WanderStore: ObservableObject {
         else { return false }
 
         let previousSummary = activityEngagement(for: comment.activityID)
-        activityCommentsByID[comment.activityID]?.remove(at: previousIndex)
+        activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
         activityEngagementByID[comment.activityID] = previousSummary.removingComment()
         activityEngagementErrorByID[comment.activityID] = nil
 
