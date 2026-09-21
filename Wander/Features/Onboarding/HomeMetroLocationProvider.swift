@@ -4,12 +4,13 @@ import Foundation
 struct HomeMetroSuggestion: Equatable {
     let metroID: String?
     let countryCode: String
+    var city: HomeCity? = nil
 }
 
 #if DEBUG && targetEnvironment(simulator)
 @MainActor struct SimulatorHomeMetroLocationProvider: HomeMetroLocationProviding {
     func suggestion() async throws -> HomeMetroSuggestion? {
-        HomeMetroSuggestion(metroID: "los-angeles", countryCode: "US")
+        HomeMetroSuggestion(metroID: "los-angeles", countryCode: "US", city: .losAngeles)
     }
 }
 #endif
@@ -28,12 +29,7 @@ struct HomeMetroSuggestion: Equatable {
         try Task.checkCancellation()
         let placemark = try await CLGeocoder().reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "en_US")).first
         guard let country = placemark?.isoCountryCode else { return nil }
-        return HomeMetroSuggestion(
-            metroID: HomeMetro.suggestedID(
-                latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
-                country: country, state: placemark?.administrativeArea, county: placemark?.subAdministrativeArea
-            ),
-            countryCode: country
-        )
+        guard let placemark, let city = HomeCity.from(placemark) else { return nil }
+        return HomeMetroSuggestion(metroID: city.metroID, countryCode: country, city: city)
     }
 }

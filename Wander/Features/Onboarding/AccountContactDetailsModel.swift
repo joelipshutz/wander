@@ -2,8 +2,10 @@ import Foundation
 import Combine
 
 @MainActor final class AccountContactDetailsModel: ObservableObject {
-    @Published var metroID: String?
-    @Published var homeCountryCode: String?
+    @Published private(set) var cityText = "Los Angeles"
+    @Published private(set) var homeCity: HomeCity? = .losAngeles
+    @Published var metroID: String? = "los-angeles"
+    @Published var homeCountryCode: String? = "US"
     @Published var phoneCountryCode: String
     @Published var phoneText = ""
     @Published private(set) var isLoading = true
@@ -37,11 +39,34 @@ import Combine
             || OnboardingPhoneNumber.normalized(phoneText, country: phoneCountryCode) != nil
     }
 
-    var canSave: Bool { didLoad && !isLoading && !isSaving && phoneIsValid }
+    var canSave: Bool { didLoad && !isLoading && !isSaving && phoneIsValid && homeCity != nil }
+
+    func editCity(_ text: String) {
+        didEditMetro = true
+        cityText = String(text.prefix(120))
+        homeCity = nil
+        metroID = nil
+        homeCountryCode = nil
+    }
+
+    func selectCity(_ city: HomeCity) {
+        didEditMetro = true
+        applyCity(city)
+        if !didEditPhone { phoneCountryCode = OnboardingPhoneNumber.country(city.countryCode).id }
+    }
+
+    private func applyCity(_ city: HomeCity) {
+        homeCity = city
+        cityText = city.name
+        metroID = city.metroID
+        homeCountryCode = city.countryCode
+    }
 
     func selectMetro(_ id: String) {
         didEditMetro = true
         metroID = id
+        homeCity = HomeCity.legacy(id)
+        cityText = homeCity?.name ?? ""
         if let metro = HomeMetro.find(id) { homeCountryCode = metro.country }
     }
 
@@ -69,10 +94,16 @@ import Combine
             guard !Task.isCancelled, isCurrentAccount() else { return }
             didLoad = true
             if let saved {
-                metroID = saved.metroID
-                homeCountryCode = saved.homeCountryCode
-                phoneCountryCode = OnboardingPhoneNumber.country(saved.phoneCountryCode).id
-                phoneText = saved.phoneE164.map { OnboardingPhoneNumber.nationalDisplay($0, country: phoneCountryCode) } ?? ""
+                if !didEditMetro {
+                    homeCity = saved.homeCity ?? HomeCity.legacy(saved.metroID)
+                    cityText = homeCity?.name ?? ""
+                    metroID = saved.metroID
+                    homeCountryCode = saved.homeCountryCode
+                }
+                if !didEditPhone {
+                    phoneCountryCode = OnboardingPhoneNumber.country(saved.phoneCountryCode).id
+                    phoneText = saved.phoneE164.map { OnboardingPhoneNumber.nationalDisplay($0, country: phoneCountryCode) } ?? ""
+                }
                 cache.remember(saved.metroID, for: userID)
                 return // Saved home takes precedence over the current travel location.
             }
@@ -88,8 +119,11 @@ import Combine
             let suggestion = try await location.suggestion()
             guard !Task.isCancelled, isCurrentAccount(), let suggestion else { return }
             if !didEditMetro {
-                metroID = suggestion.metroID
-                homeCountryCode = suggestion.countryCode
+                if let city = suggestion.city ?? HomeCity.legacy(suggestion.metroID) {
+                    applyCity(city)
+                    // Preserve the legacy identifier when reading an older provider.
+                    if suggestion.city == nil { metroID = suggestion.metroID }
+                }
             }
             if !didEditPhone { phoneCountryCode = OnboardingPhoneNumber.country(suggestion.countryCode).id }
         } catch {
@@ -108,7 +142,8 @@ import Combine
         let details = AccountContactDetails(
             metroID: metroID, homeCountryCode: homeCountryCode,
             phoneCountryCode: phoneCountryCode,
-            phoneE164: OnboardingPhoneNumber.normalized(phoneText, country: phoneCountryCode)
+            phoneE164: OnboardingPhoneNumber.normalized(phoneText, country: phoneCountryCode),
+            homeCity: homeCity
         )
         do {
             let saved = try await repository.save(details)

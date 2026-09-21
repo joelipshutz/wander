@@ -38,6 +38,25 @@ begin
   if saved.metro_id <> 'los-angeles' or saved.home_country_code <> 'US'
     or saved.phone_e164 <> '+12025550123' then raise exception 'save response mismatch'; end if;
   if (select phone_e164 from public.own_account_contact_details()) <> '+12025550123' then raise exception 'not persistent'; end if;
+  perform public.save_own_account_contact_details('{"metro_id":"los-angeles","phone_country_code":"JP","home_city":{"name":"Kyoto","country_code":"JP","region":"Kyoto"}}');
+  if (select home_city->>'name' from public.own_account_contact_details()) <> 'Kyoto'
+    or (select metro_id from public.own_account_contact_details()) <> 'other'
+    or (select home_country_code from public.own_account_contact_details()) <> 'JP' then
+    raise exception 'worldwide city roundtrip or authoritative gate failed'; end if;
+  perform public.save_own_account_contact_details('{"metro_id":"other","phone_country_code":"US","home_city":{"name":"Long Beach","country_code":"US","region":"CA","county":"Los Angeles County"}}');
+  if (select metro_id from public.own_account_contact_details()) <> 'los-angeles' then
+    raise exception 'LA County locality excluded'; end if;
+  perform public.save_own_account_contact_details('{"metro_id":"los-angeles","phone_country_code":"US","home_city":{"name":"Irvine","country_code":"US","region":"CA","county":"Orange"}}');
+  if (select metro_id from public.own_account_contact_details()) <> 'other' then
+    raise exception 'Orange County locality included'; end if;
+  begin
+    perform public.save_own_account_contact_details('{"phone_country_code":"US","home_city":{"name":"Paris","country_code":"FR","latitude":48.85}}');
+    raise exception 'precise city location accepted';
+  exception when raise_exception then if sqlerrm <> 'invalid_home_city' then raise; end if; end;
+  begin
+    perform public.save_own_account_contact_details('{"phone_country_code":"US","home_city":{"name":" ","country_code":"FR"}}');
+    raise exception 'blank city accepted';
+  exception when raise_exception then if sqlerrm <> 'invalid_home_city' then raise; end if; end;
   -- Repeated save is an upsert; explicit null clears optional values.
   perform public.save_own_account_contact_details('{"metro_id":"other","phone_country_code":"GB","phone_e164":null}');
   if (select count(*) from public.own_account_contact_details()) <> 1

@@ -6,6 +6,7 @@ on:
     paths:
       - '**/*AccountContactDetails*'
       - '**/*HomeMetro*'
+      - '**/*HomeCity*'
       - '**/*OnboardingPhoneNumber*'
       - '**/*EventsAccess*'
       - '.github/workflows/home-city-events-validation.yml'
@@ -50,6 +51,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests/AccountContactDetailsTests
+          -only-testing:WanderTests/HomeCitySearchTests
           -only-testing:WanderTests/EventsAccessTests
           -only-testing:WanderTests/OnboardingStateTests
           -only-testing:WanderTests/OnboardingConnectionTests

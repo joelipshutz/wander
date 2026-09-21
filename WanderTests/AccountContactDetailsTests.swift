@@ -128,7 +128,7 @@ import XCTest
         current = false
         location.continuation?.resume(returning: .init(metroID: "los-angeles", countryCode: "US"))
         await task.value
-        XCTAssertNil(model.metroID)
+        XCTAssertEqual(model.metroID, "los-angeles") // Immediate fallback remains; the late account result is ignored.
         let saved = await model.save()
         XCTAssertFalse(saved)
     }

@@ -75,6 +75,7 @@ insert into app.home_metro_areas (id, name, country_code) values
 create table public.account_contact_details (
   user_id text primary key references public.profiles(id) on delete cascade,
   metro_id text,
+  home_city jsonb check (home_city is null or jsonb_typeof(home_city) = 'object'),
   home_country_code text check (home_country_code ~ '^[A-Z]{2}$'),
   phone_country_code text not null check (phone_country_code ~ '^[A-Z]{2}$'),
   phone_e164 text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
@@ -84,25 +85,25 @@ alter table public.account_contact_details enable row level security;
 revoke all on public.account_contact_details from public, anon, authenticated;
 grant select, insert, update, delete on public.account_contact_details to service_role;
 comment on table public.account_contact_details is
-  'Owner-private home metro and optional unverified phone. No SMS consent or verification is implied. Never use phone for identity/contact matching without separate proof.';
+  'Owner-private worldwide home city and optional unverified phone. No SMS consent or verification is implied. Never use phone for identity/contact matching without separate proof.';
 
 -- Narrow definers intentionally avoid granting direct table access. Identity
 -- comes only from the authenticated JWT, with canonical account handling.
 create function public.own_account_contact_details()
-returns table (metro_id text, home_country_code text, phone_country_code text, phone_e164 text)
+returns table (metro_id text, home_country_code text, phone_country_code text, phone_e164 text, home_city jsonb)
 language plpgsql stable security definer set search_path = public, app
 as $$
 declare viewer_id text := app.current_user_id();
 begin
   if viewer_id is null then raise exception 'not_authenticated'; end if;
-  return query select d.metro_id, d.home_country_code, d.phone_country_code, d.phone_e164
+  return query select d.metro_id, d.home_country_code, d.phone_country_code, d.phone_e164, d.home_city
     from public.account_contact_details d join public.profiles p on p.id = d.user_id
     where d.user_id = viewer_id and p.deleted_at is null;
 end;
 $$;
 
 create function public.save_own_account_contact_details(input_details jsonb)
-returns table (metro_id text, home_country_code text, phone_country_code text, phone_e164 text)
+returns table (metro_id text, home_country_code text, phone_country_code text, phone_e164 text, home_city jsonb)
 language plpgsql volatile security definer set search_path = public, app
 as $$
 declare
@@ -111,29 +112,49 @@ declare
   home_country text := input_details->>'home_country_code';
   phone_country text := input_details->>'phone_country_code';
   phone text := input_details->>'phone_e164';
+  city jsonb := nullif(input_details->'home_city', 'null'::jsonb);
 begin
   if viewer_id is null then raise exception 'not_authenticated'; end if;
   perform 1 from public.profiles where id = viewer_id and deleted_at is null for share;
   if not found then raise exception 'profile_not_found'; end if;
   if input_details is null or jsonb_typeof(input_details) <> 'object'
     or exists (select 1 from jsonb_each(input_details) e
-      where e.key not in ('metro_id','home_country_code','phone_country_code','phone_e164')
-        or jsonb_typeof(e.value) not in ('string','null'))
+      where e.key not in ('metro_id','home_country_code','phone_country_code','phone_e164','home_city')
+        or (e.key <> 'home_city' and jsonb_typeof(e.value) not in ('string','null')))
     or phone_country is null or phone_country !~ '^[A-Z]{2}$'
     or (home_country is not null and home_country !~ '^[A-Z]{2}$')
     or (phone is not null and phone !~ '^\+[1-9][0-9]{6,14}$')
     or (phone is not null and phone_country in ('US','CA') and phone !~ '^\+1[2-9][0-9]{9}$') then
     raise exception 'invalid_account_contact_details';
   end if;
-  if selected_metro is not null and selected_metro <> 'other' then
+  -- Persist any worldwide locality. The client cannot grant LA eligibility by
+  -- supplying metro_id alongside a contradictory city: derive it here as well.
+  if city is not null then
+    if jsonb_typeof(city) <> 'object' then raise exception 'invalid_home_city'; end if;
+    if exists (select 1 from jsonb_each(city) e
+      where e.key not in ('name','country_code','region','county')
+        or jsonb_typeof(e.value) not in ('string','null'))
+      or nullif(btrim(city->>'name'), '') is null
+      or length(city->>'name') > 200
+      or coalesce(city->>'country_code', '') !~ '^[A-Z]{2}$'
+      or length(coalesce(city->>'region', '')) > 200
+      or length(coalesce(city->>'county', '')) > 200 then
+      raise exception 'invalid_home_city';
+    end if;
+    home_country := city->>'country_code';
+    selected_metro := case when home_country = 'US'
+      and city->>'region' in ('CA','California')
+      and replace(lower(city->>'county'), ' county', '') = 'los angeles'
+      then 'los-angeles' else 'other' end;
+  elsif selected_metro is not null and selected_metro <> 'other' then
     select m.country_code into home_country from app.home_metro_areas m where m.id = selected_metro;
     if not found then raise exception 'invalid_home_metro'; end if;
   end if;
   insert into public.account_contact_details as d
-    (user_id, metro_id, home_country_code, phone_country_code, phone_e164)
-    values (viewer_id, selected_metro, home_country, phone_country, phone)
+    (user_id, metro_id, home_country_code, phone_country_code, phone_e164, home_city)
+    values (viewer_id, selected_metro, home_country, phone_country, phone, city)
     on conflict (user_id) do update set
-      metro_id = excluded.metro_id, home_country_code = excluded.home_country_code,
+      home_city = excluded.home_city, metro_id = excluded.metro_id, home_country_code = excluded.home_country_code,
       phone_country_code = excluded.phone_country_code, phone_e164 = excluded.phone_e164,
       updated_at = now();
   return query select * from public.own_account_contact_details();

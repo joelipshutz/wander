@@ -5,17 +5,17 @@ import XCTest
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestStep", "location", "-WanderAccountContactDetailsUITest"]
         app.launch()
-        XCTAssertTrue(app.buttons["accountContactDetails.metro"].waitForExistence(timeout: 10))
-        let prefilled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Los Angeles"), object: app.buttons["accountContactDetails.metro"])
+        XCTAssertTrue(app.textFields["accountContactDetails.city"].waitForExistence(timeout: 10))
+        let prefilled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Los Angeles"), object: app.textFields["accountContactDetails.city"])
         XCTAssertEqual(XCTWaiter.wait(for: [prefilled], timeout: 5), .completed)
         return app
     }
 
     func testPrefilledMetroAndUSCountryThenContinueToContacts() {
         let app = launch()
-        XCTAssertTrue(app.buttons["accountContactDetails.metro"].label.contains("Los Angeles"))
+        XCTAssertTrue(app.textFields["accountContactDetails.city"].value as? String == "Los Angeles")
         XCTAssertTrue(app.buttons["accountContactDetails.country"].label.contains("+1"))
-        capture(app, name: "01 — Prefilled city and phone")
+        capture(app, name: "Typeahead 01 — Prefilled city and phone")
         let phone = app.textFields["accountContactDetails.phone"]
         phone.tap()
         phone.typeText("2025550123")
@@ -45,18 +45,47 @@ import XCTest
         XCTAssertTrue(app.buttons["accountContactDetails.country"].label.contains("+44"))
     }
 
-    func testMetroOptionsUseMajorAreasAndCanBeChanged() {
+    func testWorldwideInlineTypeaheadShowsClearMatchesAndSelectedCity() {
         let app = launch()
-        app.buttons["accountContactDetails.metro"].tap()
-        capture(app, name: "04 — Major metro picker")
-        app.searchFields.firstMatch.tap()
-        app.searchFields.firstMatch.typeText("Orange County")
-        app.buttons["accountContactDetails.option.orange-county"].tap()
-        XCTAssertTrue(app.buttons["accountContactDetails.metro"].label.contains("Orange County"))
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "City and phone form"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        let city = app.textFields["accountContactDetails.city"]
+        app.buttons["accountContactDetails.clearCity"].tap()
+        XCTAssertEqual(city.value as? String, "Search any city")
+        XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
+        capture(app, name: "Typeahead 02 — Cleared city")
+        city.typeText("Par")
+        XCTAssertTrue(app.staticTexts["Finding cities…"].waitForExistence(timeout: 2))
+        capture(app, name: "Typeahead 03 — Typing")
+        let paris = app.buttons["accountContactDetails.cityResult.Paris.FR"]
+        XCTAssertTrue(paris.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["accountContactDetails.cityResult.Paris.US"].exists)
+        capture(app, name: "Typeahead 04 — Worldwide city matches")
+        paris.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Paris"), object: city)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        XCTAssertTrue(app.buttons["accountContactDetails.country"].label.contains("+33"))
+        XCTAssertTrue(app.buttons["accountContactDetails.continue"].isEnabled)
+        capture(app, name: "Typeahead 05 — Paris selected")
+    }
+
+    func testUnlistedGlobalCityAndEmptyAndOfflineStates() {
+        let app = launch()
+        let city = app.textFields["accountContactDetails.city"]
+        app.buttons["accountContactDetails.clearCity"].tap()
+        city.typeText("Kyoto")
+        let kyoto = app.buttons["accountContactDetails.cityResult.Kyoto.JP"]
+        XCTAssertTrue(kyoto.waitForExistence(timeout: 5))
+        kyoto.tap()
+        XCTAssertTrue(app.buttons["accountContactDetails.country"].label.contains("+81"))
+        capture(app, name: "Typeahead 06 — Kyoto selected")
+        app.buttons["accountContactDetails.clearCity"].tap()
+        city.typeText("zzzzcity")
+        XCTAssertTrue(app.staticTexts["No matching cities. Try another spelling."].waitForExistence(timeout: 5))
+        capture(app, name: "Typeahead 07 — No matches")
+        app.buttons["accountContactDetails.clearCity"].tap()
+        city.typeText("offline")
+        XCTAssertTrue(app.buttons["Try again"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
+        capture(app, name: "Typeahead 08 — Connection unavailable")
     }
 
     func testOptionalSkipPreservesNextOnboardingStep() {

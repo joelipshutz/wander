@@ -5,7 +5,8 @@ struct AccountContactDetailsView: View {
     @StateObject var model: AccountContactDetailsModel
     var isOnboarding = true
     let continueAction: () -> Void
-    @State private var showsMetros = false
+    @StateObject private var citySearch = HomeCitySearchModel()
+    @FocusState private var cityIsFocused: Bool
     @State private var showsCountries = false
     @FocusState private var phoneIsFocused: Bool
 
@@ -29,11 +30,10 @@ struct AccountContactDetailsView: View {
             }
         }
         .task { await model.load() }
-        .sheet(isPresented: $showsMetros) {
-            ContactDetailsPicker(title: "Home city", options: metroOptions, selectedID: model.metroID) { id in
-                model.selectMetro(id)
-                showsMetros = false
-            }
+        .onDisappear { citySearch.cancel() }
+        .onChange(of: cityIsFocused) { _, focused in
+            if focused && model.homeCity == nil { citySearch.update(model.cityText, force: true) }
+            else if !focused { citySearch.cancel() }
         }
         .sheet(isPresented: $showsCountries) {
             ContactDetailsPicker(title: "Country code", options: OnboardingPhoneNumber.countries.map {
@@ -52,7 +52,8 @@ struct AccountContactDetailsView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
-                revealPhoneSection(using: proxy)
+                if cityIsFocused { proxy.scrollTo("citySection", anchor: .top) }
+                else { revealPhoneSection(using: proxy) }
             }
             .onChange(of: model.phoneIsValid) { _, _ in
                 revealPhoneSection(using: proxy)
@@ -61,7 +62,7 @@ struct AccountContactDetailsView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") { phoneIsFocused = false }
+                Button("Done") { phoneIsFocused = false; cityIsFocused = false; citySearch.cancel() }
             }
         }
         .sessionReplayMasked()
@@ -77,31 +78,14 @@ struct AccountContactDetailsView: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
             OnboardingHeadline(eyebrow: "A LITTLE ABOUT YOU", title: "Make yourself at home", message: "Check your home city and add your phone number.")
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("Home city").font(AstirTypography.label)
-                Button {
-                    phoneIsFocused = false
-                    showsMetros = true
-                } label: {
-                    HStack {
-                        Text(metroTitle)
-                        Spacer()
-                        if model.isLocating { ProgressView() }
-                        Image(systemName: "chevron.down")
-                    }
-                    .contactDetailsField()
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("accountContactDetails.metro")
-                Text("Choose the area you call home. You can change it later.")
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
+            citySection
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("Phone number · optional").font(AstirTypography.label)
                 HStack(spacing: WanderTheme.spacing2) {
                     Button {
                         phoneIsFocused = false
+                        cityIsFocused = false
+                        citySearch.cancel()
                         showsCountries = true
                     } label: {
                         HStack(spacing: 5) {
@@ -143,13 +127,15 @@ struct AccountContactDetailsView: View {
             }
         }
         .padding(WanderTheme.spacing4)
-        .disabled(model.isLoading || model.isSaving)
+        .disabled(model.isSaving)
     }
 
     private var actions: some View {
         VStack(spacing: WanderTheme.spacing1) {
             WanderPrimaryButton(title: model.isSaving ? "Saving…" : (isOnboarding ? "Continue" : "Save"), isDisabled: !model.canSave) {
                 phoneIsFocused = false
+                cityIsFocused = false
+                citySearch.cancel()
                 Task { if await model.save() { continueAction() } }
             }
             .accessibilityIdentifier("accountContactDetails.continue")
@@ -164,15 +150,120 @@ struct AccountContactDetailsView: View {
         }
     }
 
-    private var metroTitle: String {
-        if model.metroID == HomeMetro.otherID { return "Outside listed metros" }
-        return HomeMetro.find(model.metroID)?.name ?? (model.isLocating ? "Finding your city…" : "Choose your city")
+    private var citySection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("Home city").font(AstirTypography.label)
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                TextField("Search any city", text: Binding(get: { model.cityText }, set: {
+                    model.editCity($0)
+                    citySearch.update($0)
+                }))
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .focused($cityIsFocused)
+                .submitLabel(.done)
+                .onSubmit { cityIsFocused = false; citySearch.cancel() }
+                .accessibilityLabel("Home city")
+                .accessibilityIdentifier("accountContactDetails.city")
+                if !model.cityText.isEmpty {
+                    Button {
+                        model.editCity("")
+                        citySearch.update("")
+                        cityIsFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .frame(minWidth: 32, minHeight: WanderTheme.tapMinimum)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear city")
+                    .accessibilityIdentifier("accountContactDetails.clearCity")
+                }
+            }
+            .contactDetailsField()
+            if cityIsFocused && model.homeCity == nil {
+                citySuggestions
+            } else if let city = model.homeCity {
+                Text(city.subtitle)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .accessibilityIdentifier("accountContactDetails.cityContext")
+            }
+            if !cityIsFocused {
+                Text("Your home city, even when you’re away. You can change it later.")
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .id("citySection")
     }
 
-    private var metroOptions: [ContactDetailsPicker.Option] {
-        HomeMetro.all.map { .init(id: $0.id, title: $0.name, subtitle: $0.id == "los-angeles" ? "Los Angeles County" : (Locale.current.localizedString(forRegionCode: $0.country) ?? $0.country)) }
-            + [.init(id: HomeMetro.otherID, title: "Outside listed metros", subtitle: "")]
+    private var citySuggestions: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if citySearch.isSearching || citySearch.isResolving {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ProgressView()
+                    Text(citySearch.isResolving ? "Selecting city…" : "Finding cities…")
+                }
+                .font(AstirTypography.caption)
+                .padding(WanderTheme.spacing3)
+            }
+            ForEach(citySearch.suggestions) { suggestion in
+                Button {
+                    citySearch.select(suggestion) { city in
+                        model.selectCity(city)
+                        cityIsFocused = false
+                    }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(suggestion.title).font(AstirTypography.body)
+                            Text(suggestion.subtitle)
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.left").font(.caption)
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.vertical, WanderTheme.spacing2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(citySearch.isResolving)
+                .accessibilityIdentifier("accountContactDetails.cityResult.\(suggestion.title).\(suggestion.city?.countryCode ?? suggestion.subtitle)")
+                if suggestion.id != citySearch.suggestions.last?.id {
+                    Divider().padding(.horizontal, WanderTheme.spacing3)
+                }
+            }
+            if let message = citySearch.message {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text(message)
+                    if message.hasPrefix("Couldn’t") {
+                        Button("Try again") { citySearch.retry() }
+                    }
+                }
+                .font(AstirTypography.caption)
+                .padding(WanderTheme.spacing3)
+                .accessibilityIdentifier("accountContactDetails.citySearchMessage")
+            } else if model.cityText.isEmpty {
+                Text("Start typing a city anywhere in the world.")
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .padding(WanderTheme.spacing3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AstirBrandMode.editorial.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(AstirBrandMode.editorial.border))
+        .accessibilityIdentifier("accountContactDetails.citySuggestions")
     }
+
 }
 
 private extension View {

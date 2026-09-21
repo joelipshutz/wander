@@ -5,8 +5,10 @@ struct AccountContactDetails: Codable, Equatable {
     let homeCountryCode: String?
     let phoneCountryCode: String
     let phoneE164: String?
+    var homeCity: HomeCity? = nil
 
     enum CodingKeys: String, CodingKey {
+        case homeCity = "home_city"
         case metroID = "metro_id"
         case homeCountryCode = "home_country_code"
         case phoneCountryCode = "phone_country_code"

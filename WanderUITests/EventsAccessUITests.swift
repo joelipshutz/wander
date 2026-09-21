@@ -36,7 +36,7 @@ import XCTest
 
     func testSettingsHomeChangesUpdateEventsWithoutRestart() {
         let app = launch(metro: "los-angeles", initialTab: "profile")
-        for (metro, search, hasEvents) in [("orange-county", "Orange County", false), ("los-angeles", "Los Angeles", true)] {
+        for (search, hasEvents) in [("Irvine", false), ("Long Beach", true)] {
             let settings = app.buttons["Settings"]
             XCTAssertTrue(settings.waitForExistence(timeout: 10))
             // XCTest can fall back to a corner point after the tab bar changes.
@@ -45,14 +45,18 @@ import XCTest
             let details = app.buttons["settings.account.contactDetails"]
             XCTAssertTrue(details.waitForExistence(timeout: 5))
             details.tap()
-            let city = app.buttons["accountContactDetails.metro"]
+            let city = app.textFields["accountContactDetails.city"]
             XCTAssertTrue(city.waitForExistence(timeout: 5))
             let loaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: city)
             XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 5), .completed)
-            city.tap()
-            app.searchFields.firstMatch.tap()
-            app.searchFields.firstMatch.typeText(search)
-            app.buttons["accountContactDetails.option.\(metro)"].tap()
+            app.buttons["accountContactDetails.clearCity"].tap()
+            city.typeText(search)
+            let result = app.buttons["accountContactDetails.cityResult.\(search).US"]
+            XCTAssertTrue(result.waitForExistence(timeout: 5))
+            result.tap()
+            let save = app.buttons["accountContactDetails.continue"]
+            let resolved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
+            XCTAssertEqual(XCTWaiter.wait(for: [resolved], timeout: 5), .completed)
             app.buttons["accountContactDetails.continue"].tap()
             XCTAssertTrue(city.waitForNonExistence(timeout: 5))
             app.buttons["settings.back"].tap()
