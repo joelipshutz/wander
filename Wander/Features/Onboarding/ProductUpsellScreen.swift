@@ -108,7 +108,7 @@ struct ProductUpsellScreen: View {
             case .openSettings:
                 coordinator.recordAction(.openedSettings, for: presentation.id)
                 trackOnboardingPermissionResult("settings")
-                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
                 openURL(url)
             case .request, .enable:
                 let enabled = await pushNotifications.enableNotifications(
