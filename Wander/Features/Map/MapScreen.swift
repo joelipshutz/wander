@@ -13238,6 +13238,11 @@ struct MapPlaceSaveEditor: View {
     @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
+    @State private var selectedListIDs: Set<String>
+    @State private var isChoosingLists = false
+    @State private var completedCheckInForLists: SaveResult?
+    @State private var listSaveResult = CheckInListSaveResult()
+    @State private var showsListSaveResult = false
     @StateObject private var questionPresentation = CheckInQuestionPresentation()
     @State private var selectedAnswers: [String: Set<String>]
     @State private var unifiedTags: Set<String>
@@ -13375,6 +13380,7 @@ struct MapPlaceSaveEditor: View {
             initialValue: restoredAttachments ?? initialContext.initialPhotoAttachments
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
+        _selectedListIDs = State(initialValue: restoredForm?.selectedListIDs ?? [])
         let initialShowsOptionalDetails = restoredForm?.isShowingOptionalDetails ?? false
         _isShowingOptionalDetails = State(initialValue: initialShowsOptionalDetails)
         var initialModeDrafts = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
@@ -13431,7 +13437,8 @@ struct MapPlaceSaveEditor: View {
                 photoAttachments: visitPhotoAttachments.compactMap(\.draftPhoto),
                 selectedInviteeUserIDs: selectedInviteeUserIDs,
                 isShowingOptionalDetails: isShowingOptionalDetails,
-                customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil
+                customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil,
+                selectedListIDs: selectedListIDs
             ),
             submittedAt: saveAttemptedAt
         )
@@ -13551,6 +13558,28 @@ struct MapPlaceSaveEditor: View {
                 onContentExpansionRequested()
             }
         }
+        .sheet(isPresented: $isChoosingLists) {
+            MapPlaceListPickerSheet(
+                target: .candidate(selectedCandidate),
+                stagedListIDs: selectedListIDs,
+                onStage: { listIDs in
+                    guard bindEditorOwnerIfNeeded() else { return }
+                    selectedListIDs = listIDs
+                },
+                stagesCheckIn: true,
+                analyticsSurface: "check_in",
+                onComplete: { _ in }
+            )
+        }
+        .alert("Check-in saved", isPresented: $showsListSaveResult) {
+            if listSaveResult.pendingCount + listSaveResult.failedCount > 0 {
+                Button("Retry lists") { retryCheckInLists() }
+            }
+            Button("Done") { completeCheckInListSave() }
+        } message: {
+            Text([listSaveResult.message, completedCheckInForLists?.localDetailsWarning]
+                .compactMap { $0 }.joined(separator: "\n\n"))
+        }
         .disabled(editorOwnerID != nil && editorOwnerID != store.currentUser.id)
         .onChange(of: store.currentUser.id, initial: true) { _, _ in
             guard bindEditorOwnerIfNeeded() else { return }
@@ -13572,6 +13601,7 @@ struct MapPlaceSaveEditor: View {
                     VStack(alignment: .leading, spacing: isReadyForDetails ? WanderTheme.spacing3 : WanderTheme.spacing4) {
                         header
                         singleScreenContent
+                            .disabled(isSaving || completedCheckInForLists != nil)
                     }
                     .walkthroughTarget(isReadyForDetails ? nil : .saveStatus)
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -13614,7 +13644,7 @@ struct MapPlaceSaveEditor: View {
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
         .interactiveDismissDisabled(
             walkthroughs.activeSurface == .saveFlow || isSaving || isRemoving
-                || questionPresentation.request != nil
+                || questionPresentation.request != nil || completedCheckInForLists != nil
         )
         .modifier(MapPlaceSaveEditorLifecycleModifier(
             context: context,
@@ -13651,6 +13681,7 @@ struct MapPlaceSaveEditor: View {
     private var inlineEditor: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             singleScreenContent
+                .disabled(isSaving || completedCheckInForLists != nil)
 
             if presentation.showsInlineSaveAction, isReadyForDetails {
                 saveFooter
@@ -13714,6 +13745,10 @@ struct MapPlaceSaveEditor: View {
                 visitPhotoAttachments = []
                 selectedInviteeUserIDs = []
                 completedSaveWithWarning = nil
+                selectedListIDs = []
+                isChoosingLists = false
+                completedCheckInForLists = nil
+                showsListSaveResult = false
                 pendingWalkthroughSaveResult = nil
                 onClose()
             }
@@ -13805,7 +13840,11 @@ struct MapPlaceSaveEditor: View {
 
             if walkthroughs.activeSurface != .saveFlow {
                 Button {
-                    onClose()
+                    if completedCheckInForLists != nil {
+                        completeCheckInListSave()
+                    } else {
+                        onClose()
+                    }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .black))
@@ -13977,6 +14016,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var primaryActionTitle: String {
+        if completedCheckInForLists != nil { return "Retry lists" }
         if selectedStatus == .wannaGo {
             if case .editWant = context.mode {
                 return "Update Wanna"
@@ -13987,6 +14027,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var progressActionTitle: String {
+        if completedCheckInForLists != nil { return "Updating lists…" }
         if case .editWant = context.mode {
             return "Updating Wanna..."
         }
@@ -14333,7 +14374,9 @@ struct MapPlaceSaveEditor: View {
             .disabled(isWalkthroughAutomating(.saveMoreOptions))
             .walkthroughTarget(.saveMoreOptions)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
-            .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("save.moreOptions")
+            .accessibilityValue((isShowingOptionalDetails ? "Expanded" : "Collapsed")
+                + (offersCheckInLists && !selectedListIDs.isEmpty ? ", \(selectedListIDs.count) lists selected" : ""))
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
                     ? "This walkthrough points out where optional tags live."
@@ -14354,6 +14397,9 @@ struct MapPlaceSaveEditor: View {
             )
 
             if isShowingOptionalDetails {
+                if offersCheckInLists {
+                    checkInListsRow
+                }
                 questionAndLabelSections
                     .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
             }
@@ -14361,7 +14407,47 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var optionalDetailsSummary: String {
-        "tags"
+        guard offersCheckInLists else { return "tags" }
+        guard !selectedListIDs.isEmpty else { return "tags · lists" }
+        return "tags · \(selectedListIDs.count == 1 ? "1 list" : "\(selectedListIDs.count) lists")"
+    }
+
+    private var offersCheckInLists: Bool {
+        guard selectedStatus == .been, presentation != .inlineStaging else { return false }
+        switch context.mode {
+        case .add, .addVisit, .sharedVisit: return true
+        case .editVisit, .editWant: return false
+        }
+    }
+
+    private var checkInListsRow: some View {
+        Button {
+            dismissKeyboard()
+            isChoosingLists = true
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: PlaceListSymbol.systemImage)
+                    .foregroundStyle(astirBrandMode.accentText)
+                Text("Add to lists")
+                    .font(AstirTypography.control)
+                    .foregroundStyle(astirBrandMode.primaryText)
+                Spacer(minLength: WanderTheme.spacing2)
+                if !selectedListIDs.isEmpty {
+                    Text("\(selectedListIDs.count) selected")
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(astirBrandMode.secondaryText)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(astirBrandMode.secondaryText)
+            }
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("save.lists")
+        .accessibilityValue("\(selectedListIDs.count) selected")
+        .accessibilityHint("Optional. Lists are updated when you check in.")
     }
 
     private var removeSaveSection: some View {
@@ -15183,6 +15269,10 @@ struct MapPlaceSaveEditor: View {
     private func save() {
         guard bindEditorOwnerIfNeeded() else { return }
         guard !isSaving else { return }
+        if completedCheckInForLists != nil {
+            retryCheckInLists()
+            return
+        }
         guard saveAttemptedAt == nil else { return }
         if selectedStatus == .been {
             loadPrivateQuestionAnswersIfNeeded()
@@ -15239,6 +15329,7 @@ struct MapPlaceSaveEditor: View {
         errorMessage = nil
 
         let submission = currentSubmission
+        let listIDsToSave = offersCheckInLists ? selectedListIDs : []
         let analyticsMode = analyticsSaveMode
         store.productAnalytics.track(SaveFlowAnalyticsTracker.event(
             WanderAnalyticsEvents.saveFlowSubmitted, mode: analyticsMode, status: selectedStatus.rawValue))
@@ -15246,6 +15337,15 @@ struct MapPlaceSaveEditor: View {
         Task {
             guard editorOwnerID == store.currentUser.id else { return }
             let result = await onSave(submission)
+            if let result, !listIDsToSave.isEmpty, editorOwnerID == store.currentUser.id {
+                completedCheckInForLists = result
+                listSaveResult = await store.addCheckInToLists(
+                    userPlaceID: result.userPlaceID,
+                    listIDs: listIDsToSave,
+                    ownerUserID: editorOwnerID ?? "",
+                    backend: auth.isSignedIn ? backend : nil
+                )
+            }
             await MainActor.run {
                 guard editorOwnerID == store.currentUser.id else { return }
                 let outcome: AnalyticsSaveOutcome
@@ -15259,6 +15359,11 @@ struct MapPlaceSaveEditor: View {
                     status: submission.status.rawValue, outcome: outcome))
                 isSaving = false
                 if let result {
+                    if completedCheckInForLists != nil, listSaveResult.needsAttention {
+                        showsListSaveResult = true
+                        return
+                    }
+                    completedCheckInForLists = nil
                     if result.localDetailsWarning != nil {
                         completedSaveWithWarning = result
                         return
@@ -15292,6 +15397,37 @@ struct MapPlaceSaveEditor: View {
                         : "Sign in to add this to Wanna."
                 }
             }
+        }
+    }
+
+    private func retryCheckInLists() {
+        guard bindEditorOwnerIfNeeded(), !isSaving, let result = completedCheckInForLists else { return }
+        isSaving = true
+        Task { @MainActor in
+            listSaveResult = await store.addCheckInToLists(
+                userPlaceID: result.userPlaceID,
+                listIDs: selectedListIDs,
+                ownerUserID: editorOwnerID ?? "",
+                backend: auth.isSignedIn ? backend : nil
+            )
+            guard editorOwnerID == store.currentUser.id else { return }
+            isSaving = false
+            if listSaveResult.needsAttention {
+                showsListSaveResult = true
+            } else {
+                completeCheckInListSave()
+            }
+        }
+    }
+
+    private func completeCheckInListSave() {
+        guard bindEditorOwnerIfNeeded(), let result = completedCheckInForLists else { return }
+        completedCheckInForLists = nil
+        showsListSaveResult = false
+        if result.localDetailsWarning != nil, !listSaveResult.needsAttention {
+            completedSaveWithWarning = result
+        } else {
+            onSaveCompleted(result)
         }
     }
 

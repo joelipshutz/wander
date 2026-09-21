@@ -132,7 +132,10 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 
 The shared add-to-lists picker attributes successful additions to its entry
 surface: `map` for Map and place-profile actions, `discover` for Discover search
-results. Both existing-list selection and new-list creation emit
+results, and `check_in` for list additions selected in a new check-in’s More
+options. Check-in list additions emit once when membership is stored locally;
+delivery retries and existing membership do not emit again. Only the existing
+coarse properties are sent, with `companion_save=none`. Both existing-list selection and new-list creation emit
 `place_list_item_added` and the matching `list_place_added` engagement action.
 
 The push worker also emits three server-side operational events. They use

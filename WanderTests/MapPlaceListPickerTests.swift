@@ -4,6 +4,179 @@ import UIKit
 
 @MainActor
 final class MapPlaceListPickerTests: XCTestCase {
+    func testCheckInListsPreserveVisitAndAudienceAcrossOfflineRetries() async throws {
+        let analytics = MapListRecordingAnalyticsClient()
+        let store = makeStore(analytics: analytics)
+        let candidate = candidate(id: "check-in", name: "Check-in Cafe")
+        let save = store.saveCandidate(candidate, status: .been, visibility: .selfOnly,
+                                       note: "My private memory", sourceType: .manual)
+        let visitIDs = store.visits(for: save.userPlaceID).map(\.id)
+        let lists = try ["Weekend", "Coffee"].map {
+            try XCTUnwrap(store.createPlaceList(name: $0, description: "", visibility: .followers))
+        }
+        analytics.events.removeAll()
+        for _ in 0..<2 {
+            let result = await store.addCheckInToLists(userPlaceID: save.userPlaceID,
+                listIDs: Set(lists.map(\.id)), ownerUserID: store.currentUser.id, backend: nil)
+            XCTAssertEqual(result.pendingCount, 2)
+            XCTAssertEqual(result.syncedCount, 0)
+            XCTAssertTrue(result.needsAttention)
+        }
+        XCTAssertEqual(store.visits(for: save.userPlaceID).map(\.id), visitIDs)
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first?.userPlace.visibility, .selfOnly)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first?.userPlace.note, "My private memory")
+        XCTAssertEqual(store.placeListItems.count, 2)
+        XCTAssertTrue(store.placeListItems.allSatisfy { $0.ownerUserPlaceID == save.userPlaceID })
+        XCTAssertEqual(store.placeLists.map(\.ownerUserID), lists.map(\.ownerUserID))
+        XCTAssertEqual(store.placeLists.map(\.visibility), lists.map(\.visibility))
+        let additions = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeListItemAdded }
+        XCTAssertEqual(additions.count, 2)
+        XCTAssertTrue(additions.allSatisfy { $0.properties == ["surface": "check_in", "list_role": "owner", "companion_save": "none"] })
+        XCTAssertEqual(analytics.events.filter { $0.name == WanderAnalyticsEvents.engagementActionPerformed }.count, 2)
+        XCTAssertFalse(analytics.events.contains { $0.name == WanderAnalyticsEvents.checkInCreated })
+    }
+
+    func testCheckInListsKeepPermittedAdditionsWhenAnotherListIsUnavailable() async throws {
+        let store = makeStore()
+        let save = store.saveCandidate(candidate(id: "partial", name: "Cafe"), status: .been,
+            visibility: .followers, note: nil, sourceType: .manual)
+        let list = try XCTUnwrap(store.createPlaceList(name: "Weekend", description: "", visibility: .stealth))
+        let result = await store.addCheckInToLists(userPlaceID: save.userPlaceID,
+            listIDs: [list.id, "unavailable"], ownerUserID: store.currentUser.id, backend: nil)
+        XCTAssertEqual(result.pendingCount, 1)
+        XCTAssertEqual(result.unavailableCount, 1)
+        XCTAssertEqual(store.placeListItems.count, 1)
+        XCTAssertEqual(store.visits(for: save.userPlaceID).count, 1)
+    }
+
+    func testCheckInListsRejectChangedAccountAndNeverCreateAMissingSave() async {
+        let store = makeStore()
+        let save = store.saveCandidate(candidate(id: "account", name: "Cafe"), status: .been,
+            visibility: .followers, note: nil, sourceType: .manual)
+        let list = store.createPlaceList(name: "Weekend", description: "", visibility: .followers)!
+        let stale = await store.addCheckInToLists(userPlaceID: save.userPlaceID,
+            listIDs: [list.id], ownerUserID: "another-account", backend: nil)
+        let missing = await store.addCheckInToLists(userPlaceID: "missing-save",
+            listIDs: [list.id], ownerUserID: store.currentUser.id, backend: nil)
+        XCTAssertEqual(stale.unavailableCount, 1)
+        XCTAssertEqual(missing.unavailableCount, 1)
+        XCTAssertTrue(store.placeListItems.isEmpty)
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
+    }
+
+    func testCheckInListRetryDeliversOnlyFailedMembershipWithoutAnotherVisit() async throws {
+        let (store, lists, userPlaceID) = makeRemoteCheckInListStore()
+        let repository = CheckInListTestRepository()
+        repository.failingListIDs = [lists[1].id]
+        let backend = WanderBackend(placeListRepository: repository)
+        let visitIDs = store.visits(for: userPlaceID).map(\.id)
+        let first = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: Set(lists.map(\.id)), ownerUserID: store.currentUser.id, backend: backend)
+        XCTAssertEqual(first.syncedCount, 1)
+        XCTAssertEqual(first.failedCount, 1)
+        XCTAssertEqual(store.placeListItems.count, 2)
+
+        repository.failingListIDs = []
+        let retry = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: Set(lists.flatMap { [$0.localID, $0.id] }), ownerUserID: store.currentUser.id, backend: backend)
+        XCTAssertEqual(retry.syncedCount, 2)
+        XCTAssertFalse(retry.needsAttention)
+        XCTAssertEqual(repository.itemRequests.filter { $0.listID == lists[0].id }.count, 1)
+        XCTAssertEqual(repository.itemRequests.filter { $0.listID == lists[1].id }.count, 2)
+        XCTAssertEqual(store.placeListItems.count, 2)
+        XCTAssertEqual(store.visits(for: userPlaceID).map(\.id), visitIDs)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first?.userPlace.visibility, .selfOnly)
+    }
+
+    func testCheckInListOutboxRetriesCollaboratorMembershipWithoutEditingTheirList() async throws {
+        let (store, lists, userPlaceID) = makeRemoteCheckInListStore(collaboration: true)
+        let selected = lists[0]
+        let queued = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: [selected.id], ownerUserID: store.currentUser.id, backend: nil)
+        XCTAssertEqual(queued.pendingCount, 1)
+        let repository = CheckInListTestRepository()
+        _ = await store.syncPendingPlaceLists(backend: WanderBackend(placeListRepository: repository))
+        XCTAssertEqual(store.placeListItems.first?.syncState, .synced)
+        XCTAssertEqual(repository.itemRequests.map(\.listID), [selected.id])
+        XCTAssertEqual(repository.upsertCount, 0)
+        XCTAssertEqual(repository.collaboratorUpdateCount, 0)
+        XCTAssertEqual(store.placeLists.first?.ownerUserID, selected.ownerUserID)
+    }
+
+    func testCheckInListOutboxRetriesFailedItemsAfterListMetadataSyncs() async {
+        let (store, lists, userPlaceID) = makeRemoteCheckInListStore()
+        let repository = CheckInListTestRepository()
+        repository.failingListIDs = [lists[0].id]
+        let backend = WanderBackend(placeListRepository: repository)
+        _ = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: [lists[0].id], ownerUserID: store.currentUser.id, backend: backend)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertEqual(store.placeListItems.first?.syncState, .failed)
+        repository.failingListIDs = []
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertEqual(store.placeListItems.first?.syncState, .synced)
+        XCTAssertEqual(store.placeListItems.count, 1)
+    }
+
+    func testCheckInListsDoNotRestoreADeletedList() async throws {
+        let (store, lists, userPlaceID) = makeRemoteCheckInListStore()
+        XCTAssertTrue(store.deletePlaceList(id: lists[0].id))
+        let repository = CheckInListTestRepository()
+        let result = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: [lists[0].id], ownerUserID: store.currentUser.id,
+            backend: WanderBackend(placeListRepository: repository))
+        XCTAssertEqual(result.unavailableCount, 1)
+        XCTAssertTrue(store.placeListItems.isEmpty)
+        XCTAssertTrue(repository.itemRequests.isEmpty)
+    }
+
+    func testCheckInListsRecheckCollaboratorPermissionAtSubmission() async {
+        let (store, lists, userPlaceID) = makeRemoteCheckInListStore(collaboration: false)
+        let repository = CheckInListTestRepository()
+        let result = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: [lists[0].id], ownerUserID: store.currentUser.id,
+            backend: WanderBackend(placeListRepository: repository))
+        XCTAssertEqual(result.unavailableCount, 1)
+        XCTAssertTrue(store.placeListItems.isEmpty)
+        XCTAssertTrue(repository.itemRequests.isEmpty)
+    }
+
+    func testCheckInListSyncDoesNotApplyAResponseAfterAccountSwitch() async {
+        let (store, lists, userPlaceID) = makeRemoteCheckInListStore()
+        let repository = CheckInListTestRepository()
+        repository.onAdd = {
+            store.apply(authState: .signedIn(AuthSession(userID: "new-owner", displayName: "New", handle: "new")))
+        }
+        _ = await store.addCheckInToLists(userPlaceID: userPlaceID,
+            listIDs: Set(lists.map(\.id)), ownerUserID: store.currentUser.id,
+            backend: WanderBackend(placeListRepository: repository))
+        XCTAssertEqual(store.currentUser.id, "new-owner")
+        XCTAssertEqual(repository.itemRequests.count, 1)
+        XCTAssertTrue(store.placeListItems.isEmpty)
+    }
+
+    private func makeRemoteCheckInListStore(collaboration: Bool? = nil) -> (WanderStore, [LocalPlaceList], String) {
+        let owner = LocalProfile(localID: "local-owner", serverID: "user_live", handle: "tester", displayName: "Tester")
+        let place = LocalPlace(localID: "local-place", serverID: "33333333-3333-4333-8333-333333333333",
+            canonicalName: "Fixture Cafe", category: "coffee", latitude: 34, longitude: -118, syncState: .synced)
+        let save = LocalUserPlace(localID: "local-save", serverID: "44444444-4444-4444-8444-444444444444",
+            userID: owner.id, placeID: place.id, status: .been, visibility: .selfOnly, sourceType: "manual", syncState: .synced)
+        let lists = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"].enumerated().map { index, id in
+            LocalPlaceList(localID: "local-list-\(index)", serverID: id, ownerUserID: collaboration == nil ? owner.id : "list-owner",
+                name: "List \(index)", description: "", syncState: .synced)
+        }
+        let memberships = collaboration == true ? lists.map {
+            LocalPlaceListMember(localID: "member-\($0.localID)", listID: $0.id, userID: owner.id, role: .collaborator)
+        } : []
+        let store = WanderStore(fixtures: WanderFixtures(currentUser: owner, profiles: [owner],
+            places: [place], userPlaces: [save], placeAttributes: [], follows: [], blocks: [],
+            placeLists: lists, placeListMembers: memberships, placeListItems: [], contactProvider: FakeContactProvider(seededMatches: [])))
+        _ = store.createVisit(userPlaceID: save.id, visitedAt: .now, note: nil, ratingScore: 8,
+                              attributes: [], visibility: .selfOnly)
+        return (store, lists, save.id)
+    }
+
     func testImportListMembershipPreservesBothSaveStatuses() async throws {
         let analytics = MapListRecordingAnalyticsClient()
         let store = makeStore(analytics: analytics)
@@ -362,4 +535,29 @@ private final class MapListRecordingAnalyticsClient: AnalyticsClient {
 
     func identify(userID: String) {}
     func resetIdentity() {}
+}
+
+@MainActor
+private final class CheckInListTestRepository: PlaceListRepository {
+    var failingListIDs: Set<String> = []
+    var itemRequests: [PlaceListItemDraft] = []
+    var onAdd: (() -> Void)?
+    var upsertCount = 0
+    var collaboratorUpdateCount = 0
+
+    func visibleLists() async throws -> [RemotePlaceListSummary] { [] }
+    func detail(listID: String) async throws -> RemotePlaceListDetail? { nil }
+    func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
+        upsertCount += 1
+        return draft.id ?? UUID().uuidString
+    }
+    func delete(listID: String) async throws {}
+    func setCollaborators(listID: String, userIDs: [String]) async throws { collaboratorUpdateCount += 1 }
+    func removeItem(listID: String, itemID: String) async throws {}
+    func addItem(_ draft: PlaceListItemDraft) async throws -> String {
+        itemRequests.append(draft)
+        onAdd?()
+        if failingListIDs.contains(draft.listID) { throw URLError(.notConnectedToInternet) }
+        return UUID().uuidString
+    }
 }

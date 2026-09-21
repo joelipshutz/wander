@@ -174,6 +174,7 @@ struct MapPlaceListPickerSheet: View {
     var additionalTargets: [MapPlaceListTarget] = []
     var stagedListIDs: Set<String> = []
     var onStage: ((Set<String>) -> Void)?
+    var stagesCheckIn = false
     private var targets: [MapPlaceListTarget] { [target] + additionalTargets }
     var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
@@ -211,7 +212,12 @@ struct MapPlaceListPickerSheet: View {
                         }
                     }
 
-                    if presentation.needsCompanionWanna {
+                    if stagesCheckIn {
+                        Text("Lists are updated when you check in. The place follows each list’s visibility; your check-in audience stays the same.")
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if presentation.needsCompanionWanna {
                         companionSaveNotice
                     }
 
@@ -258,7 +264,11 @@ struct MapPlaceListPickerSheet: View {
         .onAppear {
             guard !didLoadMembership else { return }
             loadMembershipOnce()
-            for id in stagedListIDs { selection.togglePending(listID: id) }
+            for id in stagedListIDs {
+                // A staged selection may outlive a new list receiving its server ID.
+                let currentID = presentation.eligibleLists.first { $0.id == id || $0.localID == id }?.id ?? id
+                selection.togglePending(listID: currentID)
+            }
         }
         .onChange(of: store.presentationRevision) { _, _ in
             guard didLoadMembership, !isApplying else { return }
@@ -295,7 +305,7 @@ struct MapPlaceListPickerSheet: View {
                     Text("New list")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text(onStage == nil ? "Create it and add this place" : "Create it and select it for this import")
+                    Text(onStage == nil ? "Create it and add this place" : stagesCheckIn ? "Create it and select it for this check-in" : "Create it and select it for this import")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }

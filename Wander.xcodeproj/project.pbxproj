@@ -11,6 +11,7 @@
 		00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */; };
 		01193A5EFB4DEB5B4F0BB8A4 /* WanderWidgetIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3179057CF009DF47A424566 /* WanderWidgetIntegrationTests.swift */; };
 		02F594AB759A5785C4EA9955 /* PlaceMemoryTagPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FC415195F46542F6C4740B1 /* PlaceMemoryTagPresentationTests.swift */; };
+		0339035BD40C8A40F7437A06 /* CheckInListSaveResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71D2F7C6CA1ED926E57C059E /* CheckInListSaveResult.swift */; };
 		03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3EDD3FA845221CF23EBFCA /* SaveStreakReminder.swift */; };
 		03461155119042D6739D7619 /* WanderEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038D4985674B1D969110954F /* WanderEnums.swift */; };
 		03B8805B01D27AF04C0D3CC5 /* InviteMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840B7E03004D458695870EAF /* InviteMockups.swift */; };
@@ -644,6 +645,7 @@
 		70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderNearbyWidgetSnapshot.swift; sourceTree = "<group>"; };
 		711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultMapFilterSettingsUITests.swift; sourceTree = "<group>"; };
 		718A86905C5ED6292D127B8D /* WanderShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WanderShareExtension.entitlements; sourceTree = "<group>"; };
+		71D2F7C6CA1ED926E57C059E /* CheckInListSaveResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInListSaveResult.swift; sourceTree = "<group>"; };
 		728FBAC7DBB18CEA5B912615 /* NotificationBadgeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationBadgeStoreTests.swift; sourceTree = "<group>"; };
 		7327B8B87EDE207236010857 /* FullPageBackSwipeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullPageBackSwipeUITests.swift; sourceTree = "<group>"; };
 		73D64500CA1377F2C798EB38 /* WannaGoReminderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WannaGoReminderTests.swift; sourceTree = "<group>"; };
@@ -1488,6 +1490,7 @@
 		E8C412A5051CD9CCBE4E8249 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				71D2F7C6CA1ED926E57C059E /* CheckInListSaveResult.swift */,
 				93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */,
 				98A011A7BA9FB18559F7D951 /* Feedback.swift */,
 				F99048FDB3AD3D79FB6B853D /* LocalListModels.swift */,
@@ -1908,6 +1911,7 @@
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
 				FC1886271BDE08FBF1EF00AF /* CalendarReservationManager.swift in Sources */,
 				D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */,
+				0339035BD40C8A40F7437A06 /* CheckInListSaveResult.swift in Sources */,
 				4B8889477AB85A421D61C3A6 /* CheckInQuestionPanel.swift in Sources */,
 				1D008BA76230E32D7EBEA3AA /* CheckInQuestionPreferences.swift in Sources */,
 				97A39511E32DC5F182EA232B /* CheckInQuestionSettingsScreen.swift in Sources */,
