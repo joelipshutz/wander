@@ -179,7 +179,8 @@ struct PlaceProfileFullScreen: View {
             category: place.primaryCategory,
             saves: resolvedSaves,
             tasteSaves: tasteSaves,
-            currentUserID: currentUserID
+            currentUserID: currentUserID,
+            featuredEvidence: saves
         )
     }
 
@@ -1199,7 +1200,8 @@ private struct PlaceProfilePreviewCard: View {
             providerScore: displayedPhoto?.providerRating,
             providerCount: displayedPhoto?.providerUserRatingCount,
             recmeRating: presentation.overallRating ?? presentation.ownRating,
-            providerName: displayedPhoto?.provider
+            providerName: displayedPhoto?.provider,
+            isUnratedFeatured: presentation.isUnratedFeatured
         )
     }
 
@@ -1224,7 +1226,7 @@ private struct PlaceProfilePreviewCard: View {
         [
             place.name,
             place.compactPlaceType,
-            ratingPresentation.map { "Rated \($0.scoreText) out of 5" },
+            ratingPresentation?.accessibilityLabel,
             distanceText,
             hoursPresentation.map { [$0.statusText, $0.detailText].compactMap { $0 }.joined(separator: ", ") }
         ]
@@ -1529,6 +1531,9 @@ private struct PlaceCardRatingDistanceRow: View {
 
                 if let providerName = rating.providerDisplayName {
                     PlaceCardProviderRatingBadge(providerName: providerName)
+                } else if rating.source == .featured {
+                    Text("Featured")
+                        .font(.system(size: 10, weight: .bold))
                 }
             }
 

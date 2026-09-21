@@ -1058,8 +1058,9 @@ struct MapPinRenderCatalog {
                }) {
                 places.append(currentUserSave)
             }
-            let states = MapPinSaveState.personalStates(for: places, currentUserID: currentUserID)
-            outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(for: states)
+            outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(
+                for: places, currentUserID: currentUserID
+            )
         }
 
         self.outlinesByGroupKey = outlinesByGroupKey
@@ -3666,7 +3667,7 @@ struct MapScreen: View {
             places.append(currentUserSave)
         }
         return MapPinOutlineBuilder.outlines(
-            for: MapPinSaveState.personalStates(for: places, currentUserID: store.currentUser.id)
+            for: places, currentUserID: store.currentUser.id
         )
     }
 
@@ -10403,18 +10404,20 @@ struct MapPinOutlineStroke: View {
 enum MapPinSaveOwnership: Equatable {
     case currentUser
     case social
+    case featured
 
     var key: String {
         switch self {
         case .currentUser: "current_user"
         case .social: "social"
+        case .featured: "featured"
         }
     }
 
     var color: Color {
         switch self {
         case .currentUser: WanderTheme.pinYou.color
-        case .social: WanderTheme.pinSocial.color
+        case .social, .featured: WanderTheme.pinSocial.color
         }
     }
 }
@@ -11031,6 +11034,19 @@ struct MapPinOutlineArc: Equatable {
 }
 
 enum MapPinOutlineBuilder {
+    static func outlines(for places: [VisiblePlace], currentUserID: String) -> [MapPinOutline] {
+        let personalOutlines = outlines(
+            for: MapPinSaveState.personalStates(for: places, currentUserID: currentUserID)
+        )
+        guard personalOutlines.isEmpty,
+              places.contains(where: { $0.isCommunityAggregate && $0.userPlace.deletedAt == nil })
+        else { return personalOutlines }
+
+        // Anonymous Featured evidence gets a visible ring without implying
+        // that the viewer or a followed person has checked in.
+        return [MapPinOutline(ownership: .featured, status: .been)]
+    }
+
     static func outlines(for states: [MapPinSaveState]) -> [MapPinOutline] {
         [
             outline(for: .currentUser, in: states),
@@ -11050,7 +11066,7 @@ enum MapPinOutlineBuilder {
             currentUserID: currentUserID
         ) {
             let outlines = outlines(
-                for: MapPinSaveState.personalStates(for: group.places, currentUserID: currentUserID)
+                for: group.places, currentUserID: currentUserID
             )
 
             for visiblePlace in group.places {
@@ -11087,6 +11103,7 @@ enum MapPinOutlineBuilder {
 enum MapPinAccessibility {
     static func label(outlines: [MapPinOutline], category: String, placeName: String) -> String {
         let stateSummaries = outlines.map { outline in
+            if outline.ownership == .featured { return "Featured" }
             let owner = outline.ownership == .currentUser ? "you" : "social"
             let primaryStatus = outline.status == .been ? CheckInCopy.pastTense : "wanna"
 
