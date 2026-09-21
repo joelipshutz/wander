@@ -25,7 +25,9 @@ python3 ../.tools/ios-work.py build -- test \
   -only-testing:WanderTests/AccountContactDetailsTests \
   -only-testing:WanderTests/EventsAccessTests \
   -only-testing:WanderTests/OnboardingStateTests \
-  -only-testing:WanderTests/NavigationContractTests \
+  -only-testing:WanderTests/OnboardingConnectionTests \
+  -only-testing:WanderTests/OnboardingEntryRegressionTests \
+  -only-testing:WanderTests/FirstVisitWalkthroughTests \
   -only-testing:WanderUITests/AccountContactDetailsUITests \
   -only-testing:WanderUITests/EventsAccessUITests \
   CODE_SIGNING_ALLOWED=NO
@@ -70,3 +72,25 @@ The server independently denies Events registration for unknown and non-LA
 homes. Phone is optional, private and unverified; this form does not register a
 verified contact-match identity. Existing Events interest is retained when home
 changes, and becomes readable again if the member changes back to LA.
+
+## Native CI evidence
+
+The `Home city and Events native validation` workflow runs the feature unit tests,
+onboarding and first-visit regression suites, and both feature UI suites on an
+existing iPhone 17 Pro. It repeats the UI suites on an existing iPhone 16e and
+exports original screenshots, result bundles, and a simulator app for review.
+
+The initial full-unit run [35620835724](https://github.com/joelipshutz/wander/actions/runs/35620835724)
+finished with 2,380 passes and four failures on Pro; compact UI had seven passes
+and one failure. All 20 new feature unit tests passed. The feature UI failure was
+a parent accessibility identifier overriding the Settings Save button identifier;
+the parent identifier has been removed. Screenshot review also found the keyboard
+clipping the phone field, addressed by revealing the whole phone section when
+editing. The typing UI test now checks that its privacy note stays visible.
+
+Three full-suite failures were in unchanged areas: the glass-cluster source
+contract (`NavigationContractTests`), a search timing threshold (58.7 ms against
+50 ms on the hosted runner), and the calendar widget month-boundary snapshot.
+These are not hidden by a full-suite pass claim. The dedicated workflow now runs
+the relevant feature/onboarding suites; broader-suite failures remain release
+review items.

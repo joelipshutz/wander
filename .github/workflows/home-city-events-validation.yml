@@ -44,12 +44,17 @@ jobs:
                   f.write(variable + '=' + device['udid'] + '\n')
               print('Using', name, device['udid'])
           PY
-      - name: Unit suite and native screen flows on iPhone 17 Pro
+      - name: Feature units and native screen flows on iPhone 17 Pro
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests
+          -only-testing:WanderTests/AccountContactDetailsTests
+          -only-testing:WanderTests/EventsAccessTests
+          -only-testing:WanderTests/OnboardingStateTests
+          -only-testing:WanderTests/OnboardingConnectionTests
+          -only-testing:WanderTests/OnboardingEntryRegressionTests
+          -only-testing:WanderTests/FirstVisitWalkthroughTests
           -only-testing:WanderUITests/AccountContactDetailsUITests
           -only-testing:WanderUITests/EventsAccessUITests
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=NO

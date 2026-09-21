@@ -19,6 +19,9 @@ import XCTest
         let phone = app.textFields["accountContactDetails.phone"]
         phone.tap()
         phone.typeText("2025550123")
+        let privacyNote = app.staticTexts["Your phone number is private."]
+        let phoneSectionIsVisible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: privacyNote)
+        XCTAssertEqual(XCTWaiter.wait(for: [phoneSectionIsVisible], timeout: 5), .completed)
         capture(app, name: "02 — Phone keyboard")
         app.buttons["Done"].tap()
         app.buttons["accountContactDetails.continue"].tap()

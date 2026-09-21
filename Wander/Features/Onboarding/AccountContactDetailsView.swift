@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AccountContactDetailsView: View {
     @StateObject var model: AccountContactDetailsModel
@@ -42,81 +43,21 @@ struct AccountContactDetailsView: View {
                 showsCountries = false
             }
         }
-        .accessibilityIdentifier("accountContactDetails.screen")
     }
 
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-                OnboardingHeadline(eyebrow: "A LITTLE ABOUT YOU", title: "Make yourself at home", message: "Check your home city and add your phone number.")
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Home city").font(AstirTypography.label)
-                    Button {
-                        phoneIsFocused = false
-                        showsMetros = true
-                    } label: {
-                        HStack {
-                            Text(metroTitle)
-                            Spacer()
-                            if model.isLocating { ProgressView() }
-                            Image(systemName: "chevron.down")
-                        }
-                        .contactDetailsField()
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("accountContactDetails.metro")
-                    Text("Choose the area you call home. You can change it later.")
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Phone number · optional").font(AstirTypography.label)
-                    HStack(spacing: WanderTheme.spacing2) {
-                        Button {
-                            phoneIsFocused = false
-                            showsCountries = true
-                        } label: {
-                            HStack(spacing: 5) {
-                                Text(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)
-                                Image(systemName: "chevron.down").font(.caption)
-                            }
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Country code, \(OnboardingPhoneNumber.country(model.phoneCountryCode).name), \(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)")
-                        .accessibilityIdentifier("accountContactDetails.country")
-                        Divider().frame(height: 28)
-                        TextField(model.phoneCountryCode == "US" ? "10-digit phone number" : "Phone number", text: Binding(get: { model.phoneText }, set: { model.editPhone($0) }))
-                            .keyboardType(.phonePad)
-                            .textContentType(.telephoneNumber)
-                            .focused($phoneIsFocused)
-                            .accessibilityIdentifier("accountContactDetails.phone")
-                    }
-                    .contactDetailsField()
-                    if !model.phoneIsValid {
-                        Text(model.phoneCountryCode == "US" ? "Enter a valid 10-digit phone number." : "Check the number and country code.")
-                            .font(AstirTypography.caption)
-                            .foregroundStyle(WanderTheme.stateError.color)
-                            .accessibilityIdentifier("accountContactDetails.phoneError")
-                    }
-                    Text("Your phone number is private.")
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-                .sessionReplayMasked()
-                if let message = model.errorMessage {
-                    Text(message)
-                        .font(AstirTypography.bodySmall)
-                        .foregroundStyle(WanderTheme.stateError.color)
-                    if !model.didLoad {
-                        Button("Try again") { Task { await model.load() } }
-                    }
-                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                form
             }
-            .padding(WanderTheme.spacing4)
-            .disabled(model.isLoading || model.isSaving)
+            .scrollDismissesKeyboard(.interactively)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                revealPhoneSection(using: proxy)
+            }
+            .onChange(of: model.phoneIsValid) { _, _ in
+                revealPhoneSection(using: proxy)
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -124,6 +65,85 @@ struct AccountContactDetailsView: View {
             }
         }
         .sessionReplayMasked()
+    }
+
+    private func revealPhoneSection(using proxy: ScrollViewProxy) {
+        guard phoneIsFocused else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo("phoneSection", anchor: .bottom)
+        }
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+            OnboardingHeadline(eyebrow: "A LITTLE ABOUT YOU", title: "Make yourself at home", message: "Check your home city and add your phone number.")
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text("Home city").font(AstirTypography.label)
+                Button {
+                    phoneIsFocused = false
+                    showsMetros = true
+                } label: {
+                    HStack {
+                        Text(metroTitle)
+                        Spacer()
+                        if model.isLocating { ProgressView() }
+                        Image(systemName: "chevron.down")
+                    }
+                    .contactDetailsField()
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("accountContactDetails.metro")
+                Text("Choose the area you call home. You can change it later.")
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text("Phone number · optional").font(AstirTypography.label)
+                HStack(spacing: WanderTheme.spacing2) {
+                    Button {
+                        phoneIsFocused = false
+                        showsCountries = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)
+                            Image(systemName: "chevron.down").font(.caption)
+                        }
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Country code, \(OnboardingPhoneNumber.country(model.phoneCountryCode).name), \(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)")
+                    .accessibilityIdentifier("accountContactDetails.country")
+                    Divider().frame(height: 28)
+                    TextField(model.phoneCountryCode == "US" ? "10-digit phone number" : "Phone number", text: Binding(get: { model.phoneText }, set: { model.editPhone($0) }))
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                        .focused($phoneIsFocused)
+                        .accessibilityIdentifier("accountContactDetails.phone")
+                }
+                .contactDetailsField()
+                if !model.phoneIsValid {
+                    Text(model.phoneCountryCode == "US" ? "Enter a valid 10-digit phone number." : "Check the number and country code.")
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(WanderTheme.stateError.color)
+                        .accessibilityIdentifier("accountContactDetails.phoneError")
+                }
+                Text("Your phone number is private.")
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            .id("phoneSection")
+            .sessionReplayMasked()
+            if let message = model.errorMessage {
+                Text(message)
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(WanderTheme.stateError.color)
+                if !model.didLoad {
+                    Button("Try again") { Task { await model.load() } }
+                }
+            }
+        }
+        .padding(WanderTheme.spacing4)
+        .disabled(model.isLoading || model.isSaving)
     }
 
     private var actions: some View {
