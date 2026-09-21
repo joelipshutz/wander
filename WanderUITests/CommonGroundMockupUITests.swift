@@ -8,6 +8,50 @@ final class CommonGroundMockupUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testOneSidedSuggestionsCityFilterAndInvitation() {
+        let app = launch(page: "oneSided")
+        let count = app.staticTexts["common-ground.mix-count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 8))
+        XCTAssertEqual(count.label, "3 suggestions")
+        XCTAssertTrue(app.staticTexts["common-ground.one-sided-intro"].exists)
+        XCTAssertEqual(app.staticTexts["common-ground.narrative.mudwater"].label, "Joe loves Mudwater")
+        XCTAssertTrue(app.staticTexts["You two should go together."].firstMatch.exists)
+        capture("rec578-one-sided-suggestions")
+
+        let invite = app.buttons["common-ground.invite.mudwater"]
+        XCTAssertTrue(scrollTo(invite, in: app))
+        invite.tap()
+        let invitation = app.staticTexts["common-ground.invitation.place"]
+        XCTAssertTrue(invitation.waitForExistence(timeout: 4))
+        XCTAssertEqual(invitation.label, "Mudwater")
+        capture("rec578-one-sided-invitation")
+        app.navigationBars.firstMatch.buttons.firstMatch.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 4))
+
+        selectCity("London", in: app)
+        assertLabel("1 suggestion", on: count)
+        XCTAssertEqual(app.staticTexts["common-ground.narrative.canal-coffee"].label, "Joe loves Canal Coffee")
+        XCTAssertFalse(app.buttons["common-ground.invite.mudwater"].exists)
+        capture("rec578-one-sided-city")
+        selectCity("All places", in: app)
+        assertLabel("3 suggestions", on: count)
+    }
+
+    func testOneSidedSuggestionsAtAccessibilityTextSize() {
+        let app = launch(page: "oneSided", additionalArguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        let narrative = app.staticTexts["common-ground.narrative.mudwater"]
+        XCTAssertTrue(narrative.waitForExistence(timeout: 8))
+        XCTAssertEqual(narrative.label, "Joe loves Mudwater")
+        let invite = app.buttons["common-ground.invite.mudwater"]
+        XCTAssertTrue(scrollTo(invite, in: app))
+        XCTAssertGreaterThanOrEqual(invite.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(invite.frame.minX, 0)
+        XCTAssertLessThanOrEqual(invite.frame.maxX, app.frame.width)
+        capture("rec578-one-sided-accessibility")
+    }
+
     func testPlacePhotosOpenTheirOwnProfilesAndInviteTheSelectedPlace() {
         let app = launch(page: "mix")
         XCTAssertTrue(app.staticTexts["common-ground.collection-title"].waitForExistence(timeout: 8))
@@ -260,14 +304,14 @@ final class CommonGroundMockupUITests: XCTestCase {
         }
     }
 
-    private func launch(page: String) -> XCUIApplication {
+    private func launch(page: String, additionalArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderAuthenticatedUITest",
             "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs",
             "-WanderCommonGroundMockup", page
-        ]
+        ] + additionalArguments
         app.launch()
         return app
     }

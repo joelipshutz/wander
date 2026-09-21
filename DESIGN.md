@@ -358,6 +358,12 @@ Pin states:
 - You + Wanna go: dashed terracotta.
 - Social + Been: solid sky.
 - Social + Wanna go: dashed sky.
+- Featured community place without a personal/social ring: solid sky, with a
+  Featured accessibility label. An own or social save replaces this fallback
+  with the corresponding save-state ring.
+- Unrated Featured community places display a temporary 5-star value labeled
+  Featured, without a review count. The first actual Astir rating replaces it;
+  the temporary value never contributes to rating averages or Fit scores.
 
 Rules:
 

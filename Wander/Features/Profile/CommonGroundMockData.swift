@@ -10,6 +10,7 @@ enum CommonGroundMockPage: String, CaseIterable, Sendable {
     case messages
     case recipientOpened
     case sparse
+    case oneSided
     case loading
     case unavailable
 
@@ -52,6 +53,7 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
     let partner: CommonGroundPerson
     let photoReference: CommonGroundPlacePhotoReference?
     let sourcePlaceID: String?
+    let isOneSidedRecommendation: Bool
 
     enum Linkage: String, Hashable, Sendable {
         case sharedRegulars, sharedLove, mutualWanna
@@ -98,7 +100,8 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         systemImage: String, youRating: Double?, joeRating: Double?,
         youVisits: Int, joeVisits: Int, youWanna: Bool, joeWanna: Bool,
         youWannaEventIDs: [String] = [], joeWannaEventIDs: [String] = [],
-        reason: String
+        reason: String,
+        isOneSidedRecommendation: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -113,6 +116,7 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         partner = .previewPartner
         photoReference = nil
         sourcePlaceID = nil
+        self.isOneSidedRecommendation = isOneSidedRecommendation
         // Fixtures mirror separate check-in and Wanna events. In the live
         // adapter, pass all visible events after canonical place resolution,
         // including Wanna events attached to a Been summary (REC-497).
@@ -139,7 +143,8 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         systemImage: String, youRating: Double?, joeRating: Double?,
         youEvidence: CommonGroundPersonEvidence, joeEvidence: CommonGroundPersonEvidence,
         reason: String, viewer: CommonGroundPerson, partner: CommonGroundPerson,
-        photoReference: CommonGroundPlacePhotoReference?, sourcePlaceID: String?
+        photoReference: CommonGroundPlacePhotoReference?, sourcePlaceID: String?,
+        isOneSidedRecommendation: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -156,6 +161,7 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
         self.partner = partner
         self.photoReference = photoReference
         self.sourcePlaceID = sourcePlaceID
+        self.isOneSidedRecommendation = isOneSidedRecommendation
     }
 
     var previewPhotoTile: Int? {
@@ -232,6 +238,24 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
 /// Fictional, deterministic design fixtures. Visit counts describe each person's
 /// separate check-ins; no fixture claims that the people visited together.
 enum CommonGroundMockData {
+    static let oneSidedPlaces: [CommonGroundMockPlace] = [
+        CommonGroundMockPlace(
+            id: "mudwater", name: "Mudwater", category: "Coffee", area: "Los Feliz", city: "Los Angeles",
+            systemImage: "cup.and.saucer", youRating: nil, joeRating: 5, youVisits: 0, joeVisits: 5,
+            youWanna: false, joeWanna: false, reason: "Joe rated it 5/5", isOneSidedRecommendation: true
+        ),
+        CommonGroundMockPlace(
+            id: "the-little-room", name: "The Little Room", category: "Restaurant", area: "Atwater Village", city: "Los Angeles",
+            systemImage: "fork.knife", youRating: 5, joeRating: nil, youVisits: 3, joeVisits: 0,
+            youWanna: false, joeWanna: false, reason: "You rated it 5/5", isOneSidedRecommendation: true
+        ),
+        CommonGroundMockPlace(
+            id: "canal-coffee", name: "Canal Coffee", category: "Coffee", area: "Hackney", city: "London",
+            systemImage: "cup.and.saucer", youRating: nil, joeRating: 4.5, youVisits: 0, joeVisits: 1,
+            youWanna: false, joeWanna: false, reason: "Joe rated it 4.5/5", isOneSidedRecommendation: true
+        )
+    ]
+
     static let places: [CommonGroundMockPlace] = [
         CommonGroundMockPlace(
             id: "narwhal", name: "Narwhal", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
