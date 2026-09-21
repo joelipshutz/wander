@@ -86,7 +86,7 @@ struct AccountContactDetailsView: View {
                         .accessibilityLabel("Country code, \(OnboardingPhoneNumber.country(model.phoneCountryCode).name), \(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)")
                         .accessibilityIdentifier("accountContactDetails.country")
                         Divider().frame(height: 28)
-                        TextField(model.phoneCountryCode == "US" ? "10-digit phone number" : "Phone number", text: Binding(get: { model.phoneText }, set: model.editPhone))
+                        TextField(model.phoneCountryCode == "US" ? "10-digit phone number" : "Phone number", text: Binding(get: { model.phoneText }, set: { model.editPhone($0) }))
                             .keyboardType(.phonePad)
                             .textContentType(.telephoneNumber)
                             .focused($phoneIsFocused)
