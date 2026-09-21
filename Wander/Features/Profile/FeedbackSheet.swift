@@ -93,7 +93,7 @@ struct FeedbackSheet: View {
                     Label("Your voice note will be included.", systemImage: "checkmark.circle.fill")
                         .font(.footnote).foregroundStyle(brandMode.secondaryText)
                 } else if inputMode == .voice, hasTextDraft {
-                    Label("Your text and photos will be included.", systemImage: "checkmark.circle.fill")
+                    Label("Your text will be included.", systemImage: "checkmark.circle.fill")
                         .font(.footnote).foregroundStyle(brandMode.secondaryText)
                 }
                 if let error = composer.errorMessage ?? audio.errorMessage {
@@ -144,7 +144,7 @@ struct FeedbackSheet: View {
     }
 
     private var hasTextDraft: Bool {
-        !composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !composer.photos.isEmpty
+        !composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var inputTabs: some View {
@@ -282,6 +282,12 @@ struct FeedbackSheet: View {
                 }
                 .font(.footnote.weight(.medium)).frame(minHeight: 44)
             }
+            VStack(alignment: .leading, spacing: 12) {
+                if isLoadingPhotos { ProgressView("Adding photos…") }
+                if !composer.photos.isEmpty { photos }
+                photoButton
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22).padding(.horizontal, 16)
