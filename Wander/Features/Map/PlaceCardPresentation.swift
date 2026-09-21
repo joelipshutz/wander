@@ -5,6 +5,7 @@ import SwiftUI
 struct PlaceCardRatingPresentation: Equatable {
     enum Source: Equatable {
         case recme
+        case featured
         case provider(displayName: String)
     }
 
@@ -20,6 +21,12 @@ struct PlaceCardRatingPresentation: Equatable {
         guard case .provider(let displayName) = source else { return nil }
         return displayName
     }
+
+    var accessibilityLabel: String {
+        source == .featured
+            ? "Featured, 5 out of 5, not yet rated"
+            : "Rated \(scoreText) out of 5"
+    }
 }
 
 struct PlaceCardHoursPresentation: Equatable {
@@ -33,7 +40,8 @@ enum PlaceCardPresentation {
         providerScore: Double?,
         providerCount: Int?,
         recmeRating: PlaceActualRating?,
-        providerName: String? = nil
+        providerName: String? = nil,
+        isUnratedFeatured: Bool = false
     ) -> PlaceCardRatingPresentation? {
         if let recmeRating, recmeRating.count > 0 {
             guard (1 ... 5).contains(recmeRating.score) else { return nil }
@@ -46,8 +54,15 @@ enum PlaceCardPresentation {
 
         // A malformed negative rec.me count is not the same as zero evidence.
         // Avoid silently replacing invalid first-party data with a provider score.
-        guard recmeRating?.count ?? 0 == 0,
-              let providerScore,
+        guard recmeRating?.count ?? 0 == 0 else { return nil }
+
+        // Presentation only: no fabricated review count and no stored rating.
+        // Actual Astir ratings above always replace this temporary value.
+        if isUnratedFeatured {
+            return PlaceCardRatingPresentation(score: 5, count: nil, source: .featured)
+        }
+
+        guard let providerScore,
               (1 ... 5).contains(providerScore)
         else { return nil }
 

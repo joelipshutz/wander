@@ -85,6 +85,7 @@ struct PlaceProfilePresentation: Equatable {
     let ownRating: PlaceActualRating?
     let fitRating: PlaceFitRating?
     let commonTags: [PlaceCommonTag]
+    let isUnratedFeatured: Bool
 
     var whyItFits: [String] {
         fitRating?.reasons ?? []
@@ -97,10 +98,15 @@ enum PlaceProfilePresenter {
         category: String,
         saves: [PlaceSaveSummary],
         tasteSaves: [PlaceSaveSummary],
-        currentUserID: String
+        currentUserID: String,
+        featuredEvidence: [PlaceSaveSummary] = []
     ) -> PlaceProfilePresentation {
+        // Full profiles filter anonymous aggregates out of activity history,
+        // but may retain their place-level rating evidence from the entry point.
+        let ratingSaves = (saves + featuredEvidence.filter { $0.visiblePlace.isCommunityAggregate })
+            .filter { $0.visiblePlace.userPlace.deletedAt == nil }
         let commonTags = commonTags(from: saves, currentUserID: currentUserID)
-        let overallRating = overallRating(from: saves, currentUserID: currentUserID)
+        let overallRating = overallRating(from: ratingSaves, currentUserID: currentUserID)
         let ownRating = ownRating(from: saves, currentUserID: currentUserID)
         let fitRating = fitRating(
             placeID: placeID,
@@ -116,7 +122,13 @@ enum PlaceProfilePresenter {
             overallRating: overallRating,
             ownRating: ownRating,
             fitRating: fitRating,
-            commonTags: commonTags
+            commonTags: commonTags,
+            isUnratedFeatured: ratingSaves.contains { $0.visiblePlace.isCommunityAggregate }
+                && !ratingSaves.contains {
+                    $0.visiblePlace.userPlace.recommendedCount != 0
+                        || ($0.visiblePlace.userPlace.status == .been
+                            && $0.visiblePlace.userPlace.ratingScore != nil)
+                }
         )
     }
 
