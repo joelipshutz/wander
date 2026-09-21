@@ -32,7 +32,6 @@ struct ProductUpsellScreen: View {
                         .padding(.horizontal, WanderTheme.spacing4)
                         .padding(.top, WanderTheme.spacing2)
                         .padding(.bottom, WanderTheme.spacing2)
-                        .background(.ultraThinMaterial)
                 }
                 .background(brandMode.background.ignoresSafeArea())
                 .foregroundStyle(brandMode.primaryText)
