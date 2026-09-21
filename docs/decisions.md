@@ -376,7 +376,7 @@ when present, otherwise “On <first name>’s radar”; their action is “Let�
 List invitations omit a repeated list-name subtitle and use “Join”. Messages and system sharing use one published card link. Instagram and TikTok
 photo handoffs copy that link for captions or stickers.
 
-## Linked share-card snapshots (REC-546)
+## Linked share-card snapshots — initial rollout (REC-546)
 
 Sharing publishes the approved Link card as a static public image behind an
 unguessable preview token on a website-only `/cards/<entity>/<id>` URL.
@@ -394,3 +394,23 @@ stay outside AASA associations. Existing app visibility rules remain authoritati
 Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
+
+## 2026-09-21 — Shared cards open the installed app directly (REC-577)
+
+Published `/cards/<entity>/<id>?card=<token>` links should open the exact entity
+in a compatible installed Astir app when tapped from Messages. This supersedes
+the browser-first routing of REC-546; the published snapshot, one-URL message,
+and website fallback remain unchanged.
+
+The native parser accepts only the five published card roots and one valid
+preview token, discards the token, and reuses the canonical route through the
+existing session and authorization checks. The token grants no native access
+and is never an analytics property. The website associates only those five
+card paths with the app; it retains its preview and View action for browsers.
+
+Roll out the compatible iOS build before deploying the website association,
+then verify a tap from Messages on a device with that build. Older clients
+cannot parse card paths and association rules cannot select an app version.
+Keep the website PR unmerged until the tester-update gate is satisfied; account
+for Apple's association cache when verifying. Coordinate domain changes with
+REC-586 without removing existing getrec.me link support.

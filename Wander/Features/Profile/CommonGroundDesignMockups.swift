@@ -58,6 +58,7 @@ struct CommonGroundDesignMockupRoot: View {
                                      retry: { page = .detail })
         case .mix:
             CommonGroundMixMockup(sparse: page == .sparse,
+                                 livePlaces: page == .oneSided ? CommonGroundMockData.oneSidedPlaces : nil,
                                  openPlace: { path.append(.place($0)) },
                                  invite: { path.append(.invitation($0)) })
         case .shared(let filter):
@@ -95,7 +96,7 @@ struct CommonGroundDesignMockupRoot: View {
         switch page {
         case .profile, .ownProfile: return []
         case .detail, .loading, .unavailable, .sparse: return [.detail]
-        case .mix: return [.detail, .mix]
+        case .mix, .oneSided: return [.detail, .mix]
         case .invitation: return [.detail, .mix, .invitation(place)]
         case .recipient: return [.detail, .recipient(place)]
         case .messages: return []
@@ -116,6 +117,7 @@ private extension CommonGroundMockPage {
         case .messages: "In Messages"
         case .recipientOpened: "Opened invitation"
         case .sparse: "In Common · A few places"
+        case .oneSided: "In Common · No shared places"
         case .loading: "Loading"
         case .unavailable: "Unavailable"
         }
@@ -304,6 +306,10 @@ struct CommonGroundMixMockup: View {
         return CommonGroundMockData.mix(area: area, sparse: sparse)
     }
 
+    private var showsOneSidedRecommendations: Bool {
+        livePlaces?.contains(where: \.isOneSidedRecommendation) == true
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
@@ -323,17 +329,28 @@ struct CommonGroundMixMockup: View {
                     HStack(alignment: .center) {
                         areaPicker
                         Spacer(minLength: 12)
-                        Text("\(places.count) places")
+                        Text(showsOneSidedRecommendations
+                             ? "\(places.count) \(places.count == 1 ? "suggestion" : "suggestions")"
+                             : "\(places.count) places")
                             .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                             .accessibilityIdentifier("common-ground.mix-count")
                     }
                     Rectangle().fill(brand.border).frame(height: 1)
+                    if showsOneSidedRecommendations && !places.isEmpty {
+                        Text("No shared places yet. Start with a favorite.")
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brand.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("common-ground.one-sided-intro")
+                    }
                 }
                 if places.isEmpty {
                     ContentUnavailableView {
                         Label("A little more to discover", systemImage: "map")
                     } description: {
-                        Text(livePlaces == nil ? "There aren’t any picks for you two in this city yet" : "Places you both save will show up here")
+                        Text(livePlaces == nil || area != "All places"
+                             ? "There aren’t any picks for you two in this city yet"
+                             : "Shared places and favorites to try together will show up here")
                     } actions: {
                         Button(livePlaces == nil ? "Back to Los Angeles" : "All places") { area = livePlaces == nil ? "Los Angeles" : "All places" }
                             .buttonStyle(.bordered).frame(minHeight: 44)
@@ -476,6 +493,12 @@ private struct CommonGroundPlaceStory: View {
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brand.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+                if place.isOneSidedRecommendation {
+                    Text("You two should go together.")
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brand.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -833,6 +856,7 @@ private struct CommonGroundProfileMockup: View {
                         center: CLLocationCoordinate2D(latitude: 34.02, longitude: -118.47),
                         span: MKCoordinateSpan(latitudeDelta: 0.065, longitudeDelta: 0.065)
                     )), interactionModes: [])
+                    .sessionReplayMasked()
                     .frame(height: 190).clipShape(RoundedRectangle(cornerRadius: 12))
                     .accessibilityLabel("Los Angeles map preview")
                 }

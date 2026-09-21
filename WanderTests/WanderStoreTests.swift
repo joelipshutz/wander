@@ -8065,6 +8065,22 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
     }
 
+    func testClearingContactRecommendationsInvalidatesOlderInFlightRefresh() async {
+        let store = makeStore()
+        let oldProfile = ProfileShell(id: "user_removed_contact", handle: "removed", displayName: "Removed", avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let newProfile = ProfileShell(id: "user_new_suggestion", handle: "new", displayName: "New", avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let oldRepo = FakeProfileRepository(recommendations: [.init(profile: oldProfile, reason: .contacts, rank: 1)])
+        oldRepo.suspendRecommendations = true
+        let oldTask = Task { await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(profileRepository: oldRepo)) }
+        while oldRepo.recommendationLimits.isEmpty { await Task.yield() }
+        store.clearContactRecommendations()
+        let newRepo = FakeProfileRepository(recommendations: [.init(profile: newProfile, reason: .suggested, rank: 1)])
+        await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(profileRepository: newRepo), force: true)
+        oldRepo.suspendRecommendations = false
+        await oldTask.value
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.map(\.id), [newProfile.id])
+    }
+
     func testDiscoverPeopleRecommendationsFailureAndIdentityChangeResetState() async {
         let store = makeStore()
         let backend = WanderBackend(

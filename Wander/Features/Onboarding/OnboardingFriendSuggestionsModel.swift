@@ -21,10 +21,11 @@ final class OnboardingFriendSuggestionsModel: ObservableObject {
     private let fetchFollowing: () async throws -> [ProfileShell]
     private let createFollow: (String) async throws -> Void
     private var searchGeneration = 0
+    private var loadGeneration = 0
 
     convenience init(backend: WanderBackend, userID: String) {
         self.init(
-            recommendations: { try await backend.discoverProfileRecommendations(limit: 12) },
+            recommendations: { try await backend.peopleRecommendations(userID: userID, limit: 20) },
             search: { try await backend.searchProfiles(handleQuery: $0) },
             following: { try await backend.following(userID: userID) },
             follow: { try await backend.follow(userID: $0) }
@@ -59,17 +60,27 @@ final class OnboardingFriendSuggestionsModel: ObservableObject {
         followedIDs.contains(profile.id) || profile.relationship == .follower || profile.relationship == .mutual
     }
 
-    func load() async {
-        guard loadingState == .idle || loadingState == .failed else { return }
+    func clearContactRecommendations() {
+        loadGeneration += 1
+        recommendations.removeAll { $0.reason == .contacts }
+    }
+
+    func load(force: Bool = false) async {
+        guard force || loadingState == .idle || loadingState == .failed else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
         loadingState = .loading
         do {
             // Search RPCs omit relationship data. Load the viewer's real graph
             // before offering follow actions, including resumed onboarding.
             let following = try await fetchFollowing()
             followedIDs.formUnion(following.map(\.id))
-            recommendations = try await fetchRecommendations()
+            let loaded = try await fetchRecommendations()
+            guard generation == loadGeneration, !Task.isCancelled else { return }
+            recommendations = loaded
             loadingState = .loaded
         } catch {
+            guard generation == loadGeneration else { return }
             loadingState = .failed
         }
     }

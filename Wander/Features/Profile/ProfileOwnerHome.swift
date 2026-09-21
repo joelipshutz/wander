@@ -418,90 +418,57 @@ struct ProfileOwnerHome: View {
     }
 
     private var profileNavigationRow: some View {
-        WanderGlassButtonCluster {
-            HStack(spacing: WanderTheme.spacing1) {
-                if let backAction {
-                    ProfileBackButton(action: backAction)
-                }
+        HStack(spacing: WanderTheme.spacing1) {
+            if let backAction {
+                ProfileBackButton(action: backAction)
+            }
 
-                if !isProfileMotionActive {
-                    Text("@\(profile.handle)")
-                        .font(AstirTypography.sectionTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                }
+            if mode.isOwner, let feedbackAction {
+                ProfileHeaderActionButton(systemImage: "ladybug.fill", accessibilityLabel: "Feedback", action: feedbackAction)
+                    .accessibilityIdentifier("profile.feedback")
+            }
 
-                Spacer(minLength: 0)
+            if !isProfileMotionActive {
+                Text("@\(profile.handle)")
+                    .font(AstirTypography.sectionTitle)
+                    .foregroundStyle(brandMode.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
 
-                if mode.isOwner {
-                    if let feedbackAction {
-                        ProfileHeaderActionButton(systemImage: "ladybug.fill", accessibilityLabel: "Feedback", action: feedbackAction)
-                            .accessibilityIdentifier("profile.feedback")
-                    }
-                    ProfileInvitationButton(
-                        pendingInvitationCount: sharedVisitInvitationCount,
-                        action: sharedVisitInvitationsAction
-                    )
-                    ProfileHeaderActionButton(
-                        systemImage: "pencil",
-                        accessibilityLabel: "Edit profile",
-                        action: editAction
-                    )
-                }
+            Spacer(minLength: 0)
 
-                if let shareContent = WanderShareContent.profile(
-                    serverID: profile.serverID,
-                    displayName: profile.displayName,
-                    handle: profile.handle
+            if mode.isOwner {
+                ProfileInvitationButton(
+                    pendingInvitationCount: sharedVisitInvitationCount,
+                    action: sharedVisitInvitationsAction
+                )
+            }
+
+            if mode.isOwner {
+                ProfileHeaderActionButton(systemImage: "line.3.horizontal", accessibilityLabel: "Settings", action: settingsAction)
+                    .walkthroughTarget(.profileSettings)
+            } else if let memberActions {
+                ProfileHeaderActionButton(
+                    systemImage: "ellipsis",
+                    accessibilityLabel: "More profile actions"
                 ) {
-                    ShareCardButton(
-                        content: shareContent,
-                        card: ShareCardContent(kind: .profile, name: profile.displayName,
-                                               ownerName: profile.displayName, detail: "@\(profile.handle)"),
-                        onTap: shareAction,
-                        loadImages: {
-                            let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: profile.avatarURL)
-                            let request = ProfileMapSnapshotRequest(points: insights.mapPoints,
-                                size: CGSize(width: 390, height: 238), displayScale: 3,
-                                colorScheme: brandMode == .editorial ? .dark : .light)
-                            let map = await ProfileMapSnapshotCache.shared.image(for: request)
-                            return ShareCardImages(avatar: avatar, map: map)
-                        }
-                    ) {
-                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share profile")
-                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                    showsMemberActions.toggle()
                 }
-
-                if mode.isOwner {
-                    ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
-                        .walkthroughTarget(.profileSettings)
-                } else if let memberActions {
-                    ProfileHeaderActionButton(
-                        systemImage: "ellipsis",
-                        accessibilityLabel: "More profile actions"
-                    ) {
-                        showsMemberActions.toggle()
-                    }
-                    .popover(
-                        isPresented: $showsMemberActions,
-                        attachmentAnchor: .rect(.bounds),
-                        arrowEdge: .top
-                    ) {
-                        ProfileMemberActionsPopover(
-                            actions: memberActions,
-                            dismiss: { showsMemberActions = false }
-                        )
-                        .presentationCompactAdaptation(.popover)
-                    }
+                .popover(
+                    isPresented: $showsMemberActions,
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: .top
+                ) {
+                    ProfileMemberActionsPopover(
+                        actions: memberActions,
+                        dismiss: { showsMemberActions = false }
+                    )
+                    .presentationCompactAdaptation(.popover)
                 }
             }
         }
-        // Liquid Glass composites above ordinary siblings inside its container.
-        // Draw the count outside that container so the bell cannot obscure it.
+        // Keep the notification count above the icon without intercepting taps.
         .overlayPreferenceValue(ProfileNotificationBellAnchorKey.self) { anchor in
             GeometryReader { geometry in
                 if let anchor, mode.isOwner {
@@ -514,7 +481,36 @@ struct ProfileOwnerHome: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
-        .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+    }
+
+    @ViewBuilder
+    private var profileShareButton: some View {
+        if let shareContent = WanderShareContent.profile(
+            serverID: profile.serverID,
+            displayName: profile.displayName,
+            handle: profile.handle
+        ) {
+            ShareCardButton(
+                content: shareContent,
+                card: ShareCardContent(kind: .profile, name: profile.displayName,
+                                       ownerName: profile.displayName, detail: "@\(profile.handle)"),
+                onTap: shareAction,
+                loadImages: {
+                    let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: profile.avatarURL)
+                    let request = ProfileMapSnapshotRequest(points: insights.mapPoints,
+                        size: CGSize(width: 390, height: 238), displayScale: 3,
+                        colorScheme: brandMode == .editorial ? .dark : .light)
+                    let map = await ProfileMapSnapshotCache.shared.image(for: request)
+                    return ShareCardImages(avatar: avatar, map: map)
+                }
+            ) {
+                AstirIdentityActionLabel(title: "Share profile")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Share profile")
+            .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+            .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+        }
     }
 
     private var profileIdentityBlock: some View {
@@ -563,23 +559,24 @@ struct ProfileOwnerHome: View {
                     .profileMotionSource(normalized(profile.bio) == nil ? .bio : nil)
             }
 
-            if let relationship = mode.relationship {
-                Button(action: relationshipAction) {
-                    Label(relationshipTitle(relationship), systemImage: relationshipSymbol(relationship))
-                        .font(AstirTypography.control)
-                        .padding(.horizontal, WanderTheme.spacing4)
-                        .frame(minHeight: WanderTheme.tapMinimum)
-                        .foregroundStyle(
-                            relationship == .nonFollower
-                                ? brandMode.accent
-                                : brandMode.primaryText
-                        )
-                        .astirOutlinedSurface(
-                            selected: relationship == .nonFollower,
-                            castsShadow: true
-                        )
+            if mode.isOwner {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Button(action: editAction) {
+                        AstirIdentityActionLabel(title: "Edit profile")
+                    }
+                    .buttonStyle(.plain)
+                    profileShareButton
                 }
-                .buttonStyle(.plain)
+            }
+
+            if let relationship = mode.relationship {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Button(action: relationshipAction) {
+                        AstirIdentityActionLabel(title: relationshipTitle(relationship))
+                    }
+                    .buttonStyle(.plain)
+                    profileShareButton
+                }
             }
         }
     }
@@ -629,10 +626,6 @@ struct ProfileOwnerHome: View {
         case .follower: "Following"
         case .nonFollower: "Follow"
         }
-    }
-
-    private func relationshipSymbol(_ relationship: ViewerRelationship) -> String {
-        relationship == .nonFollower ? "person.badge.plus" : "checkmark"
     }
 
     private var memberSinceText: String {
@@ -718,7 +711,7 @@ struct ProfileHeaderActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            ProfileHeaderActionLabel(systemImage: systemImage)
+            ProfileHeaderActionLabel(systemImage: systemImage, showsBackground: false)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -772,7 +765,7 @@ private struct ProfileInvitationButton: View {
 
     var body: some View {
         Button(action: action) {
-            ProfileHeaderActionLabel(systemImage: "bell")
+            ProfileHeaderActionLabel(systemImage: "bell", showsBackground: false)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Notifications")
@@ -815,14 +808,23 @@ private struct ProfileNotificationCountBadge: View {
 private struct ProfileHeaderActionLabel: View {
     @Environment(\.astirBrandMode) private var brandMode
     let systemImage: String
+    var showsBackground = true
 
+    @ViewBuilder
     var body: some View {
+        if showsBackground {
+            icon.wanderGlassCapsule()
+        } else {
+            icon
+        }
+    }
+
+    private var icon: some View {
         Image(systemName: systemImage)
             .font(.system(size: 16, weight: .black))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .foregroundStyle(brandMode.primaryText)
             .contentShape(Circle())
-            .wanderGlassCapsule()
     }
 }
 

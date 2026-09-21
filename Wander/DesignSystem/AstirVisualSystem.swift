@@ -697,3 +697,26 @@ extension EnvironmentValues {
         set { self[PlaceProfileVisualStyleKey.self] = newValue }
     }
 }
+
+/// Shared, quiet identity actions for profile and list detail screens.
+/// The label owns presentation; callers retain their existing Button or ShareCardButton.
+struct AstirIdentityActionLabel: View {
+    @Environment(\.astirBrandMode) private var brandMode
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AstirTypography.control)
+            .foregroundStyle(brandMode.primaryText)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.vertical, WanderTheme.spacing2)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .background(
+                brandMode.primaryText.opacity(brandMode.prefersDarkInterface ? 0.10 : 0.055),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
