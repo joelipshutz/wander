@@ -13988,6 +13988,10 @@ struct MapPlaceSaveEditor: View {
                     .disabled(!canInviteFriends)
             }
 
+            if offersListSelection {
+                saveListsRow
+            }
+
             if context.allowsPhotoAttachments {
                 MapSaveVisitPhotoSection(
                     canAddPhotos: true,
@@ -14344,7 +14348,7 @@ struct MapPlaceSaveEditor: View {
                         .font(AstirTypography.control)
                         .foregroundStyle(astirBrandMode.primaryText)
 
-                    Text(optionalDetailsSummary)
+                    Text("tags")
                         .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
@@ -14379,8 +14383,7 @@ struct MapPlaceSaveEditor: View {
             .walkthroughTarget(.saveMoreOptions)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityIdentifier("save.moreOptions")
-            .accessibilityValue((isShowingOptionalDetails ? "Expanded" : "Collapsed")
-                + (offersListSelection && !selectedListIDs.isEmpty ? ", \(selectedListIDs.count) lists selected" : ""))
+            .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
                     ? "This walkthrough points out where optional tags live."
@@ -14401,19 +14404,10 @@ struct MapPlaceSaveEditor: View {
             )
 
             if isShowingOptionalDetails {
-                if selectedStatus == .been, offersListSelection {
-                    saveListsRow
-                }
                 questionAndLabelSections
                     .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
             }
         }
-    }
-
-    private var optionalDetailsSummary: String {
-        guard selectedStatus == .been, offersListSelection else { return "tags" }
-        guard !selectedListIDs.isEmpty else { return "tags · lists" }
-        return "tags · \(selectedListIDs.count == 1 ? "1 list" : "\(selectedListIDs.count) lists")"
     }
 
     private var offersListSelection: Bool {
@@ -14444,8 +14438,8 @@ struct MapPlaceSaveEditor: View {
                     .foregroundStyle(astirBrandMode.secondaryText)
             }
             .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(.horizontal, selectedStatus == .wannaGo ? WanderTheme.spacing3 : 0)
-            .background(selectedStatus == .wannaGo ? astirBrandMode.raisedBackground : .clear)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .background(astirBrandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .contentShape(Rectangle())
         }

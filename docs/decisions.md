@@ -7,10 +7,11 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 ## Lists within Wanna and check-in saves (REC-567)
 
 Wanna places **Add to lists** below the note and above the date, outside More
-options. Check-in keeps it inside More options. List selection remains optional
-and is available for first saves, repeat saves, and edits. Lists already containing
-the canonical place are disabled and labeled **Already in list**; repeat visits
-never create duplicate entries for that place in a list.
+options. Check-in places it directly below Friends, before Photos and More options.
+List selection remains optional and is available for first saves, repeat saves,
+and edits. Lists already containing the canonical place are disabled and labeled
+**Already in list**; repeat visits never create duplicate entries for that place
+in a list.
 
 Picker choices are staged until the parent save succeeds. Canceling the picker
 preserves the form; closing an unsaved form adds no list memberships. List delivery

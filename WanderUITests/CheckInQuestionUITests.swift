@@ -10,20 +10,24 @@ final class CheckInQuestionUITests: XCTestCase {
     func testCheckInListsStayOptionalAndPickerCancellationPreservesDraft() {
         let app = launchPlace()
         openCheckIn(in: app)
-        XCTAssertFalse(app.buttons["save.lists"].exists)
-        capture("REC-567 check-in with collapsed More options")
+        let lists = app.buttons["save.lists"]
+        let more = app.buttons["save.moreOptions"]
+        reveal(lists, in: app)
+        XCTAssertTrue(lists.exists)
+        XCTAssertEqual(more.value as? String, "Collapsed")
+        let friends = app.buttons["Add friends to this check-in"]
+        XCTAssertTrue(friends.exists)
+        XCTAssertLessThan(friends.frame.minY, lists.frame.minY)
+        XCTAssertLessThan(lists.frame.minY, app.buttons["save.photos"].frame.minY)
+        XCTAssertLessThan(lists.frame.minY, more.frame.minY)
+        capture("REC-567 check-in lists below Friends and above More options")
 
         let note = app.textFields["save.note"]
         reveal(note, in: app)
         note.tap()
         note.typeText("Keep this check-in draft")
-        let more = app.buttons["save.moreOptions"]
-        reveal(more, in: app)
-        more.tap()
-        let lists = app.buttons["save.lists"]
         reveal(lists, in: app)
         XCTAssertEqual(lists.value as? String, "0 selected")
-        capture("REC-567 Add to lists inside More options")
         lists.tap()
         let picker = app.buttons["map-list-picker.cancel"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
@@ -52,17 +56,18 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertEqual(lists.value as? String, "1 selected")
         reveal(more, in: app)
         more.tap()
-        XCTAssertTrue(app.staticTexts["tags · 1 list"].exists)
-        XCTAssertFalse(lists.exists)
-        capture("REC-567 collapsed selected list count")
+        XCTAssertTrue(lists.exists)
+        more.tap()
+        XCTAssertEqual(more.value as? String, "Collapsed")
+        XCTAssertTrue(lists.exists)
+        XCTAssertEqual(lists.value as? String, "1 selected")
+        capture("REC-567 lists remain visible with More options collapsed")
 
         let close = app.buttons["save.close"]
         reveal(close, in: app, upwards: false)
         close.tap()
         XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForNonExistence(timeout: 10))
         openCheckIn(in: app)
-        reveal(more, in: app)
-        more.tap()
         reveal(lists, in: app)
         lists.tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
@@ -119,11 +124,6 @@ final class CheckInQuestionUITests: XCTestCase {
             action.tap()
             XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 10))
             let lists = app.buttons["save.lists"]
-            if actionID.hasSuffix("checkIn") {
-                let more = app.buttons["save.moreOptions"]
-                reveal(more, in: app)
-                more.tap()
-            }
             reveal(lists, in: app)
             lists.tap()
             let existing = app.buttons.matching(NSPredicate(
