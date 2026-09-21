@@ -770,13 +770,21 @@ final class WanderBackend: ObservableObject {
     }
 
     func peopleRecommendations(userID: String, limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {
-        async let contacts = try? contactDiscovery.matches(userID: userID)
-        async let general = try? discoverProfileRecommendations(limit: limit)
-        let (matched, suggested) = await (contacts, general)
+        let matched = (try? await contactDiscovery.matches(userID: userID)) ?? []
         try Task.checkCancellation()
-        guard suggested != nil || !(matched ?? []).isEmpty else { throw ContactDiscoveryError.unavailable }
-        let permittedMatches = await contactDiscovery.canUseResults(userID: userID) ? (matched ?? []) : []
-        return PeopleRecommendationMerge.combine(contacts: permittedMatches, general: suggested ?? [], limit: limit)
+        let permitted = await contactDiscovery.canUseResults(userID: userID) ? matched : []
+        if let profileRepository,
+           let ranked = try? await profileRepository.rankedPeopleRecommendations(contactIDs: permitted.map(\.id), limit: limit) {
+            try Task.checkCancellation()
+            let canUseContacts = await contactDiscovery.canUseResults(userID: userID)
+            return ranked.filter { $0.reason != .contacts || canUseContacts }
+        }
+        // A staged server rollout or temporary ranking failure keeps the same
+        // contact/general fallback on both onboarding and the People shelf.
+        let suggested = try? await discoverProfileRecommendations(limit: limit)
+        guard suggested != nil || !permitted.isEmpty else { throw ContactDiscoveryError.unavailable }
+        let finalContacts = await contactDiscovery.canUseResults(userID: userID) ? permitted : []
+        return PeopleRecommendationMerge.combine(contacts: finalContacts, general: suggested ?? [], limit: limit)
     }
 
     func discoverProfileRecommendations(limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {

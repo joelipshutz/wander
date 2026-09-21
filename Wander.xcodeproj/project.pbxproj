@@ -105,6 +105,7 @@
 		2F479C8C414D7250CCD158D9 /* OnboardingHotchkissPark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2B52230604656C6B3B2B22C5 /* OnboardingHotchkissPark.jpg */; };
 		2FCACFADB44361B7435C5793 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9166766790578B44B8D3597A /* Supabase */; };
 		2FD8F0A08EED3CAFDC70F0F5 /* ImportWorkflowDesignMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC3C812E022B8D8200F4287 /* ImportWorkflowDesignMockups.swift */; };
+		30E0F0903E69CAE4AF309BB9 /* PeopleFollowButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCF9133CF234414AFEEEB16 /* PeopleFollowButton.swift */; };
 		31E27F44912FDDF3AF00306E /* MapPlaceCardActionInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */; };
 		321792B906B2F777D89C44B7 /* OnboardingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */; };
 		33D184799AF3759D47C9F1FA /* OnboardingIdentitySubmission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD4E89E8065F294DD497FF5 /* OnboardingIdentitySubmission.swift */; };
@@ -529,6 +530,7 @@
 		1CEB8B354BBD2C2CB9AFABCA /* FeedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedModels.swift; sourceTree = "<group>"; };
 		1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-168-check-in-date-reselection-pre.json"; sourceTree = "<group>"; };
 		1D1C7C90B3FCDDC970DAF376 /* CommonGroundPersonEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundPersonEvidenceTests.swift; sourceTree = "<group>"; };
+		1DCF9133CF234414AFEEEB16 /* PeopleFollowButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleFollowButton.swift; sourceTree = "<group>"; };
 		1E6F6858FAB55D4C03CB7BC2 /* FirstVisitWalkthroughTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstVisitWalkthroughTests.swift; sourceTree = "<group>"; };
 		1F02A34AD702E15C8702F666 /* ProfileHeaderMotionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHeaderMotionUITests.swift; sourceTree = "<group>"; };
 		1F632D2BDC390C70FD727599 /* rec-195-copy-rotation-analytics-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-copy-rotation-analytics-pre.json"; sourceTree = "<group>"; };
@@ -1342,6 +1344,7 @@
 				81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */,
 				8A9418DE1CEF195815E9E029 /* EventsTabSymbol.swift */,
 				98B104023B0E56EE2EDFF8E3 /* FullPageBackSwipe.swift */,
+				1DCF9133CF234414AFEEEB16 /* PeopleFollowButton.swift */,
 				239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */,
 				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
 				F3224572209A0533F2B1B0A3 /* SessionReplayPrivacy.swift */,
@@ -1996,6 +1999,7 @@
 				D4B963611EB5B141EC5D9BFB /* OnboardingPlacePhotoRepository.swift in Sources */,
 				1F6050501FF55A31CF052BDD /* OnboardingState.swift in Sources */,
 				6ACCE690B9C8FF876B5B90CC /* OnboardingWelcomeContent.swift in Sources */,
+				30E0F0903E69CAE4AF309BB9 /* PeopleFollowButton.swift in Sources */,
 				85AADE6CC89E67EF821CA62E /* PhotoPlaceTextExtractor.swift in Sources */,
 				540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */,
 				0E63C5812CFBBD3907522CA0 /* PlaceBusinessMetadata.swift in Sources */,

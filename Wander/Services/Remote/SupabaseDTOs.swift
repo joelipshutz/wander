@@ -78,6 +78,8 @@ struct RemoteDiscoverPeopleRecommendationDTO: Codable, Equatable {
             relationship: relationship.flatMap(ViewerRelationship.init(rawValue:)) ?? .nonFollower
         )
         let reason: DiscoverPeopleRecommendationReason = switch reasonKind {
+        case "contacts": .contacts
+        case "nearby": .nearby
         case "follows_you": .followsYou
         case "shared_follows": .sharedFollows(max(sharedFollowCount, 1))
         default: .suggested

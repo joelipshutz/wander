@@ -2205,7 +2205,6 @@ private extension View {
 struct PeopleRecommendationCard: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var followFeedback = UIImpactFeedbackGenerator(style: .medium)
     let recommendation: DiscoverPeopleRecommendation
     let isFollowing: Bool
     let isFollowInFlight: Bool
@@ -2214,7 +2213,6 @@ struct PeopleRecommendationCard: View {
     let follow: () -> Void
 
     private var profile: ProfileShell { recommendation.profile }
-    private var showsFollowing: Bool { isFollowing || isFollowInFlight }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2255,31 +2253,8 @@ struct PeopleRecommendationCard: View {
 
             Spacer(minLength: 10)
 
-            Button {
-                var transaction = Transaction(animation: nil)
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { follow() }
-            } label: {
-                Text(showsFollowing ? "Following" : didFollowFail ? "Try again" : "Follow")
-                    .font(AstirTypography.label)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .foregroundStyle(showsFollowing ? brandMode.primaryText : brandMode.accentForeground)
-                    .background(showsFollowing ? brandMode.recessedBackground : brandMode.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-                    .contentShape(Rectangle())
-                    .contentTransition(.identity)
-            }
-            .buttonStyle(RecommendationFollowPressStyle {
-                followFeedback.impactOccurred(intensity: 1)
-                followFeedback.prepare()
-            })
-            .disabled(showsFollowing)
-            .transaction {
-                $0.animation = nil
-                $0.disablesAnimations = true
-            }
-            .onAppear { followFeedback.prepare() }
-            .accessibilityLabel(showsFollowing ? "Following \(profile.displayName)" : didFollowFail ? "Couldn't follow \(profile.displayName). Try again" : "Follow \(profile.displayName)")
+            PeopleFollowButton(displayName: profile.displayName, isFollowing: isFollowing,
+                isPending: isFollowInFlight, didFail: didFollowFail, action: follow)
             .accessibilityIdentifier("people.recommendation.\(profile.id).follow")
         }
         .padding(WanderTheme.spacing3)
@@ -2291,19 +2266,6 @@ struct PeopleRecommendationCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
                 .stroke(brandMode.border, lineWidth: 1)
         }
-    }
-}
-
-/// Keep native Button/ScrollView gesture cancellation, with no press fade or
-/// label morph. The haptic starts on press rather than a later model update.
-private struct RecommendationFollowPressStyle: ButtonStyle {
-    let onPress: () -> Void
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                if isPressed { onPress() }
-            }
     }
 }
 

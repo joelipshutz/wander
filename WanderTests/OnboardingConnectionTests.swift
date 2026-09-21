@@ -70,6 +70,8 @@ final class OnboardingConnectionTests: XCTestCase {
         await fulfillment(of: [followStarted], timeout: 5)
         let completion = try XCTUnwrap(continuation)
         XCTAssertTrue(model.isFollowing)
+        XCTAssertTrue(model.pendingIDs.contains(ryan.id), "The shared control must show Following while the write is suspended")
+        XCTAssertEqual(model.completedFollowCount, 0, "Optimistic display must not count as a saved follow")
         let duplicate = await model.follow(ryan)
         XCTAssertFalse(duplicate)
         completion.resume()

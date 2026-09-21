@@ -486,7 +486,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             followedFeedTimeout
         case "activity_media":
             activityMediaTimeout
-        case "discover_profile_recommendations":
+        case "discover_profile_recommendations", "ranked_people_recommendations":
             discoverProfileRecommendationsTimeout
         default:
             60

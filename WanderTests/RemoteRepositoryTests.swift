@@ -1696,6 +1696,20 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[0].body["input_limit"] as? Int, 12)
     }
 
+    func testSharedRankingPassesOnlyContactProfileIDsAndPreservesServerOrder() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["ranked_people_recommendations"] = """
+        [{"id":"rachel","handle":"rachel","display_name":"Rachel","avatar_url":null,"bio":null,"home_area":"Los Angeles","created_at":"2026-07-01T12:00:00Z","relationship":"non_follower","reason_kind":"suggested","shared_follow_count":0,"result_rank":1},
+         {"id":"friend","handle":"friend","display_name":"Friend","avatar_url":null,"bio":null,"home_area":"Los Angeles","created_at":"2026-07-01T12:00:00Z","relationship":"non_follower","reason_kind":"contacts","shared_follow_count":2,"result_rank":2},
+         {"id":"local","handle":"local","display_name":"Local","avatar_url":null,"bio":null,"home_area":"Los Angeles","created_at":"2026-07-01T12:00:00Z","relationship":"non_follower","reason_kind":"nearby","shared_follow_count":0,"result_rank":3}]
+        """.data(using: .utf8)
+        let result = try await SupabaseProfileRepository(rpc: rpc).rankedPeopleRecommendations(contactIDs: ["friend"], limit: 20)
+        XCTAssertEqual(result.map(\.id), ["rachel", "friend", "local"])
+        XCTAssertEqual(result.map(\.reason), [.suggested, .contacts, .nearby])
+        XCTAssertEqual(rpc.calls[0].body["input_contact_ids"] as? [String], ["friend"])
+        XCTAssertEqual(Set(rpc.calls[0].body.keys), ["input_contact_ids", "input_limit"])
+    }
+
     func testProfileSearchCallsExpectedRPCAndMapsShells() async throws {
         let rpc = RecordingRPC()
         rpc.responses["search_profiles_by_handle"] = """

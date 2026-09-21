@@ -105,6 +105,24 @@ import XCTest
         openContactSettings(app)
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 5))
     }
+    func testOnboardingFollowMatchesShelfPendingAndRetryBehavior() {
+        let app = launch(["-WanderContactDiscoveryDelayedFollow"])
+        let find = app.buttons["onboarding.contacts.findFriends"]
+        XCTAssertTrue(find.waitForExistence(timeout: 15)); find.tap()
+        let friend = app.buttons["onboarding.friends.follow.user_contact_friend"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10)); friend.tap()
+        XCTAssertEqual(friend.label, "Following Contact Friend")
+        XCTAssertFalse(friend.isEnabled)
+        XCTAssertFalse(friend.descendants(matching: .activityIndicator).firstMatch.exists)
+        capture("Onboarding instant Following")
+        let failed = expectation(for: NSPredicate(format: "label CONTAINS %@", "Couldn't follow"), evaluatedWith: friend)
+        wait(for: [failed], timeout: 8)
+        XCTAssertTrue(friend.isEnabled)
+        capture("Onboarding retry after failure")
+        friend.tap()
+        XCTAssertEqual(friend.label, "Following Contact Friend")
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)

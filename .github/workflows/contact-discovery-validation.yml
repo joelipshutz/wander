@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - '**/*ContactDiscovery*'
+      - '**/PeopleFollowButton.swift'
+      - 'supabase/migrations/*ranked_people_recommendations.sql'
+      - 'supabase/tests/ranked_people_recommendations.sql'
       - '**/ContactProvider.swift'
       - '**/OnboardingFriendSuggestions*'
       - 'supabase/functions/contact-discovery/**'
