@@ -30,6 +30,12 @@ begin
     or not has_function_privilege('anon', 'public.place_plan_preview(text)', 'execute') then
     raise exception 'plan RPC grants changed';
   end if;
+  if exists (select 1 from pg_proc
+    where oid = 'public.create_place_plan_invitation(uuid,text,text,text,text,text,text,timestamptz)'::regprocedure
+      and (provolatile <> 'v' or prorettype <> 'jsonb'::regtype
+        or exists (select 1 from aclexplode(coalesce(proacl, acldefault('f', proowner)))
+          where grantee = 0 and privilege_type = 'EXECUTE')))
+  then raise exception 'create plan RPC volatility, result, or public grant changed'; end if;
   if has_function_privilege('anon', 'public.received_place_plan_invitations()', 'execute')
     or has_function_privilege('anon', 'public.open_received_place_plan_invitation(uuid)', 'execute')
     or has_function_privilege('authenticated', 'app.place_plan_payload(uuid)', 'execute')
@@ -146,5 +152,130 @@ begin
   reset role;
 end;
 $test$;
+
+-- Exercise the exact authenticated RPC for both one-sided invitation directions.
+-- Separate fixtures keep the original shared-place / inbox contract unchanged.
+do $one_sided$
+declare
+  sender text := 'user_codex_plan_solo_sender';
+  recipient text := 'user_codex_plan_solo_recipient';
+  venue jsonb := '{"canonical_name":"One Sided Smoke Park","category":"coffee_tea_sweets","primary_category":"coffee_tea_sweets","latitude":0,"longitude":0,"source_provider":"codex_smoke","source_provider_place_id":"rec578-one-sided-plan","confidence":1}';
+  venue_id uuid;
+  image_path text := 'user_codex_plan_solo_sender/11111111-2222-4333-8444-555555555555/preview.png';
+  invite_token text;
+  result jsonb;
+  owner_id text;
+  blocked_by text;
+begin
+  insert into public.profiles(id, handle, display_name, is_private_profile)
+    values(sender, 'codex_plan_solo_sender', 'Solo Sender', false),
+          (recipient, 'codex_plan_solo_recipient', 'Solo Recipient', false);
+  insert into public.follows(follower_user_id, followed_user_id, source)
+    values(sender, recipient, 'username');
+
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', sender, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  result := public.save_own_place(venue,
+    '{"status":"been","visibility":"self","note":"NEVER PUBLISH SOLO SAVE NOTE","source_type":"manual","nearby_confirmed":false}', '[]');
+  venue_id := (result->>'place_id')::uuid;
+  insert into storage.objects(bucket_id, name) values ('place-plan-previews', image_path);
+  invite_token := public.create_place_plan_invitation(venue_id, recipient, image_path,
+    'Go together?', 'I love this place', 'Date TBD', 'A favorite to try together')->>'token';
+  if invite_token is null or invite_token !~ '^[a-f0-9]{48}$'
+  then raise exception 'sender-only plan failed'; end if;
+  reset role;
+  if exists (select 1 from public.user_places where user_id = recipient and deleted_at is null)
+  then raise exception 'sender-only fixture requires a recipient with zero saves'; end if;
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', recipient, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  result := public.received_place_plan_invitations();
+  if jsonb_array_length(result) <> 1 or result::text like '%NEVER PUBLISH%'
+    or public.open_received_place_plan_invitation((result->0->>'id')::uuid)
+      is distinct from public.place_plan_preview(invite_token)
+  then raise exception 'sender-only plan did not reach recipient safely'; end if;
+  perform public.save_own_place(venue,
+    '{"status":"been","visibility":"followers","note":"NEVER PUBLISH RECIPIENT NOTE","source_type":"manual","nearby_confirmed":false}', '[]');
+  reset role;
+  update public.user_places set deleted_at = now() where user_id = sender and place_id = venue_id;
+
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', sender, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  invite_token := public.create_place_plan_invitation(venue_id, recipient, image_path,
+    'Take me here?', 'You love this place', 'Date TBD', 'Your favorite to try together')->>'token';
+  if invite_token is null or invite_token !~ '^[a-f0-9]{48}$'
+  then raise exception 'recipient-only plan failed'; end if;
+  reset role;
+  if exists (select 1 from public.user_places where user_id = sender and deleted_at is null)
+  then raise exception 'recipient-only fixture requires a sender with zero active saves'; end if;
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', recipient, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  result := public.received_place_plan_invitations();
+  if jsonb_array_length(result) <> 2 or result::text like '%NEVER PUBLISH%'
+    or public.place_plan_preview(invite_token)->>'connection' is distinct from 'You love this place'
+  then raise exception 'recipient-only plan did not reach recipient safely'; end if;
+  reset role;
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', sender, 'role', 'authenticated')::text, true);
+
+  -- A hidden or deleted recipient save cannot authorize a sender with no saves.
+  update public.user_places set visibility = 'self' where user_id = recipient and place_id = venue_id;
+  set local role authenticated;
+  begin
+    perform public.create_place_plan_invitation(venue_id, recipient, image_path, 'Hidden', 'Hidden', 'Date TBD', 'Hidden');
+    raise exception 'hidden recipient save authorized a plan';
+  exception when raise_exception then if sqlerrm <> 'plan_not_available' then raise; end if; end;
+  reset role;
+  update public.user_places set visibility = 'followers', deleted_at = now()
+    where user_id = recipient and place_id = venue_id;
+  set local role authenticated;
+  begin
+    perform public.create_place_plan_invitation(venue_id, recipient, image_path, 'Deleted', 'Deleted', 'Date TBD', 'Deleted');
+    raise exception 'two deleted saves authorized a plan';
+  exception when raise_exception then if sqlerrm <> 'plan_not_available' then raise; end if; end;
+  reset role;
+  update public.user_places set deleted_at = null where user_id = recipient and place_id = venue_id;
+  delete from public.follows where follower_user_id = sender and followed_user_id = recipient;
+  set local role authenticated;
+  begin
+    perform public.create_place_plan_invitation(venue_id, recipient, image_path, 'Unfollowed', 'Unfollowed', 'Date TBD', 'Unfollowed');
+    raise exception 'unreadable recipient save authorized a plan';
+  exception when raise_exception then if sqlerrm <> 'plan_not_available' then raise; end if; end;
+  reset role;
+  insert into public.follows(follower_user_id, followed_user_id, source) values(sender, recipient, 'username');
+
+  -- Blocks and deleted accounts must deny either ownership direction.
+  foreach owner_id in array array[sender, recipient] loop
+    update public.user_places set deleted_at = case when user_id = owner_id then null else now() end
+      where place_id = venue_id and user_id in (sender, recipient);
+    foreach blocked_by in array array[sender, recipient] loop
+      insert into public.follows(follower_user_id, followed_user_id, source)
+        values(sender, recipient, 'username') on conflict do nothing;
+      set local role authenticated;
+      perform public.create_place_plan_invitation(venue_id, recipient, image_path,
+        'Available', 'Available', 'Date TBD', 'Available before block or deletion');
+      reset role;
+      insert into public.blocks(blocker_user_id, blocked_user_id)
+        values(blocked_by, case when blocked_by = sender then recipient else sender end);
+      set local role authenticated;
+      begin
+        perform public.create_place_plan_invitation(venue_id, recipient, image_path, 'Blocked', 'Blocked', 'Date TBD', 'Blocked');
+        raise exception 'block allowed a one-sided plan';
+      exception when raise_exception then if sqlerrm <> 'plan_not_available' then raise; end if; end;
+      reset role;
+      delete from public.blocks where blocker_user_id = blocked_by
+        and blocked_user_id = case when blocked_by = sender then recipient else sender end;
+      insert into public.follows(follower_user_id, followed_user_id, source)
+        values(sender, recipient, 'username') on conflict do nothing;
+      update public.profiles set deleted_at = now() where id = blocked_by;
+      set local role authenticated;
+      begin
+        perform public.create_place_plan_invitation(venue_id, recipient, image_path, 'Deleted account', 'Deleted account', 'Date TBD', 'Deleted account');
+        raise exception 'deleted account allowed a one-sided plan';
+      exception when raise_exception then if sqlerrm <> 'plan_not_available' then raise; end if; end;
+      reset role;
+      update public.profiles set deleted_at = null where id = blocked_by;
+    end loop;
+  end loop;
+end;
+$one_sided$;
 
 rollback;
