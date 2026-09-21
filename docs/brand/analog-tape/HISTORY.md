@@ -159,10 +159,11 @@ This second pass remains a proposal. Its account layout is a visual illustration
 its decorative logo uses the shared renderer. It has not been installed into the
 native account screen, merged or released.
 
-## 9. September 20: half-second bend, no flicker
+## 9. September 20: no flicker; timing initially misinterpreted
 
-Joe liked the deformation around 1.8 seconds and explicitly asked to stretch it
-to half a second while removing flicker. Revision 3 separates the liked geometry
+Joe liked the deformation around 1.8 seconds and asked to move it to half a
+second while removing flicker. The assistant initially misread this as a request
+to stretch its duration. Revision 3 separates the liked geometry
 from brightness failure. The selected first waveform runs at 40% of its former
 speed across source 1.55–2.05 s; the artwork stays at its normal 0.94 density.
 Global pulse and band darkening are removed, and material grain/texture is held
@@ -174,6 +175,26 @@ preview duration is unchanged; the tracking burst itself lasts 0.5 seconds.
 The existing video link paths are refreshed with the current rendering. Revision
 2 and its prior recordings remain recoverable at git commit `49c2d59`.
 This review instruction changes only the proposal, not the source archive or main.
+
+## 10. September 20: move it earlier, do not prolong it
+
+Joe corrected the interpretation: bring that event forward in the order, measure
+how brief the splash actually is, and let it appear during short launches. He
+repeated that flicker is unwanted. Revision 4 restores the original 0.20-second
+waveform and moves it to elapsed 0.50–0.70 seconds. The peak inspection frame is
+0.60 s. All preview clocks now start at zero, independently of the source movie.
+
+The installed simulator build showed approximately 2.79, 2.98 and 3.38 seconds
+of visible splash across three launches. The source has no fixed minimum hold;
+these are not universal or latest-main measurements. See [the timing record](SPLASH-TIMING.md)
+for capture method, build limits and the native adoption rule. The preview adds
+0.8 s and 0.35 s stress cases: the first contains the bend; the second exits too
+soon. Native startup must never wait for this decorative effect.
+
+No opacity flicker was reintroduced. The original Events video stays available
+but is paused by default, so its historical flicker does not play beside the
+steadier proposal automatically. Revision 3 remains recoverable at `26c6dbe`.
+Main, native code and font/artwork files remain untouched.
 
 ## Evidence trail and future editing
 

@@ -11,12 +11,11 @@ function createBrandTapeRenderer(canvas) {
     vec3 yiq(vec3 c){return vec3(dot(c,vec3(.299,.587,.114)),dot(c,vec3(.596,-.274,-.322)),dot(c,vec3(.211,-.523,.312)));}
     vec3 rgb(vec3 c){return vec3(c.x+.956*c.y+.621*c.z,c.x-.272*c.y-.647*c.z,c.x-1.106*c.y+1.703*c.z);}
     void main(){
-      float d=damage,t=time*motion;float f=floor(t*24.);vec2 p=uv;
-      // The first source-time fault now spans 1.55–2.05 s (12 frames at 24 fps).
-      // Stretch its original .20 s waveform across .50 s, rather than adding
-      // extra rapid oscillations. The other two source faults keep their timing.
-      float loopTime=mod(t,8.);float hitA=step(1.72,loopTime)*(1.-step(2.22,loopTime));float hitB=step(4.72,loopTime)*(1.-step(4.88,loopTime));float hitC=step(6.93,loopTime)*(1.-step(7.18,loopTime));float event=max(hitA,max(hitB,hitC))*motion;
-      float faultTime=mix(t,1.68+(loopTime-1.72)*.4,hitA);float epoch=floor(faultTime*2.);
+      float d=damage,t=(time+.17)*motion;float f=floor(t*24.);vec2 p=uv;
+      // Launch clock starts at zero. Move the liked source waveform earlier,
+      // without slowing it down: .50–.70 s elapsed maps to source 1.68–1.88 s.
+      float loopTime=mod(time,8.);float hitA=step(.50,loopTime)*(1.-step(.70,loopTime));float hitB=step(4.55,loopTime)*(1.-step(4.71,loopTime));float hitC=step(6.76,loopTime)*(1.-step(7.01,loopTime));float event=max(hitA,max(hitB,hitC))*motion;
+      float faultTime=mix(t,1.68+(loopTime-.50),hitA);float epoch=floor(faultTime*2.);
       float center=.16+.69*noise(vec2(epoch,2.8));// Preserve the Events failure waveform, expressed over this object's extent.
       float objectRow=(p.y-objectBox.y)/objectBox.w;
       float damageBand=band(objectRow,center,.20);

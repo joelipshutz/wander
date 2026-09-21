@@ -22,22 +22,42 @@
       720,
       1560
     ],
-    "sourceStartSeconds": 1.4,
     "quietMaterialSourceSeconds": 0.4,
-    "tearStillSourceSeconds": 1.8,
     "requestedCaptureFPS": 24,
     "recording": "Real-time browser canvas recording; measured nominal rates below are not frame-exact 24 fps.",
     "accountLayout": "Illustrative; not a functioning or pixel-exact native login.",
-    "revision": 3,
+    "revision": 4,
     "primaryTear": {
-      "sourceStartSeconds": 1.55,
-      "sourceEndSeconds": 2.05,
-      "durationSeconds": 0.5,
-      "originalWaveformSpeedMultiplier": 0.4
+      "elapsedStartSeconds": 0.5,
+      "elapsedEndSeconds": 0.7,
+      "durationSeconds": 0.2,
+      "originalWaveformSpeedMultiplier": 1,
+      "originalWaveformStartSeconds": 1.68
     },
     "flicker": false,
     "material": "Frozen texture at source 0.40 seconds and fixed noise seeds; only geometry and registration move",
-    "artOpacity": 0.94
+    "artOpacity": 0.94,
+    "clock": "Elapsed seconds since first rendered splash frame; independent of original Events movie",
+    "startElapsedSeconds": 0,
+    "tearStillElapsedSeconds": 0.6,
+    "reviewCyclesSeconds": [
+      1.2,
+      0.8,
+      0.35,
+      8
+    ],
+    "nativeTimingRecord": "docs/brand/analog-tape/SPLASH-TIMING.md",
+    "nativeTimingBaseline": {
+      "installedBuild": 177,
+      "environment": "iPhone 16e simulator, iOS 26.3",
+      "samplesSeconds": [
+        3.375,
+        2.7916666667,
+        2.9816666667
+      ],
+      "notFreshLatestMainBuild": true
+    },
+    "sourceReferenceAutoplays": false
   },
   "assets": [
     {
@@ -120,11 +140,11 @@
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/account-v2.mp4",
-      "bytes": 3564267,
-      "sha256": "31b4d74f96d363ee8224f9a3ed5752de33e54b03d385fdb4d48e6986e1feffd9",
+      "bytes": 3454074,
+      "sha256": "67d4ae2ad8ecb29833e68ce5da2f7e8981d75e392e96cc4553f36642ce486134",
       "audioTracks": 0,
-      "duration": 8.247,
-      "fps": 22.795063018798828,
+      "duration": 8.249,
+      "fps": 22.062210083007812,
       "height": 1560,
       "width": 720
     },
@@ -139,8 +159,8 @@
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/logo-tear.png",
-      "bytes": 793469,
-      "sha256": "2c58475fe1d58ba643d1738b491293c1c23e0255ef8b6c4a7b0b64cd28ac0a2a",
+      "bytes": 792706,
+      "sha256": "a3b15a6e8dc2a5a9ba7f11a0754d1082847f855807c358bb62ef27c6fdcd74de",
       "width": 1000,
       "height": 478
     },
@@ -155,11 +175,11 @@
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/splash-v2.mp4",
-      "bytes": 3555148,
-      "sha256": "1e19c06d928777f0e4d12d39e9d118794f6eacf31f6baba15938f99e6761f3b0",
+      "bytes": 3446862,
+      "sha256": "3164b9ea062b985b53a070e92c32004189fc6b7750804f25de945d05e253a5a5",
       "audioTracks": 0,
-      "duration": 8.247,
-      "fps": 22.794601440429688,
+      "duration": 8.249,
+      "fps": 22.062477111816406,
       "height": 1560,
       "width": 720
     }

@@ -1,8 +1,8 @@
-/* REC-557 v3. Half-second tracking bend; steady material, no brightness flicker. */
+/* REC-557 v4. Early tracking bend on an elapsed launch clock; no brightness flicker. */
 'use strict';
 const $=s=>document.querySelector(s), art=$('#artwork'), texture=$('#texture'), reference=$('#reference');
 const status=$('#status'), reduced=matchMedia('(prefers-reduced-motion: reduce)');
-const W=393,H=852,R=720/W, LEAD=1.4, STATIC_TIME=.4, TEAR_TIME=1.8;
+const W=393,H=852,R=720/W, LEAD=0, STATIC_TIME=.4, TEAR_TIME=.6;
 const frames=['splash','account'].map(id=>{const canvas=$('#'+id);canvas.width=720;canvas.height=1560;const scene=document.createElement('canvas');scene.width=720;scene.height=1560;const signal=scene.cloneNode();return{id,canvas,ctx:canvas.getContext('2d'),scene,sc:scene.getContext('2d'),signal,render:createBrandTapeRenderer(signal)};});
 const detail=$('#detail');detail.width=1000;detail.height=478;const dc=detail.getContext('2d');
 const grain=document.createElement('canvas');grain.width=180;grain.height=320;const gc=grain.getContext('2d'),pixels=gc.createImageData(180,320);
@@ -30,30 +30,30 @@ function accountUI(c){
 }
 function draw(t){if(!ready)return;makeGrain(STATIC_TIME);for(const f of frames){const c=f.sc,box=artRect(f.id);c.setTransform(R,0,0,1560/H,0,0);background(c,STATIC_TIME);c.save();c.globalAlpha=treatment==='clean'?1:.94;if(treatment!=='clean'){c.shadowColor='rgba(176,55,40,.38)';c.shadowBlur=1.5*R;c.shadowOffsetX=.4*R;}c.drawImage(art,box.x,box.y,box.w,box.h);c.restore();
  if(treatment!=='clean'){c.globalCompositeOperation='multiply';c.globalAlpha=.23;c.imageSmoothingEnabled=false;c.drawImage(grain,0,0,W,H);c.globalAlpha=1;c.globalCompositeOperation='source-over';c.imageSmoothingEnabled=true;}
- if(treatment==='clean')f.ctx.drawImage(f.scene,0,0);else{f.render(f.scene,t+.17,1,false,[box.x/W,1-(box.y+box.h)/H,box.w/W,box.h/H]);f.ctx.drawImage(f.signal,0,0);}
+ if(treatment==='clean')f.ctx.drawImage(f.scene,0,0);else{f.render(f.scene,t,1,false,[box.x/W,1-(box.y+box.h)/H,box.w/W,box.h/H]);f.ctx.drawImage(f.signal,0,0);}
  if(f.id==='account'){f.ctx.save();f.ctx.scale(R,1560/H);accountUI(f.ctx);f.ctx.restore();}
- f.canvas.dataset.sourceTime=t.toFixed(3);f.canvas.dataset.treatment=treatment;
+ f.canvas.dataset.elapsedTime=t.toFixed(3);f.canvas.dataset.treatment=treatment;
  }
  const b=artRect('splash');dc.drawImage(frames[0].canvas,b.x*R,b.y*1560/H,b.w*R,b.h*1560/H,0,0,detail.width,detail.height);
  $('#time').value=t.toFixed(2)+' s';$('#scrub').value=t;$('#detail-label').textContent=treatment==='clean'?'Original artwork pixels. No replacement font.':treatment==='static'?'Static material: the same grain, softened density and registration, held still.':'Actual logo pixels: inspect a tracking fault to see the silhouette tear.';
 }
 function loaded(el,event){return new Promise((resolve,reject)=>{el.addEventListener(event,resolve,{once:true});el.addEventListener('error',reject,{once:true});});}
-async function seek(t){texture.pause();reference.pause();await Promise.all([[texture,STATIC_TIME],[reference,t]].map(async([v,target])=>{if(Math.abs(v.currentTime-target)>.002){const done=loaded(v,'seeked');v.currentTime=target;await done;}}));draw(t);lastTick=Math.floor(t*24);}
-function mediaPlayback(){const play=ready&&treatment==='motion'&&!paused&&!document.hidden;texture.pause();play?reference.play().catch(()=>{status.textContent='Press Play to begin.';}):reference.pause();$('#play').textContent=paused?'Play':'Pause';$('#play').disabled=treatment!=='motion';}
-async function setTreatment(value){if(recording)return;treatment=value;paused=value!=='motion'||reduced.matches;document.querySelectorAll('[data-treatment]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.treatment===value)));await seek(value==='motion'?LEAD:STATIC_TIME);cycleElapsed=0;lastNow=performance.now();mediaPlayback();status.textContent=value==='motion'?'Half-second tracking bend at 1.55–2.05 s. Logo brightness stays steady.':value==='static'?'Static material only. No moving grain, jitter, flicker or tears.':'Original raster artwork on the same tape field.';}
+async function seek(t){texture.pause();if(Math.abs(texture.currentTime-STATIC_TIME)>.002){const done=loaded(texture,'seeked');texture.currentTime=STATIC_TIME;await done;}cycleElapsed=t;draw(t);lastTick=Math.floor(t*24);}
+function mediaPlayback(){texture.pause();if(document.hidden)reference.pause();$('#play').textContent=paused?'Play':'Pause';$('#play').disabled=treatment!=='motion';}
+async function setTreatment(value){if(recording)return;treatment=value;paused=value!=='motion'||reduced.matches;document.querySelectorAll('[data-treatment]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.treatment===value)));await seek(value==='motion'?LEAD:STATIC_TIME);cycleElapsed=0;lastNow=performance.now();mediaPlayback();status.textContent=value==='motion'?'Bend starts 0.50 seconds after launch. No flicker or extra loading time.':value==='static'?'Static material only. No moving grain, jitter, flicker or tears.':'Original raster artwork on the same tape field.';}
 async function restart(){if(recording)return;await seek(LEAD);paused=reduced.matches;cycleElapsed=0;lastNow=performance.now();mediaPlayback();}
 let seeking=false;
-async function tick(now){const dt=Math.min((now-lastNow)/1000,.15);lastNow=now;if(ready&&treatment==='motion'&&!paused&&!document.hidden&&!seeking){cycleElapsed+=dt;const max=Number($('#cycle').value);if(cycleElapsed>=max){cycleElapsed=0;seeking=true;await seek(LEAD);seeking=false;mediaPlayback();}const t=reference.currentTime,n=Math.floor(t*24);if(n!==lastTick){draw(t);lastTick=n;}}requestAnimationFrame(tick);}
-$('#tear').addEventListener('click',async()=>{if(recording)return;await setTreatment('motion');paused=true;mediaPlayback();await seek(TEAR_TIME);status.textContent='Tracking bend at 1.80 s. The half-second effect keeps the logo visible.';});
+async function tick(now){const dt=Math.max(0,Math.min((now-lastNow)/1000,.15));lastNow=now;if(ready&&treatment==='motion'&&!paused&&!document.hidden&&!seeking){cycleElapsed+=dt;const max=Number($('#cycle').value);if(cycleElapsed>=max){cycleElapsed=0;seeking=true;await seek(LEAD);seeking=false;mediaPlayback();}const t=cycleElapsed,n=Math.floor(t*24);if(n!==lastTick){draw(t);lastTick=n;}}requestAnimationFrame(tick);}
+$('#tear').addEventListener('click',async()=>{if(recording)return;await setTreatment('motion');paused=true;mediaPlayback();await seek(TEAR_TIME);status.textContent='The selected bend, moved to 0.60 seconds after launch. Brightness stays steady.';});
 $('#enlarge').addEventListener('click',e=>{const on=document.body.classList.toggle('large');e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent=on?'Fit previews':'Larger previews';});
 $('#play').addEventListener('click',()=>{if(recording)return;paused=!paused;lastNow=performance.now();mediaPlayback();});$('#restart').addEventListener('click',restart);$('#cycle').addEventListener('change',restart);
 for(const b of document.querySelectorAll('[data-treatment]'))b.addEventListener('click',()=>setTreatment(b.dataset.treatment));
-let seekQueue=Promise.resolve();$('#scrub').addEventListener('input',e=>{if(recording)return;paused=true;mediaPlayback();const t=Number(e.target.value);seekQueue=seekQueue.then(()=>seek(t));status.textContent='Paused on a source frame. Play resumes from here.';});
+let seekQueue=Promise.resolve();$('#scrub').addEventListener('input',e=>{if(recording)return;paused=true;mediaPlayback();const t=Number(e.target.value);seekQueue=seekQueue.then(()=>seek(t));status.textContent='Paused at elapsed time since launch. Play resumes from here.';});
 document.addEventListener('visibilitychange',()=>{lastNow=performance.now();mediaPlayback();});reduced.addEventListener('change',()=>setTreatment(reduced.matches?'static':'motion'));
 async function save(name,blob){const response=await fetch('/__export/'+name,{method:'POST',body:blob});if(!response.ok)throw new Error('Start this page with serve.py to save media.');}
 const png=c=>new Promise(resolve=>c.toBlob(resolve,'image/png'));
 async function exportMedia(){
- if(!ready||recording)return;const button=$('#export');button.disabled=true;
+ if(!ready||recording)return;const button=$('#export'),previousCycle=$('#cycle').value;button.disabled=true;
  try{
   await setTreatment('static');for(const f of frames)await save(f.id+'-static.png',await png(f.canvas));await save('logo-static.png',await png(detail));
   await setTreatment('motion');paused=true;await seek(TEAR_TIME);await save('logo-tear.png',await png(detail));
@@ -66,7 +66,7 @@ async function exportMedia(){
   for(const s of sessions)await save(s.f.id+'-v2.'+extension,await s.done);
   document.querySelectorAll('.saved-link').forEach((a,i)=>a.href='media/'+frames[i].id+'-v2.'+extension);
   status.textContent='Saved both videos and four stills into the branch media folder.';
- }catch(error){status.textContent='Export: '+error.message;}finally{recording=false;button.disabled=false;}
+ }catch(error){status.textContent='Export: '+error.message;}finally{recording=false;button.disabled=false;$('#cycle').value=previousCycle;await restart();}
 }
 $('#export').addEventListener('click',exportMedia);
 Promise.all([art.decode(),document.fonts.load('900 38px FilmGrotesk'),document.fonts.load('14px AppBody'),document.fonts.load('17px AppDemi'),... [texture,reference].map(v=>v.readyState>=2?Promise.resolve():loaded(v,'loadeddata'))]).then(async()=>{ready=true;await setTreatment(treatment);requestAnimationFrame(tick);}).catch(error=>{status.textContent='Unable to load the local study assets: '+error.message;});

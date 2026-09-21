@@ -5,3 +5,5 @@
 @media(min-width:1000px){.phone{max-width:min(300px,calc((100svh - 280px)*393/852))}}@media(max-width:760px){main{padding:24px 18px}header{display:block}.brief-link{display:inline-block;margin-top:12px}h1{font-size:30px}.board{grid-template-columns:1fr;gap:32px}.board article{max-width:340px;width:100%;margin:auto}.phone{max-width:300px}.material,.library-grid{grid-template-columns:1fr;gap:24px}.toolbar{gap:16px}.timeline{gap:10px}.library video,.library img{height:300px}}
 
 body.large .phone{max-width:300px}
+
+.timing-note{font-size:11px;line-height:1.6;color:#acb09f;max-width:850px}

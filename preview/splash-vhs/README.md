@@ -1,44 +1,60 @@
-# Astir shared tape study — REC-557, revision 3
+# Astir shared tape study — REC-557, revision 4
 
 Branch-only visual review of Events, the launch splash and the create-account
 logo. Uses the exact logo PNG and the approved Events texture/signal source.
-No native app or timing changes. Keep draft PR #686 unmerged.
+No native app or readiness changes. Keep draft PR #686 unmerged.
 
 ```sh
 python3 preview/splash-vhs/serve.py --port 65364
 ```
 
-Open <http://127.0.0.1:65364/preview/splash-vhs/>. Compare Motion, Static material
-and Original logos. “Show a tear” pauses at source 1.80 seconds; the slider
-inspects any frame. The full eight-second and short 1.8-second cycles begin at
-source 1.40 seconds. The selected bend spans source 1.55–2.05 seconds. “Larger previews” expands the phone frames.
+Open <http://127.0.0.1:65364/preview/splash-vhs/>. The clock starts at **zero**.
+The selected bend now begins **0.50 seconds after launch**, lasts its original
+0.20 seconds, and never blinks the logo. “Show a tear” pauses at elapsed 0.60 s.
+This corrects revision 3's mistaken interpretation of “half a second” as duration.
 
-The account form is an inert browser illustration of the current native layout.
-The decorative logo is rendered through the same actual shader as the splash.
-The brand logo is never re-typeset. In production, form controls should stay
-native and outside the decorative effect.
+The 1.2-second default and 0.8-second quick cycle show it during a short splash;
+the 0.35-second case shows a launch too fast to catch it. The eight-second cycle
+shows later faults as well. No minimum hold is added to the native app. Three
+launches of installed simulator build 177 measured approximately **2.79–3.38 s**
+of visible splash; see [method and limits](../../docs/brand/analog-tape/SPLASH-TIMING.md).
+
+The reference Events film is paused by default, with independent playback
+controls. Its original flicker is retained only in that historical source.
+The proposed splash/account keep constant opacity, fixed material and no
+luminance pulse or band darkening. Geometry and registration still move.
+
+The account form is an inert illustration of the native layout. Its decorative
+logo uses the same shader and exact bitmap as the splash; UI labels are drawn
+after the signal pass. The logo is never re-typeset. “Static material” holds the
+material still; “Original logos” shows the supplied bitmap without added wear.
 
 [Detailed library](../../docs/brand/analog-tape/README.md) includes separate static
-and motion briefs, original prompt, preserved original shader/compositor,
-iteration history and asset hashes. The exact Events movie and source texture
-are linked from their existing tracked paths.
+and motion briefs, original prompt, preserved source, history and asset hashes.
+Original source bytes are not edited. Earlier revisions are recoverable at
+`26c6dbe` (v3), `49c2d59` (v2), and `9e2ae5b` (v1).
 
-“Save preview videos & stills” writes two locally recorded videos and four PNGs
-into `media/` via the loopback-only helper. It is not a network upload or native
-app build. The videos are real-time canvas captures at a requested 24 fps;
-they are visual-review artifacts, not the deterministic 192-frame Events master.
-Use the preserved offline exporter as a starting point for production-quality
-frame-exact outputs if the visual direction is approved.
+“Save preview videos & stills” writes two locally recorded MP4s and four PNGs into
+`media/` via the loopback helper. Recordings start at elapsed zero and run eight
+seconds; the selected short-cycle setting is restored afterward. These are
+requested-24-fps, real-time review captures, not frame-exact production masters.
+The stable `*-v2.mp4` URLs contain the latest revision for existing viewers.
 
-Revision 2 remains in git history at `49c2d59` (revision 1 at `9e2ae5b`).
-Revision 3 stretches the selected first tracking waveform to half a second,
-removes art-opacity dropouts, shader pulse and band darkening, and holds the
-material grain/texture steady. Geometric distortion and chroma registration
-remain. The other two source tracking faults retain their timing. The original
-renderer in `docs/brand/analog-tape/source/` is unchanged. Existing video link
-paths are refreshed with the current proposal.
+## Current revision 4 verification — September 20, 2026
 
-## Current revision 3 verification — September 20, 2026
+- Early event schedule: 0.50–0.70 s, normal waveform speed; held bend at 0.60 s.
+- Browser controls, short cycles, still inspection and export checked.
+- Three installed-build native launches recorded and decoded for timing.
+- Both saved videos decoded with AVFoundation: 720 × 1560, silent, 8.249 s,
+  about 22.06 fps nominal. The 0.65-second recorded frame shows the early bend.
+- All 182 decoded splash frames retained steady logo-band luma: 35.11–36.90/255,
+  minimum/maximum ratio 95.15%, with no deep brightness dropouts.
+- Refreshed stills inspected; original material stills remain byte-identical.
+- JavaScript syntax, source-asset hashes and git whitespace checks passed.
+- No native source changes or new iOS build. Latest-main/physical-device timing
+  remains outside this existing-build measurement; see the timing record.
+
+## Previous revision 3 verification — September 20, 2026
 
 - Browser renderer compiled without warnings/errors. The 1.80-second still
   visibly bends the lettering and statue while keeping them readable.

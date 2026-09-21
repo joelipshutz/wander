@@ -9,10 +9,11 @@ same texture and animation without reconstructing the exploration from chat.
 His standing constraint for this work is explicit: **keep it on the remote branch;
 do not merge to main**. REC-557, `codex/splash-vhs-preview`, draft PR #686.
 
-Current review revision: the selected bend around **1.8 seconds lasts 0.5
-seconds**, with steady logo brightness and material. Read the current-revision
+Current review revision: the selected bend is moved earlier to **0.50–0.70
+seconds after launch**, with steady logo brightness and material. Read the current-revision
 section in the motion brief before reusing the original Events dropout recipe.
-The original film remains unchanged as the reference.
+The original film remains unchanged as the reference. Read the [native splash
+timing record](SPLASH-TIMING.md) for measured windows and fast-launch behavior.
 
 ## Start here
 
@@ -76,11 +77,11 @@ service or generation credits are involved.
 > artwork and glyphs exactly as supplied. Composite the artwork into the original
 > tape field, apply material wear to the artwork itself, then pass the composition
 > through the recorded signal: luma/chroma separation, registration delay, sparse
-> flecks, irregular density loss and short horizontal tracking tears. Anchor the
+> flecks, steady worn density and short horizontal tracking tears without flicker. Anchor the
 > hue to the asset's existing palette. Make actual object edges and interior rows
 > visibly displace during faults. Use the same texture in the quiet and moving
-> states. For a brief launch, choose a short passage around an existing strong
-> fault rather than inventing a different animation. Keep forms and navigation
+> states. For a brief launch, move the existing tracking waveform to 0.50–0.70
+> seconds after appearance. Never hold readiness for the effect. Keep forms and navigation
 > steady. Supply a static material rendition and a review video. Do not replace
 > fonts or redraw the Astir logo.
 

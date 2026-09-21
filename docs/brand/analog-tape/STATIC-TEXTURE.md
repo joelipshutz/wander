@@ -2,7 +2,7 @@
 
 ## Current splash/account application
 
-Revision 3 retains this material while keeping its density steady. The source
+Revision 4 retains the revision-3 material while keeping its density steady. The source
 texture is held at 0.40 seconds, grain/flecks use fixed seeds, and art opacity is
 0.94. During playback only geometric signal errors and registration move;
 there are no programmed opacity dropouts, luminance pulses or band blackouts.

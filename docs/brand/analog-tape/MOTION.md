@@ -1,30 +1,31 @@
 # Motion and signal-failure brief
 
-## Current splash/account revision — September 20, 2026
+## Current splash/account revision 4 — September 20, 2026
 
-Joe selected the bend around 1.8 seconds, requested a half-second duration and
-removed the flicker. This revision changes the **splash/account proposals**;
-the preserved Events source and its timing tables below remain historical truth.
+Joe clarified that “half a second” meant **move the liked bend earlier in the
+order**, not extend its duration. Revision 3's stretched event was an assistant
+misinterpretation and is superseded. The flicker removal remains requested.
 
-- First tracking event: source clock **1.55 ≤ t < 2.05 seconds** (0.50 s; 12
-  sample times at 24 fps), centered on 1.80 s.
-- Its original shader waveform, 1.68–1.88 s, is stretched across that half second:
-  `faultTime = 1.68 + (shaderLoopTime - 1.72) * 0.4`. This slows the existing
-  shape change rather than introducing additional rapid direction reversals.
-- The other two geometric faults keep their original timing. Their brightness
-  collapse is also removed.
-- Artwork opacity is a constant **0.94**. The old density/dropout sequence is
-  not executed. Shader luminance pulse and event-band darkening are removed.
-- The raw background is held at source 0.40 s; coarse grain, fine grain, flecks
-  and streaks use fixed seeds. This removes random brightness refresh as well
-  as whole-logo blinking, while keeping the worn material.
-- Row displacement, fine timing error, chroma registration and vertical slip
-  still move. A changing silhouette is intentional; opacity flashing is not.
-- Replay starts at source **1.40 s**, so the selected bend begins after 0.15 s
-  and finishes after 0.65 s. The short preview is still 1.8 seconds long; the
-  burst itself is 0.5 seconds. Neither value changes native launch timing.
-- “Show a tear” holds source **1.80 s**. The original Events movie is explicitly
-  labeled as a comparison that retains its original flicker.
+- Use elapsed time from first splash frame, beginning at **0.00 s**.
+- First fault: **0.50 ≤ t < 0.70 s**. The original 0.20-second waveform runs
+  at its original speed: `faultTime = 1.68 + (elapsedLoopTime - 0.50)`.
+  There are five event samples at the intended 24 fps (0.500–0.667 s).
+- “Show a tear” holds **0.60 s**, mapping to waveform 1.78 s: the same shape
+  previously shown at revision-3 source time 1.80 s.
+- Later faults retain elapsed 4.55–4.71 and 6.76–7.01 s. Their brightness
+  collapse remains removed. The eight-second reference movie is independent
+  of the splash clock and paused by default; its archived bytes are unchanged.
+- Artwork opacity is constant **0.94**. Do not execute the original density/
+  dropout sequence, shader luminance pulse or event-band darkening.
+- Background texture is fixed at source 0.40 s; coarse grain, fine grain,
+  flecks and streaks use fixed seeds. Only geometry and registration move.
+- No whole-logo blink, random brightness refresh or artificial minimum hold.
+  Row displacement and fine timing error are intentional geometric motion.
+- The default 1.2 s preview and 0.8 s quick launch include the early tear.
+  The 0.35 s case deliberately misses it. Never stall a real launch to play it.
+- [Native measurement and integration timing](SPLASH-TIMING.md): three launches
+  of installed simulator build 177 showed about 2.79–3.38 seconds. This is a
+  baseline, not a fixed native duration or proof of current-main performance.
 
 The following sections preserve the original Events recipe and v2 rationale.
 Where those differ, the current revision above governs splash/account playback.
