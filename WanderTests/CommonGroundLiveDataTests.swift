@@ -5,6 +5,126 @@ import UIKit
 
 @MainActor
 final class CommonGroundLiveDataTests: XCTestCase {
+    func testEmptyViewerGetsPartnersLovedPlacesWithOneSidedInvitationCopy() throws {
+        let viewer = profile("viewer"), partner = profile("brian")
+        let favorite = row("brian-favorite", owner: partner, status: .been, name: "Canal Coffee")
+        let snapshot = project(viewer, partner, rows: [favorite],
+                               visits: [visit("check-in", parent: favorite, rating: 4.5)])
+        let place = try XCTUnwrap(snapshot.places.first)
+
+        XCTAssertEqual(snapshot.places.count, 1, "Do not invent extra picks to fill the limit.")
+        XCTAssertTrue(place.isOneSidedRecommendation)
+        XCTAssertEqual(place.linkage, .partnerLoves)
+        XCTAssertEqual(place.narrativeTitle, "Brian loves Canal Coffee")
+        XCTAssertEqual(place.narrativeDetail, "Brian rated it 4.5/5")
+        XCTAssertEqual(place.reason, "You two should go together.")
+        XCTAssertEqual(place.sourcePlaceID, favorite.id)
+        XCTAssertEqual(place.youVisits, 0)
+        XCTAssertFalse(place.youWanna)
+        XCTAssertNil(place.youRating)
+        let draft = CommonGroundInvitationDraft(place: place)
+        XCTAssertEqual(draft.message, "You love Canal Coffee\nTake me next time?")
+        XCTAssertEqual(draft.reasonTitle, "Brian loves this place")
+        XCTAssertEqual(draft.recipientReasonTitle, "You love this place, show Viewer")
+    }
+
+    func testEmptyPartnerGetsViewersFavoritesIncludingOwnPrivatePlace() throws {
+        let viewer = profile("viewer"), partner = profile("brian")
+        let favorite = row("mine", owner: viewer, status: .been, rating: 5, name: "Canal Coffee")
+        favorite.userPlace.visibilityRaw = PlaceVisibility.selfOnly.rawValue
+        let place = try XCTUnwrap(project(viewer, partner, rows: [favorite], legacyFallback: true).places.first)
+
+        XCTAssertTrue(place.isOneSidedRecommendation)
+        XCTAssertEqual(place.linkage, .viewerLoves)
+        XCTAssertEqual(place.sourcePlaceID, favorite.id)
+        XCTAssertEqual(place.joeVisits, 0)
+        XCTAssertFalse(place.joeWanna)
+        XCTAssertEqual(CommonGroundInvitationDraft(place: place).message, "I love Canal Coffee\nLet me show you why")
+        XCTAssertEqual(CommonGroundInvitationDraft(place: place).recipientReasonTitle, "Viewer loves this place")
+    }
+
+    func testDisjointSavesChooseThreeDistinctFavoritesByRatingVisitsAndName() {
+        let viewer = profile("viewer"), partner = profile("partner")
+        let frequent = row("frequent", owner: partner, canonicalID: "frequent", status: .been, name: "Zulu")
+        let alpha = row("alpha", owner: viewer, canonicalID: "alpha", status: .been, name: "Alpha")
+        let bravo = row("bravo", owner: partner, canonicalID: "bravo", status: .been, name: "Bravo")
+        let charlie = row("charlie", owner: viewer, canonicalID: "charlie", status: .been, name: "Charlie")
+        let lower = row("lower", owner: partner, canonicalID: "lower", status: .been, name: "Lower")
+        let visits = [visit("f1", parent: frequent, rating: 5), visit("f2", parent: frequent, rating: 5),
+                      visit("a1", parent: alpha, rating: 5), visit("b1", parent: bravo, rating: 5),
+                      visit("c1", parent: charlie, rating: 5), visit("l1", parent: lower, rating: 4.5)]
+        let rows = [lower, charlie, bravo, alpha, frequent, frequent]
+        let result = project(viewer, partner, rows: rows, visits: visits).places
+
+        XCTAssertEqual(result.map(\.name), ["Zulu", "Alpha", "Bravo"])
+        XCTAssertTrue(result.allSatisfy(\.isOneSidedRecommendation))
+        XCTAssertEqual(Set(result.map(\.id)).count, 3)
+        XCTAssertEqual(result.first?.joeVisits, 2, "Duplicate rows must not inflate visit evidence.")
+        XCTAssertEqual(project(viewer, partner, rows: rows.reversed(), visits: visits.reversed()).places, result)
+    }
+
+    func testAnySharedPlaceSuppressesFallbackEvenWhenSharedPlaceIsWannaOnlyElsewhere() {
+        let viewer = profile("viewer"), partner = profile("partner")
+        let favorite = row("favorite", owner: partner, canonicalID: "favorite", status: .been, rating: 5)
+        let mine = row("mine", owner: viewer, status: .wannaGo, city: "Kyoto")
+        let theirs = row("theirs", owner: partner, status: .wannaGo, city: "Kyoto")
+        let result = project(viewer, partner, rows: [favorite, mine, theirs], legacyFallback: true)
+
+        XCTAssertEqual(result.places.count, 1)
+        XCTAssertEqual(result.places.first?.linkage, .mutualWanna)
+        XCTAssertEqual(result.places.first?.isOneSidedRecommendation, false)
+        XCTAssertTrue(result.places.filter { $0.city == "Los Angeles" }.isEmpty,
+                      "A city with no overlap must not activate introductions when the pair shares another place.")
+        XCTAssertTrue(project(viewer, partner, rows: [favorite], legacyFallback: true).places.first?.isOneSidedRecommendation == true)
+    }
+
+    func testTwoQualifyingPlacesReturnTwoSuggestionsWithoutUnratedFiller() {
+        let viewer = profile("viewer"), partner = profile("partner")
+        let first = row("first", owner: partner, canonicalID: "first", status: .been, rating: 5)
+        let second = row("second", owner: partner, canonicalID: "second", status: .been, rating: 4.5)
+        let unrated = row("unrated", owner: viewer, canonicalID: "unrated", status: .been)
+        let result = project(viewer, partner, rows: [first, second, unrated], legacyFallback: true)
+        XCTAssertEqual(result.places.map(\.sourcePlaceID), [first.id, second.id])
+        XCTAssertTrue(result.places.allSatisfy(\.isOneSidedRecommendation))
+    }
+
+    func testFallbackRequiresVisiblePositiveCheckInEvidence() {
+        let viewer = profile("viewer"), partner = profile("partner")
+        let ratings: [Double?] = [nil, 4.49, -1, 5.1, .nan, .infinity]
+        for rating in ratings {
+            let saved = row("saved", owner: partner, status: .been, rating: 5)
+            let checkIn = visit("visit", parent: saved)
+            // The initializer rounds/clamps input. Exercise raw persisted values
+            // at the projection boundary instead of normalized UI save values.
+            checkIn.ratingScore = rating
+            let result = project(viewer, partner, rows: [saved], visits: [checkIn])
+            XCTAssertTrue(result.places.isEmpty, "Explicit history must not inherit the summary's 5-star rating.")
+        }
+        let stale = row("stale", owner: partner, status: .been, rating: 5)
+        XCTAssertTrue(project(viewer, partner, rows: [stale]).places.isEmpty)
+        let deletedVisit = visit("deleted", parent: stale, rating: 5)
+        deletedVisit.deletedAt = .now
+        XCTAssertTrue(project(viewer, partner, rows: [stale], visits: [deletedVisit], legacyFallback: true).places.isEmpty)
+        let wanna = row("wanna", owner: partner, status: .wannaGo, rating: 5)
+        XCTAssertTrue(project(viewer, partner, rows: [wanna], legacyFallback: true).places.isEmpty)
+        XCTAssertTrue(project(viewer, partner, rows: []).places.isEmpty)
+    }
+
+    func testFallbackExcludesPrivateDeletedAndUnrelatedOwners() {
+        let viewer = profile("viewer"), partner = profile("partner"), stranger = profile("stranger")
+        let hidden = row("hidden", owner: partner, canonicalID: "hidden", status: .been, rating: 5)
+        hidden.userPlace.visibilityRaw = PlaceVisibility.selfOnly.rawValue
+        let deleted = row("deleted", owner: partner, canonicalID: "deleted", status: .been, rating: 5)
+        deleted.userPlace.deletedAt = .now
+        let unrelated = row("unrelated", owner: stranger, canonicalID: "unrelated", status: .been, rating: 5)
+        let favorite = row("favorite", owner: partner, canonicalID: "favorite", status: .been, rating: 5)
+        let result = project(viewer, partner, rows: [hidden, deleted, unrelated, favorite], legacyFallback: true)
+
+        XCTAssertEqual(result.places.map(\.sourcePlaceID), [favorite.id])
+        partner.deletedAt = .now
+        XCTAssertTrue(project(viewer, partner, rows: [favorite], legacyFallback: true).places.isEmpty)
+    }
+
     func testCanonicalAliasesPreserveSeparateWannaAndBeenRows() throws {
         let viewer = profile("viewer"), partner = profile("partner")
         let been = row("viewer-been", owner: viewer, status: .been, rating: 4)
