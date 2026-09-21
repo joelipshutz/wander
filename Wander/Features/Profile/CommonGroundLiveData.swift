@@ -20,7 +20,8 @@ enum CommonGroundLiveData {
     static func snapshot(store: WanderStore, profileID: String) -> Snapshot {
         guard let partner = store.profile(for: profileID),
               partner.id != store.currentUser.id,
-              partner.deletedAt == nil
+              partner.deletedAt == nil,
+              store.profileState(for: profileID)?.isBlocked == false
         else { return Snapshot(places: [], availableCities: []) }
         return snapshot(
             viewerProfile: store.currentUser,
@@ -60,6 +61,7 @@ enum CommonGroundLiveData {
         }
         let groups = VisiblePlaceGrouping.groups(from: rows, currentUserID: viewerProfile.id)
         var places: [CommonGroundMockPlace] = []
+        var introductions: [CommonGroundMockPlace] = []
         var citiesByKey: [String: String] = [:]
         for group in groups {
             let mine = personEvidence(
@@ -79,10 +81,9 @@ enum CommonGroundLiveData {
             if !city.isEmpty && (mine.evidence.visitCount > 0 || theirs.evidence.visitCount > 0) {
                 citiesByKey[city.lowercased()] = city
             }
-            guard group.places.contains(where: { $0.owner.id == viewerProfile.id }),
-                  group.places.contains(where: { $0.owner.id == partnerProfile.id })
-            else { continue }
-            places.append(CommonGroundMockPlace(
+            let isShared = group.places.contains(where: { $0.owner.id == viewerProfile.id })
+                && group.places.contains(where: { $0.owner.id == partnerProfile.id })
+            let place = CommonGroundMockPlace(
                 id: group.key,
                 name: primary.place.canonicalName,
                 category: primary.effectiveCompactType,
@@ -94,14 +95,22 @@ enum CommonGroundLiveData {
                 joeRating: theirs.rating,
                 youEvidence: mine.evidence,
                 joeEvidence: theirs.evidence,
-                reason: reason(mine: mine, theirs: theirs, partner: partner.shortName),
+                reason: isShared
+                    ? reason(mine: mine, theirs: theirs, partner: partner.shortName)
+                    : "You two should go together.",
                 viewer: viewer,
                 partner: partner,
                 photoReference: CommonGroundPlacePhotoReference(place: primary),
                 // Native navigation resolves this exact currently authorized
                 // VisiblePlace row, rather than an arbitrary canonical save.
-                sourcePlaceID: primary.id
-            ))
+                sourcePlaceID: primary.id,
+                isOneSidedRecommendation: !isShared
+            )
+            if isShared {
+                places.append(place)
+            } else if place.viewerLoves || place.partnerLoves {
+                introductions.append(place)
+            }
         }
         places.sort {
             let lhsRank = rank($0), rhsRank = rank($1)
@@ -109,6 +118,19 @@ enum CommonGroundLiveData {
             if $0.totalVisits != $1.totalVisits { return $0.totalVisits > $1.totalVisits }
             let comparison = $0.name.localizedCaseInsensitiveCompare($1.name)
             return comparison == .orderedSame ? $0.id < $1.id : comparison == .orderedAscending
+        }
+        // Only a pair with no shared saves gets introductions. A city filter
+        // must not turn an existing shared collection into one-sided picks.
+        if places.isEmpty {
+            introductions.sort {
+                let lhsRating = max($0.youRating ?? 0, $0.joeRating ?? 0)
+                let rhsRating = max($1.youRating ?? 0, $1.joeRating ?? 0)
+                if lhsRating != rhsRating { return lhsRating > rhsRating }
+                if $0.totalVisits != $1.totalVisits { return $0.totalVisits > $1.totalVisits }
+                let comparison = $0.name.localizedCaseInsensitiveCompare($1.name)
+                return comparison == .orderedSame ? $0.id < $1.id : comparison == .orderedAscending
+            }
+            places = Array(introductions.prefix(3))
         }
         return Snapshot(
             places: places,

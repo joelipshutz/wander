@@ -159,7 +159,7 @@ struct WanderFixtures {
             LocalPlaceListItem(localID: "local_list_item_launch_juniper", serverID: "list_item_launch_juniper", listID: "list_launch", placeID: demoDinner.id, sourceUserPlaceID: "up_demo_juniper_table", addedByUserID: ryan.id, syncState: .synced)
         ]
 
-        return WanderFixtures(
+        let fixtures = WanderFixtures(
             currentUser: currentUser,
             profiles: [currentUser, maya, ryan, demo],
             places: [coffee, hike, noodles, laptopCoffee, dinner, picnic, demoCoffee, demoDinner],
@@ -172,7 +172,37 @@ struct WanderFixtures {
             placeListItems: placeListItems,
             contactProvider: contacts
         )
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderFeaturedRatingFixture") {
+            return fixtures.addingFeaturedRatingFixture()
+        }
+        #endif
+        return fixtures
     }
+
+    #if DEBUG
+    @MainActor
+    private func addingFeaturedRatingFixture() -> WanderFixtures {
+        let community = LocalProfile(localID: FeaturedCommunityPlaceSignal.ownerID,
+            handle: "featured_fixture", displayName: "Featured", syncState: .synced)
+        let place = LocalPlace(localID: "rec579_featured_place", canonicalName: "Featured Coffee QA",
+            category: "coffee", latitude: 34.0777, longitude: -118.2588, syncState: .synced)
+        let rated = ProcessInfo.processInfo.arguments.contains("-WanderFeaturedRatingFixtureRated")
+        let aggregate = LocalUserPlace(localID: "rec579_featured_aggregate", userID: community.id,
+            placeID: place.id, status: .been, visibility: .followers,
+            recommendedScore: rated ? 3.5 : nil, recommendedCount: rated ? 2 : 0,
+            sourceType: "featured_community_aggregate", syncState: .synced)
+        // The local fixture visibility policy needs a follow edge; production
+        // anonymous Featured evidence is supplied by the authorized repository.
+        let follow = LocalFollow(localID: "rec579_fixture_follow", followerUserID: currentUser.id,
+            followedUserID: community.id, source: .profile, syncState: .synced)
+        return WanderFixtures(currentUser: currentUser, profiles: profiles + [community],
+            places: places + [place], userPlaces: userPlaces + [aggregate], placeAttributes: placeAttributes,
+            placeVisits: placeVisits, visitPhotos: visitPhotos, follows: follows + [follow], blocks: blocks,
+            mutes: mutes, placeLists: placeLists, placeListMembers: placeListMembers,
+            placeListItems: placeListItems, contactProvider: contactProvider)
+    }
+    #endif
 
     /// A public-safe, deterministic social graph used only for App Store
     /// screenshots. It deliberately reuses the demo graph's stable identifiers

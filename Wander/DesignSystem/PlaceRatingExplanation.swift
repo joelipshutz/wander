@@ -10,7 +10,7 @@ enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
     }
 
     var message: String {
-        "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
+        "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Unrated Featured places show a temporary 5 until the first Astir rating. That value never counts toward an average or Fit score. Fit score is personalized from your ratings, categories, tags, and people you follow."
     }
 
     var accessibilityLabel: String {
@@ -35,10 +35,10 @@ struct PlaceProfileRatingsRail: View {
                 subtitle: presentation.ownRating?.subtitle ?? "No rating yet"
             ),
             Metric(
-                title: presentation.overallRating?.title ?? "Astir rating",
-                value: presentation.overallRating?.displayScore ?? "—",
-                suffix: presentation.overallRating == nil ? nil : "/5",
-                subtitle: presentation.overallRating?.subtitle ?? "No ratings yet"
+                title: presentation.overallRating?.title ?? (presentation.isUnratedFeatured ? "Featured" : "Astir rating"),
+                value: presentation.overallRating?.displayScore ?? (presentation.isUnratedFeatured ? "5" : "—"),
+                suffix: presentation.overallRating != nil || presentation.isUnratedFeatured ? "/5" : nil,
+                subtitle: presentation.overallRating?.subtitle ?? (presentation.isUnratedFeatured ? "Not yet rated" : "No ratings yet")
             ),
             Metric(
                 title: "Fit score",
