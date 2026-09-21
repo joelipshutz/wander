@@ -181,9 +181,7 @@ struct WanderApp: App {
             )
         )
         #if DEBUG
-        _mapCaptureBackend = StateObject(wrappedValue:
-            usesSimulatorTestSession && ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryUITest")
-                ? backendStore : Self.makeMapCaptureBackend())
+        _mapCaptureBackend = StateObject(wrappedValue: Self.makeMapCaptureBackend())
         #endif
     }
 

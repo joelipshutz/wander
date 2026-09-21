@@ -54,7 +54,7 @@ import XCTest
     }
     private func launchFeed(_ extras: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderMapCapture", "-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
+        app.launchArguments = ["-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
             "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover",
             "-WanderFeedSurface", "people"] + extras
         app.launch()
