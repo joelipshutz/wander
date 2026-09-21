@@ -87,6 +87,63 @@ final class ShareCardMockupUITests: XCTestCase {
         app.terminate()
     }
 
+    func testExternalPlaceCopyLinkDoesNotRequireCardPublication() {
+        let app = launch("place", additional: ["-ShareCardExternalPlace"])
+        app.buttons["share-mock.try"].tap()
+        let copy = app.buttons["Copy Link"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: copy)
+        waitForExpectations(timeout: 10)
+        copy.tap()
+        XCTAssertTrue(app.staticTexts["link copied"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        capture("external-place-copied")
+        app.terminate()
+    }
+
+    func testExternalPlaceCanOpenNativeDestinationsFromEveryFormat() {
+        let app = launch("place", additional: ["-ShareCardExternalPlace"])
+        app.buttons["share-mock.try"].tap()
+        let formats = app.segmentedControls["share.format"]
+        XCTAssertTrue(formats.waitForExistence(timeout: 10))
+        let copy = app.buttons["Copy Link"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: copy)
+        waitForExpectations(timeout: 10)
+        for (format, destination) in [("Link", "Messages"), ("Story", "Instagram Story"), ("Post", "Open more sharing options")] {
+            formats.buttons[format].tap()
+            app.buttons[destination].tap()
+            // Messages and Instagram are unavailable on the simulator, so both
+            // use the same native fallback as More. Never send to a recipient.
+            let activityList = app.otherElements["ActivityListView"]
+            XCTAssertTrue(activityList.waitForExistence(timeout: 10))
+            XCTAssertFalse(app.alerts.firstMatch.exists)
+            capture("external-place-\(format)-destination")
+            app.buttons["Close"].tap()
+            XCTAssertTrue(formats.waitForExistence(timeout: 5))
+        }
+        app.terminate()
+    }
+
+    func testPublicationFailureShowsConnectionRecoveryAndRetrySucceeds() {
+        let app = launch("place", additional: ["-ShareCardPublicationFailure"])
+        app.buttons["share-mock.try"].tap()
+        let copy = app.buttons["Copy Link"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: copy)
+        waitForExpectations(timeout: 10)
+        copy.tap()
+        let alert = app.alerts["Couldn't create the share link"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts["Check your internet connection, then try sharing again."].exists)
+        capture("publication-connection-error")
+        alert.buttons["OK"].tap()
+        copy.tap()
+        XCTAssertTrue(app.staticTexts["link copied"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        capture("publication-retry-succeeded")
+        app.terminate()
+    }
+
     private func launch(_ kind: String, additional: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs", "-WanderShareCardMockup", kind] + additional

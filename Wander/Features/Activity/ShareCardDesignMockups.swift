@@ -1,7 +1,7 @@
 #if DEBUG
 import SwiftUI
 
-/// Local design rehearsal only. No URLs are published and no share destinations are invoked.
+/// Local design rehearsal. Publication is simulated; native destination sheets use sample data.
 enum ShareCardMockKind: String, CaseIterable, Identifiable {
     case profile, map, list, place, checkIn, wanna, invitation
     var id: String { rawValue }
@@ -64,6 +64,7 @@ extension ShareCardMockKind {
 }
 
 struct ShareCardDesignMockupRoot: View {
+    @StateObject private var shareBackend: WanderBackend
     @State private var kind: ShareCardMockKind
     @State private var format: ShareCardMockFormat
     @State private var count = 4
@@ -74,6 +75,11 @@ struct ShareCardDesignMockupRoot: View {
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
+        _shareBackend = StateObject(wrappedValue: WanderBackend(
+            shareCardPreviewRepository: ShareCardMockPreviewRepository(
+                failsFirstAttempt: arguments.contains("-ShareCardPublicationFailure")
+            )
+        ))
         func value(after flag: String) -> String? {
             guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }
             return arguments[index + 1]
@@ -111,14 +117,35 @@ struct ShareCardDesignMockupRoot: View {
                 }
                 .sheet(isPresented: $showsShareSheet) {
                     ActivitySharePreviewScreen(card: kind.card(count: count, dated: dated),
-                        content: .place(item: URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000264")!, name: "Sample preview", message: "Sample preview"),
+                        content: .place(item: ProcessInfo.processInfo.arguments.contains("-ShareCardExternalPlace")
+                            ? PlaceExternalLinks.directionsAction(placeName: "Sample place", latitude: 0, longitude: 0)!.url
+                            : URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000264")!, name: "Sample preview", message: "Sample preview"),
                         loadImages: { kind.images })
+                        .environmentObject(shareBackend)
                 }
                 .sheet(isPresented: $showsRecipient) {
                     ShareCardMockRecipient(kind: kind, count: count, dated: dated)
                 }
         }
         .tint(dark ? AstirTheme.paper.color : AstirTheme.ink.color)
+    }
+}
+
+@MainActor
+private final class ShareCardMockPreviewRepository: ShareCardPreviewRepository {
+    private var failsNextAttempt: Bool
+
+    init(failsFirstAttempt: Bool) { failsNextAttempt = failsFirstAttempt }
+
+    func publish(content: WanderShareContent, previewPNG: Data) async throws -> WanderShareContent {
+        if failsNextAttempt {
+            failsNextAttempt = false
+            throw URLError(.notConnectedToInternet)
+        }
+        guard let url = ShareCardLinkTarget.link(content.item, token: String(repeating: "a", count: 48)) else {
+            throw WanderRemoteError.invalidResponse("invalid_mock_card")
+        }
+        return content.withLink(url)
     }
 }
 

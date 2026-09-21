@@ -4,6 +4,126 @@ import UIKit
 
 @MainActor
 final class ShareCardPreviewRepositoryTests: XCTestCase {
+    func testExternalPlaceLinkSkipsArtworkAndPublicationEvenWithoutARepository() async throws {
+        let url = try XCTUnwrap(PlaceExternalLinks.directionsAction(
+            placeName: "Sample place", latitude: 0, longitude: 0)?.url)
+        let content = WanderShareContent.place(item: url, name: "Sample place", message: "Unused caption")
+        // This is the URL supplied by the unsaved-place screen. It cannot be
+        // sent to the Astir card publisher because it has no Astir entity ID.
+        XCTAssertNil(ShareCardLinkTarget(url: url))
+        let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: nil) {
+            XCTFail("Copying a Maps link must not depend on rendering an image")
+            throw ShareCardPreparationError.artwork
+        }
+        XCTAssertEqual(shared.items, [url])
+        XCTAssertEqual(shared.messageBody, url.absoluteString)
+        XCTAssertEqual(shared.message, "")
+    }
+
+    func testCanonicalPlaceStillPublishesItsArtworkAndExactTarget() async throws {
+        let transport = CardTransport()
+        let id = UUID().uuidString
+        let content = try XCTUnwrap(WanderShareContent.place(serverID: id, name: "Sample place", message: ""))
+        var renderCount = 0
+        let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: repository(transport)) {
+            renderCount += 1
+            return self.png
+        }
+        XCTAssertEqual(renderCount, 1)
+        XCTAssertEqual(transport.params["input_kind"], "place")
+        XCTAssertEqual(transport.params["input_identifier"]?.lowercased(), id.lowercased())
+        XCTAssertEqual(shared.items.count, 1)
+        XCTAssertEqual(shared.item.path, "/cards" + content.item.path)
+    }
+
+    func testPublicationFailureIsNotAnArtworkErrorAndCanBeRetried() async throws {
+        let transport = CardTransport()
+        transport.fail = true
+        let repo = repository(transport)
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await ShareCardLinkPreparation.prepare(content: content, repository: repo) { self.png }
+            XCTFail("A canonical link must not silently fall back to a generic URL")
+        } catch {
+            XCTAssertEqual(error as? ShareCardPreparationError, .session)
+            XCTAssertTrue(transport.deleted)
+        }
+        transport.fail = false
+        let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: repo) { self.png }
+        XCTAssertNotEqual(shared.item, content.item)
+    }
+
+    func testArtworkFailureNeverUploadsAndRetainsItsSpecificError() async throws {
+        let transport = CardTransport()
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await ShareCardLinkPreparation.prepare(content: content, repository: repository(transport)) {
+                throw ShareCardPreparationError.artwork
+            }
+            XCTFail("Expected rendering failure")
+        } catch { XCTAssertEqual(error as? ShareCardPreparationError, .artwork) }
+        XCTAssertTrue(transport.path.isEmpty)
+    }
+
+    func testMissingPublisherAndUnsupportedURLsFailBeforeRendering() async {
+        for (url, expected): (URL, ShareCardPreparationError) in [
+            (WanderDeepLinkRoute.sharedProfile(profileID: "user_ryan").url!, .configuration),
+            (URL(string: "https://www.google.com.evil.example/maps/dir/?api=1")!, .unavailable),
+            (URL(string: "https://www.google.com/unrelated")!, .unavailable),
+            (URL(string: "http://www.google.com/maps/dir/")!, .unavailable)
+        ] {
+            do {
+                _ = try await ShareCardLinkPreparation.prepare(
+                    content: .place(item: url, name: "Sample", message: ""), repository: nil
+                ) {
+                    XCTFail("Invalid or unconfigured publication must not render")
+                    return self.png
+                }
+                XCTFail("Expected failure")
+            } catch { XCTAssertEqual(error as? ShareCardPreparationError, expected) }
+        }
+    }
+
+    func testCancellationDuringArtworkNeverPublishes() async {
+        let transport = CardTransport()
+        do {
+            _ = try await ShareCardLinkPreparation.prepare(
+                content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!,
+                repository: repository(transport)
+            ) { throw CancellationError() }
+            XCTFail("Expected cancellation")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.path.isEmpty)
+    }
+
+    func testCancelledArtworkDoesNotBecomeAVisibleRenderingFailure() async {
+        let transport = CardTransport()
+        let task = Task {
+            try await ShareCardLinkPreparation.prepare(
+                content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!,
+                repository: repository(transport)
+            ) {
+                withUnsafeCurrentTask { $0?.cancel() }
+                throw ShareCardPreparationError.artwork
+            }
+        }
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.path.isEmpty)
+    }
+
+    func testPublicationMessagesClassifyFailuresWithoutExposingRawPayloads() {
+        XCTAssertEqual(ShareCardPreparationError.publicationFailure(URLError(.notConnectedToInternet)), .connection)
+        XCTAssertEqual(ShareCardPreparationError.publicationFailure(WanderRemoteError.notAuthenticated), .session)
+        XCTAssertEqual(ShareCardPreparationError.publicationFailure(WanderRemoteError.notConfigured), .configuration)
+        let failure = ShareCardPreparationError.publicationFailure(WanderRemoteError.invalidResponse("private response"))
+        XCTAssertEqual(failure, .publication)
+        XCTAssertFalse(failure.message.contains("private response"))
+        XCTAssertNotEqual(failure.title, ShareCardPreparationError.artwork.title)
+    }
+
     func testPublishedLinksPreserveEveryExactDestinationAndRejectOtherQueries() throws {
         let uuid = UUID().uuidString
         let token = String(repeating: "a", count: 48)
