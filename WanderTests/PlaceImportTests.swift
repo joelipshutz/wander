@@ -5413,6 +5413,38 @@ final class PlaceImportStoreTests: XCTestCase {
 
 @MainActor
 final class DevicePlaceImportResolverTests: XCTestCase {
+    func testGoogleSinglePlaceKeepsSourceNameWhenMapKitReturnsOnlyAnAddress() async throws {
+        let sharedURL = "https://maps.app.goo.gl/single-place"
+        let finalURL = try XCTUnwrap(URL(string:
+            "https://www.google.com/maps/place/Clover+Cafe/data=!4m2!3d34.05!4d-118.25"
+        ))
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data(#"<meta property="og:title" content="Clover Cafe · 123 Example St, Los Angeles, CA"><meta property="og:description" content="Restaurant">"#.utf8),
+                finalURL: finalURL,
+                statusCode: 200,
+                mimeType: "text/html"
+            )
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: [
+                placeImportCandidate(name: "123 Example St", latitude: 34.05, longitude: -118.25)
+            ]),
+            googleListLoader: GoogleMapsSharedListImporter(httpClient: client)
+        )
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(), resolver: resolver)
+
+        let batchID = try store.enqueue(source: .googleMaps, text: sharedURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let item = try XCTUnwrap(store.items(for: batchID).first)
+        XCTAssertEqual(item.seed.nameHint, "Clover Cafe")
+        XCTAssertEqual(item.selectedCandidate?.name, "Clover Cafe")
+        XCTAssertEqual(item.selectedCandidate?.latitude, 34.05)
+        XCTAssertEqual(item.selectedCandidate?.longitude, -118.25)
+        XCTAssertEqual(client.requests.count, 1)
+    }
+
     func testDoesNotAutoSelectALoneCandidateWithADifferentName() async throws {
         let wrongCandidate = placeImportCandidate(name: "Blue Daisy")
         let placeResolver = FakeDevicePlaceResolver(candidates: [wrongCandidate])
