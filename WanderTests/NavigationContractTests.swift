@@ -5192,7 +5192,7 @@ final class NavigationContractTests: XCTestCase {
         let navigationRow = try sourceSection(
             home,
             after: "private var profileNavigationRow: some View {",
-            before: "private var profileIdentityBlock: some View"
+            before: "private var profileShareButton: some View"
         )
         let identityBlock = try sourceSection(
             home,
@@ -5201,7 +5201,7 @@ final class NavigationContractTests: XCTestCase {
         )
         let backButton = try sourceSection(
             home,
-            after: "private struct ProfileBackButton: View {",
+            after: "struct ProfileBackButton: View {",
             before: "struct ProfileInvitationBadgeState: Equatable"
         )
         let recentActivity = try sourceSection(
@@ -5216,7 +5216,11 @@ final class NavigationContractTests: XCTestCase {
         let mapIndex = try XCTUnwrap(body.range(of: "ProfileMapSection")?.lowerBound)
         let calendarIndex = try XCTUnwrap(body.range(of: "ProfileCalendarSection")?.lowerBound)
         let invitationButtonIndex = try XCTUnwrap(navigationRow.range(of: "ProfileInvitationButton(")?.lowerBound)
-        let editButtonIndex = try XCTUnwrap(navigationRow.range(of: "accessibilityLabel: \"Edit profile\"")?.lowerBound)
+        let feedbackButtonIndex = try XCTUnwrap(navigationRow.range(of: "systemImage: \"ladybug.fill\"")?.lowerBound)
+        let settingsButtonIndex = try XCTUnwrap(navigationRow.range(of: "systemImage: \"line.3.horizontal\"")?.lowerBound)
+        let memberSinceIndex = try XCTUnwrap(identityBlock.range(of: "Text(memberSinceText)")?.lowerBound)
+        let editButtonIndex = try XCTUnwrap(identityBlock.range(of: "Button(action: editAction)")?.lowerBound)
+        let shareButtonIndex = try XCTUnwrap(identityBlock.range(of: "profileShareButton")?.lowerBound)
         let invitationButton = try sourceSection(
             home,
             after: "private struct ProfileInvitationButton: View",
@@ -5228,7 +5232,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertLessThan(activityIndex, mapIndex)
         XCTAssertLessThan(mapIndex, calendarIndex)
         XCTAssertFalse(body.contains("ProfileSharedVisitInboxRow"))
-        XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
+        XCTAssertLessThan(feedbackButtonIndex, invitationButtonIndex)
+        XCTAssertLessThan(invitationButtonIndex, settingsButtonIndex)
+        XCTAssertLessThan(memberSinceIndex, editButtonIndex)
+        XCTAssertLessThan(editButtonIndex, shareButtonIndex)
+        XCTAssertFalse(navigationRow.contains("editAction"))
+        XCTAssertFalse(navigationRow.contains("profileShareButton"))
+        XCTAssertFalse(navigationRow.contains("WanderGlassButtonCluster"))
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
         XCTAssertTrue(navigationRow.contains("ProfileBackButton(action: backAction)"))
         XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
@@ -5259,7 +5269,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(backButton.contains(".buttonStyle(.plain)"))
         XCTAssertFalse(backButton.contains(".wanderGlassCapsule"))
         XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
-        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"bell\")"))
+        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"bell\", showsBackground: false)"))
         XCTAssertTrue(invitationButton.contains(".accessibilityLabel(\"Notifications\")"))
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
         XCTAssertTrue(invitationButton.contains("Capsule()"))
@@ -5405,7 +5415,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedIdentityHeader.contains(".font(AstirTypography.sheetTitle)"))
         XCTAssertTrue(sharedIdentityHeader.contains(".profileMotionSource(tracksProfileMotion ? .name : nil)"))
         XCTAssertTrue(identity.contains("ProfileGraphCountButton(value: followerCount"))
-        XCTAssertTrue(identity.contains(".astirOutlinedSurface("))
+        XCTAssertTrue(identity.contains("Button(action: relationshipAction)"))
+        XCTAssertTrue(identity.contains("AstirIdentityActionLabel(title: relationshipTitle(relationship))"))
+        XCTAssertFalse(identity.contains(".astirOutlinedSurface("))
         XCTAssertTrue(home.contains("private struct ProfileHeaderActionLabel: View"))
         XCTAssertTrue(home.contains(".wanderGlassCapsule()"))
         XCTAssertTrue(monthButton.contains(".wanderGlassCapsule()"))

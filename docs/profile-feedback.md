@@ -5,7 +5,8 @@ is “Drop us a line” with “(feature request, bug, or tell us you love us)�
 Voice and Text tabs preserve their drafts when switching; Voice opens by default.
 Voice has a large record/stop control, live audio-level waveform, timer, and
 play/pause/resume/replay controls. Stop rewinds playback. Replacing a note requires
-confirmation. Text contains the editor and Add photos. Checkmarks and inclusion
+confirmation. Text contains the editor. Both tabs offer Add photos, previews,
+and removal, sharing the same photo draft. Checkmarks and inclusion
 copy make it clear when both tabs have content; Submit includes both drafts.
 A report can contain text, up to three photos, and one voice note up to three minutes. At
 least one of those is required. Photos are downsampled to 2,000 pixels without
