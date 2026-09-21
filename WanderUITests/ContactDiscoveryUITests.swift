@@ -81,6 +81,15 @@ import XCTest
         capture("Following screen contact suggestions")
         friend.tap()
         XCTAssertEqual(friend.label, "Following Contact Friend")
+        // The first successful follow can present the contextual notifications
+        // campaign. Complete that real flow before reopening contact settings.
+        let notificationContinue = app.buttons["productUpsell.primary"]
+        if notificationContinue.waitForExistence(timeout: 3) {
+            notificationContinue.tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let deny = springboard.alerts.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")).firstMatch
+            if deny.waitForExistence(timeout: 3) { deny.tap() }
+        }
         openContactSettings(app)
         app.buttons["contacts.settings.disable"].tap()
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
