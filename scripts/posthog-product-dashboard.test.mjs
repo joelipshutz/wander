@@ -15,6 +15,7 @@ import {
   INTERNAL_USER_IDS,
   withStaffExclusions,
   appEntrySQL,
+  remoteOpenRateSQL,
 } from "./posthog-product-dashboard.mjs";
 
 test("dashboard contract has every requested lifecycle section", () => {
@@ -98,6 +99,19 @@ test("notification clicks and entry sources live under Engagement with external 
     assert.match(sql, /direct_or_unknown/);
     assert.doesNotMatch(sql, /app_session_started|notification_opened/);
   }
+});
+
+test("remote-open count remains visible when comparable delivery reporting is unavailable", () => {
+  const sql = remoteOpenRateSQL();
+  assert.match(sql, /count\(\) as remote_opens_30d/);
+  assert.match(sql, /countIf\(timestamp >= \(select reporting_started_at from delivery\)\)/);
+  assert.match(sql, /Awaiting comparable delivery data/);
+  assert.match(sql, /if\(delivery.accepted_notifications = 0, null, opens.opens_in_reporting_window\)/);
+  assert.doesNotMatch(sql, /and \(select accepted_notifications from delivery\) > 0/);
+  assert.doesNotMatch(sql, /and timestamp >= \(select reporting_started_at from delivery\)/);
+  assert.ok(sql.includes(staffExclusionSQL));
+  const frequency = insights.find(({ key }) => key === "notifications-frequency-summary").query.query;
+  assert.match(frequency, /timestamp as snapshot_at/);
 });
 
 test("apply provisions an ordered dashboard through supported tile endpoints", async () => {

@@ -265,6 +265,8 @@ Place invitation opens from Notifications use `notification_type=place_plan_invi
 
 ### Engagement: notification clicks and app entry source
 
+The Notification Operations open-rate card always shows the actual last-30-day remote open count. Its separate comparable-window count and directional rate require at least one delivery reported with the staff-excluded audience policy. Until then these fields are null with an explicit awaiting-data status. Missing delivery coverage must never suppress real opens to zero. The frequency snapshot displays its timestamp; its historical total across currently eligible recipients is a different population/window and must not be used as the open-rate denominator.
+
 The Engagement section includes daily notification clicks by type, a type/channel table with clicks and unique people, and the existing cold-launch/foreground-session split. Opens represent accepted routing, not guaranteed destination rendering. Only place-plan invitations currently instrument in-app inbox opens; this is not coverage of every in-app notification row.
 
 New app-entry charts use `app_entry_started` joined to `app_entry_source_observed` by a random, ephemeral per-entry UUID. Source callbacks are grouped before joining, so repeated callbacks cannot multiply entries. A notification source takes precedence over a link when both are observed; unmatched entries remain `direct_or_unknown`. Notification type/channel and cold/foreground kind are separate dimensions. No notification, recipient, actor, link URL, or content identifiers are added.

@@ -156,6 +156,32 @@ from attributed group by entry_source, entry_kind, notification_type, delivery_c
 order by entries desc`}`;
 }
 
+// Missing comparable deliveries are a coverage gap, never evidence of no opens.
+function remoteOpenRateSQL() {
+  return `with delivery as (
+  select count() as accepted_notifications, min(timestamp) as reporting_started_at
+  from events
+  where event = 'notification_delivery_processed' and ${notificationAudienceSQL}
+    and properties.delivery_outcome = 'sent'
+    and timestamp >= now() - interval 30 day
+), opens as (
+  select count() as remote_opens_30d,
+    countIf(timestamp >= (select reporting_started_at from delivery)) as opens_in_reporting_window
+  from events
+  where event = 'notification_opened' and properties.delivery_channel = 'remote'
+    and ${productionSQL}
+    and timestamp >= now() - interval 30 day
+)
+select
+  opens.remote_opens_30d as remote_opens_30d,
+  if(delivery.accepted_notifications = 0, 'Awaiting comparable delivery data', 'Comparable window available') as rate_status,
+  if(delivery.accepted_notifications = 0, null, delivery.accepted_notifications) as comparable_accepted_notifications,
+  if(delivery.accepted_notifications = 0, null, opens.opens_in_reporting_window) as comparable_remote_opens,
+  round(100.0 * comparable_remote_opens / nullIf(comparable_accepted_notifications, 0), 1) as aggregate_open_percent,
+  if(delivery.accepted_notifications = 0, null, delivery.reporting_started_at) as comparable_from
+from delivery cross join opens`;
+}
+
 // Start before the friends step so onboarding follows are included. Take the
 // first observed start before applying the date range, so resumes do not create
 // new cohorts. Count successful user actions, never queued attempts or seeded
@@ -496,36 +522,9 @@ where event = 'notification_delivery_processed'
   },
   {
     key: "notifications-open-rate",
-    name: "Notifications — remote open rate",
-    description: "Routable remote taps divided by APNs-accepted notifications, excluding Joe and Ryan. Uses the last 30 days from the first staff-excluded acceptance; legacy mixed-recipient deliveries are excluded. This is an aggregate directional rate; no notification or recipient identifier is exported by the server analytics path.",
-    query: hogql(`
-with delivery as (
-  select count() as accepted_notifications, min(timestamp) as reporting_started_at
-  from events
-  where event = 'notification_delivery_processed'
-  and ${notificationAudienceSQL}
-    and properties.delivery_outcome = 'sent'
-    and timestamp >= now() - interval 30 day
-), opens as (
-  select count() as notification_opens
-  from events
-  where event = 'notification_opened'
-    and properties.delivery_channel = 'remote'
-    and timestamp >= (select reporting_started_at from delivery)
-    and (select accepted_notifications from delivery) > 0
-    and ${productionSQL}
-    and timestamp >= now() - interval 30 day
-)
-select
-  delivery.accepted_notifications as accepted_notifications,
-  opens.notification_opens as notification_opens,
-  round(
-    100.0 * opens.notification_opens / nullIf(delivery.accepted_notifications, 0),
-    1
-  ) as aggregate_open_percent
-from delivery
-cross join opens
-`.trim()),
+    name: "Notifications — remote opens and comparable rate",
+    description: "Actual remote opens in the last 30 days, plus a directional rate only from the first staff-excluded delivery report. Without comparable deliveries, the rate and its inputs are unavailable, not zero opens. Older mixed-recipient delivery events cannot be used. The frequency snapshot has a different population/window and is not this rate's denominator.",
+    query: hogql(remoteOpenRateSQL()),
   },
   {
     key: "notifications-frequency-summary",
@@ -538,7 +537,8 @@ select
   toFloat(properties.average_per_recipient) as average_per_recipient,
   toInt(properties.p50_per_recipient) as p50_per_recipient,
   toInt(properties.p90_per_recipient) as p90_per_recipient,
-  toInt(properties.max_per_recipient) as max_per_recipient
+  toInt(properties.max_per_recipient) as max_per_recipient,
+  timestamp as snapshot_at
 from events
 where event = 'notification_frequency_snapshot' and ${notificationAudienceSQL}
 order by timestamp desc
@@ -920,4 +920,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 }
 
-export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, appEntrySQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };
+export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, appEntrySQL, remoteOpenRateSQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };
