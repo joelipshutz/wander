@@ -5,10 +5,14 @@ enum ProductUpsellTrigger: String, CaseIterable, Codable, Equatable, Hashable {
     case onboardingNotifications = "onboarding_notifications"
     case placeSaved = "place_saved"
     case followCreated = "follow_created"
+    case remoteNotificationReprompt = "remote_notification_reprompt"
+
+    static let automaticTriggers: [Self] = [.onboardingNotifications, .placeSaved, .followCreated]
 }
 
 enum ProductUpsellCampaignID: String, Codable, Equatable, Hashable {
     case notifications
+    case notificationReprompt = "notification_reprompt"
 }
 
 enum ProductUpsellActionPolicy: String, Codable, Equatable {
@@ -78,6 +82,22 @@ struct ProductUpsellCatalog {
                 actionPolicy: .notifications,
                 maxLifetimeImpressionsPerTrigger: 1,
                 maxLifetimeImpressions: 3
+            ),
+            ProductUpsellCampaignConfiguration(
+                id: .notificationReprompt,
+                triggers: [.remoteNotificationReprompt],
+                contentByTrigger: [
+                    .remoteNotificationReprompt: ProductUpsellContent(
+                        eyebrow: "STAY IN THE LOOP",
+                        title: "See when your friends check in",
+                        message: "Get a heads-up when people you follow save a place or check in somewhere worth knowing.",
+                        systemImage: "bell.and.waves.left.and.right.fill",
+                        palette: .sun
+                    )
+                ],
+                actionPolicy: .notifications,
+                maxLifetimeImpressionsPerTrigger: 1_000_000,
+                maxLifetimeImpressions: 1_000_000
             )
         ]
     )
@@ -234,6 +254,47 @@ final class ProductUpsellCoordinator: ObservableObject {
         guard boundUserID != userID else { return }
         boundUserID = userID
         cancelAllRequests()
+    }
+
+    /// Remote requests are reconciled at safe presentation boundaries, never
+    /// queued. Disabling or changing the remote campaign while blocked therefore
+    /// cannot leave an obsolete prompt waiting to appear.
+    func requestRemoteNotificationReprompt(
+        campaignVersion: Int,
+        userID: String,
+        isEligible: Bool,
+        canPresent: Bool
+    ) {
+        guard boundUserID == userID,
+              isEligible, canPresent,
+              presentationBlockerCount == 0,
+              campaignVersion > 0,
+              FeatureFlagKey.notificationRepromptCampaign.definition.accepts(.integer(campaignVersion)),
+              campaignVersion > lastShownRemoteCampaignVersion(for: userID)
+        else { return }
+
+        // A currently visible notification primer already fulfils this request.
+        // Do not put a second copy immediately behind it.
+        if let activePresentation {
+            guard activePresentation.userID == userID,
+                  activePresentation.actionPolicy == .notifications else { return }
+            userDefaults.set(campaignVersion, forKey: remoteCampaignVersionKey(userID: userID))
+            return
+        }
+        guard suspendedPresentation == nil, pendingRequests.isEmpty else { return }
+
+        request(trigger: .remoteNotificationReprompt, userID: userID, isEligible: true)
+        guard activePresentation?.trigger == .remoteNotificationReprompt,
+              activePresentation?.userID == userID else { return }
+        userDefaults.set(campaignVersion, forKey: remoteCampaignVersionKey(userID: userID))
+    }
+
+    func lastShownRemoteCampaignVersion(for userID: String) -> Int {
+        userDefaults.integer(forKey: remoteCampaignVersionKey(userID: userID))
+    }
+
+    private func remoteCampaignVersionKey(userID: String) -> String {
+        "recme.productUpsell.notificationReprompt.\(userID).lastShownCampaign.v1"
     }
 
     func request(

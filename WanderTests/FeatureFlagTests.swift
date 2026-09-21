@@ -14,6 +14,7 @@ final class FeatureFlagTests: XCTestCase {
                 "social_import_apify_gemini_v1",
                 "place_profile_action_variant",
                 "profile_feedback_v1",
+                "notification_reprompt_campaign",
             ]
         )
         XCTAssertEqual(FeatureFlagKey.placeProfileSaveTrayV1.definition.valueKind, .boolean)
@@ -32,6 +33,36 @@ final class FeatureFlagTests: XCTestCase {
         XCTAssertEqual(FeatureFlagKey.profileFeedbackV1.definition.bundledDefault, .boolean(false))
         XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.isEditableOnDevice)
         XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.allowsRemoteAccountOverride)
+        XCTAssertEqual(FeatureFlagKey.notificationRepromptCampaign.definition.bundledDefault, .integer(0))
+        XCTAssertEqual(FeatureFlagKey.notificationRepromptCampaign.definition.integerRange, 0 ... 1_000_000)
+        XCTAssertTrue(FeatureFlagKey.notificationRepromptCampaign.definition.allowsRemoteAccountOverride)
+        XCTAssertTrue(FeatureFlagKey.notificationRepromptCampaign.definition.isEditableOnDevice)
+    }
+
+    func testRemoteNotificationCampaignFailsClosedAndDeviceOverrideWaitsForRestart() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = FeatureFlagOverrideStore(defaults: defaults)
+        let remote: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
+            .notificationRepromptCampaign: .init(value: .integer(7), source: .accountOverride)
+        ]
+        let backend = WanderBackend(featureFlagRepository: FeatureFlagTestRepository(values: remote),
+                                    featureFlagDeviceOverrides: store.launchSnapshot())
+        XCTAssertNil(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"))
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 7)
+        XCTAssertNil(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_b"))
+        store.setOverride(.integer(8), for: .notificationRepromptCampaign, userID: "user_a")
+        XCTAssertEqual(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 7)
+        let restarted = WanderBackend(featureFlagDeviceOverrides: store.launchSnapshot())
+        XCTAssertEqual(restarted.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 8)
+        store.setOverride(.integer(-1), for: .notificationRepromptCampaign, userID: "user_a")
+        store.setOverride(.integer(1_000_001), for: .notificationRepromptCampaign, userID: "user_a")
+        XCTAssertEqual(store.override(for: .notificationRepromptCampaign, userID: "user_a"), .integer(8))
+        store.clearOverride(for: .notificationRepromptCampaign, userID: "user_a")
+        let reset = WanderBackend(featureFlagDeviceOverrides: store.launchSnapshot())
+        await reset.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(reset.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 0)
     }
 
     func testProfileFeedbackDefaultsOffAndRequiresExplicitEnablementAfterRestart() async throws {

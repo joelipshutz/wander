@@ -56,6 +56,12 @@ The producer sends only to followers who can read the associated `user_places` r
 
 ## Permission And Routing
 
+Every notification primer uses the same animated example notification cards as
+onboarding, with the existing trigger-specific headline and permission actions.
+Operators can also request a separate remote re-prompt campaign for selected
+accounts or all eligible accounts. See [remote notification re-prompts](feature-flags.md#remote-notification-re-prompts)
+for targeting, campaign versions, device-scoped exposure tracking, and cancellation.
+
 Notification setup uses one centrally configured enrollment campaign across onboarding and contextual product moments. It appears once per trigger during onboarding, after a newly created place save, or after a newly created follow while notifications remain off. The campaign is capped at three impressions per account across those triggers, persists both campaign and per-trigger counts locally, queues behind an active product presentation instead of stacking, and never appears when both iOS authorization and backend push preferences are enabled.
 
 When iOS authorization is not determined, the campaign uses a neutral **Continue** action with no close, swipe, or **Not now** path before the native permission alert. After denial it offers **Open Settings** and **Not now**. In Profile -> Settings -> Notifications, the same neutral action rule applies before the first native request. A successful enrollment enables every category, requests an APNs token, and registers any available stored token. **Disable notifications** turns off every backend category before deactivating the device token; iOS permission may remain granted because apps cannot revoke system permission themselves.

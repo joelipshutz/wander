@@ -68,6 +68,7 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     case socialImportApifyGeminiV1 = "social_import_apify_gemini_v1"
     case placeProfileActionVariant = "place_profile_action_variant"
     case profileFeedbackV1 = "profile_feedback_v1"
+    case notificationRepromptCampaign = "notification_reprompt_campaign"
 
     var definition: FeatureFlagDefinition {
         switch self {
@@ -131,6 +132,15 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
                 summary: "Shows the profile feedback button. Enable after delivery setup is verified.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
+                allowsRemoteAccountOverride: true,
+                isEditableOnDevice: true
+            )
+        case .notificationRepromptCampaign:
+            FeatureFlagDefinition(
+                title: "Notification re-prompt campaign",
+                summary: "0 is off. A higher campaign number reopens the notification primer once per account on this device while notifications are off.",
+                bundledDefault: .integer(0),
+                integerRange: 0 ... 1_000_000,
                 allowsRemoteAccountOverride: true,
                 isEditableOnDevice: true
             )
@@ -241,7 +251,8 @@ struct FeatureFlagOverrideStore {
              .placeProfileSaveTrayV1,
              .semanticPlaceSearchV1,
              .socialImportApifyGeminiV1,
-             .profileFeedbackV1:
+             .profileFeedbackV1,
+             .notificationRepromptCampaign:
             nil
         }
     }

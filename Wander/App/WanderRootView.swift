@@ -913,6 +913,7 @@ struct WanderRootView: View {
                 for: userID
             )
             configureWalkthroughsForCurrentUser()
+            presentDeferredProductUpsellIfPossible()
         }
         .task(id: isSessionValidated) {
             guard isSessionValidated else {
@@ -1217,6 +1218,7 @@ struct WanderRootView: View {
             if isValidated {
                 configureWalkthroughsForCurrentUser()
                 scheduleProductUpsellDrain()
+                presentDeferredProductUpsellIfPossible()
                 drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
@@ -1233,6 +1235,12 @@ struct WanderRootView: View {
 
     private var stateObservedRoot: some View {
         recoveryObservedRoot
+        .onChange(of: remoteNotificationRepromptCampaign, initial: true) { _, _ in
+            presentDeferredProductUpsellIfPossible()
+        }
+        .onChange(of: pushNotifications.notificationsAreEnabled) { _, _ in
+            presentDeferredProductUpsellIfPossible()
+        }
         .onChange(of: blocksProductUpsellPresentation) { _, isBlocked in
             if isBlocked {
                 productUpsells.suspendActivePresentation()
@@ -1244,8 +1252,11 @@ struct WanderRootView: View {
             presentDeferredProductUpsellIfPossible()
         }
         .onChange(of: productUpsells.activePresentation?.id) { _, presentationID in
-            guard presentationID == nil else { return }
-            presentDeferredProductUpsellIfPossible()
+            if presentationID == nil {
+                presentDeferredProductUpsellIfPossible()
+            } else {
+                requestRemoteNotificationRepromptIfPossible()
+            }
         }
         .onChange(of: productUpsells.presentationBlockerCount) { _, blockerCount in
             if blockerCount > 0 {
@@ -2210,8 +2221,29 @@ struct WanderRootView: View {
     }
 
     private func presentDeferredProductUpsellIfPossible() {
+        guard isSessionValidated, scenePhase == .active else { return }
         let userID = auth.state.session?.userID ?? store.currentUser.id
         productUpsells.presentDeferredIfPossible(
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && !blocksProductUpsellPresentation
+        )
+        requestRemoteNotificationRepromptIfPossible()
+    }
+
+    private var remoteNotificationRepromptCampaign: Int {
+        guard isSessionValidated, let userID = auth.state.session?.userID else { return 0 }
+        return backend.integerFeatureFlag(.notificationRepromptCampaign, for: userID) ?? 0
+    }
+
+    private func requestRemoteNotificationRepromptIfPossible() {
+        guard isSessionValidated, scenePhase == .active,
+              let userID = auth.state.session?.userID,
+              pushNotifications.notificationPreferencesUserID == userID else { return }
+        productUpsells.bind(to: userID)
+        productUpsells.requestRemoteNotificationReprompt(
+            campaignVersion: remoteNotificationRepromptCampaign,
             userID: userID,
             isEligible: !pushNotifications.notificationsAreEnabled,
             canPresent: pushNotifications.hasLoadedNotificationPreferences
@@ -2418,6 +2450,7 @@ struct WanderRootView: View {
             )
             configureWalkthroughsForCurrentUser()
             walkthroughFeatureFlagRefreshTask = nil
+            presentDeferredProductUpsellIfPossible()
         }
     }
 

@@ -3,6 +3,108 @@ import XCTest
 
 @MainActor
 final class ProductUpsellCoordinatorTests: XCTestCase {
+    func testRemoteCampaignBypassesAutomaticCapAndPersistsAcrossRelaunch() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        for trigger in ProductUpsellTrigger.automaticTriggers {
+            coordinator.request(trigger: trigger, userID: "user_a", isEligible: true)
+            coordinator.completeCurrent(with: .dismissed)
+        }
+
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.trigger, .remoteNotificationReprompt)
+        XCTAssertEqual(coordinator.impressionCount(for: .notifications, userID: "user_a"), 3)
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationReprompt, userID: "user_a"), 1)
+        coordinator.completeCurrent(with: .dismissed)
+
+        let relaunched = ProductUpsellCoordinator(userDefaults: defaults)
+        relaunched.bind(to: "user_a")
+        relaunched.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(relaunched.activePresentation)
+        relaunched.requestRemoteNotificationReprompt(campaignVersion: 2, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(relaunched.activePresentation?.trigger, .remoteNotificationReprompt)
+        XCTAssertEqual(relaunched.activePresentation?.impressionNumber, 2)
+        relaunched.completeCurrent(with: .dismissed)
+        relaunched.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(relaunched.activePresentation, "An old campaign cannot replay after a newer campaign.")
+    }
+
+    func testRemoteCampaignWaitsForEligibilityAndPresentationWithoutConsumingExposure() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        for version in [-1, 0, 1_000_001] {
+            coordinator.requestRemoteNotificationReprompt(campaignVersion: version, userID: "user_a", isEligible: true, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation)
+        }
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: false, canPresent: true)
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: false)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_a"), 0)
+
+        // Withdrawing the remote request while blocked leaves no stale queue.
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 0, userID: "user_a", isEligible: true, canPresent: true)
+        coordinator.presentDeferredIfPossible(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 2, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_a"), 2)
+        XCTAssertEqual(coordinator.activePresentation?.trigger, .remoteNotificationReprompt)
+    }
+
+    func testRemoteCampaignIsAccountScopedAndRejectsStaleAccount() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_b", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_b"), 0)
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        coordinator.bind(to: "user_b")
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_b", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.userID, "user_b")
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_a"), 1)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_b"), 1)
+    }
+
+    func testVisiblePrimerSatisfiesRemoteCampaignWithoutAnotherDialog() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.request(trigger: .placeSaved, userID: "user_a", isEligible: true)
+        let presentationID = coordinator.activePresentation?.id
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.id, presentationID)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_a"), 1)
+        coordinator.completeCurrent(with: .dismissed)
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+    }
+
+    func testRemoteCampaignCannotReplaceOrConsumeASuspendedPrimer() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.request(trigger: .followCreated, userID: "user_a", isEligible: true)
+        coordinator.suspendActivePresentation()
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_a"), 0)
+        coordinator.presentDeferredIfPossible(userID: "user_a", isEligible: true, canPresent: true)
+        coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.trigger, .followCreated)
+        XCTAssertEqual(coordinator.lastShownRemoteCampaignVersion(for: "user_a"), 1)
+    }
+
     func testPresentationGateDefersForEveryExistingRootPresentation() {
         let blockedStates = [
             ProductUpsellPresentationGate(isPresentingAdd: true),
@@ -62,7 +164,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults, analytics: analytics)
         let userID = "user_cap"
 
-        for trigger in ProductUpsellTrigger.allCases {
+        for trigger in ProductUpsellTrigger.automaticTriggers {
             coordinator.request(trigger: trigger, userID: userID, isEligible: true)
             XCTAssertEqual(coordinator.activePresentation?.trigger, trigger)
             coordinator.completeCurrent(with: .dismissed)
@@ -140,7 +242,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
 
         coordinator.bind(to: "user_a")
-        for trigger in ProductUpsellTrigger.allCases {
+        for trigger in ProductUpsellTrigger.automaticTriggers {
             coordinator.request(trigger: trigger, userID: "user_a", isEligible: true)
             coordinator.completeCurrent(with: .dismissed)
         }
@@ -286,7 +388,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
         let userID = "user_fifo"
 
-        for trigger in ProductUpsellTrigger.allCases {
+        for trigger in ProductUpsellTrigger.automaticTriggers {
             coordinator.request(
                 trigger: trigger,
                 userID: userID,
@@ -295,7 +397,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             )
         }
 
-        for expectedTrigger in ProductUpsellTrigger.allCases {
+        for expectedTrigger in ProductUpsellTrigger.automaticTriggers {
             coordinator.presentDeferredIfPossible(
                 userID: userID,
                 isEligible: true,

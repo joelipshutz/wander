@@ -54,3 +54,52 @@ and reopen it. To stop testing local values, choose Remote for one flag or use
 **Reset all to defaults** for every flag, then fully quit and reopen again. This
 clears device overrides, so each flag resolves from its remote value or bundled
 fallback on the next launch.
+
+## Remote notification re-prompts
+
+`notification_reprompt_campaign` is an integer control, from 0 through 1,000,000.
+0 disables requests. Set a new, higher positive campaign number to re-prompt
+notification-disabled users at their next authenticated app open or foreground.
+Remote values refresh at those boundaries; this does not wake a closed app or
+interrupt users immediately while they remain in an active session.
+
+The global row targets everyone eligible. An account row targets that user and
+takes precedence over the global row; an account override of 0 excludes that
+account. Device test overrides retain the platform's next-launch precedence.
+Use increasing campaign numbers across global and account targeting. Reusing or
+lowering a number does not re-prompt an account that already saw that version or
+a newer one. Record the last issued version in the campaign's operations ticket,
+including when setting a global or account row back to 0.
+
+Example operator SQL, after the migration and supporting app build are deployed:
+
+```sql
+-- Target a specific account. Replace the user id and campaign number deliberately.
+insert into public.feature_flags(key, user_id, enabled, value_type, integer_value)
+values ('notification_reprompt_campaign', 'user_target', false, 'integer', 1)
+on conflict (key, user_id) where user_id is not null
+do update set value_type = excluded.value_type, integer_value = excluded.integer_value;
+
+-- Or target everyone eligible with a fresh campaign number.
+update public.feature_flags set integer_value = 2
+where key = 'notification_reprompt_campaign' and user_id is null;
+
+-- Stop further global requests; existing per-account overrides still take precedence.
+update public.feature_flags set integer_value = 0
+where key = 'notification_reprompt_campaign' and user_id is null;
+```
+
+The app records exposure only when the primer becomes visible, once per campaign
+per account **on that device**. The record survives app relaunch, but is not a
+server receipt and does not deduplicate across devices or a fresh installation.
+An already visible notification primer satisfies the current campaign without
+stacking another dialog. Blocked requests are reconciled from the current flag
+after the competing UI clears; disabling a campaign leaves no obsolete queued
+prompt. Remote impressions use a separate campaign counter and do not consume
+or depend on the automatic onboarding/save/follow cap of three.
+
+The current account's notification preferences and iOS permission must still
+indicate notifications are off. Normal presentation blockers apply. A previously
+denied iOS permission offers Open Settings and Not now; the app cannot force
+Apple's permission alert to appear again. Creating the dormant control does not
+authorize activating a live campaign.
