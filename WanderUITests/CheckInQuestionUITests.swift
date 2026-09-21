@@ -25,34 +25,160 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertEqual(lists.value as? String, "0 selected")
         capture("REC-567 Add to lists inside More options")
         lists.tap()
-        let picker = app.otherElements["map-list-picker.sheet"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        let picker = app.buttons["map-list-picker.cancel"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["map-list-picker.wanna-notice"].exists)
         let available = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@ AND enabled == true", "map-list-picker.list."
         )).firstMatch
-        XCTAssertTrue(available.waitForExistence(timeout: 5))
+        XCTAssertTrue(available.waitForExistence(timeout: 10))
         let listID = available.identifier
-        available.tap()
+        selectPendingList(available)
         capture("REC-567 staged list picker")
         app.buttons["map-list-picker.cancel"].tap()
-        XCTAssertTrue(lists.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
         XCTAssertEqual(lists.value as? String, "0 selected")
         XCTAssertEqual(note.value as? String, "Keep this check-in draft")
 
         reveal(lists, in: app)
         lists.tap()
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons[listID].isEnabled)
-        app.buttons[listID].tap()
+        selectPendingList(app.buttons[listID])
         app.buttons["map-list-picker.apply"].tap()
-        XCTAssertTrue(lists.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
         XCTAssertEqual(lists.value as? String, "1 selected")
         reveal(more, in: app)
         more.tap()
         XCTAssertTrue(app.staticTexts["tags · 1 list"].exists)
         XCTAssertFalse(lists.exists)
         capture("REC-567 collapsed selected list count")
+
+        let close = app.buttons["save.close"]
+        reveal(close, in: app, upwards: false)
+        close.tap()
+        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForNonExistence(timeout: 10))
+        openCheckIn(in: app)
+        reveal(more, in: app)
+        more.tap()
+        reveal(lists, in: app)
+        lists.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons[listID].isEnabled, "Closing an unsaved check-in must not create list membership.")
+        XCTAssertFalse(app.buttons[listID].label.contains("already in list"))
+        capture("REC-567 cancelled check-in leaves list available")
+    }
+
+    func testWannaListsAreVisibleAndClosingWithoutSavingDoesNotAddMembership() {
+        let app = launchPlace()
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 10))
+        wanna.tap()
+        let lists = app.buttons["save.lists"]
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
+        let more = app.buttons["save.moreOptions"]
+        XCTAssertEqual(more.value as? String, "Collapsed")
+        XCTAssertLessThan(lists.frame.minY, more.frame.minY)
+        capture("REC-567 Wanna Add to lists above More options")
+        reveal(lists, in: app)
+        lists.tap()
+        let picker = app.buttons["map-list-picker.cancel"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        let available = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND enabled == true", "map-list-picker.list."
+        )).firstMatch
+        XCTAssertTrue(available.waitForExistence(timeout: 10))
+        let listID = available.identifier
+        selectPendingList(available)
+        app.buttons["map-list-picker.apply"].tap()
+        XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
+        XCTAssertEqual(lists.value as? String, "1 selected")
+        let close = app.buttons["save.close"]
+        reveal(close, in: app, upwards: false)
+        close.tap()
+        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(wanna.waitForExistence(timeout: 10))
+        wanna.tap()
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
+        reveal(lists, in: app)
+        lists.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons[listID].isEnabled, "Closing an unsaved Wanna must not create list membership.")
+        XCTAssertFalse(app.buttons[listID].label.contains("already in list"))
+        capture("REC-567 cancelled Wanna leaves list available")
+    }
+
+    func testRepeatSavePickerDisablesListsThatAlreadyContainPlace() {
+        let app = launchPlace(placeName: "Woodcat Coffee")
+        for actionID in ["place-profile.floating-action.wanna", "place-profile.floating-action.checkIn"] {
+            let action = app.buttons[actionID]
+            XCTAssertTrue(action.waitForExistence(timeout: 10))
+            action.tap()
+            XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 10))
+            let lists = app.buttons["save.lists"]
+            if actionID.hasSuffix("checkIn") {
+                let more = app.buttons["save.moreOptions"]
+                reveal(more, in: app)
+                more.tap()
+            }
+            reveal(lists, in: app)
+            lists.tap()
+            let existing = app.buttons.matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "map-list-picker.list.", "already in list"
+            )).firstMatch
+            XCTAssertTrue(existing.waitForExistence(timeout: 10))
+            XCTAssertFalse(existing.isEnabled)
+            capture("REC-567 existing list disabled in \(actionID)")
+            app.buttons["map-list-picker.cancel"].tap()
+            XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
+            let close = app.buttons["save.close"]
+            reveal(close, in: app, upwards: false)
+            close.tap()
+            XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForNonExistence(timeout: 10))
+        }
+    }
+
+    func testWannaSaveCommitsSelectedListAndDisablesItOnRepeatSave() {
+        let app = launchPlace()
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 10))
+        wanna.tap()
+        let lists = app.buttons["save.lists"]
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
+        reveal(lists, in: app)
+        lists.tap()
+        let available = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND enabled == true", "map-list-picker.list."
+        )).firstMatch
+        XCTAssertTrue(available.waitForExistence(timeout: 10))
+        let listID = available.identifier
+        selectPendingList(available)
+        app.buttons["map-list-picker.apply"].tap()
+        XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
+        app.buttons["save.submit"].tap()
+        // Demo saves stay local; the list sync notice must allow finishing.
+        let done = app.alerts["Wanna saved"].buttons["Done"]
+        if done.waitForExistence(timeout: 10) { done.tap() }
+        XCTAssertTrue(wanna.waitForExistence(timeout: 10))
+        wanna.tap()
+        XCTAssertTrue(lists.waitForExistence(timeout: 10))
+        reveal(lists, in: app)
+        lists.tap()
+        XCTAssertTrue(app.buttons[listID].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons[listID].isEnabled)
+        XCTAssertTrue(app.buttons[listID].label.contains("already in list"))
+        capture("REC-567 saved Wanna disables existing membership")
+    }
+
+    private func selectPendingList(_ row: XCUIElement) {
+        row.tap()
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label ENDSWITH %@", ", selected"), object: row
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
     func testRestoreCancellationKeepsCustomizationOpen() {

@@ -4,6 +4,63 @@ import UIKit
 
 @MainActor
 final class MapPlaceListPickerTests: XCTestCase {
+    func testWannaSelectionsDoNotAddMembershipBeforeSaveAndRetriesDoNotCreateWannas() async throws {
+        let analytics = MapListRecordingAnalyticsClient()
+        let store = makeStore(analytics: analytics)
+        let candidate = candidate(id: "wanna-lists", name: "Wanna Cafe")
+        let list = try XCTUnwrap(store.createPlaceList(name: "Try soon", description: "", visibility: .followers))
+        var selection = MapPlaceListPickerSelection(existingListIDs: [])
+        selection.togglePending(listID: list.id)
+        XCTAssertTrue(store.placeListItems.isEmpty, "Selection alone must never add the place.")
+        XCTAssertTrue(store.currentUserVisiblePlaces.isEmpty)
+
+        let save = await store.saveNewWanna(candidate, visibility: .selfOnly, note: "For later",
+            plannedDate: nil, attributes: [], backend: nil)
+        XCTAssertTrue(store.placeListItems.isEmpty)
+        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first?.userPlace)
+        let wannaIDs = store.wannaSaves(for: place).map(\.id)
+        analytics.events.removeAll()
+        for _ in 0..<2 {
+            _ = await store.addSavedPlaceToLists(userPlaceID: save.userPlaceID,
+                listIDs: selection.pendingListIDs, ownerUserID: store.currentUser.id,
+                backend: nil, analyticsSurface: "wanna")
+        }
+        XCTAssertEqual(store.placeListItems.count, 1)
+        XCTAssertEqual(store.wannaSaves(for: place).map(\.id), wannaIDs)
+        XCTAssertEqual(place.visibility, .selfOnly)
+        let events = analytics.events.filter { $0.name == WanderAnalyticsEvents.placeListItemAdded }
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.properties, ["surface": "wanna", "list_role": "owner", "companion_save": "existing_wanna"])
+    }
+
+    func testRepeatedWannasAndCheckInsKeepOnePlacePerListAndPickerDetectsMembership() async throws {
+        let store = makeStore()
+        let candidate = candidate(id: "repeat-place", name: "Repeat Cafe")
+        let list = try XCTUnwrap(store.createPlaceList(name: "Favorites", description: "", visibility: .followers))
+        for status in [PlaceStatus.wannaGo, .wannaGo, .been, .wannaGo, .been] {
+            let save: SaveResult
+            if status == .wannaGo {
+                save = await store.saveNewWanna(candidate, visibility: .selfOnly, note: "Again",
+                    plannedDate: nil, attributes: [], backend: nil)
+            } else if let existing = store.currentUserVisiblePlaces.first {
+                let visit = try XCTUnwrap(store.createVisit(userPlaceID: existing.userPlace.id,
+                    note: "Another visit", visibility: .selfOnly))
+                save = SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState)
+            } else {
+                XCTFail("The first Wanna should create the owned place")
+                return
+            }
+            _ = await store.addSavedPlaceToLists(userPlaceID: save.userPlaceID,
+                listIDs: [list.id], ownerUserID: store.currentUser.id, backend: nil,
+                analyticsSurface: status == .been ? "check_in" : "wanna")
+            XCTAssertEqual(store.placeListItems.count, 1)
+            XCTAssertTrue(MapPlaceListTarget.candidate(candidate).isAlreadyInList(list, store: store))
+            var picker = MapPlaceListPickerSelection(existingListIDs: [list.id])
+            picker.togglePending(listID: list.id)
+            XCTAssertTrue(picker.pendingListIDs.isEmpty)
+        }
+    }
+
     func testCheckInListsPreserveVisitAndAudienceAcrossOfflineRetries() async throws {
         let analytics = MapListRecordingAnalyticsClient()
         let store = makeStore(analytics: analytics)
@@ -16,7 +73,7 @@ final class MapPlaceListPickerTests: XCTestCase {
         }
         analytics.events.removeAll()
         for _ in 0..<2 {
-            let result = await store.addCheckInToLists(userPlaceID: save.userPlaceID,
+            let result = await store.addSavedPlaceToLists(userPlaceID: save.userPlaceID,
                 listIDs: Set(lists.map(\.id)), ownerUserID: store.currentUser.id, backend: nil)
             XCTAssertEqual(result.pendingCount, 2)
             XCTAssertEqual(result.syncedCount, 0)
@@ -42,7 +99,7 @@ final class MapPlaceListPickerTests: XCTestCase {
         let save = store.saveCandidate(candidate(id: "partial", name: "Cafe"), status: .been,
             visibility: .followers, note: nil, sourceType: .manual)
         let list = try XCTUnwrap(store.createPlaceList(name: "Weekend", description: "", visibility: .stealth))
-        let result = await store.addCheckInToLists(userPlaceID: save.userPlaceID,
+        let result = await store.addSavedPlaceToLists(userPlaceID: save.userPlaceID,
             listIDs: [list.id, "unavailable"], ownerUserID: store.currentUser.id, backend: nil)
         XCTAssertEqual(result.pendingCount, 1)
         XCTAssertEqual(result.unavailableCount, 1)
@@ -55,9 +112,9 @@ final class MapPlaceListPickerTests: XCTestCase {
         let save = store.saveCandidate(candidate(id: "account", name: "Cafe"), status: .been,
             visibility: .followers, note: nil, sourceType: .manual)
         let list = store.createPlaceList(name: "Weekend", description: "", visibility: .followers)!
-        let stale = await store.addCheckInToLists(userPlaceID: save.userPlaceID,
+        let stale = await store.addSavedPlaceToLists(userPlaceID: save.userPlaceID,
             listIDs: [list.id], ownerUserID: "another-account", backend: nil)
-        let missing = await store.addCheckInToLists(userPlaceID: "missing-save",
+        let missing = await store.addSavedPlaceToLists(userPlaceID: "missing-save",
             listIDs: [list.id], ownerUserID: store.currentUser.id, backend: nil)
         XCTAssertEqual(stale.unavailableCount, 1)
         XCTAssertEqual(missing.unavailableCount, 1)
@@ -71,14 +128,14 @@ final class MapPlaceListPickerTests: XCTestCase {
         repository.failingListIDs = [lists[1].id]
         let backend = WanderBackend(placeListRepository: repository)
         let visitIDs = store.visits(for: userPlaceID).map(\.id)
-        let first = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        let first = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: Set(lists.map(\.id)), ownerUserID: store.currentUser.id, backend: backend)
         XCTAssertEqual(first.syncedCount, 1)
         XCTAssertEqual(first.failedCount, 1)
         XCTAssertEqual(store.placeListItems.count, 2)
 
         repository.failingListIDs = []
-        let retry = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        let retry = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: Set(lists.flatMap { [$0.localID, $0.id] }), ownerUserID: store.currentUser.id, backend: backend)
         XCTAssertEqual(retry.syncedCount, 2)
         XCTAssertFalse(retry.needsAttention)
@@ -92,7 +149,7 @@ final class MapPlaceListPickerTests: XCTestCase {
     func testCheckInListOutboxRetriesCollaboratorMembershipWithoutEditingTheirList() async throws {
         let (store, lists, userPlaceID) = makeRemoteCheckInListStore(collaboration: true)
         let selected = lists[0]
-        let queued = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        let queued = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: [selected.id], ownerUserID: store.currentUser.id, backend: nil)
         XCTAssertEqual(queued.pendingCount, 1)
         let repository = CheckInListTestRepository()
@@ -109,7 +166,7 @@ final class MapPlaceListPickerTests: XCTestCase {
         let repository = CheckInListTestRepository()
         repository.failingListIDs = [lists[0].id]
         let backend = WanderBackend(placeListRepository: repository)
-        _ = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        _ = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: [lists[0].id], ownerUserID: store.currentUser.id, backend: backend)
         _ = await store.syncPendingPlaceLists(backend: backend)
         XCTAssertEqual(store.placeListItems.first?.syncState, .failed)
@@ -123,7 +180,7 @@ final class MapPlaceListPickerTests: XCTestCase {
         let (store, lists, userPlaceID) = makeRemoteCheckInListStore()
         XCTAssertTrue(store.deletePlaceList(id: lists[0].id))
         let repository = CheckInListTestRepository()
-        let result = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        let result = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: [lists[0].id], ownerUserID: store.currentUser.id,
             backend: WanderBackend(placeListRepository: repository))
         XCTAssertEqual(result.unavailableCount, 1)
@@ -134,7 +191,7 @@ final class MapPlaceListPickerTests: XCTestCase {
     func testCheckInListsRecheckCollaboratorPermissionAtSubmission() async {
         let (store, lists, userPlaceID) = makeRemoteCheckInListStore(collaboration: false)
         let repository = CheckInListTestRepository()
-        let result = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        let result = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: [lists[0].id], ownerUserID: store.currentUser.id,
             backend: WanderBackend(placeListRepository: repository))
         XCTAssertEqual(result.unavailableCount, 1)
@@ -144,16 +201,22 @@ final class MapPlaceListPickerTests: XCTestCase {
 
     func testCheckInListSyncDoesNotApplyAResponseAfterAccountSwitch() async {
         let (store, lists, userPlaceID) = makeRemoteCheckInListStore()
+        let originalOwnerID = store.currentUser.id
         let repository = CheckInListTestRepository()
         repository.onAdd = {
             store.apply(authState: .signedIn(AuthSession(userID: "new-owner", displayName: "New", handle: "new")))
         }
-        _ = await store.addCheckInToLists(userPlaceID: userPlaceID,
+        _ = await store.addSavedPlaceToLists(userPlaceID: userPlaceID,
             listIDs: Set(lists.map(\.id)), ownerUserID: store.currentUser.id,
             backend: WanderBackend(placeListRepository: repository))
         XCTAssertEqual(store.currentUser.id, "new-owner")
         XCTAssertEqual(repository.itemRequests.count, 1)
-        XCTAssertTrue(store.placeListItems.isEmpty)
+        // Offline records remain owned by their original account. A stale
+        // response must neither mark them synced nor assign them to the new one.
+        XCTAssertEqual(store.placeListItems.count, 2)
+        XCTAssertTrue(store.placeListItems.allSatisfy {
+            $0.addedByUserID == originalOwnerID && $0.serverID == nil && $0.syncState == .pendingCreate
+        })
     }
 
     private func makeRemoteCheckInListStore(collaboration: Bool? = nil) -> (WanderStore, [LocalPlaceList], String) {

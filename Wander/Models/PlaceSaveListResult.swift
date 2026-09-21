@@ -1,8 +1,8 @@
 import Foundation
 
-/// List delivery is separate from the already committed check-in. Retrying
+/// List delivery is separate from the already committed check-in or Wanna. Retrying
 /// these destinations must never create another visit or companion Wanna.
-struct CheckInListSaveResult: Equatable {
+struct PlaceSaveListResult: Equatable {
     var syncedCount = 0
     var pendingCount = 0
     var failedCount = 0

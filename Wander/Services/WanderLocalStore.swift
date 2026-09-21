@@ -3016,33 +3016,33 @@ final class WanderStore: ObservableObject {
             placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
         persist()
+        let companionSave: ListPlaceAddResult.CompanionSave = userPlace.status == .been
+            ? .none : .existingWanna(userPlaceID: userPlace.id)
         if let analyticsSurface {
-            trackListPlaceAdded(to: list, companionSave: .none, surface: analyticsSurface)
+            trackListPlaceAdded(to: list, companionSave: companionSave, surface: analyticsSurface)
         }
         return ListPlaceAddResult(
             outcome: .added,
-            companionSave: userPlace.status == .been
-                ? .none
-                : .existingWanna(userPlaceID: userPlace.id)
+            companionSave: companionSave
         )
     }
 
     /// Queue every permitted membership locally before the first network wait.
     /// Uses the committed save ID, never a candidate that could create a Wanna.
-    func addCheckInToLists(
+    func addSavedPlaceToLists(
         userPlaceID: String,
         listIDs: Set<String>,
         ownerUserID: String,
-        backend: WanderBackend?
-    ) async -> CheckInListSaveResult {
+        backend: WanderBackend?,
+        analyticsSurface: String = "check_in"
+    ) async -> PlaceSaveListResult {
         guard currentUser.id == ownerUserID,
-              let userPlace = currentUserPlace(matching: userPlaceID),
-              userPlace.status == .been
-        else { return CheckInListSaveResult(unavailableCount: listIDs.count) }
+              let userPlace = currentUserPlace(matching: userPlaceID)
+        else { return PlaceSaveListResult(unavailableCount: listIDs.count) }
 
         var itemReferences: [(itemID: String, listID: String)] = []
         var selectedLocalListIDs: Set<String> = []
-        var outcome = CheckInListSaveResult()
+        var outcome = PlaceSaveListResult()
         for listID in listIDs.sorted() {
             guard let list = placeLists.first(where: {
                 ($0.id == listID || $0.localID == listID) && $0.deletedAt == nil
@@ -3052,7 +3052,7 @@ final class WanderStore: ObservableObject {
                 continue
             }
             guard selectedLocalListIDs.insert(list.localID).inserted else { continue }
-            let result = addCurrentUserPlace(userPlaceID: userPlaceID, to: list, analyticsSurface: "check_in")
+            let result = addCurrentUserPlace(userPlaceID: userPlaceID, to: list, analyticsSurface: analyticsSurface)
             guard result.outcome != .permissionDenied,
                   let item = listItems(for: list).first(where: { item in
                       item.ownerUserPlaceID == userPlace.id || item.sourceUserPlaceID == userPlace.id
