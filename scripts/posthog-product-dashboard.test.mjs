@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   applyDashboard,
   assertDefinition,
+  firstDayFollowSQL,
+  activationSQL,
   insights,
   sections,
   retentionSQL,
@@ -164,11 +166,52 @@ test("apply provisions an ordered dashboard through supported tile endpoints", a
 });
 
 
-test("core activation does not require an optional follow or count raw save/check-in twice", () => {
+test("activation includes a successful follow OR core action, including during onboarding", () => {
   const activation = insights.find(({ key }) => key === "activation-first-value");
-  assert.deepEqual(activation.query.series.map(({ event }) => event), ["onboarding_completed", "core_action_performed"]);
+  assert.equal(activation.query.source.query, activationSQL());
+  assert.match(activationSQL(), /event = 'onboarding_completed'/);
+  assert.match(activationSQL(), /event = 'core_action_performed'\s+or \(event = 'follow_created' and properties.outcome = 'succeeded'\)/);
+  assert.match(activationSQL(), /cohort left join actions on cohort.person_id = actions.person_id/);
+  assert.match(activationSQL(), /completed_at - interval 14 day/);
+  assert.match(activationSQL(), /completed_at \+ interval 14 day/);
+  assert.match(activationSQL(), /activated_users \/ nullIf\(onboarded_users, 0\)/);
   const core = insights.find(({ key }) => key === "engagement-core-actions");
   assert.deepEqual(core.query.series.map(({ event }) => event), ["core_action_performed"]);
+});
+
+test("first-day follow cohorts preserve zeroes, mature denominators, and exact 24-hour boundaries", () => {
+  const sql = firstDayFollowSQL();
+  assert.match(sql, /event = 'onboarding_started'/);
+  assert.match(sql, /min\(timestamp\) as started_at/);
+  assert.match(sql, /group by person_id\s+having started_at/);
+  assert.match(sql, /event = 'follow_created' and properties.outcome = 'succeeded'/);
+  assert.match(sql, /cohort left join follow_events on cohort.person_id = follow_events.person_id/);
+  assert.match(sql, /timestamp >= cohort.started_at/);
+  assert.match(sql, /timestamp < cohort.started_at \+ interval 24 hour/);
+  assert.match(sql, /started_at \+ interval 24 hour <= now\(\)/);
+  assert.match(sql, /if\(eligible_users = 0, null, sumIf/);
+  assert.match(sql, /users_who_followed \/ nullIf\(eligible_users, 0\)/);
+  assert.match(sql, /first_day_follows \/ nullIf\(eligible_users, 0\)/);
+  assert.doesNotMatch(sql, /distinct_id|followed_count|onboarding_completed/);
+  for (const filter of ["analytics_schema_version = '3'", "analytics_environment = 'production'", "person_id not in cohort 481950", "internal_or_test_user"]) {
+    assert.equal(sql.split(filter).length - 1, 2, `Both cohort and follow events need ${filter}`);
+  }
+});
+
+test("first-day follow dashboard charts share a cohort query and expose rate, total and mean separately", () => {
+  const section = sections.find(({ title }) => title === "Activation");
+  for (const [key, column] of [
+    ["activation-first-day-follow-rate", "follow_rate_percent"],
+    ["activation-first-day-follow-count", "first_day_follows"],
+    ["activation-first-day-follows-per-user", "follows_per_user"],
+  ]) {
+    assert.ok(section.insightKeys.includes(key));
+    const { query } = insights.find(item => item.key === key);
+    assert.equal(query.source.query, firstDayFollowSQL());
+    assert.equal(query.display, "ActionsLineGraph");
+    assert.equal(query.chartSettings.xAxis.column, "cohort_day");
+    assert.deepEqual(query.chartSettings.yAxis, [{ column }]);
+  }
 });
 
 test("retention joins merged people and separately matures every horizon", () => {
@@ -208,7 +251,9 @@ test("every dashboard event is backed by the client or aggregate server contract
   const server = new Set(["notification_delivery_processed", "notification_frequency_snapshot", "notification_frequency_bucket_snapshot"]);
   const names = new Set([...swift.matchAll(/static let \w+ = "([^"\n]+)"/g)].map(match => match[1]));
   for (const insight of insights) {
-    for (const series of insight.query.series || []) assert.ok(names.has(series.event) || server.has(series.event), series.event);
+    for (const series of insight.query.series || []) {
+      for (const node of series.nodes || [series]) assert.ok(names.has(node.event) || server.has(node.event), node.event);
+    }
   }
 });
 

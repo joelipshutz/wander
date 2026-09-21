@@ -26,7 +26,8 @@ PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys
 |---|---|---|
 | Acquisition | Which channels reach the app? | Unique devices recording `app_first_opened` plus sanitized UTM properties on `acquisition_link_opened`. `direct_or_unknown` is an honest bucket. |
 | Activation | Where does onboarding lose people? | Ordered funnel: first open → sign-up start/completion → onboarding start → identity → location → contacts → friends → notifications → completion. |
-| Activation | Did a new user create value? | `onboarding_completed` → `core_action_performed` within 14 days. A Wanna or check-in qualifies; following is optional. Local completion is separate from server sync. |
+| Activation | Did a new user create value? | Completed onboarding AND (`follow_created(outcome=succeeded)` OR `core_action_performed`) within 14 days, in either order so follows during onboarding count. Each person converts once. A follow, Wanna, or check-in qualifies; automatic default follows do not. Local saves are separate from server sync. |
+| Activation | Do new users follow people on their first day? | Daily cohorts anchored to first observed `onboarding_started`. Three time-series charts show first-24h follow rate, total follow actions, and average follows per user, plus a denominator table. Only fully observed users enter counts/rates; zero-follow users remain in the denominator. |
 | Engagement | Which human need is the app serving? | Unique users and action volume for `engagement_action_performed`, broken down by `need` and `action`. |
 | Retention | Do people return and repeat the core behavior? | Separate weekly cohorts: onboarding → session return, and first observed core action → repeat core action. D1/D7/D14/D30 use elapsed-day windows and a distinct fully matured denominator at each horizon. |
 | Referrals | Are users inviting others? | Invite sheet open → delivery start → successful Messages/share-sheet handoff. |
@@ -64,6 +65,18 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 Behavioral dashboard queries require schema 3, production, exclusion from the existing Internal / Test users cohort 481950, and absence of a true `$internal_or_test_user` person marker. Native queries also retain the project test-account filter. SQL explicitly excludes the same cohort; update both if the project rule changes. The cohort had zero members on September 19: release staff/review accounts still need classification. Do not infer or assign internal status to unknown users. Existing schema-2 traffic remains available in Data Quality; it is not silently counted as verified launch traffic.
 
 SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashboard date selectors do not alter those SQL literals. Native trends/funnels support normal dashboard filtering. Retention uses merged `person_id`, not raw `distinct_id`. Exact D1 is `[start+24h, start+48h)`; users enter its denominator only at `start+48h`. D7/D14/D30 follow the same rule, return null without eligible users, and show both eligible and returned counts. Cohort weeks use the project's UTC time basis. First observed core action after rollout can belong to an existing user and is not a new-signup claim.
+
+### First-day follow metrics
+
+The activation comparison uses SQL to keep its denominator at completed onboarding users; PostHog's native unordered funnel would instead count anyone who did either step. It compares first onboarding completion with a qualifying action within 14 days before or after it. Its fixed 90-day cohort range and conversion percentage are explicit; recent cohorts may still convert.
+
+The follow charts use `[first onboarding start, start+24h)`, including follows made in the friends step before onboarding completes. First start is selected across all schema-3 production history for each merged `person_id` before applying the 90-day cohort range; resumes do not reset the clock. These are first-observed-onboarding cohorts, not an authoritative account-creation date. Users who abandon onboarding remain in the denominator.
+
+Only `follow_created(outcome=succeeded)` qualifies. Queued/local-only attempts and failed follows do not count. Server-created `signup_default` edges emit no client follow event and are excluded. Each successful follow event counts as one action; following someone again after unfollowing counts again. The analytics intentionally do not collect followed-person identity, so these charts measure follow actions, not unique targets, current following balance, or net follows.
+
+At `start+24h`, a user enters both numerator and denominator. Follow rate is users with at least one qualifying action / eligible users; total is all qualifying actions by those users; average is total / eligible users, including zero-follow users. Cohorts with no fully observed users have null rate/count/average, not zero. The accompanying table shows eligible and pending users. The x-axis is the onboarding cohort's UTC date, not the follow's date; SQL charts use a fixed 90-day view. Core-action volume and retention still measure Wanna/check-in behavior separately.
+
+Run `npm --prefix scripts run analytics:test-follows` with scoped Astir PostHog credentials to execute the boundary and denominator fixture against the hosted SQL engine. It creates an unsaved temporary insight and soft-deletes it in `finally`; it never ingests synthetic events.
 
 | Event | When it fires | Allowed product properties |
 |---|---|---|

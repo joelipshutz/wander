@@ -5,6 +5,7 @@
   "scripts": {
     "analytics:check": "node posthog-product-dashboard.mjs --check && node --test posthog-product-dashboard.test.mjs",
     "analytics:test-retention": "node posthog-retention-fixture.mjs",
+    "analytics:test-follows": "node posthog-follow-fixture.mjs",
     "analytics:verify": "node posthog-product-dashboard.mjs --verify",
     "analytics:apply": "node posthog-product-dashboard.mjs --apply",
     "audit:clerk-continuity": "node clerk-account-continuity-audit.mjs",

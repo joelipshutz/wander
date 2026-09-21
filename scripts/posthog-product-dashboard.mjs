@@ -84,6 +84,87 @@ const hogqlBar = (query, xAxis, yAxis) => ({
   },
 });
 
+const hogqlLine = (query, yAxis) => ({
+  kind: "DataVisualizationNode",
+  source: hogql(query),
+  display: "ActionsLineGraph",
+  chartSettings: {
+    xAxis: { column: "cohort_day" },
+    yAxis: [{ column: yAxis }],
+    showLegend: true,
+  },
+});
+
+// Start before the friends step so onboarding follows are included. Take the
+// first observed start before applying the date range, so resumes do not create
+// new cohorts. Count successful user actions, never queued attempts or seeded
+// server-side default follows. Keep zero-follow people in the denominator.
+function firstDayFollowSQL() {
+  return `with cohort as (
+  select person_id, min(timestamp) as started_at
+  from events
+  where event = 'onboarding_started' and ${productionSQL}
+  group by person_id
+  having started_at >= now() - interval 90 day
+), follow_events as (
+  select person_id, timestamp from events
+  where event = 'follow_created' and properties.outcome = 'succeeded'
+    and ${productionSQL}
+), observed as (
+  select cohort.person_id, cohort.started_at,
+    countIf(follow_events.timestamp >= cohort.started_at
+      and follow_events.timestamp < cohort.started_at + interval 24 hour) as follows
+  from cohort left join follow_events on cohort.person_id = follow_events.person_id
+    and follow_events.timestamp >= cohort.started_at
+    and follow_events.timestamp < cohort.started_at + interval 24 hour
+  group by cohort.person_id, cohort.started_at
+)
+select toStartOfDay(started_at) as cohort_day,
+  count() as cohort_users,
+  countIf(started_at + interval 24 hour <= now()) as eligible_users,
+  countIf(started_at + interval 24 hour > now()) as pending_users,
+  countIf(follows > 0 and started_at + interval 24 hour <= now()) as users_who_followed,
+  if(eligible_users = 0, null, sumIf(follows, started_at + interval 24 hour <= now())) as first_day_follows,
+  round(100.0 * users_who_followed / nullIf(eligible_users, 0), 1) as follow_rate_percent,
+  round(first_day_follows / nullIf(eligible_users, 0), 2) as follows_per_user
+from observed group by cohort_day order by cohort_day asc`;
+}
+
+// PostHog's unordered funnel starts with people who did ANY step, including
+// action-only users. Anchor explicitly to completed onboarding instead.
+function activationSQL() {
+  return `with cohort as (
+  select person_id, min(timestamp) as completed_at
+  from events where event = 'onboarding_completed' and ${productionSQL}
+  group by person_id
+  having completed_at >= now() - interval 90 day
+), actions as (
+  select person_id, timestamp from events
+  where (event = 'core_action_performed'
+    or (event = 'follow_created' and properties.outcome = 'succeeded'))
+    and ${productionSQL}
+), observed as (
+  select cohort.person_id,
+    max(if(actions.timestamp >= cohort.completed_at - interval 14 day
+      and actions.timestamp <= cohort.completed_at + interval 14 day, 1, 0)) as activated
+  from cohort left join actions on cohort.person_id = actions.person_id
+    and actions.timestamp >= cohort.completed_at - interval 14 day
+    and actions.timestamp <= cohort.completed_at + interval 14 day
+  group by cohort.person_id
+), summary as (
+  select count() as onboarded_users, sum(activated) as activated_users from observed
+)
+select step, people, conversion_percent from (
+select 'Completed onboarding' as step, onboarded_users as people,
+  if(onboarded_users = 0, null, 100.0) as conversion_percent, 1 as step_order from summary
+union all
+select concat('Follow / Wanna / check-in (',
+    coalesce(toString(round(100.0 * activated_users / nullIf(onboarded_users, 0), 1)), '—'), '%)') as step,
+  activated_users as people,
+  round(100.0 * activated_users / nullIf(onboarded_users, 0), 1) as conversion_percent, 2 as step_order from summary
+) order by step_order`;
+}
+
 // Exact elapsed-day windows. Only fully observed users enter each denominator;
 // an immature cohort yields null rather than an invented zero. person_id joins
 // merged anonymous/account identities; distinct_id would split those people.
@@ -147,9 +228,29 @@ from events where event = 'onboarding_permission_result' and ${productionSQL}
   and timestamp >= now() - interval 30 day group by step, result order by step, decisions desc`),
   },
   {
-    key: "activation-first-value", name: "Activation — onboarding to first core action",
-    description: "Complete onboarding then save a Wanna or create a check-in within 14 days. Following is optional. A first check-in counts once, even when it also creates a saved place. Local completion; inspect sync health separately.",
-    query: funnel([event("onboarding_completed"), event("core_action_performed")]),
+    key: "activation-first-value", name: "Activation — onboarding + follow, Wanna or check-in",
+    description: "Completed onboarding users who also successfully follow someone, save a Wanna, or create a check-in within 14 days before/after their first onboarding completion. Includes onboarding follows. Each person counts once; action-only users and automatic defaults excluded. Fixed last 90 days of onboarding cohorts; recent cohorts can still convert. Saves/check-ins are local completion.",
+    query: hogqlBar(activationSQL(), "step", "people"),
+  },
+  {
+    key: "activation-first-day-follow-rate", name: "First day — follow rate (%) over time",
+    description: "Percent of new onboarding users who successfully follow at least one person in [first onboarding start, start + 24h). Includes onboarding follows and zero-follow users. Only fully observed users enter the rate; immature cohorts are blank. Cohort date in UTC; fixed last 90 days. Automatic default follows excluded.",
+    query: hogqlLine(firstDayFollowSQL(), "follow_rate_percent"),
+  },
+  {
+    key: "activation-first-day-follow-count", name: "First day — total follow count over time",
+    description: "Total successful follow actions in each user's first 24h from first onboarding start, grouped by onboarding cohort date (UTC), not action date. Only fully observed users; immature cohorts are blank. Fixed last 90 days. Excludes automatic defaults; re-follows count again. Not current following balance or distinct people followed.",
+    query: hogqlLine(firstDayFollowSQL(), "first_day_follows"),
+  },
+  {
+    key: "activation-first-day-follows-per-user", name: "First day — average follows per new user over time",
+    description: "Successful first-24h follow actions divided by all fully observed onboarding users, including those who followed nobody. Cohorts start at first onboarding start (UTC); includes onboarding follows, excludes automatic defaults. Fixed last 90 days. Blank means no mature users; re-follows count again.",
+    query: hogqlLine(firstDayFollowSQL(), "follows_per_user"),
+  },
+  {
+    key: "activation-first-day-follow-cohorts", name: "First day — follow cohort counts and denominators",
+    description: "Daily first-onboarding-start cohorts (UTC), last 90 days: all users, fully observed users, pending users, users who followed, successful first-24h follow actions, rate, and average. Pending users enter neither numerator nor denominator. Schema 3 production only; first observed onboarding is not guaranteed first-ever signup.",
+    query: hogql(firstDayFollowSQL()),
   },
   {
     key: "engagement-active-users", name: "Engagement — daily active and core-active users",
@@ -367,12 +468,16 @@ const sections = [
   },
   {
     "title": "Activation",
-    "body": "Measure required onboarding separately from product value. Following and permission consent are optional. First value is a locally created Wanna or check-in within 14 days after onboarding.",
+    "body": "Activation requires completed onboarding plus a successful follow, Wanna, or check-in within 14 days, in either order so onboarding follows count. First-day follow charts use the first 24 hours from first onboarding start, including onboarding follows. Only fully observed users enter rates/counts; automatic default follows are excluded. Daily cohorts use UTC; fixed last 90 days.",
     "insightKeys": [
       "onboarding-full-funnel",
       "onboarding-resumed",
       "onboarding-permissions",
-      "activation-first-value"
+      "activation-first-value",
+      "activation-first-day-follow-rate",
+      "activation-first-day-follow-count",
+      "activation-first-day-follows-per-user",
+      "activation-first-day-follow-cohorts"
     ]
   },
   {
@@ -642,4 +747,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 }
 
-export { applyDashboard, assertDefinition, insights, sections, retentionSQL, clientProperties, verifyDashboard };
+export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, clientProperties, verifyDashboard };
