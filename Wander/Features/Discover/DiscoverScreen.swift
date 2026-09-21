@@ -1460,6 +1460,12 @@ struct DiscoverScreen: View {
             memberSearchResultsSection
         } else {
             peopleValueNote
+            NavigationLink {
+                ContactDiscoverySettingsScreen()
+            } label: {
+                Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
+                    .font(AstirTypography.control).frame(minHeight: 44)
+            }.accessibilityIdentifier("discover.contactDiscovery")
             peopleRecommendationsSection
         }
 
