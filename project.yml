@@ -110,7 +110,7 @@ targets:
         WANDER_SUPABASE_PUBLISHABLE_KEY: $(WANDER_SUPABASE_PUBLISHABLE_KEY)
         WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
         TikTokClientKey: $(WANDER_TIKTOK_CLIENT_KEY)
-        CFBundleDisplayName: ASTIR Movement
+        CFBundleDisplayName: ASTIR
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:

@@ -1000,7 +1000,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceRatingExplanation.ratings.title, "Ratings")
         XCTAssertEqual(
             PlaceRatingExplanation.ratings.message,
-            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
+            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Unrated Featured places show a temporary 5 until the first Astir rating. That value never counts toward an average or Fit score. Fit score is personalized from your ratings, categories, tags, and people you follow."
         )
         XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About the Ratings")
     }
@@ -1423,6 +1423,84 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(overallRating.score, 5)
     }
 
+    func testUnratedFeaturedPresentationDisappearsOnFirstActualRatingWithoutChangingEvidence() throws {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let venue = place(id: "unrated_featured", category: "restaurant")
+        let aggregate = summary(owner: community, place: venue, status: .been,
+                                ratingScore: nil, viewerFollowsOwner: false, tags: [])
+        let wanna = summary(owner: viewer, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+        func presentation(_ saves: [PlaceSaveSummary]) -> PlaceProfilePresentation {
+            PlaceProfilePresenter.presentation(placeID: venue.id, category: venue.category,
+                saves: saves, tasteSaves: [], currentUserID: viewer.id)
+        }
+
+        for saves in [[aggregate], [aggregate, wanna]] {
+            let result = presentation(saves)
+            XCTAssertTrue(result.isUnratedFeatured)
+            XCTAssertNil(result.overallRating)
+            XCTAssertNil(result.ownRating)
+            XCTAssertNil(result.fitRating, "The temporary five must never become rating evidence.")
+            XCTAssertNil(aggregate.visiblePlace.recommendedScore)
+            XCTAssertEqual(aggregate.visiblePlace.recommendedCount, 0)
+            XCTAssertNil(aggregate.visiblePlace.userPlace.ratingScore)
+        }
+
+        // A local first check-in must replace the five before aggregate refresh.
+        let checkIn = summary(owner: viewer, place: venue, status: .been,
+                              ratingScore: 2, recommendedCount: 0, tags: [])
+        let rated = presentation([aggregate, checkIn])
+        XCTAssertFalse(rated.isUnratedFeatured)
+        XCTAssertEqual(rated.ownRating?.score, 2)
+        XCTAssertEqual(rated.ownRating?.count, 1)
+
+        // A server community score is retained exactly, including a real 3.5.
+        aggregate.visiblePlace.userPlace.recommendedScore = 3.5
+        aggregate.visiblePlace.userPlace.recommendedCount = 2
+        let communityRated = presentation([aggregate, wanna])
+        XCTAssertFalse(communityRated.isUnratedFeatured)
+        XCTAssertEqual(communityRated.overallRating?.score, 3.5)
+        XCTAssertEqual(communityRated.overallRating?.count, 2)
+        XCTAssertEqual(communityRated.overallRating?.source, .community)
+    }
+
+    func testFeaturedRatingEvidenceSurvivesHistoryFilteringAndYieldsToRealFriendRating() {
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let friend = profile(id: "friend", handle: "friend")
+        let venue = place(id: "unrated_featured", category: "restaurant")
+        let aggregate = summary(owner: community, place: venue, status: .been,
+                                ratingScore: nil, viewerFollowsOwner: false, tags: [])
+        let unrated = PlaceProfilePresenter.presentation(placeID: venue.id, category: venue.category,
+            saves: [], tasteSaves: [], currentUserID: "viewer", featuredEvidence: [aggregate])
+        XCTAssertTrue(unrated.isUnratedFeatured)
+        XCTAssertNil(unrated.overallRating)
+        XCTAssertNil(unrated.fitRating)
+
+        let friendRating = summary(owner: friend, place: venue, ratingScore: 3, tags: [])
+        let rated = PlaceProfilePresenter.presentation(placeID: venue.id, category: venue.category,
+            saves: [friendRating], tasteSaves: [], currentUserID: "viewer", featuredEvidence: [aggregate])
+        XCTAssertFalse(rated.isUnratedFeatured)
+        XCTAssertEqual(rated.overallRating?.score, 3)
+        XCTAssertEqual(rated.overallRating?.count, 1)
+        XCTAssertEqual(rated.overallRating?.source, .friends)
+    }
+
+    func testMissingOrDeletedFeaturedEvidenceNeverCreatesFiveStars() {
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let venue = place(id: "unrated_featured", category: "restaurant")
+        let aggregate = summary(owner: community, place: venue, status: .been,
+                                ratingScore: nil, viewerFollowsOwner: false, tags: [])
+        aggregate.visiblePlace.userPlace.deletedAt = .now
+        let friend = profile(id: "friend", handle: "friend")
+        let ordinaryWanna = summary(owner: friend, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+        for saves in [[], [aggregate], [ordinaryWanna]] {
+            let result = PlaceProfilePresenter.presentation(placeID: venue.id, category: venue.category,
+                saves: saves, tasteSaves: [], currentUserID: "viewer")
+            XCTAssertFalse(result.isUnratedFeatured)
+            XCTAssertNil(result.overallRating)
+        }
+    }
+
     func testOverallRatingUsesCommunityFallbackWhenNoFollowedPersonHasRated() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let stranger = profile(id: "user_stranger", handle: "stranger")
@@ -1649,7 +1727,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(Set(history.map(\.id)), Set([own.id, social.id]))
     }
 
-    func testAnonymousFeaturedOnlyPlaceHasNoPersonalOrSocialRing() throws {
+    func testAnonymousFeaturedOnlyPlaceHasSolidBlueFeaturedRing() throws {
         let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
         let aggregate = summary(owner: community, place: place(id: "featured_only", category: "restaurant"),
                                 status: .been, ratingScore: 4, tags: [])
@@ -1657,7 +1735,67 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(groups.count, 1, "The Featured place remains on the map.")
         let group = try XCTUnwrap(groups.first)
         let catalog = MapPinRenderCatalog(groups: groups, currentUserPlaces: [], currentUserID: "viewer")
-        XCTAssertEqual(catalog.outlinesByGroupKey[group.key], [])
+        let expected = [MapPinOutline(ownership: .featured, status: .been)]
+        XCTAssertEqual(catalog.outlinesByGroupKey[group.key], expected)
+        XCTAssertEqual(MapPinOutlineBuilder.outlineCatalog(
+            for: [aggregate.visiblePlace], currentUserID: "viewer"
+        )[aggregate.id], expected)
+        XCTAssertEqual(expected[0].color, WanderTheme.pinSocial.color)
+        XCTAssertEqual(expected[0].dashPattern, [])
+        XCTAssertEqual(MapPinAccessibility.label(
+            outlines: expected, category: "Restaurant", placeName: "Featured Only"
+        ), "Featured Only, Restaurant, Featured")
+        XCTAssertTrue(MapPinSaveState.personalStates(
+            for: [aggregate.visiblePlace], currentUserID: "viewer"
+        ).isEmpty, "A Featured outline must not become personal or social save evidence.")
+    }
+
+    func testPersonalSaveReplacesFeaturedRingEvenBeforeFeaturedRefresh() throws {
+        let viewer = profile(id: "viewer", handle: "viewer")
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let venue = place(id: "featured_only", category: "restaurant")
+        let aggregate = summary(owner: community, place: venue, status: .been, ratingScore: nil, tags: [])
+        let groups = VisiblePlaceGrouping.groups(from: [aggregate.visiblePlace], currentUserID: viewer.id)
+        let group = try XCTUnwrap(groups.first)
+
+        for status in [PlaceStatus.wannaGo, .been] {
+            let own = summary(owner: viewer, place: venue, status: status, ratingScore: nil, tags: [])
+            let catalog = MapPinRenderCatalog(
+                groups: groups, currentUserPlaces: [own.visiblePlace], currentUserID: viewer.id
+            )
+            let expected = [MapPinOutline(ownership: .currentUser, status: status)]
+            XCTAssertEqual(catalog.outlinesByGroupKey[group.key], expected)
+            XCTAssertEqual(MapPinOutlineBuilder.outlines(
+                for: [aggregate.visiblePlace, own.visiblePlace], currentUserID: viewer.id
+            ), expected)
+        }
+    }
+
+    func testSocialWannaReplacesFeaturedRingWithoutImplyingSocialCheckIn() {
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let friend = profile(id: "friend", handle: "friend")
+        let venue = place(id: "featured_only", category: "restaurant")
+        let aggregate = summary(owner: community, place: venue, status: .been, ratingScore: nil, tags: [])
+        let wanna = summary(owner: friend, place: venue, status: .wannaGo, ratingScore: nil, tags: [])
+
+        XCTAssertEqual(MapPinOutlineBuilder.outlines(
+            for: [aggregate.visiblePlace, wanna.visiblePlace], currentUserID: "viewer"
+        ), [MapPinOutline(ownership: .social, status: .wannaGo)])
+        wanna.visiblePlace.userPlace.deletedAt = .now
+        XCTAssertEqual(MapPinOutlineBuilder.outlines(
+            for: [aggregate.visiblePlace, wanna.visiblePlace], currentUserID: "viewer"
+        ), [MapPinOutline(ownership: .featured, status: .been)])
+    }
+
+    func testDeletedFeaturedAggregateAndEmptyPlacesHaveNoRing() {
+        let community = profile(id: FeaturedCommunityPlaceSignal.ownerID, handle: "community")
+        let aggregate = summary(owner: community, place: place(id: "deleted_featured", category: "restaurant"),
+                                status: .been, ratingScore: nil, tags: [])
+        aggregate.visiblePlace.userPlace.deletedAt = .now
+        XCTAssertTrue(MapPinOutlineBuilder.outlines(
+            for: [aggregate.visiblePlace], currentUserID: "viewer"
+        ).isEmpty)
+        XCTAssertTrue(MapPinOutlineBuilder.outlines(for: [], currentUserID: "viewer").isEmpty)
     }
 
     func testMyCheckInsExcludesCurrentAndHistoricalWannasForEveryOwner() {

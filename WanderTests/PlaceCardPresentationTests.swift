@@ -3,6 +3,34 @@ import XCTest
 @testable import Wander
 
 final class PlaceCardPresentationTests: XCTestCase {
+    func testUnratedFeaturedUsesFiveWithoutFabricatingRatingCountOrProviderAttribution() throws {
+        for providerScore in [nil, 3.5] as [Double?] {
+            let rating = try XCTUnwrap(PlaceCardPresentation.rating(
+                providerScore: providerScore, providerCount: 20, recmeRating: nil,
+                providerName: "yelp", isUnratedFeatured: true
+            ))
+            XCTAssertEqual(rating.score, 5)
+            XCTAssertEqual(rating.scoreText, "5.0")
+            XCTAssertNil(rating.count)
+            XCTAssertEqual(rating.source, .featured)
+            XCTAssertNil(rating.providerDisplayName)
+            XCTAssertEqual(rating.accessibilityLabel, "Featured, 5 out of 5, not yet rated")
+        }
+    }
+
+    func testFirstActualRatingReplacesFeaturedFiveWithoutAveragingItIn() throws {
+        for source in [PlaceActualRating.Source.own, .friends, .community] {
+            let rating = try XCTUnwrap(PlaceCardPresentation.rating(
+                providerScore: 4.7, providerCount: 20,
+                recmeRating: PlaceActualRating(score: 2, count: 1, source: source),
+                providerName: "yelp", isUnratedFeatured: true
+            ))
+            XCTAssertEqual(rating.score, 2)
+            XCTAssertEqual(rating.count, 1)
+            XCTAssertEqual(rating.source, .recme)
+        }
+    }
+
     func testRecmeRatingTakesPriorityWhenProviderRatingIsAvailable() throws {
         let recme = PlaceActualRating(score: 5, count: 2, source: .friends)
         let rating = try XCTUnwrap(

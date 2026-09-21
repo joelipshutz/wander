@@ -181,6 +181,7 @@ async function main() {
           await client.query("rollback to savepoint place_plan_smoke");
           await client.query("release savepoint place_plan_smoke");
         }
+        console.log("ok - shared and one-sided place plans preserve visibility, blocks, and recipient-only inbox access");
         await client.query("reset role");
         await client.query("savepoint repeat_wanna_smoke");
         try {
