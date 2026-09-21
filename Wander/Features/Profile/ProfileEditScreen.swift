@@ -344,7 +344,8 @@ struct ProfilePhotoFullScreenViewer: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
         }
-        .preferredColorScheme(.dark)
+        // Keep the dark photo chrome local; do not restyle the presenting app.
+        .environment(\.colorScheme, .dark)
         .task(id: avatarURL) {
             image = nil
             loadFailed = false

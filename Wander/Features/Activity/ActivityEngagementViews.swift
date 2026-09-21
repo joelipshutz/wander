@@ -1325,7 +1325,8 @@ private struct ActivityCommentsPhotoViewer: View {
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
         }
-        .preferredColorScheme(.dark)
+        // Keep the dark photo chrome local; do not restyle the presenting app.
+        .environment(\.colorScheme, .dark)
         .onChange(of: media.map(\.id)) { _, ids in
             guard !ids.isEmpty else {
                 dismiss()
