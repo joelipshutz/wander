@@ -133,6 +133,7 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
 }
 
 final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    @MainActor static var entryAnalytics: AppAnalyticsLifecycleTracker?
     static let didRegisterForRemoteNotifications = Notification.Name("WanderDidRegisterForRemoteNotifications")
     static let didFailToRegisterForRemoteNotifications = Notification.Name("WanderDidFailToRegisterForRemoteNotifications")
     nonisolated static let didReceiveNotificationResponse = Notification.Name("WanderDidReceiveNotificationResponse")
@@ -245,6 +246,21 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let boxedUserInfo = NotificationUserInfoBox(response.notification.request.content.userInfo)
+        // Observe the system tap before auth resolution can delay routing.
+        // In-app inbox navigation never calls this path. Dismissals/background
+        // actions must not be attributed as an entry into the app.
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            let receivedAt = ProcessInfo.processInfo.systemUptime
+            Task { @MainActor in
+                guard PushNotificationManager.destination(from: boxedUserInfo.value) != nil else { return }
+                Self.entryAnalytics?.recordEntrySource(
+                    .notification,
+                    notificationType: PushNotificationManager.analyticsNotificationType(from: boxedUserInfo.value),
+                    deliveryChannel: PushNotificationManager.analyticsDeliveryChannel(from: boxedUserInfo.value),
+                    atUptime: receivedAt
+                )
+            }
+        }
         #if DEBUG
         WanderDebugLog.remote.debug("notification response received action=\(response.actionIdentifier, privacy: .public)")
         #endif
@@ -975,7 +991,7 @@ final class PushNotificationManager: ObservableObject {
         (userInfo["recme"] as? [String: Any])?["event_id"] as? String
     }
 
-    private static func analyticsNotificationType(
+    static func analyticsNotificationType(
         from userInfo: [AnyHashable: Any]
     ) -> String {
         let value = (userInfo["recme"] as? [String: Any])?["notification_type"] as? String
@@ -1004,6 +1020,10 @@ final class PushNotificationManager: ObservableObject {
     private static func deliveryChannel(eventID: String?) -> String {
         guard let eventID else { return "unknown" }
         return UUID(uuidString: eventID) == nil ? "local" : "remote"
+    }
+
+    static func analyticsDeliveryChannel(from userInfo: [AnyHashable: Any]) -> String {
+        deliveryChannel(eventID: eventID(from: userInfo))
     }
 
     private static func analyticsRoute(for destination: NotificationDestination) -> String {

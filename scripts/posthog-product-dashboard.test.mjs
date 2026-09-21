@@ -14,6 +14,7 @@ import {
   staffExclusionSQL,
   INTERNAL_USER_IDS,
   withStaffExclusions,
+  appEntrySQL,
 } from "./posthog-product-dashboard.mjs";
 
 test("dashboard contract has every requested lifecycle section", () => {
@@ -73,6 +74,30 @@ test("notification operations includes delivery, opens, frequency, and aggregate
   assert.equal(histogram.query.display, "ActionsBar");
   assert.match(histogram.query.source.query, /notification_frequency_bucket_snapshot/);
   assert.doesNotMatch(histogram.query.source.query, /distinct_id/);
+});
+
+test("notification clicks and entry sources live under Engagement with external production filters", () => {
+  const engagement = sections.find(({ title }) => title === "Engagement").insightKeys;
+  for (const key of ["engagement-notification-clicks", "engagement-notification-click-details", "engagement-entry-lifecycle", "engagement-entry-source", "engagement-entry-source-details"]) {
+    assert.ok(engagement.includes(key));
+  }
+  const clicks = insights.find(({ key }) => key === "engagement-notification-clicks").query;
+  assert.equal(clicks.series[0].event, "notification_opened");
+  assert.equal(clicks.series[0].math, "total");
+  assert.equal(clicks.breakdownFilter.breakdown, "notification_type");
+  assert.ok(clicks.breakdownFilter.breakdown_limit >= 18, "Keep all 17 known types plus unknown visible");
+  assert.deepEqual(clicks.properties, clientProperties);
+  const sessions = insights.find(({ key }) => key === "engagement-entry-lifecycle").query;
+  assert.equal(sessions.breakdownFilter.breakdown, "session_source");
+  assert.equal(sessions.series[0].math, "total");
+  for (const sql of [appEntrySQL(), appEntrySQL({ daily: true })]) {
+    assert.ok(sql.includes("entries left join sources on entries.entry_id = sources.entry_id"));
+    assert.equal(sql.split(staffExclusionSQL).length - 1, 2);
+    assert.equal(sql.split("analytics_environment = 'production'").length - 1, 2);
+    assert.match(sql, /group by entry_id/);
+    assert.match(sql, /direct_or_unknown/);
+    assert.doesNotMatch(sql, /app_session_started|notification_opened/);
+  }
 });
 
 test("apply provisions an ordered dashboard through supported tile endpoints", async () => {

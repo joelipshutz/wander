@@ -61,7 +61,7 @@ const property = (key, value) => ({
   type: "event",
 });
 
-const trends = (series, { breakdown, interval = "day" } = {}) => ({
+const trends = (series, { breakdown, interval = "day", breakdownLimit = 12 } = {}) => ({
   kind: "TrendsQuery",
   series,
   properties: isServerSeries(series) ? [property("analytics_audience", notificationAudience)] : clientProperties,
@@ -69,7 +69,7 @@ const trends = (series, { breakdown, interval = "day" } = {}) => ({
   dateRange: { date_from: "-90d", date_to: null, explicitDate: false },
   trendsFilter: { display: "ActionsLineGraph", showLegend: true },
   breakdownFilter: breakdown
-    ? { breakdown, breakdown_type: "event", breakdown_limit: 12 }
+    ? { breakdown, breakdown_type: "event", breakdown_limit: breakdownLimit }
     : undefined,
   filterTestAccounts: true,
 });
@@ -114,6 +114,47 @@ const hogqlDailyBars = (query, yAxis) => ({
     showLegend: true,
   },
 });
+
+// One row per actual activation, with optional observed source. These new
+// events deliberately do not retrofit attribution onto legacy sessions.
+// Aggregate source callbacks first so duplicate callbacks cannot inflate entries.
+function appEntrySQL({ daily = false } = {}) {
+  return `with entries as (
+  select properties.entry_id as entry_id, min(timestamp) as entered_at,
+    argMin(properties.entry_kind, timestamp) as entry_kind,
+    argMin(person_id, timestamp) as entry_person
+  from events where event = 'app_entry_started' and ${productionSQL}
+    and notEmpty(toString(properties.entry_id))
+    and timestamp >= now() - interval 30 day
+  group by entry_id
+), sources as (
+  select properties.entry_id as entry_id,
+    countIf(properties.entry_source = 'notification') > 0 as from_notification,
+    countIf(properties.entry_source = 'link') > 0 as from_link,
+    argMinIf(properties.notification_type, timestamp, properties.entry_source = 'notification') as notification_type,
+    argMinIf(properties.delivery_channel, timestamp, properties.entry_source = 'notification') as delivery_channel
+  from events where event = 'app_entry_source_observed' and ${productionSQL}
+    and timestamp >= now() - interval 31 day
+    and notEmpty(toString(properties.entry_id))
+  group by entry_id
+), attributed as (
+  select entries.entered_at, entries.entry_kind, entries.entry_person,
+    if(coalesce(sources.from_notification, false), 'notification',
+      if(coalesce(sources.from_link, false), 'link', 'direct_or_unknown')) as entry_source,
+    if(coalesce(sources.from_notification, false), coalesce(nullIf(toString(sources.notification_type), ''), 'unknown'), 'not_applicable') as notification_type,
+    if(coalesce(sources.from_notification, false), coalesce(nullIf(toString(sources.delivery_channel), ''), 'unknown'), 'not_applicable') as delivery_channel
+  from entries left join sources on entries.entry_id = sources.entry_id
+)
+${daily ? `select toStartOfDay(entered_at) as day,
+  countIf(entry_source = 'notification') as notification_entries,
+  countIf(entry_source = 'link') as link_entries,
+  countIf(entry_source = 'direct_or_unknown' and entry_kind = 'cold_launch') as other_cold_launches,
+  countIf(entry_source = 'direct_or_unknown' and entry_kind = 'foreground_return') as other_foreground_returns
+from attributed group by day order by day` : `select entry_source, entry_kind, notification_type, delivery_channel,
+  count() as entries, uniqExact(entry_person) as unique_users
+from attributed group by entry_source, entry_kind, notification_type, delivery_channel
+order by entries desc`}`;
+}
 
 // Start before the friends step so onboarding follows are included. Take the
 // first observed start before applying the date range, so resumes do not create
@@ -283,6 +324,39 @@ from events where event = 'onboarding_permission_result' and ${productionSQL}
     key: "engagement-weekly-users", name: "Engagement — weekly active and core-active users",
     description: "Unique people per calendar week, not the sum of daily active users.",
     query: trends([event("app_session_started"), event("core_action_performed")], { interval: "week" }),
+  },
+  {
+    key: "engagement-notification-clicks", name: "Engagement — notification clicks by type",
+    description: "Daily accepted notification opens by type: remote pushes, local reminders, and instrumented in-app inbox opens. Counts opens, not unique people or delivered notifications. Duplicate handling of the same system response is suppressed. Last 90 days; type/channel totals are in the companion table.",
+    query: trends([eventTotal("notification_opened")], { breakdown: "notification_type", breakdownLimit: 20 }),
+  },
+  {
+    key: "engagement-notification-click-details", name: "Engagement — notification clicks and users by type / channel",
+    description: "Last 30 days of accepted notification opens, split by type and remote/local/in_app/unknown channel. Unique users are per row and must not be summed. An open means routing was accepted; it does not prove the destination finished loading. In-app coverage currently includes place-plan invitations.",
+    query: hogql(`select coalesce(nullIf(toString(properties.notification_type), ''), 'unknown') as notification_type,
+  coalesce(nullIf(toString(properties.delivery_channel), ''), 'unknown') as delivery_channel,
+  count() as clicks, uniqExact(person_id) as unique_users
+from events where event = 'notification_opened' and ${productionSQL}
+  and timestamp >= now() - interval 30 day
+group by notification_type, delivery_channel order by clicks desc`),
+  },
+  {
+    key: "engagement-entry-lifecycle", name: "Engagement — app sessions: cold launches and foreground returns",
+    description: "Existing session logging split by lifecycle. A cold launch can come from a notification or link; this chart alone does not identify the source. Foreground sessions follow the app refresh policy, including its 30-second grace, and do not count every brief app switch. Last 90 days.",
+    query: trends([eventTotal("app_session_started")], { breakdown: "session_source" }),
+  },
+  {
+    key: "engagement-entry-source", name: "Engagement — app entries by observed source",
+    description: "Daily entries: notification, link, or other cold launch/foreground return. Source callbacks before activation or within 2s of it are associated, not proof of causality; other means direct or unknown. New app-entry logging only, after release; historical sessions cannot be attributed. Last 30 days, UTC. Every background return counts.",
+    query: {
+      kind: "DataVisualizationNode", source: hogql(appEntrySQL({ daily: true })), display: "ActionsBar",
+      chartSettings: { xAxis: { column: "day" }, yAxis: ["notification_entries", "link_entries", "other_cold_launches", "other_foreground_returns"].map(column => ({ column })), showLegend: true, showValuesOnSeries: true },
+    },
+  },
+  {
+    key: "engagement-entry-source-details", name: "Engagement — entry source, notification type and launch kind",
+    description: "Last 30 days of new app-entry logging after release, by source, cold/foreground kind, notification type and channel. One random per-entry correlation ID joins callbacks without exporting payload IDs. Callbacks before activation or within 2s are associated. Unmatched entries remain direct_or_unknown. In-app clicks do not supply entry attribution.",
+    query: hogql(appEntrySQL()),
   },
   {
     key: "engagement-core-actions", name: "Engagement — Wanna and check-in volume",
@@ -512,10 +586,15 @@ const sections = [
   },
   {
     "title": "Engagement",
-    "body": "Start with active people and unduplicated core actions. Then diagnose feature reach, save completion, discovery, import usage, and Events interest. Local completion and server sync are separate.",
+    "body": "Start with active people, notification clicks, and app entry source. Cold/foreground describes lifecycle, while notification/link/direct-or-unknown describes source. Notification clicks and existing sessions are live; source attribution requires the new app release and cannot be backfilled. Then diagnose core actions and feature reach. Joe, Ryan, and automatic follows are excluded.",
     "insightKeys": [
       "engagement-active-users",
       "engagement-weekly-users",
+      "engagement-notification-clicks",
+      "engagement-notification-click-details",
+      "engagement-entry-lifecycle",
+      "engagement-entry-source",
+      "engagement-entry-source-details",
       "engagement-core-actions",
       "engagement-surfaces",
       "engagement-human-needs",
@@ -841,4 +920,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 }
 
-export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };
+export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, appEntrySQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };

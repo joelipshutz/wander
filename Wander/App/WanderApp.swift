@@ -103,7 +103,9 @@ struct WanderApp: App {
         }
         let contextualAnalytics = ContextualAnalyticsClient(client: analyticsClient)
         analytics = contextualAnalytics
-        analyticsLifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)
+        let lifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)
+        analyticsLifecycle = lifecycle
+        WanderAppDelegate.entryAnalytics = lifecycle
         _pushNotifications = StateObject(
             wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
         )

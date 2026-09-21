@@ -174,6 +174,7 @@ struct AppEntryView: View {
         }
         .task {
             analyticsLifecycle.recordLaunch()
+            if scenePhase == .active { analyticsLifecycle.recordEntryActivation() }
             productUpsells.bind(to: auth.state.session?.userID)
             pushNotifications.bindNotificationPreferences(to: auth.state.session?.userID)
             #if DEBUG
@@ -193,13 +194,15 @@ struct AppEntryView: View {
         .onChange(of: notificationGateState, initial: true) { _, state in
             state.synchronize()
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .background:
+                analyticsLifecycle.recordEntryBackground()
                 foregroundRefreshPolicy.didEnterBackground(
                     atUptime: ProcessInfo.processInfo.systemUptime
                 )
             case .active:
+                analyticsLifecycle.recordEntryActivation()
                 guard didFinishInitialResolution else { return }
                 // Returning from Mail or an identity provider must preserve the
                 // inline form and its pending verification attempt. Its auth
@@ -257,6 +260,9 @@ struct AppEntryView: View {
             return
         }
         #endif
+        if WanderDeepLinkRoute.parse(url) != nil {
+            analyticsLifecycle.recordEntrySource(.link)
+        }
         if let attribution = AcquisitionAttribution(url: url) {
             analytics.track(
                 AnalyticsEvent(

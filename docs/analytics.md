@@ -117,6 +117,8 @@ Run `npm --prefix scripts run analytics:test-follows` with scoped Astir PostHog 
 | `app_surface_viewed` | A native tab becomes selected, after yielding to its first render | coarse `surface`: `map`, `discover` (Feed), `events`, `lists`, or `profile`; Events remains a coming-soon teaser |
 | `app_first_opened` | First launch after the install-local marker is introduced | `acquisition_source` |
 | `app_session_started` | Cold launch or foreground return after the app refresh grace period | `session_source` |
+| `app_entry_started` | First scene activation and every actual background-to-active return; repeated active callbacks and inactive interruptions do not create entries | Random per-entry `entry_id`; `entry_kind` (`cold_launch`, `foreground_return`) |
+| `app_entry_source_observed` | Routable system notification default tap or recognized incoming link, before activation or within two seconds of it | Same `entry_id`; `entry_source` (`notification`, `link`); allowlisted notification type/channel for system taps only |
 | `acquisition_link_opened` | Universal/custom link enters the app | sanitized `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`; coarse `route`; `has_campaign` |
 | `onboarding_started` | Onboarding flow first appears | `initial_step`, `is_resumed` |
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
@@ -260,3 +262,15 @@ For every analytics change:
   by sending recipient IDs or per-recipient rows to PostHog.
 
 Place invitation opens from Notifications use `notification_type=place_plan_invitation`, `delivery_channel=in_app`, and `route=place_plan`. Emit only after the recipient resolver succeeds. Reopening is a new open; refreshes and failed/unavailable requests emit nothing. No invitation ID, token, sender, place, date, message, or artwork URL is sent. These in-app opens are excluded from the existing remote push-delivery funnel.
+
+### Engagement: notification clicks and app entry source
+
+The Engagement section includes daily notification clicks by type, a type/channel table with clicks and unique people, and the existing cold-launch/foreground-session split. Opens represent accepted routing, not guaranteed destination rendering. Only place-plan invitations currently instrument in-app inbox opens; this is not coverage of every in-app notification row.
+
+New app-entry charts use `app_entry_started` joined to `app_entry_source_observed` by a random, ephemeral per-entry UUID. Source callbacks are grouped before joining, so repeated callbacks cannot multiply entries. A notification source takes precedence over a link when both are observed; unmatched entries remain `direct_or_unknown`. Notification type/channel and cold/foreground kind are separate dimensions. No notification, recipient, actor, link URL, or content identifiers are added.
+
+Attribution is a bounded association, not proof of causality: a callback before activation, or within two seconds on either side of activation when actor scheduling reverses callback order, can attach to that entry. Later taps in an active app do not change its entry source. System taps are observed before auth-gated routing; in-app clicks, dismissals, and background notification actions do not supply entry source. A tap may therefore identify the source even when authenticated destination routing later fails. Known links supply `link`; other entry paths remain unknown. Every background return is an entry, while the older session metric retains its refresh/grace semantics.
+
+These two new events require a new app release. Historical session and click events cannot establish entry source retrospectively and are never presented as direct opens. All five Engagement additions apply the same production, staff, test-account, and automatic-follow exclusions as existing behavioral charts.
+
+Lightweight attribution validation (does not replace a native build): compile `Wander/Services/AnalyticsEvent.swift` and `scripts/app-entry-analytics-fixture.swift` together with `swiftc -swift-version 6 -parse-as-library`, then run the resulting executable. Dashboard contracts run with `npm --prefix scripts run analytics:check`. With scoped Astir PostHog credentials, `npm --prefix scripts run analytics:test-entry` validates the actual aggregation using temporary unsaved SQL insights (duplicates, orphan callbacks, source precedence, and unknowns); it never ingests product events and soft-deletes the fixtures.
