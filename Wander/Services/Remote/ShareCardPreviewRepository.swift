@@ -74,6 +74,7 @@ struct ShareCardLinkTarget: Equatable {
 
     init?(url: URL) {
         guard url.scheme == "https", url.host == "getrec.me", url.fragment == nil,
+              !url.path.hasPrefix("/cards/"),
               let route = WanderDeepLinkRoute.parse(url) else { return nil }
         switch route {
         case .sharedProfile(let id): kind = "profile"; identifier = id
@@ -88,8 +89,8 @@ struct ShareCardLinkTarget: Equatable {
     static func link(_ url: URL, token: String) -> URL? {
         guard token.range(of: "^[a-f0-9]{48}$", options: .regularExpression) != nil,
               var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
-        // Keep preview links outside AASA paths claimed by older installed apps.
-        // Their query-free deep-link parser would otherwise swallow this link.
+        // The website keeps the token-backed preview; compatible apps unwrap
+        // this route to the original entity without carrying the preview token.
         parts.percentEncodedPath = "/cards" + parts.percentEncodedPath
         parts.queryItems = [URLQueryItem(name: "card", value: token)]
         return parts.url

@@ -133,16 +133,61 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
             let original = try XCTUnwrap(route.url)
             let shared = try XCTUnwrap(ShareCardLinkTarget.link(original, token: token))
             XCTAssertEqual(shared.path, "/cards" + original.path)
-            // Website-only wrapper; the recipient card opens the original route.
-            XCTAssertNil(WanderDeepLinkRoute.parse(shared))
+            XCTAssertEqual(WanderDeepLinkRoute.parse(shared), route)
+            XCTAssertNil(ShareCardLinkTarget(url: shared), "A published wrapper must not be published again")
             var inbox = WanderDeepLinkInbox()
-            inbox.receive(original)
+            inbox.receive(shared)
             XCTAssertNil(inbox.request(ifSessionValidated: false))
-            XCTAssertEqual(inbox.request(ifSessionValidated: true)?.route, route)
+            let request = try XCTUnwrap(inbox.request(ifSessionValidated: true))
+            XCTAssertEqual(request.route, route)
+            XCTAssertEqual(request.route.url, original, "The preview token must not enter native navigation")
+            inbox.consume(request.id)
+            XCTAssertNil(inbox.pendingRequest)
             for query in ["card=x", "card=\(token)&card=\(token)", "card=\(token)&edit=true"] {
                 XCTAssertNil(WanderDeepLinkRoute.parse(URL(string: original.absoluteString + "?" + query)!))
+                XCTAssertNil(WanderDeepLinkRoute.parse(URL(string: "https://getrec.me/cards" + original.path + "?" + query)!))
             }
         }
+    }
+
+    func testCardLinksRejectMalformedRoutesAndKeepPendingValidDestination() throws {
+        let id = "40000000-0000-0000-0000-000000000001"
+        let token = String(repeating: "a", count: 48)
+        let base = "https://getrec.me/cards/places/\(id)"
+        let valid = try XCTUnwrap(URL(string: base + "?card=" + token))
+        var inbox = WanderDeepLinkInbox()
+        inbox.receive(valid)
+        let request = try XCTUnwrap(inbox.pendingRequest)
+        for raw in [
+            base, base + "?", base + "?card=", base + "?card=" + String(token.dropLast()),
+            base + "?card=" + token + "%0A",
+            base + "?card=" + token.uppercased(), base + "?card=" + token + "#extra",
+            base + "/?card=" + token, base + "/extra?card=" + token,
+            "https://getrec.me/cards/places/not-a-uuid?card=" + token,
+            "https://getrec.me/cards/plans/\(token)?card=" + token,
+            "https://getrec.me/cards/unknown/\(id)?card=" + token,
+            "https://getrec.me/cards/cards/places/\(id)?card=" + token,
+            "https://getrec.me.evil.example/cards/places/\(id)?card=" + token,
+            "https://getrec.me:8443/cards/places/\(id)?card=" + token,
+            "https://user@getrec.me/cards/places/\(id)?card=" + token,
+            "http://getrec.me/cards/places/\(id)?card=" + token,
+            "recme://cards/places/\(id)?card=" + token
+        ] {
+            let url = try XCTUnwrap(URL(string: raw))
+            XCTAssertNil(WanderDeepLinkRoute.parse(url), raw)
+            inbox.receive(url)
+            XCTAssertEqual(inbox.pendingRequest, request)
+        }
+    }
+
+    func testCardLinkAnalyticsKeepCanonicalCategoryWithoutPreviewTokenOrIdentity() throws {
+        let id = "40000000-0000-0000-0000-000000000001"
+        let token = String(repeating: "a", count: 48)
+        let original = try XCTUnwrap(WanderDeepLinkRoute.sharedPlace(placeID: id).url)
+        let shared = try XCTUnwrap(ShareCardLinkTarget.link(original, token: token))
+        let properties = try XCTUnwrap(AcquisitionAttribution(url: shared)).properties
+        XCTAssertEqual(properties, ["route": "place", "has_campaign": "false"])
+        XCTAssertFalse(properties.values.contains { $0.contains(id) || $0.contains(token) })
     }
 
     func testPublicationUploadsOnceAndReturnsOneURLWithoutPromotionalTextOrAttachment() async throws {

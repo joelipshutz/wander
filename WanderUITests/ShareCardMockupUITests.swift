@@ -116,9 +116,13 @@ final class ShareCardMockupUITests: XCTestCase {
             // use the same native fallback as More. Never send to a recipient.
             let activityList = app.otherElements["ActivityListView"]
             XCTAssertTrue(activityList.waitForExistence(timeout: 10))
+            // The remote share-sheet container appears before its controls.
+            // Wait for the system UI to finish loading before interacting.
+            let close = app.buttons["Close"]
+            XCTAssertTrue(close.waitForExistence(timeout: 30))
             XCTAssertFalse(app.alerts.firstMatch.exists)
             capture("external-place-\(format)-destination")
-            app.buttons["Close"].tap()
+            close.tap()
             XCTAssertTrue(formats.waitForExistence(timeout: 5))
         }
         app.terminate()
