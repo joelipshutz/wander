@@ -39,7 +39,9 @@ import XCTest
         for (metro, search, hasEvents) in [("orange-county", "Orange County", false), ("los-angeles", "Los Angeles", true)] {
             let settings = app.buttons["Settings"]
             XCTAssertTrue(settings.waitForExistence(timeout: 10))
-            settings.tap()
+            // XCTest can fall back to a corner point after the tab bar changes.
+            // That point is outside this button's circular content shape.
+            settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             let details = app.buttons["settings.account.contactDetails"]
             XCTAssertTrue(details.waitForExistence(timeout: 5))
             details.tap()

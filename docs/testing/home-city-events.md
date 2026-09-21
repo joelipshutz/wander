@@ -94,3 +94,13 @@ contract (`NavigationContractTests`), a search timing threshold (58.7 ms against
 These are not hidden by a full-suite pass claim. The dedicated workflow now runs
 the relevant feature/onboarding suites; broader-suite failures remain release
 review items.
+
+The follow-up [native run 35624797787](https://github.com/joelipshutz/wander/actions/runs/35624797787)
+passed all 116 selected unit tests and seven of eight UI tests on each phone. The
+keyboard/Save fixes compiled and the phone section is fully visible in both
+native captures. The remaining Settings loop failure occurred on its second
+Settings-open tap: XCTest chose (346.4, 78.4), outside the circular 44-point
+button centered at (364, 96). The first home save, Events removal and selected
+Profile assertion had already passed. The test now targets the button center;
+manual native LA → Orange County → LA passed without a restart. This test-only
+correction still needs its automated rerun before claiming all UI tests pass.
