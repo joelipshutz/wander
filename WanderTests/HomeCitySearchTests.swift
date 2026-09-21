@@ -96,6 +96,33 @@ import CoreLocation
         XCTAssertEqual(restoring.phoneText, "2025550123")
     }
 
+    func testKeyboardCommitOfSelectedCityDoesNotClearConfirmation() async {
+        let model = AccountContactDetailsModel(userID: "commit", repository: CityDetailsRepository(), location: CityLocation(nil))
+        await model.load()
+        model.editCity("Kyo")
+        model.selectCity(kyoto)
+        model.editCity("Kyoto") // Native TextField's focus-loss commit.
+        XCTAssertEqual(model.homeCity, kyoto)
+        XCTAssertTrue(model.canSave)
+        model.editCity("Kyot")
+        XCTAssertNil(model.homeCity)
+        XCTAssertFalse(model.canSave)
+    }
+
+    func testLateLocationKeepsTheCountryOfManuallySelectedCity() async {
+        let location = PendingCityLocation()
+        let model = AccountContactDetailsModel(userID: "countryRace", repository: CityDetailsRepository(), location: location)
+        let load = Task { await model.load() }
+        await eventually { location.pending != nil }
+        model.selectCity(kyoto)
+        location.pending?.resume(returning: .init(metroID: "los-angeles", countryCode: "US", city: .losAngeles))
+        await load.value
+        XCTAssertEqual(model.homeCity, kyoto)
+        XCTAssertEqual(model.phoneCountryCode, "JP")
+        model.selectCity(HomeCity(name: "Paris", countryCode: "FR"))
+        XCTAssertEqual(model.phoneCountryCode, "FR")
+    }
+
     func testCountyGateDoesNotConfuseSameNamedCitiesOrNeighboringCounties() {
         XCTAssertEqual(HomeCity(name: "Long Beach", countryCode: "US", region: "CA", county: "Los Angeles County").metroID, "los-angeles")
         XCTAssertEqual(HomeCity(name: "Pasadena", countryCode: "US", region: "CA", county: "Los Angeles").metroID, "los-angeles")

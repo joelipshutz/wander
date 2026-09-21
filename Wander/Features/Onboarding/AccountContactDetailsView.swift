@@ -157,6 +157,7 @@ struct AccountContactDetailsView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(WanderTheme.textMuted.color)
                 TextField("Search any city", text: Binding(get: { model.cityText }, set: {
+                    guard cityIsFocused, $0 != model.cityText else { return }
                     model.editCity($0)
                     citySearch.update($0)
                 }))

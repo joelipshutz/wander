@@ -42,8 +42,12 @@ import Combine
     var canSave: Bool { didLoad && !isLoading && !isSaving && phoneIsValid && homeCity != nil }
 
     func editCity(_ text: String) {
+        let next = String(text.prefix(120))
+        // TextField may commit the same value again when focus resigns after
+        // choosing a suggestion. That is not a new, unconfirmed city edit.
+        guard next != cityText else { return }
         didEditMetro = true
-        cityText = String(text.prefix(120))
+        cityText = next
         homeCity = nil
         metroID = nil
         homeCountryCode = nil
@@ -127,7 +131,7 @@ import Combine
                     if suggestion.city == nil { metroID = suggestion.metroID }
                 }
             }
-            if !didEditPhone { phoneCountryCode = OnboardingPhoneNumber.country(suggestion.countryCode).id }
+            if !didEditPhone && !didEditMetro { phoneCountryCode = OnboardingPhoneNumber.country(suggestion.countryCode).id }
         } catch {
             // Denied, unavailable or timed-out location keeps manual entry available.
         }
