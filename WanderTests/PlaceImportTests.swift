@@ -1416,6 +1416,114 @@ final class PlaceImportAutoSavePolicyTests: XCTestCase {
 
 @MainActor
 final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
+    func testMultipleGooglePlacesDoNotImplyAListImport() async throws {
+        let importStore = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: PlaceImportSnapshot(ownerUserID: "user_live")),
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try importStore.enqueue(
+            source: .googleMaps, text: "First Cafe, Los Angeles\nSecond Cafe, Los Angeles",
+            automaticSaveRequested: true
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Tester", handle: "tester")))
+
+        let result = await PlaceImportAutoSaveCoordinator.process(
+            batchIDs: [batchID], importStore: importStore, store: store,
+            expectedUserID: "user_live", isAuthorized: { true }
+        )
+
+        XCTAssertEqual(result.addedCount, 2)
+        XCTAssertTrue(store.visiblePlaceLists.isEmpty)
+        XCTAssertNil(importStore.batches.first?.destinationListID)
+    }
+
+    func testSinglePlaceFromAnExplicitGoogleListFileKeepsItsList() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GoogleListFile-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        _ = try inbox.capture([
+            .file(Data("name,address\nClover Cafe,Los Angeles".utf8),
+                fileName: "Saved Places.csv", contentTypeIdentifier: "public.comma-separated-values-text")
+        ], saveIntent: .wanna)
+        let importStore = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: PlaceImportSnapshot(ownerUserID: "user_live")),
+            resolver: FakePlaceImportResolver()
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Tester", handle: "tester")))
+        let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: importStore)
+
+        let result = await PlaceImportAutoSaveCoordinator.process(
+            batchIDs: report.batchIDs, importStore: importStore, store: store,
+            expectedUserID: "user_live", isAuthorized: { true }
+        )
+
+        XCTAssertEqual(result.addedCount, 1)
+        XCTAssertEqual(store.visiblePlaceLists.count, 1)
+        XCTAssertEqual(store.visiblePlaceLists.first?.name, "Saved Places.csv")
+        XCTAssertEqual(store.visiblePlaceLists.first?.cachedItemCount, 1)
+        XCTAssertEqual(importStore.batches.first?.receipt?.destinationListID, store.visiblePlaceLists.first?.id)
+    }
+
+    func testSourceListProvenanceSurvivesPersistenceWithoutInferringLegacyTitles() throws {
+        let batch = PlaceImportBatch(
+            source: .googleMaps, sourceName: "Display title", sourceListName: "Imported favorites",
+            totalCount: 1
+        )
+        let encoded = try JSONEncoder().encode(batch)
+        XCTAssertEqual(try JSONDecoder().decode(PlaceImportBatch.self, from: encoded).sourceListName, "Imported favorites")
+
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy.removeValue(forKey: "sourceListName")
+        let decoded = try JSONDecoder().decode(PlaceImportBatch.self, from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertEqual(decoded.sourceName, "Display title")
+        XCTAssertNil(decoded.sourceListName, "Old titles cannot authorize new list creation")
+    }
+
+    func testSharedGooglePlaceWannaDoesNotCreateAnUnselectedList() async throws {
+        for title: String? in [nil, "Clover Cafe"] {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GooglePlaceWanna-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let inbox = SharedPlaceImportInbox(rootURL: root)
+            _ = try inbox.capture(
+                [.text("https://maps.app.goo.gl/single-place", suggestedName: title)],
+                saveIntent: .wanna
+            )
+            let finalURL = try XCTUnwrap(URL(string:
+                "https://www.google.com/maps/place/Clover+Cafe/data=!3d34.05!4d-118.25"
+            ))
+            let client = FakePlaceImportHTTPClient(responses: [
+                PlaceImportHTTPResponse(data: Data("".utf8), finalURL: finalURL,
+                    statusCode: 200, mimeType: "text/html")
+            ])
+            let importStore = PlaceImportStore(
+                persistence: InMemoryPlaceImportPersistence(snapshot: PlaceImportSnapshot(ownerUserID: "user_live")),
+                resolver: DevicePlaceImportResolver(
+                    placeResolver: FakeDevicePlaceResolver(candidates: []),
+                    googleListLoader: GoogleMapsSharedListImporter(httpClient: client)
+                )
+            )
+            let store = WanderStore(fixtures: WanderFixtures.empty())
+            store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Tester", handle: "tester")))
+            let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: importStore)
+
+            let result = await PlaceImportAutoSaveCoordinator.process(
+                batchIDs: report.batchIDs, importStore: importStore, store: store,
+                expectedUserID: "user_live", isAuthorized: { true }
+            )
+
+            XCTAssertEqual(result.addedCount, 1)
+            XCTAssertEqual(store.currentUserVisiblePlaces.first?.place.canonicalName, "Clover Cafe")
+            XCTAssertEqual(store.currentUserVisiblePlaces.first?.userPlace.status, .wannaGo)
+            XCTAssertTrue(store.visiblePlaceLists.isEmpty, "A shared title is not a list choice")
+            XCTAssertNil(importStore.batches.first?.destinationListID)
+            XCTAssertNil(importStore.batches.first?.receipt?.destinationListID)
+        }
+    }
+
     func testSourceRetryIsReceiptScanStatusInsteadOfAPlaceNeedingReview() async throws {
         let batchID = "partial-social-import"
         let candidate = placeImportCandidate(name: "Maru Coffee")
@@ -1536,6 +1644,7 @@ final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
                         id: batchID,
                         source: .googleMaps,
                         sourceName: "Ryan’s Bakeries",
+                        sourceListName: "Ryan’s Bakeries",
                         state: .ready,
                         totalCount: items.count,
                         processedCount: items.count,
@@ -4114,6 +4223,7 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.items(for: batchID).count, 45)
         XCTAssertEqual(store.items(for: batchID).map(\.state), Array(repeating: .ready, count: 45))
         XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.sourceName, "Ryan's Bakeries")
+        XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.sourceListName, "Ryan's Bakeries")
         XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.totalCount, 45)
         XCTAssertEqual(store.summary.totalCount, 45)
     }

@@ -1426,6 +1426,7 @@ final class PlaceImportStore: ObservableObject {
         source: PlaceImportSource,
         text: String,
         sourceName: String? = nil,
+        sourceListName: String? = nil,
         captureDeliveryID: String? = nil,
         automaticSaveRequested: Bool = false,
         requestedStatus: PlaceStatus = .wannaGo,
@@ -1439,6 +1440,7 @@ final class PlaceImportStore: ObservableObject {
         let batch = PlaceImportBatch(
             source: source,
             sourceName: sourceName,
+            sourceListName: sourceListName,
             captureDeliveryID: captureDeliveryID,
             totalCount: seeds.count,
             automaticSaveRequested: automaticSaveRequested,
@@ -2494,6 +2496,9 @@ final class PlaceImportStore: ObservableObject {
             if let sourceName,
                let batchIndex = batches.firstIndex(where: { $0.id == original.batchID }) {
                 batches[batchIndex].sourceName = sourceName
+                if original.source == .googleMaps {
+                    batches[batchIndex].sourceListName = sourceName
+                }
             }
             return
         case .partialExpanded(let seeds, let retrySeed, let sourceName):
