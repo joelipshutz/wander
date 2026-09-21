@@ -478,3 +478,9 @@ enabled = true
 # Dedicated cron secret is checked before any lookup, signing or Slack work.
 verify_jwt = false
 entrypoint = "./functions/feedback-slack-worker/index.ts"
+
+[functions.signup-slack-worker]
+enabled = true
+# Dedicated cron secret checked before production identity lookup and delivery.
+verify_jwt = false
+entrypoint = "./functions/signup-slack-worker/index.ts"
