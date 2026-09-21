@@ -3,7 +3,7 @@ import UIKit
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
-    func testREC570HistoryViewportReachesBottomWithoutFloatingActions() {
+    func testREC570HistoryViewportReachesBottomWithoutFloatingActions() throws {
         let app = launchPhotoHistoryFixture()
         let scroll = app.scrollViews["place-profile.scroll"]
         XCTAssertTrue(scroll.waitForExistence(timeout: 8))
@@ -11,8 +11,9 @@ final class MapPlaceCardUITests: XCTestCase {
         // Allow the home-indicator safe area, but not a second inset or a
         // viewport shortened by the top safe area.
         XCTAssertGreaterThanOrEqual(scroll.frame.maxY, app.frame.maxY - 40)
-        let lastHistoryAction = scroll.buttons["Share activity"].lastMatch
-        XCTAssertTrue(lastHistoryAction.waitForExistence(timeout: 5))
+        let historyActions = scroll.buttons.matching(identifier: "Share activity")
+        XCTAssertTrue(historyActions.firstMatch.waitForExistence(timeout: 5))
+        let lastHistoryAction = try XCTUnwrap(historyActions.allElementsBoundByIndex.last)
         scrollUp(in: scroll, until: lastHistoryAction)
         XCTAssertTrue(lastHistoryAction.isHittable)
         XCTAssertLessThanOrEqual(lastHistoryAction.frame.maxY, scroll.frame.maxY)
@@ -44,9 +45,11 @@ final class MapPlaceCardUITests: XCTestCase {
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [initialTheme], timeout: 5), .completed)
         capture("REC-576 presenter before photos — \(initialAppearance)")
+        let photo = app.buttons["Open place photo by Ryan full screen"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 6))
 
         for visit in 1...3 {
-            app.buttons["Open place photo by Ryan full screen"].tap()
+            photo.tap()
             let close = app.buttons["Close photo viewer"]
             XCTAssertTrue(close.waitForExistence(timeout: 5))
             capture("REC-576 photo viewer — \(initialAppearance) — \(visit)")
@@ -58,7 +61,10 @@ final class MapPlaceCardUITests: XCTestCase {
             if visit == 3 { XCUIDevice.shared.appearance = expectedAppearance }
             close.tap()
             XCTAssertTrue(close.waitForNonExistence(timeout: 5))
-            XCTAssertTrue(title.isHittable)
+            // A heading is not an interactive accessibility target. Verify
+            // return to the same place through its actual controls instead.
+            XCTAssertTrue(photo.isHittable)
+            XCTAssertTrue(app.buttons["place-profile.back"].isHittable)
             let luminance = try meanLuminance(title.screenshot().image)
             if expectedAppearance == .light {
                 XCTAssertGreaterThan(luminance, 0.55, "Photo dismissal changed the light presenter.")
