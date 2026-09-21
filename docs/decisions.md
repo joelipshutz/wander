@@ -407,3 +407,8 @@ Your Map Explore reuses the main Map's native renderer, pin hit testing and
 selection policies. Pan and empty-map tap dismiss the compact selection; zoom
 retains it. Selection, dismissal and returning from a place profile preserve the
 viewport and active lens.
+
+Every matching Check-in/Wanna place remains rendered in Your Map at every zoom
+level. There is no pin-count cap or collision-based hiding; dense markers may
+overlap at their real coordinates. Active filters and canonical-place
+deduplication still apply. The main Map retains its existing collision policy.

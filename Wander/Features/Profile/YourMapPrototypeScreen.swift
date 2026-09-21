@@ -748,7 +748,8 @@ struct YourMapPrototypeScreen: View {
                     outlines: outlines, category: place.category, placeName: place.name
                 ),
                 bounceRevision: interaction.selectedPlaceID == place.id ? interaction.bounceRevision : 0,
-                accessibilityIdentifierOverride: "yourMap.prototype.pin.\(place.id)"
+                accessibilityIdentifierOverride: "yourMap.prototype.pin.\(place.id)",
+                keepsVisibleWhenColliding: true
             )
         }
     }

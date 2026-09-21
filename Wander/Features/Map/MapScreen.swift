@@ -1272,6 +1272,7 @@ struct NativeMapAnnotationDescriptor: Equatable {
     let accessibilityLabel: String
     let bounceRevision: UInt64
     var accessibilityIdentifierOverride: String? = nil
+    var keepsVisibleWhenColliding = false
 
     var accessibilityIdentifier: String? {
         if let accessibilityIdentifierOverride { return accessibilityIdentifierOverride }
@@ -1315,6 +1316,7 @@ struct NativeMapAnnotationDescriptor: Equatable {
             && lhs.accessibilityLabel == rhs.accessibilityLabel
             && lhs.bounceRevision == rhs.bounceRevision
             && lhs.accessibilityIdentifierOverride == rhs.accessibilityIdentifierOverride
+            && lhs.keepsVisibleWhenColliding == rhs.keepsVisibleWhenColliding
     }
 }
 
@@ -7220,7 +7222,7 @@ private final class NativeMapAnnotation: NSObject, MKAnnotation {
     }
 }
 
-private final class NativeMapPinAnnotationView: MKAnnotationView {
+final class NativeMapPinAnnotationView: MKAnnotationView {
     static let savedReuseIdentifier = "recme.map.pin.saved"
     static let searchReuseIdentifier = "recme.map.pin.search"
     static let reuseIdentifiers = [
@@ -7295,7 +7297,10 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         accessibilityIdentifier = descriptor.accessibilityIdentifier
         accessibilityTraits = .button
         clusteringIdentifier = nil
-        displayPriority = descriptor.isSelected ? .required : .defaultHigh
+        // Your Map is a complete view of saved places, including dense areas.
+        // Required priority prevents MapKit from hiding overlapping markers.
+        displayPriority = descriptor.keepsVisibleWhenColliding || descriptor.isSelected
+            ? .required : .defaultHigh
         zPriority = descriptor.isSelected ? .max : .defaultUnselected
         selectedZPriority = descriptor.isSelected ? .max : .defaultSelected
 

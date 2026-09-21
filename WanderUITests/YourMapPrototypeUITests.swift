@@ -19,13 +19,15 @@ final class YourMapPrototypeUITests: XCTestCase {
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 10))
         let pins = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "yourMap.prototype.pin."))
+        XCTAssertEqual(pins.count, 4, "All saved places must appear before any zoom gesture")
+        capture("REC-573 all pins at overview zoom")
         selectProfileFixturePin(in: app)
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         capture("REC-574 selected native pin")
 
-        // At the city overview, MapKit may suppress overlapping markers. Use
-        // the place actually selected by the physical tap, then zoom around it.
+        // Every marker stays rendered at the city overview; nearby markers can
+        // overlap. Zoom around the physically selected pin to test gestures.
         let selectedName = String(card.label.split(separator: ",")[0])
         let selectedPin = pins.matching(NSPredicate(format: "label BEGINSWITH %@", selectedName)).firstMatch
         for _ in 0..<2 {
@@ -266,8 +268,8 @@ final class YourMapPrototypeUITests: XCTestCase {
         let pins = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "yourMap.prototype.pin."))
         XCTAssertTrue(pins.firstMatch.waitForExistence(timeout: 8))
         // The four LA fixture saves overlap at the initial city overview.
-        // MapKit can expose collision-hidden annotation views to XCTest, so
-        // tap the center of that visible group instead of an arbitrary AX row.
+        // Tap the center of the overlapping group to exercise physical hit
+        // testing instead of asking XCTest to activate a covered marker.
         let frames = pins.allElementsBoundByIndex.map(\.frame).filter { app.frame.contains($0) }
         guard !frames.isEmpty else { return XCTFail("Expected profile fixture pins in the viewport") }
         let center = CGVector(
