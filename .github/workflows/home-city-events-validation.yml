@@ -59,7 +59,7 @@ jobs:
           -only-testing:WanderTests/FirstVisitWalkthroughTests
           -only-testing:WanderUITests/AccountContactDetailsUITests
           -only-testing:WanderUITests/EventsAccessUITests
-          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Repeat native screen flows on compact iPhone 16e
         if: success() || failure()
         run: >-
@@ -68,7 +68,7 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/AccountContactDetailsUITests
           -only-testing:WanderUITests/EventsAccessUITests
-          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export screenshots and test summaries
         if: always()
         run: |
