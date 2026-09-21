@@ -43,9 +43,11 @@ protocol ContactProvider: Sendable {
     func authorization() async -> ContactProviderAuthorization
     func requestAccess() async -> ContactProviderAuthorization
     func matches() async throws -> [ContactMatch]
+    func discoveryIdentifiers() async throws -> [ContactDiscoveryIdentifier]
 }
 
 extension ContactProvider {
+    func discoveryIdentifiers() async throws -> [ContactDiscoveryIdentifier] { [] }
     func authorization() async -> ContactProviderAuthorization { .authorized }
     func requestAccess() async -> ContactProviderAuthorization { .authorized }
 }
@@ -114,6 +116,27 @@ actor SystemContactProvider: ContactProvider {
         @unknown default:
             .denied
         }
+    }
+
+    func discoveryIdentifiers() async throws -> [ContactDiscoveryIdentifier] {
+        guard await authorization() == .authorized else { return [] }
+        let request = CNContactFetchRequest(keysToFetch: [
+            CNContactPhoneNumbersKey as CNKeyDescriptor, CNContactEmailAddressesKey as CNKeyDescriptor
+        ])
+        var identifiers = Set<ContactDiscoveryIdentifier>()
+        try store.enumerateContacts(with: request) { contact, stop in
+            for phone in contact.phoneNumbers {
+                let value = phone.value.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty && value.count <= 80 { identifiers.insert(.init(kind: .phone, value: value)) }
+            }
+            for email in contact.emailAddresses {
+                let value = (email.value as String).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if !value.isEmpty && value.count <= 254 { identifiers.insert(.init(kind: .email, value: value)) }
+            }
+            if identifiers.count > 5000 { stop.pointee = true }
+        }
+        guard identifiers.count <= 5000 else { throw ContactDiscoveryError.tooManyContacts }
+        return identifiers.sorted { ($0.kind.rawValue, $0.value) < ($1.kind.rawValue, $1.value) }
     }
 
     private static func match(for contact: CNContact) -> ContactMatch? {

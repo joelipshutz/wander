@@ -44,12 +44,14 @@ struct ProfileViewState {
 }
 
 enum DiscoverPeopleRecommendationReason: Equatable {
+    case contacts
     case followsYou
     case sharedFollows(Int)
     case suggested
 
     var compactDisplayText: String {
         switch self {
+        case .contacts: "In your contacts"
         case .followsYou: "Follows you"
         case .sharedFollows(let count):
             count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
@@ -59,6 +61,8 @@ enum DiscoverPeopleRecommendationReason: Equatable {
 
     func displayText(for profile: ProfileShell) -> String {
         switch self {
+        case .contacts:
+            return "In your contacts"
         case .followsYou:
             return "Follows you"
         case .sharedFollows(let count):

@@ -6044,7 +6044,7 @@ final class WanderStore: ObservableObject {
         discoverPeopleRecommendationsState = .loading
 
         do {
-            let recommendations = try await backend.discoverProfileRecommendations(limit: limit)
+            let recommendations = try await backend.peopleRecommendations(userID: requestingUserID, limit: limit)
             guard currentUser.id == requestingUserID else {
                 discoverPeopleRecommendationsState = .idle
                 return
@@ -6069,6 +6069,12 @@ final class WanderStore: ObservableObject {
             }
             lastRemoteError = remoteErrorMessage(error)
             discoverPeopleRecommendationsState = .failed
+        }
+    }
+
+    func clearContactRecommendations() {
+        if case .loaded(let recommendations) = discoverPeopleRecommendationsState {
+            discoverPeopleRecommendationsState = .loaded(recommendations.filter { $0.reason != .contacts })
         }
     }
 

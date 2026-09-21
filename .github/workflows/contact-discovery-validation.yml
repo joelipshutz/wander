@@ -1,0 +1,69 @@
+name: Contact discovery validation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*ContactDiscovery*'
+      - '**/ContactProvider.swift'
+      - '**/OnboardingFriendSuggestions*'
+      - 'supabase/**/contact*'
+      - 'supabase/functions/_shared/contact-identifiers.ts'
+      - '.github/workflows/contact-discovery-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: contact-discovery-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+      - run: deno test supabase/functions/contact-discovery/handler.test.ts
+      - run: deno check --config supabase/functions/clerk-profile-webhook/deno.json supabase/functions/clerk-profile-webhook/index.ts
+  native:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Select existing iPhone simulator
+        run: |
+          xcrun simctl list devices available --json > /tmp/devices.json
+          python3 - <<'PY'
+          import json, os
+          devices = json.load(open('/tmp/devices.json'))['devices']
+          choices = [(runtime, d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == 'iPhone 17 Pro']
+          if not choices:
+              choices = [(runtime, d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'].startswith('iPhone')]
+          assert choices, 'No existing iPhone simulator'
+          chosen = sorted(choices, key=lambda x: x[0])[-1][1]
+          with open(os.environ['GITHUB_ENV'], 'a') as f: f.write('TEST_DEVICE_ID=' + chosen['udid'] + '\n')
+          print('Testing on', chosen['name'])
+          PY
+      - name: Unit suite and contact-discovery UI flows
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests -only-testing:WanderUITests/ContactDiscoveryUITests
+          -resultBundlePath "$RUNNER_TEMP/ContactDiscovery.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Save native evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contact-discovery-native-results
+          path: ${{ runner.temp }}/ContactDiscovery.xcresult
+          retention-days: 14

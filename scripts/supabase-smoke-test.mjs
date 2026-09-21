@@ -104,6 +104,12 @@ async function main() {
           : "hosted schema";
         console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
+        await client.query("savepoint contact_discovery_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint contact_discovery_smoke");
+        await client.query("release savepoint contact_discovery_smoke");
+        console.log("ok - consent-gated contact discovery, private verified index, quotas and deletion");
         await client.query("savepoint launch_profile_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/launch_profile_discovery.sql", import.meta.url)), "rollback"));
@@ -1288,6 +1294,8 @@ function runLinkedSmokeChecks(
   );
   // Each isolated suite needs the preview because the preceding suite rolls it back.
   const discoverPreviewSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(discoverSmokeSQL, "rollback")}\nrollback;`;
+  const contactDiscoverySmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
+    new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
   const launchProfileSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/launch_profile_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
   const socialImportAdmissionSmokeSQL = migrationPreviewPaths.length === 0
@@ -1324,7 +1332,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");

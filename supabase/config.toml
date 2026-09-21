@@ -478,3 +478,10 @@ enabled = true
 # Dedicated cron secret is checked before any lookup, signing or Slack work.
 verify_jwt = false
 entrypoint = "./functions/feedback-slack-worker/index.ts"
+
+[functions.contact-discovery]
+enabled = true
+# Clerk bearer authentication is verified through PostgREST in the handler.
+verify_jwt = false
+import_map = "./functions/contact-discovery/deno.json"
+entrypoint = "./functions/contact-discovery/index.ts"
