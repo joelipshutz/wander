@@ -93,47 +93,38 @@ changes, and becomes readable again if the member changes back to LA.
 
 ## Native CI evidence
 
-The `Home city and Events native validation` workflow runs the feature unit tests,
-onboarding and first-visit regression suites, and both feature UI suites on an
-existing iPhone 17 Pro. It repeats the UI suites on an existing iPhone 16e and
-exports original screenshots, result bundles, and a simulator app for review.
+[Native run 35637604171](https://github.com/joelipshutz/wander/actions/runs/35637604171)
+passed at app/test commit `57a4f7add4dc08dbc27feac243470d487091ea3a`:
 
-The initial full-unit run [35620835724](https://github.com/joelipshutz/wander/actions/runs/35620835724)
-finished with 2,380 passes and four failures on Pro; compact UI had seven passes
-and one failure. All 20 new feature unit tests passed. The feature UI failure was
-a parent accessibility identifier overriding the Settings Save button identifier;
-the parent identifier has been removed. Screenshot review also found the keyboard
-clipping the phone field, addressed by revealing the whole phone section when
-editing. The typing UI test now checks that its privacy note stays visible.
+- iPhone 17 Pro, iOS 26.5: 138 passed, zero failures or skips (129 selected
+  feature/onboarding unit tests and all nine feature UI flows).
+- iPhone 16e, iOS 26.2: all nine UI flows passed, zero failures or skips.
+- Captures include prefill, clearing, loading, worldwide matches, selected
+  Paris/Kyoto, no matches, retry, phone entry, country picker and Events states.
+- Selection remains confirmed when the keyboard commits text on focus loss;
+  Continue/Save stays enabled. The Settings LA → Irvine → Long Beach loop passed
+  on both phones without restarting or changing the selected Profile tab.
 
-Three full-suite failures were in unchanged areas: the glass-cluster source
-contract (`NavigationContractTests`), a search timing threshold (58.7 ms against
-50 ms on the hosted runner), and the calendar widget month-boundary snapshot.
-These are not hidden by a full-suite pass claim. The dedicated workflow now runs
-the relevant feature/onboarding suites; broader-suite failures remain release
-review items.
+The workflow artifacts contain original native screenshots, result summaries,
+full result bundles and the simulator app. Local live Apple search also returned
+Kyoto (resolved to Japan/+81) and São Paulo from an unaccented query. Review
+fixtures are deterministic; their two-second `Par` delay is absent in production.
+Swift 6 provider/model type checking also passed against the local iOS 26.3 SDK
+with iOS 17 as the deployment target.
 
-The follow-up [native run 35624797787](https://github.com/joelipshutz/wander/actions/runs/35624797787)
-passed all 116 selected unit tests and seven of eight UI tests on each phone. The
-keyboard/Save fixes compiled and the phone section is fully visible in both
-native captures. The remaining Settings loop failure occurred on its second
-Settings-open tap: XCTest chose (346.4, 78.4), outside the circular 44-point
-button centered at (364, 96). The first home save, Events removal and selected
-Profile assertion had already passed. The test now targets the button center;
-manual native LA → Orange County → LA passed without a restart. This test-only
-correction still needs its automated rerun before claiming all UI tests pass.
+The earlier full-unit run had three failures in unchanged areas: the glass-cluster
+source contract (`NavigationContractTests`), a search timing threshold (58.7 ms
+against 50 ms on the hosted runner), and the calendar widget month-boundary
+snapshot. Those remain broader release-review items. The passing run above covers
+the relevant feature/onboarding suites and is not a full-app suite pass claim.
 
-## Worldwide city update
+## Worldwide city persistence
 
-The owner-private payload now includes `home_city` (name, ISO country, region,
+The owner-private payload includes `home_city` (name, ISO country, region,
 county), with no exact coordinates. The server validates those fields and derives
 LA eligibility from the city even if a caller supplies a contradictory metro ID.
-Legacy saved metro records remain readable. The two migrations are still undeployed,
+Legacy saved metro records remain readable. The two migrations are undeployed,
 so the worldwide-city extension is included in the original draft migration.
-The existing full hosted rollback-only smoke suite passed after this change;
-a separate read verified that neither the new table nor RPC was left deployed.
-
-The new native run is [35632947649](https://github.com/joelipshutz/wander/actions/runs/35632947649)
-for commit `3a1258b`. Native validation is in progress; earlier captures show the
-superseded metro picker. Swift 6 type checking of the city provider/model passed
-against the local iOS 26.3 SDK with iOS 17 as the deployment target.
+The full hosted rollback-only smoke suite passed after this change; a separate
+read verified that neither the new table nor RPC was left deployed. Production
+cross-launch/cross-device acceptance requires deployment and a dedicated account.

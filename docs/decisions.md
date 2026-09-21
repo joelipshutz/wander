@@ -1,10 +1,10 @@
 # Decisions
 
-Last updated: 2026-09-18
+Last updated: 2026-09-21
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
-## Onboarding home metro and phone (REC-584)
+## Onboarding home city and phone (REC-584)
 
 Joe approved an editable home city prefilled from location and a phone input with
 the country dialing code selected from the detected country. These share the
@@ -14,23 +14,29 @@ The country code is separate from the national number; US numbers have ten
 national digits. Other countries use their numbering plan through PhoneNumberKit
 5.0.8. Phone remains optional pending any explicit decision to require it.
 
-The home selector contains major metro areas. Los Angeles follows Los Angeles
-County, including its smaller cities, with separate Orange County and Inland
-Empire choices. Approximate location is a suggestion, never proof of residence;
-no phone area code is used to infer home. Unavailable location leaves manual
-selection available. A saved choice wins over current travel location and can be
-edited in Settings → City & phone. A late geocoder result cannot replace edits.
+The home field searches worldwide cities inline through MapKit, with region and
+country labels to distinguish same-name places. It immediately shows Los Angeles
+as a fallback, then uses an already-authorized recent location or a bounded
+three-second lookup to suggest the current locality. Search debounces 150 ms,
+cancels superseded work, ignores stale responses and caches at most 20 queries.
+Only a selected completion gets a detail lookup; incomplete text cannot be saved.
+Approximate location is a suggestion, never proof of residence, and phone area
+codes do not infer home. A saved city wins over travel location and can be edited
+in Settings → City & phone. Late hydration/geocoding cannot replace edits. The
+phone country follows city selection until the user edits the phone or country.
 
-Home metro and optional unverified phone are private account data in separate
+Home city and optional unverified phone are private account data in separate
 owner-only RPCs, not public profile fields or verified contact-match identifiers.
-Only the coarse metro key is cached locally per account. Phone is excluded from
+City name, country, region and county are stored without exact coordinates. Only
+the coarse Events eligibility metro key is cached locally per account. Phone is excluded from
 analytics, session replay, raw RPC errors and local defaults. Hard and soft
 account deletion purge the private record. The public profile's freeform home
 area remains separate; Events uses the private confirmed metro.
 
-Events is visible only when the saved home metro is Los Angeles. Orange County,
-Inland Empire, other metros and unknown home areas have four tabs, preserving
-their order. Existing members can confirm their city in Settings → City & phone.
+Events is visible only when the saved city belongs to Los Angeles County,
+including smaller cities such as Long Beach and Pasadena. Client and server
+derive eligibility from country, region and county. Orange County, Inland Empire,
+other cities and unknown homes have four tabs, preserving their order. Existing members can confirm their city in Settings → City & phone.
 A request for a hidden Events tab falls back to Feed. Eligible first-visit
 walkthroughs still land on Map and follow the existing Map → Feed sequence.
 The per-account cached home keeps eligibility stable while offline or traveling;
