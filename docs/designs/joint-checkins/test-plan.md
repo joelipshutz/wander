@@ -1,6 +1,6 @@
 # Joint check-ins acceptance and regression matrix
 
-REC-566 · Baseline `fb1bad2` · September 21, 2026
+REC-566 · Initial baseline `fb1bad2`; reviewed against `8890e5a` · September 21, 2026 · 88 cases
 
 This is the required implementation test plan, not a claim that v2 tests already pass. The planning turn read source/tests, queried aggregate production counts read-only, and checked an interactive fictional preview. It did not change the app/database or run native builds. Use only synthetic accounts/content in automated tests.
 
@@ -8,13 +8,13 @@ This is the required implementation test plan, not a claim that v2 tests already
 
 ```text
 Server create/invite/accept -> version + consent + capacity + owned visit
-        |                      [V01–V08]       [L01–L17, D01–D08]
+        |                      [V01–V08]       [L01–L18, D01–D08]
         v
 Readable contributions -> canonical projection -> every surface
        [P01–P14]           [F01–F10]               [U01–U10]
         v
 One engagement identity -> comments/likes/share/push
-       [E01–E10] + privacy/alias cases above
+       [E01–E12] + privacy/alias cases above
         v
 Rollout / old clients / rollback / performance [R01–R08]
 ```
@@ -68,6 +68,7 @@ Layers: **SQL** = pgTAP and direct authenticated RPC fixtures; **race** = separa
 | L15 | Edit place/date after acceptance | Explicit detach/close flow; stale/legacy field update denied safely; note/photo edits still work | SQL, UI |
 | L16 | App killed/offline during accept, then response lost and retry | Per-account durable op ID, retained draft, server-confirmed accepted state only | store, UI |
 | L17 | Switch accounts with in-flight response; two owned edits conflict | No cross-account application; no overwritten unrelated contributions; revision conflict preserves draft | store |
+| L18 | Leave, receive standalone engagement, delete every comment/unlike, then rejoin; also race standalone write against rejoin | Permanent personal-thread marker survives zero engagement. Old links stay personal; group tile stays canonical. Concurrent identity resolution yields one legal outcome or a context-changed error, never silent retargeting | SQL, race, UI |
 
 ## Privacy, blocking and media
 
@@ -102,6 +103,8 @@ Layers: **SQL** = pgTAP and direct authenticated RPC fixtures; **race** = separa
 | E08 | Leave after commenting | Contribution removed; authored comments stay in canonical thread unless individually deleted; confirmation matches behavior; authors can still delete their own comment after losing thread access | SQL, UI |
 | E09 | Close canonical thread | No new writes/reads via aliases or legacy RPCs; retained records not reassigned to survivors | SQL |
 | E10 | Report group, contribution or comment | Correct target/author and authorized content; existing moderation routes functional | UI, SQL |
+| E11 | Joint comment commits, response is lost, author deletes on another device, original device retries | Durable receipt returns terminal deleted result, no recreated comment/push or deleted text. A changed body/target under the same request ID is a conflict | SQL, race, store |
+| E12 | Compose on unengaged detached personal visit, rejoin on another device, then submit old draft | Exact conversation target is checked; no automatic alias write to the group. Context-changed response preserves typed text, shows refreshed audience and requires explicit resubmission with a fresh request ID | SQL, store, UI |
 
 ## Surface consistency and accessibility
 
