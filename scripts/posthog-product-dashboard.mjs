@@ -640,7 +640,7 @@ const sections = [
   },
   {
     "title": "Notification Operations",
-    "body": "Joe and Ryan are excluded as recipients before server aggregation. Delivery trends start with external-recipient reporting; old mixed totals cannot be separated retrospectively. Frequency snapshots recompute the full last 30 days for eligible external recipients. APNs acceptance is not display. Opens/acceptances is a directional ratio, not recipient conversion, and may cross time windows. No recipient IDs or notification payloads are exported.",
+    "body": "Joe and Ryan are excluded as recipients before server aggregation. Delivery trends start with external-recipient reporting; old mixed totals cannot be separated retrospectively. Frequency snapshots recompute the full last 30 days for eligible external recipients. APNs acceptance is not display. Opens/acceptances is a directional ratio, not recipient conversion, and may cross time windows. These aggregate tiles contain no recipient identifiers or notification content. [Permission enablement and delivery by username](https://us.posthog.com/project/557259/dashboard/2120890) are on the dedicated diagnostics dashboard.",
     "insightKeys": [
       "notifications-accepted-volume",
       "notifications-delivery-health",
@@ -920,4 +920,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 }
 
-export { applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, appEntrySQL, remoteOpenRateSQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };
+export { api, listAll, upsertInsight, upsertSectionTile, productionSQL, applyDashboard, assertDefinition, insights, sections, retentionSQL, firstDayFollowSQL, activationSQL, appEntrySQL, remoteOpenRateSQL, clientProperties, staffExclusionSQL, INTERNAL_USER_IDS, withStaffExclusions, verifyDashboard };

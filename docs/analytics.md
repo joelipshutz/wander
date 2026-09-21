@@ -198,10 +198,14 @@ Apple Calendar analytics is aggregate-only. It must never include calendar event
 identifiers, titles, notes, attendees, URLs, addresses, place names, provider
 place IDs, reservation IDs, timestamps, or time zones.
 
-Notification operations are stricter: never export recipient IDs, event IDs,
-actor IDs, APNs IDs, device tokens, notification title/body, deep links, or
-notification `data` from the server. Keep per-recipient frequency computation
-inside Supabase and export only the aggregate summary and fixed histogram.
+Aggregate notification operations continue to export only counts. On September 21,
+Joe explicitly requested a username-searchable delivery dashboard. The separate
+`notification_recipient_snapshot` path may export the opaque account ID as
+`distinct_id`, public username, notification preference booleans, active production
+token count, and 30 UTC days of counts. It never exports notification/event IDs,
+actor IDs, APNs IDs, device tokens, titles/bodies, deep links, or notification `data`.
+This exception is limited to the authenticated PostHog diagnostics dashboard;
+client event sanitization remains unchanged.
 
 ## Provision the dashboard
 
@@ -276,3 +280,46 @@ Attribution is a bounded association, not proof of causality: a callback before 
 These two new events require a new app release. Historical session and click events cannot establish entry source retrospectively and are never presented as direct opens. All five Engagement additions apply the same production, staff, test-account, and automatic-follow exclusions as existing behavioral charts.
 
 Lightweight attribution validation (does not replace a native build): compile `Wander/Services/AnalyticsEvent.swift` and `scripts/app-entry-analytics-fixture.swift` together with `swiftc -swift-version 6 -parse-as-library`, then run the resulting executable. Dashboard contracts run with `npm --prefix scripts run analytics:check`. With scoped Astir PostHog credentials, `npm --prefix scripts run analytics:test-entry` validates the actual aggregation using temporary unsaved SQL insights (duplicates, orphan callbacks, source precedence, and unknowns); it never ingests product events and soft-deletes the fixtures.
+
+
+### Permissions and username delivery diagnostics
+
+`permission_status_observed` records seven system authorization states on an
+identified user's foreground activation: notifications, location, contacts,
+camera, microphone, Calendar full access, and photo-library add-only access.
+It reads authorization only and never prompts or accesses personal content.
+Unknown and not-yet-asked are separate. Limited contacts and provisional/ephemeral
+notifications count as enabled with a separate limited-access count. Calendar
+write-only cannot enable reservation import. The system photo picker requires no
+full-library permission and is not represented as denied library access.
+
+The latest status is per user/permission, not per device; with several devices it
+means the most recently observed device. The population overview covers identified
+production users active in the last 30 days, shows missing observation coverage,
+and divides enabled by all known statuses including not-yet-asked. Daily rates use
+the latest observation per person/permission/day. Historical onboarding results are
+separate: false can mean skipping as well as denying. New system observations need
+an app release; historical decisions are never promoted to current settings.
+
+`scripts/posthog-permissions-dashboard.mjs --apply` manages a separate Permissions
+& Notification Delivery dashboard. Use its `username` event-property filter with
+an exact username. The directory shows matching accounts; individual details appear
+only when exactly one account matches. Population permission charts remain global.
+
+The service-only `notification_recipient_analytics_snapshot(30)` recomputes the
+last 30 calendar days from the delivery ledger, including zero-send users and zero
+days. Accepted notifications use the earliest successful production-token result,
+once per notification even on multiple devices. Sandbox-only acceptance is excluded.
+Failed/skipped events use their outcome date; currently pending/claimed events use
+creation date. These are server intent outcomes and include missing-token skips.
+Opens are separate production client taps by tap date, not per-message receipts.
+APNs acceptance is not proof of display or reading.
+
+A separate reporting invocation of the existing worker runs every 15 minutes and
+never claims or sends notifications. It exports a complete generation marker after
+all recipient batches succeed; queries additionally require the expected number of
+unique recipients to have arrived. They choose the latest complete generation and
+refuse snapshots older than two days. Snapshot timestamps remain visible. A failed
+refresh therefore leaves the last complete snapshot visible with its original time,
+never a fabricated zero. Joe and Ryan are excluded in SQL, the worker, and dashboard
+queries. Existing test-person/cohort exclusions remain in the dashboard.

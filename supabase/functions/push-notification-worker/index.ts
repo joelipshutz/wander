@@ -1,4 +1,5 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
+import { recipientAnalyticsEvents, type RecipientSnapshot } from "./recipient-analytics.ts";
 
 export type PushToken = {
   id: string;
@@ -111,6 +112,20 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 
   const body = await readBody(req);
+  if (body.analytics_snapshot === true) {
+    // A read-only reporting invocation must never claim or send notifications.
+    if (!postHogProjectToken()) return Response.json({ error: "analytics_not_configured" }, { status: 503 });
+    const snapshot = await serviceRpc<RecipientSnapshot>("notification_recipient_analytics_snapshot", { input_window_days: 30 });
+    const { rows, completion } = recipientAnalyticsEvents(snapshot, INTERNAL_ANALYTICS_USER_IDS);
+    for (let offset = 0; offset < rows.length; offset += 100) {
+      if (!await capturePostHogEvents(rows.slice(offset, offset + 100))) {
+        return Response.json({ error: "snapshot_capture_failed" }, { status: 502 });
+      }
+    }
+    // Queries only expose a complete generation, never a partially exported directory.
+    if (!await capturePostHogEvents([completion])) return Response.json({ error: "snapshot_capture_failed" }, { status: 502 });
+    return Response.json({ snapshot_at: snapshot.snapshot_at, recipients: rows.length });
+  }
   const limit = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 20);
   const events = await serviceRpc<PushEvent[]>(
     "claim_pending_push_notifications",
@@ -185,7 +200,8 @@ async function processEvent(
 }
 
 // Analytics exclusion only: sending and settling notifications still runs for
-// every recipient. Keep IDs inside the worker, never in exported aggregates.
+// every recipient. Aggregate events remain anonymous; the separate, requested
+// recipient snapshot uses account identity only for username-searchable support diagnostics.
 export const INTERNAL_ANALYTICS_USER_IDS = new Set([
   "user_3EhATWssjvHxwGiUaoWR5VTgeoy", // Joe
   "user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc", // Ryan

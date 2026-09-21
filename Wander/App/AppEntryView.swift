@@ -194,6 +194,13 @@ struct AppEntryView: View {
         .onChange(of: notificationGateState, initial: true) { _, state in
             state.synchronize()
         }
+        .task(id: permissionObservationKey) {
+            guard let expectedUserID = permissionObservationKey else { return }
+            let events = await PermissionAnalytics.currentEvents()
+            // Async system reads must not attribute a former account's state to a new identity.
+            guard !Task.isCancelled, permissionObservationKey == expectedUserID else { return }
+            for event in events { analytics.track(event) }
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .background:
@@ -252,6 +259,16 @@ struct AppEntryView: View {
             },
             set: { auth.isPresentingNativeAuth = $0 }
         )
+    }
+
+    private var permissionObservationKey: String? {
+        guard scenePhase == .active, auth.isSessionValidated else { return nil }
+        switch coordinator.state {
+        case .onboarding(let session, _), .ready(let session, _):
+            return auth.state.session?.userID == session.userID ? session.userID : nil
+        default:
+            return nil
+        }
     }
 
     private func receiveIncomingURL(_ url: URL) {

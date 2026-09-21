@@ -394,3 +394,15 @@ stay outside AASA associations. Existing app visibility rules remain authoritati
 Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
+
+
+## 2026-09-21 — Username-scoped notification diagnostics (REC-581)
+
+Joe requested a permissions enablement dashboard and lookup by username of daily
+notification delivery. Permit the server's separate diagnostic snapshot to export
+public usernames and opaque account identity with preference booleans and daily
+counts to the existing authenticated Astir PostHog project. Continue excluding
+Joe/Ryan and keep notification content, device tokens, event IDs and actor identity
+out of this path. This is a specific exception to the former aggregate-only server
+analytics rule. Existing aggregate events and client sanitizer rules remain intact.
+Label successful sends as APNs acceptance, never confirmed device delivery.
