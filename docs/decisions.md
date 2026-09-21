@@ -424,5 +424,9 @@ Leaving/removal preserves the person’s visit and original date. Rejoining reus
 the surviving visit with new consent, preserves any standalone conversation, and
 never merges engagement. Starter deletion or Self/private transition permanently
 closes the joint conversation while preserving other people’s independent visits.
-A surviving starter visit gets a distinct solo engagement identity; the old group
-URL stays closed. These lifecycle and privacy rules are server release gates.
+The engineering refresh keeps a separate group event and personal visit event
+from creation; a surviving starter visit retains its own identity and the old
+group URL stays closed. This supersedes the initial retire-and-replace source
+anchor approach. The [implementation blueprint](designs/joint-checkins/implementation-blueprint.md)
+records exact schema, native integration and rollout/test order. These lifecycle
+and privacy rules are server release gates.

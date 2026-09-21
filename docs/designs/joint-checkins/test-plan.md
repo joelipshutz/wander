@@ -27,7 +27,7 @@ Layers: **SQL** = pgTAP and direct authenticated RPC fixtures; **race** = separa
 | --- | --- | --- | --- |
 | V01 | Upgrade schema over v1 groups with existing comments, likes and terminal invitations | IDs, values, authors, timestamps, statuses and engagement unchanged; default version legacy | SQL |
 | V02 | Accept an old pending invitation after rollout | Legacy independent visit/thread behavior; no retroactive shared audience | SQL, store |
-| V03 | Create a joint draft through v2 | Group and canonical event commit together; no intermediate legacy publication | SQL |
+| V03 | Create a joint draft through v2 | Personal visit/event, group and distinct canonical group event commit together; no intermediate legacy publication | SQL |
 | V04 | Add people to an already published solo check-in | Legacy behavior; no comment migration or canonical reparenting | SQL, UI |
 | V05 | Two unrelated people visit the same venue/minute | Remain separate groups/visits; no inference | SQL, store |
 | V06 | Legacy group has 20 people; new group reaches 10 including pending | Legacy remains intact; v2 accepts tenth and rejects eleventh atomically | SQL, race |
@@ -63,7 +63,7 @@ Layers: **SQL** = pgTAP and direct authenticated RPC fixtures; **race** = separa
 | L10 | Reinvite/reaccept surviving visit | New generation, same surviving visit, no doubled stats/activity | SQL, store |
 | L11 | Rejoin after standalone visit gains its own engagement | Standalone thread/links retained; no merging/retargeting; group tile uses canonical group thread | SQL, UI |
 | L12 | Delete nonowner visit | Only that membership detaches; others and group conversation survive | SQL, UI |
-| L13 | Starter deletes, switches Self/private, or account/source disappears | Permanent group closure, thread unavailable, pending cancelled, others’ visits survive; surviving starter visit gets distinct empty solo event without violating visit-event uniqueness | SQL, UI |
+| L13 | Starter deletes, switches Self/private, or account/source disappears | Permanent group closure, thread unavailable, pending cancelled, others’ visits survive; surviving starter visit retains its already-distinct personal event while the canonical group thread stays closed | SQL, UI |
 | L14 | Restore starter visibility/account/visit after closure | No implicit group resurrection, old links remain closed | SQL |
 | L15 | Edit place/date after acceptance | Explicit detach/close flow; stale/legacy field update denied safely; note/photo edits still work | SQL, UI |
 | L16 | App killed/offline during accept, then response lost and retry | Per-account durable op ID, retained draft, server-confirmed accepted state only | store, UI |
@@ -99,7 +99,7 @@ Layers: **SQL** = pgTAP and direct authenticated RPC fixtures; **race** = separa
 | E05 | Comment whitespace, Unicode, exactly 1,000 chars and over limit | Existing server contract respected, no empty/over-limit write, accurate validation | SQL, UI |
 | E06 | Child event deep link while grouped then detached | Active authorized alias resolves group; detach terminates alias; never leaks old thread through standalone visit | SQL, UI |
 | E07 | Nonowner edits/deletes starter or another person’s content | Denied; own note/rating/photo/comment permissions preserved | SQL |
-| E08 | Leave after commenting | Contribution removed; authored comments stay in canonical thread unless individually deleted; confirmation matches behavior | SQL, UI |
+| E08 | Leave after commenting | Contribution removed; authored comments stay in canonical thread unless individually deleted; confirmation matches behavior; authors can still delete their own comment after losing thread access | SQL, UI |
 | E09 | Close canonical thread | No new writes/reads via aliases or legacy RPCs; retained records not reassigned to survivors | SQL |
 | E10 | Report group, contribution or comment | Correct target/author and authorized content; existing moderation routes functional | UI, SQL |
 

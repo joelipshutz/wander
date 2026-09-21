@@ -1,8 +1,8 @@
 # Joint check-ins: one memory, individual contributions
 
-REC-566 · September 21, 2026 · Source baseline `fb1bad2`
+REC-566 · September 21, 2026 · Initial baseline `fb1bad2`; engineering refresh against `8890e5a`
 
-Joe approved the direction and delegated the edge-case and migration decisions. This is the implementation contract and an updated interactive preview, not a deployed feature. No production records were changed. Implementation and release validation remain to be done.
+Joe approved the direction and delegated the edge-case and migration decisions. This is the implementation contract and an updated interactive preview, not a deployed feature. No production records were changed. Implementation and release validation remain to be done. The [implementation blueprint](implementation-blueprint.md) now fixes the exact schema/RPC, native integration and test sequence; its separate group-event identity supersedes the original source-anchor approach.
 
 ## Product contract
 
@@ -26,7 +26,7 @@ Reasons: existing engagement belongs to a specific event and audience; old accep
 
 | Existing mechanism | Reuse / necessary extension |
 | --- | --- |
-| `shared_visit_groups`, participant generations, status transitions, operation ledger | Extend with an explicit version and a canonical event association; retain v1 semantics. Do not introduce a second invitation service. |
+| `shared_visit_groups`, participant generations, status transitions, operation ledger | Extend with an explicit version and a canonical event association; retain v1 semantics. Use a narrowly scoped v2 operation ledger because the legacy ledger allows only one accept per invitation generation. Do not introduce a second invitation service. |
 | Independent `place_visits` and their owned photos | Remain the source of personal history, edit permissions and statistics. Add only the association/projection needed for a shared card. |
 | `activity_likes`, `activity_comments`, narrow engagement RPCs | Continue using one `feed_events.id` as the conversation key. Add v2 authorization and idempotent comment creation. Do not copy engagement between events. |
 | `ActivityPostcardView`, `FeedModels`, engagement navigation | Extend with a typed joint payload and reuse the same component across feed, profiles, place history and detail. Avoid separate profile-only rendering logic. |
@@ -58,11 +58,11 @@ Owned visits ----> existing personal history / stats / chronological summary
 Legacy groups ---> unchanged legacy paths, event IDs and conversations
 ```
 
-Use the original source `feed_events.id` as the v2 canonical conversation anchor; store it once with a uniqueness constraint. Reuse the existing group ID, not a new unrelated post service. Event creation and group creation must be transactional: a v2 draft must not first publish a legacy event and change its comment audience afterward. The canonical event can project contributions from visible invitees even when the source contribution is not readable; v2 readers must therefore authorize the group projection explicitly instead of calling the legacy source-event predicate as the sole rule.
+Create one separate canonical row in the existing `feed_events` table for each v2 group, bound by a unique `shared_visit_group_id`; keep the starter’s personal visit event separate from the outset. Reuse the existing group ID and engagement tables, not a new post service. Personal visit, group, canonical event and pending invitations commit atomically: no v2 draft first publishes as legacy. The canonical projection may include visible invitees when the source contribution is hidden, so v2 readers authorize the group projection explicitly instead of using the legacy source-event predicate alone. See the blueprint for exact schema constraints and RPCs.
 
 Represent `(group, user)` membership once, link each active visit to at most one active joint group, and retain the former participant-to-visit association privately when a person leaves. Unengaged child event IDs can resolve to the canonical conversation only while the viewer can read the active group and that association is active. On detach, the alias ends immediately: the child becomes an independent visit with its own engagement identity and does not acquire old shared comments. Once a standalone event has received likes/comments, its ID stays permanently bound to that standalone conversation, including after rejoining. Rejoin makes the feed tile explicitly target the canonical group event; visit detail/history offers the preserved standalone discussion separately. Never merge engagement or display a duplicate feed tile. Canonical links to closed groups return unavailable; never redirect them to another person’s visit.
 
-When closure preserves the starter’s own visit (for example Self/private or detach-and-edit), its old canonical event cannot become the new solo conversation. In the closure transaction, retire the anchor from all read/engagement paths using its durable group association, clear its `visit_id` while retaining valid subject fields, and create a distinct standalone event for the surviving visit at its original date with empty engagement and no new notification. This respects `feed_events_explicit_visit_unique_idx` without reopening the canonical URL. A closed anchor with null `visit_id` must never fall back to legacy parent-place visibility. If the source visit was deleted, create no replacement. Preserve the group’s source-visit association and closed anchor for authorized lifecycle bookkeeping.
+When closure preserves the starter’s own visit, its independent personal event already exists. Keep that event and its original date; the separate canonical group conversation becomes permanently inaccessible. There is no event-ID reassignment, source-event retirement or synthetic replacement on closure. Closed canonical events must never fall back to legacy parent visibility, and no shared engagement is copied to surviving personal events.
 
 Group changes use server-generated revisions. Acceptance validates caller ownership, group version, lifecycle, generation, snapshot revision, eligibility and current privacy **before returning a cached operation result**. An authorized replay may return the original accepted result only while its membership/visit is still valid. A stale retry after removal or closure returns a terminal result without resurrection. Scope operation keys to caller, participant, generation and operation kind; validate payload consistency for retries.
 
@@ -138,7 +138,7 @@ Architecture findings: (1) historical event ownership prevents safe automatic co
 
 Code quality findings: (7) reuse typed core models/rendering instead of inferring from companions or duplicating profile cards; (8) authenticate before replay, persist operation IDs, and detect edit conflicts. Both are included. Performance finding: (9) batch/filter before pagination rather than app-side collapse or per-person queries. Included.
 
-Test review identifies six coverage areas beyond existing legacy tests: versioned rollout, permissions/discussion, lifecycle/races, personal-place preservation, surface parity and bounded reads. [The test plan](test-plan.md) provides named cases and the execution gate. Existing tests were read, not rerun, and none yet establishes the new v2 contract. An independent Codex reviewer found five concrete gaps (parent metadata, commenter consent, versioned gates, rejoin aliases, replay authorization) plus a nonowner-block case; all were incorporated. This is a plan review, not proof of implementation security.
+Test review identifies six coverage areas beyond existing legacy tests: versioned rollout, permissions/discussion, lifecycle/races, personal-place preservation, surface parity and bounded reads. [The test plan](test-plan.md) provides named cases and the execution gate. Existing tests were read, not rerun, and none yet establishes the new v2 contract. The current-main engineering refresh additionally fixes atomic first publication, distinct group/personal event IDs and the separate profile-row integration. An independent Codex reviewer found five concrete gaps (parent metadata, commenter consent, versioned gates, rejoin aliases, replay authorization) plus a nonowner-block case; all were incorporated. This is a plan review, not proof of implementation security.
 
 The interactive preview was refined to pin the subject’s own contribution on activity, use the current rating/visibility vocabulary, disclose the discussion audience, and distinguish authenticated post sharing from external venue-only sharing. It is a fictional local demonstration, not connected to production. Additional lifecycle states are specified and tested by the implementation matrix rather than presented as fake working backend behavior.
 
@@ -164,7 +164,7 @@ Execute T1 → T2 → T3 → T4 → T5. UI fixture exploration can accompany T1/
 | --- | --- | --- | --- | --- | --- |
 | CEO | Not invoked | Existing user-approved direction | 0 | Not run | User delegated routine edge-case/migration decisions. |
 | Independent Codex | Engineering outside review | Challenge compatibility/security | 1 | Incorporated | Five concrete findings plus nonowner block case incorporated. |
-| Engineering | `plan-eng-review` | Architecture, quality, tests, performance | 1 | Clear for planning | 6 architecture + 2 quality + 1 performance findings; 6 test coverage areas specified. |
+| Engineering | `plan-eng-review` | Architecture, quality, tests, performance | 2 | Clear for planning | 6 architecture + 2 quality + 1 performance findings; 6 test coverage areas specified. |
 | Design | Direct preview review | Feed/profile parity | 1 | Preview checked | Subject-first activity, accepted-only pile, 1–5 rating, audience disclosure. Native UI still requires implementation QA. |
 | DX | Not invoked | No developer-facing product | 0 | Not applicable | No new external API or SDK product. |
 

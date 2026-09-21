@@ -15,3 +15,11 @@ Completed in this planning pass:
 The prior preview pass also exercised shared comment addition across profile views, own note/rating edits, ten-person expansion, empty acceptance and decline. The preview has no server connection and does not simulate production authorization or lifecycle mutations.
 
 The 85-case implementation matrix is **not executed yet**. No native build, native UI test, new SQL contract test, concurrent database test, performance measurement, migration rehearsal or production rollout was performed. Those are required after implementation; see `test-plan.md`.
+
+## Engineering refresh requested before implementation
+
+Refreshed against current main `8890e5a`; the planning branch includes that main update. The new `implementation-blueprint.md` identifies the exact schema, RPC boundaries, native files, sync/publication sequence, profile integration, error behavior, batch reads and test/deployment checkpoints.
+
+Code inspection refined the canonical identity: a new group gets its own event in the existing event table while every personal visit keeps its own event. This removes the initial retire-and-replace source-event approach. The existing v1 operation ledger stays unchanged because its accept-only constraint and per-generation uniqueness cannot safely represent repeated group-management operations; a narrow v2 request ledger handles those retries.
+
+The refresh also identifies first-publication atomicity in `syncVisit`/the invitation queue, the separate profile activity renderer, retained staged text/media loading, author-owned comment deletion after lost thread access and the isolated-account rollback-only smoke command path. Local links, review report endings and all 85 unique case IDs were checked. No new preview, app code or production data was changed in this refresh.
