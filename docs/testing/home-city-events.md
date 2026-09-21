@@ -23,6 +23,7 @@ python3 ../.tools/ios-work.py build -- test \
   -project Wander.xcodeproj -scheme Wander \
   -destination 'platform=iOS Simulator,id=FD6770B4-AF24-4435-BD3F-301C706D51E2' \
   -only-testing:WanderTests/AccountContactDetailsTests \
+  -only-testing:WanderTests/HomeCitySearchTests \
   -only-testing:WanderTests/EventsAccessTests \
   -only-testing:WanderTests/OnboardingStateTests \
   -only-testing:WanderTests/OnboardingConnectionTests \
@@ -35,22 +36,39 @@ python3 ../.tools/ios-work.py build -- test \
 
 Repeat the two UI suites on existing iPhone 16e
 `6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C`. UI tests attach the form, keyboard,
-country picker, metro picker, and each Events eligibility layout to the result.
+country picker, inline city search states, and each Events eligibility layout to the result.
 
 ## What to check
 
-- Allow location: LA County cities such as Long Beach and Lancaster suggest
-  Los Angeles. Orange County and the Inland Empire remain separate. Denied,
-  missing or ambiguous location still permits manual selection.
-- Confirm or correct the city in the same form as the phone. US dialing code is
-  +1; enter fictional `2025550123`. Nine digits cannot save. A country change
-  updates the prefix and uses that country's phone validation. Blank phone is
-  allowed. Continue and Not now both advance to Contacts.
-- Check the keyboard's Done button, scrolling, picker search, VoiceOver labels
-  and large text on both phone sizes. No new permission request should appear
-  when the form reads location already authorized in the preceding step.
-- Change Settings → City & phone from LA to Orange County and back. Events
-  disappears/reappears immediately; the selected Profile tab stays selected.
+- The city field paints immediately with Los Angeles as the fallback. Existing
+  saved home takes priority. Otherwise, already-authorized location supplies its
+  locality without blocking editing; late hydration/geocoding cannot replace edits.
+  It reuses a recent authorized fix and cancels the background lookup after three seconds.
+- Clear the city and type `Par`: an inline dropdown distinguishes Paris, France
+  from Paris, Texas. Select France and check +33. Try Kyoto, Nairobi, São Paulo,
+  and non-Latin city names. The production provider uses worldwide MapKit locality
+  search, not the old fixed metro catalog. iOS 18+ uses locality-filtered completion;
+  iOS 17 uses one address search with city-only result filtering.
+- Search waits 150 ms after the last edit, cancels superseded requests, ignores
+  out-of-order responses, and keeps at most 20 recent queries in memory. Only the
+  selected completion gets a detail lookup. Empty input sends no request. Search
+  timeouts show retry copy; a partial query cannot be saved as a confirmed city.
+- The simulator review scheme uses deterministic search fixtures. `Par` deliberately
+  waits two seconds to capture the typing state; this delay is absent in production.
+  `zzzzcity` shows no matches and `offline` shows retry. Add launch argument
+  `-WanderHomeCityLiveSearch` to use real Apple city search with the same fictional
+  account; it still performs no account/SMS writes.
+- Confirm or correct the city in the same form as the phone. The country code
+  follows city selection until the phone/country is edited. US numbers need ten
+  national digits; use fictional `2025550123`. Blank phone is allowed. Continue
+  and Not now both advance to Contacts, preserving the existing step order.
+- Check the keyboard's Done button, scrolling, inline dropdown, VoiceOver labels
+  and large text on both phone sizes. The native screenshots cover initial,
+  cleared, typing, matching cities, selected Paris/Kyoto, no-match and offline states.
+- Change Settings → City & phone from LA to Irvine, then Long Beach. Events
+  disappears/reappears immediately; the selected Profile tab stays selected. LA
+  County metadata includes Pasadena, Long Beach and Lancaster; Orange County,
+  Ventura and Inland Empire cities do not qualify. No radius-based LA inference.
 - A completed member cold-starts on Feed. First-visit onboarding and Map → Feed
   walkthrough ordering and landing remain unchanged. An explicit hidden Events
   destination resolves to Feed without a blank tab.
@@ -104,3 +122,18 @@ button centered at (364, 96). The first home save, Events removal and selected
 Profile assertion had already passed. The test now targets the button center;
 manual native LA → Orange County → LA passed without a restart. This test-only
 correction still needs its automated rerun before claiming all UI tests pass.
+
+## Worldwide city update
+
+The owner-private payload now includes `home_city` (name, ISO country, region,
+county), with no exact coordinates. The server validates those fields and derives
+LA eligibility from the city even if a caller supplies a contradictory metro ID.
+Legacy saved metro records remain readable. The two migrations are still undeployed,
+so the worldwide-city extension is included in the original draft migration.
+The existing full hosted rollback-only smoke suite passed after this change;
+a separate read verified that neither the new table nor RPC was left deployed.
+
+The new native run is [35632947649](https://github.com/joelipshutz/wander/actions/runs/35632947649)
+for commit `3a1258b`. Native validation is in progress; earlier captures show the
+superseded metro picker. Swift 6 type checking of the city provider/model passed
+against the local iOS 26.3 SDK with iOS 17 as the deployment target.

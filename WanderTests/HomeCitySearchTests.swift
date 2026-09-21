@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 @testable import Wander
 
 @MainActor final class HomeCitySearchTests: XCTestCase {
@@ -18,6 +19,21 @@ import XCTest
         XCTAssertTrue(saved)
         XCTAssertEqual(repo.details?.homeCity, kyoto)
         XCTAssertEqual(repo.details?.metroID, "other")
+    }
+
+    func testLocationPrefillReusesRecentFixAndBoundsUnavailableLookup() async throws {
+        let live = CountingCityLocation()
+        let fix = CLLocation(latitude: 35.01, longitude: 135.77)
+        let provider = HomeMetroLocationProvider(locationProvider: live, recentLocation: { fix }, reverseGeocode: { _ in self.kyoto })
+        let result = try await provider.suggestion()
+        XCTAssertEqual(result?.city, kyoto)
+        XCTAssertEqual(live.calls, 0)
+        let unavailable = HomeMetroLocationProvider(locationProvider: live, recentLocation: { nil }, reverseGeocode: { _ in nil }, budget: .milliseconds(20))
+        do {
+            _ = try await unavailable.suggestion()
+            XCTFail("Expected the background location budget to cancel acquisition")
+        } catch is CancellationError { }
+        XCTAssertEqual(live.calls, 1)
     }
 
     func testNearestLocalityPrefillsAndSavedCityWinsOnNextLoad() async {
@@ -189,4 +205,13 @@ import XCTest
     var pending: CheckedContinuation<AccountContactDetails?, Never>?
     func currentDetails() async throws -> AccountContactDetails? { await withCheckedContinuation { pending = $0 } }
     func save(_ details: AccountContactDetails) async throws -> AccountContactDetails { details }
+}
+
+@MainActor private final class CountingCityLocation: CurrentLocationProviding {
+    var calls = 0
+    func currentLocation() async throws -> CLLocation {
+        calls += 1
+        try await Task.sleep(for: .seconds(30))
+        return CLLocation(latitude: 0, longitude: 0)
+    }
 }

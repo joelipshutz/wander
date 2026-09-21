@@ -261,7 +261,6 @@ struct AccountContactDetailsView: View {
         .background(AstirBrandMode.editorial.raisedBackground)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium).stroke(AstirBrandMode.editorial.border))
-        .accessibilityIdentifier("accountContactDetails.citySuggestions")
     }
 
 }
