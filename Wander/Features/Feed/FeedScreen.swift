@@ -996,6 +996,7 @@ private struct FeedPeopleSurface: View {
             .padding(.top, contentTopInset)
             .padding(.bottom, WanderTheme.spacing16)
         }
+        .accessibilityIdentifier("feed.people.scroll")
         .coordinateSpace(name: FeedScrollCoordinateSpace.people)
         .astirScrollTracking(
             coordinateSpaceName: FeedScrollCoordinateSpace.people,
