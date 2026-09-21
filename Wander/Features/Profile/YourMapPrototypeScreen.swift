@@ -192,6 +192,7 @@ struct YourMapPrototypeScreen: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .sessionReplayMasked()
             .onMapCameraChange(frequency: .onEnd) { context in
                 cameraRegion = context.region
             }

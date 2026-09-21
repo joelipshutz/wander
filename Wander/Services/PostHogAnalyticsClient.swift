@@ -51,8 +51,21 @@ final class PostHogAnalyticsClient: AnalyticsClient {
         configuration.captureApplicationLifecycleEvents = false
         configuration.captureScreenViews = false
         configuration.captureElementInteractions = false
-        configuration.enableSwizzling = false
-        configuration.sessionReplay = false
+        // Replay needs swizzling even though event autocapture stays disabled.
+        configuration.enableSwizzling = true
+        configuration.sessionReplay = true
+        // SwiftUI requires screenshot mode. Mask on-device before upload;
+        // MapKit surfaces are additionally masked in the view layer.
+        configuration.sessionReplayConfig.screenshotMode = true
+        configuration.sessionReplayConfig.maskAllTextInputs = true
+        configuration.sessionReplayConfig.maskAllImages = true
+        configuration.sessionReplayConfig.maskAllSandboxedViews = true
+        configuration.sessionReplayConfig.captureLogs = false
+        configuration.sessionReplayConfig.captureNetworkTelemetry = false
+        configuration.sessionReplayConfig.screenshotModeBackgroundCapture = false
+        configuration.sessionReplayConfig.throttleDelay = 1.0
+        // Keep sampling and the recording kill switch controllable in PostHog.
+        configuration.sessionReplayConfig.sampleRate = nil
         configuration.surveys = false
         configuration.errorTrackingConfig.autoCapture = false
         configuration.setDefaultPersonProperties = false
