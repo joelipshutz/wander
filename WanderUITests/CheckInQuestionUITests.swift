@@ -23,7 +23,7 @@ final class CheckInQuestionUITests: XCTestCase {
         capture("REC-567 check-in lists below Friends and above More options")
 
         let note = app.textFields["save.note"]
-        reveal(note, in: app)
+        reveal(note, in: app, upwards: false)
         note.tap()
         note.typeText("Keep this check-in draft")
         reveal(lists, in: app)
@@ -125,6 +125,7 @@ final class CheckInQuestionUITests: XCTestCase {
             XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 10))
             let lists = app.buttons["save.lists"]
             reveal(lists, in: app)
+            capture("REC-567 list row in repeat \(actionID)")
             lists.tap()
             let existing = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "map-list-picker.list.", "already in list"
