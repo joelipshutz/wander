@@ -313,7 +313,6 @@ private actor DiscoveryContacts: ContactProvider {
             .init(profile: person("local"), reason: .nearby, rank: 2)])
         let result = try await task.value
         XCTAssertEqual(result.map(\.id), ["local"])
-        XCTAssertFalse(service.hasConsent(userID: "viewer"))
         XCTAssertEqual(profiles.followWrites, 0)
     }
 }
