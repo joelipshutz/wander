@@ -305,6 +305,7 @@ private struct WanderRootTabContent<Content: View>: View {
 
 @MainActor
 struct WanderRootView: View {
+    @State private var needsContactRecommendationsRefresh = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.colorScheme) private var systemColorScheme
@@ -921,6 +922,10 @@ struct WanderRootView: View {
             // A tapped notification must not wait for permission, calendar or
             // background-maintenance network work on a cold authenticated launch.
             applyAuthStateIfNeeded(auth.state)
+            if needsContactRecommendationsRefresh {
+                needsContactRecommendationsRefresh = false
+                Task { await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true) }
+            }
             #if DEBUG
             if fixtureMode != .empty, !seededNotificationFixture,
                ProcessInfo.processInfo.arguments.contains("-WanderNotificationPostUITest") {
@@ -1128,7 +1133,21 @@ struct WanderRootView: View {
         ) { _, request in
             handleControlNavigationRequestIfReady(request)
         }
+        .onReceive(NotificationCenter.default.publisher(for: ContactDiscoveryService.didChange)) { _ in
+            store.clearContactRecommendations()
+            guard isSessionValidated else { return }
+            Task { await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SystemContactProvider.didChange).receive(on: DispatchQueue.main)) { _ in
+            backend.contactDiscovery.invalidateContactAccess()
+            store.clearContactRecommendations()
+            guard isSessionValidated, scenePhase == .active else { return }
+            Task { await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true) }
+        }
         .onChange(of: scenePhase) { _, phase in
+            backend.contactDiscovery.invalidateContactAccess()
+            store.clearContactRecommendations()
+            needsContactRecommendationsRefresh = true
             if phase == .background {
                 placeSaveDraftStore.flush()
                 walkthroughs.recordSuspension()

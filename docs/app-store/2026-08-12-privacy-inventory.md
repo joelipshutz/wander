@@ -1,6 +1,6 @@
 # rec.me App Store privacy inventory
 
-Updated: 2026-09-20
+Updated: 2026-09-21
 
 Owner: [REC-185](https://linear.app/recme/issue/REC-185/complete-app-store-privacy-manifests-labels-and-permission-audit)
 
@@ -11,7 +11,7 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 - Keep PostHog with explicit allowlisted events and the internal auth user ID. REC-582 adds screenshot-based session replay with text, images, system views and maps masked on-device; replay requires swizzling. Element capture, automatic screen/lifecycle events, surveys, crash autocapture, automatic person properties, console logs and network telemetry remain disabled. Project recording is still off pending native masking/playback validation. See [the replay activation checklist](../analytics.md#ios-session-replay) before release.
 - Add `$geoip_disable = true` to every PostHog event before it is queued. PostHog project `557259` was browser-verified on 2026-08-14 with **Discard client IP data** enabled. The rec.me personal API key still lacks `project:read`; the authenticated project setting is the current evidence source.
 - Declare no tracking and do not request App Tracking Transparency permission. rec.me does not combine its data with third-party data for targeted advertising, advertising measurement, or data-broker sharing.
-- Keep native Contacts. Access follows a contextual primer and reads name and phone fields locally. Address-book data is never uploaded or analytics-logged; selected phone numbers go only to Apple's Messages composer. The server-side social graph is still disclosed as Contacts because Apple's category includes social graphs.
+- Keep native Contacts. REC-560 adds a separate, optional Find friends consent: permitted phone numbers and email addresses are transmitted over TLS for an immediate authenticated match. Names, organizations, notes, addresses and contact photos are not part of matching. No uploaded address book, unmatched identifiers or contact edges are retained; a private HMAC index contains only opted-in members’ verified account identifiers. Contact values never enter analytics. The separate invitation flow remains local and passes only selected recipients to Messages. Existing iOS permission grants do not imply Find friends consent. See [contact discovery](../contact-discovery.md).
 - Do not declare device precise location as collected. Current location is used on-device for nearby MapKit results and the nearby widget, and is not uploaded or analytics-logged. Saved businesses carry their own place coordinates, which are place metadata rather than a device location trail.
 - Declare trusted-search history. The raw query is sent to the authenticated parsing function and AI provider to produce filters.
 - Treat Apple Calendar access as optional app functionality. EventKit rows are inspected locally; MapKit receives a bounded restaurant query, while rec.me services receive only a hashed occurrence key, matched place identity, reservation time, and time zone. Raw calendar identifiers, titles, notes, attendees, URLs, and addresses are not uploaded to rec.me.
@@ -64,7 +64,7 @@ Clerk receives account identifiers and contact information for authentication. S
 Mark these as collected and linked to the user, not used for tracking:
 
 - Contact Info: Name, Email Address, Phone Number — App Functionality.
-- Contacts — App Functionality. This declaration covers the rec.me social graph; device address-book rows remain on-device.
+- Contacts — App Functionality. This covers the social graph and optional contact matching. Phone/email matching inputs are processed transiently; verified opted-in member identifier tokens and account consent are retained. Reconcile the final privacy-policy and App Review copy with REC-560 before distributing the new binary.
 - User Content: Photos or Videos — App Functionality.
 - User Content: Other User Content — App Functionality and Product Personalization.
 - Search History — App Functionality and Product Personalization.
@@ -81,7 +81,7 @@ Do not declare precise or coarse device location unless the production archive o
 | Permission | Trigger | Behavior without access | Store/privacy treatment |
 |---|---|---|---|
 | Location When In Use | Nearby place search after contextual UI; nearby widget uses WidgetKit authorization | Manual search/map remains available | Used on-device; not collected |
-| Contacts | Invite entry point after contextual primer | Username search/share link remains available | Address book stays local; social graph disclosed |
+| Contacts | Optional Find friends in onboarding/Discover/Settings, or separate local invitations | General suggestions, username search and share links remain available | Explicit matching consent before transmitting permitted phone/email values; no retained address books; private verified-member index; local invitation flow unchanged |
 | Camera | User chooses to take a photo | Photo picker/manual save remains available | Uploaded chosen photos disclosed |
 | Photo Library Add | User chooses Save/Instagram/TikTok for generated share media | Standard share paths remain available | User-initiated write only |
 | Calendars Full Access | Profile → Settings → Privacy and trust → Permissions connection | Manual check-ins and every non-calendar feature remain available | Raw EventKit content is not collected; the derived restaurant/time reminder intent is covered by Other User Content |
