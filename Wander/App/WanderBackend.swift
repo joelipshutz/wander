@@ -198,6 +198,7 @@ final class WanderBackend: ObservableObject {
     let photoCacheScopeID = UUID()
     let featureFlagRepository: (any FeatureFlagRepository)?
     let profileRepository: (any ProfileRepository)?
+    let contactDiscovery: ContactDiscoveryService
     let profileAvatarRepository: (any ProfileAvatarRepository)?
     let followRepository: (any FollowRepository)?
     let blockRepository: (any BlockRepository)?
@@ -248,6 +249,8 @@ final class WanderBackend: ObservableObject {
             self.feedbackRepository = SupabaseFeedbackRepository(rpc: client, storage: client)
             self.featureFlagRepository = SupabaseFeatureFlagRepository(table: client)
             self.profileRepository = SupabaseProfileRepository(rpc: client)
+            self.contactDiscovery = ContactDiscoveryService(repository: SupabaseContactDiscoveryRepository(functions: client),
+                activeUserID: { [weak authSession] in authSession?.state.session?.userID })
             self.profileAvatarRepository = SupabaseProfileAvatarRepository(rpc: client, storage: client)
             self.followRepository = SupabaseFollowRepository(rpc: client)
             self.blockRepository = SupabaseBlockRepository(rpc: client)
@@ -275,6 +278,7 @@ final class WanderBackend: ObservableObject {
             self.feedbackRepository = nil
             self.featureFlagRepository = nil
             self.profileRepository = nil
+            self.contactDiscovery = ContactDiscoveryService(repository: nil, activeUserID: { nil })
             self.profileAvatarRepository = nil
             self.followRepository = nil
             self.blockRepository = nil
@@ -308,6 +312,7 @@ final class WanderBackend: ObservableObject {
             supabasePublishableKey: nil
         ),
         profileRepository: (any ProfileRepository)? = nil,
+        contactDiscovery: ContactDiscoveryService? = nil,
         profileAvatarRepository: (any ProfileAvatarRepository)? = nil,
         followRepository: (any FollowRepository)? = nil,
         blockRepository: (any BlockRepository)? = nil,
@@ -344,6 +349,7 @@ final class WanderBackend: ObservableObject {
         self.placePhotoDownloadLimiter = placePhotoDownloadLimiter
         self.featureFlagRepository = featureFlagRepository
         self.profileRepository = profileRepository
+        self.contactDiscovery = contactDiscovery ?? ContactDiscoveryService(repository: nil, activeUserID: { nil })
         self.profileAvatarRepository = profileAvatarRepository
         self.followRepository = followRepository
         self.blockRepository = blockRepository
@@ -761,6 +767,16 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await profileRepository.searchProfiles(handleQuery: handleQuery)
+    }
+
+    func peopleRecommendations(userID: String, limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {
+        async let contacts = try? contactDiscovery.matches(userID: userID)
+        async let general = try? discoverProfileRecommendations(limit: limit)
+        let (matched, suggested) = await (contacts, general)
+        try Task.checkCancellation()
+        guard suggested != nil || !(matched ?? []).isEmpty else { throw ContactDiscoveryError.unavailable }
+        let permittedMatches = await contactDiscovery.canUseResults(userID: userID) ? (matched ?? []) : []
+        return PeopleRecommendationMerge.combine(contacts: permittedMatches, general: suggested ?? [], limit: limit)
     }
 
     func discoverProfileRecommendations(limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {

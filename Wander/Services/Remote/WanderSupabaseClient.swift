@@ -632,6 +632,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             // otherwise abandon paid work before the bounded response.
             request.timeoutInterval = Self.socialImportUnderstandingTimeout
         }
+        if name == "contact-discovery" { request.timeoutInterval = 12 }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         requestContext.headers.forEach { key, value in

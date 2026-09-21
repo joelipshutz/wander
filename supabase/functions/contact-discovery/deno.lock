@@ -1,0 +1,11 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:libphonenumber-js@1.12.31": "1.12.31"
+  },
+  "npm": {
+    "libphonenumber-js@1.12.31": {
+      "integrity": "sha512-Z3IhgVgrqO1S5xPYM3K5XwbkDasU67/Vys4heW+lfSBALcUZjeIIzI8zCLifY+OCzSq+fpDdywMDa7z+4srJPQ=="
+    }
+  }
+}

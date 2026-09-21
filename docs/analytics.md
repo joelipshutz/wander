@@ -170,6 +170,10 @@ place ID, address, coordinates, or contributor identity.
 
 ## Privacy rules
 
+Published `/cards/...` links use the same coarse acquisition route as their
+canonical entity URL. Their preview token and entity identifier never enter
+analytics properties.
+
 Analytics must never receive:
 
 - place names, addresses, coordinates, notes, comments, messages, or raw searches;

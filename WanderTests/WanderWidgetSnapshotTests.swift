@@ -755,7 +755,8 @@ final class WanderCalendarWidgetSnapshotTests: XCTestCase {
 
         let schedule = WanderCalendarTimelineSchedule.make(
             startingAt: now,
-            snapshot: snapshot
+            snapshot: snapshot,
+            referenceCalendar: calendar
         )
         let components = schedule.entryDates.map {
             calendar.dateComponents([.year, .month, .day, .hour], from: $0)
