@@ -1144,7 +1144,6 @@ private struct ListDetailScreen: View {
                         ProgressView()
                             .tint(brandMode.accent)
                             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                            .wanderGlassCapsule()
                             .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
@@ -6043,11 +6042,10 @@ struct ListDetailHeaderActionLabel: View {
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
             .foregroundStyle(brandMode.primaryText)
             .contentShape(Circle())
-            .wanderGlassCapsule()
     }
 }
 
-/// The toolbar owns placement; each action owns its glass surface.
+/// Keep header actions unfilled, including the system toolbar background.
 struct ListDetailHeaderToolbar<Content: View>: ToolbarContent {
     @ViewBuilder let content: () -> Content
 

@@ -3,6 +3,11 @@
 September 20, 2026 · REC-549 · Owner Profile and List detail direction approved;
 member Profile added for Joe's design review.
 
+Latest refinement: remove the visible backgrounds from profile navigation icons
+and the custom list Add/More actions. Preserve their 44pt tap targets and the
+filled Edit/Follow/Share action row. The system-owned list Back control keeps
+its native navigation treatment and behavior.
+
 These are HTML-rendered design mockups with fictional profile/list content,
 not screenshots of a tested iOS build. The included SwiftUI changes are a draft
 of the same action placement and styling. Main and the launch checkout are
@@ -22,13 +27,15 @@ unchanged. Earlier profile-only work remains in draft PR #682.
 ## Owner profile
 
 Feedback moves to the leading edge. Notifications and hamburger Settings stay
-trailing. Edit profile and Share profile sit below Member since. Feedback
+trailing. These header icons float directly on the screen without glass,
+borders or shadows. Edit profile and Share profile sit below Member since. Feedback
 rollout, notification badge, profile header motion and walkthrough targets
 remain connected.
 
 ## Member profile
 
-Back stays leading and More stays trailing. Follow/Following/Friends and Share
+Back stays leading and More stays trailing, both with unfilled icon treatment.
+Follow/Following/Friends and Share
 profile sit below Member since using the same shared label as owner Profile and
 List detail. The existing relationship action still follows or opens unfollow
 confirmation; mutual connections retain the Friends label. Share uses the same
@@ -41,7 +48,8 @@ added. Activity, map, privacy rules, counts and header motion remain unchanged.
 
 ## List detail
 
-Back stays leading and Add places stays trailing. Edit list and Share list sit
+The native Back control stays leading; Add places and More use unfilled icons
+trailing. Edit list and Share list sit
 below owner/collaborator information and above the map. Edit remains subject to
 the existing permission check. Visitors see only Share; offline/local records
 without a shareable ID omit Share. Existing collaborator/leave/report controls
