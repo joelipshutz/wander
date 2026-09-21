@@ -132,6 +132,21 @@ import XCTest
         XCTAssertEqual(friend.label, "Following Contact Friend")
     }
 
+    func testOnboardingVerticalDragFromFollowDoesNotSubmit() {
+        let app = launch(["-WanderContactDiscoveryLongList", "-WanderContactDiscoveryDelayedFollow"])
+        let find = app.buttons["onboarding.contacts.findFriends"]
+        XCTAssertTrue(find.waitForExistence(timeout: 15)); find.tap()
+        let friend = app.buttons["onboarding.friends.follow.user_contact_friend"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10))
+        let originalY = friend.frame.minY
+        let start = friend.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -70)))
+        XCTAssertLessThan(friend.frame.minY, originalY - 20)
+        XCTAssertEqual(friend.label, "Follow Contact Friend")
+        XCTAssertTrue(friend.isEnabled)
+        capture("Onboarding vertical drag cancels Follow")
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)

@@ -21,8 +21,13 @@ import UIKit
         let curated = ProfileShell(id: "user_curated_rachel", handle: "rachelfixture", displayName: "Rachel (preview)", avatarURL: nil, bio: nil, relationship: .nonFollower)
         let local = ProfileShell(id: "user_local_friend", handle: "localfriend", displayName: "Local Friend", avatarURL: nil, bio: nil, homeArea: "Los Angeles", relationship: .nonFollower)
         let contact = contactIDs.contains(friend.id) ? [DiscoverPeopleRecommendation(profile: friend, reason: .contacts, rank: 2)] : []
-        let rows = [.init(profile: curated, reason: .suggested, rank: 1)] + contact
+        var rows = [.init(profile: curated, reason: .suggested, rank: 1)] + contact
             + [.init(profile: local, reason: .nearby, rank: 3), .init(profile: general, reason: .suggested, rank: 4)]
+        if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryLongList") {
+            rows += (5...20).map { index in
+                .init(profile: ProfileShell(id: "user_extra_\(index)", handle: "fixture\(index)", displayName: "Preview Friend \(index)", avatarURL: nil, bio: nil, relationship: .nonFollower), reason: .suggested, rank: index)
+            }
+        }
         return Array(rows.prefix(limit))
     }
     func follow(userID: String) async throws {
