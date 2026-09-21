@@ -1416,6 +1416,114 @@ final class PlaceImportAutoSavePolicyTests: XCTestCase {
 
 @MainActor
 final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
+    func testMultipleGooglePlacesDoNotImplyAListImport() async throws {
+        let importStore = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: PlaceImportSnapshot(ownerUserID: "user_live")),
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try importStore.enqueue(
+            source: .googleMaps, text: "First Cafe, Los Angeles\nSecond Cafe, Los Angeles",
+            automaticSaveRequested: true
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Tester", handle: "tester")))
+
+        let result = await PlaceImportAutoSaveCoordinator.process(
+            batchIDs: [batchID], importStore: importStore, store: store,
+            expectedUserID: "user_live", isAuthorized: { true }
+        )
+
+        XCTAssertEqual(result.addedCount, 2)
+        XCTAssertTrue(store.visiblePlaceLists.isEmpty)
+        XCTAssertNil(importStore.batches.first?.destinationListID)
+    }
+
+    func testSinglePlaceFromAnExplicitGoogleListFileKeepsItsList() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GoogleListFile-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        _ = try inbox.capture([
+            .file(Data("name,address\nClover Cafe,Los Angeles".utf8),
+                fileName: "Saved Places.csv", contentTypeIdentifier: "public.comma-separated-values-text")
+        ], saveIntent: .wanna)
+        let importStore = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: PlaceImportSnapshot(ownerUserID: "user_live")),
+            resolver: FakePlaceImportResolver()
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Tester", handle: "tester")))
+        let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: importStore)
+
+        let result = await PlaceImportAutoSaveCoordinator.process(
+            batchIDs: report.batchIDs, importStore: importStore, store: store,
+            expectedUserID: "user_live", isAuthorized: { true }
+        )
+
+        XCTAssertEqual(result.addedCount, 1)
+        XCTAssertEqual(store.visiblePlaceLists.count, 1)
+        XCTAssertEqual(store.visiblePlaceLists.first?.name, "Saved Places.csv")
+        XCTAssertEqual(store.visiblePlaceLists.first?.cachedItemCount, 1)
+        XCTAssertEqual(importStore.batches.first?.receipt?.destinationListID, store.visiblePlaceLists.first?.id)
+    }
+
+    func testSourceListProvenanceSurvivesPersistenceWithoutInferringLegacyTitles() throws {
+        let batch = PlaceImportBatch(
+            source: .googleMaps, sourceName: "Display title", sourceListName: "Imported favorites",
+            totalCount: 1
+        )
+        let encoded = try JSONEncoder().encode(batch)
+        XCTAssertEqual(try JSONDecoder().decode(PlaceImportBatch.self, from: encoded).sourceListName, "Imported favorites")
+
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy.removeValue(forKey: "sourceListName")
+        let decoded = try JSONDecoder().decode(PlaceImportBatch.self, from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertEqual(decoded.sourceName, "Display title")
+        XCTAssertNil(decoded.sourceListName, "Old titles cannot authorize new list creation")
+    }
+
+    func testSharedGooglePlaceWannaDoesNotCreateAnUnselectedList() async throws {
+        for title: String? in [nil, "Clover Cafe"] {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GooglePlaceWanna-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let inbox = SharedPlaceImportInbox(rootURL: root)
+            _ = try inbox.capture(
+                [.text("https://maps.app.goo.gl/single-place", suggestedName: title)],
+                saveIntent: .wanna
+            )
+            let finalURL = try XCTUnwrap(URL(string:
+                "https://www.google.com/maps/place/Clover+Cafe/data=!3d34.05!4d-118.25"
+            ))
+            let client = FakePlaceImportHTTPClient(responses: [
+                PlaceImportHTTPResponse(data: Data("".utf8), finalURL: finalURL,
+                    statusCode: 200, mimeType: "text/html")
+            ])
+            let importStore = PlaceImportStore(
+                persistence: InMemoryPlaceImportPersistence(snapshot: PlaceImportSnapshot(ownerUserID: "user_live")),
+                resolver: DevicePlaceImportResolver(
+                    placeResolver: FakeDevicePlaceResolver(candidates: []),
+                    googleListLoader: GoogleMapsSharedListImporter(httpClient: client)
+                )
+            )
+            let store = WanderStore(fixtures: WanderFixtures.empty())
+            store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Tester", handle: "tester")))
+            let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: importStore)
+
+            let result = await PlaceImportAutoSaveCoordinator.process(
+                batchIDs: report.batchIDs, importStore: importStore, store: store,
+                expectedUserID: "user_live", isAuthorized: { true }
+            )
+
+            XCTAssertEqual(result.addedCount, 1)
+            XCTAssertEqual(store.currentUserVisiblePlaces.first?.place.canonicalName, "Clover Cafe")
+            XCTAssertEqual(store.currentUserVisiblePlaces.first?.userPlace.status, .wannaGo)
+            XCTAssertTrue(store.visiblePlaceLists.isEmpty, "A shared title is not a list choice")
+            XCTAssertNil(importStore.batches.first?.destinationListID)
+            XCTAssertNil(importStore.batches.first?.receipt?.destinationListID)
+        }
+    }
+
     func testSourceRetryIsReceiptScanStatusInsteadOfAPlaceNeedingReview() async throws {
         let batchID = "partial-social-import"
         let candidate = placeImportCandidate(name: "Maru Coffee")
@@ -1536,6 +1644,7 @@ final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
                         id: batchID,
                         source: .googleMaps,
                         sourceName: "Ryan’s Bakeries",
+                        sourceListName: "Ryan’s Bakeries",
                         state: .ready,
                         totalCount: items.count,
                         processedCount: items.count,
@@ -1925,6 +2034,29 @@ final class GoogleMapsSharedListParserTests: XCTestCase {
 
 @MainActor
 final class GoogleMapsSharedListImporterTests: XCTestCase {
+    func testExtractsNamedQueryFromGenericGooglePage() async throws {
+        let url = try XCTUnwrap(URL(string: "https://www.google.com/maps?q=Woon+-+Filipinotown,+2920+W+Temple+St,+Los+Angeles,+CA+90026&ftid=0x80c2c721fe7e9aef:0xefee778dd712d955"))
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data(#"<meta property="og:title" content="Google Maps">"#.utf8),
+                finalURL: url, statusCode: 200, mimeType: "text/html"
+            )
+        ])
+
+        let result = await GoogleMapsSharedListImporter(httpClient: client)
+            .load(from: URL(string: "https://maps.app.goo.gl/single-place")!)
+
+        guard case .namedPlace(let seed) = result else {
+            return XCTFail("Expected named venue evidence, got \(result)")
+        }
+        XCTAssertEqual(seed.nameHint, "Woon - Filipinotown")
+        XCTAssertEqual(seed.areaHint, "2920 W Temple St, Los Angeles, CA 90026")
+        XCTAssertEqual(seed.sourceProviderPlaceID, "0x80c2c721fe7e9aef:0xefee778dd712d955")
+        XCTAssertNil(seed.latitude)
+        XCTAssertNil(seed.longitude)
+        XCTAssertEqual(client.requests.count, 1)
+    }
+
     func testLoadsTheBulkListEndpointInsteadOfTreatingTheLinkAsOneMapPin() async throws {
         let listURL = try XCTUnwrap(
             URL(string: "https://www.google.com/maps/@/data=!3m1!4b1!4m3!11m2!2slist_45!3e3")
@@ -1953,6 +2085,67 @@ final class GoogleMapsSharedListImporterTests: XCTestCase {
         XCTAssertEqual(list.seeds.count, 45)
         XCTAssertEqual(client.requests.count, 2)
         XCTAssertTrue(client.requests[1].url?.absoluteString.contains("4i1000") == true)
+    }
+}
+
+final class GoogleMapsSinglePlaceParserTests: XCTestCase {
+    func testNamedPathWinsOverAddressQueryAndPreservesPunctuation() throws {
+        let seed = try parse("https://www.google.com/maps/place/Bread+%26+Butter+-+East?q=123+Example+St,+Los+Angeles,+CA+90026")
+        XCTAssertEqual(seed?.nameHint, "Bread & Butter - East")
+        XCTAssertEqual(seed?.areaHint, "123 Example St, Los Angeles, CA 90026")
+    }
+
+    func testDoesNotSplitBusinessNameAtItsOwnCommaOrDecodeALiteralPlusAsSpace() throws {
+        let seed = try parse("https://www.google.com/maps?q=Salt,+Pepper+%2B+Co.,+123+Example+St,+Los+Angeles,+CA")
+        XCTAssertEqual(seed?.nameHint, "Salt, Pepper + Co.")
+        XCTAssertEqual(seed?.areaHint, "123 Example St, Los Angeles, CA")
+    }
+
+    func testUsesOnlyExplicitPlaceCoordinatesNotCameraCenter() throws {
+        let place = try parse("https://www.google.com/maps/place/Clover+Cafe/@40,-70,12z/data=!4m2!3d34.05!4d-118.25")
+        XCTAssertEqual(place?.latitude, 34.05)
+        XCTAssertEqual(place?.longitude, -118.25)
+        let camera = try parse("https://www.google.com/maps/place/Clover+Cafe/@40,-70,12z?ll=40,-70")
+        XCTAssertNil(camera?.latitude)
+        XCTAssertNil(camera?.longitude)
+        let invalid = try parse("https://www.google.com/maps/place/Clover+Cafe/data=!3d134!4d-118")
+        XCTAssertNil(invalid?.latitude)
+        XCTAssertNil(invalid?.longitude)
+        let multiple = try parse("https://www.google.com/maps/place/Clover+Cafe/data=!3d34!4d-118!3d35!4d-119")
+        XCTAssertNil(multiple?.latitude)
+        XCTAssertNil(multiple?.longitude)
+    }
+
+    func testUsesNamedPageMetadataForOpaquePlaceID() throws {
+        let seed = try parse(
+            "https://www.google.com/maps?q=place_id:ChIJ-example",
+            html: #"<meta property="og:title" content="Bread &amp; Butter · 123 Example St, Los Angeles, CA">"#
+        )
+        XCTAssertEqual(seed?.nameHint, "Bread & Butter")
+        XCTAssertEqual(seed?.areaHint, "123 Example St, Los Angeles, CA")
+        XCTAssertEqual(seed?.sourceProviderPlaceID, "ChIJ-example")
+    }
+
+    func testRejectsGenericAddressOnlyCoordinateAndNonMapsPages() throws {
+        for url in [
+            "https://www.google.com/maps?q=place_id:ChIJ-example",
+            "https://www.google.com/maps?q=123+Example+St,+Los+Angeles,+CA",
+            "https://www.google.com/maps?q=34.05,-118.25",
+            "https://consent.google.com/?name=Clover+Cafe",
+            "https://example.com/maps/place/Clover+Cafe",
+            "https://www.google.com/maps/dir/Clover+Cafe/Other+Cafe"
+        ] {
+            XCTAssertNil(try parse(url, html: #"<meta property="og:title" content="Google Maps">"#), url)
+        }
+    }
+
+    func testBusinessStartingWithANumberIsStillAName() throws {
+        XCTAssertEqual(try parse("https://www.google.com/maps?q=7+Leaves+Cafe,+123+Example+St")?.nameHint, "7 Leaves Cafe")
+        XCTAssertNil(GoogleMapsSinglePlaceParser.unqualifiedName("In-N-Out Burger"))
+    }
+
+    private func parse(_ value: String, html: String = "") throws -> PlaceImportSeed? {
+        GoogleMapsSinglePlaceParser.seed(from: try XCTUnwrap(URL(string: value)), html: html)
     }
 }
 
@@ -4030,6 +4223,7 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.items(for: batchID).count, 45)
         XCTAssertEqual(store.items(for: batchID).map(\.state), Array(repeating: .ready, count: 45))
         XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.sourceName, "Ryan's Bakeries")
+        XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.sourceListName, "Ryan's Bakeries")
         XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.totalCount, 45)
         XCTAssertEqual(store.summary.totalCount, 45)
     }
@@ -5413,6 +5607,111 @@ final class PlaceImportStoreTests: XCTestCase {
 
 @MainActor
 final class DevicePlaceImportResolverTests: XCTestCase {
+    func testGoogleQualifiedVenueUsesCoreNameOnlyAtTheSourceAddress() async throws {
+        let venue = placeImportCandidate(name: "Woon", address: "2920 W Temple St", latitude: 34.0742543, longitude: -118.2793242)
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "woon - filipinotown": [placeImportCandidate(name: "2920 W Temple St", address: "2920 W Temple St")],
+            "woon": [venue]
+        ])
+        let seed = try XCTUnwrap(GoogleMapsSinglePlaceParser.seed(
+            from: URL(string: "https://www.google.com/maps?q=Woon+-+Filipinotown,+2920+W+Temple+St,+Los+Angeles,+CA+90026&ftid=0x80c2c721fe7e9aef:0xefee778dd712d955")!,
+            html: ""
+        ))
+
+        let resolution = try await DevicePlaceImportResolver(placeResolver: placeResolver)
+            .resolve(seed: seed, source: .googleMaps)
+
+        guard case .candidates(let candidates, let selectedID) = resolution else {
+            return XCTFail("Expected named Google venue, got \(resolution)")
+        }
+        let candidate = try XCTUnwrap(candidates.first)
+        XCTAssertEqual(candidate.name, "Woon - Filipinotown")
+        XCTAssertEqual(candidate.address, "2920 W Temple St, Los Angeles, CA 90026")
+        XCTAssertEqual(candidate.latitude, venue.latitude)
+        XCTAssertEqual(candidate.longitude, venue.longitude)
+        XCTAssertEqual(candidate.sourceProvider, "google_maps")
+        XCTAssertEqual(selectedID, candidate.id)
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Woon - Filipinotown", "Woon"])
+    }
+
+    func testGoogleQualifiedNameDoesNotUseDifferentBranchOrUnlocatedResult() async throws {
+        let seed = PlaceImportSeed(
+            rawText: "Clover Cafe - East", nameHint: "Clover Cafe - East",
+            areaHint: "123 Example St, Los Angeles, CA 90026", sourceURLString: nil,
+            sourceLine: 1, sourceProvider: "google_maps", sourceProviderPlaceID: "google-place"
+        )
+        for candidates in [
+            [placeImportCandidate(name: "Clover Cafe", address: "456 Other St")],
+            [placeImportCandidate(name: "Clover Cafe", address: "123 Example St", locality: "San Diego")],
+            []
+        ] {
+            let resolver = DevicePlaceImportResolver(placeResolver: RoutingDevicePlaceResolver(routes: ["clover cafe": candidates]))
+            let result = try await resolver.resolve(seed: seed, source: .googleMaps)
+            guard case .needsHelp = result else {
+                return XCTFail("A mismatched or missing location must need review: \(result)")
+            }
+        }
+    }
+
+    func testOpaqueGooglePageDoesNotAutoSelectASoleAddress() async throws {
+        let url = URL(string: "https://www.google.com/maps?q=place_id:ChIJ-example")!
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(data: Data(#"<meta property="og:title" content="Google Maps">"#.utf8), finalURL: url, statusCode: 200, mimeType: "text/html")
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: [placeImportCandidate(name: "123 Example St")]),
+            googleListLoader: GoogleMapsSharedListImporter(httpClient: client)
+        )
+        let seed = PlaceImportSeed(rawText: url.absoluteString, nameHint: nil, areaHint: nil, sourceURLString: url.absoluteString, sourceLine: 1)
+        let result = try await resolver.resolve(seed: seed, source: .googleMaps)
+        guard case .needsHelp = result else { return XCTFail("An opaque link must need review, got \(result)") }
+    }
+
+    func testGooglePlaceIDAndNameWithoutAreaDoNotAuthorizeAnArbitraryBranch() async throws {
+        let placeResolver = FakeDevicePlaceResolver(candidates: [placeImportCandidate(name: "Clover Cafe")])
+        let resolver = DevicePlaceImportResolver(placeResolver: placeResolver)
+        let seed = PlaceImportSeed(
+            rawText: "Clover Cafe", nameHint: "Clover Cafe", areaHint: nil,
+            sourceURLString: nil, sourceLine: 1,
+            sourceProvider: "google_maps", sourceProviderPlaceID: "google-place"
+        )
+        let result = try await resolver.resolve(seed: seed, source: .googleMaps)
+        guard case .needsHelp = result else { return XCTFail("Missing location evidence must need review") }
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
+    func testGoogleSinglePlaceKeepsSourceNameWhenMapKitReturnsOnlyAnAddress() async throws {
+        let sharedURL = "https://maps.app.goo.gl/single-place"
+        let finalURL = try XCTUnwrap(URL(string:
+            "https://www.google.com/maps/place/Clover+Cafe/data=!4m2!3d34.05!4d-118.25"
+        ))
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data(#"<meta property="og:title" content="Clover Cafe · 123 Example St, Los Angeles, CA"><meta property="og:description" content="Restaurant">"#.utf8),
+                finalURL: finalURL,
+                statusCode: 200,
+                mimeType: "text/html"
+            )
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: [
+                placeImportCandidate(name: "123 Example St", latitude: 34.05, longitude: -118.25)
+            ]),
+            googleListLoader: GoogleMapsSharedListImporter(httpClient: client)
+        )
+        let store = PlaceImportStore(persistence: InMemoryPlaceImportPersistence(), resolver: resolver)
+
+        let batchID = try store.enqueue(source: .googleMaps, text: sharedURL)
+        await store.waitForProcessing(batchID: batchID)
+
+        let item = try XCTUnwrap(store.items(for: batchID).first)
+        XCTAssertEqual(item.seed.nameHint, "Clover Cafe")
+        XCTAssertEqual(item.selectedCandidate?.name, "Clover Cafe")
+        XCTAssertEqual(item.selectedCandidate?.latitude, 34.05)
+        XCTAssertEqual(item.selectedCandidate?.longitude, -118.25)
+        XCTAssertEqual(client.requests.count, 1)
+    }
+
     func testDoesNotAutoSelectALoneCandidateWithADifferentName() async throws {
         let wrongCandidate = placeImportCandidate(name: "Blue Daisy")
         let placeResolver = FakeDevicePlaceResolver(candidates: [wrongCandidate])
