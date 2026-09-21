@@ -6690,6 +6690,9 @@ private final class NativeMapContainerView: UIView {
 
     init() {
         super.init(frame: .zero)
+        // PostHog's UIKit masking token excludes map tiles, pins and location.
+        accessibilityIdentifier = "ph-no-capture"
+        mapView.accessibilityIdentifier = "ph-no-capture"
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(mapView)
     }

@@ -2493,6 +2493,7 @@ private struct ListMapPreview: View {
                     }
                 }
                 .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                .sessionReplayMasked()
                 .environment(
                     \.colorScheme,
                     store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
@@ -3473,6 +3474,7 @@ private struct ListMapFullScreen: View {
                         }
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .sessionReplayMasked()
                     .environment(
                         \.colorScheme,
                         store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light

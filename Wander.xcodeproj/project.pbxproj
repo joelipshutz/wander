@@ -79,6 +79,7 @@
 		20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */; };
 		21DB99956D5231546070A9D5 /* ListPlacePhotoResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */; };
 		22366D3693CFC2DA01B4FB7B /* rec-330-camera-preview-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 9C30A04EF44D39080C11F695 /* rec-330-camera-preview-pre.json */; };
+		242C3B809FA7868D4B3DFCAC /* SessionReplayPrivacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3224572209A0533F2B1B0A3 /* SessionReplayPrivacy.swift */; };
 		2447C6B234F4E1EFF58E5850 /* PlaceSaveAttributePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E6CB95ED3D17BAA6B69D2B /* PlaceSaveAttributePolicy.swift */; };
 		24AA5015511677E17DD8A5BC /* WanderNearbyWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */; };
 		24C727E03F36117FA1336129 /* rec-352-adaptive-map-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = CDE30E27D314EBCB2ED7F01A /* rec-352-adaptive-map-search-pre.json */; };
@@ -832,6 +833,7 @@
 		F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderLocalStore.swift; sourceTree = "<group>"; };
 		F2C4EF76F1E573B4E9454338 /* PlacePlanNotificationRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanNotificationRow.swift; sourceTree = "<group>"; };
 		F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRegionFitter.swift; sourceTree = "<group>"; };
+		F3224572209A0533F2B1B0A3 /* SessionReplayPrivacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReplayPrivacy.swift; sourceTree = "<group>"; };
 		F34E2861127F5EE79AF8571A /* SharedVisitComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedVisitComponents.swift; sourceTree = "<group>"; };
 		F421570464BDC2628C4013EC /* PlaceImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportTests.swift; sourceTree = "<group>"; };
 		F454C1F63367AD9A420BC986 /* PlaceCheckInObservationProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCheckInObservationProjectionTests.swift; sourceTree = "<group>"; };
@@ -1329,6 +1331,7 @@
 				98B104023B0E56EE2EDFF8E3 /* FullPageBackSwipe.swift */,
 				239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */,
 				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
+				F3224572209A0533F2B1B0A3 /* SessionReplayPrivacy.swift */,
 				77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */,
 				1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */,
 				58EF753986682D036EC50061 /* ZoomablePhoto.swift */,
@@ -2035,6 +2038,7 @@
 				DC93B6D45F927B63B3DD012D /* SaveStreak.swift in Sources */,
 				FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */,
 				03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */,
+				242C3B809FA7868D4B3DFCAC /* SessionReplayPrivacy.swift in Sources */,
 				13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */,
 				52DB8A084E2DAFF18AC7DE3B /* ShareCardArtwork.swift in Sources */,
 				082F64B2798DFD3CC49A4CBD /* ShareCardDesignMockups.swift in Sources */,

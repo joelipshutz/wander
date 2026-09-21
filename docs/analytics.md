@@ -18,7 +18,23 @@ Launch audit and rollout gates: [September 19 audit](reviews/2026-09-19-launch-a
 
 The product dashboard lives in PostHog because its funnels, trends, retention drill-down, and event inspector operate directly on the same explicit client events. A second dashboard inside rec.me would duplicate metric logic and require an analytics backend. The dashboard is still code-reviewed and reproducible: `scripts/posthog-product-dashboard.mjs` owns every managed insight and tile.
 
-PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product questions use explicit events only.
+PostHog autocapture, automatic screen/lifecycle capture, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product metrics use explicit events. Session replay is configured separately with on-device masking (REC-582).
+
+## iOS session replay
+
+`PostHogAnalyticsClient.sdkConfiguration` enables replay and the swizzling it requires. SwiftUI uses screenshot mode with text, images, and sandboxed system views masked before upload. Logs and network telemetry remain disabled. Screenshots are throttled to at most one per second; experimental background capture stays off. Existing identify/reset behavior associates recordings with the same opaque user IDs as analytics.
+
+MapKit tiles and pins can reveal locations even with text/image masking enabled. All SwiftUI maps use `sessionReplayMasked()`; the native main map and its container use PostHog's `ph-no-capture` accessibility identifier. Do not unmask private text, photos, maps, contacts, or authentication fields. Masked recordings are intended to show layout and interaction flow, not people's content. Simulator test sessions and native onboarding review fixtures retain their Noop analytics client.
+
+The [project recording switch](https://us.posthog.com/project/557259/settings/project-replay) must also be enabled. Local `sampleRate` remains unset so Mobile recording conditions control sampling remotely; disabling **Record user sessions** is the server-side kill switch. On September 20, 2026, browser inspection confirmed the switch was **off**, with log/network capture configured on behind that disabled switch. Activation is pending native privacy validation; turn log/network capture off when activating replay. This change cannot record sessions from older app builds or recover past sessions.
+
+Before enabling recording and distributing a build:
+
+1. Run `BuildConfigurationTests` and the full native test suite through the shared iOS build helper.
+2. With fictional data, verify replay on iOS 26 and an older supported OS. Inspect auth/onboarding, maps, profile, imports, lists, notes/comments, and system photo/contact pickers. Confirm text, images, map tiles/pins and location are concealed. The SDK cautions that manual SwiftUI masking can be inconsistent on iOS 26; configuration assertions alone do not prove visual masking.
+3. In project 557259, enable **Record user sessions**, disable console/network capture, and inspect **Mobile** sampling/conditions. Keep the current retention/billing plan. Use a controlled test build first and disable recording again if any masking check fails.
+4. Watch a synthetic session in [Session replay](https://us.posthog.com/project/557259/replay/home), verify interaction playback and identity reset on sign-out, and check scrolling/map responsiveness on a physical phone.
+5. Reconcile the privacy policy and App Store privacy disclosures with the verified recording behavior before distributing the next app build. Record native build/OS, replay evidence, masking and performance results in REC-582.
 
 ## Metric tree
 
