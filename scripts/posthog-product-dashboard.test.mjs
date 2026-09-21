@@ -208,7 +208,8 @@ test("first-day follow dashboard charts share a cohort query and expose rate, to
     assert.ok(section.insightKeys.includes(key));
     const { query } = insights.find(item => item.key === key);
     assert.equal(query.source.query, firstDayFollowSQL());
-    assert.equal(query.display, "ActionsLineGraph");
+    assert.equal(query.display, "ActionsBar");
+    assert.equal(query.chartSettings.showValuesOnSeries, true);
     assert.equal(query.chartSettings.xAxis.column, "cohort_day");
     assert.deepEqual(query.chartSettings.yAxis, [{ column }]);
   }

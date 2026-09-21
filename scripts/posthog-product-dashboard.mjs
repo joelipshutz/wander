@@ -84,11 +84,12 @@ const hogqlBar = (query, xAxis, yAxis) => ({
   },
 });
 
-const hogqlLine = (query, yAxis) => ({
+const hogqlDailyBars = (query, yAxis) => ({
   kind: "DataVisualizationNode",
   source: hogql(query),
-  display: "ActionsLineGraph",
+  display: "ActionsBar",
   chartSettings: {
+    showValuesOnSeries: true,
     xAxis: { column: "cohort_day" },
     yAxis: [{ column: yAxis }],
     showLegend: true,
@@ -235,17 +236,17 @@ from events where event = 'onboarding_permission_result' and ${productionSQL}
   {
     key: "activation-first-day-follow-rate", name: "First day — follow rate (%) over time",
     description: "Percent of new onboarding users who successfully follow at least one person in [first onboarding start, start + 24h). Includes onboarding follows and zero-follow users. Only fully observed users enter the rate; immature cohorts are blank. Cohort date in UTC; fixed last 90 days. Automatic default follows excluded.",
-    query: hogqlLine(firstDayFollowSQL(), "follow_rate_percent"),
+    query: hogqlDailyBars(firstDayFollowSQL(), "follow_rate_percent"),
   },
   {
     key: "activation-first-day-follow-count", name: "First day — total follow count over time",
     description: "Total successful follow actions in each user's first 24h from first onboarding start, grouped by onboarding cohort date (UTC), not action date. Only fully observed users; immature cohorts are blank. Fixed last 90 days. Excludes automatic defaults; re-follows count again. Not current following balance or distinct people followed.",
-    query: hogqlLine(firstDayFollowSQL(), "first_day_follows"),
+    query: hogqlDailyBars(firstDayFollowSQL(), "first_day_follows"),
   },
   {
     key: "activation-first-day-follows-per-user", name: "First day — average follows per new user over time",
     description: "Successful first-24h follow actions divided by all fully observed onboarding users, including those who followed nobody. Cohorts start at first onboarding start (UTC); includes onboarding follows, excludes automatic defaults. Fixed last 90 days. Blank means no mature users; re-follows count again.",
-    query: hogqlLine(firstDayFollowSQL(), "follows_per_user"),
+    query: hogqlDailyBars(firstDayFollowSQL(), "follows_per_user"),
   },
   {
     key: "activation-first-day-follow-cohorts", name: "First day — follow cohort counts and denominators",
