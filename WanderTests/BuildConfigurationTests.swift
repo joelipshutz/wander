@@ -456,11 +456,31 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertFalse(configuration.captureApplicationLifecycleEvents)
         XCTAssertFalse(configuration.captureScreenViews)
         XCTAssertFalse(configuration.captureElementInteractions)
-        XCTAssertFalse(configuration.enableSwizzling)
-        XCTAssertFalse(configuration.sessionReplay)
         XCTAssertFalse(configuration.surveys)
         XCTAssertFalse(configuration.errorTrackingConfig.autoCapture)
         XCTAssertFalse(configuration.setDefaultPersonProperties)
+        #endif
+    }
+
+    func testPostHogReplayMasksContentAndExcludesDiagnosticCapture() {
+        #if canImport(PostHog)
+        let configuration = PostHogAnalyticsClient.sdkConfiguration(
+            projectToken: "phc_recme_project",
+            host: "https://us.i.posthog.com"
+        )
+
+        XCTAssertTrue(configuration.enableSwizzling, "Replay requires swizzling")
+        XCTAssertTrue(configuration.sessionReplay)
+        let replay = configuration.sessionReplayConfig
+        XCTAssertTrue(replay.screenshotMode, "SwiftUI requires screenshot mode")
+        XCTAssertTrue(replay.maskAllTextInputs)
+        XCTAssertTrue(replay.maskAllImages)
+        XCTAssertTrue(replay.maskAllSandboxedViews)
+        XCTAssertFalse(replay.captureLogs)
+        XCTAssertFalse(replay.captureNetworkTelemetry)
+        XCTAssertFalse(replay.screenshotModeBackgroundCapture)
+        XCTAssertEqual(replay.throttleDelay, 1.0)
+        XCTAssertNil(replay.sampleRate, "Respect remote sampling")
         #endif
     }
 

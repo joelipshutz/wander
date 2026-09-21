@@ -1,6 +1,6 @@
 # rec.me App Store privacy inventory
 
-Updated: 2026-08-28
+Updated: 2026-09-20
 
 Owner: [REC-185](https://linear.app/recme/issue/REC-185/complete-app-store-privacy-manifests-labels-and-permission-audit)
 
@@ -8,7 +8,7 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 
 ## Decisions
 
-- Keep PostHog for launch, with tracking, replay, screen capture, element capture, surveys, crash autocapture, lifecycle autocapture, swizzling, and automatic person-property capture disabled. rec.me sends only explicit allowlisted events and identifies them with the internal auth user ID.
+- Keep PostHog with explicit allowlisted events and the internal auth user ID. REC-582 adds screenshot-based session replay with text, images, system views and maps masked on-device; replay requires swizzling. Element capture, automatic screen/lifecycle events, surveys, crash autocapture, automatic person properties, console logs and network telemetry remain disabled. Project recording is still off pending native masking/playback validation. See [the replay activation checklist](../analytics.md#ios-session-replay) before release.
 - Add `$geoip_disable = true` to every PostHog event before it is queued. PostHog project `557259` was browser-verified on 2026-08-14 with **Discard client IP data** enabled. The rec.me personal API key still lacks `project:read`; the authenticated project setting is the current evidence source.
 - Declare no tracking and do not request App Tracking Transparency permission. rec.me does not combine its data with third-party data for targeted advertising, advertising measurement, or data-broker sharing.
 - Keep native Contacts. Access follows a contextual primer and reads name and phone fields locally. Address-book data is never uploaded or analytics-logged; selected phone numbers go only to Apple's Messages composer. The server-side social graph is still disclosed as Contacts because Apple's category includes social graphs.
@@ -50,10 +50,12 @@ App Store privacy responses must include third-party behavior even when it belon
 |---|---:|---:|---|---|
 | User ID | Yes | No | Analytics | rec.me calls PostHog `identify` with the internal auth user ID |
 | Device ID | Yes | No | Analytics | PostHog creates an install-scoped device/anonymous ID and links it after identify |
-| Product interaction | Yes | No | Analytics | Explicit allowlisted product events |
-| Other usage data | Yes | No | Analytics | Coarse counts, states, sources, and error categories |
+| Product interaction | Yes | No | Analytics | Explicit allowlisted product events; masked replay interactions when activated |
+| Other usage data | Yes | No | Analytics | Coarse counts, states, sources, and error categories; masked replay layout/timing when activated |
 
 PostHog event properties must remain non-PII. Current policy forbids place names, notes, coordinates, emails, phone numbers, handles, raw searches, and imported content. Search analytics contains only length/result/latency buckets and fixed example IDs; the raw search is sent to the product parsing service, not PostHog.
+
+Replay snapshots use a separate SDK pipeline from event-property sanitization. Global masking and explicit map masks must be visually verified against the release candidate, especially on iOS 26. No recording has been verified for REC-582 yet. Reconcile the public privacy policy and App Store answers with observed replay data before distributing this behavior; the historic validation below does not validate replay.
 
 Clerk receives account identifiers and contact information for authentication. Supabase receives the app-owned product data listed above. The authenticated parsing service passes trusted-search text to the configured AI provider. Apple system frameworks receive selected message recipients and media only when the person explicitly invokes those system flows.
 
