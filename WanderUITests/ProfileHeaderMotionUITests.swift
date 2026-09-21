@@ -26,10 +26,16 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(identifier: "Settings").count, 1)
         capture("Owner pinned header")
 
-        app.buttons["Edit profile"].tap()
+        // Edit belongs to the scrollable identity block, below Member since.
+        let edit = app.buttons["Edit profile"]
+        for _ in 0..<6 where !edit.isHittable { app.swipeDown() }
+        XCTAssertTrue(edit.isHittable)
+        edit.tap()
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        app.swipeUp()
+        assertPinned(name: name, photo: photo)
         settings.tap()
         let settingsScreen = app.descendants(matching: .any)["settings.screen"]
         XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
