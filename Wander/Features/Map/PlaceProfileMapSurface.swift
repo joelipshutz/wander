@@ -3225,6 +3225,7 @@ private struct PlaceProfileMapHeader: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .sessionReplayMasked()
             .allowsHitTesting(false)
         } else {
             PlaceProfileMapFallback()
