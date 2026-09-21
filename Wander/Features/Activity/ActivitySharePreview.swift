@@ -232,7 +232,7 @@ struct ActivitySharePreviewScreen: View {
     @State private var shouldOpenSystemShareAfterMessagesDismiss = false
     @State private var shouldOpenSystemShareAfterInstagramDismiss = false
     @State private var isShowingPhotoSettingsAlert = false
-    @State private var isShowingExportError = false
+    @State private var preparationError: ShareCardPreparationError?
     @State private var tikTokFailureMessage: String?
     @State private var confirmationMessage: String?
 
@@ -341,10 +341,13 @@ struct ActivitySharePreviewScreen: View {
         } message: {
             Text("Please go to Settings > Astir and turn on Photos access.")
         }
-        .alert("Couldn't make the share image", isPresented: $isShowingExportError) {
+        .alert(preparationError?.title ?? "Couldn't share this item", isPresented: Binding(
+            get: { preparationError != nil },
+            set: { if !$0 { preparationError = nil } }
+        )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Try sharing this item again.")
+            Text(preparationError?.message ?? "Try sharing this item again.")
         }
         .alert(
             "Couldn't share to TikTok",
@@ -481,7 +484,7 @@ struct ActivitySharePreviewScreen: View {
                         let wannas = try await repository.wannaSaves(userPlaceIDs: [parentID])
                         resolvedCard = context.shareCard(resolving: wannas)
                     } catch {
-                        isShowingExportError = true
+                        if !Task.isCancelled { preparationError = .publicationFailure(error) }
                         return false
                     }
                 }
@@ -492,7 +495,10 @@ struct ActivitySharePreviewScreen: View {
         }
         guard let image = ShareCardRenderer.render(card, images: images, format: format, brand: brandMode),
               let fileURL = await WanderShareAttachmentStore.preparePNG(image)
-        else { isShowingExportError = true; return false }
+        else {
+            if !Task.isCancelled { preparationError = .artwork }
+            return false
+        }
         if let oldURL = renderedImageURL { await WanderShareAttachmentStore.removePreparedPNG(at: oldURL) }
         renderedImage = image
         renderedImageURL = fileURL
@@ -506,15 +512,22 @@ struct ActivitySharePreviewScreen: View {
         guard !isPublishing else { return nil }
         isPublishing = true
         defer { isPublishing = false }
-        guard await prepareArtworkIfNeeded(format: .link), let renderedImage,
-              let png = renderedImage.pngData() else { return nil }
         do {
-            guard let repository = backend.shareCardPreviewRepository else { throw WanderRemoteError.notConfigured }
-            let shared = try await repository.publish(content: content, previewPNG: png)
+            let shared = try await ShareCardLinkPreparation.prepare(
+                content: content, repository: backend.shareCardPreviewRepository
+            ) {
+                guard await prepareArtworkIfNeeded(format: .link), let renderedImage,
+                      let png = renderedImage.pngData() else {
+                    throw preparationError ?? ShareCardPreparationError.artwork
+                }
+                return png
+            }
             publishedContent = shared
             return shared
+        } catch is CancellationError {
+            return nil
         } catch {
-            isShowingExportError = true
+            preparationError = .publicationFailure(error)
             return nil
         }
     }
@@ -618,7 +631,7 @@ struct ActivitySharePreviewScreen: View {
             instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
             trackShareCompleted(destination: "instagram_post", outcome: "handoff")
         } catch {
-            isShowingExportError = true
+            preparationError = .artwork
         }
     }
 
@@ -636,7 +649,7 @@ struct ActivitySharePreviewScreen: View {
         do {
             localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
         } catch {
-            isShowingExportError = true
+            preparationError = .artwork
             return
         }
         UIPasteboard.general.url = shared.item
@@ -692,7 +705,7 @@ struct ActivitySharePreviewScreen: View {
             trackShareCompleted(destination: "save_photo", outcome: "saved")
             showConfirmation("saved to photos")
         } catch {
-            isShowingExportError = true
+            preparationError = .artwork
         }
     }
 

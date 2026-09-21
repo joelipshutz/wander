@@ -208,6 +208,13 @@ struct ProfileSettingsHome: View {
     private var privacySection: some View {
         Section("Privacy and safety") {
             NavigationLink {
+                ContactDiscoverySettingsScreen()
+            } label: {
+                Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
+            }
+            .accessibilityIdentifier("settings.contactDiscovery")
+
+            NavigationLink {
                 ProfilePrivacyTrustScreen()
             } label: {
                 Label("Privacy and trust", systemImage: "shield.lefthalf.filled")

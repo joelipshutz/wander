@@ -1,4 +1,5 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
+import { verifiedIdentifiers, type VerifiedContactUser } from "../_shared/contact-identifiers.ts";
 import { purgeAccountStorage } from "./account-purge.ts";
 import {
   canonicalProfileIDFromPayload,
@@ -222,6 +223,15 @@ async function mirrorClerkProfile(headers: Headers, event: ClerkProfileWebhookEv
     // the profile foreign key exists. If it fails, Svix retries the event;
     // duplicate profile events are safe and the mapping write is retried.
     await registerClerkIdentityMapping(user.id, profileID, supabaseFetch);
+    const identityUser = user as VerifiedContactUser;
+    const identityTimestamp = typeof identityUser.updated_at === "number"
+      ? new Date(identityUser.updated_at).toISOString() : mirroredEventTimestamp;
+    const discovery = await supabaseFetch("/rest/v1/rpc/sync_contact_discovery_identity", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input_clerk_user_id: user.id, input_user_id: profileID,
+        input_updated_at: identityTimestamp, input_identifiers: verifiedIdentifiers(identityUser) }),
+    });
+    if (!discovery.ok) throw new Error("contact_identity_sync_failed");
   }
 
   return await response.json();

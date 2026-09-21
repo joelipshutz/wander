@@ -8,8 +8,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: Y7TVK75RZ8
-    MARKETING_VERSION: "1.0.01"
-    CURRENT_PROJECT_VERSION: "178"
+    MARKETING_VERSION: "1.0.02"
+    CURRENT_PROJECT_VERSION: "179"
     WANDER_CLERK_FRONTEND_API: clerk.getrec.me
     WANDER_META_APP_ID: "1056841943950470"
     WANDER_SNAPCHAT_CLIENT_ID: 9ff6b79b-97ce-435c-bf7a-5176638246a0
@@ -110,7 +110,7 @@ targets:
         WANDER_SUPABASE_PUBLISHABLE_KEY: $(WANDER_SUPABASE_PUBLISHABLE_KEY)
         WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
         TikTokClientKey: $(WANDER_TIKTOK_CLIENT_KEY)
-        CFBundleDisplayName: ASTIR Movement
+        CFBundleDisplayName: ASTIR
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:
@@ -132,7 +132,7 @@ targets:
         NSCameraUsageDescription: Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.
         NSMicrophoneUsageDescription: Astir uses your microphone only when you choose to record a voice note for the Astir team with your feedback.
         NSCalendarsFullAccessUsageDescription: Astir reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.
-        NSContactsUsageDescription: Astir uses your contacts to help you connect with people you know.
+        NSContactsUsageDescription: Astir reads the contacts you allow to find friends or choose invitations. If you choose Find friends, phone numbers and emails are securely compared with verified Astir accounts; your address book is not saved on our servers.
         NSLocationWhenInUseUsageDescription: Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.
         NSPhotoLibraryAddUsageDescription: Astir saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.
         UILaunchScreen: {}

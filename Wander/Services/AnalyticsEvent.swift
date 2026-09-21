@@ -278,6 +278,11 @@ struct AcquisitionAttribution: Equatable {
     }
 
     private static func route(for components: URLComponents) -> String {
+        if components.path.hasPrefix("/cards/"), let url = components.url,
+           let target = WanderDeepLinkRoute.parse(url)?.url,
+           let canonical = URLComponents(url: target, resolvingAgainstBaseURL: false) {
+            return route(for: canonical)
+        }
         let path = components.path.lowercased()
         if path.hasPrefix("/invite/") || path.hasPrefix("/lists/invite/") { return "invite" }
         if path.hasPrefix("/import/") { return "import" }

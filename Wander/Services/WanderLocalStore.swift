@@ -317,6 +317,7 @@ final class WanderStore: ObservableObject {
     private var activityCommentsGeneration = UUID()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
+    private var discoverPeopleRecommendationsGeneration = 0
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
     var defaultVisibility: PlaceVisibility {
         willSet {
@@ -1197,6 +1198,7 @@ final class WanderStore: ObservableObject {
             }
             apply(session: session)
             if previousUserID != currentUser.id {
+                discoverPeopleRecommendationsGeneration += 1
                 discoverPeopleRecommendationsState = .idle
             }
             analytics.identify(userID: session.userID)
@@ -1206,6 +1208,7 @@ final class WanderStore: ObservableObject {
         case .signedOut, .unavailable:
             clearSessionScopedRemoteState()
             applySignedOutProfile()
+            discoverPeopleRecommendationsGeneration += 1
             discoverPeopleRecommendationsState = .idle
             analytics.resetIdentity()
             #if DEBUG
@@ -1548,6 +1551,7 @@ final class WanderStore: ObservableObject {
         saveStreakRecoveryDatesByUserID = [:]
         saveStreakCelebration = nil
         remoteVisiblePlaceCache = []
+        discoverPeopleRecommendationsGeneration += 1
         discoverPeopleRecommendationsState = .idle
         feedRefreshTask?.task.cancel()
         feedRefreshTask = nil
@@ -6141,6 +6145,7 @@ final class WanderStore: ObservableObject {
         }
         #endif
         guard let backend, backend.profileRepository != nil else {
+            discoverPeopleRecommendationsGeneration += 1
             discoverPeopleRecommendationsState = .idle
             return
         }
@@ -6155,14 +6160,13 @@ final class WanderStore: ObservableObject {
         }
 
         let requestingUserID = currentUser.id
+        discoverPeopleRecommendationsGeneration += 1
+        let generation = discoverPeopleRecommendationsGeneration
         discoverPeopleRecommendationsState = .loading
 
         do {
-            let recommendations = try await backend.discoverProfileRecommendations(limit: limit)
-            guard currentUser.id == requestingUserID else {
-                discoverPeopleRecommendationsState = .idle
-                return
-            }
+            let recommendations = try await backend.peopleRecommendations(userID: requestingUserID, limit: limit)
+            guard currentUser.id == requestingUserID, generation == discoverPeopleRecommendationsGeneration else { return }
 
             let visibleRecommendations = recommendations.filter { recommendation in
                 recommendation.profile.id != currentUser.id
@@ -6177,12 +6181,17 @@ final class WanderStore: ObservableObject {
             discoverPeopleRecommendationsState = .loaded(visibleRecommendations)
             lastRemoteError = nil
         } catch {
-            guard currentUser.id == requestingUserID else {
-                discoverPeopleRecommendationsState = .idle
-                return
-            }
+            guard currentUser.id == requestingUserID, generation == discoverPeopleRecommendationsGeneration else { return }
             lastRemoteError = remoteErrorMessage(error)
             discoverPeopleRecommendationsState = .failed
+        }
+    }
+
+    func clearContactRecommendations() {
+        discoverPeopleRecommendationsGeneration += 1
+        if case .loading = discoverPeopleRecommendationsState { discoverPeopleRecommendationsState = .idle }
+        if case .loaded(let recommendations) = discoverPeopleRecommendationsState {
+            discoverPeopleRecommendationsState = .loaded(recommendations.filter { $0.reason != .contacts })
         }
     }
 
