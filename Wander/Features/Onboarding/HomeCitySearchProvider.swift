@@ -5,6 +5,20 @@ import MapKit
     func resolve(_ suggestion: HomeCitySuggestion) async throws -> HomeCity
 }
 
+@MainActor enum HomeCitySearchProviderFactory {
+    static func make(arguments: [String] = ProcessInfo.processInfo.arguments) -> any HomeCitySearchProviding {
+        #if DEBUG && targetEnvironment(simulator)
+        // Fictional account/location fixtures must not limit manual city search.
+        // Only automated tests explicitly opt into the small deterministic list.
+        if arguments.contains("-WanderHomeCitySearchFixtures"),
+           !arguments.contains("-WanderHomeCityLiveSearch") {
+            return SimulatorHomeCitySearchProvider()
+        }
+        #endif
+        return MapKitHomeCitySearchProvider()
+    }
+}
+
 /// No country restriction or local search region: suggestions cover the world.
 /// One autocomplete request per settled query, one detail lookup on selection.
 @MainActor final class MapKitHomeCitySearchProvider: HomeCitySearchProviding {

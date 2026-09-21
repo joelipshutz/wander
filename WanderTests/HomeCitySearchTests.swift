@@ -5,6 +5,19 @@ import CoreLocation
 @MainActor final class HomeCitySearchTests: XCTestCase {
     private let kyoto = HomeCity(name: "Kyoto", countryCode: "JP", region: "Kyoto")
 
+    func testManualReviewUsesWorldwideSearchAndOnlyExplicitTestsUseCityFixtures() {
+        let cityReview = ["-WanderAuthenticatedUITest", "-WanderAccountContactDetailsUITest"]
+        let settingsReview = ["-WanderAuthenticatedUITest", "-WanderHomeMetroUITest", "los-angeles"]
+        XCTAssertTrue(HomeCitySearchProviderFactory.make(arguments: []) is MapKitHomeCitySearchProvider)
+        XCTAssertTrue(HomeCitySearchProviderFactory.make(arguments: cityReview) is MapKitHomeCitySearchProvider)
+        XCTAssertTrue(HomeCitySearchProviderFactory.make(arguments: settingsReview) is MapKitHomeCitySearchProvider)
+        #if DEBUG && targetEnvironment(simulator)
+        let testArguments = cityReview + ["-WanderHomeCitySearchFixtures"]
+        XCTAssertTrue(HomeCitySearchProviderFactory.make(arguments: testArguments) is SimulatorHomeCitySearchProvider)
+        XCTAssertTrue(HomeCitySearchProviderFactory.make(arguments: testArguments + ["-WanderHomeCityLiveSearch"]) is MapKitHomeCitySearchProvider)
+        #endif
+    }
+
     func testFallbackIsImmediateAndSearchIsNotLimitedToMetroCatalog() async {
         let repo = CityDetailsRepository()
         let model = AccountContactDetailsModel(userID: "fallback", repository: repo, location: CityLocation(nil))

@@ -13,13 +13,10 @@ struct AccountContactDetailsView: View {
     var body: some View {
         Group {
             if isOnboarding {
-                NavigationStack {
-                    OnboardingStepScaffold(step: .location) {
-                        content
-                    } footer: {
-                        actions
-                    }
-                    .toolbar(.hidden, for: .navigationBar)
+                OnboardingStepScaffold(step: .location) {
+                    content
+                } footer: {
+                    actions
                 }
             } else {
                 VStack(spacing: 0) {
@@ -57,12 +54,6 @@ struct AccountContactDetailsView: View {
             }
             .onChange(of: model.phoneIsValid) { _, _ in
                 revealPhoneSection(using: proxy)
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { phoneIsFocused = false; cityIsFocused = false; citySearch.cancel() }
             }
         }
         .sessionReplayMasked()
@@ -131,23 +122,17 @@ struct AccountContactDetailsView: View {
     }
 
     private var actions: some View {
-        VStack(spacing: WanderTheme.spacing1) {
-            WanderPrimaryButton(title: model.isSaving ? "Saving…" : (isOnboarding ? "Continue" : "Save"), isDisabled: !model.canSave) {
-                phoneIsFocused = false
-                cityIsFocused = false
-                citySearch.cancel()
-                Task { if await model.save() { continueAction() } }
-            }
-            .accessibilityIdentifier("accountContactDetails.continue")
-            if isOnboarding {
-                Button("Not now") { continueAction() }
-                    .font(AstirTypography.control)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                    .disabled(model.isSaving)
-                    .accessibilityIdentifier("accountContactDetails.skip")
-            }
+        WanderPrimaryButton(
+            title: model.isSaving ? "Saving…" : (isOnboarding ? "Continue" : "Save"),
+            systemImage: isOnboarding && !model.isSaving ? "arrow.right" : nil,
+            isDisabled: !model.canSave
+        ) {
+            phoneIsFocused = false
+            cityIsFocused = false
+            citySearch.cancel()
+            Task { if await model.save() { continueAction() } }
         }
+        .accessibilityIdentifier("accountContactDetails.continue")
     }
 
     private var citySection: some View {
@@ -164,8 +149,8 @@ struct AccountContactDetailsView: View {
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .focused($cityIsFocused)
-                .submitLabel(.done)
-                .onSubmit { cityIsFocused = false; citySearch.cancel() }
+                .submitLabel(.search)
+                .onSubmit { citySearch.update(model.cityText, force: true) }
                 .accessibilityLabel("Home city")
                 .accessibilityIdentifier("accountContactDetails.city")
                 if !model.cityText.isEmpty {

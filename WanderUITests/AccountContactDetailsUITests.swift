@@ -3,7 +3,7 @@ import XCTest
 @MainActor final class AccountContactDetailsUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestStep", "location", "-WanderAccountContactDetailsUITest"]
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestStep", "location", "-WanderAccountContactDetailsUITest", "-WanderHomeCitySearchFixtures"]
         app.launch()
         XCTAssertTrue(app.textFields["accountContactDetails.city"].waitForExistence(timeout: 10))
         let prefilled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Los Angeles"), object: app.textFields["accountContactDetails.city"])
@@ -23,7 +23,8 @@ import XCTest
         let phoneSectionIsVisible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: privacyNote)
         XCTAssertEqual(XCTWaiter.wait(for: [phoneSectionIsVisible], timeout: 5), .completed)
         capture(app, name: "02 — Phone keyboard")
-        app.buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["Done"].exists)
+        XCTAssertTrue(app.buttons["accountContactDetails.continue"].isHittable)
         app.buttons["accountContactDetails.continue"].tap()
         XCTAssertTrue(app.staticTexts["Connect with your people"].waitForExistence(timeout: 5))
     }
@@ -35,7 +36,6 @@ import XCTest
         phone.typeText("202555012")
         XCTAssertTrue(app.staticTexts["accountContactDetails.phoneError"].exists)
         XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
-        app.buttons["Done"].tap()
         app.buttons["accountContactDetails.country"].tap()
         capture(app, name: "03 — Country code picker")
         let search = app.searchFields.firstMatch
@@ -51,6 +51,8 @@ import XCTest
         app.buttons["accountContactDetails.clearCity"].tap()
         XCTAssertEqual(city.value as? String, "Search any city")
         XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
+        XCTAssertFalse(app.buttons["Done"].exists)
+        XCTAssertFalse(app.buttons["accountContactDetails.skip"].exists)
         capture(app, name: "Typeahead 02 — Cleared city")
         city.typeText("Par")
         XCTAssertTrue(app.staticTexts["Finding cities…"].waitForExistence(timeout: 2))
@@ -88,9 +90,14 @@ import XCTest
         capture(app, name: "Typeahead 08 — Connection unavailable")
     }
 
-    func testOptionalSkipPreservesNextOnboardingStep() {
+    func testContinueIsTheOnlyActionAndBlankPhoneCanAdvance() {
         let app = launch()
-        app.buttons["accountContactDetails.skip"].tap()
+        XCTAssertFalse(app.buttons["accountContactDetails.skip"].exists)
+        XCTAssertFalse(app.buttons["Not now"].exists)
+        XCTAssertFalse(app.buttons["Done"].exists)
+        let primary = app.buttons["accountContactDetails.continue"]
+        XCTAssertTrue(primary.isEnabled)
+        primary.tap()
         XCTAssertTrue(app.staticTexts["Connect with your people"].waitForExistence(timeout: 5))
     }
 

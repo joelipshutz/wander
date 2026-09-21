@@ -53,16 +53,20 @@ country picker, inline city search states, and each Events eligibility layout to
   out-of-order responses, and keeps at most 20 recent queries in memory. Only the
   selected completion gets a detail lookup. Empty input sends no request. Search
   timeouts show retry copy; a partial query cannot be saved as a confirmed city.
-- The simulator review scheme uses deterministic search fixtures. `Par` deliberately
-  waits two seconds to capture the typing state; this delay is absent in production.
-  `zzzzcity` shows no matches and `offline` shows retry. Add launch argument
-  `-WanderHomeCityLiveSearch` to use real Apple city search with the same fictional
-  account; it still performs no account/SMS writes.
+- Manual Xcode review schemes use live worldwide Apple city search with fictional
+  accounts. Search Portland and check Oregon/Maine results; select Oregon, confirm
+  +1, then continue. Account/location fixtures never imply a limited city catalog.
+  Only automated UI tests pass `-WanderHomeCitySearchFixtures` for deterministic
+  suggestions. In that explicit test mode, `Par` waits two seconds for the loading
+  capture, `zzzzcity` shows no matches and `offline` shows retry.
+  `-WanderHomeCityLiveSearch` overrides that fixture flag if both are present.
 - Confirm or correct the city in the same form as the phone. The country code
   follows city selection until the phone/country is edited. US numbers need ten
   national digits; use fictional `2025550123`. Blank phone is allowed. Continue
-  and Not now both advance to Contacts, preserving the existing step order.
-- Check the keyboard's Done button, scrolling, inline dropdown, VoiceOver labels
+  advances to Contacts, preserving the existing step order. There is no Not now
+  skip action; the confirmed city is saved even with a blank phone.
+- Continue is the only screen action and remains reachable with the phone keyboard
+  open. There is no separate Done toolbar. Check scrolling, dropdown, VoiceOver labels
   and large text on both phone sizes. The native screenshots cover initial,
   cleared, typing, matching cities, selected Paris/Kyoto, no-match and offline states.
 - Change Settings → City & phone from LA to Irvine, then Long Beach. Events
@@ -93,7 +97,7 @@ changes, and becomes readable again if the member changes back to LA.
 
 ## Native CI evidence
 
-[Native run 35637604171](https://github.com/joelipshutz/wander/actions/runs/35637604171)
+Baseline [native run 35637604171](https://github.com/joelipshutz/wander/actions/runs/35637604171)
 passed at app/test commit `57a4f7add4dc08dbc27feac243470d487091ea3a`:
 
 - iPhone 17 Pro, iOS 26.5: 138 passed, zero failures or skips (129 selected
@@ -107,8 +111,10 @@ passed at app/test commit `57a4f7add4dc08dbc27feac243470d487091ea3a`:
 
 The workflow artifacts contain original native screenshots, result summaries,
 full result bundles and the simulator app. Local live Apple search also returned
-Kyoto (resolved to Japan/+81) and São Paulo from an unaccented query. Review
-fixtures are deterministic; their two-second `Par` delay is absent in production.
+Kyoto (resolved to Japan/+81) and São Paulo from an unaccented query. The
+automated test fixtures are deterministic; their two-second `Par` delay is absent
+in production and manual review. The later Portland/one-action follow-up is
+tracked with its exact native run in PR #699 and REC-584.
 Swift 6 provider/model type checking also passed against the local iOS 26.3 SDK
 with iOS 17 as the deployment target.
 

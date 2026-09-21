@@ -12,7 +12,10 @@ existing Location step after its permission primer. The onboarding step order,
 founders welcome, first-visit walkthrough and their landing behavior stay intact.
 The country code is separate from the national number; US numbers have ten
 national digits. Other countries use their numbering plan through PhoneNumberKit
-5.0.8. Phone remains optional pending any explicit decision to require it.
+5.0.8. Phone remains optional; the label simply reads Phone number. This step
+uses the standard onboarding scaffold and one Continue action. It has no Not now
+skip action or separate keyboard Done toolbar; Continue saves the confirmed city
+and any entered phone before advancing to Contacts.
 
 The home field searches worldwide cities inline through MapKit, with region and
 country labels to distinguish same-name places. It immediately shows Los Angeles
@@ -24,6 +27,8 @@ Approximate location is a suggestion, never proof of residence, and phone area
 codes do not infer home. A saved city wins over travel location and can be edited
 in Settings → City & phone. Late hydration/geocoding cannot replace edits. The
 phone country follows city selection until the user edits the phone or country.
+Manual review schemes use the same worldwide provider as production; a limited
+city fixture list requires an explicit automated-test argument.
 
 Home city and optional unverified phone are private account data in separate
 owner-only RPCs, not public profile fields or verified contact-match identifiers.

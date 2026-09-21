@@ -3,7 +3,7 @@ import XCTest
 @MainActor final class EventsAccessUITests: XCTestCase {
     private func launch(metro: String, initialTab: String = "discover") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs", "-WanderHomeMetroUITest", metro, "-WanderInitialTab", initialTab]
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs", "-WanderHomeMetroUITest", metro, "-WanderInitialTab", initialTab, "-WanderHomeCitySearchFixtures"]
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 20))
         return app

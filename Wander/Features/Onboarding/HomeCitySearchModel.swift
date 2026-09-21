@@ -15,16 +15,7 @@ import Foundation
     private var recentQueries: [String] = []
 
     init(provider: (any HomeCitySearchProviding)? = nil, debounce: Duration = .milliseconds(150)) {
-        if let provider { self.provider = provider }
-        else {
-            #if DEBUG && targetEnvironment(simulator)
-            if !ProcessInfo.processInfo.arguments.contains("-WanderHomeCityLiveSearch") && (ProcessInfo.processInfo.arguments.contains("-WanderAccountContactDetailsUITest") || ProcessInfo.processInfo.arguments.contains("-WanderHomeMetroUITest")) {
-                self.provider = SimulatorHomeCitySearchProvider()
-            } else { self.provider = MapKitHomeCitySearchProvider() }
-            #else
-            self.provider = MapKitHomeCitySearchProvider()
-            #endif
-        }
+        self.provider = provider ?? HomeCitySearchProviderFactory.make()
         self.debounce = debounce
     }
 

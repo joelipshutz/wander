@@ -71,6 +71,10 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "-WanderHomeCityLiveSearch"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "-WanderHomeMetroUITest los-angeles"
             isEnabled = "YES">
          </CommandLineArgument>
