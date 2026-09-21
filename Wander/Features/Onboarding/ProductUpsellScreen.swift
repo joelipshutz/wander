@@ -17,7 +17,7 @@ struct ProductUpsellScreen: View {
         Group {
             if presentation.isOnboarding {
                 OnboardingStepScaffold(step: .notifications) {
-                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking, showsOnboardingExamples: true)
+                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking)
                 } footer: {
                     footer
                 }
@@ -150,29 +150,12 @@ struct ProductUpsellScreen: View {
 struct ProductUpsellContentView: View {
     let content: ProductUpsellContent
     let isWorking: Bool
-    var showsOnboardingExamples = false
-    private var accent: Color { AstirTheme.signal.color }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: WanderTheme.spacing6) {
-                if showsOnboardingExamples {
-                    OnboardingNotificationExamples()
-                        .padding(.top, WanderTheme.spacing6)
-                } else {
-                Spacer(minLength: WanderTheme.spacing4)
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(0.18))
-                        .frame(width: 220, height: 220)
-                    Image(systemName: content.systemImage)
-                        .font(.system(size: 86, weight: .medium))
-                        .foregroundStyle(accent)
-                        .symbolEffect(.bounce, value: isWorking)
-                }
-                .accessibilityHidden(true)
-
-                }
+                OnboardingNotificationExamples()
+                    .padding(.top, WanderTheme.spacing6)
 
                 OnboardingHeadline(
                     eyebrow: content.eyebrow,
@@ -194,7 +177,7 @@ struct ProductUpsellContentView: View {
 }
 
 /// Illustrative examples of supported notification types, rendered natively in
-/// the signup notification primer. They are not live account activity.
+/// every notification primer. They are not live account activity.
 struct OnboardingNotificationExamples: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
