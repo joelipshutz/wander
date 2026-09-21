@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap;
-select no_plan();
+select plan(42);
 
 select has_table('public', 'activity_comment_likes', 'comment likes have a separate table');
 select ok((select relrowsecurity from pg_class where oid = 'public.activity_comment_likes'::regclass), 'comment likes enforce RLS');
