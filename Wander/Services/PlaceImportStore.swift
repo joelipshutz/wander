@@ -167,15 +167,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             switch await googleListLoader.load(from: sourceURL) {
             case .list(let list):
                 return .expanded(list.seeds, sourceName: list.name)
-            case .singlePlace(let expandedURLString):
-                do {
-                    let candidates = try await placeResolver.resolveLink(
-                        LinkPlaceInput(rawValue: expandedURLString)
-                    )
-                    return candidateResolution(candidates, seed: seed)
-                } catch {
-                    return .needsHelp("No matching Apple Maps place was found for this link.")
-                }
+            case .namedPlace(let placeSeed):
+                return .expanded([placeSeed], sourceName: nil)
+            case .singlePlace:
+                return .needsHelp("This Google Maps link did not expose a place name. Add the name and nearby city to match it.")
             case .unavailable(let message):
                 return .needsHelp(message)
             }
@@ -888,6 +883,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     }
 
     private func googleSeedResolution(_ seed: PlaceImportSeed, name: String) async -> PlaceImportResolution {
+        guard normalized(seed.areaHint) != nil || (seed.latitude != nil && seed.longitude != nil) else {
+            return .needsHelp("The Google Maps place name was found, but its location could not be confirmed. Search for the correct place.")
+        }
         var candidates: [PlaceCandidate] = []
 
         if let latitude = seed.latitude,
@@ -920,10 +918,38 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             )
         }
 
-        let enrichment = match.selectedCandidateID.flatMap { selectedCandidateID in
+        var enrichment = match.selectedCandidateID.flatMap { selectedCandidateID in
             match.candidates.first(where: { $0.id == selectedCandidateID })
         }
+        // Google may call a venue "Woon - Filipinotown" while Apple indexes
+        // "Woon". A shortened name can enrich only the same source address;
+        // it must never select another branch just because its name matches.
+        if enrichment == nil,
+           normalized(seed.areaHint) != nil,
+           let coreName = GoogleMapsSinglePlaceParser.unqualifiedName(name),
+           let coreCandidates = try? await placeResolver.resolveManualEntry(
+               ManualPlaceInput(name: coreName, areaHint: seed.areaHint, category: nil)
+           ) {
+            let sameAreaCandidates = coreCandidates.filter {
+                PlaceImportGeography.candidateStronglyMatchesArea($0, areaHint: seed.areaHint)
+            }
+            let coreMatch = PlaceImportCandidateMatcher.match(
+                sameAreaCandidates,
+                nameHint: coreName,
+                areaHint: seed.areaHint,
+                latitude: seed.latitude,
+                longitude: seed.longitude
+            )
+            enrichment = coreMatch.selectedCandidateID.flatMap { id in
+                coreMatch.candidates.first(where: { $0.id == id })
+            }
+        }
         let candidate = authoritativeGoogleCandidate(seed: seed, name: name, enrichment: enrichment)
+        guard let latitude = candidate.latitude, let longitude = candidate.longitude,
+              CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
+        else {
+            return .needsHelp("The Google Maps place name was found, but its location could not be confirmed. Search for the correct place.")
+        }
         return .candidates([candidate], selectedCandidateID: candidate.id)
     }
 
