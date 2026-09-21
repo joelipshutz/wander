@@ -276,14 +276,28 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     private static func parseUniversalLink(
         components: URLComponents
     ) -> Self? {
-        let segments = pathSegments(from: components)
+        var segments = pathSegments(from: components)
+        var targetComponents = components
+        if segments.first == "cards" {
+            // The token selects the web preview only. Native navigation uses
+            // the same target and authorization as its query-free entity link.
+            let roots = ["profiles", "places", "activities", "lists", "invites"]
+            guard segments.count == 3, roots.contains(segments[1]),
+                  let items = components.queryItems, items.count == 1,
+                  items[0].name == "card", let token = items[0].value,
+                  token.utf8.count == 48,
+                  token.range(of: "^[a-f0-9]{48}$", options: .regularExpression) != nil
+            else { return nil }
+            segments.removeFirst()
+            targetComponents.percentEncodedQuery = nil
+        }
         guard segments.count == 2,
               let root = segments.first,
               let identifier = segments.last,
               isValidSharedIdentifier(
                 identifier,
                 root: root,
-                components: components
+                components: targetComponents
               )
         else {
             return nil
