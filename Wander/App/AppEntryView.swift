@@ -87,8 +87,6 @@ struct AppEntryView: View {
             switch coordinator.state {
             case .launching:
                 OnboardingLaunchView()
-                    .environment(\.onboardingVisualTreatment, OnboardingWelcomeConfiguration.current.visualTreatment)
-                    .environment(\.onboardingFilmMotion, true)
             case .signedOut:
                 SignedOutOnboardingFlowView(analytics: analytics)
             case .onboarding(let session, let step):
@@ -102,6 +100,11 @@ struct AppEntryView: View {
             case .ready(let session, let firstVisitWalkthroughEligible):
                 FoundersWelcomeGate(userID: session.userID, isEligible: firstVisitWalkthroughEligible) {
                     WanderRootView(
+                        // Only seed the root selection; the mounted tab state and
+                        // onboarding/NUX routing continue to own later navigation.
+                        initialTab: WanderRootView.resolvedInitialTab(
+                            defaultTab: firstVisitWalkthroughEligible ? .map : .discover
+                        ),
                         initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
                         initialSession: session,
                         isSessionValidated: auth.isSessionValidated,

@@ -3226,7 +3226,38 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testReturningUserLaunchDefaultsToFeedAndPreservesExplicitDestinations() {
+        for arguments in [
+            ["Wander"],
+            ["Wander", "-WanderInitialTab"],
+            ["Wander", "-WanderInitialTab", "nope"]
+        ] {
+            XCTAssertEqual(
+                WanderRootView.resolvedInitialTab(from: arguments, defaultTab: .discover),
+                .discover
+            )
+        }
+        for tab in WanderTab.primaryTabs {
+            XCTAssertEqual(
+                WanderRootView.resolvedInitialTab(
+                    from: ["Wander", "-WanderInitialTab", tab.rawValue],
+                    defaultTab: .discover
+                ),
+                tab
+            )
+        }
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialTab(
+                from: ["Wander", "-WanderInitialTab", "add"], defaultTab: .discover
+            ),
+            .map
+        )
+    }
+
+    @MainActor
     func testRootViewCanResolveInitialTabForVisualQA() {
+        XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander"], defaultTab: .map), .map)
+        XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander"]), .map)
         XCTAssertEqual(
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "discover"]),
             .discover
