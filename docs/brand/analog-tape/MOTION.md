@@ -1,5 +1,34 @@
 # Motion and signal-failure brief
 
+## Current splash/account revision — September 20, 2026
+
+Joe selected the bend around 1.8 seconds, requested a half-second duration and
+removed the flicker. This revision changes the **splash/account proposals**;
+the preserved Events source and its timing tables below remain historical truth.
+
+- First tracking event: source clock **1.55 ≤ t < 2.05 seconds** (0.50 s; 12
+  sample times at 24 fps), centered on 1.80 s.
+- Its original shader waveform, 1.68–1.88 s, is stretched across that half second:
+  `faultTime = 1.68 + (shaderLoopTime - 1.72) * 0.4`. This slows the existing
+  shape change rather than introducing additional rapid direction reversals.
+- The other two geometric faults keep their original timing. Their brightness
+  collapse is also removed.
+- Artwork opacity is a constant **0.94**. The old density/dropout sequence is
+  not executed. Shader luminance pulse and event-band darkening are removed.
+- The raw background is held at source 0.40 s; coarse grain, fine grain, flecks
+  and streaks use fixed seeds. This removes random brightness refresh as well
+  as whole-logo blinking, while keeping the worn material.
+- Row displacement, fine timing error, chroma registration and vertical slip
+  still move. A changing silhouette is intentional; opacity flashing is not.
+- Replay starts at source **1.40 s**, so the selected bend begins after 0.15 s
+  and finishes after 0.65 s. The short preview is still 1.8 seconds long; the
+  burst itself is 0.5 seconds. Neither value changes native launch timing.
+- “Show a tear” holds source **1.80 s**. The original Events movie is explicitly
+  labeled as a comparison that retains its original flicker.
+
+The following sections preserve the original Events recipe and v2 rationale.
+Where those differ, the current revision above governs splash/account playback.
+
 ## Intent
 
 Use the movement of the approved Events 03C film. It behaves like a compromised

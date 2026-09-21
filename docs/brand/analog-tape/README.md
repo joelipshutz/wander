@@ -9,6 +9,11 @@ same texture and animation without reconstructing the exploration from chat.
 His standing constraint for this work is explicit: **keep it on the remote branch;
 do not merge to main**. REC-557, `codex/splash-vhs-preview`, draft PR #686.
 
+Current review revision: the selected bend around **1.8 seconds lasts 0.5
+seconds**, with steady logo brightness and material. Read the current-revision
+section in the motion brief before reusing the original Events dropout recipe.
+The original film remains unchanged as the reference.
+
 ## Start here
 
 1. Watch the [approved Events film](../../../Wander/Resources/Events/events-coming-soon.mp4).

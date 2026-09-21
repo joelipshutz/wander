@@ -1,16 +1,14 @@
-/* REC-557 v2. The approved Events signal, adapted to intact raster artwork. */
+/* REC-557 v3. Half-second tracking bend; steady material, no brightness flicker. */
 'use strict';
 const $=s=>document.querySelector(s), art=$('#artwork'), texture=$('#texture'), reference=$('#reference');
 const status=$('#status'), reduced=matchMedia('(prefers-reduced-motion: reduce)');
-const W=393,H=852,R=720/W, LEAD=6.6, STATIC_TIME=.4;
+const W=393,H=852,R=720/W, LEAD=1.4, STATIC_TIME=.4, TEAR_TIME=1.8;
 const frames=['splash','account'].map(id=>{const canvas=$('#'+id);canvas.width=720;canvas.height=1560;const scene=document.createElement('canvas');scene.width=720;scene.height=1560;const signal=scene.cloneNode();return{id,canvas,ctx:canvas.getContext('2d'),scene,sc:scene.getContext('2d'),signal,render:createBrandTapeRenderer(signal)};});
 const detail=$('#detail');detail.width=1000;detail.height=478;const dc=detail.getContext('2d');
 const grain=document.createElement('canvas');grain.width=180;grain.height=320;const gc=grain.getContext('2d'),pixels=gc.createImageData(180,320);
 let seed=987123,treatment=reduced.matches?'static':'motion',paused=reduced.matches,ready=false,recording=false,cycleElapsed=0,lastNow=performance.now(),lastTick=-1;
 function random(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296;}
 function makeGrain(t){seed=987123+Math.round(t*24)*131;for(let i=0;i<pixels.data.length;i+=4){const l=random()*110;pixels.data[i]=l+random()*22;pixels.data[i+1]=l+random()*26;pixels.data[i+2]=l+random()*24;pixels.data[i+3]=255;}gc.putImageData(pixels,0,0);}
-// Verbatim density sequence from the original 03C composition.
-function signal(t){t%=12;for(const[a,b,p]of[[.72,.81,.35],[.81,.86,.94],[.86,.99,.16],[1.04,1.13,.58],[3.20,3.28,.12],[3.31,3.45,.43],[5.74,5.88,.35],[5.88,5.94,1.08],[5.94,6.08,.18],[8.64,8.76,.38],[8.79,8.91,.06],[9.00,9.13,.51],[10.47,10.60,.28]])if(t>=a&&t<b)return p;return .94;}
 function artRect(kind){const w=kind==='splash'?361:172,h=w/(1600/764);return{x:(W-w)/2,y:kind==='splash'?(H-h)/2:72,w,h};}
 function cover(c,video){const scale=Math.max(W/video.videoWidth,H/video.videoHeight);c.drawImage(video,(W-video.videoWidth*scale)/2,(H-video.videoHeight*scale)/2,video.videoWidth*scale,video.videoHeight*scale);}
 function background(c,t){c.fillStyle='#0c1010';c.fillRect(0,0,W,H);if(texture.readyState>=2){c.globalAlpha=.78;c.filter='brightness(.88) saturate(1.15)';cover(c,texture);c.filter='none';c.globalAlpha=1;}const cloud=c.createRadialGradient(W*(.45+.2*Math.sin(t*.12)),H*.43,0,W*.45,H*.48,H*.65);cloud.addColorStop(0,'rgba(25,36,29,.25)');cloud.addColorStop(1,'rgba(0,0,0,.48)');c.fillStyle=cloud;c.fillRect(0,0,W,H);c.imageSmoothingEnabled=false;c.globalCompositeOperation='screen';c.globalAlpha=.11;c.drawImage(grain,0,0,W,H);c.globalAlpha=1;c.globalCompositeOperation='source-over';c.imageSmoothingEnabled=true;}
@@ -30,7 +28,7 @@ function accountUI(c){
  label(c,'By continuing, you agree to the Terms of Use and',W/2,690,'12px AppBody','#a6a797');label(c,'Community Guidelines, and acknowledge',W/2,708,'12px AppBody','#a6a797');label(c,'the Privacy Policy.',W/2,726,'12px AppBody','#a6a797');
  label(c,'Already have an account? Log in',W/2,771,'16px AppDemi');
 }
-function draw(t){if(!ready)return;makeGrain(t);for(const f of frames){const c=f.sc,box=artRect(f.id);c.setTransform(R,0,0,1560/H,0,0);background(c,t);c.save();c.globalAlpha=treatment==='clean'?1:signal(t+.23);if(treatment!=='clean'){c.shadowColor='rgba(176,55,40,.38)';c.shadowBlur=1.5*R;c.shadowOffsetX=.4*R;}c.drawImage(art,box.x,box.y,box.w,box.h);c.restore();
+function draw(t){if(!ready)return;makeGrain(STATIC_TIME);for(const f of frames){const c=f.sc,box=artRect(f.id);c.setTransform(R,0,0,1560/H,0,0);background(c,STATIC_TIME);c.save();c.globalAlpha=treatment==='clean'?1:.94;if(treatment!=='clean'){c.shadowColor='rgba(176,55,40,.38)';c.shadowBlur=1.5*R;c.shadowOffsetX=.4*R;}c.drawImage(art,box.x,box.y,box.w,box.h);c.restore();
  if(treatment!=='clean'){c.globalCompositeOperation='multiply';c.globalAlpha=.23;c.imageSmoothingEnabled=false;c.drawImage(grain,0,0,W,H);c.globalAlpha=1;c.globalCompositeOperation='source-over';c.imageSmoothingEnabled=true;}
  if(treatment==='clean')f.ctx.drawImage(f.scene,0,0);else{f.render(f.scene,t+.17,1,false,[box.x/W,1-(box.y+box.h)/H,box.w/W,box.h/H]);f.ctx.drawImage(f.signal,0,0);}
  if(f.id==='account'){f.ctx.save();f.ctx.scale(R,1560/H);accountUI(f.ctx);f.ctx.restore();}
@@ -40,13 +38,13 @@ function draw(t){if(!ready)return;makeGrain(t);for(const f of frames){const c=f.
  $('#time').value=t.toFixed(2)+' s';$('#scrub').value=t;$('#detail-label').textContent=treatment==='clean'?'Original artwork pixels. No replacement font.':treatment==='static'?'Static material: the same grain, softened density and registration, held still.':'Actual logo pixels: inspect a tracking fault to see the silhouette tear.';
 }
 function loaded(el,event){return new Promise((resolve,reject)=>{el.addEventListener(event,resolve,{once:true});el.addEventListener('error',reject,{once:true});});}
-async function seek(t){texture.pause();reference.pause();await Promise.all([texture,reference].map(async v=>{if(Math.abs(v.currentTime-t)>.002){const done=loaded(v,'seeked');v.currentTime=t;await done;}}));draw(t);lastTick=Math.floor(t*24);}
-function mediaPlayback(){const play=ready&&treatment==='motion'&&!paused&&!document.hidden;for(const v of[texture,reference])play?v.play().catch(()=>{status.textContent='Press Play to begin.';}):v.pause();$('#play').textContent=paused?'Play':'Pause';$('#play').disabled=treatment!=='motion';}
-async function setTreatment(value){if(recording)return;treatment=value;paused=value!=='motion'||reduced.matches;document.querySelectorAll('[data-treatment]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.treatment===value)));await seek(value==='motion'?LEAD:STATIC_TIME);cycleElapsed=0;lastNow=performance.now();mediaPlayback();status.textContent=value==='motion'?'Events and both logos share the source clock.':value==='static'?'Static material only. No moving grain, jitter, flicker or tears.':'Original raster artwork on the same tape field.';}
+async function seek(t){texture.pause();reference.pause();await Promise.all([[texture,STATIC_TIME],[reference,t]].map(async([v,target])=>{if(Math.abs(v.currentTime-target)>.002){const done=loaded(v,'seeked');v.currentTime=target;await done;}}));draw(t);lastTick=Math.floor(t*24);}
+function mediaPlayback(){const play=ready&&treatment==='motion'&&!paused&&!document.hidden;texture.pause();play?reference.play().catch(()=>{status.textContent='Press Play to begin.';}):reference.pause();$('#play').textContent=paused?'Play':'Pause';$('#play').disabled=treatment!=='motion';}
+async function setTreatment(value){if(recording)return;treatment=value;paused=value!=='motion'||reduced.matches;document.querySelectorAll('[data-treatment]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.treatment===value)));await seek(value==='motion'?LEAD:STATIC_TIME);cycleElapsed=0;lastNow=performance.now();mediaPlayback();status.textContent=value==='motion'?'Half-second tracking bend at 1.55–2.05 s. Logo brightness stays steady.':value==='static'?'Static material only. No moving grain, jitter, flicker or tears.':'Original raster artwork on the same tape field.';}
 async function restart(){if(recording)return;await seek(LEAD);paused=reduced.matches;cycleElapsed=0;lastNow=performance.now();mediaPlayback();}
 let seeking=false;
 async function tick(now){const dt=Math.min((now-lastNow)/1000,.15);lastNow=now;if(ready&&treatment==='motion'&&!paused&&!document.hidden&&!seeking){cycleElapsed+=dt;const max=Number($('#cycle').value);if(cycleElapsed>=max){cycleElapsed=0;seeking=true;await seek(LEAD);seeking=false;mediaPlayback();}const t=reference.currentTime,n=Math.floor(t*24);if(n!==lastTick){draw(t);lastTick=n;}}requestAnimationFrame(tick);}
-$('#tear').addEventListener('click',async()=>{if(recording)return;await setTreatment('motion');paused=true;mediaPlayback();await seek(6.9166667);status.textContent='Tracking fault at 6.92 s. The original object is displaced row by row.';});
+$('#tear').addEventListener('click',async()=>{if(recording)return;await setTreatment('motion');paused=true;mediaPlayback();await seek(TEAR_TIME);status.textContent='Tracking bend at 1.80 s. The half-second effect keeps the logo visible.';});
 $('#enlarge').addEventListener('click',e=>{const on=document.body.classList.toggle('large');e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent=on?'Fit previews':'Larger previews';});
 $('#play').addEventListener('click',()=>{if(recording)return;paused=!paused;lastNow=performance.now();mediaPlayback();});$('#restart').addEventListener('click',restart);$('#cycle').addEventListener('change',restart);
 for(const b of document.querySelectorAll('[data-treatment]'))b.addEventListener('click',()=>setTreatment(b.dataset.treatment));
@@ -58,7 +56,7 @@ async function exportMedia(){
  if(!ready||recording)return;const button=$('#export');button.disabled=true;
  try{
   await setTreatment('static');for(const f of frames)await save(f.id+'-static.png',await png(f.canvas));await save('logo-static.png',await png(detail));
-  await setTreatment('motion');paused=true;await seek(6.9166667);await save('logo-tear.png',await png(detail));
+  await setTreatment('motion');paused=true;await seek(TEAR_TIME);await save('logo-tear.png',await png(detail));
   const mime=['video/mp4','video/webm;codecs=vp9','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));if(!mime)throw new Error('Video recording is unavailable in this browser.');
   const extension=mime.startsWith('video/mp4')?'mp4':'webm';
   await seek(LEAD);cycleElapsed=0;$('#cycle').value='8';recording=true;paused=false;lastNow=performance.now();

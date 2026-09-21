@@ -159,6 +159,22 @@ This second pass remains a proposal. Its account layout is a visual illustration
 its decorative logo uses the shared renderer. It has not been installed into the
 native account screen, merged or released.
 
+## 9. September 20: half-second bend, no flicker
+
+Joe liked the deformation around 1.8 seconds and explicitly asked to stretch it
+to half a second while removing flicker. Revision 3 separates the liked geometry
+from brightness failure. The selected first waveform runs at 40% of its former
+speed across source 1.55–2.05 s; the artwork stays at its normal 0.94 density.
+Global pulse and band darkening are removed, and material grain/texture is held
+stable. Both splash and account previews receive the change. The source Events
+film is preserved as the historical comparison, including its original flicker.
+
+Replay now leads into that selected event at source 1.40 s. The 1.8-second short
+preview duration is unchanged; the tracking burst itself lasts 0.5 seconds.
+The existing video link paths are refreshed with the current rendering. Revision
+2 and its prior recordings remain recoverable at git commit `49c2d59`.
+This review instruction changes only the proposal, not the source archive or main.
+
 ## Evidence trail and future editing
 
 The source discussion was read from the Codex chat titled

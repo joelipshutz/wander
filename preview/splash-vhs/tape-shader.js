@@ -12,40 +12,43 @@ function createBrandTapeRenderer(canvas) {
     vec3 rgb(vec3 c){return vec3(c.x+.956*c.y+.621*c.z,c.x-.272*c.y-.647*c.z,c.x-1.106*c.y+1.703*c.z);}
     void main(){
       float d=damage,t=time*motion;float f=floor(t*24.);vec2 p=uv;
-      float loopTime=mod(t,8.);float hitA=step(1.68,loopTime)*(1.-step(1.88,loopTime));float hitB=step(4.72,loopTime)*(1.-step(4.88,loopTime));float hitC=step(6.93,loopTime)*(1.-step(7.18,loopTime));float event=max(hitA,max(hitB,hitC))*motion;float epoch=floor(t*2.);
+      // The first source-time fault now spans 1.55–2.05 s (12 frames at 24 fps).
+      // Stretch its original .20 s waveform across .50 s, rather than adding
+      // extra rapid oscillations. The other two source faults keep their timing.
+      float loopTime=mod(t,8.);float hitA=step(1.72,loopTime)*(1.-step(2.22,loopTime));float hitB=step(4.72,loopTime)*(1.-step(4.88,loopTime));float hitC=step(6.93,loopTime)*(1.-step(7.18,loopTime));float event=max(hitA,max(hitB,hitC))*motion;
+      float faultTime=mix(t,1.68+(loopTime-1.72)*.4,hitA);float epoch=floor(faultTime*2.);
       float center=.16+.69*noise(vec2(epoch,2.8));// Preserve the Events failure waveform, expressed over this object's extent.
       float objectRow=(p.y-objectBox.y)/objectBox.w;
       float damageBand=band(objectRow,center,.20);
       float fine=(noise(vec2(floor(p.y*resolution.y*.52),f))-.5)*(0.10+d*.26)/resolution.x;
       float wobble=sin(p.y*11.+t*2.1)*(.00015+d*.00028)+sin(p.y*41.-t*4.4)*d*.00010;
-      float tear=event*damageBand*(.010+d*.088)*objectBox.z*sin(t*41.);
+      float tear=event*damageBand*(.010+d*.088)*objectBox.z*sin(faultTime*41.);
       float head=(1.-smoothstep(.025,.125,p.y))*(.3+d*.7);
       p.x+=motion*(fine+wobble+tear+head*(noise(vec2(floor(p.y*resolution.y),f))-.5)*d*.012);
-      p.y+=motion*event*d*d*.011*objectBox.w*2.5*sin(t*31.);
+      p.y+=motion*event*d*d*.011*objectBox.w*2.5*sin(faultTime*31.);
       vec3 c=texture2D(frame,p).rgb;vec3 l=yiq(c);
       float delay=(.8+d*5.8+event*damageBand*d*9.)/resolution.x;
       vec3 chroma=yiq(texture2D(frame,p+vec2(delay,0.)).rgb)*.44;
       chroma+=yiq(texture2D(frame,p+vec2(delay*2.3,0.)).rgb)*.25;
       chroma+=yiq(texture2D(frame,p+vec2(-delay*.55,0.)).rgb)*.20;
       chroma+=yiq(texture2D(frame,p+vec2(delay*3.8,0.)).rgb)*.11;
-      // Hue stays anchored to faded Astir signal. Only density and registration vary.
+      // Hold material density and flecks steady. Only registration/geometry move.
       vec2 cq=chroma.yz;
-      float grain=noise(floor(p*resolution*.85)+vec2(f,17.))-.5;
-      float dust=noise(floor(p*resolution*vec2(.63,.73))+vec2(f*.91,41.));
+      float materialFrame=13.;
+      float grain=noise(floor(p*resolution*.85)+vec2(materialFrame,17.))-.5;
+      float dust=noise(floor(p*resolution*vec2(.63,.73))+vec2(materialFrame*.91,41.));
       float speck=step(.9990-d*.0006,dust)*motion;
       float darkSpeck=step(dust,.0006+d*.0007)*motion;
-      float dropout=event*damageBand*(.08+d*.5);
-      float pulse=1.-motion*(.018+d*.052)*(0.5+0.5*sin(t*17.4));
-      float luminance=l.x*pulse-dropout*l.x;
+      float luminance=l.x;
       luminance+=grain*(.009+d*.022);
       luminance*=1.-d*.10*(.5+.5*sin(p.y*resolution.y*3.14159));
       vec3 outputColor=rgb(vec3(luminance,cq));
       // Sparse short horizontal dropout streaks: bright dusty traces and dim gaps.
-      float streak=step(.995-d*.002,noise(vec2(floor(p.y*resolution.y*.7),f*.38)))*motion;
-      float span=band(p.x,noise(vec2(floor(p.y*resolution.y),f*.38+3.)),.03+d*.15);
+      float streak=step(.995-d*.002,noise(vec2(floor(p.y*resolution.y*.7),materialFrame*.38)))*motion;
+      float span=band(p.x,noise(vec2(floor(p.y*resolution.y),materialFrame*.38+3.)),.03+d*.15);
       outputColor+=streak*span*(.045+d*.14);
       outputColor+=speck*(.18+d*.20);outputColor*=1.-darkSpeck*(.32+d*.38);
-      outputColor+=head*(noise(vec2(floor(p.x*resolution.x),floor(p.y*resolution.y)+f))-.5)*d*.052;
+      outputColor+=head*(noise(vec2(floor(p.x*resolution.x),floor(p.y*resolution.y)+materialFrame))-.5)*d*.052;
       gl_FragColor=vec4(clamp(outputColor,0.,1.),1.);
     }`;
   function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}

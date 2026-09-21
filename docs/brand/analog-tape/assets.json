@@ -22,12 +22,22 @@
       720,
       1560
     ],
-    "sourceStartSeconds": 6.6,
+    "sourceStartSeconds": 1.4,
     "quietMaterialSourceSeconds": 0.4,
-    "tearStillSourceSeconds": 6.9166667,
+    "tearStillSourceSeconds": 1.8,
     "requestedCaptureFPS": 24,
     "recording": "Real-time browser canvas recording; measured nominal rates below are not frame-exact 24 fps.",
-    "accountLayout": "Illustrative; not a functioning or pixel-exact native login."
+    "accountLayout": "Illustrative; not a functioning or pixel-exact native login.",
+    "revision": 3,
+    "primaryTear": {
+      "sourceStartSeconds": 1.55,
+      "sourceEndSeconds": 2.05,
+      "durationSeconds": 0.5,
+      "originalWaveformSpeedMultiplier": 0.4
+    },
+    "flicker": false,
+    "material": "Frozen texture at source 0.40 seconds and fixed noise seeds; only geometry and registration move",
+    "artOpacity": 0.94
   },
   "assets": [
     {
@@ -102,54 +112,54 @@
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/account-static.png",
-      "bytes": 1759141,
-      "sha256": "66893997715b5118988f969315bcfa0105ce7630decc359781caa88fcb0a6e7b",
+      "bytes": 1761293,
+      "sha256": "cc56a6566e08161d4ac492e2f49604e30ee9d01a5890ac07e243cbfe0098486f",
       "width": 720,
       "height": 1560
     },
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/account-v2.mp4",
-      "bytes": 3588193,
-      "sha256": "3d832b7d3876f95b8c70e5b2765c500e66a2c77989ab6905d2cf500da8ebae42",
+      "bytes": 3564267,
+      "sha256": "31b4d74f96d363ee8224f9a3ed5752de33e54b03d385fdb4d48e6986e1feffd9",
       "audioTracks": 0,
-      "duration": 8.264,
-      "fps": 22.989896774291992,
+      "duration": 8.247,
+      "fps": 22.795063018798828,
       "height": 1560,
       "width": 720
     },
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/logo-static.png",
-      "bytes": 820599,
-      "sha256": "74f5b3ec4319f8bf9cc1b78594e014754b868e4579a255cd9a14b0821939ec50",
+      "bytes": 821464,
+      "sha256": "69f307dc1247c98e90bfcb068fd15837c4a8ebb479cfba17b3002df74620c91b",
       "width": 1000,
       "height": 478
     },
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/logo-tear.png",
-      "bytes": 807920,
-      "sha256": "109b58ade7c96b17fb69da76195f9ab3d5fc7d362703c7718d3292cfc63a9105",
+      "bytes": 793469,
+      "sha256": "2c58475fe1d58ba643d1738b491293c1c23e0255ef8b6c4a7b0b64cd28ac0a2a",
       "width": 1000,
       "height": 478
     },
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/splash-static.png",
-      "bytes": 2186259,
-      "sha256": "fdd39c4c66247b8ead44367c9480a23770e16dad362b065dde5e0a89113ac226",
+      "bytes": 2189484,
+      "sha256": "a5234f50952c701230f976fca48951475d6e7ac56b6965c11f7ede99b707fa09",
       "width": 720,
       "height": 1560
     },
     {
       "role": "review_artifact",
       "path": "preview/splash-vhs/media/splash-v2.mp4",
-      "bytes": 3585110,
-      "sha256": "b32f593c9792d7c4d1302e528681baa212431fef9c65d2338e7bceb198e0866c",
+      "bytes": 3555148,
+      "sha256": "1e19c06d928777f0e4d12d39e9d118794f6eacf31f6baba15938f99e6761f3b0",
       "audioTracks": 0,
-      "duration": 8.264,
-      "fps": 22.98943328857422,
+      "duration": 8.247,
+      "fps": 22.794601440429688,
       "height": 1560,
       "width": 720
     }

@@ -1,4 +1,4 @@
-# Astir shared tape study — REC-557, revision 2
+# Astir shared tape study — REC-557, revision 3
 
 Branch-only visual review of Events, the launch splash and the create-account
 logo. Uses the exact logo PNG and the approved Events texture/signal source.
@@ -9,9 +9,9 @@ python3 preview/splash-vhs/serve.py --port 65364
 ```
 
 Open <http://127.0.0.1:65364/preview/splash-vhs/>. Compare Motion, Static material
-and Original logos. “Show a tear” pauses at a strong source frame; the slider
+and Original logos. “Show a tear” pauses at source 1.80 seconds; the slider
 inspects any frame. The full eight-second and short 1.8-second cycles begin at
-source 6.60 seconds. “Larger previews” expands the phone frames.
+source 1.40 seconds. The selected bend spans source 1.55–2.05 seconds. “Larger previews” expands the phone frames.
 
 The account form is an inert browser illustration of the current native layout.
 The decorative logo is rendered through the same actual shader as the splash.
@@ -30,12 +30,33 @@ they are visual-review artifacts, not the deterministic 192-frame Events master.
 Use the preserved offline exporter as a starting point for production-quality
 frame-exact outputs if the visual direction is approved.
 
-The previous study remains in git history at `9e2ae5b`. This revision replaces
-its custom flicker sequence with the original source timing and moves the band
-into object-relative coordinates. It does not modify the original renderer in
-`docs/brand/analog-tape/source/`.
+Revision 2 remains in git history at `49c2d59` (revision 1 at `9e2ae5b`).
+Revision 3 stretches the selected first tracking waveform to half a second,
+removes art-opacity dropouts, shader pulse and band darkening, and holds the
+material grain/texture steady. Geometric distortion and chroma registration
+remain. The other two source tracking faults retain their timing. The original
+renderer in `docs/brand/analog-tape/source/` is unchanged. Existing video link
+paths are refreshed with the current proposal.
 
-## Review verification — September 20, 2026
+## Current revision 3 verification — September 20, 2026
+
+- Browser renderer compiled without warnings/errors. The 1.80-second still
+  visibly bends the lettering and statue while keeping them readable.
+- First fault window is 1.55–2.05 seconds: 0.50 s (12 samples at 24 fps).
+  The original 0.20-second waveform is time-stretched, not repeated faster.
+- Both refreshed silent 720 × 1560 MP4s decode with AVFoundation. They measure
+  about 8.247 seconds and 22.8 fps nominal as real-time review recordings.
+- All 188 decoded splash frames were checked over the full logo band
+  (x 0–720, y 560–1000, every fourth pixel). Mean luma ranged 35.00–37.09/255;
+  minimum/maximum ratio 94.36%. There are no deep brightness dropouts in this
+  recording. This aggregate check complements the visual review; it does not
+  claim every moving edge has identical brightness.
+- Updated stills, recordings and hash manifest are saved. Logo, Events movie,
+  raw texture and archived original source bytes remain unchanged.
+- JavaScript syntax and git diff checks passed. No native build was needed
+  for this browser-only revision. Native adoption is still outside this PR.
+
+## Previous revision 2 verification — September 20, 2026
 
 - In-app browser: Events and both canvas surfaces rendered together; Motion,
   Static material, Original logos, Show a tear, and the short 1.8-second cycle
