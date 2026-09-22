@@ -234,6 +234,23 @@ struct ProductUpsellPresentation: Identifiable, Equatable {
     var isOnboarding: Bool {
         trigger == .onboardingNotifications
     }
+
+    var analyticsProperties: [String: String] {
+        [
+            "campaign": campaignID.rawValue,
+            "trigger": trigger.rawValue,
+            "impression_number": "\(impressionNumber)",
+            // Random per-presentation correlation, never an account, token, or app-open ID.
+            "presentation_id": id.uuidString,
+            "prompt_analytics_version": "1"
+        ]
+    }
+}
+
+enum ProductUpsellButton: String, CaseIterable {
+    case `continue`
+    case openSettings = "open_settings"
+    case notNow = "not_now"
 }
 
 enum ProductUpsellAction: String, Equatable {
@@ -505,6 +522,16 @@ final class ProductUpsellCoordinator: ObservableObject {
         }
     }
 
+    func recordButtonClick(_ button: ProductUpsellButton, for presentationID: UUID) {
+        guard let presentation = activePresentation,
+              presentation.id == presentationID,
+              presentation.userID == boundUserID else { return }
+        analytics.track(AnalyticsEvent(
+            name: WanderAnalyticsEvents.productUpsellButtonClicked,
+            properties: presentation.analyticsProperties.merging(["button": button.rawValue]) { _, value in value }
+        ))
+    }
+
     func recordAction(
         _ action: ProductUpsellAction,
         for presentationID: UUID
@@ -521,12 +548,7 @@ final class ProductUpsellCoordinator: ObservableObject {
         analytics.track(
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.productUpsellActioned,
-                properties: [
-                    "campaign": presentation.campaignID.rawValue,
-                    "trigger": presentation.trigger.rawValue,
-                    "action": action.rawValue,
-                    "impression_number": "\(presentation.impressionNumber)"
-                ]
+                properties: presentation.analyticsProperties.merging(["action": action.rawValue]) { _, value in value }
             )
         )
     }
@@ -644,7 +666,7 @@ final class ProductUpsellCoordinator: ObservableObject {
         if registeredAppOpenIDs[request.userID] == appOpenID {
             presentedAppOpenIDs[request.userID] = appOpenID
         }
-        activePresentation = ProductUpsellPresentation(
+        let presentation = ProductUpsellPresentation(
             id: UUID(),
             userID: request.userID,
             campaignID: configuration.id,
@@ -653,14 +675,11 @@ final class ProductUpsellCoordinator: ObservableObject {
             actionPolicy: configuration.actionPolicy,
             impressionNumber: impressionNumber
         )
+        activePresentation = presentation
         analytics.track(
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.productUpsellShown,
-                properties: [
-                    "campaign": configuration.id.rawValue,
-                    "trigger": request.trigger.rawValue,
-                    "impression_number": "\(impressionNumber)"
-                ]
+                properties: presentation.analyticsProperties
             )
         )
     }

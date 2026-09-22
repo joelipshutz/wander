@@ -60,6 +60,8 @@ struct ProductUpsellScreen: View {
 
             if allowsSecondaryAction {
                 Button("Not now") {
+                    guard isCurrentPresentation else { return }
+                    coordinator.recordButtonClick(.notNow, for: presentation.id)
                     trackOnboardingPermissionResult("skipped")
                     coordinator.complete(
                         presentationID: presentation.id,
@@ -95,6 +97,12 @@ struct ProductUpsellScreen: View {
     private func handlePrimaryAction() {
         guard isCurrentPresentation,
               coordinator.beginAction(for: presentation.id) else { return }
+        // Log the button the person actually saw, before refreshing permission or
+        // awaiting an outcome. A tap does not mean authorization succeeded.
+        let button: ProductUpsellButton = OnboardingNotificationPermissionPolicy.action(
+            for: pushNotifications.authorizationStatus
+        ) == .openSettings ? .openSettings : .continue
+        coordinator.recordButtonClick(button, for: presentation.id)
         Task { @MainActor in
             defer { coordinator.endAction(for: presentation.id) }
             await pushNotifications.refreshAuthorizationStatus()

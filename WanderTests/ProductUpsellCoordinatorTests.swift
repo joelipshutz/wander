@@ -1,4 +1,5 @@
 import XCTest
+import UserNotifications
 @testable import Wander
 
 @MainActor
@@ -25,9 +26,71 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let shown = analytics.events.filter { $0.name == WanderAnalyticsEvents.productUpsellShown }
         XCTAssertEqual(shown.count, 3)
         for (index, event) in shown.enumerated() {
-            XCTAssertEqual(event.properties, [
+            XCTAssertNotNil(UUID(uuidString: try XCTUnwrap(event.properties["presentation_id"])))
+            XCTAssertEqual(event.properties.filter { $0.key != "presentation_id" }, [
+                "prompt_analytics_version": "1",
                 "campaign": "notification_app_open", "trigger": "app_opened", "impression_number": "\(index + 1)"
             ])
+        }
+    }
+
+    func testExistingUserReminderAudienceUsesPermissionAndPreference() throws {
+        let states: [(UNAuthorizationStatus, Bool, Bool)] = [
+            (.notDetermined, false, true), (.notDetermined, true, true),
+            (.denied, false, true), (.denied, true, true),
+            (.authorized, false, true), (.authorized, true, false),
+            (.provisional, true, false), (.ephemeral, true, false)
+        ]
+        for (status, pushEnabled, shouldShow) in states {
+            let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+            coordinator.bind(to: "existing_user")
+            let eligible = !PushNotificationManager.notificationsAreEnabled(
+                pushEnabled: pushEnabled, authorizationStatus: status
+            )
+            coordinator.recordAppOpen(for: "existing_user")
+            coordinator.requestAppOpenNotificationReminder(userID: "existing_user", isEligible: eligible, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation, "Initial use of the supporting build is skipped.")
+            coordinator.recordAppBackground()
+            coordinator.recordAppForeground()
+            coordinator.recordAppOpen(for: "existing_user")
+            coordinator.requestAppOpenNotificationReminder(userID: "existing_user", isEligible: eligible, canPresent: true)
+            XCTAssertEqual(coordinator.activePresentation != nil, shouldShow)
+            // No token-registration state is used to decide who gets a primer.
+        }
+    }
+
+    func testPromptAnalyticsCorrelateShowsClicksAndOutcomesWithoutPrivateData() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recording = ProductUpsellRecordingAnalyticsClient()
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults, analytics: ContextualAnalyticsClient(client: recording, environment: .development))
+        coordinator.bind(to: "user_private")
+        coordinator.request(trigger: .onboardingNotifications, userID: "user_private", isEligible: true)
+        let id = try XCTUnwrap(coordinator.activePresentation?.id)
+        coordinator.recordButtonClick(.continue, for: UUID()) // Stale callback.
+        coordinator.recordButtonClick(.continue, for: id)
+        coordinator.suspendActivePresentation()
+        coordinator.recordButtonClick(.notNow, for: id) // Not visible.
+        coordinator.presentDeferredIfPossible(userID: "user_private", isEligible: true, canPresent: true)
+        coordinator.recordButtonClick(.openSettings, for: id)
+        coordinator.recordButtonClick(.openSettings, for: id) // Real repeat tap remains measurable.
+        coordinator.recordButtonClick(.notNow, for: id)
+        coordinator.complete(presentationID: id, with: .dismissed)
+        coordinator.recordButtonClick(.notNow, for: id) // Already dismissed.
+        XCTAssertEqual(recording.events.filter { $0.name == WanderAnalyticsEvents.productUpsellShown }.count, 1)
+        let clicks = recording.events.filter { $0.name == WanderAnalyticsEvents.productUpsellButtonClicked }
+        XCTAssertEqual(clicks.compactMap { $0.properties["button"] }, ["continue", "open_settings", "open_settings", "not_now"])
+        XCTAssertEqual(recording.events.last?.properties["action"], "dismissed")
+        for event in recording.events {
+            XCTAssertEqual(event.properties["presentation_id"], id.uuidString)
+            XCTAssertEqual(event.properties["prompt_analytics_version"], "1")
+            XCTAssertEqual(event.properties["analytics_environment"], "development")
+            XCTAssertFalse(event.properties.values.contains("user_private"))
+            XCTAssertTrue(Set(event.properties.keys).isDisjoint(with: WanderAnalyticsSchema.forbiddenPropertyKeys))
         }
     }
 
