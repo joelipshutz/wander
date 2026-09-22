@@ -9663,7 +9663,8 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    private func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
+    /// Shared read-only visibility check for search, notification rows, and badges.
+    func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
         isBlockedBetween(currentUser.id, and: userID)
     }
 
@@ -9683,7 +9684,7 @@ final class WanderStore: ObservableObject {
             && !isBlockedBetween(graphOwnerID, and: profileID)
     }
 
-    private func isProfilePrivate(_ userID: String) -> Bool {
+    func isProfilePrivate(_ userID: String) -> Bool {
         profiles.first { $0.id == userID }?.isPrivateProfile == true
     }
 

@@ -7455,9 +7455,11 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
 
         XCTAssertEqual(store.searchProfiles(handleQuery: "ry").map(\.handle), ["ryan"])
+        XCTAssertFalse(store.isBlockedBetweenCurrentUser(and: "user_ryan"))
 
         store.block(userID: "user_ryan")
 
+        XCTAssertTrue(store.isBlockedBetweenCurrentUser(and: "user_ryan"))
         XCTAssertTrue(store.searchProfiles(handleQuery: "ry").isEmpty)
         XCTAssertTrue(store.searchProfiles(handleQuery: "r").isEmpty)
     }
@@ -7467,9 +7469,11 @@ final class WanderStoreTests: XCTestCase {
         let maya = store.profiles.first { $0.id == "user_maya" }!
 
         XCTAssertEqual(store.searchProfiles(handleQuery: "ma").map(\.handle), ["maya"])
+        XCTAssertFalse(store.isProfilePrivate("user_maya"))
 
         maya.isPrivateProfile = true
 
+        XCTAssertTrue(store.isProfilePrivate("user_maya"))
         XCTAssertTrue(store.searchProfiles(handleQuery: "ma").isEmpty)
     }
 
