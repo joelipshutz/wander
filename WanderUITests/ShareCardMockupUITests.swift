@@ -111,7 +111,10 @@ final class ShareCardMockupUITests: XCTestCase {
         expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: copy)
         waitForExpectations(timeout: 10)
         for (format, destination) in [("Link", "Messages"), ("Story", "Instagram Story"), ("Post", "Open more sharing options")] {
-            formats.buttons[format].tap()
+            let formatButton = formats.buttons[format]
+            expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: formatButton)
+            waitForExpectations(timeout: 10)
+            formatButton.tap()
             app.buttons[destination].tap()
             // Messages and Instagram are unavailable on the simulator, so both
             // use the same native fallback as More. Never send to a recipient.
@@ -124,6 +127,7 @@ final class ShareCardMockupUITests: XCTestCase {
             XCTAssertFalse(app.alerts.firstMatch.exists)
             capture("external-place-\(format)-destination")
             close.tap()
+            XCTAssertTrue(activityList.waitForNonExistence(timeout: 10))
             XCTAssertTrue(formats.waitForExistence(timeout: 5))
         }
         app.terminate()
