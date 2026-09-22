@@ -1009,6 +1009,17 @@ struct WanderRootView: View {
                     calendarReservations.clearAccountState(userID: previousUserID)
                 }
                 cancelInteractivePlaceImports(clearCompletionQueue: true)
+                #if DEBUG
+                // Startup authentication clears account-owned banners. Restore
+                // the explicit UI-test fixture for the newly authenticated user.
+                if nextUserID != nil,
+                   ProcessInfo.processInfo.arguments.contains("-WanderImportNoticeUITest") {
+                    activeImportCompletionNotice = PlaceImportCompletionNotice(
+                        batchIDs: ["notice-fixture"], foundCount: 13, matchedCount: 13,
+                        needsReviewCount: 0, sourceRetryCount: 0, sourceName: "Instagram"
+                    )
+                }
+                #endif
                 walkthroughFeatureFlagRefreshTask?.cancel()
                 walkthroughFeatureFlagRefreshTask = nil
                 placeProfileFloatingActionVariant = .productionDefault
