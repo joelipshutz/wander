@@ -4522,19 +4522,19 @@ final class RemoteRepositoryTests: XCTestCase {
             .profile(id: "user_joe")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/lists/44000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/lists/44000000-0000-0000-0000-000000000001")!),
             .list(id: "44000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/activities/41000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/activities/41000000-0000-0000-0000-000000000001")!),
             .activityComments(id: "41000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/\(inviteToken)")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/invites/\(inviteToken)")!),
             .listInvite(token: inviteToken)
         )
         XCTAssertEqual(

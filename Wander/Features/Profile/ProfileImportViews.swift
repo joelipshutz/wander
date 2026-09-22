@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 enum ImportHelpDestination {
-    static let url = URL(string: "https://getrec.me/import-help")!
+    static let url = URL(string: "https://astirmovement.com/import-help")!
 }
 
 struct AddImportEntrySection: View {

@@ -294,7 +294,7 @@ final class InviteFrameworkTests: XCTestCase {
         )
         XCTAssertEqual(content.message, ContactInviteWalkthroughContent.inviteProse)
         XCTAssertEqual(content.messageBody, content.item.absoluteString)
-        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user-sender")
+        XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user-sender")
         XCTAssertEqual(content.items.count, 1)
     }
 
