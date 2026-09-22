@@ -441,6 +441,8 @@ caption, including the list name for invitations. The website supplies the
 canonical Astir app icon as its favicon and apple-touch-icon. Apple controls
 caption layout, truncation and icon placement; Open Graph metadata cannot add a
 custom native View button. App Clip work remains separate under REC-408.
+Ryan chose metadata-only icon support for this change; do not add an image-corner
+logo. The native app icon and View footer belong to the later App Clip work.
 
 Every explicit social share copies the exact published link as both a URL and
 plain text, including when reusing a prepared link. Instagram Story and Snapchat
