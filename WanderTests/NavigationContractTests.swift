@@ -3113,7 +3113,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("saved as wanna this day"))
         XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun"))
         XCTAssertFalse(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
-        XCTAssertTrue(source.contains("var includesAllStatuses: Bool {\n        false\n    }"))
+        XCTAssertTrue(source.contains("var includesAllStatuses: Bool {\n        source == .mapSummary\n    }"))
     }
 
     func testProfileCalendarDayDetailUsesSideBySideDropdownsWithoutSearch() throws {
@@ -3179,7 +3179,7 @@ final class NavigationContractTests: XCTestCase {
                 .last
         )
 
-        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) checked-in \\(placeLabel)"))
+        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) saved \\(placeLabel)"))
         XCTAssertTrue(mapSection.contains("ProfileMapSummaryShareButton("))
         XCTAssertTrue(mapSection.contains("points: insights.mapPoints(matching: item)"))
         XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))

@@ -1,9 +1,121 @@
 import MapKit
+import Observation
 import SwiftUI
 import UIKit
 
+/// Uses the main Map's gesture classification and dismissal timing. Camera
+/// samples live in a reference tracker so a pinch does not rebuild SwiftUI.
+@MainActor
+@Observable
+final class YourMapInteractionState {
+    let camera: MapCameraRegionTracker
+    private(set) var cameraRequest: NativeMapCameraRequest
+    private(set) var selectedPlaceID: String?
+    var presentedPlaceID: String?
+    var isMapChromeVisible: Bool { presentedPlaceID == nil }
+    private(set) var bounceRevision: UInt64 = 0
+    @ObservationIgnored private var pendingTap: Task<Void, Never>?
+    @ObservationIgnored private var previousTapDate = Date.distantPast
+    @ObservationIgnored private var suppressTapUntil = Date.distantPast
+    @ObservationIgnored private var selectionRevision: UInt64 = 0
+    @ObservationIgnored private var cameraSnapshot: MKMapCamera?
+
+    init(region: MKCoordinateRegion) {
+        camera = MapCameraRegionTracker(region: region)
+        cameraRequest = NativeMapCameraRequest(region: region, revision: 0, animated: false)
+    }
+
+    func select(_ placeID: String) {
+        cancelPendingTap()
+        selectionRevision &+= 1
+        if selectedPlaceID == placeID { bounceRevision &+= 1 }
+        selectedPlaceID = placeID
+    }
+
+    func openSelectedPlace() {
+        cancelPendingTap()
+        presentedPlaceID = selectedPlaceID
+    }
+
+    func dismissSelection(trigger: MapSelectionDismissalTrigger) {
+        guard MapSelectionLifetimePolicy.shouldDismiss(for: trigger) else { return }
+        cancelPendingTap()
+        selectionRevision &+= 1
+        selectedPlaceID = nil
+    }
+
+    func tapEmptyMap(now: Date = .now) {
+        cancelPendingTap()
+        guard now >= suppressTapUntil, selectedPlaceID != nil else { return }
+        if now.timeIntervalSince(previousTapDate) <= MapSelectionGesturePolicy.doubleTapRecognitionWindow {
+            previousTapDate = .distantPast
+            registerZoom(now: now)
+            return
+        }
+        previousTapDate = now
+        let revision = selectionRevision
+        let tapRegion = camera.region
+        pendingTap = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: MapSelectionGesturePolicy.tapDismissalDelayNanoseconds) }
+            catch { return }
+            guard let self else { return }
+            if MapSelectionGesturePolicy.classify(from: tapRegion, to: self.camera.region) == .zoom {
+                self.registerZoom()
+                return
+            }
+            guard !Task.isCancelled, revision == self.selectionRevision,
+                  !self.camera.isInteractionActive, Date.now >= self.suppressTapUntil,
+                  self.presentedPlaceID == nil
+            else { return }
+            self.dismissSelection(trigger: .emptyMapTap)
+        }
+    }
+
+    func finishCameraChange(_ region: MKCoordinateRegion, isUserInitiated: Bool) {
+        switch camera.finishCameraChange(region, isUserInitiated: isUserInitiated) {
+        case .stationary: break
+        case .zoom: registerZoom()
+        case .pan: dismissSelection(trigger: .oneFingerPan)
+        }
+    }
+
+    func reconcile(placeIDs: Set<String>) {
+        if let selectedPlaceID, !placeIDs.contains(selectedPlaceID) {
+            dismissSelection(trigger: .emptyMapTap)
+        }
+        if let presentedPlaceID, !placeIDs.contains(presentedPlaceID) {
+            self.presentedPlaceID = nil
+        }
+    }
+
+    func recordCameraSnapshot(_ camera: MKMapCamera) {
+        cameraSnapshot = camera
+    }
+
+    func suspend() {
+        cancelPendingTap()
+        // Navigation can recreate the native view. Restore the last viewport,
+        // never the initial region, if that happens on the way back.
+        cameraRequest = NativeMapCameraRequest(
+            region: camera.region, revision: cameraRequest.revision &+ 1, animated: false,
+            restoredCamera: cameraSnapshot
+        )
+    }
+
+    private func registerZoom(now: Date = .now) {
+        suppressTapUntil = now.addingTimeInterval(MapSelectionGesturePolicy.postZoomTapSuppressionDuration)
+        cancelPendingTap()
+    }
+
+    private func cancelPendingTap() {
+        pendingTap?.cancel()
+        pendingTap = nil
+    }
+}
+
 struct YourMapPrototypeScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @StateObject private var snapshotCapture = MapSnapshotCapture()
@@ -20,12 +132,10 @@ struct YourMapPrototypeScreen: View {
 
     @State private var mode: YourMapPrototypeMode
     @State private var lens: YourMapPrototypeLens
-    @State private var cameraPosition: MapCameraPosition
-    @State private var cameraRegion: MKCoordinateRegion
+    @State private var interaction: YourMapInteractionState
     @State private var showsFilters = false
     @State private var showsSharePreview: Bool
     @State private var savedLenses: [YourMapPrototypeSavedLens] = []
-    @State private var selectedPlaceID: String?
 
     init(
         dataset: YourMapPrototypeDataset,
@@ -45,8 +155,7 @@ struct YourMapPrototypeScreen: View {
         _showsSharePreview = State(initialValue: initialShowsSharePreview)
         _lens = State(initialValue: dataset.initialLens)
         let initialRegion = Self.initialRegion(for: dataset.places)
-        _cameraPosition = State(initialValue: .region(initialRegion))
-        _cameraRegion = State(initialValue: initialRegion)
+        _interaction = State(initialValue: YourMapInteractionState(region: initialRegion))
     }
 
     init(
@@ -62,13 +171,14 @@ struct YourMapPrototypeScreen: View {
     }
 
     var body: some View {
-        Group {
-            switch mode {
-            case .map:
-                mapWorkspace
-            case .patterns:
-                patternsWorkspace
-            }
+        ZStack {
+            // Keep the native map mounted while viewing Patterns, retaining
+            // its viewport, heading and pitch without a camera feedback loop.
+            mapWorkspace
+                .opacity(mode == .map ? 1 : 0)
+                .allowsHitTesting(mode == .map)
+                .accessibilityHidden(mode != .map)
+            if mode == .patterns { patternsWorkspace }
         }
         .foregroundStyle(brandMode.primaryText)
         .tint(brandMode.accent)
@@ -99,32 +209,50 @@ struct YourMapPrototypeScreen: View {
         } message: {
             Text(snapshotError ?? "Please try again.")
         }
-        .navigationTitle(mode == .map ? mapTitle : "Patterns")
+        .navigationTitle(interaction.isMapChromeVisible ? (mode == .map ? mapTitle : "Patterns") : "")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(!interaction.isMapChromeVisible)
+        .toolbar(interaction.isMapChromeVisible ? .visible : .hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    if mode == .map {
-                        showsSharePreview = true
-                    } else {
-                        showsFilters = true
+                if interaction.isMapChromeVisible {
+                    Button {
+                        if mode == .map {
+                            showsSharePreview = true
+                        } else {
+                            showsFilters = true
+                        }
+                    } label: {
+                        Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
                     }
-                } label: {
-                    Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
+                    .disabled(mode == .map && sharedMapProfile?.serverID == nil)
+                    .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
                 }
-                .disabled(mode == .map && sharedMapProfile?.serverID == nil)
-                .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
             }
         }
-        .onChange(of: lens) { _, updatedLens in
-            guard let selectedPlaceID,
-                  !dataset.places.contains(where: {
-                      $0.id == selectedPlaceID && updatedLens.matches($0, now: dataset.now)
-                  })
-            else { return }
-            self.selectedPlaceID = nil
+        .navigationDestination(isPresented: Binding(
+            get: { interaction.presentedPlaceID != nil },
+            set: { if !$0 { interaction.presentedPlaceID = nil } }
+        )) {
+            if let id = interaction.presentedPlaceID,
+               let place = dataset.visiblePlaceByPlaceID[id] {
+                PlaceProfileFullScreen(
+                    place: PlaceSheetPlace(visiblePlace: place),
+                    saves: saveSummaries(for: place),
+                    tasteSaves: [],
+                    currentUserID: viewerID ?? store.currentUser.id,
+                    action: .none,
+                    onBack: { interaction.presentedPlaceID = nil },
+                    onAction: {}
+                )
+            }
         }
+        .onChange(of: filteredPlaces) { _, places in
+            interaction.reconcile(placeIDs: Set(places.map(\.id)))
+        }
+        .onDisappear { interaction.suspend() }
+
     }
 
     @ViewBuilder
@@ -135,7 +263,15 @@ struct YourMapPrototypeScreen: View {
                     card: ShareCardContent(kind: .map, name: mapShareTitle(profile), ownerName: profile.displayName, count: filteredPlaces.count),
                     content: content.withSubject(mapShareTitle(profile)),
                     loadImages: {
-                        let points = filteredPlaces.map { ProfileMapPoint(id: $0.id, name: $0.name, city: $0.city, latitude: $0.latitude, longitude: $0.longitude) }
+                        let points = filteredPlaces.map { place in
+                            let statuses = lens.statuses.isEmpty ? place.statuses : place.statuses.intersection(lens.statuses)
+                            return ProfileMapPoint(
+                                id: place.id, name: place.name, city: place.city,
+                                latitude: place.latitude, longitude: place.longitude,
+                                status: statuses.contains(.been) ? .been : .wannaGo,
+                                secondaryStatus: statuses.count > 1 ? .wannaGo : nil
+                            )
+                        }
                         let request = ProfileMapSnapshotRequest(points: points, size: CGSize(width: 390, height: 238), displayScale: 3, colorScheme: .dark)
                         return ShareCardImages(map: await ProfileMapSnapshotCache.shared.image(for: request))
                     }
@@ -166,7 +302,7 @@ struct YourMapPrototypeScreen: View {
     }
 
     private var selectedVisiblePlace: VisiblePlace? {
-        guard let selectedPlaceID,
+        guard let selectedPlaceID = interaction.selectedPlaceID,
               renderedPlaces.contains(where: { $0.id == selectedPlaceID })
         else { return nil }
         return dataset.visiblePlaceByPlaceID[selectedPlaceID]
@@ -174,28 +310,29 @@ struct YourMapPrototypeScreen: View {
 
     private var mapWorkspace: some View {
         ZStack(alignment: .bottom) {
-            Map(position: $cameraPosition, interactionModes: .all) {
-                ForEach(renderedPlaces) { place in
-                    Annotation(place.name, coordinate: place.coordinate) {
-                        YourMapPrototypeSelectablePin(
-                            place: place,
-                            isSelected: selectedPlaceID == place.id,
-                            pinOwnership: pinOwnership
-                        ) {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                selectedPlaceID = place.id
-                                cameraPosition = .region(selectedRegion(for: place))
-                            }
-                        }
-                    }
-                    .annotationTitles(.hidden)
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            NativeMapView(
+                attributionBottomClearance: 72,
+                isInteractionEnabled: mode == .map && interaction.isMapChromeVisible,
+                annotations: nativeAnnotations,
+                cameraRequest: interaction.cameraRequest,
+                nativeFeatureClearRevision: 0,
+                showsUserLocation: false,
+                isDark: brandMode.prefersDarkInterface,
+                reduceMotion: reduceMotion,
+                onAnnotationTap: { kind in
+                    if case let .saved(id) = kind { interaction.select(id) }
+                },
+                onEmptyMapTap: { interaction.tapEmptyMap() },
+                onLongPress: { _ in },
+                onNativeFeatureSelection: { _ in },
+                onUserInteraction: {},
+                onCameraChange: { interaction.camera.recordCameraChange($0) },
+                onCameraInteractionEnd: { interaction.finishCameraChange($0, isUserInitiated: $1) },
+                allowsNativeFeatureSelection: false,
+                usesAdaptivePinDetail: true,
+                onCameraSnapshot: { interaction.recordCameraSnapshot($0) }
+            )
             .sessionReplayMasked()
-            .onMapCameraChange(frequency: .onEnd) { context in
-                cameraRegion = context.region
-            }
             .overlay { MapSnapshotCaptureAnchor(capture: snapshotCapture).allowsHitTesting(false) }
             .ignoresSafeArea()
             .overlay {
@@ -204,6 +341,19 @@ struct YourMapPrototypeScreen: View {
                 }
             }
 
+            mapControls
+                // NavigationStack can retain the source during a push. Hide
+                // its chrome in the same update that requests the destination,
+                // without waiting for onDisappear or animating an opacity tail.
+                .opacity(interaction.isMapChromeVisible ? 1 : 0)
+                .allowsHitTesting(interaction.isMapChromeVisible)
+                .accessibilityHidden(!interaction.isMapChromeVisible)
+                .animation(nil, value: interaction.isMapChromeVisible)
+        }
+    }
+
+    private var mapControls: some View {
+        ZStack(alignment: .bottom) {
             selectedPlaceProfileSurface
                 .padding(.bottom, 72)
                 .zIndex(30)
@@ -227,17 +377,12 @@ struct YourMapPrototypeScreen: View {
         if let selectedVisiblePlace {
             PlaceProfileMapSurface(
                 place: PlaceSheetPlace(visiblePlace: selectedVisiblePlace),
-                saves: [
-                    PlaceSaveSummary(
-                        visiblePlace: selectedVisiblePlace,
-                        attributes: selectedVisiblePlace.attributes
-                    )
-                ],
+                saves: saveSummaries(for: selectedVisiblePlace),
                 tasteSaves: [],
-                currentUserID: viewerID ?? selectedVisiblePlace.owner.id,
+                currentUserID: viewerID ?? store.currentUser.id,
                 viewerLocation: nil,
                 action: .none,
-                onOpen: {},
+                onOpen: { interaction.openSelectedPlace() },
                 onAction: {},
                 onReady: {}
             )
@@ -606,14 +751,30 @@ struct YourMapPrototypeScreen: View {
         Int((insights.repeatRate * 100).rounded())
     }
 
-    private func selectedRegion(for place: YourMapPrototypePlace) -> MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: place.coordinate.latitude - (cameraRegion.span.latitudeDelta * 0.18),
-                longitude: place.coordinate.longitude
-            ),
-            span: cameraRegion.span
-        )
+    private var nativeAnnotations: [NativeMapAnnotationDescriptor] {
+        renderedPlaces.map { place in
+            let statuses = lens.statuses.isEmpty ? place.statuses : place.statuses.intersection(lens.statuses)
+            let outlines = MapPinOutlineBuilder.outlines(for: statuses.map {
+                MapPinSaveState(ownership: pinOwnership, status: $0 == .been ? .been : .wannaGo)
+            })
+            return NativeMapAnnotationDescriptor(
+                id: place.id, kind: .saved(place.id), title: place.name,
+                emoji: WanderPlaceCategory.emoji(for: place.category, name: place.name),
+                coordinate: place.coordinate, outlines: outlines,
+                isSearchResult: false, isSelected: interaction.selectedPlaceID == place.id,
+                opacity: 1, animatesEntrance: false, entranceDelay: 0,
+                accessibilityLabel: MapPinAccessibility.label(
+                    outlines: outlines, category: place.category, placeName: place.name
+                ),
+                bounceRevision: interaction.selectedPlaceID == place.id ? interaction.bounceRevision : 0,
+                accessibilityIdentifierOverride: "yourMap.prototype.pin.\(place.id)",
+                keepsVisibleWhenColliding: true
+            )
+        }
+    }
+
+    private func saveSummaries(for visiblePlace: VisiblePlace) -> [PlaceSaveSummary] {
+        [PlaceSaveSummary(visiblePlace: visiblePlace, attributes: visiblePlace.attributes)]
     }
 
     private static func initialRegion(for places: [YourMapPrototypePlace]) -> MKCoordinateRegion {
@@ -966,72 +1127,6 @@ private struct YourMapPrototypeFilterSheet: View {
     private func sortedOptions(_ values: [String], fallback: [String]) -> [String] {
         let resolved = Set(values).sorted()
         return resolved.isEmpty ? fallback : resolved
-    }
-}
-
-private struct YourMapPrototypePin: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let place: YourMapPrototypePlace
-    let pinOwnership: MapPinSaveOwnership
-
-    var body: some View {
-        WanderCategoryEmoji(
-            category: place.category,
-            name: place.name,
-            size: MapPinVisualMetrics.emojiDiameter
-        )
-        .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
-        .background(brandMode.raisedBackground)
-        .clipShape(Circle())
-        .overlay(
-            MapPinOutlineStroke(
-                outline: MapPinOutline(
-                    ownership: pinOwnership,
-                    status: place.status == .been ? .been : .wannaGo
-                ),
-                lineWidth: MapPinVisualMetrics.outlineWidth
-            )
-        )
-        .shadow(color: brandMode.primaryText.opacity(0.22), radius: 6, x: 0, y: 2)
-        .accessibilityLabel("\(place.name), \(place.status.title), \(place.visitCount) visits")
-    }
-}
-
-private struct YourMapPrototypeSelectablePin: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let place: YourMapPrototypePlace
-    let isSelected: Bool
-    let pinOwnership: MapPinSaveOwnership
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                YourMapPrototypePin(place: place, pinOwnership: pinOwnership)
-
-                if isSelected {
-                    Text(place.name)
-                        .font(AstirTypography.metadata)
-                        .fontWeight(.bold)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .padding(.vertical, WanderTheme.spacing1)
-                        .background(brandMode.raisedBackground.opacity(0.96), in: Capsule())
-                        .overlay(Capsule().stroke(brandMode.border))
-                        .shadow(color: Color.black.opacity(0.16), radius: 4, y: 2)
-                        .offset(y: (MapPinVisualMetrics.discDiameter / 2) + 18)
-                        .transition(.scale(scale: 0.92).combined(with: .opacity))
-                }
-            }
-            .frame(width: 164, height: MapPinVisualMetrics.discDiameter)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Select \(place.name)")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("yourMap.prototype.pin.\(place.id)")
-        .zIndex(isSelected ? 10 : 0)
     }
 }
 

@@ -410,6 +410,33 @@ Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
 
+## Your Map includes Check-in and Wanna places (REC-573 / REC-574)
+
+Your Map's preview, total and Places/Cities/Countries breakdowns include both
+eligible Check-in and Wanna saves. A canonical place counts once; a place with
+both statuses uses the main Map's mixed solid/dashed marker. Status/time filters
+must still match a newer Wanna independently of an older check-in. The activity
+calendar and check-in totals retain their check-in-only meaning.
+
+Your Map Explore reuses the main Map's native renderer, pin hit testing and
+selection policies. Pan and empty-map tap dismiss the compact selection; zoom
+retains it. Selection, dismissal and returning from a place profile preserve the
+viewport and active lens.
+
+Every matching Check-in/Wanna place remains rendered in Your Map at every zoom
+level. There is no pin-count cap or collision-based hiding; dense markers may
+overlap at their real coordinates. Active filters and canonical-place
+deduplication still apply. The main Map retains its existing collision policy.
+
+At wider zooms, Your Map shows tiny neutral gray dots alongside spatially
+scattered category pins. Check-in dots are filled; Wanna-only dots are hollow.
+Selecting any dot promotes it to its full category pin without moving the
+camera. At neighborhood detail (3 meters per screen point or closer), every
+marker becomes a category pin, including coincident places. It returns to
+adaptive detail beyond 4 meters per point so small pinch changes do not flicker
+between modes. Existing category representatives get modest spacing tolerance
+during movement, and detail changes crossfade unless Reduce Motion is enabled.
+
 ## 2026-09-21 — Shared cards open the installed app directly (REC-577)
 
 Published `/cards/<entity>/<id>?card=<token>` links should open the exact entity
