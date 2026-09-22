@@ -1,0 +1,73 @@
+name: Feedback validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Wander/Features/Profile/Feedback*.swift'
+      - 'Wander/Models/Feedback.swift'
+      - 'Wander/Services/Remote/SupabaseFeedbackRepository.swift'
+      - 'WanderTests/FeedbackTests.swift'
+      - 'WanderUITests/FeedbackUITests.swift'
+      - '.github/workflows/feedback-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feedback-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Select existing iPhone simulator
+        run: |
+          xcrun simctl list devices available --json > /tmp/devices.json
+          python3 - <<'PY'
+          import json, os
+          devices = json.load(open('/tmp/devices.json'))['devices']
+          choices = [(runtime, d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == 'iPhone 17 Pro']
+          assert choices, 'No existing iPhone 17 Pro simulator'
+          chosen = sorted(choices, key=lambda x: x[0])[-1][1]
+          with open(os.environ['GITHUB_ENV'], 'a') as f: f.write('TEST_DEVICE_ID=' + chosen['udid'] + '\n')
+          print('Testing on', chosen['name'])
+          PY
+      # Match the existing native workflow: this timing benchmark requires
+      # its reference hardware rather than a shared hosted macOS runner.
+      - name: Unit suite and feedback lifecycle UI tests
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests -only-testing:WanderUITests/FeedbackUITests
+          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -resultBundlePath "$RUNNER_TEMP/Feedback.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Summarize native tests
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Feedback.xcresult" --format json | tee "$RUNNER_TEMP/feedback-summary.json"
+      - name: Save native summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feedback-native-summary
+          path: ${{ runner.temp }}/feedback-summary.json
+          retention-days: 14
+      - name: Save native evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feedback-native-results
+          path: ${{ runner.temp }}/Feedback.xcresult
+          retention-days: 14
