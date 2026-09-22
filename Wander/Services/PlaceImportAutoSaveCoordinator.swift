@@ -179,7 +179,6 @@ enum PlaceImportAutoSaveCoordinator {
                         ? nil
                         : destinationList(
                             for: batch,
-                            itemCount: placeItems.count,
                             importStore: importStore,
                             store: store
                         )
@@ -326,12 +325,11 @@ enum PlaceImportAutoSaveCoordinator {
 
     private static func destinationList(
         for batch: PlaceImportBatch,
-        itemCount: Int,
         importStore: PlaceImportStore,
         store: WanderStore
     ) -> LocalPlaceList? {
         guard batch.source == .googleMaps,
-              batch.sourceName != nil || itemCount > 1
+              let sourceListName = batch.sourceListName
         else { return nil }
         if let listID = batch.destinationListID,
            let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
@@ -343,7 +341,7 @@ enum PlaceImportAutoSaveCoordinator {
                 .map(\.name)
         )
         let name = PlaceImportDestinationListName.unique(
-            batch.sourceName,
+            sourceListName,
             existingNames: existingNames
         )
         guard let list = store.createPlaceList(

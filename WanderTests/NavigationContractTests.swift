@@ -616,7 +616,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(placeProfile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 2)
         XCTAssertTrue(placeProfile.contains("WanderGlassButtonCluster(mergeSpacing: 0)"))
         XCTAssertTrue(placeProfile.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
-        XCTAssertEqual(profile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 2)
+        // The profile header uses the shared action row; only its place controls remain grouped.
+        XCTAssertEqual(profile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 1)
         XCTAssertTrue(walkthrough.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
     }
 
@@ -2462,12 +2463,7 @@ final class NavigationContractTests: XCTestCase {
         let optionalDetails = try sourceSection(
             mapScreen,
             after: "private var optionalDetailsDisclosure: some View",
-            before: "private var optionalDetailsSummary: String"
-        )
-        let optionalSummary = try sourceSection(
-            mapScreen,
-            after: "private var optionalDetailsSummary: String",
-            before: "private var removeSaveSection: some View"
+            before: "private var offersListSelection: Bool"
         )
 
         XCTAssertFalse(detailsContent.contains("saveAsSection"))
@@ -2492,8 +2488,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains("checkInQuestionsSection"))
         XCTAssertFalse(optionalDetails.contains("plannedDateSection"))
         XCTAssertTrue(optionalDetails.contains("if isShowingOptionalDetails"))
-        XCTAssertTrue(optionalSummary.contains("\"tags\""))
-        XCTAssertFalse(optionalSummary.contains("fit, tags & privacy"))
+        XCTAssertTrue(optionalDetails.contains("\"tags\""))
+        XCTAssertFalse(optionalDetails.contains("fit, tags & privacy"))
         XCTAssertFalse(optionalDetails.contains("date, note"))
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
         XCTAssertFalse(optionalDetails.contains("WanderTheme.sunTint.color"))

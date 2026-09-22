@@ -190,7 +190,7 @@ final class BuildConfigurationTests: XCTestCase {
         let generatedProject = try String(contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj"))
 
         XCTAssertEqual(AppBrand.displayName, "Astir")
-        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "ASTIR Movement")
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "ASTIR")
         XCTAssertEqual(plist["CFBundleName"] as? String, "$(PRODUCT_NAME)")
 
         for key in ["NSCameraUsageDescription", "NSCalendarsFullAccessUsageDescription", "NSContactsUsageDescription", "NSLocationWhenInUseUsageDescription", "NSPhotoLibraryAddUsageDescription", "NSMicrophoneUsageDescription"] {
@@ -204,7 +204,10 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(cameraUsage.contains("restaurant photo"))
 
         let contactsUsage = try XCTUnwrap(plist["NSContactsUsageDescription"] as? String)
-        XCTAssertEqual(contactsUsage, "Astir uses your contacts to help you connect with people you know.")
+        XCTAssertTrue(contactsUsage.contains("contacts you allow"))
+        XCTAssertTrue(contactsUsage.contains("If you choose Find friends"))
+        XCTAssertTrue(contactsUsage.contains("phone numbers and emails"))
+        XCTAssertTrue(contactsUsage.contains("not saved on our servers"))
 
         for (relativePath, expectedName) in [
             ("WanderShareExtension/Info.plist", "Save to Astir"),
@@ -218,7 +221,7 @@ final class BuildConfigurationTests: XCTestCase {
             XCTAssertEqual(extensionPlist["CFBundleDisplayName"] as? String, expectedName)
         }
 
-        XCTAssertTrue(project.contains("CFBundleDisplayName: ASTIR Movement"))
+        XCTAssertTrue(project.contains("CFBundleDisplayName: ASTIR\n"))
         XCTAssertTrue(project.contains("PRODUCT_NAME: Wander"))
         XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander"))
         XCTAssertTrue(generatedProject.contains("PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander;"))

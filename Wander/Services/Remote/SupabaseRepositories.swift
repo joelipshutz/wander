@@ -871,6 +871,17 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
         return response.page
     }
 
+    func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
+        let response: RemoteActivityCommentLikeDTO = try await rpc.call(
+            "set_activity_comment_like",
+            params: SetActivityCommentLikeParams(commentID: commentID, isLiked: isLiked)
+        )
+        guard response.commentID.caseInsensitiveCompare(commentID) == .orderedSame else {
+            throw WanderRemoteError.invalidResponse("Comment like response did not match the request")
+        }
+        return response.summary
+    }
+
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
         try CommunityContentPolicy.validate(body)
         let response: RemoteActivityCommentPostDTO = try await rpc.call(
@@ -3758,6 +3769,16 @@ private struct ActivityCommentsParams: Encodable {
         case activityID = "input_activity_id"
         case before = "input_before"
         case limit = "input_limit"
+    }
+}
+
+private struct SetActivityCommentLikeParams: Encodable {
+    let commentID: String
+    let isLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case commentID = "input_comment_id"
+        case isLiked = "input_is_liked"
     }
 }
 

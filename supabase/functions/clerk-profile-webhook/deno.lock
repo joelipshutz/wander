@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@supabase/functions-js@2": "2.108.2",
+    "npm:libphonenumber-js@1.12.31": "1.12.31",
     "npm:openai@^4.52.5": "4.104.0"
   },
   "jsr": {
@@ -157,6 +158,9 @@
       "dependencies": [
         "ms"
       ]
+    },
+    "libphonenumber-js@1.12.31": {
+      "integrity": "sha512-Z3IhgVgrqO1S5xPYM3K5XwbkDasU67/Vys4heW+lfSBALcUZjeIIzI8zCLifY+OCzSq+fpDdywMDa7z+4srJPQ=="
     },
     "math-intrinsics@1.1.0": {
       "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g=="

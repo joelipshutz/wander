@@ -1,8 +1,23 @@
 # Decisions
 
-Last updated: 2026-09-18
+Last updated: 2026-09-21
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Lists within Wanna and check-in saves (REC-567)
+
+Wanna places **Add to lists** below the note and above the date, outside More
+options. Check-in places it directly below Friends, before Photos and More options.
+List selection remains optional and is available for first saves, repeat saves,
+and edits. Lists already containing the canonical place are disabled and labeled
+**Already in list**; repeat visits never create duplicate entries for that place
+in a list.
+
+Picker choices are staged until the parent save succeeds. Canceling the picker
+preserves the form; closing an unsaved form adds no list memberships. List delivery
+reuses the committed save and reports partial sync separately. Retrying list
+delivery never creates another check-in or Wanna. Each list retains its visibility
+and ownership, and selecting lists never changes the save's audience.
 
 ## Initial map preparation and retained returns (REC-484)
 
@@ -376,7 +391,7 @@ when present, otherwise “On <first name>’s radar”; their action is “Let�
 List invitations omit a repeated list-name subtitle and use “Join”. Messages and system sharing use one published card link. Instagram and TikTok
 photo handoffs copy that link for captions or stickers.
 
-## Linked share-card snapshots (REC-546)
+## Linked share-card snapshots — initial rollout (REC-546)
 
 Sharing publishes the approved Link card as a static public image behind an
 unguessable preview token on a website-only `/cards/<entity>/<id>` URL.
@@ -421,3 +436,23 @@ marker becomes a category pin, including coincident places. It returns to
 adaptive detail beyond 4 meters per point so small pinch changes do not flicker
 between modes. Existing category representatives get modest spacing tolerance
 during movement, and detail changes crossfade unless Reduce Motion is enabled.
+
+## 2026-09-21 — Shared cards open the installed app directly (REC-577)
+
+Published `/cards/<entity>/<id>?card=<token>` links should open the exact entity
+in a compatible installed Astir app when tapped from Messages. This supersedes
+the browser-first routing of REC-546; the published snapshot, one-URL message,
+and website fallback remain unchanged.
+
+The native parser accepts only the five published card roots and one valid
+preview token, discards the token, and reuses the canonical route through the
+existing session and authorization checks. The token grants no native access
+and is never an analytics property. The website associates only those five
+card paths with the app; it retains its preview and View action for browsers.
+
+Roll out the compatible iOS build before deploying the website association,
+then verify a tap from Messages on a device with that build. Older clients
+cannot parse card paths and association rules cannot select an app version.
+Keep the website PR unmerged until the tester-update gate is satisfied; account
+for Apple's association cache when verifying. Coordinate domain changes with
+REC-586 without removing existing getrec.me link support.

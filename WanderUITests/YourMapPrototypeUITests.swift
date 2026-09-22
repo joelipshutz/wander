@@ -113,10 +113,18 @@ final class YourMapPrototypeUITests: XCTestCase {
         card.tap()
         let back = app.buttons["place-profile.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["yourMap.prototype.filters"].exists)
+        XCTAssertFalse(app.buttons["yourMap.snapshot"].exists)
+        XCTAssertFalse(app.buttons["yourMap.prototype.mode"].exists)
+        XCTAssertFalse(app.buttons["Share this lens"].exists)
+        XCTAssertFalse(app.navigationBars.firstMatch.exists, "The native Your Map header must yield to the place profile header")
         capture("REC-574 full place detail from Your Map")
         back.tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["yourMap.prototype.filters"].exists)
+        XCTAssertTrue(app.buttons["yourMap.snapshot"].exists)
+        XCTAssertTrue(app.buttons["Share this lens"].exists)
+        XCTAssertTrue(app.navigationBars.firstMatch.exists)
         XCTAssertEqual(finalSelectedPin.frame.midX, selectedFrame.midX, accuracy: 5)
         XCTAssertEqual(finalSelectedPin.frame.midY, selectedFrame.midY, accuracy: 5)
         app.buttons.matching(identifier: "yourMap.prototype.mode").matching(NSPredicate(format: "label == %@", "Patterns")).firstMatch.tap()
@@ -146,6 +154,9 @@ final class YourMapPrototypeUITests: XCTestCase {
         app.launch()
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
+            app.swipeUp()
+        }
         preview.tap()
         app.buttons["Share this lens"].tap()
         XCTAssertTrue(app.segmentedControls["share.format"].waitForExistence(timeout: 10))
@@ -228,6 +239,9 @@ final class YourMapPrototypeUITests: XCTestCase {
 
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
+            app.swipeUp()
+        }
         preview.tap()
 
         XCTAssertFalse(app.tabBars.firstMatch.exists)

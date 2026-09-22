@@ -382,7 +382,7 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("YourMapPrototypeScreen(dataset: yourMapPrototypeDataset)"))
         XCTAssertFalse(profileScreen.contains("handledYourMapPrototypeLaunch"))
         XCTAssertFalse(profileScreen.contains("WanderShowYourMapPrototype"))
-        XCTAssertTrue(yourMapScreen.contains(".navigationTitle(mode == .map ? mapTitle : \"Patterns\")"))
+        XCTAssertTrue(yourMapScreen.contains(".navigationTitle(interaction.isMapChromeVisible ? (mode == .map ? mapTitle : \"Patterns\") : \"\")"))
         XCTAssertTrue(yourMapScreen.contains("MapPinOutlineBuilder"))
         XCTAssertTrue(yourMapScreen.contains("NativeMapView("))
         XCTAssertTrue(yourMapScreen.contains("keepsVisibleWhenColliding: true"))
@@ -401,7 +401,7 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertFalse(yourMapScreen.contains("private var yearComparisonPicker"))
         XCTAssertFalse(yourMapScreen.contains("private var patternFilterRow"))
         XCTAssertFalse(yourMapScreen.contains("YourMapPrototypeTabBar"))
-        XCTAssertFalse(yourMapScreen.contains("navigationBarBackButtonHidden"))
+        XCTAssertTrue(yourMapScreen.contains(".navigationBarBackButtonHidden(!interaction.isMapChromeVisible)"))
         XCTAssertFalse(sharedScheme.contains("-WanderShowYourMapPrototype"))
     }
 
@@ -589,10 +589,12 @@ final class ProfileMapRegressionTests: XCTestCase {
         XCTAssertEqual(state.selectedPlaceID, "two")
         XCTAssertEqual(state.cameraRequest.revision, 0)
         state.openSelectedPlace()
+        XCTAssertFalse(state.isMapChromeVisible, "Hide source controls on the navigation request, before onDisappear")
         let rotatedCamera = MKMapCamera(lookingAtCenter: zoom.center, fromDistance: 5_000, pitch: 35, heading: 70)
         state.recordCameraSnapshot(rotatedCamera)
         state.suspend()
         state.presentedPlaceID = nil
+        XCTAssertTrue(state.isMapChromeVisible, "Returning must restore the source controls")
         XCTAssertEqual(state.selectedPlaceID, "two")
         XCTAssertEqual(state.cameraRequest.region.span.latitudeDelta, zoom.span.latitudeDelta)
         XCTAssertEqual(state.cameraRequest.region.center.latitude, zoom.center.latitude)
@@ -641,5 +643,6 @@ final class ProfileMapRegressionTests: XCTestCase {
         state.reconcile(placeIDs: ["two"])
         XCTAssertNil(state.selectedPlaceID)
         XCTAssertNil(state.presentedPlaceID)
+        XCTAssertTrue(state.isMapChromeVisible, "Removing the destination restores the map controls")
     }
 }

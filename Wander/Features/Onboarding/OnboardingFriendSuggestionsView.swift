@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OnboardingFriendSuggestionsView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var brandMode
     let analytics: AnalyticsClient
     let continueAction: () -> Void
@@ -58,6 +59,14 @@ struct OnboardingFriendSuggestionsView: View {
             .accessibilityIdentifier("onboarding.friends.continue")
         }
         .task { await model.load() }
+        .onReceive(NotificationCenter.default.publisher(for: ContactDiscoveryService.didChange)) { _ in
+            model.clearContactRecommendations()
+            Task { await model.load(force: true) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            model.clearContactRecommendations()
+            if phase == .active { Task { await model.load(force: true) } }
+        }
         .task(id: model.normalizedQuery) { await model.search() }
     }
 
@@ -88,6 +97,7 @@ struct OnboardingFriendSuggestionsView: View {
                     ForEach(model.visibleProfiles) { profile in
                         OnboardingFriendRow(
                             profile: profile,
+                            reason: model.recommendations.first(where: { $0.id == profile.id })?.reason,
                             isFollowing: model.isFollowed(profile),
                             isPending: model.pendingIDs.contains(profile.id),
                             error: model.followErrors[profile.id]
@@ -139,6 +149,7 @@ struct OnboardingFriendSuggestionsView: View {
 private struct OnboardingFriendRow: View {
     @Environment(\.astirBrandMode) private var brandMode
     let profile: ProfileShell
+    let reason: DiscoverPeopleRecommendationReason?
     let isFollowing: Bool
     let isPending: Bool
     let error: String?
@@ -157,6 +168,11 @@ private struct OnboardingFriendRow: View {
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
+                if reason == .contacts {
+                    Text("In your contacts").font(AstirTypography.caption)
+                        .foregroundStyle(brandMode.secondaryText).fixedSize(horizontal: false, vertical: true)
+                }
+
                 }
                 Spacer(minLength: WanderTheme.spacing1)
                 Button(action: follow) {

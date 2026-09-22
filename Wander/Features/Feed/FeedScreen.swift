@@ -977,6 +977,14 @@ private struct FeedPeopleSurface: View {
                 }
                 .walkthroughTarget(.feedInvite)
 
+                NavigationLink {
+                    ContactDiscoverySettingsScreen()
+                } label: {
+                    Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
+                        .font(AstirTypography.control).frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("feed.contactDiscovery")
+
                 if isMemberSearchActive {
                     memberSearchResultsSection
                 } else {
@@ -988,6 +996,7 @@ private struct FeedPeopleSurface: View {
             .padding(.top, contentTopInset)
             .padding(.bottom, WanderTheme.spacing16)
         }
+        .accessibilityIdentifier("feed.people.scroll")
         .coordinateSpace(name: FeedScrollCoordinateSpace.people)
         .astirScrollTracking(
             coordinateSpaceName: FeedScrollCoordinateSpace.people,

@@ -12,6 +12,7 @@ final class YourMapInteractionState {
     private(set) var cameraRequest: NativeMapCameraRequest
     private(set) var selectedPlaceID: String?
     var presentedPlaceID: String?
+    var isMapChromeVisible: Bool { presentedPlaceID == nil }
     private(set) var bounceRevision: UInt64 = 0
     @ObservationIgnored private var pendingTap: Task<Void, Never>?
     @ObservationIgnored private var previousTapDate = Date.distantPast
@@ -208,22 +209,26 @@ struct YourMapPrototypeScreen: View {
         } message: {
             Text(snapshotError ?? "Please try again.")
         }
-        .navigationTitle(mode == .map ? mapTitle : "Patterns")
+        .navigationTitle(interaction.isMapChromeVisible ? (mode == .map ? mapTitle : "Patterns") : "")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(!interaction.isMapChromeVisible)
+        .toolbar(interaction.isMapChromeVisible ? .visible : .hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    if mode == .map {
-                        showsSharePreview = true
-                    } else {
-                        showsFilters = true
+                if interaction.isMapChromeVisible {
+                    Button {
+                        if mode == .map {
+                            showsSharePreview = true
+                        } else {
+                            showsFilters = true
+                        }
+                    } label: {
+                        Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
                     }
-                } label: {
-                    Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
+                    .disabled(mode == .map && sharedMapProfile?.serverID == nil)
+                    .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
                 }
-                .disabled(mode == .map && sharedMapProfile?.serverID == nil)
-                .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
             }
         }
         .navigationDestination(isPresented: Binding(
@@ -307,7 +312,7 @@ struct YourMapPrototypeScreen: View {
         ZStack(alignment: .bottom) {
             NativeMapView(
                 attributionBottomClearance: 72,
-                isInteractionEnabled: mode == .map,
+                isInteractionEnabled: mode == .map && interaction.isMapChromeVisible,
                 annotations: nativeAnnotations,
                 cameraRequest: interaction.cameraRequest,
                 nativeFeatureClearRevision: 0,
@@ -336,6 +341,19 @@ struct YourMapPrototypeScreen: View {
                 }
             }
 
+            mapControls
+                // NavigationStack can retain the source during a push. Hide
+                // its chrome in the same update that requests the destination,
+                // without waiting for onDisappear or animating an opacity tail.
+                .opacity(interaction.isMapChromeVisible ? 1 : 0)
+                .allowsHitTesting(interaction.isMapChromeVisible)
+                .accessibilityHidden(!interaction.isMapChromeVisible)
+                .animation(nil, value: interaction.isMapChromeVisible)
+        }
+    }
+
+    private var mapControls: some View {
+        ZStack(alignment: .bottom) {
             selectedPlaceProfileSurface
                 .padding(.bottom, 72)
                 .zIndex(30)
