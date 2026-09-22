@@ -3087,7 +3087,8 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func addCurrentUserPlace(
         userPlaceID: String,
-        to list: LocalPlaceList
+        to list: LocalPlaceList,
+        analyticsSurface: String? = nil
     ) -> ListPlaceAddResult {
         guard canAddPlaces(to: list),
               let userPlace = currentUserPlace(matching: userPlaceID)
@@ -3133,12 +3134,74 @@ final class WanderStore: ObservableObject {
             placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
         persist()
+        let companionSave: ListPlaceAddResult.CompanionSave = userPlace.status == .been
+            ? .none : .existingWanna(userPlaceID: userPlace.id)
+        if let analyticsSurface {
+            trackListPlaceAdded(to: list, companionSave: companionSave, surface: analyticsSurface)
+        }
         return ListPlaceAddResult(
             outcome: .added,
-            companionSave: userPlace.status == .been
-                ? .none
-                : .existingWanna(userPlaceID: userPlace.id)
+            companionSave: companionSave
         )
+    }
+
+    /// Queue every permitted membership locally before the first network wait.
+    /// Uses the committed save ID, never a candidate that could create a Wanna.
+    func addSavedPlaceToLists(
+        userPlaceID: String,
+        listIDs: Set<String>,
+        ownerUserID: String,
+        backend: WanderBackend?,
+        analyticsSurface: String = "check_in"
+    ) async -> PlaceSaveListResult {
+        guard currentUser.id == ownerUserID,
+              let userPlace = currentUserPlace(matching: userPlaceID)
+        else { return PlaceSaveListResult(unavailableCount: listIDs.count) }
+
+        var itemReferences: [(itemID: String, listID: String)] = []
+        var selectedLocalListIDs: Set<String> = []
+        var outcome = PlaceSaveListResult()
+        for listID in listIDs.sorted() {
+            guard let list = placeLists.first(where: {
+                ($0.id == listID || $0.localID == listID) && $0.deletedAt == nil
+                    && $0.syncState != .tombstoned && $0.syncState != .pendingDelete
+            }), canAddPlaces(to: list) else {
+                outcome.unavailableCount += 1
+                continue
+            }
+            guard selectedLocalListIDs.insert(list.localID).inserted else { continue }
+            let result = addCurrentUserPlace(userPlaceID: userPlaceID, to: list, analyticsSurface: analyticsSurface)
+            guard result.outcome != .permissionDenied,
+                  let item = listItems(for: list).first(where: { item in
+                      item.ownerUserPlaceID == userPlace.id || item.sourceUserPlaceID == userPlace.id
+                          || place(matching: userPlace.placeID).map { listItem(item, represents: $0) } == true
+                  }) else {
+                outcome.unavailableCount += 1
+                continue
+            }
+            itemReferences.append((item.localID, list.localID))
+        }
+        flushPersistence()
+
+        for reference in itemReferences {
+            guard currentUser.id == ownerUserID else { return outcome }
+            if let backend {
+                await syncPlaceListItem(localOrServerID: reference.itemID, listID: reference.listID, backend: backend)
+            }
+            guard currentUser.id == ownerUserID else { return outcome }
+            guard let item = placeListItems.first(where: { $0.localID == reference.itemID }),
+                  item.deletedAt == nil else {
+                outcome.unavailableCount += 1
+                continue
+            }
+            switch item.syncState {
+            case .synced: outcome.syncedCount += 1
+            case .failed, .serverDenied: outcome.failedCount += 1
+            case .pendingDelete, .tombstoned: outcome.unavailableCount += 1
+            default: outcome.pendingCount += 1
+            }
+        }
+        return outcome
     }
 
     func addCandidate(
@@ -3547,6 +3610,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func performPendingPlaceListSync(backend: WanderBackend) async -> Int {
+        let ownerID = currentUser.id
         var processedLocalIDs = Set<String>()
         var syncedCount = 0
         while let list = placeLists.first(where: { list in
@@ -3558,6 +3622,21 @@ final class WanderStore: ObservableObject {
             if await syncPlaceList(localOrServerID: list.id, backend: backend) {
                 syncedCount += 1
             }
+            guard currentUser.id == ownerID else { return syncedCount }
+        }
+
+        // List metadata may already be synced while membership is still pending.
+        // Collaborators must also retry items without upserting someone else's list.
+        let pendingItems = placeListItems.filter {
+            $0.addedByUserID == ownerID && $0.deletedAt == nil
+                && [.pendingCreate, .pendingUpdate, .failed, .localOnly].contains($0.syncState)
+        }.map { ($0.localID, $0.listID) }
+        for (itemID, listID) in pendingItems {
+            guard currentUser.id == ownerID else { return syncedCount }
+            guard let list = placeLists.first(where: { $0.id == listID || $0.localID == listID }),
+                  !processedLocalIDs.contains(list.localID), list.deletedAt == nil, canAddPlaces(to: list)
+            else { continue }
+            await syncPlaceListItem(localOrServerID: itemID, listID: listID, backend: backend)
         }
 
         #if DEBUG
@@ -3618,6 +3697,7 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     private func performPlaceListSync(localOrServerID: String, backend: WanderBackend) async -> Bool {
+        let ownerID = currentUser.id
         guard let index = placeLists.firstIndex(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }),
               canManage(placeLists[index])
         else { return false }
@@ -3634,6 +3714,7 @@ final class WanderStore: ObservableObject {
 
             do {
                 try await backend.deletePlaceList(listID: remoteListID)
+                guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
                 }
@@ -3641,6 +3722,7 @@ final class WanderStore: ObservableObject {
                 persist()
                 return true
             } catch {
+                guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
                 }
@@ -3668,6 +3750,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let remoteListID = try await backend.upsertPlaceList(draft)
+            guard currentUser.id == ownerID else { return false }
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID || $0.serverID == remoteListID }) {
                 placeLists[currentIndex].serverID = remoteListID
                 replaceListIDReferences(previousID: previousID, canonicalID: placeLists[currentIndex].id)
@@ -3675,6 +3758,7 @@ final class WanderStore: ObservableObject {
             }
 
             try await backend.setPlaceListCollaborators(listID: remoteListID, userIDs: collaboratorUserIDs)
+            guard currentUser.id == ownerID else { return false }
 
             let deletedItemIDs = placeListItems
                 .filter {
@@ -3689,6 +3773,7 @@ final class WanderStore: ObservableObject {
                     listID: remoteListID,
                     backend: backend
                 )
+                guard currentUser.id == ownerID else { return false }
             }
 
             let itemIDs = placeListItems
@@ -3696,10 +3781,12 @@ final class WanderStore: ObservableObject {
                 .map(\.id)
             for itemID in itemIDs {
                 await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
+                guard currentUser.id == ownerID else { return false }
             }
 
             if let data = list.snapshotCoverData, list.snapshotCoverPath == nil {
                 let path = try await backend.uploadListSnapshotCover(listID: remoteListID, jpegData: data)
+                guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
                     placeLists[currentIndex].snapshotCoverPath = path
                 }
@@ -3717,6 +3804,7 @@ final class WanderStore: ObservableObject {
             persist()
             return true
         } catch {
+            guard currentUser.id == ownerID else { return false }
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID }) {
                 if placeListMatchesSnapshot(placeLists[currentIndex], snapshot: list, collaboratorUserIDs: collaboratorUserIDs) {
                     placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
@@ -3754,6 +3842,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func syncPlaceListItem(localOrServerID: String, listID: String, backend: WanderBackend) async {
+        let ownerID = currentUser.id
         guard let initialItem = placeListItems.first(where: { item in
             item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
         }) else {
@@ -3763,6 +3852,7 @@ final class WanderStore: ObservableObject {
         if remoteID(initialItem.listID) == nil {
             _ = await syncPlaceList(localOrServerID: listID, backend: backend)
         }
+        guard currentUser.id == ownerID else { return }
 
         guard let itemIndex = placeListItems.firstIndex(where: { item in
             item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
@@ -3776,8 +3866,11 @@ final class WanderStore: ObservableObject {
 
         do {
             let remoteItemID = try await backend.addPlaceListItem(draft)
-            placeListItems[itemIndex].serverID = remoteItemID
-            placeListItems[itemIndex].syncStateRaw = SyncState.synced.rawValue
+            guard currentUser.id == ownerID,
+                  let currentIndex = placeListItems.firstIndex(where: { $0.localID == initialItem.localID }),
+                  placeListItems[currentIndex].deletedAt == nil else { return }
+            placeListItems[currentIndex].serverID = remoteItemID
+            placeListItems[currentIndex].syncStateRaw = SyncState.synced.rawValue
             if let listIndex = placeLists.firstIndex(where: { $0.id == draft.listID || $0.serverID == draft.listID }) {
                 placeLists[listIndex].syncStateRaw = SyncState.synced.rawValue
                 placeLists[listIndex].cachedItemCount = listItems(for: placeLists[listIndex]).count
@@ -3786,7 +3879,10 @@ final class WanderStore: ObservableObject {
             lastRemoteError = nil
             persist()
         } catch {
-            placeListItems[itemIndex].syncStateRaw = SyncState.failed.rawValue
+            guard currentUser.id == ownerID,
+                  let currentIndex = placeListItems.firstIndex(where: { $0.localID == initialItem.localID }),
+                  placeListItems[currentIndex].deletedAt == nil else { return }
+            placeListItems[currentIndex].syncStateRaw = SyncState.failed.rawValue
             lastRemoteError = remoteErrorMessage(error)
             persist()
         }
