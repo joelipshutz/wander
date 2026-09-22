@@ -38,6 +38,7 @@
 		0E63C5812CFBBD3907522CA0 /* PlaceBusinessMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F8BE1B23A944FEF54533C0A /* PlaceBusinessMetadata.swift */; };
 		0E8F681583533012E44915CC /* BoundaryImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */; };
 		0F3D94BE097ECC72E14C849E /* ProfileIdentityDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2EFE475CB6583F0C505A332 /* ProfileIdentityDraft.swift */; };
+		0F8B6E177C2636EC5AB77186 /* JointCheckInTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC11FF48C67C7F4C7E072E90 /* JointCheckInTests.swift */; };
 		0FAD14461F61D19F055200E0 /* Feedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A011A7BA9FB18559F7D951 /* Feedback.swift */; };
 		0FBC2CA85335E84B315F5529 /* PlacePlanNotificationRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C4EF76F1E573B4E9454338 /* PlacePlanNotificationRow.swift */; };
 		10758BA557EF6D1DF76EDE1A /* rec-303-map-pin-entrance-bounce-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = F4773A8786B641C4B1B2AD5E /* rec-303-map-pin-entrance-bounce-pre.png */; };
@@ -864,6 +865,7 @@
 		FB62FA88F5FD2D3EEFBF3EC5 /* FeedbackAudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackAudioRecorder.swift; sourceTree = "<group>"; };
 		FB8844D089094A4ECCD76AB9 /* PlacePlanInvitationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanInvitationScreen.swift; sourceTree = "<group>"; };
 		FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreak.swift; sourceTree = "<group>"; };
+		FC11FF48C67C7F4C7E072E90 /* JointCheckInTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointCheckInTests.swift; sourceTree = "<group>"; };
 		FC31E1B31B7D3F9A6586AEB4 /* SharedCheckInQuestionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCheckInQuestionTests.swift; sourceTree = "<group>"; };
 		FC7A37127E589B3983B23875 /* rec-206-profile-activity-count-instability-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-206-profile-activity-count-instability-pre.json"; sourceTree = "<group>"; };
 		FCE68EF63CF76167D39B86CC /* CommonGroundInvitationDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundInvitationDraftTests.swift; sourceTree = "<group>"; };
@@ -1206,6 +1208,7 @@
 				C16EB7A1D40F7359CDF8BBD5 /* FullPageBackSwipeTests.swift */,
 				91F90BDBE304312EA5EAE4F4 /* InCommonDesignMockupTests.swift */,
 				250A52345423E83FCB445CEE /* InviteFrameworkTests.swift */,
+				FC11FF48C67C7F4C7E072E90 /* JointCheckInTests.swift */,
 				5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */,
 				FF974E1185955511D9799445 /* ListMapPresentationTests.swift */,
 				693C10045243D1D398714042 /* ListPlacePhotoTests.swift */,
@@ -2180,6 +2183,7 @@
 				467A349EA278B0B533891B36 /* FullPageBackSwipeTests.swift in Sources */,
 				378615C2CBE931B6273D3BC1 /* InCommonDesignMockupTests.swift in Sources */,
 				45833D5AA3703CD781FE0E0E /* InviteFrameworkTests.swift in Sources */,
+				0F8B6E177C2636EC5AB77186 /* JointCheckInTests.swift in Sources */,
 				26573736780BA54719E0F7EC /* LinkPlaceParserTests.swift in Sources */,
 				06130F23A3FE733B72CC2F51 /* ListMapPresentationTests.swift in Sources */,
 				7EA0CEE2490A8C95F486A1F3 /* ListPlacePhotoTests.swift in Sources */,

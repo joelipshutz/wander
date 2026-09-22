@@ -382,7 +382,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(fixture["destructive_gesture_policy"], "full-swipe deletion is disabled")
         XCTAssertTrue(activityViews.contains("artworkAction: artworkAction"))
         XCTAssertTrue(activityViews.contains("photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstMediaID)"))
-        XCTAssertTrue(activityViews.contains("context.media.count == 1 ? \"Open activity photo\" : \"Open activity photos\""))
+        XCTAssertTrue(activityViews.contains("activeContext.media.count == 1 ? \"Open activity photo\" : \"Open activity photos\""))
         XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute, onDismiss:"))
         XCTAssertTrue(activityViews.contains("TabView(selection: $selectedMediaID)"))
         XCTAssertTrue(activityViews.contains(".tabViewStyle(.page(indexDisplayMode: .automatic))"))

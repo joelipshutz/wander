@@ -6,17 +6,20 @@ struct ActivityEngagementSummary: Equatable {
     let likeCount: Int
     let commentCount: Int
     let viewerHasLiked: Bool
+    let isAvailable: Bool
 
     init(
         activityID: String,
         likeCount: Int = 0,
         commentCount: Int = 0,
-        viewerHasLiked: Bool = false
+        viewerHasLiked: Bool = false,
+        isAvailable: Bool = true
     ) {
         self.activityID = activityID
         self.likeCount = max(0, likeCount)
         self.commentCount = max(0, commentCount)
         self.viewerHasLiked = viewerHasLiked
+        self.isAvailable = isAvailable
     }
 
     static func empty(activityID: String) -> ActivityEngagementSummary {
@@ -157,6 +160,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     let attributionAction: String
     let listContext: ActivityEngagementListContext?
     let media: [ActivityEngagementMedia]
+    let jointCheckIn: JointCheckInProjection?
+    let profileSubjectUserID: String?
 
     init(
         activityID: String,
@@ -173,7 +178,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         ticketEyebrow: String? = nil,
         attributionAction: String? = nil,
         listContext: ActivityEngagementListContext? = nil,
-        media: [ActivityEngagementMedia] = []
+        media: [ActivityEngagementMedia] = [],
+        jointCheckIn: JointCheckInProjection? = nil,
+        profileSubjectUserID: String? = nil
     ) {
         self.init(
             activityID: activityID,
@@ -190,7 +197,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             ticketEyebrow: ticketEyebrow,
             attributionAction: attributionAction,
             listContext: listContext,
-            media: media
+            media: media,
+            jointCheckIn: jointCheckIn,
+            profileSubjectUserID: profileSubjectUserID
         )
     }
 
@@ -209,7 +218,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         ticketEyebrow: String? = nil,
         attributionAction: String? = nil,
         listContext: ActivityEngagementListContext? = nil,
-        media: [ActivityEngagementMedia] = []
+        media: [ActivityEngagementMedia] = [],
+        jointCheckIn: JointCheckInProjection? = nil,
+        profileSubjectUserID: String? = nil
     ) {
         self.activityID = activityID
         self.actor = actor
@@ -227,6 +238,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         self.attributionAction = attributionAction ?? ticketKind.defaultAttributionAction
         self.listContext = listContext
         self.media = media
+        self.jointCheckIn = jointCheckIn
+        self.profileSubjectUserID = profileSubjectUserID
     }
 
     var id: String { activityID }
@@ -241,6 +254,11 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     }
 
     var shareMessage: String {
+        if jointCheckIn != nil { return "See this check-in at \(placeName) on Astir" }
+        return legacyShareMessage
+    }
+
+    private var legacyShareMessage: String {
         switch ticketKind {
         case .checkIn:
             "See \(actor.displayName)'s check-in at \(placeName) on Astir"

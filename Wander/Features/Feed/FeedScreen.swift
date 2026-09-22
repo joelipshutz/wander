@@ -1739,6 +1739,7 @@ private struct FeedActivityModule: View {
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
             showsEngagementActions: engagementContext != nil,
+            openContributorProfile: openProfile,
             activityGroup: group.isCombined ? group : nil,
             openActivityList: openList
         )
@@ -1810,7 +1811,8 @@ private struct FeedActivityModule: View {
             ticketEyebrow: activity.postcardTicketEyebrow,
             attributionAction: activity.postcardAttributionAction,
             listContext: activity.list?.activityEngagementListContext,
-            media: activity.media.map(\.activityEngagementMedia)
+            media: activity.media.map(\.activityEngagementMedia),
+            jointCheckIn: activity.jointCheckIn
         )
     }
 }
@@ -1858,7 +1860,8 @@ extension FeedActivity {
             ticketEyebrow: postcardTicketEyebrow,
             attributionAction: postcardAttributionAction,
             listContext: list?.activityEngagementListContext,
-            media: media.map(\.activityEngagementMedia)
+            media: media.map(\.activityEngagementMedia),
+            jointCheckIn: jointCheckIn
         )
     }
 
@@ -2248,7 +2251,7 @@ private func initials(for name: String) -> String {
         .uppercased()
 }
 
-private func placeDetail(for place: VisiblePlace) -> String {
+func placeDetail(for place: VisiblePlace) -> String {
     [
         place.effectiveCompactType,
         place.place.locality,

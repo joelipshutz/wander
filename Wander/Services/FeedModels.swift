@@ -53,6 +53,65 @@ struct FeedMediaPreview: Identifiable, Equatable, Sendable {
     }
 }
 
+/// One viewer-authorized occasion, shared by Feed, activity history and detail.
+/// Pending/hidden members are deliberately absent, including from all counts.
+struct JointCheckInProjection: Identifiable, Equatable {
+    let groupID: String
+    let canonicalActivityID: String
+    let revision: Int
+    let occurredAt: Date
+    let viewerCanManage: Bool
+    let contributions: [JointCheckInContribution]
+
+    var id: String { groupID }
+    var hasMultipleContributors: Bool { contributions.count > 1 }
+
+    /// Server order -> profile subject first -> stable remaining order.
+    /// A missing/unreadable subject never gets a synthetic contribution.
+    func ordered(for profileUserID: String? = nil) -> [JointCheckInContribution] {
+        guard let profileUserID,
+              let index = contributions.firstIndex(where: { $0.person.id == profileUserID })
+        else { return contributions }
+        return [contributions[index]] + contributions.enumerated().compactMap {
+            $0.offset == index ? nil : $0.element
+        }
+    }
+
+    func attribution(for profileUserID: String? = nil) -> String {
+        let people = ordered(for: profileUserID)
+        let names = people.prefix(2).map(\.person.displayName)
+        switch people.count {
+        case 0: return "Checked in"
+        case 1: return "\(names[0]) checked in"
+        case 2: return "\(names[0]) and \(names[1]) checked in"
+        default: return "\(names[0]), \(names[1]) and \(people.count - 2) \(people.count == 3 ? "other" : "others") checked in"
+        }
+    }
+
+    static let discussionAudience = "Comments are shared with everyone who can view this check-in. People who join later may bring more readers."
+}
+
+struct JointCheckInContribution: Identifiable, Equatable {
+    let participantID: String
+    let visitID: String
+    let userPlaceID: String
+    let person: ProfileShell
+    let note: String?
+    let rating: Double?
+    let media: [ActivityEngagementMedia]
+    let viewerCanEdit: Bool
+    /// Keep the server's full timestamp precision for optimistic edit checks.
+    var updatedAtToken: String? = nil
+
+    var id: String { participantID }
+}
+
+struct JointCheckInContexts: Equatable {
+    let mappings: [String: String]
+    let groups: [String: JointCheckInProjection]
+    var isSupported = true
+}
+
 /// An event envelope resolved through the viewer's current visibility rules.
 /// `place` and `list` are intentionally optional: source data can disappear
 /// between an event being committed and a later page refresh.
@@ -66,6 +125,7 @@ struct FeedActivity: Identifiable {
     let note: String?
     let rating: Double?
     let media: [FeedMediaPreview]
+    let jointCheckIn: JointCheckInProjection?
 
     init(
         id: String,
@@ -76,7 +136,8 @@ struct FeedActivity: Identifiable {
         occurredAt: Date,
         note: String? = nil,
         rating: Double? = nil,
-        media: [FeedMediaPreview] = []
+        media: [FeedMediaPreview] = [],
+        jointCheckIn: JointCheckInProjection? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -87,6 +148,7 @@ struct FeedActivity: Identifiable {
         self.note = note
         self.rating = kind.supportsRating ? rating : nil
         self.media = media
+        self.jointCheckIn = jointCheckIn
     }
 
     /// `place_saved` is the legacy event name for saving from another person's
@@ -208,7 +270,7 @@ enum FeedPresentation {
         for event in chronological {
             // Legacy social saves infer their ticket from mutable status; they
             // cannot safely stand in for a specific immutable Wanna or visit.
-            guard event.kind != .placeSaved, event.kind != .listCreated,
+            guard event.jointCheckIn == nil, event.kind != .placeSaved, event.kind != .listCreated,
                   let place = event.place,
                   !place.place.id.isEmpty,
                   event.occurredAt > .distantPast,

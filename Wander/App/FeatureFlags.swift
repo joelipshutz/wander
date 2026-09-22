@@ -68,6 +68,7 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     case socialImportApifyGeminiV1 = "social_import_apify_gemini_v1"
     case placeProfileActionVariant = "place_profile_action_variant"
     case profileFeedbackV1 = "profile_feedback_v1"
+    case jointCheckInsV2 = "joint_check_ins_v2"
 
     var definition: FeatureFlagDefinition {
         switch self {
@@ -129,6 +130,15 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             FeatureFlagDefinition(
                 title: "Profile feedback",
                 summary: "Shows the profile feedback button. Enable after delivery setup is verified.",
+                bundledDefault: .boolean(false),
+                integerRange: nil,
+                allowsRemoteAccountOverride: true,
+                isEditableOnDevice: true
+            )
+        case .jointCheckInsV2:
+            FeatureFlagDefinition(
+                title: "Joint check-ins",
+                summary: "Creates shared check-ins with individual contributions and one conversation.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -241,6 +251,7 @@ struct FeatureFlagOverrideStore {
              .placeProfileSaveTrayV1,
              .semanticPlaceSearchV1,
              .socialImportApifyGeminiV1,
+             .jointCheckInsV2,
              .profileFeedbackV1:
             nil
         }

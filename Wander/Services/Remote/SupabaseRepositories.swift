@@ -732,9 +732,10 @@ struct SupabaseFeedRepository: FeedRepository {
 
         let mediaRows: [RemoteActivityMediaDTO]
         do {
-            mediaRows = try await rpc.call(
-                "activity_media",
-                params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
+            mediaRows = try await rpc.versionedRead(
+                "activity_media_v2", legacy: "activity_media",
+                params: ActivityEngagementSummariesParams(activityIDs: activityIDs),
+                allowsLegacy: response.activity.allSatisfy { $0.jointCheckIn == nil }
             )
         } catch {
             if Task.isCancelled { throw CancellationError() }
@@ -771,6 +772,12 @@ struct SupabaseFeedRepository: FeedRepository {
         before: String?,
         limit: Int
     ) async throws -> RemoteFollowedFeedPageDTO {
+        do {
+            return try await rpc.call("followed_feed_v2", params: FollowedFeedParams(
+                before: before, limit: limit, includeFeatured: includesFeaturedPlaces))
+        } catch {
+            guard isMissingRemoteFunction(error, named: "followed_feed_v2") else { throw error }
+        }
         do {
             return try await rpc.call(
                 "followed_feed",
@@ -821,47 +828,47 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     }
 
     func activity(id: String) async throws -> FeedActivity {
-        let response: RemoteFeedActivityDTO = try await rpc.call(
-            "activity_detail",
+        let response: RemoteFeedActivityDTO = try await rpc.versionedRead(
+            "activity_detail_v2", legacy: "activity_detail",
             params: ActivityDetailParams(activityID: id)
         )
-        let mediaRows: [RemoteActivityMediaDTO] = (try? await rpc.call(
-            "activity_media",
-            params: ActivityEngagementSummariesParams(activityIDs: [id])
+        let mediaRows: [RemoteActivityMediaDTO] = (try? await rpc.versionedRead(
+            "activity_media_v2", legacy: "activity_media",
+            params: ActivityEngagementSummariesParams(activityIDs: [response.id]), allowsLegacy: response.jointCheckIn == nil
         )) ?? []
         return try await response.activity(
             storage: storage,
-            mediaOverride: mediaRows.first(where: { $0.activityID == id })?.media
+            mediaOverride: mediaRows.first(where: { $0.activityID == response.id })?.media
         )
     }
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
-        let rows: [RemoteActivityEngagementSummaryDTO] = try await rpc.call(
-            "activity_engagement_summaries",
+        let rows: [RemoteActivityEngagementSummaryDTO] = try await rpc.versionedRead(
+            "activity_engagement_summaries_v2", legacy: "activity_engagement_summaries",
             params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
         )
         return rows.map(\.summary)
     }
 
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
-        let rows: [RemotePlaceActivityEngagementDTO] = try await rpc.call(
-            "place_activity_engagement_summaries",
+        let rows: [RemotePlaceActivityEngagementDTO] = try await rpc.versionedRead(
+            "place_activity_engagement_summaries_v2", legacy: "place_activity_engagement_summaries",
             params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
         )
         return try rows.map { try $0.match() }
     }
 
     func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary {
-        let response: RemoteActivityEngagementSummaryDTO = try await rpc.call(
-            "set_activity_like",
+        let response: RemoteActivityEngagementSummaryDTO = try await rpc.versionedRead(
+            "set_activity_like_v2", legacy: "set_activity_like",
             params: SetActivityLikeParams(activityID: activityID, isLiked: isLiked)
         )
         return response.summary
     }
 
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
-        let response: RemoteActivityCommentsPageDTO = try await rpc.call(
-            "activity_comments",
+        let response: RemoteActivityCommentsPageDTO = try await rpc.versionedRead(
+            "activity_comments_v2", legacy: "activity_comments",
             params: ActivityCommentsParams(
                 activityID: activityID,
                 before: before,
@@ -871,9 +878,21 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
         return response.page
     }
 
+    func addComment(activityID: String, body: String, requestID: String, jointConsent: Bool) async throws -> ActivityCommentPostResult {
+        try CommunityContentPolicy.validate(body)
+        do {
+            let response: RemoteActivityCommentPostDTO = try await rpc.call("add_activity_comment_v2",
+                params: AddActivityCommentV2Params(activityID: activityID, body: body, requestID: requestID, consent: jointConsent ? 1 : nil))
+            return response.result
+        } catch {
+            guard !jointConsent, isMissingRemoteFunction(error, named: "add_activity_comment_v2") else { throw error }
+            return try await addComment(activityID: activityID, body: body)
+        }
+    }
+
     func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
-        let response: RemoteActivityCommentLikeDTO = try await rpc.call(
-            "set_activity_comment_like",
+        let response: RemoteActivityCommentLikeDTO = try await rpc.versionedRead(
+            "set_activity_comment_like_v2", legacy: "set_activity_comment_like",
             params: SetActivityCommentLikeParams(commentID: commentID, isLiked: isLiked)
         )
         guard response.commentID.caseInsensitiveCompare(commentID) == .orderedSame else {
@@ -892,7 +911,7 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     }
 
     func deleteComment(commentID: String) async throws -> ActivityEngagementSummary {
-        let response: RemoteActivityEngagementSummaryDTO = try await rpc.call(
+        let response: RemoteActivityCommentDeletionDTO = try await rpc.call(
             "delete_own_activity_comment",
             params: DeleteActivityCommentParams(commentID: commentID)
         )
@@ -1430,6 +1449,44 @@ struct SupabaseSharedVisitRepository: SharedVisitRepository {
         self.storage = storage
     }
 
+    func createJoint(_ draft: CheckInSaveDraft, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult {
+        try await rpc.call("save_joint_check_in", params: SaveJointCheckInParams(draft: draft, inviteeUserIDs: inviteeUserIDs, operationID: operationID))
+    }
+
+    func editJoint(_ draft: CheckInSaveDraft, groupID: String, expectedUpdatedAt: String, operationID: String) async throws -> JointCheckInMutationResult {
+        try await rpc.call("edit_joint_check_in", params: EditJointCheckInParams(draft: draft, groupID: groupID, expectedUpdatedAt: expectedUpdatedAt, operationID: operationID))
+    }
+
+    func jointContexts(visitIDs: [String]) async throws -> JointCheckInContexts {
+        guard !visitIDs.isEmpty else { return JointCheckInContexts(mappings: [:], groups: [:]) }
+        do {
+            let response: RemoteJointCheckInContextsDTO = try await rpc.call("joint_check_in_contexts", params: SharedVisitCompanionParams(visitIDs: Array(visitIDs.prefix(50))))
+            let ids = response.groups.map(\.canonicalActivityID)
+            let rows: [RemoteActivityMediaDTO] = ids.isEmpty ? [] : ((try? await rpc.call("activity_media_v2", params: ActivityEngagementSummariesParams(activityIDs: ids))) ?? [])
+            let source = Dictionary(rows.map { ($0.activityID.lowercased(), $0.media) }, uniquingKeysWith: { first, _ in first })
+            let rendered = await resolveFeedMedia(rows.flatMap { row in
+                row.media.enumerated().map { FeedMediaResolutionRequest(activityID: row.activityID.lowercased(), mediaIndex: $0.offset, media: $0.element) }
+            }, storage: storage)
+            let previews = Dictionary(grouping: rendered, by: \.activityID).mapValues { $0.sorted { $0.mediaIndex < $1.mediaIndex }.map(\.preview) }
+            return try response.contexts(sourceMedia: source, renderedMedia: previews)
+        } catch {
+            guard isMissingRemoteFunction(error, named: "joint_check_in_contexts") else { throw error }
+            return JointCheckInContexts(mappings: [:], groups: [:], isSupported: false)
+        }
+    }
+
+    func setJointInvitees(groupID: String, expectedRevision: Int, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult {
+        try await rpc.call("set_joint_check_in_invitees", params: ManageJointCheckInParams(groupID: groupID, expectedRevision: expectedRevision, inviteeUserIDs: inviteeUserIDs, operationID: operationID))
+    }
+
+    func leaveJoint(groupID: String, expectedRevision: Int, operationID: String) async throws -> JointCheckInLeaveResult {
+        try await rpc.call("leave_joint_check_in", params: LeaveJointCheckInParams(groupID: groupID, expectedRevision: expectedRevision, operationID: operationID))
+    }
+
+    func declineJoint(participantID: String, generation: Int) async throws {
+        let _: Bool = try await rpc.call("decline_joint_check_in", params: SharedVisitContextParams(participantID: participantID, generation: generation))
+    }
+
     func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
         let rows: [SharedVisitInviteRow] = try await rpc.call(
             "create_shared_visit_invites",
@@ -1461,30 +1518,39 @@ struct SupabaseSharedVisitRepository: SharedVisitRepository {
     }
 
     func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
-        let rows: [SharedVisitInvitationRow] = try await rpc.call(
-            "list_shared_visit_inbox",
+        let rows: [SharedVisitInvitationRow] = try await rpc.versionedRead(
+            "list_shared_visit_inbox_v2", legacy: "list_shared_visit_inbox",
             params: SharedVisitInboxParams(before: before, limit: limit)
         )
         return rows.map(\.invitation)
     }
 
     func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation? {
-        let rows: [SharedVisitInvitationRow] = try await rpc.call(
-            "get_shared_visit_context",
+        let rows: [SharedVisitInvitationRow] = try await rpc.versionedRead(
+            "get_shared_visit_context_v2", legacy: "get_shared_visit_context",
             params: SharedVisitContextParams(participantID: participantID, generation: generation)
         )
         return rows.first?.invitation
     }
 
     func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? {
-        let rows: [SharedVisitDestinationRow] = try await rpc.call(
-            "resolve_shared_visit_destination",
+        let rows: [SharedVisitDestinationRow] = try await rpc.versionedRead(
+            "resolve_shared_visit_destination_v2", legacy: "resolve_shared_visit_destination",
             params: SharedVisitContextParams(participantID: participantID, generation: generation)
         )
         return rows.first?.destination
     }
 
     func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
+        if draft.modelVersion == 2 {
+            let result: JointCheckInMutationResult = try await rpc.call(
+                draft.savesPrivately ? "save_joint_invitation_privately" : "accept_joint_check_in",
+                params: JointCheckInAcceptanceParams(draft: draft))
+            return SharedVisitAcceptanceResult(operationID: draft.operationID, participantID: result.participantID,
+                userPlaceID: result.userPlaceID, visitID: result.visitID,
+                backfilledFromUserPlace: result.backfilledFromUserPlace,
+                status: draft.savesPrivately ? .declined : .accepted, photoCopies: [], jointResult: result)
+        }
         let response: SharedVisitAcceptanceResponse = try await rpc.call(
             "accept_shared_visit",
             params: SharedVisitAcceptanceParams(draft: draft)
@@ -1602,6 +1668,7 @@ private struct SharedVisitContextParams: Encodable {
 
 private struct SharedVisitInvitationRow: Decodable {
     let participantID: String
+    let modelVersion: Int?
     let groupID: String
     let invitationGeneration: Int
     let snapshotRevision: Int
@@ -1629,6 +1696,7 @@ private struct SharedVisitInvitationRow: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case participantID = "participant_id"
+        case modelVersion = "model_version"
         case groupID = "group_id"
         case invitationGeneration = "invitation_generation"
         case snapshotRevision = "snapshot_revision"
@@ -1686,7 +1754,8 @@ private struct SharedVisitInvitationRow: Decodable {
             ratingScore: sourceSnapshot.ratingScore,
             attributeAnswers: sourceSnapshot.attributeAnswers,
             tags: sourceSnapshot.tags,
-            photos: sourceSnapshot.photos
+            photos: sourceSnapshot.photos,
+            modelVersion: modelVersion
         )
     }
 }
@@ -1797,12 +1866,14 @@ private struct SharedVisitVisitPayload: Encodable {
     let note: String?
     let ratingScore: Double?
     let attributeAnswers: [SharedVisitAttributePayload]
+    let startsFreshVisit: Bool?
 
     init(draft: SharedVisitAcceptanceDraft) {
         visitedAt = draft.visitedAt
         note = draft.note
         ratingScore = PlaceRating.normalized(draft.ratingScore)
         attributeAnswers = draft.attributes.map(SharedVisitAttributePayload.init)
+        startsFreshVisit = draft.modelVersion == 2 ? draft.startsFreshVisit : nil
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1810,6 +1881,7 @@ private struct SharedVisitVisitPayload: Encodable {
         case note
         case ratingScore = "rating_score"
         case attributeAnswers = "attribute_answers"
+        case startsFreshVisit = "starts_fresh_visit"
     }
 }
 
@@ -1897,6 +1969,7 @@ private struct SharedVisitPhotoCopyRow: Decodable {
 
 private struct SharedVisitDestinationRow: Decodable {
     let participantID: String
+    let modelVersion: Int?
     let requestedGeneration: Int
     let currentGeneration: Int
     let routeStatus: String
@@ -1906,6 +1979,7 @@ private struct SharedVisitDestinationRow: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case participantID = "participant_id"
+        case modelVersion = "model_version"
         case requestedGeneration = "requested_generation"
         case currentGeneration = "current_generation"
         case routeStatus = "route_status"
@@ -1922,7 +1996,8 @@ private struct SharedVisitDestinationRow: Decodable {
             status: routeStatus,
             placeID: placeID,
             acceptedVisitID: acceptedVisitID,
-            sourceVisitID: sourceVisitID
+            sourceVisitID: sourceVisitID,
+            modelVersion: modelVersion
         )
     }
 }
@@ -4444,5 +4519,106 @@ private struct RemoteWannaSaveDTO: Decodable {
                       occurredAt: occurredAt, note: note, visibility: visibility,
                       plannedDate: plannedDate.flatMap { WannaGoDate.date(fromStorageString: $0) }, attributeAnswersJSON: attributeAnswersJSON,
                       isSynced: true, editedAt: editedAt, isHistoricalOriginal: isHistoricalOriginal)
+    }
+}
+
+private struct SaveJointCheckInParams: Encodable {
+    let draft: CheckInSaveDraft
+    let inviteeUserIDs: [String]
+    let operationID: String
+    enum CodingKeys: String, CodingKey {
+        case inviteeUserIDs = "input_invitee_user_ids", operationID = "input_operation_id"
+        case consentVersion = "input_consent_version", historicalWant = "input_historical_want"
+    }
+    func encode(to encoder: Encoder) throws {
+        try SaveOwnCheckInParams(draft: draft).encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(inviteeUserIDs, forKey: .inviteeUserIDs)
+        try container.encode(operationID, forKey: .operationID)
+        try container.encode(1, forKey: .consentVersion)
+        if draft.historicalWant == nil { try container.encodeNil(forKey: .historicalWant) }
+    }
+}
+private struct EditJointCheckInParams: Encodable {
+    let draft: CheckInSaveDraft
+    let groupID: String
+    let expectedUpdatedAt: String
+    let operationID: String
+    enum CodingKeys: String, CodingKey {
+        case groupID = "input_group_id", expectedUpdatedAt = "input_expected_updated_at"
+        case operationID = "input_operation_id", historicalWant = "input_historical_want"
+    }
+    func encode(to encoder: Encoder) throws {
+        try SaveOwnCheckInParams(draft: draft).encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(groupID, forKey: .groupID)
+        try container.encode(expectedUpdatedAt, forKey: .expectedUpdatedAt)
+        try container.encode(operationID, forKey: .operationID)
+        if draft.historicalWant == nil { try container.encodeNil(forKey: .historicalWant) }
+    }
+}
+private struct JointCheckInAcceptanceParams: Encodable {
+    let draft: SharedVisitAcceptanceDraft
+    enum CodingKeys: String, CodingKey {
+        case participantID = "input_participant_id", generation = "input_generation"
+        case revision = "input_snapshot_revision", operationID = "input_operation_id"
+        case userPlaceID = "input_user_place_id", visitID = "input_visit_id"
+        case parent = "input_user_place", visit = "input_visit", consent = "input_consent_version"
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(draft.participantID, forKey: .participantID)
+        try container.encode(draft.invitationGeneration, forKey: .generation)
+        try container.encode(draft.snapshotRevision, forKey: .revision)
+        try container.encode(draft.operationID, forKey: .operationID)
+        try container.encode(draft.userPlaceID, forKey: .userPlaceID)
+        try container.encode(draft.visitID, forKey: .visitID)
+        try container.encode(SharedVisitUserPlacePayload(visibility: draft.visibility.rawValue), forKey: .parent)
+        try container.encode(SharedVisitVisitPayload(draft: draft), forKey: .visit)
+        if !draft.savesPrivately { try container.encode(1, forKey: .consent) }
+    }
+}
+private struct ManageJointCheckInParams: Encodable {
+    let groupID: String
+    let expectedRevision: Int
+    let inviteeUserIDs: [String]
+    let operationID: String
+    enum CodingKeys: String, CodingKey {
+        case groupID = "input_group_id", expectedRevision = "input_expected_revision"
+        case inviteeUserIDs = "input_invitee_user_ids", operationID = "input_operation_id"
+    }
+}
+private struct LeaveJointCheckInParams: Encodable {
+    let groupID: String
+    let expectedRevision: Int
+    let operationID: String
+    enum CodingKeys: String, CodingKey {
+        case groupID = "input_group_id", expectedRevision = "input_expected_revision", operationID = "input_operation_id"
+    }
+}
+
+private struct AddActivityCommentV2Params: Encodable {
+    let activityID: String
+    let body: String
+    let requestID: String
+    let consent: Int?
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id", body = "input_body", requestID = "input_request_id", consent = "input_consent_version"
+    }
+}
+
+private struct RemoteActivityCommentDeletionDTO: Decodable {
+    let activityID: String
+    let isAvailable: Bool?
+    let likeCount: Int?
+    let commentCount: Int?
+    let viewerHasLiked: Bool?
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id", isAvailable = "is_available", likeCount = "like_count"
+        case commentCount = "comment_count", viewerHasLiked = "viewer_has_liked"
+    }
+    var summary: ActivityEngagementSummary {
+        ActivityEngagementSummary(activityID: activityID, likeCount: likeCount ?? 0,
+            commentCount: commentCount ?? 0, viewerHasLiked: viewerHasLiked ?? false, isAvailable: isAvailable ?? true)
     }
 }

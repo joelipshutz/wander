@@ -152,6 +152,16 @@ async function main() {
         await client.query("rollback to savepoint feedback_slack_smoke");
         await client.query("release savepoint feedback_slack_smoke");
         console.log("ok - independent private Slack feedback delivery and account context");
+        for (const name of ["joint_check_in_identity", "joint_check_ins", "joint_check_in_lifecycle", "joint_check_in_projections", "joint_check_in_security"]) {
+          await client.query("savepoint joint_check_in_smoke");
+          try {
+            await client.query(transactionBody(loadStrictPgTapSQL(new URL(`../supabase/tests/${name}.sql`, import.meta.url)), "rollback"));
+          } finally {
+            await client.query("rollback to savepoint joint_check_in_smoke");
+            await client.query("release savepoint joint_check_in_smoke");
+          }
+        }
+        console.log("ok - joint check-in identity, lifecycle, visibility, engagement and RPC security");
         // Isolate pgTAP's per-transaction plan from the later history suite.
         await client.query("savepoint question_snapshot_smoke");
         try {
@@ -1390,6 +1400,7 @@ function runLinkedSmokeChecks(
 
 function loadStrictPgTapSQL(fileURL) {
   const source = readFileSync(fileURL, "utf8");
+  const suiteLabel = fileURL.pathname.split("/").pop().replaceAll("'", "''");
   const finishStatement = "select * from finish();";
   if (source.includes("from finish() as result(message);")) {
     return source;
@@ -1409,7 +1420,7 @@ begin
   from finish() as result(message);
 
   if diagnostics is not null then
-    raise exception 'pgTAP smoke failures: %', diagnostics;
+    raise exception 'pgTAP smoke failures (${suiteLabel}): %', diagnostics;
   end if;
 end;
 $strict_pgtap$;`,
@@ -2635,6 +2646,14 @@ begin
   end if;
 end
 $user_place_soft_delete$;
+
+${["joint_check_in_identity", "joint_check_ins", "joint_check_in_lifecycle", "joint_check_in_projections", "joint_check_in_security"].map(name => `
+reset role;
+savepoint joint_check_in_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL(`../supabase/tests/${name}.sql`, import.meta.url)), "rollback")}
+rollback to savepoint joint_check_in_smoke;
+release savepoint joint_check_in_smoke;
+`).join("\n")}
 
 -- Isolate preview fixtures and pgTAP's transaction-local plan before other suites.
 reset role;

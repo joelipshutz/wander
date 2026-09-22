@@ -173,7 +173,14 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeVisits: [LocalPlaceVisit]
     @Published private(set) var visitPhotos: [LocalVisitPhoto]
     @Published private(set) var sharedVisitInvitations: [SharedVisitInvitation]
+    @Published private(set) var pendingActivityCommentDrafts: [PendingActivityCommentDraft]
     @Published private(set) var pendingSharedVisitInvites: [PendingSharedVisitInvite]
+    @Published private(set) var jointCheckInsByVisitID: [String: JointCheckInProjection] = [:]
+    @Published private(set) var unavailableJointActivityByVisitID: [String: String] = [:]
+    @Published private(set) var jointPrivacyRevision: UInt64 = 0
+    private var inFlightJointOperationIDs: Set<String> = []
+    private var completedJointVisitByOperationID: [String: String] = [:]
+
     @Published private(set) var sharedVisitCompanionsByVisitID: [String: [SharedVisitCompanion]] = [:]
     private(set) var sharedVisitInboxUserID: String?
     @Published private(set) var follows: [LocalFollow]
@@ -617,6 +624,8 @@ final class WanderStore: ObservableObject {
             self.visitPhotos = restored.visitPhotos
             self.sharedVisitInvitations = restored.sharedVisitInvitations
             self.sharedVisitInboxUserID = restored.sharedVisitInboxUserID
+            self.unavailableJointActivityByVisitID = restored.jointActivityIdentityByVisitID
+            self.pendingActivityCommentDrafts = restored.pendingActivityCommentDrafts
             self.pendingSharedVisitInvites = restored.pendingSharedVisitInvites
             self.follows = restored.follows
             self.blocks = restored.blocks
@@ -648,6 +657,7 @@ final class WanderStore: ObservableObject {
             self.visitPhotos = fixtures.visitPhotos
             self.sharedVisitInvitations = []
             self.sharedVisitInboxUserID = nil
+            self.pendingActivityCommentDrafts = []
             self.pendingSharedVisitInvites = []
             self.follows = fixtures.follows
             self.blocks = fixtures.blocks
@@ -924,7 +934,7 @@ final class WanderStore: ObservableObject {
         guard let backend, backend.canUseSharedVisits else { return false }
         let requestUserID = currentUser.id
         do {
-            try await backend.declineSharedVisit(participantID: participantID, generation: generation)
+            try await backend.declineSharedVisit(participantID: participantID, generation: generation, isJoint: sharedVisitInvitations.first(where: { $0.participantID == participantID })?.isJointCheckIn == true)
             guard currentUser.id == requestUserID else { return false }
             sharedVisitInvitations.removeAll { $0.participantID == participantID }
             lastRemoteError = nil
@@ -943,6 +953,7 @@ final class WanderStore: ObservableObject {
         let remoteIDs = Array(Set(visitIDs.filter { UUID(uuidString: $0) != nil })).prefix(50)
         guard !remoteIDs.isEmpty else { return }
 
+        await refreshJointCheckInContexts(visitIDs: visitIDs, backend: backend)
         do {
             let companions = try await backend.sharedVisitCompanions(visitIDs: Array(remoteIDs))
             guard currentUser.id == requestUserID else { return }
@@ -956,6 +967,340 @@ final class WanderStore: ObservableObject {
             guard currentUser.id == requestUserID else { return }
             lastRemoteError = remoteErrorMessage(error)
         }
+    }
+
+    func jointCheckIn(for visitID: String) -> JointCheckInProjection? {
+        matchingVisitIDs(visitID).compactMap { jointCheckInsByVisitID[$0.lowercased()] }.first
+    }
+
+    func unavailableJointActivityID(for visitID: String) -> String? {
+        matchingVisitIDs(visitID).compactMap { unavailableJointActivityByVisitID[$0.lowercased()] }.first
+    }
+
+    var jointActivityIdentityByVisitID: [String: String] {
+        var identities = unavailableJointActivityByVisitID
+        for (visitID, projection) in jointCheckInsByVisitID {
+            identities[visitID.lowercased()] = projection.canonicalActivityID
+        }
+        for activity in followedFeedPage?.activity ?? [] {
+            for contribution in activity.jointCheckIn?.contributions ?? [] {
+                identities[contribution.visitID.lowercased()] = activity.id
+            }
+        }
+        return identities
+    }
+
+    private func invalidateJointCheckInContexts() {
+        jointPrivacyRevision &+= 1
+        feedRefreshTask?.task.cancel()
+        feedRefreshTask = nil
+        feedRefreshCompletedAt = nil
+        feedRefreshCompletedRevision = nil
+        for (id, projection) in jointCheckInsByVisitID {
+            unavailableJointActivityByVisitID[id] = projection.canonicalActivityID
+        }
+        let jointActivities = followedFeedPage?.activity.filter { $0.jointCheckIn != nil } ?? []
+        for activity in jointActivities {
+            for contribution in activity.jointCheckIn?.contributions ?? [] {
+                unavailableJointActivityByVisitID[contribution.visitID.lowercased()] = activity.id
+            }
+            discardCachedActivity(activity.id)
+        }
+        // Cached comments can contain names and personal details even when the
+        // corresponding card has only ever been opened through a profile.
+        activityCommentsByID = [:]
+        pendingActivityCommentLikeIDs = []
+        activityCommentLikeRevisions = [:]
+        activityCommentsGeneration = UUID()
+        jointCheckInsByVisitID = [:]
+    }
+
+    func refreshJointCheckInContexts(visitIDs: [String], backend: WanderBackend?) async {
+        guard let backend, backend.canUseSharedVisits else { return }
+        let ownerID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
+        let previousIdentities = jointActivityIdentityByVisitID
+        let ids = Array(Set(visitIDs.flatMap { matchingVisitIDs($0) }
+            .filter { UUID(uuidString: $0) != nil }.map { $0.lowercased() })).sorted()
+        for offset in stride(from: 0, to: ids.count, by: 50) {
+            let batch = Array(ids[offset..<min(offset + 50, ids.count)])
+            do {
+                let contexts = try await backend.jointCheckInContexts(visitIDs: batch)
+                guard !Task.isCancelled, currentUser.id == ownerID, jointPrivacyRevision == privacyRevision else { return }
+                if !contexts.isSupported && batch.contains(where: {
+                    jointCheckInsByVisitID[$0] != nil || unavailableJointActivityByVisitID[$0] != nil
+                }) {
+                    throw WanderRemoteError.notImplemented("Refresh support for this shared check-in is unavailable")
+                }
+                // An explicit absent mapping revokes the old projection, including media.
+                for id in batch {
+                    let projection = contexts.mappings[id].flatMap { contexts.groups[$0] }
+                    if let projection, projection.contributions.contains(where: { isBlockedBetweenCurrentUser(and: $0.person.id) }) {
+                        // A freshly started read can still race the remote block
+                        // write. Keep local blocking effective until it commits.
+                        jointCheckInsByVisitID[id] = nil
+                        unavailableJointActivityByVisitID[id] = projection.canonicalActivityID
+                    } else {
+                        jointCheckInsByVisitID[id] = projection
+                        unavailableJointActivityByVisitID[id] = nil
+                    }
+                }
+            } catch {
+                guard !Task.isCancelled, currentUser.id == ownerID, jointPrivacyRevision == privacyRevision else { return }
+                // Fail closed on refresh; never retain another audience's cached contributors.
+                for id in batch {
+                    if let prior = jointCheckInsByVisitID[id] {
+                        unavailableJointActivityByVisitID[id] = prior.canonicalActivityID
+                    }
+                    jointCheckInsByVisitID[id] = nil
+                }
+                lastRemoteError = remoteErrorMessage(error)
+            }
+        }
+        if jointActivityIdentityByVisitID != previousIdentities {
+            persist()
+            flushPersistence()
+        }
+    }
+
+    @discardableResult
+    func queueJointCheckIn(sourceVisitID: String, inviteeUserIDs: [String]) -> Bool {
+        guard let visit = currentUserVisit(matching: sourceVisitID), visit.serverUpdatedAt == nil,
+              let parent = currentUserPlace(matching: visit.userPlaceID), parent.visibility != .selfOnly,
+              !isPrivateProfile else { return false }
+        let invitees = Array(Set(inviteeUserIDs.filter { !$0.isEmpty && $0 != currentUser.id })).sorted()
+        guard (1...9).contains(invitees.count) else { return false }
+        if pendingSharedVisitInvites.contains(where: { $0.ownerUserID == currentUser.id && $0.jointMutation != nil && matchingVisitIDs(sourceVisitID).contains($0.sourceVisitID) }) { return true }
+        if visit.serverID == nil { visit.serverID = UUID().uuidString.lowercased() }
+        guard let draft = checkInDraft(for: visit.id, userPlace: parent) else { return false }
+        pendingSharedVisitInvites.append(PendingSharedVisitInvite(id: UUID().uuidString.lowercased(), ownerUserID: currentUser.id,
+            sourceVisitID: visit.id, inviteeUserIDs: invitees, createdAt: .now, jointMutation: .create(draft)))
+        // Durable frozen intent precedes the first await or network write.
+        persist()
+        flushPersistence()
+        let properties = ["invitee_count": "\(invitees.count)"]
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.sharedVisitInvitesQueued, properties: properties))
+        analytics.track(.engagement(need: .connect, action: .sharedVisitInvitesQueued, surface: "check_in", properties: properties))
+        return true
+    }
+
+    func pendingJointAcceptanceDraft(participantID: String) -> SharedVisitAcceptanceDraft? {
+        pendingSharedVisitInvites
+            .filter { $0.ownerUserID == currentUser.id }
+            .sorted { $0.createdAt > $1.createdAt }
+            .compactMap { pending -> SharedVisitAcceptanceDraft? in
+                guard case .accept(let invitation, let draft) = pending.jointMutation,
+                      invitation.participantID == participantID else { return nil }
+                return draft
+            }.first
+    }
+
+    @discardableResult
+    func acceptJointCheckIn(invitation: SharedVisitInvitation, draft: SharedVisitAcceptanceDraft, backend: WanderBackend) async -> LocalPlaceVisit? {
+        guard invitation.isJointCheckIn, draft.modelVersion == 2 else { return nil }
+        let ownerID = currentUser.id
+        let pending: PendingSharedVisitInvite
+        if let existing = pendingSharedVisitInvites.first(where: { item in
+            guard item.ownerUserID == ownerID, item.requiresReview != true, case .accept(let prior, _) = item.jointMutation else { return false }
+            return prior.participantID == invitation.participantID && prior.invitationGeneration == invitation.invitationGeneration
+        }) {
+            if case .accept(_, let frozen) = existing.jointMutation,
+               (frozen.note != draft.note || frozen.ratingScore != draft.ratingScore
+                || frozen.attributes != draft.attributes || frozen.visibility != draft.visibility
+                || frozen.savesPrivately != draft.savesPrivately || frozen.startsFreshVisit != draft.startsFreshVisit
+                || (frozen.ownPhotos ?? []) != (draft.ownPhotos ?? [])) {
+                lastRemoteError = "Your earlier response is still syncing. Finish that response before changing it. Your new text stays in this form."
+                return nil
+            }
+            pending = existing
+        } else {
+            pendingSharedVisitInvites.removeAll { item in
+                guard item.ownerUserID == ownerID, item.requiresReview == true, case .accept(let prior, _) = item.jointMutation else { return false }
+                return prior.participantID == invitation.participantID
+            }
+            pending = PendingSharedVisitInvite(id: draft.operationID, ownerUserID: ownerID,
+                sourceVisitID: draft.visitID, inviteeUserIDs: [], createdAt: .now,
+                jointMutation: .accept(invitation: invitation, draft: draft))
+            pendingSharedVisitInvites.append(pending)
+            persist()
+            flushPersistence()
+        }
+        guard await deliverJointOperation(pending, backend: backend), currentUser.id == ownerID else { return nil }
+        return currentUserVisit(matching: completedJointVisitByOperationID.removeValue(forKey: pending.id) ?? pending.sourceVisitID)
+    }
+
+    @discardableResult
+    func leaveJointCheckIn(_ group: JointCheckInProjection, backend: WanderBackend?) async -> Bool {
+        guard let backend, let own = group.contributions.first(where: { $0.person.id == currentUser.id }) else { return false }
+        if let existing = pendingSharedVisitInvites.first(where: {
+            $0.ownerUserID == currentUser.id && $0.jointMutation != nil
+                && matchingVisitIDs(own.visitID).contains($0.sourceVisitID)
+        }) {
+            if case .leave(let groupID, let revision) = existing.jointMutation, groupID == group.groupID {
+                if existing.requiresReview != true { return await deliverJointOperation(existing, backend: backend) }
+                guard revision != group.revision else {
+                    lastRemoteError = "Refresh this check-in before trying again."
+                    return false
+                }
+                pendingSharedVisitInvites.removeAll { $0.id == existing.id }
+            } else {
+                lastRemoteError = "Finish syncing this check-in before leaving it."
+                return false
+            }
+        }
+        let pending = PendingSharedVisitInvite(id: UUID().uuidString.lowercased(), ownerUserID: currentUser.id,
+            sourceVisitID: own.visitID, inviteeUserIDs: [], createdAt: .now,
+            jointMutation: .leave(groupID: group.groupID, expectedRevision: group.revision))
+        pendingSharedVisitInvites.append(pending)
+        persist()
+        flushPersistence()
+        return await deliverJointOperation(pending, backend: backend)
+    }
+
+    private func deliverJointOperation(_ pending: PendingSharedVisitInvite, backend: WanderBackend) async -> Bool {
+        guard currentUser.id == pending.ownerUserID, pending.requiresReview != true, let mutation = pending.jointMutation,
+              inFlightJointOperationIDs.insert(pending.id).inserted else { return false }
+        defer { inFlightJointOperationIDs.remove(pending.id) }
+        let ownerID = pending.ownerUserID
+        do {
+            switch mutation {
+            case .create(let draft):
+                guard let visit = currentUserVisit(matching: pending.sourceVisitID),
+                      let parent = currentUserPlace(matching: visit.userPlaceID), parent.visibility != .selfOnly,
+                      !isPrivateProfile else {
+                    lastRemoteError = "This draft is now private. Review it before sharing a joint check-in."
+                    return false
+                }
+                let result = try await backend.createJointCheckIn(draft, inviteeUserIDs: pending.inviteeUserIDs, operationID: pending.id)
+                guard currentUser.id == ownerID else { return false }
+                markPlace(localOrServerID: draft.userPlace.place.localID, serverID: result.placeID, syncState: .synced)
+                _ = applyJointCheckInResult(result, candidate: nil, localVisitID: pending.sourceVisitID)
+            case .accept(let invitation, let draft):
+                let response = try await backend.acceptSharedVisit(draft)
+                guard currentUser.id == ownerID, let result = response.jointResult else { return false }
+                guard let visit = applyJointCheckInResult(result, candidate: invitation.candidate, localVisitID: pending.sourceVisitID) else {
+                    throw WanderRemoteError.invalidResponse("Invalid owned joint check-in response")
+                }
+                recordJointAcceptancePhotos(draft.ownPhotos ?? [], visitID: visit.id)
+                completedJointVisitByOperationID[pending.id] = visit.id
+                sharedVisitInvitations.removeAll { $0.participantID == invitation.participantID }
+                let properties = ["created_new_place": "false", "photo_count": "0"]
+                analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.sharedVisitAccepted, properties: properties))
+                analytics.track(.engagement(need: .status, action: .sharedVisitAccepted, surface: "shared_visit", properties: properties))
+            case .manage(let groupID, let expectedRevision):
+                _ = try await backend.setJointCheckInInvitees(groupID: groupID, expectedRevision: expectedRevision,
+                    inviteeUserIDs: pending.inviteeUserIDs, operationID: pending.id)
+                guard currentUser.id == ownerID else { return false }
+            case .edit(let groupID, let expectedUpdatedAt, let draft):
+                let result = try await backend.editJointCheckIn(draft, groupID: groupID,
+                    expectedUpdatedAt: expectedUpdatedAt, operationID: pending.id)
+                guard currentUser.id == ownerID else { return false }
+                _ = applyJointCheckInResult(result, candidate: nil, localVisitID: pending.sourceVisitID)
+            case .leave(let groupID, let expectedRevision):
+                _ = try await backend.leaveJointCheckIn(groupID: groupID, expectedRevision: expectedRevision, operationID: pending.id)
+                guard currentUser.id == ownerID else { return false }
+                jointCheckInsByVisitID = jointCheckInsByVisitID.filter { $0.value.groupID != groupID }
+            }
+            pendingSharedVisitInvites.removeAll { $0.id == pending.id }
+            lastRemoteError = nil
+            persist()
+            await refreshJointCheckInContexts(visitIDs: [pending.sourceVisitID], backend: backend)
+            if case .accept = mutation {
+                Task { @MainActor [weak self] in
+                    guard let self, self.currentUser.id == ownerID else { return }
+                    _ = await self.retryPendingVisitPhotoUploads(backend: backend)
+                }
+            }
+            return true
+        } catch {
+            guard currentUser.id == ownerID else { return false }
+            lastRemoteError = remoteErrorMessage(error)
+            if case WanderRemoteError.invalidResponse(let failure) = error,
+               failure.contains("P0001"), !failure.contains("creation_unavailable"),
+               let index = pendingSharedVisitInvites.firstIndex(where: { $0.id == pending.id }) {
+                pendingSharedVisitInvites[index].requiresReview = true
+            }
+            persist()
+            return false
+        }
+    }
+
+    func recordJointAcceptancePhotos(_ drafts: [PlaceSaveDraftPhoto], visitID: String) {
+        guard let visit = currentUserVisit(matching: visitID) else { return }
+        withDeferredPersistence {
+            for draft in drafts where draft.sourcePhotoID == nil {
+                let localID = "joint_visit_photo_\(draft.id.uuidString.lowercased())"
+                // Include tombstones: replay must not restore an explicitly
+                // removed photo, even before its first successful upload.
+                guard !visitPhotos.contains(where: { $0.localID == localID }) else { continue }
+                let photo = LocalVisitPhoto(localID: localID, visitID: visit.id,
+                    storagePath: "\(currentUser.id)/\(visit.id)/\(localID).jpg",
+                    localAssetRef: draft.localAssetRef, contentType: draft.contentType, byteSize: draft.byteSize,
+                    sortOrder: (photos(for: visit.id).map(\.sortOrder).max() ?? -1) + 1,
+                    uploadState: .pendingUpload, syncState: .pendingCreate)
+                visitPhotos.append(photo)
+                persist()
+            }
+        }
+        flushPersistence()
+    }
+
+    @discardableResult
+    private func applyJointCheckInResult(_ result: JointCheckInMutationResult, candidate: PlaceCandidate?, localVisitID: String) -> LocalPlaceVisit? {
+        guard result.modelVersion == 2, result.userPlace.userID == currentUser.id else { return nil }
+        let snapshot = result.userPlace
+        let place: LocalPlace?
+        if let candidate {
+            let resolved = upsertPlace(from: candidate, sourceType: .socialSave)
+            resolved.serverID = result.placeID
+            place = resolved
+        } else {
+            place = places.first { $0.id == result.placeID || $0.serverID == result.placeID }
+        }
+        guard let place else { return nil }
+        let parent = currentUserPlace(matching: result.userPlaceID)
+            ?? userPlaces.first { $0.userID == currentUser.id && matchingPlaceIDs(place.id).contains($0.placeID) && $0.deletedAt == nil }
+            ?? LocalUserPlace(localID: "local_up_joint_\(result.userPlaceID)", serverID: result.userPlaceID,
+                userID: currentUser.id, placeID: place.id, status: .been,
+                visibility: PlaceVisibility(rawValue: snapshot.visibility) ?? .selfOnly, sourceType: snapshot.sourceType)
+        if !userPlaces.contains(where: { $0 === parent }) { userPlaces.append(parent) }
+        parent.serverID = snapshot.id
+        parent.statusRaw = snapshot.status
+        parent.visibilityRaw = snapshot.visibility
+        parent.note = snapshot.note
+        parent.ratingScore = snapshot.ratingScore
+        parent.visitedAt = snapshot.visitedAt
+        parent.savedAt = snapshot.savedAt
+        parent.sourceType = snapshot.sourceType
+        parent.sourceUserPlaceID = snapshot.sourceUserPlaceID
+        parent.attributionUserID = snapshot.attributionUserID
+        parent.categoryOverride = snapshot.categoryOverride
+        parent.subcategoryOverride = snapshot.subcategoryOverride
+        parent.categoryOverrideSource = snapshot.categoryOverrideSource
+        parent.categoryOverrideConfidence = snapshot.categoryOverrideConfidence
+        parent.historicalWantNote = snapshot.historicalWantNote
+        parent.historicalWantedAt = snapshot.historicalWantedAt
+        parent.historicalWantAttributeAnswersJSON = snapshot.historicalWantAttributeAnswers.flatMap { try? JSONEncoder().encode($0) }.flatMap { String(data: $0, encoding: .utf8) }
+        parent.setHistoricalWantTags(snapshot.historicalWantTags ?? [])
+        parent.serverUpdatedAt = snapshot.updatedAt
+        parent.updatedAt = snapshot.updatedAt
+        parent.localUpdatedAt = snapshot.updatedAt
+        parent.syncStateRaw = SyncState.synced.rawValue
+        parent.lastSyncError = nil
+        let attributesJSON = String(data: (try? JSONEncoder().encode(result.userPlaceAttributes)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        replaceAttributes(for: parent.id, with: VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: attributesJSON), syncState: .synced)
+        let visit = currentUserVisit(matching: result.visitID) ?? currentUserVisit(matching: localVisitID)
+            ?? LocalPlaceVisit(localID: "local_visit_joint_\(result.visitID)", serverID: result.visitID, userPlaceID: parent.id,
+                visitedAt: result.visitedAt, syncState: .synced)
+        if !placeVisits.contains(where: { $0 === visit }) { placeVisits.append(visit) }
+        visit.userPlaceID = parent.id
+        markPlaceVisit(localOrServerID: visit.id, serverID: result.visitID, syncState: .synced, result: result.visitResult)
+        if let activityID = result.canonicalActivityID {
+            unavailableJointActivityByVisitID[result.visitID.lowercased()] = activityID
+        }
+        objectWillChange.send()
+        persist()
+        return visit
     }
 
     func sharedVisitCompanions(for visitID: String) -> [SharedVisitCompanion] {
@@ -1010,8 +1355,25 @@ final class WanderStore: ObservableObject {
     }
 
     func queueSharedVisitInviteeReconciliation(sourceVisitID: String, inviteeUserIDs: [String]) {
+        guard unavailableJointActivityID(for: sourceVisitID) == nil else {
+            lastRemoteError = "Refresh this shared check-in before changing its people."
+            return
+        }
         let normalizedInvitees = Array(Set(inviteeUserIDs.filter { !$0.isEmpty })).sorted()
         let sourceVisit = currentUserVisit(matching: sourceVisitID)
+        if pendingSharedVisitInvites.contains(where: { $0.ownerUserID == currentUser.id && $0.jointMutation != nil && matchingVisitIDs(sourceVisitID).contains($0.sourceVisitID) }) {
+            lastRemoteError = "Finish syncing this joint check-in before changing its people."
+            return
+        }
+        if let group = jointCheckIn(for: sourceVisitID) {
+            guard group.viewerCanManage, normalizedInvitees.count <= 9 else { return }
+            pendingSharedVisitInvites.append(PendingSharedVisitInvite(id: UUID().uuidString.lowercased(), ownerUserID: currentUser.id,
+                sourceVisitID: sourceVisit?.id ?? sourceVisitID, inviteeUserIDs: normalizedInvitees, createdAt: .now,
+                jointMutation: .manage(groupID: group.groupID, expectedRevision: group.revision)))
+            persist()
+            flushPersistence()
+            return
+        }
 
         pendingSharedVisitInvites.removeAll {
             $0.ownerUserID == currentUser.id
@@ -1047,6 +1409,10 @@ final class WanderStore: ObservableObject {
 
         for pending in pendingSharedVisitInvites where pending.ownerUserID == ownerUserID {
             guard currentUser.id == ownerUserID else { break }
+            if pending.jointMutation != nil {
+                if await deliverJointOperation(pending, backend: backend) { sentCount += pending.inviteeUserIDs.count }
+                continue
+            }
             guard let visit = currentUserVisit(matching: pending.sourceVisitID) else {
                 pendingSharedVisitInvites.removeAll { $0.id == pending.id }
                 continue
@@ -1521,6 +1887,13 @@ final class WanderStore: ObservableObject {
     }
 
     func resetAfterAccountDeletion() {
+        let deletedOwnerID = currentUser.id
+        jointPrivacyRevision &+= 1
+        jointCheckInsByVisitID = [:]
+        unavailableJointActivityByVisitID = [:]
+        completedJointVisitByOperationID = [:]
+        pendingSharedVisitInvites.removeAll { $0.ownerUserID == deletedOwnerID }
+        pendingActivityCommentDrafts.removeAll { $0.ownerUserID == deletedOwnerID }
         placeListSyncTask?.task.cancel()
         individualPlaceListSyncTasks.values.forEach { $0.task.cancel() }
         placeListSyncTask = nil
@@ -1859,6 +2232,7 @@ final class WanderStore: ObservableObject {
     @MainActor
     func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
         let requestUserID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
         let existing = followedFeedPage?.activity.first(where: {
             $0.id == activityID && canDisplayActivity($0)
         })
@@ -1873,11 +2247,11 @@ final class WanderStore: ObservableObject {
 
         do {
             let activity = try await retryActivityRead {
-                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                guard self.currentUser.id == requestUserID, self.jointPrivacyRevision == privacyRevision else { throw CancellationError() }
                 return try await repository.activity(id: activityID)
             }
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
-            guard activity.id == activityID, canDisplayActivity(activity),
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return nil }
+            guard (activity.id == activityID || activity.jointCheckIn?.canonicalActivityID == activity.id.lowercased()), canDisplayActivity(activity),
                   activity.activityEngagementContext != nil else {
                 discardCachedActivity(activityID)
                 activityEngagementErrorByID[activityID] = "This activity is no longer available."
@@ -1898,7 +2272,7 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = nil
             return activity
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return nil }
             // Never turn an authorization failure into a successful cached
             // read. Transient failures can be retried through the same route.
             discardCachedActivity(activityID)
@@ -1912,6 +2286,7 @@ final class WanderStore: ObservableObject {
     @MainActor
     func activity(checkIn target: ActivityCheckInTarget, backend: WanderBackend?) async -> FeedActivity? {
         let requestUserID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
         let errorID = target.visitID
         guard let repository = backend?.activityEngagementRepository else {
             activityEngagementErrorByID[errorID] = "This activity is no longer available."
@@ -1919,10 +2294,10 @@ final class WanderStore: ObservableObject {
         }
         do {
             let matches = try await retryActivityRead {
-                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                guard self.currentUser.id == requestUserID, self.jointPrivacyRevision == privacyRevision else { throw CancellationError() }
                 return try await repository.placeActivitySummaries(userPlaceIDs: [target.userPlaceID])
             }
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return nil }
             guard let match = matches.first(where: {
                 $0.userPlaceID.caseInsensitiveCompare(target.userPlaceID) == .orderedSame
                     && $0.visitID?.caseInsensitiveCompare(target.visitID) == .orderedSame
@@ -1932,18 +2307,22 @@ final class WanderStore: ObservableObject {
                 return nil
             }
             let resolved = await activity(id: match.activityID, backend: backend)
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return nil }
             activityEngagementErrorByID[errorID] = resolved == nil
                 ? activityEngagementErrorByID[match.activityID] : nil
             return resolved
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return nil }
             activityEngagementErrorByID[errorID] = remoteErrorMessage(error)
             return nil
         }
     }
 
     private func canDisplayActivity(_ activity: FeedActivity) -> Bool {
+        if let joint = activity.jointCheckIn, joint.contributions.contains(where: {
+            isBlockedBetweenCurrentUser(and: $0.person.id)
+                || ($0.person.id != currentUser.id && isProfilePrivate($0.person.id))
+        }) { return false }
         guard !isBlockedBetweenCurrentUser(and: activity.actor.id) else { return false }
         guard activity.actor.id == currentUser.id
             || (activity.actor.isPrivateProfile != true && !isProfilePrivate(activity.actor.id))
@@ -2099,6 +2478,7 @@ final class WanderStore: ObservableObject {
 
     func refreshActivityEngagement(activityIDs: [String], backend: WanderBackend?) async {
         let requestUserID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
         let remoteIDs = Array(Set(activityIDs.filter { UUID(uuidString: $0) != nil })).sorted()
         guard !remoteIDs.isEmpty,
               let repository = backend?.activityEngagementRepository
@@ -2106,7 +2486,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let summaries = try await repository.summaries(activityIDs: remoteIDs)
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return }
             var refreshedEngagement = activityEngagementByID
             var refreshedErrors = activityEngagementErrorByID
             for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
@@ -2120,7 +2500,7 @@ final class WanderStore: ObservableObject {
                 activityEngagementErrorByID = refreshedErrors
             }
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return }
             let message = remoteErrorMessage(error)
             var refreshedErrors = activityEngagementErrorByID
             for activityID in remoteIDs {
@@ -2134,6 +2514,7 @@ final class WanderStore: ObservableObject {
 
     func refreshPlaceActivityEngagement(userPlaceIDs: [String], backend: WanderBackend?) async {
         let requestUserID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
         let remoteIDs = Array(Set(userPlaceIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })).sorted()
         guard !remoteIDs.isEmpty,
               let repository = backend?.activityEngagementRepository
@@ -2145,7 +2526,7 @@ final class WanderStore: ObservableObject {
                 matches += try await repository.placeActivitySummaries(
                     userPlaceIDs: Array(remoteIDs[start..<min(start + 100, remoteIDs.count)])
                 )
-                guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+                guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return }
             }
             let refreshedIDs = Set(remoteIDs)
             placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID.lowercased()) }
@@ -2164,7 +2545,7 @@ final class WanderStore: ObservableObject {
                 activityEngagementErrorByID = refreshedErrors
             }
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision else { return }
             let message = remoteErrorMessage(error)
             var refreshedErrors = activityEngagementErrorByID
             for userPlaceID in remoteIDs {
@@ -2205,6 +2586,7 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func toggleActivityLike(activityID: String, backend: WanderBackend?) async -> Bool {
         guard !pendingActivityLikeIDs.contains(activityID) else { return false }
+        let requestOwnerID = currentUser.id
         let previous = activityEngagement(for: activityID)
         let requestedLike = !previous.viewerHasLiked
         activityEngagementByID[activityID] = previous.settingLike(requestedLike)
@@ -2220,13 +2602,16 @@ final class WanderStore: ObservableObject {
         pendingActivityLikeIDs.insert(activityID)
         defer { pendingActivityLikeIDs.remove(activityID) }
         do {
-            activityEngagementByID[activityID] = try await repository.setLike(
+            let summary = try await repository.setLike(
                 activityID: activityID,
                 isLiked: requestedLike
             )
+            guard currentUser.id == requestOwnerID else { return false }
+            activityEngagementByID[activityID] = summary
             trackActivityLike(requestedLike, outcome: "succeeded")
             return true
         } catch {
+            guard currentUser.id == requestOwnerID else { return false }
             activityEngagementByID[activityID] = previous
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
@@ -2254,6 +2639,7 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
         let requestUserID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
         let generation = activityCommentsGeneration
         let likeRevisions = activityCommentLikeRevisions
         let pendingLikesAtRead = pendingActivityCommentLikeIDs
@@ -2263,10 +2649,10 @@ final class WanderStore: ObservableObject {
 
         do {
             let page = try await retryActivityRead {
-                guard self.currentUser.id == requestUserID else { throw CancellationError() }
+                guard self.currentUser.id == requestUserID, self.jointPrivacyRevision == privacyRevision else { throw CancellationError() }
                 return try await repository.comments(activityID: activityID, before: nil, limit: 50)
             }
-            guard !Task.isCancelled, currentUser.id == requestUserID,
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision,
                   generation == activityCommentsGeneration else { return false }
             let pendingDeletedComments = page.comments.filter {
                 pendingActivityCommentDeletionIDs.contains($0.id)
@@ -2304,7 +2690,7 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = nil
             return true
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID,
+            guard !Task.isCancelled, currentUser.id == requestUserID, jointPrivacyRevision == privacyRevision,
                   generation == activityCommentsGeneration else { return false }
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
@@ -2312,10 +2698,18 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func addActivityComment(activityID: String, body: String, backend: WanderBackend?) async -> Bool {
+    func addActivityComment(activityID: String, body: String, jointConsent: Bool = false, backend: WanderBackend?) async -> Bool {
         let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedBody.isEmpty, normalizedBody.count <= 1_000 else { return false }
 
+        let requestOwnerID = currentUser.id
+        let privacyRevision = jointPrivacyRevision
+        let request = pendingActivityCommentDrafts.first { $0.ownerUserID == requestOwnerID && $0.activityID == activityID && $0.body == normalizedBody && $0.jointConsent == jointConsent }
+            ?? PendingActivityCommentDraft(id: UUID().uuidString.lowercased(), ownerUserID: requestOwnerID,
+                activityID: activityID, body: normalizedBody, jointConsent: jointConsent)
+        if !pendingActivityCommentDrafts.contains(where: { $0.id == request.id }) { pendingActivityCommentDrafts.append(request) }
+        persist()
+        flushPersistence()
         let previousSummary = activityEngagement(for: activityID)
         let pendingID = "pending-comment-\(UUID().uuidString.lowercased())"
         let pending = ActivityComment(
@@ -2343,14 +2737,22 @@ final class WanderStore: ObservableObject {
                     createdAt: comment.createdAt
                 )
             }
+            pendingActivityCommentDrafts.removeAll { $0.id == request.id }
+            persist()
             trackActivityCommentCreated(outcome: "local_only")
             return true
         }
 
         do {
-            let result = try await repository.addComment(activityID: activityID, body: normalizedBody)
+            let result = try await repository.addComment(activityID: activityID, body: normalizedBody, requestID: request.id, jointConsent: jointConsent)
+            guard currentUser.id == requestOwnerID else { return false }
+            pendingActivityCommentDrafts.removeAll { $0.id == request.id }
+            persist()
+            // The write committed, but its old audience must not repopulate
+            // caches after a local privacy change while the response travelled.
+            guard jointPrivacyRevision == privacyRevision else { return true }
             activityCommentsByID[activityID] = activityComments(for: activityID)
-                .filter { $0.id != pendingID } + [result.comment]
+                .filter { $0.id != pendingID && $0.id != result.comment.id } + [result.comment]
             activityCommentsByID[activityID]?.sort { lhs, rhs in
                 if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
                 return lhs.id < rhs.id
@@ -2359,6 +2761,7 @@ final class WanderStore: ObservableObject {
             trackActivityCommentCreated(outcome: "succeeded")
             return true
         } catch {
+            guard currentUser.id == requestOwnerID, jointPrivacyRevision == privacyRevision else { return false }
             activityCommentsByID[activityID]?.removeAll { $0.id == pendingID }
             activityEngagementByID[activityID] = previousSummary
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
@@ -2411,6 +2814,7 @@ final class WanderStore: ObservableObject {
               let previousIndex = activityComments(for: comment.activityID).firstIndex(where: { $0.id == comment.id })
         else { return false }
 
+        let requestOwnerID = currentUser.id
         let previousSummary = activityEngagement(for: comment.activityID)
         activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
         activityEngagementByID[comment.activityID] = previousSummary.removingComment()
@@ -2424,9 +2828,13 @@ final class WanderStore: ObservableObject {
         pendingActivityCommentDeletionIDs.insert(comment.id)
         defer { pendingActivityCommentDeletionIDs.remove(comment.id) }
         do {
-            activityEngagementByID[comment.activityID] = try await repository.deleteComment(commentID: comment.id)
+            let summary = try await repository.deleteComment(commentID: comment.id)
+            guard currentUser.id == requestOwnerID else { return false }
+            if summary.isAvailable { activityEngagementByID[comment.activityID] = summary }
+            else { discardCachedActivity(comment.activityID) }
             return true
         } catch {
+            guard currentUser.id == requestOwnerID else { return false }
             var restoredComments = activityComments(for: comment.activityID)
             if !restoredComments.contains(where: { $0.id == comment.id }) {
                 restoredComments.insert(comment, at: min(previousIndex, restoredComments.count))
@@ -2642,6 +3050,49 @@ final class WanderStore: ObservableObject {
                     occurredAt: visit.occurredAt.addingTimeInterval(120)
                 )
             ]
+        }
+        if ProcessInfo.processInfo.arguments.contains("-WanderJointCheckInUITest"),
+           let original = activity.first, let visible = original.place {
+            let names = ["Ryan", "Joe", "Maya", "Avery", "Sam", "Alex", "Jordan", "Quinn", "Taylor", "Casey"]
+            let count = ProcessInfo.processInfo.arguments.contains("-WanderJointTenPeople") ? 10 : 2
+            var insertedOwnedFixture = false
+            let people = (0..<count).map { index -> JointCheckInContribution in
+                let personID = index == 1 ? currentUser.id : "joint-fixture-person-\(index)"
+                let visitID = String(format: "e5660000-0000-0000-0005-%012d", index)
+                let parentID = "joint-fixture-parent-\(index)"
+                let note = index == 0 ? "The perfect spot for a slow Sunday. Get the espresso tonic."
+                    : index == 1 ? "Came for coffee, stayed for another hour. We’re coming back." : "A new favorite with this crew."
+                if !profiles.contains(where: { $0.id == personID }) {
+                    profiles.append(LocalProfile(localID: personID, handle: names[index].lowercased(), displayName: names[index]))
+                }
+                if index == 1 { currentUser.displayName = "Joe"; currentUser.isPrivateProfile = false }
+                if personID != currentUser.id, !follows.contains(where: { $0.followerUserID == currentUser.id && $0.followedUserID == personID }) {
+                    follows.append(LocalFollow(localID: "joint-fixture-follow-\(index)", followerUserID: currentUser.id,
+                        followedUserID: personID, source: .profile, syncState: .synced))
+                }
+                if !userPlaces.contains(where: { $0.id == parentID }) {
+                    insertedOwnedFixture = true
+                    userPlaces.append(LocalUserPlace(localID: parentID, userID: personID, placeID: visible.place.id,
+                        status: .been, visibility: .followers, note: note, sourceType: "manual"))
+                    placeVisits.append(LocalPlaceVisit(localID: visitID, userPlaceID: parentID,
+                        visitedAt: now.addingTimeInterval(-3600), note: note, ratingScore: index == 1 ? 4.5 : 5,
+                        syncState: .synced))
+                }
+                return JointCheckInContribution(participantID: "joint-fixture-member-\(index)",
+                    visitID: visitID, userPlaceID: parentID,
+                    person: ProfileShell(id: personID, handle: names[index].lowercased(),
+                        displayName: names[index], avatarURL: nil, bio: nil, relationship: index == 1 ? .owner : .mutual),
+                    note: note, rating: index == 1 ? 4.5 : 5, media: [], viewerCanEdit: index == 1)
+            }
+            let joint = JointCheckInProjection(groupID: "joint-fixture-group", canonicalActivityID: "joint-fixture-activity",
+                revision: 1, occurredAt: now.addingTimeInterval(-3600), viewerCanManage: false, contributions: people)
+            for person in people { jointCheckInsByVisitID[person.visitID] = joint }
+            // The profile/calendar may already have prepared its projection
+            // before Feed loads. Publish fixture membership through the same
+            // invalidation path used by real owned-visit mutations.
+            if insertedOwnedFixture { persist() }
+            displayActivity = [FeedActivity(id: joint.canonicalActivityID, kind: .placeBeen,
+                actor: people[0].person, place: visible, occurredAt: joint.occurredAt, jointCheckIn: joint)] + activity
         }
         #endif
         let orderedActivity = FeedPresentation.newestFirst(displayActivity, relativeTo: now)
@@ -5820,10 +6271,43 @@ final class WanderStore: ObservableObject {
         categoryCandidate: PlaceCandidate? = nil,
         visibility: PlaceVisibility? = nil,
         replacesNote: Bool = false,
-        replacesRating: Bool = false
+        replacesRating: Bool = false,
+        expectedJointUpdatedAt: String? = nil
     ) -> LocalPlaceVisit? {
         guard let visit = currentUserVisit(matching: visitID),
               hasEditableVisitAnswers(visit) else { return nil }
+
+        guard unavailableJointActivityID(for: visit.id) == nil else {
+            lastRemoteError = "Refresh this shared check-in before editing. Your draft stays in this form."
+            return nil
+        }
+
+        var supersededJointEditID: String?
+        // A terminal conflict remains durable until an explicit save after a
+        // fresh projection. Never silently rebase and resend an old draft.
+        if let pending = pendingSharedVisitInvites.first(where: {
+            $0.ownerUserID == currentUser.id && $0.jointMutation != nil && matchingVisitIDs(visit.id).contains($0.sourceVisitID)
+        }) {
+            if pending.requiresReview == true,
+               case .edit(_, let oldToken, _) = pending.jointMutation,
+               let fresh = jointCheckIn(for: visit.id)?.contributions.first(where: { $0.visitID == (visit.serverID ?? visit.id).lowercased() }),
+               let newToken = fresh.updatedAtToken, newToken != oldToken {
+                supersededJointEditID = pending.id
+            } else {
+                lastRemoteError = "Finish syncing this joint check-in before editing it. Your draft stays in this form."
+                return nil
+            }
+        }
+        if jointCheckIn(for: visit.id) != nil, let visitedAt, visitedAt != visit.visitedAt {
+            lastRemoteError = "Leave or close the shared check-in before changing its date."
+            return nil
+        }
+        let joint = jointCheckIn(for: visit.id)
+        let contribution = joint?.contributions.first { $0.visitID == (visit.serverID ?? visit.id).lowercased() }
+        if joint != nil && (expectedJointUpdatedAt == nil || contribution?.updatedAtToken != expectedJointUpdatedAt) {
+            lastRemoteError = "This check-in changed. Reopen it to review the latest version before saving. Your draft stays in this form."
+            return nil
+        }
 
         // Calendar hydration can restore an owned visit before its parent has
         // entered local storage. Editing needs that parent for sync, privacy
@@ -5892,6 +6376,14 @@ final class WanderStore: ObservableObject {
         }
 
         refreshUserPlaceVisitSummary(userPlaceID: visit.userPlaceID)
+        if let joint, let expectedUpdatedAt = expectedJointUpdatedAt,
+           let parent = currentUserPlace(matching: visit.userPlaceID),
+           let draft = checkInDraft(for: visit.id, userPlace: parent) {
+            if let supersededJointEditID { pendingSharedVisitInvites.removeAll { $0.id == supersededJointEditID } }
+            pendingSharedVisitInvites.append(PendingSharedVisitInvite(id: UUID().uuidString.lowercased(),
+                ownerUserID: currentUser.id, sourceVisitID: visit.id, inviteeUserIDs: [], createdAt: now,
+                jointMutation: .edit(groupID: joint.groupID, expectedUpdatedAt: expectedUpdatedAt, draft: draft)))
+        }
         analytics.track(
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.checkInEdited,
@@ -7305,6 +7797,7 @@ final class WanderStore: ObservableObject {
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         requestsProductUpsell: Bool = true,
+        jointInviteeUserIDs: [String] = [],
         backend: WanderBackend?
     ) async -> SaveResult {
         #if DEBUG
@@ -7344,6 +7837,12 @@ final class WanderStore: ObservableObject {
         if status == .been,
            let explicitVisit = visits(for: localResult.userPlaceID)
             .first(where: { !$0.backfilledFromUserPlace && $0.syncState != .synced }) {
+            if !jointInviteeUserIDs.isEmpty {
+                guard queueJointCheckIn(sourceVisitID: explicitVisit.id, inviteeUserIDs: jointInviteeUserIDs) else {
+                    lastRemoteError = "Could not prepare this joint check-in. Your draft is still saved."
+                    return SaveResult(userPlaceID: localResult.userPlaceID, syncState: .failed)
+                }
+            }
             let didSync = await syncVisit(visitID: explicitVisit.id, backend: backend)
             if didSync {
                 await refreshRemoteVisiblePlaces(backend: backend)
@@ -7715,6 +8214,13 @@ final class WanderStore: ObservableObject {
             return false
         }
 
+        let requestOwnerID = currentUser.id
+        if let pending = pendingSharedVisitInvites.first(where: {
+            $0.ownerUserID == requestOwnerID && $0.jointMutation != nil && matchingVisitIDs(visit.id).contains($0.sourceVisitID)
+        }) {
+            return await deliverJointOperation(pending, backend: backend)
+        }
+
         if visit.backfilledFromUserPlace {
             if userPlace.serverID == nil || userPlace.syncState != .synced {
                 let parentOutcome = await retryOwnPlaceSync(
@@ -7752,6 +8258,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let result = try await backend.saveCheckIn(checkInDraft)
+            guard currentUser.id == requestOwnerID else { return false }
             if let placeID = result.saveResult.placeID {
                 markPlace(
                     localOrServerID: checkInDraft.userPlace.place.localID,
@@ -7773,6 +8280,7 @@ final class WanderStore: ObservableObject {
             lastRemoteError = visit.lastSyncError
             return true
         } catch {
+            guard currentUser.id == requestOwnerID else { return false }
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
             markUserPlace(localOrServerID: userPlace.id, syncState: .failed, error: message)
@@ -8354,6 +8862,7 @@ final class WanderStore: ObservableObject {
     }
 
     func unfollow(userID: String) {
+        invalidateJointCheckInContexts()
         follows.removeAll { $0.followerUserID == currentUser.id && $0.followedUserID == userID }
         persist()
     }
@@ -8389,6 +8898,7 @@ final class WanderStore: ObservableObject {
     }
 
     func block(userID: String) {
+        invalidateJointCheckInContexts()
         guard userID != currentUser.id,
               !blocks.contains(where: { $0.blockerUserID == currentUser.id && $0.blockedUserID == userID })
         else { return }
@@ -8409,6 +8919,7 @@ final class WanderStore: ObservableObject {
     }
 
     func block(userID: String, backend: WanderBackend?) async {
+        invalidateJointCheckInContexts()
         let block = upsertBlock(userID: userID)
 
         guard let block else {
@@ -9811,6 +10322,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func makeCurrentUserContentPrivate() {
+        invalidateJointCheckInContexts()
         var didUpdate = false
 
         for userPlace in userPlaces where userPlace.userID == currentUser.id && userPlace.deletedAt == nil && userPlace.visibility != .selfOnly {
@@ -9831,6 +10343,10 @@ final class WanderStore: ObservableObject {
         let previousCurrentUser = currentUser
         guard previousCurrentUser.id != session.userID else { return }
         cancelForegroundRefreshTasks()
+        jointPrivacyRevision &+= 1
+        completedJointVisitByOperationID = [:]
+        jointCheckInsByVisitID = [:]
+        unavailableJointActivityByVisitID = [:]
         lastAppliedPlaceListsSnapshot = nil
 
         if let previousUserID = previousCurrentUser.serverID, previousUserID != session.userID {
@@ -9839,11 +10355,13 @@ final class WanderStore: ObservableObject {
             sharedVisitInvitations = []
             sharedVisitInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
+            jointCheckInsByVisitID = [:]
         } else if sharedVisitInboxUserID != nil, sharedVisitInboxUserID != session.userID {
             cancelSharedVisitInboxTask()
             sharedVisitInvitations = []
             sharedVisitInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
+            jointCheckInsByVisitID = [:]
         }
         let sessionHandle = normalizedSessionHandle(from: session)
         let handle = sessionHandle
@@ -9932,6 +10450,10 @@ final class WanderStore: ObservableObject {
 
     private func applySignedOutProfile() {
         cancelForegroundRefreshTasks()
+        jointPrivacyRevision &+= 1
+        completedJointVisitByOperationID = [:]
+        jointCheckInsByVisitID = [:]
+        unavailableJointActivityByVisitID = [:]
         lastAppliedPlaceListsSnapshot = nil
         let localID = "local_profile_current"
         let preferredPrivateProfile = false
@@ -9939,6 +10461,7 @@ final class WanderStore: ObservableObject {
         sharedVisitInvitations = []
         sharedVisitInboxUserID = nil
         sharedVisitCompanionsByVisitID = [:]
+            jointCheckInsByVisitID = [:]
         let profile = LocalProfile(
             localID: localID,
             handle: "you",
@@ -11624,7 +12147,28 @@ final class WanderStore: ObservableObject {
     }
 
     private func remoteErrorMessage(_ error: Error) -> String {
-        String(describing: error)
+        let raw = String(describing: error)
+        let messages = [
+            "activity_context_changed": "This conversation changed. Open the updated check-in before sending. Your draft is saved.",
+            "joint_check_in_comment_deleted": "This comment was already deleted. It hasn't been posted again.",
+            "comment_deleted": "This comment was already deleted. It hasn't been posted again.",
+            "joint_check_in_edit_conflict": "Your check-in changed on another device. Refresh it and review your saved draft before trying again.",
+            "stale_joint_check_in": "This check-in changed. Refresh it and review your saved draft before trying again.",
+            "stale_shared_visit": "This invitation changed. Reopen it to review your saved response.",
+            "joint_check_in_private_place": "This place is saved privately. Save privately or change its visibility yourself before joining.",
+            "joint_check_in_private_save_requires_self": "You already share this place. Open your saved place to change its visibility before saving privately.",
+            "joint_check_in_explicit_restore_required": "Your earlier check-in was removed or moved. Restore it explicitly before rejoining.",
+            "joint_check_in_capacity": "A joint check-in can include up to 10 people, including pending invitations.",
+            "joint_check_in_unavailable": "This shared check-in is no longer available. Your own check-in is still yours.",
+            "joint_check_in_closed": "This shared check-in has ended. Your own check-in is still yours.",
+            "joint_check_in_invitation_unavailable": "This invitation is no longer available. Your saved response is kept.",
+            "joint_check_in_contribution_unavailable": "Your earlier check-in is no longer available. Refresh before trying again.",
+            "joint_check_in_creation_unavailable": "New joint check-ins aren't available yet. Your draft is saved for retry.",
+            "joint_check_in_upgrade_required": "Update Astir to manage this joint check-in.",
+            "detach_before_changing_occasion": "Leave or close the shared check-in before changing its place or date.",
+            "joint_check_in_request_conflict": "This saved request changed. Refresh the check-in before submitting a new response."
+        ]
+        return messages.first(where: { raw.contains($0.key) })?.value ?? raw
     }
 
     private func remoteErrorKind(_ error: Error) -> String {

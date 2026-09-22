@@ -582,7 +582,7 @@ extension PlaceActionLink {
     }
 }
 
-struct PlaceDraft: Equatable {
+struct PlaceDraft: Codable, Equatable {
     let localID: String
     let serverID: String?
     let canonicalName: String
@@ -674,7 +674,7 @@ struct PlaceDraft: Equatable {
     }
 }
 
-struct UserPlaceDraft: Equatable {
+struct UserPlaceDraft: Codable, Equatable {
     let place: PlaceDraft
     let status: PlaceStatus
     let visibility: PlaceVisibility
@@ -731,7 +731,7 @@ struct OwnWannaGoPlan: Equatable {
     let plannedDate: Date
 }
 
-struct PlaceAttributeDraft: Equatable {
+struct PlaceAttributeDraft: Codable, Equatable {
     let questionKey: String
     let valueType: String
     let valueJSON: String
@@ -885,7 +885,7 @@ enum VisitAttributeAnswers {
     }
 }
 
-struct PlaceVisitDraft: Equatable {
+struct PlaceVisitDraft: Codable, Equatable {
     let id: String?
     let userPlaceID: String
     let visitedAt: Date
@@ -910,14 +910,14 @@ struct PlaceVisitResult: Equatable, Sendable {
     var updatedAt: Date? = nil
 }
 
-struct HistoricalWantSnapshotDraft: Equatable {
+struct HistoricalWantSnapshotDraft: Codable, Equatable {
     let note: String?
     let attributeAnswersJSON: String
     let tags: [String]
     let wantedAt: Date
 }
 
-struct CheckInSaveDraft: Equatable {
+struct CheckInSaveDraft: Codable, Equatable {
     let userPlace: UserPlaceDraft
     let visit: PlaceVisitDraft
     let historicalWant: HistoricalWantSnapshotDraft?
@@ -1682,6 +1682,9 @@ struct SharedVisitInvitation: Identifiable, Codable, Equatable, Sendable {
     let attributeAnswers: [VisitAttributeAnswer]
     let tags: [String]
     let photos: [SharedVisitPhotoSnapshot]
+    var modelVersion: Int? = nil
+
+    var isJointCheckIn: Bool { modelVersion == 2 }
 
     var id: String { participantID }
 
@@ -1764,6 +1767,102 @@ struct SharedVisitInvitation: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+/// An owned snapshot returned after a joint mutation. Applying this response
+/// never takes privacy, classification or attribution from the inviter's draft.
+struct JointCheckInOwnedPlace: Codable, Equatable {
+    let id: String
+    let userID: String
+    let placeID: String
+    let status: String
+    let visibility: String
+    let note: String?
+    let ratingScore: Double?
+    let visitedAt: Date?
+    let savedAt: Date
+    let createdAt: Date
+    let updatedAt: Date
+    let sourceType: String
+    let sourceUserPlaceID: String?
+    let attributionUserID: String?
+    let categoryOverride: String?
+    let subcategoryOverride: String?
+    let categoryOverrideSource: String?
+    let categoryOverrideConfidence: Double?
+    let historicalWantNote: String?
+    let historicalWantAttributeAnswers: [VisitAttributeAnswer]?
+    let historicalWantTags: [String]?
+    let historicalWantedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, userID = "user_id", placeID = "place_id", status, visibility, note
+        case ratingScore = "rating_score", visitedAt = "visited_at", savedAt = "saved_at"
+        case createdAt = "created_at", updatedAt = "updated_at", sourceType = "source_type"
+        case sourceUserPlaceID = "source_user_place_id", attributionUserID = "attribution_user_id"
+        case categoryOverride = "category_override", subcategoryOverride = "subcategory_override"
+        case categoryOverrideSource = "category_override_source", categoryOverrideConfidence = "category_override_confidence"
+        case historicalWantNote = "historical_want_note", historicalWantAttributeAnswers = "historical_want_attribute_answers"
+        case historicalWantTags = "historical_want_tags", historicalWantedAt = "historical_wanted_at"
+    }
+}
+
+struct JointCheckInMutationResult: Codable, Equatable {
+    let groupID: String
+    let modelVersion: Int
+    let groupRevision: Int
+    let canonicalActivityID: String?
+    let participantID: String
+    let status: String
+    let visitID: String
+    let userPlaceID: String
+    let placeID: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let tags: [String]
+    let attributeAnswers: [VisitAttributeAnswer]
+    let backfilledFromUserPlace: Bool
+    let userPlace: JointCheckInOwnedPlace
+    let userPlaceAttributes: [VisitAttributeAnswer]
+
+    enum CodingKeys: String, CodingKey {
+        case groupID = "group_id", modelVersion = "model_version", groupRevision = "group_revision"
+        case canonicalActivityID = "canonical_activity_id", participantID = "participant_id", status
+        case visitID = "visit_id", userPlaceID = "user_place_id", placeID = "place_id"
+        case visitedAt = "visited_at", note, ratingScore = "rating_score", tags
+        case attributeAnswers = "attribute_answers", backfilledFromUserPlace = "backfilled_from_user_place"
+        case userPlace = "user_place", userPlaceAttributes = "user_place_attributes"
+    }
+
+    var visitResult: PlaceVisitResult {
+        PlaceVisitResult(visitID: visitID, userPlaceID: userPlaceID, visitedAt: visitedAt,
+            note: note, ratingScore: ratingScore, tags: tags, backfilledFromUserPlace: backfilledFromUserPlace,
+            attributeAnswersJSON: String(data: (try? JSONEncoder().encode(attributeAnswers)) ?? Data("[]".utf8), encoding: .utf8))
+    }
+    var checkInResult: CheckInSaveResult {
+        CheckInSaveResult(saveResult: SaveResult(userPlaceID: userPlaceID, syncState: .synced, placeID: placeID), visitResult: visitResult)
+    }
+}
+
+struct JointCheckInLeaveResult: Decodable, Equatable {
+    let groupID: String
+    let groupRevision: Int
+    let status: String
+    let visitID: String
+    let personalActivityID: String?
+    enum CodingKeys: String, CodingKey {
+        case groupID = "group_id", groupRevision = "group_revision", status
+        case visitID = "visit_id", personalActivityID = "personal_activity_id"
+    }
+}
+
+enum PendingJointCheckInMutation: Codable, Equatable {
+    case create(CheckInSaveDraft)
+    case edit(groupID: String, expectedUpdatedAt: String, draft: CheckInSaveDraft)
+    case accept(invitation: SharedVisitInvitation, draft: SharedVisitAcceptanceDraft)
+    case manage(groupID: String, expectedRevision: Int)
+    case leave(groupID: String, expectedRevision: Int)
+}
+
 struct SharedVisitInviteResult: Equatable {
     let participantID: String
     let inviteeUserID: String
@@ -1777,6 +1876,9 @@ struct PendingSharedVisitInvite: Identifiable, Codable, Equatable {
     let sourceVisitID: String
     let inviteeUserIDs: [String]
     let createdAt: Date
+    var jointMutation: PendingJointCheckInMutation? = nil
+    var requiresReview: Bool? = nil
+
 }
 
 struct SharedVisitAcceptanceIdentifiers: Equatable {
@@ -1815,7 +1917,7 @@ struct SharedVisitAcceptanceIdentifiers: Equatable {
     }
 }
 
-struct SharedVisitAcceptanceDraft: Equatable {
+struct SharedVisitAcceptanceDraft: Codable, Equatable {
     let participantID: String
     let invitationGeneration: Int
     let snapshotRevision: Int
@@ -1828,6 +1930,11 @@ struct SharedVisitAcceptanceDraft: Equatable {
     let ratingScore: Double?
     let attributes: [PlaceAttributeDraft]
     let selectedPhotoIDs: [String]
+    var modelVersion: Int? = nil
+    var savesPrivately: Bool = false
+    var startsFreshVisit: Bool = false
+    var ownPhotos: [PlaceSaveDraftPhoto]? = nil
+
 }
 
 struct SharedVisitPhotoCopy: Equatable {
@@ -1848,6 +1955,8 @@ struct SharedVisitAcceptanceResult: Equatable {
     let backfilledFromUserPlace: Bool
     let status: SharedVisitParticipantStatus
     let photoCopies: [SharedVisitPhotoCopy]
+    var jointResult: JointCheckInMutationResult? = nil
+
 }
 
 struct SharedVisitCompanion: Identifiable, Equatable {
@@ -1868,6 +1977,8 @@ struct SharedVisitDestination: Equatable {
     let placeID: String
     let acceptedVisitID: String?
     let sourceVisitID: String
+    var modelVersion: Int? = nil
+
 }
 
 enum SharedVisitDestinationResolution: Equatable {
@@ -2011,10 +2122,15 @@ protocol ActivityEngagementRepository {
     func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult
+    func addComment(activityID: String, body: String, requestID: String, jointConsent: Bool) async throws -> ActivityCommentPostResult
     func deleteComment(commentID: String) async throws -> ActivityEngagementSummary
 }
 
 extension ActivityEngagementRepository {
+    func addComment(activityID: String, body: String, requestID: String, jointConsent: Bool) async throws -> ActivityCommentPostResult {
+        guard !jointConsent else { throw WanderRemoteError.notImplemented("joint check-in comments") }
+        return try await addComment(activityID: activityID, body: body)
+    }
     func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
         throw WanderRemoteError.notImplemented("comment likes")
     }
@@ -2311,6 +2427,12 @@ protocol NotificationRepository {
 
 @MainActor
 protocol SharedVisitRepository {
+    func createJoint(_ draft: CheckInSaveDraft, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult
+    func editJoint(_ draft: CheckInSaveDraft, groupID: String, expectedUpdatedAt: String, operationID: String) async throws -> JointCheckInMutationResult
+    func jointContexts(visitIDs: [String]) async throws -> JointCheckInContexts
+    func setJointInvitees(groupID: String, expectedRevision: Int, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult
+    func leaveJoint(groupID: String, expectedRevision: Int, operationID: String) async throws -> JointCheckInLeaveResult
+    func declineJoint(participantID: String, generation: Int) async throws
     func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult]
     func inviteeUserIDs(sourceVisitID: String) async throws -> [String]
     func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult]
@@ -2323,4 +2445,34 @@ protocol SharedVisitRepository {
     func downloadPhotoData(bucket: String, path: String) async throws -> Data
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws
     func markPhotoUploaded(photoID: String) async throws
+}
+
+// Defaults preserve legacy adapters; v2 writes never fall back to a v1 mutation.
+extension SharedVisitRepository {
+    func editJoint(_ draft: CheckInSaveDraft, groupID: String, expectedUpdatedAt: String, operationID: String) async throws -> JointCheckInMutationResult {
+        throw WanderRemoteError.notImplemented("joint check-in edit")
+    }
+    func createJoint(_ draft: CheckInSaveDraft, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult {
+        throw WanderRemoteError.notImplemented("joint check-in creation")
+    }
+    func jointContexts(visitIDs: [String]) async throws -> JointCheckInContexts {
+        JointCheckInContexts(mappings: [:], groups: [:])
+    }
+    func setJointInvitees(groupID: String, expectedRevision: Int, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult {
+        throw WanderRemoteError.notImplemented("joint check-in management")
+    }
+    func leaveJoint(groupID: String, expectedRevision: Int, operationID: String) async throws -> JointCheckInLeaveResult {
+        throw WanderRemoteError.notImplemented("joint check-in departure")
+    }
+    func declineJoint(participantID: String, generation: Int) async throws {
+        throw WanderRemoteError.notImplemented("joint check-in decline")
+    }
+}
+
+struct PendingActivityCommentDraft: Codable, Equatable, Identifiable {
+    let id: String
+    let ownerUserID: String
+    let activityID: String
+    let body: String
+    let jointConsent: Bool
 }

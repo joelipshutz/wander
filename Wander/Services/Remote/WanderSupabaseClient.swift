@@ -28,6 +28,43 @@ extension RemoteProcedureCalling {
     }
 }
 
+/// Capability detection is limited to a named missing-function response. Auth,
+/// malformed payloads and transport failures never downgrade a v2 operation.
+func isMissingRemoteFunction(_ error: Error, named name: String) -> Bool {
+    guard case WanderRemoteError.invalidResponse(let message) = error else { return false }
+    let escapedName = NSRegularExpression.escapedPattern(for: name)
+    if let start = message.firstIndex(of: "{"),
+       let data = String(message[start...]).data(using: .utf8),
+       let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       let code = response["code"] as? String, let detail = response["message"] as? String {
+        // Match the missing function in the server message, never the RPC
+        // prefix or a nested SQL error's context mentioning the caller.
+        let function = "(?:public\\.)?" + escapedName
+        switch code {
+        case "PGRST202":
+            return detail.range(of: "^Could not find the function " + function + "(?:\\(|\\s)", options: .regularExpression) != nil
+        case "42883":
+            return detail.range(of: "^function " + function + "\\([^\\n]*\\) does not exist$", options: .regularExpression) != nil
+        default: return false
+        }
+    }
+    // Narrow shorthand used by deterministic repository adapters.
+    return message.range(of: "^(?:PGRST202|42883) (?:public\\.)?" + escapedName + "(?: missing)?$",
+                         options: .regularExpression) != nil
+}
+
+extension RemoteProcedureCalling {
+    func versionedRead<Value: Decodable, Params: Encodable>(
+        _ name: String, legacy: String, params: Params, allowsLegacy: Bool = true
+    ) async throws -> Value {
+        do { return try await call(name, params: params) }
+        catch {
+            guard allowsLegacy, isMissingRemoteFunction(error, named: name) else { throw error }
+            return try await call(legacy, params: params)
+        }
+    }
+}
+
 @MainActor
 protocol RemoteFunctionCalling {
     func invoke<Value: Decodable, Body: Encodable>(
@@ -364,11 +401,19 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             )
         }
         let expectedUserID = try configuredAuthenticatedUserID()
-        let initialResponse = try await rpcResponse(
+        var initialResponse = try await rpcResponse(
             name,
             params: params,
             expectedUserID: expectedUserID
         )
+
+        for attempt in 0..<2 {
+            let failure = try? JSONSerialization.jsonObject(with: initialResponse.data) as? [String: Any]
+            guard let code = failure?["code"] as? String, ["40P01", "40001"].contains(code) else { break }
+            try await Task.sleep(for: .milliseconds(100 * (attempt + 1)))
+            try Task.checkCancellation()
+            initialResponse = try await rpcResponse(name, params: params, expectedUserID: expectedUserID)
+        }
 
         if Self.requiresFreshToken(after: initialResponse.response.statusCode) {
             #if DEBUG
@@ -482,9 +527,9 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
 
     static func rpcTimeout(for name: String) -> TimeInterval {
         switch name {
-        case "followed_feed":
+        case "followed_feed", "followed_feed_v2":
             followedFeedTimeout
-        case "activity_media":
+        case "activity_media", "activity_media_v2":
             activityMediaTimeout
         case "discover_profile_recommendations":
             discoverProfileRecommendationsTimeout
