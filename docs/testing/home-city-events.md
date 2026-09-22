@@ -98,10 +98,19 @@ country picker, inline city search states, and each Events eligibility layout to
 
 ## Backend release dependency
 
-Deploy `20260921061500_account_contact_details.sql`, then
-`20260921070000_events_home_metro_gate.sql`, before releasing the app. Until
-deployment, live account saves and gate hydration are unavailable. The migrations
-have rollback-preview tests; previewing them does not deploy them.
+`20260922171000_account_contact_details.sql` and
+`20260922171100_events_home_metro_gate.sql` deployed to Astir on September 22,
+2026 after explicit approval. Both remote history entries are verified, and the
+full hosted rollback-only smoke suite passed against the deployed schema.
+The SQL is unchanged from the reviewed preview. The undeployed files received
+new timestamps because `20260921070000` was already used by contact discovery.
+Historical migration drift prevented bulk `db push`; the two approved migrations
+and their history entries were applied together in one guarded transaction.
+No existing history was repaired or unrelated migration applied.
+
+The signed full native app is ready for live account acceptance. Still check a
+dedicated account's saved city across app/device restarts; the hosted smoke
+verifies authenticated RPC round-trips and privacy in rolled-back transactions.
 
 The server independently denies Events registration for unknown and non-LA
 homes. Phone is optional, private and unverified; this form does not register a
