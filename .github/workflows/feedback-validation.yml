@@ -43,15 +43,12 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as f: f.write('TEST_DEVICE_ID=' + chosen['udid'] + '\n')
           print('Testing on', chosen['name'])
           PY
-      # Match the existing native workflow: this timing benchmark requires
-      # its reference hardware rather than a shared hosted macOS runner.
-      - name: Unit suite and feedback lifecycle UI tests
+      - name: Feedback unit and lifecycle UI tests
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests -only-testing:WanderUITests/FeedbackUITests
-          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -only-testing:WanderTests/FeedbackTests -only-testing:WanderUITests/FeedbackUITests
           -resultBundlePath "$RUNNER_TEMP/Feedback.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Summarize native tests
         if: always()
