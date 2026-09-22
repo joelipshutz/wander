@@ -646,6 +646,9 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     let id: String
     let source: PlaceImportSource
     var sourceName: String?
+    /// Present only for a parsed source list or an explicitly imported list file.
+    /// A share-sheet title is display metadata, not permission to create a list.
+    var sourceListName: String?
     var sourcePostTitle: String?
     var sourceAuthorName: String?
     let captureDeliveryID: String?
@@ -669,6 +672,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         id: String = UUID().uuidString.lowercased(),
         source: PlaceImportSource,
         sourceName: String?,
+        sourceListName: String? = nil,
         captureDeliveryID: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
@@ -686,6 +690,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.id = id
         self.source = source
         self.sourceName = sourceName
+        self.sourceListName = sourceListName
         self.captureDeliveryID = captureDeliveryID
         self.createdAt = createdAt
         self.updatedAt = updatedAt

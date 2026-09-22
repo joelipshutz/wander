@@ -89,6 +89,9 @@ enum SharedPlaceImportInboxDrainer {
                             source: source,
                             text: contents.text,
                             sourceName: contents.fileName,
+                            sourceListName: item.kind == .file && source == .googleMaps
+                                ? item.suggestedName ?? contents.fileName
+                                : nil,
                             captureDeliveryID: deliveryID,
                             automaticSaveRequested: entry.envelope.requestsAutomaticSave,
                             requestedStatus: requestedStatus,
