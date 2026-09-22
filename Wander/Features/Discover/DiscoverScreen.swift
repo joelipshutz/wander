@@ -1126,7 +1126,6 @@ struct DiscoverScreen: View {
                     }
                 }
             }
-            .accessibilityIdentifier("discover.peopleResults")
         }
     }
 

@@ -937,7 +937,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
 
-        XCTAssertTrue(feed.contains(".task(id: auth.isSignedIn)"))
+        XCTAssertTrue(feed.contains(#".task(id: "\(auth.isSignedIn)-\(store.currentUser.id)")"#))
         XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
@@ -4476,7 +4476,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("Search visited instead"))
         XCTAssertTrue(source.contains(#"We checked \(successfulSearchSourceSummary)"#))
         XCTAssertTrue(source.contains("Search hit a snag"))
-        XCTAssertTrue(source.contains("Search places or vibes"))
+        XCTAssertTrue(source.contains("Search places and people"))
         XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
         XCTAssertTrue(feedSource.contains("onClose: closeDiscoverSearch"))
     }

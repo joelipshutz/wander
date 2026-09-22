@@ -28,13 +28,23 @@ struct NotificationInboxHost: ViewModifier {
                 // Foreground refresh also supports people who turn push off.
                 // This task cancels when the app backgrounds or identity changes.
                 repeat {
-                    async let planRefresh: Void = plans.refresh(userID: userID, repository: backend.placePlanInvitationRepository)
-                    async let followRefresh: Void = follows.refresh(userID: userID, repository: backend.followNotificationRepository)
+                    async let planRefresh: Void = refreshPlans(userID: userID)
+                    async let followRefresh: Void = refreshFollows(userID: userID)
                     async let checkInRefresh = store.refreshSharedVisitInbox(backend: backend)
                     _ = await (planRefresh, followRefresh, checkInRefresh)
                     do { try await Task.sleep(for: .seconds(60)) } catch { return }
                 } while !Task.isCancelled
             }
+    }
+
+    // Resolve non-Sendable repositories on their owning actor, rather than
+    // evaluating those arguments inside an async-let child task.
+    @MainActor private func refreshPlans(userID: String) async {
+        await plans.refresh(userID: userID, repository: backend.placePlanInvitationRepository)
+    }
+
+    @MainActor private func refreshFollows(userID: String) async {
+        await follows.refresh(userID: userID, repository: backend.followNotificationRepository)
     }
 }
 

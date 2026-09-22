@@ -732,6 +732,7 @@ struct ProfileBackButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Back")
+        .accessibilityIdentifier("profile.back")
     }
 }
 

@@ -33,7 +33,7 @@ import XCTest
         XCTAssertTrue(ryan.waitForExistence(timeout: 5))
         capture("REC-597 people in combined search")
         ryan.tap()
-        let back = app.buttons["Back"]
+        let back = app.buttons["profile.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 5))
         back.tap()
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -53,8 +53,8 @@ import XCTest
         XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].waitForExistence(timeout: 5))
         capture("REC-597 shared follower inbox")
         app.buttons["notifications.follow.user_ryan"].tap()
-        XCTAssertTrue(app.buttons["Back"].waitForExistence(timeout: 5))
-        app.buttons["Back"].tap()
+        XCTAssertTrue(app.buttons["profile.back"].waitForExistence(timeout: 5))
+        app.buttons["profile.back"].tap()
         XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 5))
