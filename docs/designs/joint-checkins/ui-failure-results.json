@@ -1,0 +1,623 @@
+{
+  "baseline": "6dd9b4fb89d40966e8a9644e728902fec166a310",
+  "candidate": "00bc55ec8e047c50afa2802e0aa092042af0a62d",
+  "device": "iPhone 16e / iOS 26.3.1 / 6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C",
+  "tests": [
+    {
+      "test": "ContactDiscoveryUITests/testFollowingScreenEnableDisableAndExistingFollowSurvives",
+      "baseline": {
+        "result": "Passed",
+        "seconds": 43.173,
+        "failures": []
+      },
+      "candidate": {
+        "result": "Passed",
+        "seconds": 28.983,
+        "failures": []
+      },
+      "classification": "Not reproduced on candidate",
+      "finding": "Candidate passed; retain existing assertions.",
+      "followUp": "REC-566",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "EventsComingSoonUITests/testDarkTabBarStaysDarkAcrossEventsVisits",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 14.642,
+        "failures": [
+          "EventsComingSoonUITests.swift:105: XCTAssertEqual failed: (\"\") is not equal to (\"main.tabBar\")"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 11.845,
+        "failures": [
+          "EventsComingSoonUITests.swift:105: XCTAssertEqual failed: (\"\") is not equal to (\"main.tabBar\")"
+        ]
+      },
+      "classification": "Native tab identity",
+      "finding": "Candidate and baseline fail the main.tabBar identifier assertion (line 105).",
+      "followUp": "REC-603",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 19.018,
+        "failures": [
+          "EventsComingSoonUITests.swift:119: XCTAssertGreaterThan failed: (\"0\") is not greater than (\"30\") - Inactive tab ink must contrast with the light bar."
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 10.86,
+        "failures": [
+          "EventsComingSoonUITests.swift:105: XCTAssertEqual failed: (\"\") is not equal to (\"main.tabBar\")"
+        ]
+      },
+      "classification": "Native tab identity / appearance",
+      "finding": "Candidate fails identity at line 105; baseline reaches inactive icon contrast and fails at line 119. Preserve both signatures.",
+      "followUp": "REC-603",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "FeedbackUITests/testVoicePlaybackAndReplacementKeepsTextDraft",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 29.272,
+        "failures": [
+          "FeedbackUITests.swift:88: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Passed",
+        "seconds": 21.022,
+        "failures": []
+      },
+      "classification": "Not reproduced on candidate",
+      "finding": "Candidate passed; baseline fails playback control existence after switching back to Voice (line 88). Cause of varying result remains open.",
+      "followUp": "REC-566",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "ImportFormRefinementUITests/testInlineImportDetailsUseTheCardSurface",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 91.054,
+        "failures": [
+          "OnboardingUITests.swift:437: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 51.209,
+        "failures": [
+          "OnboardingUITests.swift:437: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Searches for expanded tags without opening optional details.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "ImportFormRefinementUITests/testSavedImportPlaceOpensItsProfile",
+      "baseline": {
+        "result": "Failed",
+        "seconds": null,
+        "failures": [
+          "Test crashed with signal term."
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 12.587,
+        "failures": [
+          "OnboardingUITests.swift:383: XCTAssertFalse failed"
+        ]
+      },
+      "classification": "Import physical tap: unresolved",
+      "finding": "Candidate physical tap leaves the report open; baseline test crashes with signal term before the assertion. Fresh accessibility activation opens the correct profile on both binaries; physical-tap parity remains unverified.",
+      "followUp": "REC-605",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "ImportFormRefinementUITests/testShareExtensionAutomaticallyCapturesExactlyOnce",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 51.144,
+        "failures": [
+          "OnboardingUITests.swift:18: XCTAssertTrue failed",
+          "OnboardingUITests.swift:19: Failed to tap Cell (First Match): No matches found for first query match sequence: `Descendants matching type Cell` -> `Elements matching predicate 'label == \"Astir\"'`, given input App element pid: [omitted]"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 18.012,
+        "failures": [
+          "OnboardingUITests.swift:18: XCTAssertTrue failed",
+          "OnboardingUITests.swift:19: Failed to tap Cell (First Match): No matches found for first query match sequence: `Descendants matching type Cell` -> `Elements matching predicate 'label == \"Astir\"'`, given input App element pid: [omitted]"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "The extension display name is Save to Astir on both revisions; the fresh branch run cannot find the obsolete Astir cell (lines 18\u201319). Signed App Group capture remains a separate gate.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "MapFilterInteractionUITests/testPerformanceFixtureMeasuresPlaceSelectionAndTapAwayDismissalHitches",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 42.778,
+        "failures": [
+          "MapFilterInteractionUITests.swift:204: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:205: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:204: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:205: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:229: XCTAssertFalse failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 32.78,
+        "failures": [
+          "MapFilterInteractionUITests.swift:204: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:205: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:204: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:205: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:229: XCTAssertFalse failed"
+        ]
+      },
+      "classification": "Map dismissal behavior",
+      "finding": "Card and active pin remain after the same physical tap on both revisions (lines 204/205/229).",
+      "followUp": "REC-604",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "MapFilterInteractionUITests/testPerformanceFixtureSelectsPinAndDismissesCardOnEmptyMapTap",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 26.921,
+        "failures": [
+          "MapFilterInteractionUITests.swift:262: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:263: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 22.709,
+        "failures": [
+          "MapFilterInteractionUITests.swift:262: XCTAssertTrue failed",
+          "MapFilterInteractionUITests.swift:263: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Map dismissal behavior",
+      "finding": "Card and active pin remain after the same physical tap on both revisions (lines 262/263).",
+      "followUp": "REC-604",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 28.647,
+        "failures": [
+          "MapFilterInteractionUITests.swift:374: XCTAssertEqual failed: (\"XCTWaiterResult(rawValue: 2)\") is not equal to (\"XCTWaiterResult(rawValue: 1)\")"
+        ]
+      },
+      "candidate": {
+        "result": "Passed",
+        "seconds": 21.218,
+        "failures": []
+      },
+      "classification": "Not reproduced on candidate",
+      "finding": "Candidate passed; baseline probe readiness timed out at line 374. Original broad-run frame-gap failure is a different signature.",
+      "followUp": "REC-378",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "MapPlaceCardActionInteractionUITests/testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 27.711,
+        "failures": [
+          "MapPlaceCardActionInteractionUITests.swift:101: XCTAssertTrue failed",
+          "MapPlaceCardActionInteractionUITests.swift:102: Failed to tap \"Close\" Button: No matches found for Elements matching predicate '\"Close\" IN identifiers' from input {("
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 25.504,
+        "failures": [
+          "MapPlaceCardActionInteractionUITests.swift:101: XCTAssertTrue failed",
+          "MapPlaceCardActionInteractionUITests.swift:102: Failed to tap \"Close\" Button: No matches found for Elements matching predicate '\"Close\" IN identifiers' from input {("
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Share opens the branded preview before any system share sheet.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "MapPlaceCardUITests/testSelectedPlaceCardAndVerticalPlacePageRoundTrip",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 16.658,
+        "failures": [
+          "MapPlaceCardUITests.swift:449: XCTAssertTrue failed",
+          "MapPlaceCardUITests.swift:450: Failed to tap \"Close\" Button: No matches found for Elements matching predicate '\"Close\" IN identifiers' from input {("
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 16.157,
+        "failures": [
+          "MapPlaceCardUITests.swift:449: XCTAssertTrue failed",
+          "MapPlaceCardUITests.swift:450: Failed to tap \"Close\" Button: No matches found for Elements matching predicate '\"Close\" IN identifiers' from input {("
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Same obsolete direct system-sheet expectation.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "NativeAccountSetupUITests/testNativeDarkSetupCaptureInventory",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 36.034,
+        "failures": [
+          "NativeAccountSetupUITests.swift:37: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 35.799,
+        "failures": [
+          "NativeAccountSetupUITests.swift:37: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Contacts route exposes Find friends and Not now, not Continue.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "NativeAccountSetupUITests/testNativeLocationAndContactsDenialsPreserveRecovery",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 33.124,
+        "failures": [
+          "NativeAccountSetupUITests.swift:161: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 33.282,
+        "failures": [
+          "NativeAccountSetupUITests.swift:161: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Contacts step uses obsolete Continue locator; appears in two test classes.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "NativeOnboardingFlowUITests/testNativeLocationAndContactsDenialsPreserveRecovery",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 33.999,
+        "failures": [
+          "NativeOnboardingFlowUITests.swift:205: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 31.547,
+        "failures": [
+          "NativeOnboardingFlowUITests.swift:205: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Contacts step uses obsolete Continue locator; appears in two test classes.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testActualFeedContactInvitePrimerUsesSingleNeutralAction",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 12.06,
+        "failures": [
+          "OnboardingUITests.swift:753: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 12.97,
+        "failures": [
+          "OnboardingUITests.swift:753: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Contacts purpose text changed in REC-560; test uses obsolete exact text.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testActualOnboardingPermissionScreensUseSingleNeutralAction",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 30.991,
+        "failures": [
+          "OnboardingUITests.swift:636: XCTAssertTrue failed",
+          "OnboardingUITests.swift:670: XCTAssertTrue failed",
+          "OnboardingUITests.swift:671: XCTAssertTrue failed",
+          "OnboardingUITests.swift:672: XCTAssertFalse failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 31.073,
+        "failures": [
+          "OnboardingUITests.swift:636: XCTAssertTrue failed",
+          "OnboardingUITests.swift:670: XCTAssertTrue failed",
+          "OnboardingUITests.swift:671: XCTAssertTrue failed",
+          "OnboardingUITests.swift:672: XCTAssertFalse failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Location heading changed; contacts section also expects obsolete Continue-only UI.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 45.109,
+        "failures": [
+          "OnboardingUITests.swift:2662: XCTAssertTrue failed",
+          "OnboardingUITests.swift:2697: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 46.15,
+        "failures": [
+          "OnboardingUITests.swift:2662: XCTAssertTrue failed",
+          "OnboardingUITests.swift:2697: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "New forms start with tags collapsed; this test requires them already expanded.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testCompactWannaFormScrollsWithoutPullingTheSheet",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 13.437,
+        "failures": [
+          "OnboardingUITests.swift:1993: Failed to get matching snapshot: No matches found for first query match sequence: `Descendants matching type StaticText` -> `Elements matching predicate '\"a note for future you\" IN identifiers'`, given input App element pid: [omitted]"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 28.884,
+        "failures": [
+          "OnboardingUITests.swift:1993: Failed to get matching snapshot: No matches found for first query match sequence: `Descendants matching type StaticText` -> `Elements matching predicate '\"a note for future you\" IN identifiers'`, given input App element pid: [omitted]"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Measures the frame of a removed label; original failure explicitly names it.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testFirstMapCheckInUsesAttachedEditorAndRestoresItsDraft",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 21.571,
+        "failures": [
+          "OnboardingUITests.swift:1705: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1718: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 38.29,
+        "failures": [
+          "OnboardingUITests.swift:1705: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1718: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Obsolete expanded-tags assertion, followed by removed heading.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testFirstMapWannaOpensAFreshDraftEachTime",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 25.666,
+        "failures": [
+          "OnboardingUITests.swift:1762: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1775: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1777: XCTAssertEqual failed: (\"Optional(\"Who told you, what caught your eye, when you might go\u2026\")\") is not equal to (\"Optional(\"what you\\'ll want to remember, who told you...\")\")",
+          "OnboardingUITests.swift:1796: XCTAssertEqual failed: (\"Optional(\"The good bits, what you ordered, who you were with\u2026\")\") is not equal to (\"Optional(\"what you\\'ll want to remember, who told you...\")\")"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 30.042,
+        "failures": [
+          "OnboardingUITests.swift:1752: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1753: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1754: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1760: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1761: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1762: XCTAssertTrue failed",
+          "OnboardingUITests.swift:1763: Failed to tap \"save.note\" TextField: No matches found for Elements matching predicate '\"save.note\" IN identifiers' from input {("
+        ]
+      },
+      "classification": "Obsolete expectation present",
+      "finding": "Both revisions contain obsolete tags/heading/placeholder assertions. Candidate initially fails to open the tray, while baseline reaches the obsolete assertions. A fresh physical tap opens the candidate tray with current controls; automated first-tap reliability is still open.",
+      "followUp": "REC-602",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "OnboardingUITests/testMapWannaAndSaveRespondToSinglePhysicalTap",
+      "baseline": {
+        "result": "Passed",
+        "seconds": 13.735,
+        "failures": []
+      },
+      "candidate": {
+        "result": "Passed",
+        "seconds": 19.65,
+        "failures": []
+      },
+      "classification": "Not reproduced on candidate",
+      "finding": "Candidate passed; preserve physical single-tap coverage.",
+      "followUp": "REC-566",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "OnboardingUITests/testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 180,
+        "failures": [
+          "Test exceeded execution time allowance of 3 minutes"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 180,
+        "failures": [
+          "Test exceeded execution time allowance of 3 minutes"
+        ]
+      },
+      "classification": "Automation quiescence timeout",
+      "finding": "Candidate spends repeated 60-second waits on animation-idle notifications before reaching the 180-second limit; exact animation still to isolate.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "OnboardingUITests/testRatingSliderRespondsThroughoutContinuousDrag",
+      "baseline": {
+        "result": "Passed",
+        "seconds": 12.393,
+        "failures": []
+      },
+      "candidate": {
+        "result": "Passed",
+        "seconds": 18.585,
+        "failures": []
+      },
+      "classification": "Not reproduced on candidate",
+      "finding": "Candidate passed; prior baseline rating failures also tracked in REC-536.",
+      "followUp": "REC-536",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "OnboardingUITests/testReturningUserColdStartOpensFeedAndForegroundKeepsSelectedTab",
+      "baseline": {
+        "result": "Passed",
+        "seconds": 17.456,
+        "failures": []
+      },
+      "candidate": {
+        "result": "Passed",
+        "seconds": 23.562,
+        "failures": []
+      },
+      "classification": "Not reproduced on candidate",
+      "finding": "Candidate passed; do not label one successful rerun a permanent repair.",
+      "followUp": "REC-566",
+      "sameFirstFailure": false
+    },
+    {
+      "test": "ProfileResponsivenessUITests/testSettingsDestinationsAndReturnToScrolledProfile",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 15.345,
+        "failures": [
+          "ProfileResponsivenessUITests.swift:77: XCTAssertTrue failed"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 15.458,
+        "failures": [
+          "ProfileResponsivenessUITests.swift:77: XCTAssertTrue failed"
+        ]
+      },
+      "classification": "Ambiguous selector",
+      "finding": "Global Notifications prefix query taps underlying profile.checkInInvitations instead of the Settings row.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    },
+    {
+      "test": "YourMapPrototypeUITests/testGeographyExpandsAndCollapsesInPlaceWithoutUnknowns",
+      "baseline": {
+        "result": "Failed",
+        "seconds": 12.362,
+        "failures": [
+          "YourMapPrototypeUITests.swift:44: XCTAssertEqualWithAccuracy failed: (\"inf\") is not equal to (\"61.999969482421875\") +/- (\"2.0\")",
+          "YourMapPrototypeUITests.swift:52: Asynchronous wait failed: Exceeded timeout of 3 seconds, with unfulfilled expectations: \"Expect predicate `value == \"Collapsed\"` for object \"yourMap.prototype.geography.expand\" Button\".",
+          "YourMapPrototypeUITests.swift:53: XCTAssertEqual failed: (\"10\") is not equal to (\"5\")",
+          "YourMapPrototypeUITests.swift:54: XCTAssertEqual failed: (\"10\") is not equal to (\"5\")",
+          "YourMapPrototypeUITests.swift:55: XCTAssertEqualWithAccuracy failed: (\"490.66666666666663\") is not equal to (\"292.3333435058594\") +/- (\"2.0\")",
+          "YourMapPrototypeUITests.swift:56: XCTAssertEqualWithAccuracy failed: (\"inf\") is not equal to (\"61.999969482421875\") +/- (\"2.0\")"
+        ]
+      },
+      "candidate": {
+        "result": "Failed",
+        "seconds": 13.91,
+        "failures": [
+          "YourMapPrototypeUITests.swift:44: XCTAssertEqualWithAccuracy failed: (\"inf\") is not equal to (\"61.999969482421875\") +/- (\"2.0\")",
+          "YourMapPrototypeUITests.swift:52: Asynchronous wait failed: Exceeded timeout of 3 seconds, with unfulfilled expectations: \"Expect predicate `value == \"Collapsed\"` for object \"yourMap.prototype.geography.expand\" Button\".",
+          "YourMapPrototypeUITests.swift:53: XCTAssertEqual failed: (\"10\") is not equal to (\"5\")",
+          "YourMapPrototypeUITests.swift:54: XCTAssertEqual failed: (\"10\") is not equal to (\"5\")",
+          "YourMapPrototypeUITests.swift:55: XCTAssertEqualWithAccuracy failed: (\"490.66666666666663\") is not equal to (\"292.3333435058594\") +/- (\"2.0\")",
+          "YourMapPrototypeUITests.swift:56: XCTAssertEqualWithAccuracy failed: (\"inf\") is not equal to (\"61.999969482421875\") +/- (\"2.0\")"
+        ]
+      },
+      "classification": "Offscreen geometry assertion",
+      "finding": "Expanded geography pushes the month section offscreen; its accessibility frame becomes infinite. The subsequent collapse tap also leaves 10 rows and the expanded height on both revisions; preserve and recheck that interaction after correcting visibility.",
+      "followUp": "REC-602",
+      "sameFirstFailure": true
+    }
+  ],
+  "scope": "27 original residual failures; same test methods/device/arguments, no app or test edits during triage. Baseline is the main revision integrated into the feature, not a claim about later main commits.",
+  "manualChecks": [
+    {
+      "revision": "baseline",
+      "fixture": "-WanderAuthenticatedUITest -WanderImportImplementationReport",
+      "action": "Accessibility activation of import.saved.report-place-0",
+      "observed": "Maru Coffee full place profile with place-profile.back; import report gone.",
+      "limit": "Does not verify the original physical tap or screenshot visibility."
+    },
+    {
+      "revision": "candidate",
+      "fixture": "Same full launch arguments as testFirstMapWannaOpensAFreshDraftEachTime",
+      "action": "One physical coordinate click at the visible Wanna button center in Simulator",
+      "observed": "Wanna editor opens with save.note, Add a Wanna go date and collapsed Show more options.",
+      "limit": "One manual success; automated initial-tap failure remains unexplained."
+    },
+    {
+      "revision": "candidate",
+      "fixture": "-WanderAuthenticatedUITest -WanderImportImplementationReport",
+      "action": "Accessibility activation of import.saved.report-place-0",
+      "observed": "Maru Coffee full place profile with place-profile.back; import report gone.",
+      "limit": "Physical swipe attempts through the desktop automation did not scroll this report; no valid physical-tap parity result claimed."
+    }
+  ]
+}
