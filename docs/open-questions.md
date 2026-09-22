@@ -1,8 +1,18 @@
 # Open Questions
 
-Last updated: 2026-09-17
+Last updated: 2026-09-22
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## Visible icon in shared Messages cards (REC-598)
+
+The canonical app icon is supplied as website icon metadata, but Apple's native
+large-image preview hid it during simulator validation. Decision needed: show a
+small icon in the image corner now, or retain metadata-only branding until the
+separate App Clip work (REC-408) can provide a native app/action footer. Ordinary
+Open Graph tags cannot force the icon into Messages' caption or add a View button.
+The duplicate image footer is removed in either case; the native title contains
+the shared item's name and context.
 
 ## Onboarding copy and explorations (REC-529)
 
