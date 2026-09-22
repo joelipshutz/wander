@@ -432,6 +432,9 @@ copies; they are not rewritten by changing the generator.
 Client-generated links require an app update. Apply the notification-link
 migration after its rollback-only regression passes; it preserves the existing
 activity-id payload used by older notification clients and does not rewrite
-queued notifications. Register `https://astirmovement.com/share/tiktok` with
-the existing TikTok app before releasing the new callback constant, retaining
-the old registration for installed clients.
+queued notifications. Share Kit supplies `https://astirmovement.com/share/tiktok`
+as the request redirectURI; its portal has no separate callback-list field
+for this product. Verify the Astir URL prefix for the existing sandbox and
+production configurations, serve the return path in the association file,
+and retain the verified legacy domain for installed clients. Provider
+production approval is separate from domain ownership verification.
