@@ -15,7 +15,7 @@ rec.me must not ship user-generated content without all of the following operati
 - a human owner who checks the queue and acts within the service levels below; and
 - live Community Guidelines and Support links.
 
-The public endpoints were verified to return HTTP 200 on 2026-08-13:
+The public endpoints were verified to return HTTP 200 on 2026-09-22:
 
 - `https://astirmovement.com/community`
 - `https://astirmovement.com/support`
