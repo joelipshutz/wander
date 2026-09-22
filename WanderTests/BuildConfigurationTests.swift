@@ -123,7 +123,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(schemes.contains("recme"))
     }
 
-    func testAppEntitlementsRegisterGetRecMeUniversalLinks() throws {
+    func testAppEntitlementsRegisterAstirAndLegacyUniversalLinks() throws {
         let entitlementsData = try Data(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Resources/Wander.entitlements"
@@ -139,6 +139,8 @@ final class BuildConfigurationTests: XCTestCase {
             entitlements["com.apple.developer.associated-domains"] as? [String]
         )
 
+        XCTAssertTrue(associatedDomains.contains("applinks:astirmovement.com"))
+        XCTAssertTrue(associatedDomains.contains("applinks:www.astirmovement.com"))
         XCTAssertTrue(associatedDomains.contains("applinks:getrec.me"))
         XCTAssertTrue(associatedDomains.contains("webcredentials:clerk.getrec.me"))
         XCTAssertFalse(associatedDomains.contains(where: { $0.contains("clerk.accounts.dev") }))
@@ -544,7 +546,7 @@ final class BuildConfigurationTests: XCTestCase {
 
     func testAcquisitionAttributionAllowListsAndSanitizesCampaignProperties() throws {
         let url = try XCTUnwrap(
-            URL(string: "https://getrec.me/import/google?utm_source=tiktok&utm_campaign=summer%20launch&utm_term=private&utm_content=a%2Fb")
+            URL(string: "https://astirmovement.com/import/google?utm_source=tiktok&utm_campaign=summer%20launch&utm_term=private&utm_content=a%2Fb")
         )
         let attribution = try XCTUnwrap(AcquisitionAttribution(url: url))
 

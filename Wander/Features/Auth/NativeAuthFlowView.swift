@@ -192,7 +192,7 @@ struct NativeAuthFlowView: View {
                 Text("If Apple or Google returns the same verified email, it connects to your existing \(AppBrand.displayName) account.")
                     .accessibilityIdentifier("auth.accountLinkingExplanation")
 
-                Text(.init("By continuing, you agree to the [Terms of Use](https://getrec.me/terms) and [Community Guidelines](https://getrec.me/community), and acknowledge the [Privacy Policy](https://getrec.me/privacy)."))
+                Text(.init("By continuing, you agree to the [Terms of Use](https://astirmovement.com/terms) and [Community Guidelines](https://astirmovement.com/community), and acknowledge the [Privacy Policy](https://astirmovement.com/privacy)."))
                     .accessibilityIdentifier("auth.legalAcknowledgement")
             }
             .font(AstirTypography.caption)

@@ -159,7 +159,7 @@ final class ActivityEngagementTests: XCTestCase {
         )
         XCTAssertEqual(
             ActivityShareProviderConfiguration.tikTokRedirectURI,
-            "https://getrec.me/share/tiktok"
+            "https://astirmovement.com/share/tiktok"
         )
     }
 
@@ -283,10 +283,10 @@ final class ActivityEngagementTests: XCTestCase {
         )
 
         XCTAssertEqual(content.items, [
-            URL(string: "https://getrec.me/activities/\(activityID)")!,
+            URL(string: "https://astirmovement.com/activities/\(activityID)")!,
             fileURL,
         ])
-        XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
+        XCTAssertTrue(content.messageBody.contains("https://astirmovement.com/activities/\(activityID)"))
         XCTAssertFalse(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
         XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
     }

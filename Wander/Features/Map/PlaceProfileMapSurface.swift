@@ -2249,13 +2249,13 @@ private struct PlaceProfileFullView: View {
                 kind: .website,
                 title: "Website",
                 systemImage: "globe",
-                url: URL(string: "https://getrec.me")!
+                url: URL(string: "https://astirmovement.com")!
             ),
             PlaceExternalAction(
                 kind: .reserve,
                 title: "Reservation",
                 systemImage: "calendar.badge.plus",
-                url: URL(string: "https://getrec.me")!
+                url: URL(string: "https://astirmovement.com")!
             )
         ]
     }
