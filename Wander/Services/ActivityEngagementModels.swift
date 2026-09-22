@@ -62,6 +62,8 @@ struct ActivityComment: Identifiable, Equatable {
     let body: String
     let createdAt: Date
     let isPending: Bool
+    let likeCount: Int
+    let viewerHasLiked: Bool
 
     init(
         id: String,
@@ -69,7 +71,9 @@ struct ActivityComment: Identifiable, Equatable {
         author: ProfileShell,
         body: String,
         createdAt: Date,
-        isPending: Bool = false
+        isPending: Bool = false,
+        likeCount: Int = 0,
+        viewerHasLiked: Bool = false
     ) {
         self.id = id
         self.activityID = activityID
@@ -77,7 +81,26 @@ struct ActivityComment: Identifiable, Equatable {
         self.body = body
         self.createdAt = createdAt
         self.isPending = isPending
+        self.likeCount = max(0, likeCount)
+        self.viewerHasLiked = viewerHasLiked
     }
+
+    func settingLike(_ isLiked: Bool) -> ActivityComment {
+        withLikes(count: likeCount + (isLiked == viewerHasLiked ? 0 : (isLiked ? 1 : -1)), isLiked: isLiked)
+    }
+
+    func withLikes(count: Int, isLiked: Bool) -> ActivityComment {
+        ActivityComment(id: id, activityID: activityID, author: author, body: body,
+                        createdAt: createdAt, isPending: isPending,
+                        likeCount: count, viewerHasLiked: isLiked)
+    }
+}
+
+struct ActivityCommentLikeSummary: Equatable {
+    let commentID: String
+    let activityID: String
+    let likeCount: Int
+    let viewerHasLiked: Bool
 }
 
 struct ActivityCommentsPage: Equatable {

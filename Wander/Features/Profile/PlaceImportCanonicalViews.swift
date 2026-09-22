@@ -803,7 +803,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         for batch in scopedBatches {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
             let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
-            let destination = destinationList(for: batch, itemCount: batchItems.count)
+            let destination = destinationList(for: batch)
             var entries = batch.receipt?.entries ?? []
 
             for item in batchItems where itemIDs.contains(item.id) && item.state != .dismissed {
@@ -1004,8 +1004,8 @@ struct PlaceImportCanonicalReviewScreen: View {
         )
     }
 
-    private func destinationList(for batch: PlaceImportBatch, itemCount: Int) -> LocalPlaceList? {
-        guard batch.source == .googleMaps, batch.sourceName != nil || itemCount > 1 else { return nil }
+    private func destinationList(for batch: PlaceImportBatch) -> LocalPlaceList? {
+        guard batch.source == .googleMaps, let sourceListName = batch.sourceListName else { return nil }
         if let listID = batch.destinationListID,
            let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
             return existing
@@ -1015,7 +1015,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                 .filter { $0.ownerUserID == store.currentUser.id }
                 .map(\.name)
         )
-        let name = PlaceImportDestinationListName.unique(batch.sourceName, existingNames: existingNames)
+        let name = PlaceImportDestinationListName.unique(sourceListName, existingNames: existingNames)
         guard let list = store.createPlaceList(
             name: name,
             description: "Imported from Google Maps",

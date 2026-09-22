@@ -586,6 +586,36 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(repository.deletedCommentIDs, [comment.id])
     }
 
+    func testDeletingOwnCommentAfterHiddenBlockedCommentRemovesCorrectRow() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = UUID().uuidString
+        let hidden = activityComment(id: UUID().uuidString, activityID: activityID,
+                                     authorID: "blocked_author", relationship: .follower)
+        let own = activityComment(id: UUID().uuidString, activityID: activityID,
+                                  authorID: store.currentUser.id, relationship: .owner)
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(comments: [hidden, own], nextCursor: nil,
+                                              engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 2)),
+            deleteResult: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        store.block(userID: hidden.author.id)
+        // Audience changes discard cached discussions. A fresh authorized read
+        // restores the rows before exercising filtered-index deletion.
+        XCTAssertTrue(store.activityComments(for: activityID).isEmpty)
+        _ = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertEqual(store.activityComments(for: activityID), [own])
+
+        let deleted = await store.deleteActivityComment(own, backend: backend)
+
+        XCTAssertTrue(deleted)
+        XCTAssertTrue(store.activityComments(for: activityID).isEmpty)
+        XCTAssertEqual(repository.deletedCommentIDs, [own.id])
+        store.unblock(userID: hidden.author.id)
+        XCTAssertEqual(store.activityComments(for: activityID), [hidden])
+    }
+
     func testFailedRemoteCommentDeleteRestoresRowAndCount() async {
         let store = WanderStore(fixtures: .empty())
         let activityID = "40000000-0000-0000-0000-000000000102"
@@ -827,7 +857,7 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: .saved), 10)
     }
 
-    func testCommentsContextPreservesNoteAndPhotosForEveryTicketKind() {
+    func testCommentsContextPreservesPostcardFieldsForEveryTicketKind() {
         let actor = ProfileShell(
             id: "user_friend",
             handle: "friend",
@@ -859,6 +889,7 @@ final class ActivityEngagementTests: XCTestCase {
                 ticketKind: ticketKind,
                 occurredAt: .now,
                 note: "  Found god.  ",
+                rating: 4.5,
                 media: media
             )
 
@@ -869,6 +900,10 @@ final class ActivityEngagementTests: XCTestCase {
             coordinator.openComments(context: context, visiblePlace: nil)
             XCTAssertEqual(coordinator.commentsRoute?.context?.note, "Found god.")
             XCTAssertEqual(coordinator.commentsRoute?.context?.media, media)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.rating, 4.5)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.placeName, context.placeName)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.placeDetail, context.placeDetail)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.actor, actor)
         }
     }
 
@@ -1403,6 +1438,212 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(coordinator.commentsRoute?.context?.activityID, activity.id)
     }
 
+    func testCommentLikesAreIndependentAndCanBeUndone() async throws {
+        let store = WanderStore(fixtures: .empty())
+        _ = await store.addActivityComment(activityID: "local-comment-activity", body: "A comment", backend: nil)
+        let comment = try XCTUnwrap(store.activityComments(for: "local-comment-activity").first)
+        let activityBefore = store.activityEngagement(for: comment.activityID)
+        let liked = await store.toggleActivityCommentLike(comment, backend: nil)
+        XCTAssertTrue(liked)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 1)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.viewerHasLiked, true)
+        // A stale row passed by the UI must still toggle the current stored state.
+        let unliked = await store.toggleActivityCommentLike(comment, backend: nil)
+        XCTAssertTrue(unliked)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 0)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.viewerHasLiked, false)
+        XCTAssertEqual(store.activityEngagement(for: comment.activityID), activityBefore)
+    }
+
+    func testRemoteCommentLikeRollsBackAndCanRetry() async throws {
+        let (store, repository, comment, backend) = await commentLikeFixture()
+        repository.commentLikeError = ActivityEngagementTestError.expected
+        let failed = await store.toggleActivityCommentLike(comment, backend: backend)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first, comment)
+        XCTAssertNotNil(store.activityEngagementError(for: comment.activityID))
+        XCTAssertFalse(store.isActivityCommentLikePending(comment.id))
+        repository.commentLikeError = nil
+        let retried = await store.toggleActivityCommentLike(comment, backend: backend)
+        XCTAssertTrue(retried)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 1)
+        XCTAssertNil(store.activityEngagementError(for: comment.activityID))
+        let refreshed = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.viewerHasLiked, true)
+        let reloadedStore = WanderStore(fixtures: .empty())
+        _ = await reloadedStore.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        XCTAssertEqual(reloadedStore.activityComments(for: comment.activityID).first?.viewerHasLiked, true)
+        repository.commentLikeError = ActivityEngagementTestError.expected
+        let failedUnlike = await store.toggleActivityCommentLike(comment, backend: backend)
+        XCTAssertFalse(failedUnlike)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 1)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.viewerHasLiked, true)
+        repository.commentLikeError = nil
+        let unlike = await store.toggleActivityCommentLike(comment, backend: backend)
+        XCTAssertTrue(unlike)
+        XCTAssertEqual(repository.commentLikeRequests.map(\.isLiked), [true, true, false, false])
+    }
+
+    func testCommentLikeWithoutRemoteRepositoryFailsClosed() async {
+        let (store, repository, comment, _) = await commentLikeFixture()
+        let result = await store.toggleActivityCommentLike(comment, backend: nil)
+        XCTAssertFalse(result)
+        XCTAssertTrue(repository.commentLikeRequests.isEmpty)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.viewerHasLiked, false)
+    }
+
+    func testConcurrentCommentTapsIssueOneWriteAndPreventDeletionWhilePending() async {
+        let (store, repository, comment, backend) = await commentLikeFixture()
+        repository.suspendCommentLikes = true
+        let task = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+        for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+        XCTAssertTrue(store.isActivityCommentLikePending(comment.id))
+        XCTAssertFalse(store.canDeleteActivityComment(comment))
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 1)
+        let duplicate = await store.toggleActivityCommentLike(comment, backend: backend)
+        XCTAssertFalse(duplicate)
+        XCTAssertEqual(repository.commentLikeRequests.count, 1)
+        repository.suspendCommentLikes = false
+        let result = await task.value
+        XCTAssertTrue(result)
+        XCTAssertFalse(store.isActivityCommentLikePending(comment.id))
+        XCTAssertTrue(store.canDeleteActivityComment(comment))
+    }
+
+    func testRefreshCannotOverwriteLikeStartedBeforeOrDuringTheRead() async {
+        for startsDuringWrite in [false, true] {
+            let (store, repository, comment, backend) = await commentLikeFixture()
+            repository.beginSuspendingComments()
+            repository.suspendCommentLikes = true
+            var write: Task<Bool, Never>?
+            if startsDuringWrite {
+                write = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+                for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+            }
+            let read = Task { await store.refreshActivityComments(activityID: comment.activityID, backend: backend) }
+            for _ in 0..<100 where repository.commentsRequestCount < 2 { await Task.yield() }
+            if !startsDuringWrite {
+                write = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+                for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+            }
+            repository.suspendCommentLikes = false
+            let written = await write?.value
+            XCTAssertEqual(written, true)
+            repository.finishComments()
+            let refreshed = await read.value
+            XCTAssertTrue(refreshed)
+            XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 1)
+            XCTAssertEqual(store.activityComments(for: comment.activityID).first?.viewerHasLiked, true)
+        }
+    }
+
+    func testPendingCommentLikeSurvivesRefreshAndUsesAuthoritativeCount() async {
+        let (store, repository, comment, backend) = await commentLikeFixture()
+        repository.suspendCommentLikes = true
+        repository.commentLikeCountOverride = 7
+        let task = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+        for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+        _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 1)
+        repository.suspendCommentLikes = false
+        _ = await task.value
+        XCTAssertEqual(store.activityComments(for: comment.activityID).first?.likeCount, 7)
+    }
+
+    func testAccountResetRejectsOldCommentLikeSuccessAndFailureIncludingSameUser() async {
+        for fail in [false, true] {
+            for sameUser in [false, true] {
+                let (store, repository, comment, backend) = await commentLikeFixture()
+                let userID = store.currentUser.id
+                repository.suspendCommentLikes = true
+                repository.commentLikeError = fail ? ActivityEngagementTestError.expected : nil
+                let task = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+                for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+                store.apply(authState: .signedOut)
+                store.apply(authState: .signedIn(AuthSession(userID: sameUser ? userID : "new_account", displayName: "New", handle: "new")))
+                repository.suspendCommentLikes = false
+                let result = await task.value
+                XCTAssertFalse(result)
+                XCTAssertTrue(store.activityComments(for: comment.activityID).isEmpty)
+                XCTAssertFalse(store.isActivityCommentLikePending(comment.id))
+                XCTAssertNil(store.activityEngagementError(for: comment.activityID))
+            }
+        }
+    }
+
+    func testDeletedCommentIsNotResurrectedByLikeCompletion() async {
+        let (store, repository, comment, backend) = await commentLikeFixture()
+        repository.suspendCommentLikes = true
+        let task = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+        for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+        repository.commentsPage = ActivityCommentsPage(comments: [], nextCursor: nil, engagement: .empty(activityID: comment.activityID))
+        _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        repository.suspendCommentLikes = false
+        let result = await task.value
+        XCTAssertFalse(result)
+        XCTAssertTrue(store.activityComments(for: comment.activityID).isEmpty)
+    }
+
+    func testBlockedAndPendingCommentsCannotBeLiked() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let comment = activityComment(id: UUID().uuidString, activityID: UUID().uuidString,
+                                      authorID: "blocked_author", relationship: .follower)
+        let repository = ActivityEngagementRepositoryStub(commentsPage: ActivityCommentsPage(
+            comments: [comment], nextCursor: nil, engagement: .empty(activityID: comment.activityID)))
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        store.block(userID: comment.author.id)
+        XCTAssertTrue(store.activityComments(for: comment.activityID).isEmpty)
+        let blocked = await store.toggleActivityCommentLike(comment, backend: backend)
+        XCTAssertFalse(blocked)
+        XCTAssertTrue(repository.commentLikeRequests.isEmpty)
+        let pending = ActivityComment(id: "pending", activityID: comment.activityID, author: comment.author,
+                                      body: "Pending", createdAt: .now, isPending: true)
+        repository.commentsPage = ActivityCommentsPage(comments: [pending], nextCursor: nil,
+                                                      engagement: .empty(activityID: comment.activityID))
+        store.unblock(userID: comment.author.id)
+        _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        XCTAssertFalse(store.canLikeActivityComment(pending))
+        let pendingResult = await store.toggleActivityCommentLike(pending, backend: backend)
+        XCTAssertFalse(pendingResult)
+        XCTAssertTrue(repository.commentLikeRequests.isEmpty)
+    }
+
+    func testBlockDuringCommentLikeDoesNotRestoreAnOptimisticRowAfterUnblock() async {
+        for fail in [false, true] {
+            let store = WanderStore(fixtures: .empty())
+            let comment = activityComment(id: UUID().uuidString, activityID: UUID().uuidString,
+                                          authorID: "comment_author", relationship: .follower)
+            let repository = ActivityEngagementRepositoryStub(commentsPage: ActivityCommentsPage(
+                comments: [comment], nextCursor: nil, engagement: .empty(activityID: comment.activityID)))
+            let backend = WanderBackend(activityEngagementRepository: repository)
+            _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+            repository.suspendCommentLikes = true
+            repository.commentLikeError = fail ? ActivityEngagementTestError.expected : nil
+            let task = Task { await store.toggleActivityCommentLike(comment, backend: backend) }
+            for _ in 0..<100 where repository.commentLikeRequests.isEmpty { await Task.yield() }
+            store.block(userID: comment.author.id)
+            repository.suspendCommentLikes = false
+            let result = await task.value
+            XCTAssertFalse(result)
+            store.unblock(userID: comment.author.id)
+            XCTAssertTrue(store.activityComments(for: comment.activityID).isEmpty)
+            XCTAssertFalse(store.isActivityCommentLikePending(comment.id))
+        }
+    }
+
+    private func commentLikeFixture() async -> (WanderStore, ActivityEngagementRepositoryStub, ActivityComment, WanderBackend) {
+        let store = WanderStore(fixtures: .empty())
+        let comment = activityComment(id: UUID().uuidString, activityID: UUID().uuidString,
+                                      authorID: store.currentUser.id, relationship: .owner)
+        let repository = ActivityEngagementRepositoryStub(commentsPage: ActivityCommentsPage(
+            comments: [comment], nextCursor: nil, engagement: .empty(activityID: comment.activityID)))
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.refreshActivityComments(activityID: comment.activityID, backend: backend)
+        return (store, repository, comment, backend)
+    }
+
     private func privacyActivity(ownerID: String, visibility: PlaceVisibility) -> FeedActivity {
         let id = UUID().uuidString.lowercased()
         let owner = LocalProfile(localID: ownerID, handle: ownerID, displayName: "Owner")
@@ -1451,7 +1692,11 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     private(set) var placeRequests: [[String]] = []
     let summariesResult: [ActivityEngagementSummary]?
     let setLikeError: Error?
-    let commentsPage: ActivityCommentsPage?
+    var commentsPage: ActivityCommentsPage?
+    var commentLikeError: Error?
+    var suspendCommentLikes = false
+    var commentLikeCountOverride: Int?
+    private(set) var commentLikeRequests: [(commentID: String, isLiked: Bool)] = []
     let deleteResult: ActivityEngagementSummary?
     let deleteError: Error?
     private(set) var activityRequestCount = 0
@@ -1538,17 +1783,34 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
+        let snapshot = commentsPage
         commentsRequestCount += 1
         while areCommentsSuspended { await Task.yield() }
         if !commentsResponses.isEmpty { return try commentsResponses.removeFirst().get() }
-        return commentsPage ?? ActivityCommentsPage(
+        return snapshot ?? ActivityCommentsPage(
             comments: [],
             nextCursor: nil,
             engagement: .empty(activityID: activityID)
         )
     }
 
+    func beginSuspendingComments() { areCommentsSuspended = true }
     func finishComments() { areCommentsSuspended = false }
+
+    func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
+        commentLikeRequests.append((commentID, isLiked))
+        let original = commentsPage?.comments.first { $0.id == commentID }
+        while suspendCommentLikes { await Task.yield() }
+        if let commentLikeError { throw commentLikeError }
+        guard let original else { throw ActivityEngagementTestError.expected }
+        let updated = original.withLikes(count: commentLikeCountOverride ?? (isLiked ? 1 : 0), isLiked: isLiked)
+        if let page = commentsPage {
+            commentsPage = ActivityCommentsPage(comments: page.comments.map { $0.id == commentID ? updated : $0 },
+                                               nextCursor: page.nextCursor, engagement: page.engagement)
+        }
+        return ActivityCommentLikeSummary(commentID: commentID, activityID: original.activityID,
+                                          likeCount: updated.likeCount, viewerHasLiked: isLiked)
+    }
 
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
         let comment = ActivityComment(

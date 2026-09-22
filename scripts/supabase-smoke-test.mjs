@@ -116,6 +116,12 @@ async function main() {
         await client.query("rollback to savepoint launch_profile_smoke");
         await client.query("release savepoint launch_profile_smoke");
         console.log("ok - launch follows and suggestion controls preserve account and privacy boundaries");
+        await client.query("savepoint comment_likes_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/activity_comment_likes.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint comment_likes_smoke");
+        await client.query("release savepoint comment_likes_smoke");
+        console.log("ok - comment likes preserve identity, visibility, idempotency, and deletion contracts");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -2659,6 +2665,10 @@ release savepoint migration_preview_smoke;
 -- This suite sets the JSON JWT claims, which take precedence over the scalar
 -- claims used below. Restore both its fixtures and session state afterward.
 reset role;
+savepoint comment_likes_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/activity_comment_likes.sql", import.meta.url)), "rollback")}
+rollback to savepoint comment_likes_smoke;
+release savepoint comment_likes_smoke;
 savepoint repeat_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;

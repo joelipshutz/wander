@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
-select plan(58);
+select plan(65);
 insert into public.profiles(id, handle, display_name) values
  ('joint_life_owner','jointlifeowner','Fictional Ryan'),
  ('joint_life_guest','jointlifeguest','Fictional Joe'),
@@ -122,7 +122,14 @@ select throws_ok($$select public.add_activity_comment_v2(pg_temp.joint_activity_
 select lives_ok($$insert into joint_life_results values('comment',public.add_activity_comment_v2(pg_temp.joint_activity_id(),'Fictional comment','b5680000-0000-0000-0000-000000000001',1))$$,'comment published once to canonical discussion');
 select is(public.add_activity_comment_v2(pg_temp.joint_activity_id(),'Fictional comment','b5680000-0000-0000-0000-000000000001',1)->'comment'->>'id',(select result->'comment'->>'id' from joint_life_results where name='comment'),'lost-response comment retry returns same comment');
 select throws_ok($$select public.add_activity_comment_v2(pg_temp.joint_activity_id(),'Changed comment','b5680000-0000-0000-0000-000000000001',1)$$,'P0001','joint_check_in_request_conflict','comment key cannot be rebound to different text');
+select is(public.set_activity_comment_like_v2((select (result->'comment'->>'id')::uuid from joint_life_results where name='comment'),true)->>'like_count','1','shared comment can be liked');
+select is(public.set_activity_comment_like_v2((select (result->'comment'->>'id')::uuid from joint_life_results where name='comment'),true)->>'like_count','1','shared comment like retry is idempotent');
+select is(public.activity_comments_v2(pg_temp.joint_activity_id())->'comments'->0->>'like_count','1','v2 comment page preserves upstream like counts');
+select is(public.activity_comments_v2(pg_temp.joint_activity_id())->'comments'->0->>'viewer_has_liked','true','v2 comment page preserves upstream viewer state');
+select is(public.add_activity_comment_v2(pg_temp.joint_activity_id(),'Fictional comment','b5680000-0000-0000-0000-000000000001',1)->'comment'->>'like_count','1','post receipt replay preserves current comment likes');
+select throws_ok($$select public.set_activity_comment_like((select (result->'comment'->>'id')::uuid from joint_life_results where name='comment'),true)$$,'P0001','comment_not_visible','legacy comment-like writer cannot bypass shared identity');
 select lives_ok($$select public.delete_own_activity_comment((select (result->'comment'->>'id')::uuid from joint_life_results where name='comment'))$$,'author deletes comment');
+select throws_ok($$select public.set_activity_comment_like_v2((select (result->'comment'->>'id')::uuid from joint_life_results where name='comment'),true)$$,'P0001','comment_not_visible','deleted shared comment cannot receive a late like');
 select throws_ok($$select public.add_activity_comment_v2(pg_temp.joint_activity_id(),'Fictional comment','b5680000-0000-0000-0000-000000000001',1)$$,'P0001','comment_deleted','delayed retry never resurrects deleted comment');
 reset role;
 select ok(not exists(select 1 from public.joint_check_in_operations where actor_user_id='joint_view_guest' and committed_result::text like '%Fictional comment%'),'receipt does not retain deleted body');

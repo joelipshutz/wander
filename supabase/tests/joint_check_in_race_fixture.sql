@@ -60,3 +60,5 @@ create function app.can_read_legacy_activity_event(viewer text,event_id uuid) re
  select exists(select 1 from feed_events e join place_visits v on v.id=e.visit_id join user_places p on p.id=v.user_place_id
  where e.id=event_id and v.deleted_at is null and p.deleted_at is null and not app.is_blocked(viewer,p.user_id)
  and (p.user_id=viewer or (p.visibility='followers' and app.follows(viewer,p.user_id))))$$;
+
+create table activity_comment_likes(comment_id uuid references activity_comments on delete cascade, user_id text references profiles, primary key(comment_id,user_id));

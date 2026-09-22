@@ -95,8 +95,40 @@ returns jsonb language sql stable security definer set search_path=pg_catalog,pu
 as $$
  select jsonb_build_object('id',comment.id,'activity_id',comment.activity_id,
    'author',app.joint_profile_json(comment.author_user_id,input_viewer_id),'body',comment.body,'created_at',comment.created_at)
+   || app.activity_comment_likes_json(input_viewer_id,comment.id)
  from public.activity_comments comment where comment.id=input_comment_id
 $$;
+
+-- Preserve comment likes on shared discussions. Acquire the same group/event
+-- locks as other engagement before locking the comment, so closure and
+-- deletion cannot authorize a write against a stale audience.
+create function public.set_activity_comment_like_v2(input_comment_id uuid,input_is_liked boolean)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,public,app
+as $$
+declare viewer_id text := app.current_user_id(); event_id uuid; target public.feed_events;
+begin
+  if viewer_id is null then raise exception 'not_authenticated'; end if;
+  if input_is_liked is null then raise exception 'like_state_required'; end if;
+  select activity_id into event_id from public.activity_comments where id=input_comment_id;
+  if not found then raise exception 'comment_not_visible'; end if;
+  target := app.lock_activity_v2(event_id);
+  perform 1 from public.activity_comments comment
+    join public.profiles author on author.id=comment.author_user_id
+    where comment.id=input_comment_id and comment.activity_id=target.id
+      and author.deleted_at is null and not app.is_blocked(viewer_id,author.id)
+    for update of comment;
+  if not found then raise exception 'comment_not_visible'; end if;
+  if input_is_liked then
+    insert into public.activity_comment_likes(comment_id,user_id) values(input_comment_id,viewer_id)
+      on conflict(comment_id,user_id) do nothing;
+  else
+    delete from public.activity_comment_likes where comment_id=input_comment_id and user_id=viewer_id;
+  end if;
+  return app.activity_comment_likes_json(viewer_id,input_comment_id);
+end;
+$$;
+revoke all on function public.set_activity_comment_like_v2(uuid,boolean) from public,anon;
+grant execute on function public.set_activity_comment_like_v2(uuid,boolean) to authenticated;
 
 create function public.add_activity_comment_v2(input_activity_id uuid,input_body text,
  input_request_id uuid,input_consent_version integer default null)
@@ -263,7 +295,7 @@ begin
               ),
               'body', comment.body,
               'created_at', comment.created_at
-            )
+            ) || app.activity_comment_likes_json(viewer_id,comment.id)
             order by comment.created_at asc, comment.id asc
           )
           from page comment

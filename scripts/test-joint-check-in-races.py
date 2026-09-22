@@ -67,9 +67,10 @@ load_functions('supabase/migrations/20260602131500_m3_foundation.sql',{'app.can_
 load_functions('supabase/migrations/20260921223000_joint_check_in_projections.sql',{
  'app.readable_joint_check_in_members','app.visible_joint_group_for_visit','app.resolve_activity_v2','app.joint_profile_json'})
 load_functions('supabase/migrations/20260810155601_activity_engagement.sql',{'app.activity_engagement_json'})
+load_functions('supabase/migrations/20260921212104_activity_comment_likes.sql',{'app.activity_comment_likes_json'})
 load_functions('supabase/migrations/20260921224000_joint_check_in_engagement.sql',{
  'app.lock_activity_v2','app.mark_joint_personal_engagement','app.activity_comment_json',
- 'public.add_activity_comment_v2','public.set_activity_like_v2','public.delete_own_activity_comment'})
+ 'public.add_activity_comment_v2','public.set_activity_like_v2','public.set_activity_comment_like_v2','public.delete_own_activity_comment'})
 admin.query("create trigger activity_comments_00_joint_identity before insert on activity_comments for each row execute function app.mark_joint_personal_engagement();create trigger activity_likes_00_joint_identity before insert on activity_likes for each row execute function app.mark_joint_personal_engagement()")
 G='e5660000-0000-0000-0000-000000000001';PLACE='e5660000-0000-0000-0000-000000000002'
 SOURCE='e5660000-0000-0000-0000-000000000003';PARENT='e5660000-0000-0000-0000-000000000004'
@@ -95,9 +96,9 @@ def wait_lock(db):
   if rows and rows[0][0]=='Lock':return
   time.sleep(.01)
  raise AssertionError(f'Connection {db.pid} never waited for a real database lock')
-def race(first,second,first_user='friend0',second_user='friend0'):
+def race(first,second,first_user='friend0',second_user='friend0',barrier=None):
  blocker=DB();left=DB();right=DB();out={}
- blocker.query(f"begin;select id from shared_visit_groups where id='{G}' for update")
+ blocker.query("begin;"+(barrier or f"select id from shared_visit_groups where id='{G}' for update"))
  def run(label,db,user,sql):
   try:
    db.query(f"begin;select set_config('test.user_id','{user}',true)")
@@ -137,6 +138,13 @@ removed=json.loads(admin.query(f"select public.delete_own_activity_comment('{com
 record('Comment wins closure race; its author can delete without regaining thread access',out)
 seed();event=canonical();out=race(f"select public.set_activity_like_v2('{event}',true)",f"select public.set_activity_like_v2('{event}',true)");success(out);success(out,'second');assert count('select count(*) from activity_likes')==1;record('Concurrent like-set requests retain one like',out)
 seed();event=canonical();out=race(f"update user_places set visibility='self' where id='{PARENT}'",f"select public.set_activity_like_v2('{event}',true)",'owner','friend0');success(out);assert 'activity_not_visible' in out['second']['error'];assert count('select count(*) from activity_likes')==0;record('Closure wins like race without a late write',out)
+def prepare_comment():
+ seed();admin.query("select set_config('test.user_id','friend0',false)");admin.query(comment(canonical()))
+ return admin.query('select id from activity_comments')[0][0]
+comment_id=prepare_comment();out=race(f"update user_places set visibility='self' where id='{PARENT}'",f"select public.set_activity_comment_like_v2('{comment_id}',true)",'owner','friend0');success(out);assert 'activity_not_visible' in out['second']['error'];assert count('select count(*) from activity_comment_likes')==0;record('Closure wins comment-like race without a late write',out)
+comment_id=prepare_comment();out=race(f"select public.set_activity_comment_like_v2('{comment_id}',true)",f"update user_places set visibility='self' where id='{PARENT}'",'friend0','owner');success(out);success(out,'second');assert count('select count(*) from activity_comment_likes')==1;record('Comment like wins closure race and closure still completes',out)
+comment_id=prepare_comment();out=race(f"select public.delete_own_activity_comment('{comment_id}')",f"select public.set_activity_comment_like_v2('{comment_id}',true)",barrier=f"select id from activity_comments where id='{comment_id}' for update");success(out);assert 'comment_not_visible' in out['second']['error'];assert count('select count(*) from activity_comment_likes')==0;record('Deletion wins comment-like race with no orphan reaction',out)
+comment_id=prepare_comment();out=race(f"select public.set_activity_comment_like_v2('{comment_id}',true)",f"select public.delete_own_activity_comment('{comment_id}')",barrier=f"select id from activity_comments where id='{comment_id}' for update");success(out);success(out,'second');assert count('select count(*) from activity_comment_likes')==0;record('Comment like wins deletion race and deletion cascades the reaction',out)
 def prepare_rejoin():
  seed();admin.query("select set_config('test.user_id','friend0',false)");admin.query(accept())
  admin.query("select set_config('test.user_id','owner',false)");admin.query(set_people([],2));admin.query(set_people(['friend0'],3))
