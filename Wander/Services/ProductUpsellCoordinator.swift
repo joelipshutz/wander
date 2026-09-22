@@ -131,7 +131,7 @@ struct ProductUpsellPresentationGate: Equatable {
     var isPresentingWalkthrough = false
     var isPresentingSaveStreak = false
     var isPresentingAlert = false
-    var hasTransientBanner = false
+    var isPresentingChildModal = false
 
     var isBlocked: Bool {
         isPresentingAdd
@@ -142,7 +142,7 @@ struct ProductUpsellPresentationGate: Equatable {
             || isPresentingWalkthrough
             || isPresentingSaveStreak
             || isPresentingAlert
-            || hasTransientBanner
+            || isPresentingChildModal
     }
 }
 

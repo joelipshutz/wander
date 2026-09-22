@@ -301,7 +301,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             ProductUpsellPresentationGate(isPresentingWalkthrough: true),
             ProductUpsellPresentationGate(isPresentingSaveStreak: true),
             ProductUpsellPresentationGate(isPresentingAlert: true),
-            ProductUpsellPresentationGate(hasTransientBanner: true)
+            ProductUpsellPresentationGate(isPresentingChildModal: true)
         ]
 
         XCTAssertFalse(ProductUpsellPresentationGate().isBlocked)

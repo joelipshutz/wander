@@ -554,7 +554,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
-            "-WanderNotificationAuthorizationDeniedFixture"
+            "-WanderNotificationAuthorizationDeniedFixture", "-WanderImportNoticeUITest"
         ]
         app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
 
@@ -579,6 +579,9 @@ final class OnboardingUITests: XCTestCase {
             } else {
                 XCTAssertFalse(primary.waitForExistence(timeout: 8), "No reminder on app open \(appOpen)")
             }
+            // The nonblocking banner persists across the reminder. It must not
+            // prevent eligible return prompts or disappear when they dismiss.
+            XCTAssertTrue(app.buttons["import.notice.dismiss"].waitForExistence(timeout: 5))
             if appOpen == 2 {
                 XCUIDevice.shared.press(.home)
                 XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))

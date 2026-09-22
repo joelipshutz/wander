@@ -2165,9 +2165,8 @@ struct WanderRootView: View {
                 || presentedSaveStreakCelebration != nil,
             isPresentingAlert: sharedPlaceImportNotice != nil
                 || interruptedSaveRecoveryMessage != nil,
-            hasTransientBanner: activeImportCompletionNotice != nil
-                || sharedVisitBannerInvitation != nil
-                || productUpsells.presentationBlockerCount > 0
+            // Nonblocking import/invitation banners can remain behind the primer.
+            isPresentingChildModal: productUpsells.presentationBlockerCount > 0
         ).isBlocked
     }
 
