@@ -83,7 +83,7 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
     func shareContent(invitationToken: String) -> WanderShareContent? {
         guard invitationToken.count == 48,
               invitationToken.allSatisfy({ "0123456789abcdef".contains($0) }),
-              let url = URL(string: "https://getrec.me/plans/\(invitationToken)")
+              let url = WanderDeepLinkRoute.placePlanInvitation(token: invitationToken).url
         else { return nil }
         return WanderShareContent.place(item: url, name: linkTitle, message: shareText)
     }

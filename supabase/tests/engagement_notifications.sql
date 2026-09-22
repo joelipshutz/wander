@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(17);
+select plan(18);
 
 select has_column(
   'public',
@@ -34,6 +34,12 @@ select ok(
     'execute'
   ),
   'authenticated callers cannot invoke the engagement trigger directly'
+);
+select ok(
+  (select provolatile = 'v' and prorettype = 'trigger'::regtype
+   from pg_proc where oid = 'app.queue_activity_engagement_notification()'::regprocedure)
+  and not has_function_privilege('anon', 'app.queue_activity_engagement_notification()', 'execute'),
+  'engagement trigger retains its volatility, return type, and anonymous restriction'
 );
 select is(
   (
@@ -177,7 +183,7 @@ select ok(
     where recipient_user_id = 'notify_engagement_owner'
       and notification_type = 'activity_liked'
     limit 1
-  ) like 'https://getrec.me/activities/%',
+  ) like 'https://astirmovement.com/activities/%',
   'like notification deep-links to the exact comments page'
 );
 select is(
@@ -322,6 +328,16 @@ begin
 end;
 $$;
 
-select * from finish();
+do $strict_pgtap$
+declare
+  diagnostics text;
+begin
+  select string_agg(result.message, E'\n') into diagnostics
+  from finish() as result(message);
+  if diagnostics is not null then
+    raise exception 'pgTAP smoke failures: %', diagnostics;
+  end if;
+end;
+$strict_pgtap$;
 
 rollback;
