@@ -2,6 +2,7 @@ import MessageUI
 import Photos
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 #if canImport(TikTokOpenShareSDK)
 import TikTokOpenShareSDK
 #endif
@@ -250,10 +251,12 @@ struct ActivitySharePreviewScreen: View {
                     }
                     .aspectRatio(selectedFormat.size, contentMode: .fit)
                     .accessibilityIdentifier("share.card")
-                    if selectedFormat != .link {
-                        Text("Messages and More include the item’s link. For Instagram and TikTok posts, we copy the link so you can paste it into a caption or link sticker.")
-                            .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
+                    if selectedFormat == .link {
+                        Text(card.linkTitle)
+                            .font(AstirTypography.body)
                     }
+                    Text("The link is copied whenever you share. Paste it into a link sticker or anywhere the app supports links.")
+                        .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
                 }.padding(20).padding(.top, 52)
             }.background(brandMode.background)
 
@@ -430,8 +433,7 @@ struct ActivitySharePreviewScreen: View {
         switch destination.route {
         case .copyLink:
             Task {
-                guard let shared = await preparedShareContent() else { return }
-                UIPasteboard.general.url = shared.item
+                guard await preparedShareContent() != nil else { return }
                 trackShareCompleted(destination: "copy_link", outcome: "copied")
                 showConfirmation("link copied")
             }
@@ -440,13 +442,16 @@ struct ActivitySharePreviewScreen: View {
         case .instagramStory:
             Task { await presentInstagramStory() }
         case .instagramPost:
-            switch ActivityShareInstagramPhotoAccessGuidance.action(
-                hasAcknowledgedFullAccess: hasAcknowledgedInstagramFullPhotoAccess
-            ) {
-            case .showPhotoAccessGuidance:
-                instagramPhotoAccessGuidance = .requiredBeforeFirstDirectShare
-            case .openDirectEditor:
-                Task { await presentInstagramPost() }
+            Task {
+                guard await preparedShareContent() != nil else { return }
+                switch ActivityShareInstagramPhotoAccessGuidance.action(
+                    hasAcknowledgedFullAccess: hasAcknowledgedInstagramFullPhotoAccess
+                ) {
+                case .showPhotoAccessGuidance:
+                    instagramPhotoAccessGuidance = .requiredBeforeFirstDirectShare
+                case .openDirectEditor:
+                    await presentInstagramPost()
+                }
             }
         case .tikTok:
             Task { await presentTikTok() }
@@ -508,13 +513,16 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func preparedShareContent() async -> WanderShareContent? {
-        if let publishedContent { return publishedContent }
+        if let publishedContent {
+            ActivitySharePasteboard.copyLink(publishedContent.item)
+            return publishedContent
+        }
         guard !isPublishing else { return nil }
         isPublishing = true
         defer { isPublishing = false }
         do {
             let shared = try await ShareCardLinkPreparation.prepare(
-                content: content, repository: backend.shareCardPreviewRepository
+                content: content.withSubject(card.linkTitle), repository: backend.shareCardPreviewRepository
             ) {
                 guard await prepareArtworkIfNeeded(format: .link), let renderedImage,
                       let png = renderedImage.pngData() else {
@@ -523,6 +531,7 @@ struct ActivitySharePreviewScreen: View {
                 return png
             }
             publishedContent = shared
+            ActivitySharePasteboard.copyLink(shared.item)
             return shared
         } catch is CancellationError {
             return nil
@@ -598,10 +607,9 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentInstagramPost() async {
-        guard let shared = await preparedShareContent() else { return }
+        guard await preparedShareContent() != nil else { return }
         guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
 
-        UIPasteboard.general.url = shared.item
         if ActivityShareProviderLauncher.canOpenInstagramPostLibrary,
            await ensurePhotoLibraryAccess() {
             do {
@@ -623,9 +631,8 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentCompatibleInstagramPost() async {
-        guard let shared = await preparedShareContent() else { return }
+        guard await preparedShareContent() != nil else { return }
         guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
-        UIPasteboard.general.url = shared.item
         do {
             let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
             instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
@@ -637,7 +644,7 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentTikTok() async {
-        guard let shared = await preparedShareContent() else { return }
+        guard await preparedShareContent() != nil else { return }
         guard await prepareArtworkIfNeeded(format: .post), let renderedImage else { return }
         guard ActivityShareProviderLauncher.canOpenTikTok else {
             await presentSystemShare()
@@ -652,7 +659,6 @@ struct ActivitySharePreviewScreen: View {
             preparationError = .artwork
             return
         }
-        UIPasteboard.general.url = shared.item
         guard await ActivityShareProviderLauncher.openTikTok(
             localIdentifier: localIdentifier,
             onCompletion: handleTikTokOutcome
@@ -1190,6 +1196,22 @@ enum ActivityShareProviderConfiguration {
 }
 
 @MainActor
+enum ActivitySharePasteboard {
+    /// Keep the URL readable by Paste even when a provider also needs image data.
+    /// Do not expire it while someone is still composing a story or post.
+    static func copyLink(
+        _ url: URL,
+        providerPayload: [String: Any] = [:],
+        to pasteboard: UIPasteboard = .general
+    ) {
+        var item = providerPayload
+        item[UTType.url.identifier] = url as NSURL
+        item[UTType.utf8PlainText.identifier] = url.absoluteString
+        pasteboard.setItems([item])
+    }
+}
+
+@MainActor
 enum ActivityShareProviderLauncher {
     #if canImport(TikTokOpenShareSDK)
     private static var retainedTikTokRequest: TikTokShareRequest?
@@ -1217,10 +1239,10 @@ enum ActivityShareProviderLauncher {
             return false
         }
 
-        setExpiringPasteboardItems([[
+        ActivitySharePasteboard.copyLink(contentURL, providerPayload: [
             "com.instagram.sharedSticker.backgroundImage": pngData,
             "com.instagram.sharedSticker.contentURL": contentURL.absoluteString,
-        ]])
+        ])
         return await open(shareURL)
     }
 
@@ -1279,12 +1301,12 @@ enum ActivityShareProviderLauncher {
               UIApplication.shared.canOpenURL(baseURL)
         else { return false }
 
-        setExpiringPasteboardItems([[
+        ActivitySharePasteboard.copyLink(contentURL, providerPayload: [
             "com.snapchat.creativekit.clientID": clientID,
             "com.snapchat.creativekit.backgroundImage": pngData,
             "com.snapchat.creativekit.attachmentURL": contentURL.absoluteString,
             "com.snapchat.creativekit.appName": "Astir",
-        ]])
+        ])
 
         components.queryItems = [
             URLQueryItem(name: "checkcount", value: String(UIPasteboard.general.changeCount)),
@@ -1293,13 +1315,6 @@ enum ActivityShareProviderLauncher {
         ]
         guard let shareURL = components.url else { return false }
         return await open(shareURL)
-    }
-
-    private static func setExpiringPasteboardItems(_ items: [[String: Any]]) {
-        UIPasteboard.general.setItems(
-            items,
-            options: [.expirationDate: Date().addingTimeInterval(5 * 60)]
-        )
     }
 
     private static func open(_ url: URL) async -> Bool {
