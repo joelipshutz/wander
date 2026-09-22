@@ -2,8 +2,10 @@
 
 Issue: [REC-597](https://linear.app/recme/issue/REC-597/consolidate-feed-with-unified-search-invites-activity-and-shared)
 
-Branch: `codex/rec-597-feed-consolidation`  
-Plan baseline: `6dd9b4fb89d40966e8a9644e728902fec166a310`  
+Branch: `codex/rec-597-feed-consolidation`
+
+Plan baseline: `6dd9b4fb89d40966e8a9644e728902fec166a310`
+
 Date: September 21, 2026
 
 ## Requested outcome
@@ -59,5 +61,4 @@ Follow requests remain outside this change because they do not exist yet. When i
 - A synthetic new follow appears and badges both bells, including when OS push is denied or push preferences are off. Opening either inbox clears both displayed badges; account switching cannot leak counts or contents.
 - Existing plan/check-in notifications and post/comment push routing retain their behavior. Follow requests are absent.
 - Cover small-screen layout, Dynamic Type, VoiceOver labels/counts, Reduce Motion, loading/empty/error states, and first-visit walkthrough completion.
-- Extend meaningful search/badge/inbox and walkthrough tests. Validate any new RPC/RLS with policy tests and the required rolled-back hosted smoke coverage. Use the workspace ios-work.py helper for Xcode tests; inspect standard iPhone 17 Pro and compact iPhone 16e. No tests/builds were run during planning.
-
+- Extend meaningful search/badge/inbox and walkthrough tests. Validate any new RPC/RLS with policy tests and the required rolled-back hosted smoke coverage. Use the workspace `ios-work.py` helper for Xcode tests; inspect standard iPhone 17 Pro and compact iPhone 16e. No tests/builds were run during planning.
