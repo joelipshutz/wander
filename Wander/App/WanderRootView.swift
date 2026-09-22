@@ -369,8 +369,7 @@ struct WanderRootView: View {
     @State private var nativeTabItemControlsFrame: CGRect?
     @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
     @State private var didRequestForcedProductUpsell = false
-    @State private var productUpsellRequestTask: Task<Void, Never>?
-    @State private var pendingProductUpsellRequests = ProductUpsellTriggerBuffer()
+    @State private var notificationAuthorizationAppOpenID: UUID?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -1006,7 +1005,6 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
             if previousState.session?.userID != nextUserID {
-                cancelPendingProductUpsellRequests()
                 if let previousUserID = previousState.session?.userID {
                     calendarReservations.clearAccountState(userID: previousUserID)
                 }
@@ -1094,10 +1092,6 @@ struct WanderRootView: View {
         .onChange(of: store.isRefreshingCurrentUserCalendarData) {
             handleCalendarRefreshStateChange($0, $1)
         }
-        .onChange(of: store.productUpsellTriggerRequest) { _, request in
-            guard let request else { return }
-            scheduleProductUpsellRequest(request)
-        }
     }
 
     private var importObservedRoot: some View {
@@ -1154,6 +1148,7 @@ struct WanderRootView: View {
                 walkthroughs.recordSuspension()
             }
             guard phase == .active, isSessionValidated else { return }
+            presentDeferredProductUpsellIfPossible()
             switch walkthroughs.restoreJourneyIfNeeded() {
             case .resumed(let surface):
                 if completeCommittedWalkthroughDraftIfNeeded() {
@@ -1217,7 +1212,6 @@ struct WanderRootView: View {
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
                 configureWalkthroughsForCurrentUser()
-                scheduleProductUpsellDrain()
                 presentDeferredProductUpsellIfPossible()
                 drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
@@ -1235,6 +1229,13 @@ struct WanderRootView: View {
 
     private var stateObservedRoot: some View {
         recoveryObservedRoot
+        .task(id: productUpsells.appOpenID) {
+            let appOpenID = productUpsells.appOpenID
+            await pushNotifications.refreshAuthorizationStatus()
+            guard !Task.isCancelled, productUpsells.appOpenID == appOpenID else { return }
+            notificationAuthorizationAppOpenID = appOpenID
+            presentDeferredProductUpsellIfPossible()
+        }
         .onChange(of: remoteNotificationRepromptCampaign, initial: true) { _, _ in
             presentDeferredProductUpsellIfPossible()
         }
@@ -1952,7 +1953,6 @@ struct WanderRootView: View {
         sharedVisitBannerTask?.cancel()
         saveStreakCelebrationTask?.cancel()
         importCompletionBannerTask?.cancel()
-        cancelPendingProductUpsellRequests()
 
         guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
         placeSaveDraftStore.clear()
@@ -2189,44 +2189,28 @@ struct WanderRootView: View {
         )
     }
 
-    private func scheduleProductUpsellRequest(_ request: ProductUpsellTriggerRequest) {
-        guard pendingProductUpsellRequests.enqueue(request) else { return }
-        scheduleProductUpsellDrain()
-    }
-
-    private func scheduleProductUpsellDrain() {
-        guard productUpsellRequestTask == nil,
-              !pendingProductUpsellRequests.requests.isEmpty else { return }
-        productUpsellRequestTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .milliseconds(220))
-            } catch {
-                return
-            }
-            productUpsellRequestTask = nil
-            guard !Task.isCancelled else { return }
-            let requests = pendingProductUpsellRequests.drain(
-                isSessionValidated: isSessionValidated
-            )
-            for request in requests {
-                requestProductUpsell(request.trigger)
-            }
-        }
-    }
-
-    private func cancelPendingProductUpsellRequests() {
-        productUpsellRequestTask?.cancel()
-        productUpsellRequestTask = nil
-        pendingProductUpsellRequests.removeAll()
-    }
-
     private func presentDeferredProductUpsellIfPossible() {
         guard isSessionValidated, scenePhase == .active else { return }
         let userID = auth.state.session?.userID ?? store.currentUser.id
+        productUpsells.bind(to: userID)
+        productUpsells.recordAppOpen(for: userID)
         productUpsells.presentDeferredIfPossible(
             userID: userID,
             isEligible: !pushNotifications.notificationsAreEnabled,
             canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && pushNotifications.notificationPreferencesUserID == userID
+                && notificationAuthorizationAppOpenID == productUpsells.appOpenID
+                && !blocksProductUpsellPresentation
+        )
+        // Returning to the app replaces the old save/follow reminder triggers.
+        // Onboarding and explicit debug previews retain their existing paths.
+        productUpsells.requestAppOpenNotificationReminder(
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && pushNotifications.notificationPreferencesUserID == userID
+                && notificationAuthorizationAppOpenID == productUpsells.appOpenID
+                && ProductUpsellDebugPolicy.forcedTrigger() == nil
                 && !blocksProductUpsellPresentation
         )
         requestRemoteNotificationRepromptIfPossible()
@@ -2247,6 +2231,7 @@ struct WanderRootView: View {
             userID: userID,
             isEligible: !pushNotifications.notificationsAreEnabled,
             canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && notificationAuthorizationAppOpenID == productUpsells.appOpenID
                 && !blocksProductUpsellPresentation
         )
     }

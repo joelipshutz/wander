@@ -107,7 +107,7 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | `onboarding_identity_failed` | Identity or required-photo submission fails | coarse `reason`, including `photo_save_failed` |
 | `onboarding_friend_suggestions_completed` | User continues after explicit per-person actions | aggregate `selected_count`, `followed_count`; both count successful follows in this visit |
 | `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
-| `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number`; remote re-prompts use campaign `notification_reprompt` and trigger `remote_notification_reprompt` |
+| `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number`; return reminders use campaign `notification_app_open` and trigger `app_opened`; remote re-prompts use campaign `notification_reprompt` and trigger `remote_notification_reprompt` |
 | `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number` |
 | `follow_created` | Follow is created/queued/synced | `source`, `outcome`, optional aggregate `followed_count` |
 | `place_import_started` | A pasted import is durably enqueued and the app returns to Map | aggregate `batch_count`, `item_count`, `source_count` |
@@ -134,6 +134,16 @@ The shared add-to-lists picker attributes successful additions to its entry
 surface: `map` for Map and place-profile actions, `discover` for Discover search
 results. Both existing-list selection and new-list creation emit
 `place_list_item_added` and the matching `list_place_added` engagement action.
+
+Notification return reminders replace the automatic save/follow triggers. The
+first authenticated main-app use is open 1; subsequent launches and real
+background returns can show at most one reminder per open, for three actual
+appearances total (normally opens 2, 3, and 4). Inactive/active transitions from
+Apple permission alerts do not count as opens. Onboarding has its own allowance.
+Counts persist per account/device; existing installations begin this sequence
+on first use of the supporting build. Blocked or notification-enabled opens do
+not consume a reminder. A remote primer and a return reminder never stack in
+the same open. No account IDs, open IDs, or permission payloads are event properties.
 
 The push worker also emits three server-side operational events. They use
 `platform=server`, `source=push_notification_worker`, and a constant

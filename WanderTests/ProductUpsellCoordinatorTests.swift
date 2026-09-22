@@ -3,13 +3,199 @@ import XCTest
 
 @MainActor
 final class ProductUpsellCoordinatorTests: XCTestCase {
+    func testReturnRemindersAppearOnSecondThirdAndFourthOpenAcrossRelaunches() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let analytics = ProductUpsellRecordingAnalyticsClient()
+
+        for appOpen in 1...6 {
+            let coordinator = ProductUpsellCoordinator(userDefaults: defaults, analytics: analytics)
+            coordinator.bind(to: "user_a")
+            coordinator.recordAppOpen(for: "user_a")
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+            XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), appOpen)
+            XCTAssertEqual(coordinator.activePresentation?.trigger, (2...4).contains(appOpen) ? .appOpened : nil)
+            XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), min(3, appOpen - 1))
+            coordinator.completeCurrent(with: .dismissed)
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation, "Dismissing cannot immediately re-prompt in the same open.")
+        }
+
+        let shown = analytics.events.filter { $0.name == WanderAnalyticsEvents.productUpsellShown }
+        XCTAssertEqual(shown.count, 3)
+        for (index, event) in shown.enumerated() {
+            XCTAssertEqual(event.properties, [
+                "campaign": "notification_app_open", "trigger": "app_opened", "impression_number": "\(index + 1)"
+            ])
+        }
+    }
+
+    func testAppOpenRequiresBackgroundReturnAndSurvivesRootRemountAndAuthValidation() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.recordAppOpen(for: "user_a")
+        for _ in 0..<3 {
+            coordinator.recordAppForeground() // No background: permission alert, Control Center, etc.
+            coordinator.bind(to: nil)
+            coordinator.bind(to: "user_a")
+            coordinator.recordAppOpen(for: "user_a")
+        }
+        XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), 1)
+        coordinator.recordAppBackground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppOpen(for: "user_a")
+        XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), 2)
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.trigger, .appOpened)
+    }
+
+    func testBlockedOrEnabledOpensDoNotConsumeReminderAllowance() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.recordAppOpen(for: "user_a")
+        for _ in 2...4 {
+            coordinator.recordAppBackground()
+            coordinator.recordAppForeground()
+            coordinator.recordAppOpen(for: "user_a")
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: false)
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: false, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation)
+        }
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 0)
+        let blocker = UUID()
+        coordinator.setPresentationBlocker(id: blocker, isActive: true)
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+        coordinator.setPresentationBlocker(id: blocker, isActive: false)
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.impressionNumber, 1)
+        coordinator.completeCurrent(with: .enabled)
+        for _ in 0..<3 {
+            coordinator.recordAppBackground()
+            coordinator.recordAppForeground()
+            coordinator.recordAppOpen(for: "user_a")
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: false, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation)
+        }
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 1)
+    }
+
+    func testAppOpenReminderCountsAreIndependentOfOnboardingAndLegacyPrompts() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        for trigger in ProductUpsellTrigger.legacyNotificationTriggers {
+            coordinator.request(trigger: trigger, userID: "user_a", isEligible: true)
+            coordinator.completeCurrent(with: .dismissed)
+        }
+        XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), 0, "Onboarding is not a main-app open.")
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.recordAppBackground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.impressionNumber, 1)
+        XCTAssertEqual(coordinator.impressionCount(for: .notifications, userID: "user_a"), 3)
+    }
+
+    func testAppOpenReminderRejectsStaleAccountsAndRetainsSeparateProgress() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.recordAppBackground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.bind(to: "user_b")
+        coordinator.recordAppOpen(for: "user_b")
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        coordinator.requestAppOpenNotificationReminder(userID: "user_b", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+        XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), 2)
+        XCTAssertEqual(coordinator.appOpenCount(for: "user_b"), 1)
+        coordinator.bind(to: "user_a")
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.userID, "user_a")
+    }
+
+    func testRemoteAndReturnRemindersDoNotStackInEitherOrder() throws {
+        for remoteFirst in [true, false] {
+            let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+            coordinator.bind(to: "user_a")
+            coordinator.recordAppOpen(for: "user_a")
+            coordinator.recordAppBackground()
+            coordinator.recordAppForeground()
+            coordinator.recordAppOpen(for: "user_a")
+            if remoteFirst {
+                coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+            } else {
+                coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+            }
+            let id = try XCTUnwrap(coordinator.activePresentation?.id)
+            coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+            XCTAssertEqual(coordinator.activePresentation?.id, id)
+            coordinator.completeCurrent(with: .dismissed)
+            coordinator.requestRemoteNotificationReprompt(campaignVersion: 2, userID: "user_a", isEligible: true, canPresent: true)
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation)
+        }
+    }
+
+    func testSuspendedReminderDoesNotCountAgainAfterBackgroundOrRemount() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+        coordinator.bind(to: "user_a")
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.recordAppBackground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        let id = coordinator.activePresentation?.id
+        coordinator.suspendActivePresentation()
+        coordinator.recordAppBackground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.presentDeferredIfPossible(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertEqual(coordinator.activePresentation?.id, id)
+        coordinator.completeCurrent(with: .dismissed)
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation)
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 1)
+    }
+
+    func testReminderUITestPersistenceRequiresDebugAndAuthenticatedFixture() {
+        let environment = ["WANDER_PRODUCT_UPSELL_TEST_SUITE": "ProductUpsellUITests.test"]
+        XCTAssertNil(ProductUpsellDebugPolicy.testUserDefaults(arguments: ["-WanderAuthenticatedUITest"], environment: environment, isDebugBuild: false))
+        XCTAssertNil(ProductUpsellDebugPolicy.testUserDefaults(arguments: [], environment: environment, isDebugBuild: true))
+    }
+
     func testRemoteCampaignBypassesAutomaticCapAndPersistsAcrossRelaunch() throws {
         let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
         coordinator.bind(to: "user_a")
-        for trigger in ProductUpsellTrigger.automaticTriggers {
+        for trigger in ProductUpsellTrigger.legacyNotificationTriggers {
             coordinator.request(trigger: trigger, userID: "user_a", isEligible: true)
             coordinator.completeCurrent(with: .dismissed)
         }
@@ -164,7 +350,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults, analytics: analytics)
         let userID = "user_cap"
 
-        for trigger in ProductUpsellTrigger.automaticTriggers {
+        for trigger in ProductUpsellTrigger.legacyNotificationTriggers {
             coordinator.request(trigger: trigger, userID: userID, isEligible: true)
             XCTAssertEqual(coordinator.activePresentation?.trigger, trigger)
             coordinator.completeCurrent(with: .dismissed)
@@ -242,7 +428,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
 
         coordinator.bind(to: "user_a")
-        for trigger in ProductUpsellTrigger.automaticTriggers {
+        for trigger in ProductUpsellTrigger.legacyNotificationTriggers {
             coordinator.request(trigger: trigger, userID: "user_a", isEligible: true)
             coordinator.completeCurrent(with: .dismissed)
         }
@@ -388,7 +574,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
         let userID = "user_fifo"
 
-        for trigger in ProductUpsellTrigger.automaticTriggers {
+        for trigger in ProductUpsellTrigger.legacyNotificationTriggers {
             coordinator.request(
                 trigger: trigger,
                 userID: userID,
@@ -397,7 +583,7 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             )
         }
 
-        for expectedTrigger in ProductUpsellTrigger.automaticTriggers {
+        for expectedTrigger in ProductUpsellTrigger.legacyNotificationTriggers {
             coordinator.presentDeferredIfPossible(
                 userID: userID,
                 isEligible: true,

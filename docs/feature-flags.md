@@ -96,7 +96,15 @@ An already visible notification primer satisfies the current campaign without
 stacking another dialog. Blocked requests are reconciled from the current flag
 after the competing UI clears; disabling a campaign leaves no obsolete queued
 prompt. Remote impressions use a separate campaign counter and do not consume
-or depend on the automatic onboarding/save/follow cap of three.
+or depend on the three automatic return reminders or the onboarding allowance.
+Automatic reminders now appear on subsequent main-app opens, normally opens
+2, 3, and 4, replacing the save/follow triggers. Initial use is skipped; blocked
+opens defer the opportunity without consuming a reminder. Both cold launches
+and returns from the background count, while permission-alert interruptions do
+not. The sequence starts on first use of the supporting build and persists per
+account/device. A primer already shown in the current open prevents another
+automatic or remote primer immediately after dismissal; a newly arriving remote
+campaign waits for the next open if that open already showed a primer.
 
 The current account's notification preferences and iOS permission must still
 indicate notifications are off. Normal presentation blockers apply. A previously

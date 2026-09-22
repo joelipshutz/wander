@@ -5,14 +5,17 @@ enum ProductUpsellTrigger: String, CaseIterable, Codable, Equatable, Hashable {
     case onboardingNotifications = "onboarding_notifications"
     case placeSaved = "place_saved"
     case followCreated = "follow_created"
+    case appOpened = "app_opened"
     case remoteNotificationReprompt = "remote_notification_reprompt"
 
-    static let automaticTriggers: [Self] = [.onboardingNotifications, .placeSaved, .followCreated]
+    // Retained for the original campaign's persisted counters and debug previews.
+    static let legacyNotificationTriggers: [Self] = [.onboardingNotifications, .placeSaved, .followCreated]
 }
 
 enum ProductUpsellCampaignID: String, Codable, Equatable, Hashable {
     case notifications
     case notificationReprompt = "notification_reprompt"
+    case notificationAppOpen = "notification_app_open"
 }
 
 enum ProductUpsellActionPolicy: String, Codable, Equatable {
@@ -84,6 +87,22 @@ struct ProductUpsellCatalog {
                 maxLifetimeImpressions: 3
             ),
             ProductUpsellCampaignConfiguration(
+                id: .notificationAppOpen,
+                triggers: [.appOpened],
+                contentByTrigger: [
+                    .appOpened: ProductUpsellContent(
+                        eyebrow: "STAY IN THE LOOP",
+                        title: "See when your friends check in",
+                        message: "Get a heads-up when people you follow save a place or check in somewhere worth knowing.",
+                        systemImage: "bell.and.waves.left.and.right.fill",
+                        palette: .sun
+                    )
+                ],
+                actionPolicy: .notifications,
+                maxLifetimeImpressionsPerTrigger: 3,
+                maxLifetimeImpressions: 3
+            ),
+            ProductUpsellCampaignConfiguration(
                 id: .notificationReprompt,
                 triggers: [.remoteNotificationReprompt],
                 contentByTrigger: [
@@ -130,6 +149,18 @@ struct ProductUpsellPresentationGate: Equatable {
 enum ProductUpsellDebugPolicy {
     static let triggerArgument = "-WanderProductUpsellTrigger"
     static let frequencyBypassArgument = "-WanderBypassProductUpsellFrequencyCap"
+
+    static func testUserDefaults(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        isDebugBuild: Bool = isDebug
+    ) -> UserDefaults? {
+        guard isDebugBuild,
+              arguments.contains("-WanderAuthenticatedUITest"),
+              let suite = environment["WANDER_PRODUCT_UPSELL_TEST_SUITE"],
+              suite.hasPrefix("ProductUpsellUITests.") else { return nil }
+        return UserDefaults(suiteName: suite)
+    }
 
     static func forcedTrigger(
         arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -215,6 +246,7 @@ enum ProductUpsellAction: String, Equatable {
 @MainActor
 final class ProductUpsellCoordinator: ObservableObject {
     @Published private(set) var activePresentation: ProductUpsellPresentation?
+    @Published private(set) var appOpenID = UUID()
     @Published private(set) var presentationBlockerCount = 0
     @Published private(set) var actionInFlightPresentationIDs: Set<UUID> = []
 
@@ -239,6 +271,9 @@ final class ProductUpsellCoordinator: ObservableObject {
     private var suspendedPresentation: SuspendedPresentation?
     private var boundUserID: String?
     private var presentationBlockerIDs: Set<UUID> = []
+    private var didEnterBackground = false
+    private var registeredAppOpenIDs: [String: UUID] = [:]
+    private var presentedAppOpenIDs: [String: UUID] = [:]
 
     init(
         catalog: ProductUpsellCatalog = .production,
@@ -254,6 +289,52 @@ final class ProductUpsellCoordinator: ObservableObject {
         guard boundUserID != userID else { return }
         boundUserID = userID
         cancelAllRequests()
+    }
+
+    func recordAppBackground() {
+        didEnterBackground = true
+    }
+
+    func recordAppForeground() {
+        // Permission alerts and other inactive/active transitions are still
+        // the same app open. Only a real background return begins another.
+        guard didEnterBackground else { return }
+        didEnterBackground = false
+        appOpenID = UUID()
+    }
+
+    func recordAppOpen(for userID: String) {
+        guard boundUserID == userID,
+              registeredAppOpenIDs[userID] != appOpenID else { return }
+        registeredAppOpenIDs[userID] = appOpenID
+        // Called only from the authenticated main app, after onboarding.
+        // Remounting the root or revalidating auth cannot count another open.
+        userDefaults.set(appOpenCount(for: userID) + 1, forKey: appOpenCountKey(userID: userID))
+        if activePresentation?.userID == userID || suspendedPresentation?.userID == userID {
+            presentedAppOpenIDs[userID] = appOpenID
+        }
+    }
+
+    func appOpenCount(for userID: String) -> Int {
+        userDefaults.integer(forKey: appOpenCountKey(userID: userID))
+    }
+
+    func requestAppOpenNotificationReminder(userID: String, isEligible: Bool, canPresent: Bool) {
+        guard boundUserID == userID,
+              registeredAppOpenIDs[userID] == appOpenID,
+              appOpenCount(for: userID) >= 2,
+              presentedAppOpenIDs[userID] != appOpenID,
+              isEligible, canPresent,
+              presentationBlockerCount == 0,
+              activePresentation == nil, suspendedPresentation == nil,
+              pendingRequests.isEmpty else { return }
+        // Reconcile at safe boundaries rather than queueing a request. An
+        // interrupted open never consumes one of the three actual reminders.
+        request(trigger: .appOpened, userID: userID, isEligible: true)
+    }
+
+    private func appOpenCountKey(userID: String) -> String {
+        "recme.productUpsell.notificationAppOpen.\(userID).openCount.v1"
     }
 
     /// Remote requests are reconciled at safe presentation boundaries, never
@@ -281,6 +362,7 @@ final class ProductUpsellCoordinator: ObservableObject {
             userDefaults.set(campaignVersion, forKey: remoteCampaignVersionKey(userID: userID))
             return
         }
+        guard presentedAppOpenIDs[userID] != appOpenID else { return }
         guard suspendedPresentation == nil, pendingRequests.isEmpty else { return }
 
         request(trigger: .remoteNotificationReprompt, userID: userID, isEligible: true)
@@ -559,6 +641,9 @@ final class ProductUpsellCoordinator: ObservableObject {
             )
         }
         activeCompletion = request.completion
+        if registeredAppOpenIDs[request.userID] == appOpenID {
+            presentedAppOpenIDs[request.userID] = appOpenID
+        }
         activePresentation = ProductUpsellPresentation(
             id: UUID(),
             userID: request.userID,

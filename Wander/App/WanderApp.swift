@@ -108,7 +108,10 @@ struct WanderApp: App {
             wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
         )
         _productUpsells = StateObject(
-            wrappedValue: ProductUpsellCoordinator(analytics: contextualAnalytics)
+            wrappedValue: ProductUpsellCoordinator(
+                userDefaults: ProductUpsellDebugPolicy.testUserDefaults() ?? .standard,
+                analytics: contextualAnalytics
+            )
         )
         _calendarReservations = StateObject(
             wrappedValue: CalendarReservationManager(analytics: contextualAnalytics)

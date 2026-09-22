@@ -550,6 +550,44 @@ final class ImportFormRefinementUITests: XCTestCase {
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testNotificationRemindersAppearOnThreeReturnOpensThenStop() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
+            "-WanderNotificationAuthorizationDeniedFixture"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
+
+        for appOpen in 1...5 {
+            if appOpen == 3 {
+                app.activate() // A quick background return must count even within the auth refresh grace period.
+            } else {
+                app.launch()
+            }
+            let primary = app.buttons["productUpsell.primary"]
+            if (2...4).contains(appOpen) {
+                XCTAssertTrue(primary.waitForExistence(timeout: 15), "Reminder missing on app open \(appOpen)")
+                XCTAssertEqual(primary.label, "Open Settings")
+                XCTAssertTrue(app.staticTexts["See when your friends check in"].exists)
+                let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                capture.name = "Notification reminder on app open \(appOpen)"
+                capture.lifetime = .keepAlways
+                add(capture)
+                app.buttons["productUpsell.secondary"].tap()
+                XCTAssertTrue(primary.waitForNonExistence(timeout: 5))
+                XCTAssertFalse(primary.waitForExistence(timeout: 2), "No repeated reminder in the same open")
+            } else {
+                XCTAssertFalse(primary.waitForExistence(timeout: 8), "No reminder on app open \(appOpen)")
+            }
+            if appOpen == 2 {
+                XCUIDevice.shared.press(.home)
+                XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+            } else {
+                app.terminate()
+            }
+        }
+    }
+
     func testNotificationUpsellUsesTheCentralCampaignInOnboarding() {
         let app = XCUIApplication()
         app.launchArguments = [
