@@ -217,6 +217,19 @@ struct FeedScreen: View {
         AstirFloatingHeaderSurface(mergeSpacing: WanderTheme.spacing2) {
             floatingHeaderContent
         }
+        // Render above the glass container so its material cannot cover the count.
+        .overlayPreferenceValue(NotificationBellAnchorKey.self) { anchor in
+            GeometryReader { geometry in
+                if let anchor {
+                    let bounds = geometry[anchor]
+                    NotificationCountBadge(count: notificationCount)
+                        .frame(width: bounds.width, height: bounds.height, alignment: .topTrailing)
+                        .offset(x: bounds.minX + 4, y: bounds.minY - 4)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     private var floatingHeaderContent: some View {

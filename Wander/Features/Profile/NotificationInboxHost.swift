@@ -55,19 +55,30 @@ struct NotificationBellButton: View {
     var body: some View {
         AstirIconActionButton(systemImage: "bell", accessibilityLabel: "Notifications",
                               accessibilityIdentifier: "feed.notifications", action: action)
-            .overlay(alignment: .topTrailing) {
-                if count > 0 {
-                    Text(count > 99 ? "99+" : String(count))
-                        .font(.system(.caption2, design: .rounded, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 20, minHeight: 20)
-                        .background(Color(uiColor: .systemRed), in: Capsule())
-                        .offset(x: 4, y: -4)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-            }
+            .anchorPreference(key: NotificationBellAnchorKey.self, value: .bounds) { $0 }
             .accessibilityValue(ProfileInvitationBadgeState(pendingInvitationCount: count).accessibilityValue)
+    }
+}
+
+struct NotificationBellAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
+struct NotificationCountBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(count > 99 ? "99+" : String(count))
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .frame(minWidth: 20, minHeight: 20)
+                .background(Color(uiColor: .systemRed), in: Capsule())
+        }
     }
 }
