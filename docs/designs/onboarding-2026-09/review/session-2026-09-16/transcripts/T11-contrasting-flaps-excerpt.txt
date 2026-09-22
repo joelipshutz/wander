@@ -1,1 +1,0 @@
-So another thing is these flaps. We said in light mode they're going to be black with signal letters, and in dark mode they're going to be white or white-adjacent with signal letters. We want it to, like, pop.
