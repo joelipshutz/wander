@@ -17,6 +17,17 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
         XCTAssertEqual(persistence.load(), draft)
     }
 
+    func testDraftWithoutListSelectionStillDecodes() throws {
+        let data = try JSONEncoder().encode(makeDraft(status: .been))
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var form = try XCTUnwrap(json["form"] as? [String: Any])
+        form.removeValue(forKey: "selectedListIDs")
+        json["form"] = form
+        let restored = try JSONDecoder().decode(PlaceSaveDraft.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(restored.form.selectedListIDs)
+        XCTAssertEqual(restored.form.note, makeDraft().form.note)
+    }
+
     func testCoalescedWriterFlushesLatestDraftBeforeBackgrounding() throws {
         let url = temporaryURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -373,7 +384,8 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
                     )
                 ],
                 selectedInviteeUserIDs: ["friend-1", "friend-2"],
-                isShowingOptionalDetails: true
+                isShowingOptionalDetails: true,
+                selectedListIDs: ["list-weekend", "list-coffee"]
             ),
             submittedAt: submittedAt
         )

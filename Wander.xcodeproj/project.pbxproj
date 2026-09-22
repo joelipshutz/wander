@@ -248,6 +248,7 @@
 		8FE082C847183FA74B0E89A6 /* SharedPlaceImportInboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C2A2ADEB522DD9B634F1EF /* SharedPlaceImportInboxTests.swift */; };
 		902F1C0259760946D2648172 /* rec-227-adaptive-import-flow-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 34905E496D66A68FF5ACC37A /* rec-227-adaptive-import-flow-pre.json */; };
 		9076FBE375DEE0E60A95FFCD /* ContactInviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8FA25DC61F3557DC6AC60AE /* ContactInviteSheet.swift */; };
+		90BCDA288EB05FD19C1D4F0D /* PlaceSaveListResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4704397560A9100DF514BA2D /* PlaceSaveListResult.swift */; };
 		91D33D33FA34ACECBA280146 /* FeedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C904029812CF4369275B29FA /* FeedScreen.swift */; };
 		91F2161DAF8327E2D985C80D /* rec-289-pinch-zoom-selection-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = F7E072B06ED29B9846EA203B /* rec-289-pinch-zoom-selection-pre.json */; };
 		9323D4075F400D6C36E1DBA8 /* AddCameraPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04BB06898AFB0BFB2F661D42 /* AddCameraPresentationTests.swift */; };
@@ -593,6 +594,7 @@
 		466618F8405CE4321114C0D7 /* ProfileRedesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRedesignMockups.swift; sourceTree = "<group>"; };
 		46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgets.swift; sourceTree = "<group>"; };
 		46D41FCF4E7F12CF268B7533 /* MapSnapshotCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSnapshotCapture.swift; sourceTree = "<group>"; };
+		4704397560A9100DF514BA2D /* PlaceSaveListResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceSaveListResult.swift; sourceTree = "<group>"; };
 		484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockup.swift; sourceTree = "<group>"; };
 		4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPlaceCardActionInteractionUITests.swift; sourceTree = "<group>"; };
 		4C425E62A869F6D5434E793A /* CommonGroundMockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundMockData.swift; sourceTree = "<group>"; };
@@ -1510,6 +1512,7 @@
 				C8890005106844D48D93EC8C /* PlacePlanInvitation.swift */,
 				8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */,
 				E4753F17DA5C73EB4353038E /* PlaceRating.swift */,
+				4704397560A9100DF514BA2D /* PlaceSaveListResult.swift */,
 				34E4B423FB2037E1D5B183B1 /* PlaceWannaSave.swift */,
 				FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */,
 				75C6FD0BCEACBC9CCA52F70F /* SharedCheckInQuestion.swift */,
@@ -1798,11 +1801,11 @@
 			projectRoot = "";
 			targets = (
 				DAEABFB4D177DCC30394FDDE /* Wander */,
-				37043FFD3A7F40BE4ED75C0F /* WanderShareExtension */,
-				3EB8B4EBA82BA89478F45844 /* WanderWidgets */,
 				AE294465F9516B04DD43A25A /* WanderNearbyWidgets */,
+				37043FFD3A7F40BE4ED75C0F /* WanderShareExtension */,
 				0A325A118755573578F89F15 /* WanderTests */,
 				8C330C6117AF2935F6EFE207 /* WanderUITests */,
+				3EB8B4EBA82BA89478F45844 /* WanderWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -2032,6 +2035,7 @@
 				20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */,
 				2447C6B234F4E1EFF58E5850 /* PlaceSaveAttributePolicy.swift in Sources */,
 				1F0CFA9D6277F7F19F5DE064 /* PlaceSaveDraftStore.swift in Sources */,
+				90BCDA288EB05FD19C1D4F0D /* PlaceSaveListResult.swift in Sources */,
 				F7347044D8EC12EACB64BC3B /* PlaceWannaSave.swift in Sources */,
 				B84BABB0A3FC62E816F68710 /* PostHogAnalyticsClient.swift in Sources */,
 				34F3E3AD28F85D0C39F18227 /* ProductUpsellCoordinator.swift in Sources */,
