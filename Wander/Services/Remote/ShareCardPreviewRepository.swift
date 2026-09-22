@@ -73,7 +73,7 @@ struct ShareCardLinkTarget: Equatable {
     let identifier: String
 
     init?(url: URL) {
-        guard url.scheme == "https", url.host == "getrec.me", url.fragment == nil,
+        guard url.scheme == "https", WanderPublicWebsite.acceptsUniversalLinkHost(url.host), url.fragment == nil,
               !url.path.hasPrefix("/cards/"),
               let route = WanderDeepLinkRoute.parse(url) else { return nil }
         switch route {
@@ -87,10 +87,12 @@ struct ShareCardLinkTarget: Equatable {
     }
 
     static func link(_ url: URL, token: String) -> URL? {
-        guard token.range(of: "^[a-f0-9]{48}$", options: .regularExpression) != nil,
+        guard Self(url: url) != nil,
+              token.range(of: "^[a-f0-9]{48}$", options: .regularExpression) != nil,
               var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         // The website keeps the token-backed preview; compatible apps unwrap
         // this route to the original entity without carrying the preview token.
+        parts.host = WanderPublicWebsite.host
         parts.percentEncodedPath = "/cards" + parts.percentEncodedPath
         parts.queryItems = [URLQueryItem(name: "card", value: token)]
         return parts.url

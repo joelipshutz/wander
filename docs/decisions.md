@@ -429,3 +429,27 @@ cannot parse card paths and association rules cannot select an app version.
 Keep the website PR unmerged until the tester-update gate is satisfied; account
 for Apple's association cache when verifying. Coordinate domain changes with
 REC-586 without removing existing getrec.me link support.
+
+## 2026-09-22 — Canonical Astir public links (REC-599)
+
+New profile, place, activity, list, invitation, and published-card links use
+`https://astirmovement.com` with their existing paths, encoded identifiers, and
+preview tokens. The app also accepts `www.astirmovement.com` and previously
+shared `getrec.me` links. Associated Domains includes both Astir hosts and the
+legacy apex; the internal `recme://` scheme and Clerk identity stay stable.
+
+The website serves card-capable Apple association rules only on the Astir
+hosts. Older released apps have no Astir association, so they retain the web
+fallback. The legacy host's card association remains gated by REC-577's tester
+update requirement. Previously sent messages and published artwork are immutable
+copies; they are not rewritten by changing the generator.
+
+Client-generated links require an app update. Apply the notification-link
+migration after its rollback-only regression passes; it preserves the existing
+activity-id payload used by older notification clients and does not rewrite
+queued notifications. Share Kit supplies `https://astirmovement.com/share/tiktok`
+as the request redirectURI; its portal has no separate callback-list field
+for this product. Verify the Astir URL prefix for the existing sandbox and
+production configurations, serve the return path in the association file,
+and retain the verified legacy domain for installed clients. Provider
+production approval is separate from domain ownership verification.
