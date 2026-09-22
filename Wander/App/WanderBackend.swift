@@ -1436,6 +1436,31 @@ final class WanderBackend: ObservableObject {
         sharedVisitRepository != nil
     }
 
+    func createJointCheckIn(_ draft: CheckInSaveDraft, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.createJoint(draft, inviteeUserIDs: inviteeUserIDs, operationID: operationID)
+    }
+
+    func jointCheckInContexts(visitIDs: [String]) async throws -> JointCheckInContexts {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.jointContexts(visitIDs: visitIDs)
+    }
+
+    func editJointCheckIn(_ draft: CheckInSaveDraft, groupID: String, expectedUpdatedAt: String, operationID: String) async throws -> JointCheckInMutationResult {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.editJoint(draft, groupID: groupID, expectedUpdatedAt: expectedUpdatedAt, operationID: operationID)
+    }
+
+    func setJointCheckInInvitees(groupID: String, expectedRevision: Int, inviteeUserIDs: [String], operationID: String) async throws -> JointCheckInMutationResult {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.setJointInvitees(groupID: groupID, expectedRevision: expectedRevision, inviteeUserIDs: inviteeUserIDs, operationID: operationID)
+    }
+
+    func leaveJointCheckIn(groupID: String, expectedRevision: Int, operationID: String) async throws -> JointCheckInLeaveResult {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.leaveJoint(groupID: groupID, expectedRevision: expectedRevision, operationID: operationID)
+    }
+
     func createSharedVisitInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
         guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
         return try await sharedVisitRepository.createInvites(
@@ -1477,9 +1502,13 @@ final class WanderBackend: ObservableObject {
         return try await sharedVisitRepository.accept(draft)
     }
 
-    func declineSharedVisit(participantID: String, generation: Int) async throws {
+    func declineSharedVisit(participantID: String, generation: Int, isJoint: Bool = false) async throws {
         guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
-        try await sharedVisitRepository.decline(participantID: participantID, generation: generation)
+        if isJoint {
+            try await sharedVisitRepository.declineJoint(participantID: participantID, generation: generation)
+        } else {
+            try await sharedVisitRepository.decline(participantID: participantID, generation: generation)
+        }
     }
 
     func sharedVisitCompanions(visitIDs: [String]) async throws -> [SharedVisitCompanion] {

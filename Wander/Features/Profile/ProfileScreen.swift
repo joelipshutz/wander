@@ -393,6 +393,9 @@ struct ProfileScreen: View {
         }
         .tint(brandMode.accent)
         .background(brandMode.background.ignoresSafeArea())
+        .task(id: store.currentUser.id + ":" + profileActivityItems.compactMap(\.visitID).joined(separator: ",")) {
+            await store.refreshJointCheckInContexts(visitIDs: profileActivityItems.compactMap(\.visitID), backend: backend)
+        }
         .task(id: presentationResetRequest?.id) {
             handlePresentationResetRequest(presentationResetRequest)
         }
@@ -1048,6 +1051,9 @@ struct ProfileDetailView: View {
         }
         .tint(brandMode.accent)
         .background(brandMode.background.ignoresSafeArea())
+        .task(id: store.currentUser.id + ":" + profileActivityItems.compactMap(\.visitID).joined(separator: ",")) {
+            await store.refreshJointCheckInContexts(visitIDs: profileActivityItems.compactMap(\.visitID), backend: backend)
+        }
     }
 
     private var hasNestedNavigationDestination: Bool {

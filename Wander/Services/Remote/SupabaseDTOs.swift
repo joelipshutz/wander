@@ -343,6 +343,9 @@ struct RemoteFeedMediaDTO: Codable, Equatable, Sendable {
     let storageBucket: String?
     let storagePath: String?
     let accessibilityLabel: String
+    var participantID: String? = nil
+    var visitID: String? = nil
+    var ownerUserID: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -350,6 +353,7 @@ struct RemoteFeedMediaDTO: Codable, Equatable, Sendable {
         case storageBucket = "storage_bucket"
         case storagePath = "storage_path"
         case accessibilityLabel = "accessibility_label"
+        case participantID = "participant_id", visitID = "visit_id", ownerUserID = "owner_user_id"
     }
 
     @MainActor
@@ -375,20 +379,20 @@ struct RemoteFeedMediaDTO: Codable, Equatable, Sendable {
     }
 }
 
-private struct FeedMediaResolutionRequest: Sendable {
+struct FeedMediaResolutionRequest: Sendable {
     let activityID: String
     let mediaIndex: Int
     let media: RemoteFeedMediaDTO
 }
 
-private struct FeedMediaResolution: Sendable {
+struct FeedMediaResolution: Sendable {
     let activityID: String
     let mediaIndex: Int
     let preview: FeedMediaPreview
 }
 
 @MainActor
-private func resolveFeedMedia(
+func resolveFeedMedia(
     _ requests: [FeedMediaResolutionRequest],
     storage: (any RemoteStorageCalling)?
 ) async -> [FeedMediaResolution] {
@@ -465,6 +469,108 @@ struct RemoteFeedListDTO: Codable, Equatable {
     }
 }
 
+struct RemoteJointCheckInDTO: Codable, Equatable {
+    let groupID: String
+    let modelVersion: Int
+    let canonicalActivityID: String
+    let revision: Int
+    let occurredAt: Date
+    let viewerCanManage: Bool
+    let contributions: [RemoteJointCheckInContributionDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case groupID = "group_id", modelVersion = "model_version"
+        case canonicalActivityID = "canonical_activity_id", revision
+        case occurredAt = "occurred_at", viewerCanManage = "viewer_can_manage", contributions
+    }
+
+    func projection(
+        sourceMedia: [RemoteFeedMediaDTO] = [],
+        renderedMedia: [FeedMediaPreview] = []
+    ) throws -> JointCheckInProjection {
+        guard modelVersion == 2, UUID(uuidString: groupID) != nil,
+              UUID(uuidString: canonicalActivityID) != nil, revision > 0,
+              (1...10).contains(contributions.count),
+              Set(contributions.map { $0.participantID.lowercased() }).count == contributions.count,
+              Set(contributions.map { $0.visitID.lowercased() }).count == contributions.count,
+              Set(contributions.map(\.person.id)).count == contributions.count
+        else { throw WanderRemoteError.invalidResponse("Invalid joint check-in identity") }
+        return JointCheckInProjection(
+            groupID: groupID.lowercased(), canonicalActivityID: canonicalActivityID.lowercased(),
+            revision: revision, occurredAt: occurredAt, viewerCanManage: viewerCanManage,
+            contributions: try contributions.map { contribution in
+                guard UUID(uuidString: contribution.participantID) != nil,
+                      UUID(uuidString: contribution.visitID) != nil,
+                      UUID(uuidString: contribution.userPlaceID) != nil,
+                      !contribution.person.id.isEmpty,
+                      contribution.rating.map({ PlaceRating.normalized($0) == $0 }) ?? true
+                else { throw WanderRemoteError.invalidResponse("Invalid joint check-in contribution") }
+                let assetIDs = Set(sourceMedia.filter {
+                    $0.participantID?.lowercased() == contribution.participantID.lowercased()
+                }.map(\.id))
+                return JointCheckInContribution(
+                    participantID: contribution.participantID.lowercased(),
+                    visitID: contribution.visitID.lowercased(),
+                    userPlaceID: contribution.userPlaceID.lowercased(),
+                    person: contribution.person.profileShell(), note: contribution.note,
+                    rating: contribution.rating,
+                    media: renderedMedia.filter { assetIDs.contains($0.id) }.map {
+                        ActivityEngagementMedia(id: $0.id, urlString: $0.urlString, accessibilityLabel: $0.accessibilityLabel)
+                    }, viewerCanEdit: contribution.viewerCanEdit, updatedAtToken: contribution.updatedAtToken
+                )
+            }
+        )
+    }
+}
+
+struct RemoteJointCheckInContributionDTO: Codable, Equatable {
+    let participantID: String
+    let visitID: String
+    let userPlaceID: String
+    let person: RemoteProfileShellDTO
+    let note: String?
+    let rating: Double?
+    let media: [RemoteFeedMediaDTO]
+    let viewerCanEdit: Bool
+    var updatedAtToken: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id", visitID = "visit_id", userPlaceID = "user_place_id"
+        case person, note, rating, media, viewerCanEdit = "viewer_can_edit"
+        case updatedAtToken = "updated_at"
+    }
+}
+
+struct RemoteJointCheckInContextsDTO: Decodable {
+    struct Mapping: Decodable {
+        let visitID: String
+        let groupID: String?
+        enum CodingKeys: String, CodingKey { case visitID = "visit_id", groupID = "group_id" }
+    }
+    let mappings: [Mapping]
+    let groups: [RemoteJointCheckInDTO]
+
+    func contexts(sourceMedia: [String: [RemoteFeedMediaDTO]] = [:], renderedMedia: [String: [FeedMediaPreview]] = [:]) throws -> JointCheckInContexts {
+        let projections = try groups.map {
+            try $0.projection(sourceMedia: sourceMedia[$0.canonicalActivityID.lowercased()] ?? [],
+                              renderedMedia: renderedMedia[$0.canonicalActivityID.lowercased()] ?? [])
+        }
+        guard Set(projections.map(\.groupID)).count == projections.count,
+              Set(mappings.map { $0.visitID.lowercased() }).count == mappings.count
+        else { throw WanderRemoteError.invalidResponse("Duplicate joint check-in context") }
+        let groupMap = Dictionary(uniqueKeysWithValues: projections.map { ($0.groupID, $0) })
+        var visitMap: [String: String] = [:]
+        for mapping in mappings {
+            guard let groupID = mapping.groupID?.lowercased() else { continue }
+            guard let group = groupMap[groupID], group.contributions.contains(where: {
+                $0.visitID == mapping.visitID.lowercased()
+            }) else { throw WanderRemoteError.invalidResponse("Unresolved joint check-in context") }
+            visitMap[mapping.visitID.lowercased()] = groupID
+        }
+        return JointCheckInContexts(mappings: visitMap, groups: groupMap)
+    }
+}
+
 struct RemoteFeedActivityDTO: Codable, Equatable {
     let id: String
     let eventType: String
@@ -475,6 +581,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
     let note: String?
     let rating: Double?
     let media: [RemoteFeedMediaDTO]
+    var jointCheckIn: RemoteJointCheckInDTO? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -486,6 +593,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
         case note
         case rating
         case media
+        case jointCheckIn = "joint_check_in"
     }
 
     @MainActor
@@ -515,6 +623,13 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
             .sorted { $0.mediaIndex < $1.mediaIndex }
             .map(\.preview)
         }
+        let jointProjection = try jointCheckIn?.projection(
+            sourceMedia: mediaOverride ?? media, renderedMedia: renderedMedia
+        )
+        if let jointProjection,
+           (jointProjection.canonicalActivityID != id.lowercased() || kind != .placeBeen) {
+            throw WanderRemoteError.invalidResponse("Joint check-in conversation mismatch")
+        }
         return FeedActivity(
             id: id,
             kind: kind,
@@ -524,7 +639,8 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
             occurredAt: occurredAt,
             note: note,
             rating: rating,
-            media: renderedMedia
+            media: renderedMedia,
+            jointCheckIn: jointProjection
         )
     }
 }
@@ -589,6 +705,7 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
         for item in activity {
             renderedActivity.append(
                 try await item.activity(
+                    mediaOverride: mediaByActivityID[item.id.lowercased()],
                     renderedMediaOverride: renderedMediaByActivityID[item.id.lowercased()] ?? []
                 )
             )

@@ -17,9 +17,11 @@ enum SharedVisitOutboxNotice {
         pendingInvites: [PendingSharedVisitInvite],
         ownerUserID: String
     ) -> String? {
-        pendingInvites.contains(where: { $0.ownerUserID == ownerUserID })
-            ? "Friend updates are still sending. Astir will keep retrying."
-            : nil
+        let owned = pendingInvites.filter { $0.ownerUserID == ownerUserID }
+        if owned.contains(where: { $0.requiresReview == true }) {
+            return "A shared check-in changed. Open it to review your saved response."
+        }
+        return owned.isEmpty ? nil : "Friend updates are still sending. Astir will keep retrying."
     }
 }
 
@@ -2666,7 +2668,8 @@ struct MapScreen: View {
                     mapSearchMessage = "Could not open that shared check-in yet. It will retry when the app becomes active."
                     return
                 }
-                mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
+                mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility,
+                    pendingDraft: store.pendingJointAcceptanceDraft(participantID: invitation.participantID))
                 pushNotifications.consumeNavigationRequest(id: request.id)
             } else if destination.status == SharedVisitParticipantStatus.accepted.rawValue {
                 await openNotificationPlace(
@@ -5758,16 +5761,29 @@ struct MapScreen: View {
             participantID: invitation.participantID,
             invitationGeneration: invitation.invitationGeneration,
             snapshotRevision: invitation.snapshotRevision,
-            operationID: identifiers.operationID,
+            operationID: invitation.isJointCheckIn ? UUID().uuidString.lowercased() : identifiers.operationID,
             userPlaceID: identifiers.userPlaceID,
-            visitID: identifiers.visitID,
+            visitID: submission.startsFreshJointVisit ? UUID().uuidString.lowercased() : identifiers.visitID,
             visibility: submission.visibility,
             visitedAt: invitation.visitedAt,
             note: submission.note,
             ratingScore: submission.ratingScore,
             attributes: submission.attributes,
-            selectedPhotoIDs: inheritedPhotoPayloads.map(\.sourcePhotoID)
+            selectedPhotoIDs: invitation.isJointCheckIn ? [] : inheritedPhotoPayloads.map(\.sourcePhotoID),
+            modelVersion: invitation.modelVersion,
+            savesPrivately: invitation.isJointCheckIn && submission.visibility == .selfOnly,
+            startsFreshVisit: submission.startsFreshJointVisit,
+            ownPhotos: invitation.isJointCheckIn
+                ? submission.photoAttachments.filter { $0.sourcePhotoID == nil }.compactMap(\.draftPhoto) : nil
         )
+
+        if invitation.isJointCheckIn {
+            guard let visit = await store.acceptJointCheckIn(invitation: invitation, draft: draft, backend: backend) else {
+                mapSearchMessage = store.lastRemoteError ?? "Your response is saved and will retry when you connect."
+                return nil
+            }
+            return SaveResult(userPlaceID: visit.userPlaceID, syncState: .synced)
+        }
 
         do {
             let result = try await backend.acceptSharedVisit(draft)
@@ -11844,22 +11860,26 @@ struct MapPlaceSaveContext: Identifiable {
 
     static func sharedVisit(
         _ invitation: SharedVisitInvitation,
-        defaultVisibility: PlaceVisibility
+        defaultVisibility: PlaceVisibility,
+        pendingDraft: SharedVisitAcceptanceDraft? = nil
     ) -> MapPlaceSaveContext {
-        MapPlaceSaveContext(
+        let restored = invitation.isJointCheckIn ? pendingDraft : nil
+        return MapPlaceSaveContext(
             candidate: invitation.candidate,
             mode: .sharedVisit(invitation),
             requiresStatusConfirmation: false,
             hasPriorCheckIn: false,
             initialStatus: .been,
-            initialVisibility: defaultVisibility,
-            initialRatingScore: nil,
-            initialNote: "",
+            initialVisibility: restored?.visibility ?? defaultVisibility,
+            initialRatingScore: restored?.ratingScore,
+            initialNote: restored?.note ?? "",
             initialPlannedDate: nil,
-            initialAnswers: [:],
-            initialPersonalLabels: [],
-            initialCuisine: initialCuisine(from: invitation.attributeDrafts),
-            initialPhotoAttachments: []
+            initialAnswers: initialAnswers(from: restored?.attributes ?? []),
+            initialPersonalLabels: initialPersonalLabels(from: restored?.attributes ?? []),
+            initialCuisine: initialCuisine(from: restored?.attributes ?? invitation.attributeDrafts),
+            initialPhotoAttachments: (restored?.ownPhotos ?? []).compactMap(MapPlaceSavePhotoAttachment.restore),
+            initialVisitedAt: invitation.visitedAt,
+            originalAttributes: restored?.attributes ?? []
         )
     }
 
@@ -12111,6 +12131,8 @@ struct MapPlaceSaveSubmission {
     let photoAttachments: [MapPlaceSavePhotoAttachment]
     let inviteeUserIDs: [String]
     let reconcilesSharedVisitInvitees: Bool
+    var startsFreshJointVisit: Bool = false
+    var expectedJointUpdatedAt: String? = nil
     var visitedAt: Date = .now
     var plannedDate: Date? = nil
     var customQuestionAnswers: [String: String]? = nil
@@ -12408,15 +12430,13 @@ func persistNewPlaceSaveSubmission(
         visitedAt: submission.visitedAt,
         plannedDate: submission.plannedDate,
         attributes: submission.attributes,
+        jointInviteeUserIDs: backend?.featureFlag(.jointCheckInsV2, for: store.currentUser.id) == true ? submission.inviteeUserIDs : [],
         backend: backend
     )
     let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
-    await queueSharedVisitInvitees(
-        for: submission,
-        sourceVisit: targetVisit,
-        store: store,
-        backend: backend
-    )
+    if backend?.featureFlag(.jointCheckInsV2, for: store.currentUser.id) != true || submission.inviteeUserIDs.isEmpty {
+        await queueSharedVisitInvitees(for: submission, sourceVisit: targetVisit, store: store, backend: backend)
+    }
     await persistVisitPhotoAttachments(
         submission.photoAttachments,
         to: targetVisit,
@@ -12499,15 +12519,14 @@ func persistScopedVisitOrWantSubmission(
         guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
             return (nil, nil)
         }
-        if let backend {
-            _ = await store.syncVisit(visitID: visit.id, backend: backend)
+        let startsJoint = backend?.featureFlag(.jointCheckInsV2, for: store.currentUser.id) == true && !submission.inviteeUserIDs.isEmpty
+        if startsJoint && !store.queueJointCheckIn(sourceVisitID: visit.id, inviteeUserIDs: submission.inviteeUserIDs) {
+            return (SaveResult(userPlaceID: visit.userPlaceID, syncState: .failed), visit)
         }
-        await queueSharedVisitInvitees(
-            for: submission,
-            sourceVisit: visit,
-            store: store,
-            backend: backend
-        )
+        if let backend { _ = await store.syncVisit(visitID: visit.id, backend: backend) }
+        if !startsJoint {
+            await queueSharedVisitInvitees(for: submission, sourceVisit: visit, store: store, backend: backend)
+        }
         return (persistPrivateCheckInAnswers(result: SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), submission: submission, visit: visit, store: store), visit)
     case .editVisit(_, let visit):
         guard let updatedVisit = store.updateVisit(
@@ -12519,7 +12538,8 @@ func persistScopedVisitOrWantSubmission(
             categoryCandidate: submission.candidate,
             visibility: submission.visibility,
             replacesNote: true,
-            replacesRating: true
+            replacesRating: true,
+            expectedJointUpdatedAt: submission.expectedJointUpdatedAt
         ) else {
             return (nil, nil)
         }
@@ -13258,6 +13278,11 @@ struct MapPlaceSaveEditor: View {
     @State private var isShowingRemoveConfirmation = false
     @State private var visitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var selectedInviteeUserIDs: [String] = []
+    @State private var startsFreshJointVisit = false
+    @State private var includesJointRating = false
+    @State private var didRestoreJointAcceptanceFlags = false
+    @State private var expectedJointUpdatedAt: String?
+    @State private var didCaptureJointEditVersion = false
     @State private var isLoadingSharedVisitInvitees = false
     @State private var didLoadSharedVisitInvitees = false
     @State private var sharedVisitInviteesError: String?
@@ -13337,6 +13362,7 @@ struct MapPlaceSaveEditor: View {
         )
         _selectedVisibility = State(initialValue: initialVisibility)
         _selectedRatingScore = State(initialValue: initialRatingScore)
+        _includesJointRating = State(initialValue: initialContext.initialRatingScore != nil)
         _selectedAnswers = State(initialValue: initialAnswers)
         _unifiedTags = State(initialValue: initialUnifiedTags)
         _questionBlocksCache = State(
@@ -13488,13 +13514,18 @@ struct MapPlaceSaveEditor: View {
         store.isPrivateProfile ? .selfOnly : selectedVisibility
     }
 
+    private var usesOptionalJointRating: Bool {
+        context.sharedVisitInvitation?.isJointCheckIn == true
+            || context.editedVisit.map { store.jointCheckIn(for: $0.id) != nil } == true
+    }
+
     private var currentSubmission: MapPlaceSaveSubmission {
         MapPlaceSaveSubmission(
             context: context,
             candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
-            ratingScore: MapPlaceSaveSubmissionPolicy.checkInValue(
+            ratingScore: usesOptionalJointRating && !includesJointRating ? nil : MapPlaceSaveSubmissionPolicy.checkInValue(
                 selectedRatingScore,
                 status: selectedStatus
             ),
@@ -13513,6 +13544,8 @@ struct MapPlaceSaveEditor: View {
             reconcilesSharedVisitInvitees: context.editedVisit != nil
                 && canInviteFriends
                 && didLoadSharedVisitInvitees,
+            startsFreshJointVisit: startsFreshJointVisit,
+            expectedJointUpdatedAt: expectedJointUpdatedAt,
             visitedAt: visitedAt,
             plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
                 plannedDate,
@@ -13732,7 +13765,24 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func prepareEditor(isSheet: Bool) {
+        if !didCaptureJointEditVersion {
+            didCaptureJointEditVersion = true
+            if let visit = context.editedVisit {
+                expectedJointUpdatedAt = store.jointCheckIn(for: visit.id)?.contributions
+                    .first { $0.visitID == (visit.serverID ?? visit.id).lowercased() }?.updatedAtToken
+            }
+        }
         guard bindEditorOwnerIfNeeded() else { return }
+        if !didRestoreJointAcceptanceFlags {
+            didRestoreJointAcceptanceFlags = true
+            if let invitation = context.sharedVisitInvitation, invitation.isJointCheckIn,
+               let pending = store.pendingJointAcceptanceDraft(participantID: invitation.participantID) {
+                startsFreshJointVisit = pending.startsFreshVisit
+                if (pending.ownPhotos?.count ?? 0) > visitPhotoAttachments.count {
+                    errorMessage = "One photo could not be restored. Your saved response still includes it; finish syncing before changing the response."
+                }
+            }
+        }
         if let event = saveAnalytics.opened(mode: analyticsSaveMode, status: selectedStatus.rawValue) {
             store.productAnalytics.track(event)
         }
@@ -13894,6 +13944,7 @@ struct MapPlaceSaveEditor: View {
                     presentation: checkInDateTrayPresentation,
                     onExpansionRequested: onContentExpansionRequested
                 )
+                    .disabled(context.sharedVisitInvitation?.isJointCheckIn == true)
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
             } else {
@@ -13940,6 +13991,20 @@ struct MapPlaceSaveEditor: View {
 
     private var visitParticipationSections: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            if context.sharedVisitInvitation?.isJointCheckIn == true {
+                if store.lastRemoteError?.contains("earlier check-in was removed or moved") == true {
+                    Toggle("Create a new check-in", isOn: $startsFreshJointVisit)
+                        .font(AstirTypography.bodySmall)
+                    Text("Your earlier record stays unchanged. Joining adds a new check-in for this occasion.")
+                        .font(AstirTypography.caption)
+                }
+                Text(saveVisibility == .selfOnly
+                    ? "Save only to your map. You won't join the shared check-in."
+                    : "Join this check-in with your own rating, note and photos. " + JointCheckInProjection.discussionAudience)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(astirBrandMode.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
                 sharedVisitInviteSection
                     .disabled(!canInviteFriends)
@@ -14256,6 +14321,8 @@ struct MapPlaceSaveEditor: View {
     private var sharedVisitInviteSection: some View {
         SharedVisitInviteSection(
             selectedUserIDs: $selectedInviteeUserIDs,
+            isJoint: context.editedVisit.flatMap { store.jointCheckIn(for: $0.id) } != nil
+                || (context.editedVisit == nil && backend.featureFlag(.jointCheckInsV2, for: store.currentUser.id) == true),
             isLoading: isLoadingSharedVisitInvitees,
             errorMessage: sharedVisitInviteesError,
             onRetry: context.editedVisit == nil ? nil : {
@@ -14376,9 +14443,27 @@ struct MapPlaceSaveEditor: View {
         .padding(.top, WanderTheme.spacing1)
     }
 
+    @ViewBuilder
     private var ratingSection: some View {
-        PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
-            .disabled(isWalkthroughAutomating(.saveRating))
+        if usesOptionalJointRating && !includesJointRating {
+            Button { includesJointRating = true } label: {
+                Label("Add your rating", systemImage: "star")
+                    .font(AstirTypography.control)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(astirBrandMode.accent)
+            .accessibilityIdentifier("joint.rating.add")
+        } else {
+            PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
+                .disabled(isWalkthroughAutomating(.saveRating))
+            if usesOptionalJointRating {
+                Button("Remove rating") { includesJointRating = false }
+                    .font(AstirTypography.caption)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("joint.rating.remove")
+            }
+        }
     }
 
     private func isWalkthroughAutomating(_ target: WalkthroughTargetID) -> Bool {
@@ -15277,7 +15362,9 @@ struct MapPlaceSaveEditor: View {
                 } else if auth.isSignedIn {
                     saveAttemptedAt = nil
                     resetWalkthroughAutoSaveForRetry()
-                    if context.sharedVisitInvitation != nil {
+                    if context.sharedVisitInvitation?.isJointCheckIn == true || usesOptionalJointRating {
+                        errorMessage = store.lastRemoteError ?? "Your response is saved. Reopen the invitation and try again."
+                    } else if context.sharedVisitInvitation != nil {
                         errorMessage = "Could not add this shared check-in. Open the invitation and try again."
                     } else {
                         errorMessage = selectedStatus == .been
@@ -18297,11 +18384,13 @@ struct PlaceActivitySection: View {
     }
 
     private var filteredEntries: [PlaceActivityEntry] {
-        switch filter {
-        case .all:
-            entries
-        case .myVisits:
-            entries.filter { filter.includes($0) }
+        var seenJointIDs = Set<String>()
+        return entries.filter { entry in
+            guard filter == .all || filter.includes(entry) else { return false }
+            guard let visitID = entry.visit?.id,
+                  let activityID = store.jointCheckIn(for: visitID)?.canonicalActivityID
+                    ?? store.unavailableJointActivityID(for: visitID) else { return true }
+            return seenJointIDs.insert(activityID).inserted
         }
     }
 
@@ -18540,7 +18629,19 @@ private struct PlaceActivityCard: View {
     @State private var photoError: String?
     @State private var selectedProfileID: String?
 
+    @ViewBuilder
     var body: some View {
+        if let visitID = entry.visit?.id, let joint = store.jointCheckIn(for: visitID) {
+            JointCheckInPostcard(projection: joint, visiblePlace: entry.summary.visiblePlace,
+                profileSubjectUserID: entry.owner.id, editAction: entry.canEdit ? onEdit : nil)
+        } else if let visitID = entry.visit?.id, store.unavailableJointActivityID(for: visitID) != nil {
+            JointCheckInUnavailableCard(visitID: visitID, placeName: entry.summary.visiblePlace.place.canonicalName)
+        } else {
+            legacyBody
+        }
+    }
+
+    private var legacyBody: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             header
 

@@ -1161,6 +1161,22 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertNil(store.followedFeedPage)
     }
 
+    func testExactActivityCannotRepopulateAChangedPrivacyAudience() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        let repository = ActivityEngagementRepositoryStub(activityResult: activity, suspendActivity: true)
+        let task = Task { @MainActor in
+            await store.activity(id: activity.id, backend: WanderBackend(activityEngagementRepository: repository))?.id
+        }
+        for _ in 0..<100 where repository.activityRequestCount == 0 { await Task.yield() }
+        XCTAssertEqual(repository.activityRequestCount, 1)
+        store.unfollow(userID: "friend")
+        repository.finishActivity()
+        let result = await task.value
+        XCTAssertNil(result)
+        XCTAssertNil(store.followedFeedPage)
+    }
+
     func testExactActivityDoesNotWaitForEngagementSummariesBeforeOpeningComments() async {
         let store = WanderStore(fixtures: .empty())
         let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
@@ -1325,8 +1341,8 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(repository.commentsRequestCount, 1)
     }
 
-    func testCommentsResponseCannotCrossAccountBoundaryOrCancellation() async {
-        for changesAccount in [false, true] {
+    func testCommentsResponseCannotCrossAccountPrivacyOrCancellationBoundary() async {
+        for boundary in ["cancel", "account", "block", "unfollow"] {
             let store = WanderStore(fixtures: .empty())
             let activityID = UUID().uuidString
             let comment = activityComment(id: "comment", activityID: activityID, authorID: store.currentUser.id, relationship: .owner)
@@ -1342,9 +1358,13 @@ final class ActivityEngagementTests: XCTestCase {
             }
             for _ in 0..<100 where repository.commentsRequestCount == 0 { await Task.yield() }
             XCTAssertEqual(repository.commentsRequestCount, 1)
-            if changesAccount {
+            if boundary == "account" {
                 store.apply(authState: .signedOut)
                 store.apply(authState: .signedIn(AuthSession(userID: "new_account", displayName: "New", handle: "new")))
+            } else if boundary == "block" {
+                store.block(userID: "friend")
+            } else if boundary == "unfollow" {
+                store.unfollow(userID: "friend")
             } else {
                 task.cancel()
             }

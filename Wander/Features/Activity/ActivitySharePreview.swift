@@ -159,11 +159,16 @@ struct ActivitySharePreviewPresentation: Identifiable, Equatable {
     let content: WanderShareContent
 
     init?(id: UUID = UUID(), context: ActivityEngagementContext) {
-        guard let content = WanderShareContent.activity(
+        let shareContent = context.jointCheckIn != nil ? WanderShareContent.place(
+            serverID: context.placeServerID,
+            name: context.placeName,
+            message: context.shareMessage
+        ) : WanderShareContent.activity(
             activityID: context.activityID,
             placeName: context.placeName,
             message: context.shareMessage
-        ) else { return nil }
+        )
+        guard let content = shareContent else { return nil }
 
         self.id = id
         self.context = context

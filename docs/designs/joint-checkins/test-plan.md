@@ -2,7 +2,7 @@
 
 REC-566 · Initial baseline `fb1bad2`; reviewed against `8890e5a` · September 21, 2026 · 88 cases
 
-This is the required implementation test plan, not a claim that v2 tests already pass. The planning turn read source/tests, queried aggregate production counts read-only, and checked an interactive fictional preview. It did not change the app/database or run native builds. Use only synthetic accounts/content in automated tests.
+This is the required acceptance contract, not a blanket pass claim. [Implementation validation](implementation-validation.md) distinguishes executed SQL/race/native evidence from unexecuted UI and rollout requirements. Use only synthetic accounts/content in automated tests.
 
 ## Coverage map
 
@@ -137,7 +137,7 @@ Layers: **SQL** = pgTAP and direct authenticated RPC fixtures; **race** = separa
 | F10 | Two groups same venue, concurrent updates | Independent stable identity; no cache key collision | SQL, store |
 | R01 | Each legacy accept/set/invite/engagement RPC targets v2 | Upgrade-required, no mutation; v1 unchanged | SQL |
 | R02 | Old client reads v2 social feed/child links | No misleading shared thread or private payload; unsupported social projection excluded | SQL |
-| R03 | Old client edits own note/photo or deletes source/child | Owned operation reconciles membership server-side; no bypass of locked occasion | SQL |
+| R03 | Old client edits own note/photo or deletes source/child | V1 edits unchanged; active v2 note/rating/answers require upgraded CAS editor. Owned photo/delete operations reconcile membership server-side; no bypass of locked occasion | SQL |
 | R04 | Migration deployed with creation flag off | Zero new v2 creates; v1 works | ops, SQL |
 | R05 | Turn new-v2 creation off after successful internal groups | Existing v2 reads, edits, leave/delete remain supported; no split conversation | ops |
 | R06 | Roll forward after flag off / failed client rollout | Version data retained and valid; no replay/new-generation corruption | ops, SQL |

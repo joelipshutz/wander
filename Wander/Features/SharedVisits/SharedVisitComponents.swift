@@ -4,6 +4,7 @@ struct SharedVisitInviteSection: View {
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
+    var isJoint = false
     var isLoading = false
     var errorMessage: String?
     var onRetry: (() -> Void)?
@@ -75,6 +76,14 @@ struct SharedVisitInviteSection: View {
                 .padding(.horizontal, WanderTheme.spacing3)
             }
 
+            if isJoint && !selectedUserIDs.isEmpty {
+                Text("Up to 10 people, including you. Friends appear after accepting. " + JointCheckInProjection.discussionAudience)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             ForEach(selectedFriends) { friend in
                 HStack(spacing: WanderTheme.spacing3) {
                     WanderAvatar(
@@ -113,7 +122,7 @@ struct SharedVisitInviteSection: View {
                 .stroke(brandMode.border)
         )
         .sheet(isPresented: $isPresentingPicker) {
-            SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs)
+            SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs, maximumInvitees: isJoint ? 9 : nil)
                 .environmentObject(store)
         }
     }
@@ -124,6 +133,7 @@ struct SharedVisitFriendPicker: View {
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
+    var maximumInvitees: Int? = nil
     @State private var query = ""
     @State private var isPresentingContactInvites = false
 
@@ -194,7 +204,12 @@ struct SharedVisitFriendPicker: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .disabled(!selectedUserIDs.contains(friend.id) && maximumInvitees.map { selectedUserIDs.count >= $0 } == true)
                         }
+                    }
+                    if let maximumInvitees {
+                        Text("\(selectedUserIDs.count) of \(maximumInvitees) invitations · you are also included")
+                            .font(AstirTypography.caption)
                     }
                 }
             }

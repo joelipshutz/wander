@@ -190,6 +190,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let visitPhotos: [VisitPhotoRecord]?
     let sharedVisitInvitations: [SharedVisitInvitation]?
     let sharedVisitInboxUserID: String?
+    // Identity only, scoped by this snapshot's currentUser. Never persist the
+    // viewer-specific roster, ratings, notes or media authorization.
+    let jointActivityIdentityByVisitID: [String: String]?
+    let pendingActivityCommentDrafts: [PendingActivityCommentDraft]?
     let pendingSharedVisitInvites: [PendingSharedVisitInvite]?
     let follows: [FollowRecord]
     let blocks: [BlockRecord]
@@ -230,6 +234,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
         sharedVisitInvitations = store.sharedVisitInvitations
         sharedVisitInboxUserID = store.sharedVisitInboxUserID
+        jointActivityIdentityByVisitID = store.jointActivityIdentityByVisitID
+        pendingActivityCommentDrafts = store.pendingActivityCommentDrafts
         pendingSharedVisitInvites = store.pendingSharedVisitInvites
         follows = store.follows.map(FollowRecord.init)
         blocks = store.blocks.map(BlockRecord.init)
@@ -280,6 +286,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
             sharedVisitInvitations: sharedVisitInvitations ?? [],
             sharedVisitInboxUserID: sharedVisitInboxUserID,
+            jointActivityIdentityByVisitID: shouldResetSavedPlaces ? [:] : jointActivityIdentityByVisitID ?? [:],
+            pendingActivityCommentDrafts: pendingActivityCommentDrafts ?? [],
             pendingSharedVisitInvites: pendingSharedVisitInvites ?? [],
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
@@ -319,6 +327,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let visitPhotos: [LocalVisitPhoto]
         let sharedVisitInvitations: [SharedVisitInvitation]
         let sharedVisitInboxUserID: String?
+        let jointActivityIdentityByVisitID: [String: String]
+        let pendingActivityCommentDrafts: [PendingActivityCommentDraft]
         let pendingSharedVisitInvites: [PendingSharedVisitInvite]
         let follows: [LocalFollow]
         let blocks: [LocalBlock]

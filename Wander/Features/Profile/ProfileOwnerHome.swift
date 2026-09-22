@@ -1115,6 +1115,7 @@ private struct ProfileRecentActivitySection: View {
 }
 
 struct ProfileActivityRow: View {
+    @EnvironmentObject private var store: WanderStore
     @Environment(\.astirBrandMode) private var brandMode
     let item: ProfileActivityItem
     let action: () -> Void
@@ -1123,7 +1124,20 @@ struct ProfileActivityRow: View {
         ProfileActivityPresenter.timestampText(for: item.timestamp)
     }
 
+    @ViewBuilder
     var body: some View {
+        if let visitID = item.visitID, let joint = store.jointCheckIn(for: visitID) {
+            JointCheckInPostcard(projection: joint, visiblePlace: item.visiblePlace,
+                profileSubjectUserID: item.visiblePlace.owner.id, destinationAction: action)
+                .padding(.vertical, WanderTheme.spacing2)
+        } else if let visitID = item.visitID, store.unavailableJointActivityID(for: visitID) != nil {
+            JointCheckInUnavailableCard(visitID: visitID, placeName: item.visiblePlace.place.canonicalName)
+        } else {
+            legacyBody
+        }
+    }
+
+    private var legacyBody: some View {
         Button(action: action) {
             HStack(spacing: WanderTheme.spacing2) {
                 WanderCategoryEmoji(emoji: item.visiblePlace.categoryEmoji, size: 24)

@@ -353,6 +353,138 @@ enum ActivityPostcardTypographyPolicy {
     }
 }
 
+/// The same contribution section renders inside every activity postcard.
+/// Server filtering supplies the entire visible roster; no total-member hint
+/// or optimistic pending person is rendered here.
+private struct JointCheckInContributionSection: View {
+    @Environment(\.astirBrandMode) private var brand
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let projection: JointCheckInProjection
+    let profileSubjectUserID: String?
+    let openProfile: ((ProfileShell) -> Void)?
+    @State private var expanded = false
+
+    private var people: [JointCheckInContribution] { projection.ordered(for: profileSubjectUserID) }
+    private var displayed: [JointCheckInContribution] { expanded ? people : Array(people.prefix(3)) }
+    private var needsExpansion: Bool { people.count > 3 || people.contains { ($0.note?.count ?? 0) > 180 } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { facePile; attribution }
+                VStack(alignment: .leading, spacing: 8) { facePile; attribution }
+            }
+            ForEach(displayed) { person in
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        profileName(person.person)
+                        Spacer(minLength: 6)
+                        if let rating = person.rating {
+                            Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+                                .font(AstirTypography.label)
+                                .foregroundStyle(brand.accentText)
+                                .accessibilityLabel("\(person.person.displayName)'s rating: \(PlaceRating.averageDisplay(rating)) out of 5")
+                        }
+                    }
+                    if let note = person.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(note)
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brand.primaryText)
+                            // Short notes have no expansion control, so never
+                            // truncate them at large accessibility text sizes.
+                            .lineLimit(expanded || note.count <= 180 ? nil : 4)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel("\(person.person.displayName)'s note: \(note)")
+                    }
+                    if !person.media.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(person.media) { photo in
+                                    ActivityPostcardArtwork(visiblePlace: nil, media: [photo], fallbackIcon: "photo", usesAstirPhotoFallback: false)
+                                        .frame(width: 76, height: 76)
+                                        .clipped()
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                        .accessibilityLabel("Photo by \(person.person.displayName)")
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1).fill(brand.primaryText.opacity(0.15)).frame(width: 2)
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("joint.contribution.\(person.person.id)")
+            }
+            if needsExpansion {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    HStack {
+                        Text(expanded ? "Show less" : people.count > 3 ? "View all \(people.count) check-ins" : "Read full notes")
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    }
+                    .font(AstirTypography.label)
+                    .foregroundStyle(brand.accentText)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("joint.expand")
+            }
+        }
+    }
+
+    private var facePile: some View {
+        HStack(spacing: -10) {
+            ForEach(Array(people.prefix(4))) { person in
+                WanderAvatar(initials: activityInitials(for: person.person.displayName),
+                    avatarURL: person.person.avatarURL, size: 34, color: WanderTheme.skyTint.color)
+                    .overlay(Circle().stroke(brand.background, lineWidth: 2))
+                    .accessibilityHidden(true)
+            }
+            if people.count > 4 {
+                Text("+\(people.count - 4)")
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(brand.primaryText)
+                    .frame(width: 34, height: 34)
+                    .background(brand.background, in: Circle())
+                    .overlay(Circle().stroke(brand.primaryText.opacity(0.2), lineWidth: 1))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var attribution: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(projection.attribution(for: profileSubjectUserID))
+                .font(AstirTypography.bodySmall)
+                .foregroundStyle(brand.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(FeedPresentation.timestampText(for: projection.occurredAt))
+                .font(AstirTypography.metadata)
+                .foregroundStyle(brand.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func profileName(_ person: ProfileShell) -> some View {
+        if let openProfile {
+            Button { openProfile(person) } label: {
+                Text(person.displayName).font(AstirTypography.label).foregroundStyle(brand.primaryText)
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(person.displayName)'s profile")
+        } else {
+            Text(person.displayName).font(AstirTypography.label).foregroundStyle(brand.primaryText)
+        }
+    }
+}
+
 struct ActivityPostcardView: View {
     @Environment(\.activityPostcardVisualStyle) private var visualStyle
     @Environment(\.astirBrandMode) private var astirBrandMode
@@ -375,6 +507,7 @@ struct ActivityPostcardView: View {
     var showsCommentButton = true
     var showsEngagementActions = true
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
+    var openContributorProfile: ((ProfileShell) -> Void)? = nil
     var activityGroup: FeedActivityGroup? = nil
     var openActivityList: ((LocalPlaceList) -> Void)? = nil
 
@@ -393,24 +526,31 @@ struct ActivityPostcardView: View {
                     compactMetadata
                 }
 
-                actorAttribution
+                if let joint = context.jointCheckIn {
+                    JointCheckInContributionSection(projection: joint,
+                        profileSubjectUserID: context.profileSubjectUserID,
+                        openProfile: openContributorProfile)
+                } else {
+                    actorAttribution
 
-                if let note = context.note {
-                    Text("“\(note)”")
-                        .font(visualStyle == .astir ? AstirTypography.bodySmall : .system(.subheadline, design: .serif, weight: .medium))
-                        .foregroundStyle(primaryText)
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(noteBackground)
-                        .clipShape(
-                            RoundedRectangle(
-                                cornerRadius: visualStyle == .astir ? 14 : WanderTheme.radiusMedium,
-                                style: .continuous
+                    if let note = context.note {
+                        Text("“\(note)”")
+                            .font(visualStyle == .astir ? AstirTypography.bodySmall : .system(.subheadline, design: .serif, weight: .medium))
+                            .foregroundStyle(primaryText)
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(noteBackground)
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: visualStyle == .astir ? 14 : WanderTheme.radiusMedium,
+                                    style: .continuous
+                                )
                             )
-                        )
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel("Note: \(note)")
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel("Note: \(note)")
+                    }
+
                 }
 
                 if let activityGroup {
@@ -561,7 +701,7 @@ struct ActivityPostcardView: View {
 
     @ViewBuilder
     private var ratingBadge: some View {
-        if let rating = context.rating {
+        if context.jointCheckIn == nil, let rating = context.rating {
             Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
                 .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
@@ -890,6 +1030,16 @@ struct ActivityCommentsScreen: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (String) -> Void
     @State private var draft = ""
+    @State private var restoredDraft = false
+    @State private var presentationOwnerID: String?
+    @State private var presentedPrivacyRevision: UInt64?
+    private var canPresentActivity: Bool {
+        isJointAvailable && presentationOwnerID == store.currentUser.id
+            && (activeContext.jointCheckIn == nil || presentedPrivacyRevision == store.jointPrivacyRevision)
+    }
+    @State private var isJointAvailable = true
+    @State private var refreshedContext: ActivityEngagementContext?
+    private var activeContext: ActivityEngagementContext { refreshedContext ?? context }
     @State private var isLoading = true
     @State private var isPosting = false
     @State private var commentError: String?
@@ -901,7 +1051,8 @@ struct ActivityCommentsScreen: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                activityHeader
+                if canPresentActivity {
+                    activityHeader
                     .listRowInsets(
                         EdgeInsets(
                             top: WanderTheme.spacing3,
@@ -912,6 +1063,7 @@ struct ActivityCommentsScreen: View {
                     )
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
+                }
 
                 if isLoading, comments.isEmpty {
                     ProgressView("Loading comments…")
@@ -935,7 +1087,7 @@ struct ActivityCommentsScreen: View {
                 if let commentError {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(commentError)
-                        Button("Try again") {
+                        Button("Refresh check-in") {
                             Task { await refreshComments() }
                         }
                         .frame(minHeight: 44)
@@ -963,23 +1115,43 @@ struct ActivityCommentsScreen: View {
         }
         .background(brandMode.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            composer
+            if canPresentActivity { composer }
         }
-        .task(id: "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
+        .task(id: "\(activeContext.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase):\(store.jointPrivacyRevision)") {
             guard scenePhase == .active else { return }
+            if presentationOwnerID == nil { presentationOwnerID = store.currentUser.id }
+            guard presentationOwnerID == store.currentUser.id else { return }
+            if !restoredDraft {
+                draft = store.pendingActivityCommentDrafts.last(where: { $0.ownerUserID == store.currentUser.id && $0.activityID == activeContext.activityID })?.body ?? ""
+                restoredDraft = true
+            }
             await refreshComments()
         }
         .refreshable { await refreshComments() }
+        .onChange(of: store.currentUser.id) { _, _ in
+            draft = ""
+            refreshedContext = nil
+            isJointAvailable = false
+            isPosting = false
+            isLoading = false
+            commentError = "Reopen this activity from your current account."
+            clearNestedPresentations()
+        }
+        .onChange(of: store.jointPrivacyRevision) { _, _ in
+            if activeContext.jointCheckIn != nil { isJointAvailable = false }
+            isPosting = false
+            clearNestedPresentations()
+        }
         .fullScreenCover(item: $photoViewerRoute, onDismiss: { handoff.onDidDismiss(.activityPhoto) }) { route in
             WanderRootPresentationLifecycle(
                 surface: .activityPhoto, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
             ) {
                 ActivityCommentsPhotoViewer(
-                    media: context.media,
+                    media: activeContext.media,
                     initialMediaID: route.mediaID,
-                    reportedUserID: context.actor.id,
-                    reportedUserName: context.actor.displayName,
-                    placeName: context.placeName
+                    reportedUserID: activeContext.actor.id,
+                    reportedUserName: activeContext.actor.displayName,
+                    placeName: activeContext.placeName
                 )
             }
         }
@@ -1012,21 +1184,44 @@ struct ActivityCommentsScreen: View {
         }
     }
 
+    private func clearNestedPresentations() {
+        composerFocused = false
+        photoViewerRoute = nil
+        sharePreviewPresentation = nil
+        reportSubject = nil
+    }
+
     @MainActor
     private func refreshComments() async {
+        let ownerID = store.currentUser.id
+        let privacyRevision = store.jointPrivacyRevision
+        guard presentationOwnerID == ownerID else { return }
         isLoading = true
         commentError = nil
+        if activeContext.jointCheckIn != nil {
+            let refreshed = await store.activity(id: activeContext.activityID, backend: auth.isSignedIn ? backend : nil)
+            guard ownerID == store.currentUser.id, privacyRevision == store.jointPrivacyRevision, !Task.isCancelled else { return }
+            guard let updated = refreshed?.activityEngagementContext, updated.activityID == activeContext.activityID else {
+                isJointAvailable = false
+                commentError = "This shared check-in is no longer available. Your draft is kept."
+                isLoading = false
+                return
+            }
+            refreshedContext = updated
+            presentedPrivacyRevision = privacyRevision
+            isJointAvailable = true
+        }
         let didRefresh = await store.refreshActivityComments(
-            activityID: context.activityID,
+            activityID: activeContext.activityID,
             backend: auth.isSignedIn ? backend : nil
         )
-        guard !Task.isCancelled else { return }
+        guard ownerID == store.currentUser.id, privacyRevision == store.jointPrivacyRevision, !Task.isCancelled else { return }
         commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
         isLoading = false
     }
 
     private var comments: [ActivityComment] {
-        store.activityComments(for: context.activityID)
+        canPresentActivity ? store.activityComments(for: activeContext.activityID) : []
     }
 
     @ViewBuilder
@@ -1063,7 +1258,7 @@ struct ActivityCommentsScreen: View {
 
     private var activityHeader: some View {
         ActivityPostcardView(
-            context: context,
+            context: activeContext,
             visiblePlace: visiblePlace,
             metadataIcon: metadataIcon,
             secondaryMetadataTitle: secondaryListContext?.name,
@@ -1073,7 +1268,7 @@ struct ActivityCommentsScreen: View {
             artworkAccessibilityLabel: artworkAccessibilityLabel,
             destinationAction: destinationAction,
             destinationAccessibilityLabel: destinationAccessibilityLabel,
-            openProfile: { openProfile(context.actor) },
+            openProfile: { openProfile(activeContext.actor) },
             actorAccessibilityIdentifier: "comments.activity.actor",
             destinationAccessibilityIdentifier: "comments.activity.place",
             postcardAccessibilityIdentifier: "comments.activity.postcard",
@@ -1082,7 +1277,8 @@ struct ActivityCommentsScreen: View {
             showsCommentButton: false,
             onSharePreviewPresentation: { presentation in
                 sharePreviewPresentation = presentation
-            }
+            },
+            openContributorProfile: openProfile
         )
     }
 
@@ -1090,38 +1286,38 @@ struct ActivityCommentsScreen: View {
         if let visiblePlace {
             return categorySymbol(for: visiblePlace.effectiveCategory)
         }
-        return switch context.ticketKind {
+        return switch activeContext.ticketKind {
         case .list: PlaceListSymbol.systemImage
         case .saved, .checkIn, .wanna: "mappin"
         }
     }
 
     private var artworkAction: (() -> Void)? {
-        if let firstMediaID = context.media.first?.id {
+        if let firstMediaID = activeContext.media.first?.id {
             return { photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstMediaID) }
         }
         return destinationAction
     }
 
     private var artworkAccessibilityLabel: String? {
-        if !context.media.isEmpty {
-            return context.media.count == 1 ? "Open activity photo" : "Open activity photos"
+        if !activeContext.media.isEmpty {
+            return activeContext.media.count == 1 ? "Open activity photo" : "Open activity photos"
         }
         return visiblePlace.map { "Open activity at \($0.place.canonicalName)" }
     }
 
     private var artworkAccessibilityValue: String? {
-        guard !context.media.isEmpty else { return nil }
-        return context.media.count == 1 ? "1 photo" : "\(context.media.count) photos"
+        guard !activeContext.media.isEmpty else { return nil }
+        return activeContext.media.count == 1 ? "1 photo" : "\(activeContext.media.count) photos"
     }
 
     private var artworkAccessibilityHint: String? {
-        context.media.isEmpty ? nil : "Opens a full-screen photo viewer"
+        activeContext.media.isEmpty ? nil : "Opens a full-screen photo viewer"
     }
 
     private var secondaryListContext: ActivityEngagementListContext? {
         guard visiblePlace != nil else { return nil }
-        return context.listContext
+        return activeContext.listContext
     }
 
     private var secondaryMetadataAction: (() -> Void)? {
@@ -1133,14 +1329,14 @@ struct ActivityCommentsScreen: View {
         if let visiblePlace {
             return "Open \(visiblePlace.place.canonicalName)"
         }
-        return context.listContext.map { "Open list \($0.name)" }
+        return activeContext.listContext.map { "Open list \($0.name)" }
     }
 
     private var destinationAction: (() -> Void)? {
         if let visiblePlace {
             return { openPlace(visiblePlace) }
         }
-        guard let listContext = context.listContext else { return nil }
+        guard let listContext = activeContext.listContext else { return nil }
         return { openList(listContext.id) }
     }
 
@@ -1149,6 +1345,13 @@ struct ActivityCommentsScreen: View {
             Divider()
                 .overlay(brandMode.border)
 
+            if activeContext.jointCheckIn != nil {
+                Text(JointCheckInProjection.discussionAudience)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brandMode.secondaryText)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(alignment: .bottom, spacing: WanderTheme.spacing2) {
                 WanderAvatar(
                     initials: activityInitials(for: store.currentUser.displayName),
@@ -1205,7 +1408,11 @@ struct ActivityCommentsScreen: View {
 
     private func post() {
         let body = normalizedDraft
-        guard !body.isEmpty, body.count <= 1_000, !isPosting else { return }
+        guard canPresentActivity, !body.isEmpty, body.count <= 1_000, !isPosting else { return }
+        let ownerID = store.currentUser.id
+        let privacyRevision = store.jointPrivacyRevision
+        let activityID = activeContext.activityID
+        let jointConsent = activeContext.jointCheckIn != nil
         do {
             try CommunityContentPolicy.validate(body)
         } catch {
@@ -1216,14 +1423,17 @@ struct ActivityCommentsScreen: View {
         isPosting = true
         commentError = nil
         Task {
+            guard ownerID == store.currentUser.id, privacyRevision == store.jointPrivacyRevision else { return }
             let didPost = await store.addActivityComment(
-                activityID: context.activityID,
+                activityID: activityID,
                 body: body,
+                jointConsent: jointConsent,
                 backend: auth.isSignedIn ? backend : nil
             )
+            guard ownerID == store.currentUser.id, privacyRevision == store.jointPrivacyRevision else { return }
             if !didPost {
                 if draft.isEmpty { draft = body }
-                commentError = "Your comment couldn't post. Try again."
+                commentError = store.activityEngagementError(for: activeContext.activityID) ?? "Your comment couldn't post. Try again."
             }
             isPosting = false
             composerFocused = true
@@ -1588,4 +1798,109 @@ private func activityInitials(for name: String) -> String {
         .map(String.init)
         .joined()
         .uppercased()
+}
+
+
+struct JointCheckInUnavailableCard: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.astirBrandMode) private var brand
+    let visitID: String
+    let placeName: String
+    @State private var isRefreshing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(placeName).font(AstirTypography.cardTitle)
+            Text("Refresh to view this shared check-in.")
+                .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
+            Button(isRefreshing ? "Refreshing…" : "Refresh") {
+                isRefreshing = true
+                Task {
+                    await store.refreshJointCheckInContexts(visitIDs: [visitID], backend: backend)
+                    isRefreshing = false
+                }
+            }
+            .disabled(isRefreshing)
+            .frame(minHeight: 44)
+        }
+        .padding(WanderTheme.spacing4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(brand.raisedBackground)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .accessibilityIdentifier("joint.unavailable")
+    }
+}
+
+struct JointCheckInPostcard: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.astirBrandMode) private var brand
+    let projection: JointCheckInProjection
+    let visiblePlace: VisiblePlace
+    let profileSubjectUserID: String?
+    var destinationAction: (() -> Void)? = nil
+    var editAction: (() -> Void)? = nil
+    @State private var selectedProfileID: String?
+    @State private var confirmsDeparture = false
+    @State private var departureError: String?
+
+    private var context: ActivityEngagementContext {
+        ActivityEngagementContext(activityID: projection.canonicalActivityID,
+            actor: projection.ordered(for: profileSubjectUserID).first?.person ?? store.shell(for: visiblePlace.owner),
+            placeName: visiblePlace.place.canonicalName,
+            placeServerID: visiblePlace.place.serverID ?? visiblePlace.place.id,
+            placeDetail: placeDetail(for: visiblePlace),
+            status: .been, occurredAt: projection.occurredAt, note: nil, rating: nil,
+            media: projection.contributions.flatMap(\.media), jointCheckIn: projection,
+            profileSubjectUserID: profileSubjectUserID)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ActivityPostcardView(context: context, visiblePlace: visiblePlace, metadataIcon: categorySymbol(for: visiblePlace.effectiveCategory),
+                secondaryMetadataTitle: nil, secondaryMetadataAction: nil, secondaryMetadataAccessibilityLabel: nil,
+                artworkAction: destinationAction, artworkAccessibilityLabel: "Open place",
+                destinationAction: destinationAction, destinationAccessibilityLabel: "Open place",
+                openProfile: nil, actorAccessibilityIdentifier: "joint.people",
+                destinationAccessibilityIdentifier: "joint.place", postcardAccessibilityIdentifier: "joint.card",
+                openContributorProfile: { selectedProfileID = $0.id })
+            if let editAction {
+                Button("Edit your check-in", action: editAction)
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(brand.secondaryText)
+                    .frame(minHeight: 44)
+            }
+            if projection.contributions.contains(where: { $0.person.id == store.currentUser.id }) {
+                Button(projection.viewerCanManage ? "Close shared check-in" : "Leave shared check-in") {
+                    confirmsDeparture = true
+                }
+                .font(AstirTypography.caption)
+                .foregroundStyle(brand.secondaryText)
+                .frame(minHeight: 44)
+            }
+        }
+        .alert("Couldn't update this check-in", isPresented: Binding(get: { departureError != nil }, set: { if !$0 { departureError = nil } })) {
+            Button("OK") { departureError = nil }
+        } message: { Text(departureError ?? "Please refresh and try again.") }
+        .confirmationDialog(projection.viewerCanManage ? "Close this shared check-in?" : "Leave this shared check-in?", isPresented: $confirmsDeparture, titleVisibility: .visible) {
+            Button(projection.viewerCanManage ? "Close shared check-in" : "Leave shared check-in", role: .destructive) {
+                Task {
+                    if !(await store.leaveJointCheckIn(projection, backend: backend)) {
+                        departureError = store.lastRemoteError ?? "Please refresh and try again."
+                    }
+                }
+            }
+        } message: {
+            Text(projection.viewerCanManage
+                ? "Everyone keeps their own check-in. The shared conversation will close."
+                : "Your check-in stays on your map with its own conversation. Comments you've posted stay in the shared conversation unless you delete them.")
+        }
+        .sheet(isPresented: Binding(get: { selectedProfileID != nil }, set: { if !$0 { selectedProfileID = nil } })) {
+            if let selectedProfileID { ProfileDetailView(profileID: selectedProfileID) }
+        }
+        .task(id: projection.canonicalActivityID) {
+            await store.refreshActivityEngagement(activityIDs: [projection.canonicalActivityID], backend: backend)
+        }
+    }
 }

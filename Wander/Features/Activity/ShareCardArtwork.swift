@@ -253,6 +253,13 @@ enum ShareCardRenderer {
     }
 
     static func activityImages(_ context: ActivityEngagementContext, backend: WanderBackend) async -> ShareCardImages {
+        // Joint consent applies inside Astir. Public exports contain venue artwork only.
+        if context.jointCheckIn != nil {
+            guard let placeID = context.placeServerID else { return ShareCardImages() }
+            let request = PlacePhotoRequest(placeID: placeID, name: context.placeName, address: nil,
+                latitude: nil, longitude: nil, sourceProvider: nil, sourceProviderPlaceID: nil)
+            return ShareCardImages(photos: await placeImages([request], backend: backend))
+        }
         let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: context.actor.avatarURL)
         var photo: UIImage?
         for media in context.media.prefix(4) {
@@ -305,7 +312,10 @@ extension ActivityEngagementContext {
     }
 
     var shareCard: ShareCardContent {
-        ShareCardContent(kind: ticketKind == .wanna ? .wanna : ticketKind == .checkIn ? .checkIn : .place,
+        if jointCheckIn != nil {
+            return ShareCardContent(kind: .place, name: placeName, detail: placeDetail)
+        }
+        return ShareCardContent(kind: ticketKind == .wanna ? .wanna : ticketKind == .checkIn ? .checkIn : .place,
                          name: placeName, ownerName: actor.displayName, detail: placeDetail,
                          date: ticketKind == .wanna ? plannedDate : occurredAt)
     }

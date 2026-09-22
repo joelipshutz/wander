@@ -14,6 +14,7 @@ final class FeatureFlagTests: XCTestCase {
                 "social_import_apify_gemini_v1",
                 "place_profile_action_variant",
                 "profile_feedback_v1",
+                "joint_check_ins_v2",
             ]
         )
         XCTAssertEqual(FeatureFlagKey.placeProfileSaveTrayV1.definition.valueKind, .boolean)
@@ -32,6 +33,9 @@ final class FeatureFlagTests: XCTestCase {
         XCTAssertEqual(FeatureFlagKey.profileFeedbackV1.definition.bundledDefault, .boolean(false))
         XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.isEditableOnDevice)
         XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.allowsRemoteAccountOverride)
+        XCTAssertEqual(FeatureFlagKey.jointCheckInsV2.definition.bundledDefault, .boolean(false))
+        XCTAssertTrue(FeatureFlagKey.jointCheckInsV2.definition.isEditableOnDevice)
+        XCTAssertTrue(FeatureFlagKey.jointCheckInsV2.definition.allowsRemoteAccountOverride)
     }
 
     func testProfileFeedbackDefaultsOffAndRequiresExplicitEnablementAfterRestart() async throws {

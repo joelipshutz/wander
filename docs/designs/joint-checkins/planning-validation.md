@@ -1,5 +1,7 @@
 # Planning validation
 
+This file preserves the planning checkpoints. See [implementation validation](implementation-validation.md) for subsequent code, test and rollout status.
+
 September 21, 2026 · REC-566 · Source baseline `fb1bad2`
 
 Completed in this planning pass:
