@@ -14423,7 +14423,7 @@ struct MapPlaceSaveEditor: View {
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: PlaceListSymbol.systemImage)
-                    .foregroundStyle(astirBrandMode.accentText)
+                    .foregroundStyle(WanderTheme.pinSocial.color)
                 Text("Add to lists")
                     .font(AstirTypography.control)
                     .foregroundStyle(astirBrandMode.primaryText)
@@ -14435,12 +14435,16 @@ struct MapPlaceSaveEditor: View {
                 }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(astirBrandMode.secondaryText)
+                    .foregroundStyle(WanderTheme.terracotta.color)
             }
             .frame(minHeight: WanderTheme.tapMinimum)
             .padding(.horizontal, WanderTheme.spacing3)
             .background(astirBrandMode.raisedBackground)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

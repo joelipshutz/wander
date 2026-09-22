@@ -133,7 +133,7 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 
 The shared add-to-lists picker attributes successful additions to its entry
 surface: `map` for Map and place-profile actions, `discover` for Discover search
-results, `check_in` for list additions selected in a check-in’s More options,
+results, `check_in` for the Add to lists row below Friends in a check-in,
 and `wanna` for the visible Add to lists row in a Wanna editor. List additions
 from either editor emit once when membership is stored locally;
 delivery retries and existing membership do not emit again. Only the existing
