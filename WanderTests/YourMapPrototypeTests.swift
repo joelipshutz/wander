@@ -386,6 +386,7 @@ final class YourMapPrototypeTests: XCTestCase {
         XCTAssertTrue(yourMapScreen.contains("MapPinOutlineBuilder"))
         XCTAssertTrue(yourMapScreen.contains("NativeMapView("))
         XCTAssertTrue(yourMapScreen.contains("keepsVisibleWhenColliding: true"))
+        XCTAssertTrue(yourMapScreen.contains("usesAdaptivePinDetail: true"))
         XCTAssertTrue(yourMapScreen.contains("PlaceProfileMapSurface("))
         XCTAssertTrue(yourMapScreen.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(yourMapScreen.contains("YourMapPrototypeSavedLensRow"))

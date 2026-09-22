@@ -44,6 +44,8 @@ final class MapAnnotationVisibilityTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
         XCTAssertEqual(visibleCount(), pins.count, "No saved pin may be hidden by density or zoom")
+        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Map dot" }.count, 80)
+        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Category pin" }.count, 20)
         for pin in pins {
             let view = try XCTUnwrap(map.view(for: pin))
             XCTAssertEqual(view.displayPriority, .required)
@@ -211,8 +213,11 @@ private func allPinsDescriptor(index: Int, selected: Bool = false) -> NativeMapA
 private final class AllPinsDelegate: NSObject, MKMapViewDelegate {
     func mapView(_ mapView: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
         let view = NativeMapPinAnnotationView(annotation: annotation, reuseIdentifier: nil)
+        let index = Int((annotation.title ?? nil) ?? "0") ?? 0
+        var descriptor = allPinsDescriptor(index: index)
+        descriptor.detail = index.isMultiple(of: 5) ? .category : .dot
         view.configure(
-            descriptor: allPinsDescriptor(index: Int((annotation.title ?? nil) ?? "0") ?? 0),
+            descriptor: descriptor,
             isDark: false,
             reduceMotion: true
         )

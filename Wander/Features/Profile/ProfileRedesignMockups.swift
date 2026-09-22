@@ -6,6 +6,7 @@ enum ProfileRedesignMockupPage: String, CaseIterable {
     case ownerProfile
     case ownerCalendar
     case ownerDiningMap
+    case adaptiveMap
     case patternsGeography
     case patternsGeographyEmpty
     case socialGraph
@@ -34,6 +35,21 @@ enum ProfileRedesignMockupPage: String, CaseIterable {
     }
 }
 
+private struct AdaptiveMapDensityFixture: View {
+    let dataset: YourMapPrototypeDataset
+    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
+    @StateObject private var backend = WanderBackend()
+
+    var body: some View {
+        NavigationStack {
+            YourMapPrototypeScreen(dataset: dataset)
+        }
+        .environmentObject(store)
+        .environmentObject(backend)
+        .astirAdaptiveBrandMode()
+    }
+}
+
 struct ProfileRedesignMockupRoot: View {
     let page: ProfileRedesignMockupPage
 
@@ -50,6 +66,8 @@ struct ProfileRedesignMockupRoot: View {
                 ProfileMockupScreen(title: "profile") {
                     ProfileDiningMapMockup()
                 }
+            case .adaptiveMap:
+                AdaptiveMapDensityFixture(dataset: Self.adaptiveMapDataset())
             case .patternsGeography, .patternsGeographyEmpty:
                 NavigationStack {
                     YourMapPrototypeScreen(
@@ -82,6 +100,32 @@ struct ProfileRedesignMockupRoot: View {
             }
         }
         .preferredColorScheme(.light)
+    }
+
+    /// Wide-area density plus coincident places exercise both marker detail modes.
+    private static func adaptiveMapDataset() -> YourMapPrototypeDataset {
+        let base = YourMapPrototypeDataset.make(volume: .large)
+        let places = base.places.prefix(177).enumerated().map { index, place in
+            let latitudeOffset: Double
+            let longitudeOffset: Double
+            if index >= 169 {
+                latitudeOffset = Double((index - 169) / 3 - 1) * 0.0007
+                longitudeOffset = Double((index - 169) % 3 - 1) * 0.0007
+            } else {
+                latitudeOffset = index == 0 ? 0 : Double(index / 13 - 6) * 0.01
+                longitudeOffset = index == 0 ? 0 : Double(index % 13 - 6) * 0.013
+            }
+            return YourMapPrototypePlace(
+                id: "adaptive-\(index)", name: place.name,
+                latitude: 34.0522 + latitudeOffset,
+                longitude: -118.2437 + longitudeOffset,
+                status: place.status, category: place.category, city: "Los Angeles", country: "United States",
+                tags: place.tags, rating: place.rating, visitCount: place.visitCount,
+                lastVisitedAt: place.lastVisitedAt
+            )
+        }
+        return YourMapPrototypeDataset(volume: .large, places: places, now: base.now,
+                                       initialLens: YourMapPrototypeLens(), visiblePlaceByPlaceID: [:])
     }
 
     /// Deterministic fixture for the production Patterns card's 5/10/empty states.

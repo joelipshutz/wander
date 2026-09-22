@@ -324,6 +324,7 @@ struct YourMapPrototypeScreen: View {
                 onCameraChange: { interaction.camera.recordCameraChange($0) },
                 onCameraInteractionEnd: { interaction.finishCameraChange($0, isUserInitiated: $1) },
                 allowsNativeFeatureSelection: false,
+                usesAdaptivePinDetail: true,
                 onCameraSnapshot: { interaction.recordCameraSnapshot($0) }
             )
             .sessionReplayMasked()

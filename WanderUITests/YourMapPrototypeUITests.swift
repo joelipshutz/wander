@@ -2,6 +2,62 @@ import XCTest
 
 @MainActor
 final class YourMapPrototypeUITests: XCTestCase {
+    func testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+                               "-WanderProfileRedesignMockup", "adaptiveMap"]
+        app.launch()
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 10))
+        let pins = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "yourMap.prototype.pin."))
+        let dots = pins.matching(NSPredicate(format: "value == %@", "Map dot"))
+        let categories = pins.matching(NSPredicate(format: "value == %@", "Category pin"))
+        expectation(for: NSPredicate { _, _ in pins.count == 177 && dots.count > categories.count && categories.count > 0 }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        capture("REC-573 adaptive wide - all 177 places")
+
+        let dot = dots.allElementsBoundByIndex.first {
+            $0.isHittable && $0.frame.minY > 180 && $0.frame.maxY < app.frame.maxY - 180
+        }
+        XCTAssertNotNil(dot)
+        let dotID = dot!.identifier
+        let dotPosition = dot!.frame
+        dot!.tap()
+        let promoted = pins.matching(identifier: dotID).firstMatch
+        expectation(for: NSPredicate(format: "value == %@", "Category pin"), evaluatedWith: promoted)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(pins.count, 177, "Selecting a dot must not remove nearby places")
+        XCTAssertEqual(promoted.frame.midX, dotPosition.midX, accuracy: 5)
+        capture("REC-573 selected dot promotes to category")
+
+        // Ten places occupy this small area, including coincident coordinates.
+        // The close-zoom override must show all of them as category pins.
+        let center = pins.matching(identifier: "yourMap.prototype.pin.adaptive-0").firstMatch
+        for _ in 0..<6 {
+            if dots.count == 0 { break }
+            center.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
+        }
+        expectation(for: NSPredicate { _, _ in dots.count == 0 && categories.count >= 10 }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        capture("REC-573 adaptive close - all category pins including overlaps")
+
+        // XCTest spreads multi-touch events across the target's whole frame.
+        // Use the frontmost selected pin's larger frame so both touches reach
+        // the map and aren't obstructed by coincident pins or overlay controls.
+        let zoomTarget = try XCTUnwrap(pins.allElementsBoundByIndex.filter {
+            $0.isHittable && app.frame.contains($0.frame)
+        }.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+        for _ in 0..<6 {
+            zoomTarget.twoFingerTap()
+            if dots.count > 0 { break }
+        }
+        capture("REC-573 adaptive after zoom-out gesture")
+        expectation(for: NSPredicate { _, _ in dots.count > 0 && categories.count > 0 }, evaluatedWith: app)
+        waitForExpectations(timeout: 10)
+        capture("REC-573 adaptive zoomed back out")
+    }
+
     func testYourMapIncludesWannaAndSupportsZoomReselectionDismissalAndDetailReturn() {
         continueAfterFailure = false
         let app = XCUIApplication()

@@ -412,3 +412,12 @@ Every matching Check-in/Wanna place remains rendered in Your Map at every zoom
 level. There is no pin-count cap or collision-based hiding; dense markers may
 overlap at their real coordinates. Active filters and canonical-place
 deduplication still apply. The main Map retains its existing collision policy.
+
+At wider zooms, Your Map shows tiny neutral gray dots alongside spatially
+scattered category pins. Check-in dots are filled; Wanna-only dots are hollow.
+Selecting any dot promotes it to its full category pin without moving the
+camera. At neighborhood detail (3 meters per screen point or closer), every
+marker becomes a category pin, including coincident places. It returns to
+adaptive detail beyond 4 meters per point so small pinch changes do not flicker
+between modes. Existing category representatives get modest spacing tolerance
+during movement, and detail changes crossfade unless Reduce Motion is enabled.
