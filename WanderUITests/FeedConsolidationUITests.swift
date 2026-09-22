@@ -5,7 +5,8 @@ import XCTest
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
-                               "-WanderInitialTab", "discover", "-WanderResetNotificationBadge", "-WanderFollowNotificationUITest"]
+                               "-WanderInitialTab", "discover", "-WanderResetNotificationBadge", "-WanderFollowNotificationUITest",
+                               "-WanderCompactPeopleUITest"]
         app.launch()
         return app
     }
@@ -23,6 +24,9 @@ import XCTest
         let invite = app.buttons["invite people to Astir"]
         XCTAssertTrue(invite.exists)
         XCTAssertGreaterThan(invite.frame.minY, search.frame.maxY)
+        let people = app.staticTexts["People worth following"]
+        XCTAssertTrue(people.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(people.frame.minY, invite.frame.maxY)
         capture("REC-597 consolidated Feed")
         search.tap()
         let field = app.textFields["discover.placesSearchField"]
