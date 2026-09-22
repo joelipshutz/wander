@@ -55,18 +55,20 @@ import XCTest
     private func launchFeed(_ extras: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
-            "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover",
-            "-WanderFeedSurface", "people"] + extras
+            "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover"] + extras
         app.launch()
         return app
     }
     private func openContactSettings(_ app: XCUIApplication) {
-        let link = app.buttons["feed.contactDiscovery"]
+        app.buttons["feed.searchLauncher"].tap()
+        let link = app.buttons["discover.contactDiscovery"]
         XCTAssertTrue(link.waitForExistence(timeout: 15)); link.tap()
     }
     private func backToFeed(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discover.searchBack"].waitForExistence(timeout: 10))
+        app.buttons["discover.searchBack"].tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
     }
     func testFollowingScreenEnableDisableAndExistingFollowSurvives() {
         let app = launchFeed()
@@ -75,7 +77,7 @@ import XCTest
         XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
         XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
         backToFeed(app)
-        let friend = app.scrollViews["feed.people.scroll"].buttons["people.recommendation.user_contact_friend.follow"]
+        let friend = app.scrollViews["feed.places.scroll"].buttons["people.recommendation.user_contact_friend.follow"]
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
         capture("Following screen contact suggestions")
@@ -108,7 +110,7 @@ import XCTest
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"].firstMatch)
         wait(for: [gone], timeout: 10)
         openContactSettings(app)

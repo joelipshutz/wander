@@ -10,7 +10,7 @@ Date: September 21, 2026
 
 ## Requested outcome
 
-Joe requested a plan on September 21, 2026 to simplify Astir's Feed into one surface based on the current Places tab. Remove the Places/People switch and retire the separate People feed. Keep people discovery through combined search, recommendations, and invitations. This document is the implementation plan; app implementation has not started.
+Joe requested a plan on September 21, 2026 to simplify Astir's Feed into one surface based on the current Places tab. Remove the Places/People switch and retire the separate People feed. Keep people discovery through combined search, recommendations, and invitations. Joe authorized implementation and a local simulator preview on September 22. Implementation follows this plan; current validation and review status are tracked in REC-597 and its PR.
 
 ## Layout, top to bottom
 
@@ -51,7 +51,7 @@ Follow requests remain outside this change because they do not exist yet. When i
 3. Wire name/handle lookup into the existing Discover place-search presentation; preserve profile/follow behavior and search cancellation.
 4. Share inbox/badge ownership; add the follower receipt repository/read contract and follower rows; connect Feed and Profile to the shared screen.
 5. Update first-visit walkthrough targets and instructions, removed People-tab routes/launch arguments, accessibility IDs, and analytics surface attribution. Preserve contacts/invite permissions and presentation behavior. Latest main also added a “Find friends from contacts” route on People: verify it remains reachable through the existing contacts/settings flow when removing that surface, without adding an unrequested module to the new Feed.
-6. Validate and open the implementation PR with issue linkage and required TestFlight payload. This plan does not itself change the app or release behavior.
+6. Validate and open the implementation PR with issue linkage and required TestFlight payload. The backend migration must ship before enabling this behavior for live accounts; no production deployment is part of the simulator preview.
 
 ## Acceptance and validation
 
@@ -61,4 +61,4 @@ Follow requests remain outside this change because they do not exist yet. When i
 - A synthetic new follow appears and badges both bells, including when OS push is denied or push preferences are off. Opening either inbox clears both displayed badges; account switching cannot leak counts or contents.
 - Existing plan/check-in notifications and post/comment push routing retain their behavior. Follow requests are absent.
 - Cover small-screen layout, Dynamic Type, VoiceOver labels/counts, Reduce Motion, loading/empty/error states, and first-visit walkthrough completion.
-- Extend meaningful search/badge/inbox and walkthrough tests. Validate any new RPC/RLS with policy tests and the required rolled-back hosted smoke coverage. Use the workspace `ios-work.py` helper for Xcode tests; inspect standard iPhone 17 Pro and compact iPhone 16e. No tests/builds were run during planning.
+- Extend meaningful search/badge/inbox and walkthrough tests. Validate any new RPC/RLS with policy tests and the required rolled-back hosted smoke coverage. Use the workspace `ios-work.py` helper for Xcode tests; inspect standard iPhone 17 Pro and compact iPhone 16e. The simulator preview uses the existing local Joe demo identity, with explicit follower-notification fixtures; it does not impersonate a live account.

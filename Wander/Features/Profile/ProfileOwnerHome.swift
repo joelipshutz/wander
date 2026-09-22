@@ -770,7 +770,7 @@ private struct ProfileInvitationButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Notifications")
         .accessibilityValue(badgeState.accessibilityValue)
-        .accessibilityHint("Opens plans and check-in invitations")
+        .accessibilityHint("Opens followers, plans, and check-in invitations")
         .accessibilityIdentifier("profile.checkInInvitations")
         .anchorPreference(key: ProfileNotificationBellAnchorKey.self, value: .bounds) { $0 }
     }

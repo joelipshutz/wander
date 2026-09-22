@@ -463,12 +463,18 @@ struct ProfileSharedVisitInboxRow: View {
     }
 }
 
+private struct FollowNotificationProfileRoute: Identifiable {
+    let id: String
+}
+
 struct SharedVisitInvitationInboxScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @ObservedObject var planInbox: PlacePlanInvitationInbox
     @ObservedObject var notificationBadge: NotificationBadgeStore
+    @EnvironmentObject private var followInbox: FollowNotificationInbox
+    @State private var selectedFollower: FollowNotificationProfileRoute?
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
     @State private var isRefreshing = false
@@ -480,19 +486,25 @@ struct SharedVisitInvitationInboxScreen: View {
         planInbox.userID == store.currentUser.id ? planInbox.invitations : []
     }
 
+    private var follows: [FollowNotification] {
+        guard followInbox.userID == store.currentUser.id else { return [] }
+        return followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) }
+    }
+
     private var badgeSnapshot: NotificationBadgeSnapshot {
         NotificationBadgeSnapshot(
             userID: store.currentUser.id,
             plans: plans,
-            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : []
+            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : [],
+            follows: follows
         )
     }
 
-    private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty }
+    private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty && follows.isEmpty }
 
     var body: some View {
         Group {
-            if isEmpty, !isRefreshing, !planInbox.isLoading {
+            if isEmpty, !isRefreshing, !planInbox.isLoading, !followInbox.isLoading {
                 emptyState
             } else {
                 ScrollView(showsIndicators: false) {
@@ -501,6 +513,38 @@ struct SharedVisitInvitationInboxScreen: View {
                             refreshErrorRow(refreshError)
                         }
 
+                        if !follows.isEmpty {
+                            Text("Followers").font(AstirTypography.sectionTitle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ForEach(follows) { notification in
+                                Button {
+                                    selectedFollower = FollowNotificationProfileRoute(id: notification.actorID)
+                                    store.productAnalytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.notificationOpened, properties: [
+                                        "notification_type": notification.isMutual ? "mutual_follow" : "followed_you",
+                                        "delivery_channel": "in_app", "route": "profile"
+                                    ]))
+                                } label: {
+                                    HStack(spacing: WanderTheme.spacing3) {
+                                        WanderAvatar(initials: String(notification.displayName.prefix(1)), avatarURL: notification.avatarURL,
+                                                     size: 44, color: WanderTheme.pinSocial.color)
+                                        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                                            Text(notification.displayName).font(AstirTypography.cardTitle)
+                                            Text(notification.isMutual ? "Followed you back. You're now following each other." : "Started following you.")
+                                                .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
+                                            Text(notification.createdAt, style: .relative)
+                                                .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
+                                        }
+                                        Spacer(minLength: 0)
+                                        Image(systemName: "chevron.right").font(.caption)
+                                    }
+                                    .padding(WanderTheme.spacing3)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("notifications.follow.\(notification.actorID)")
+                            }
+                        }
                         if !plans.isEmpty {
                             Text("Plans").font(AstirTypography.sectionTitle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -531,8 +575,8 @@ struct SharedVisitInvitationInboxScreen: View {
             }
         }
         .overlay {
-            if isRefreshing || planInbox.isLoading, isEmpty {
-                ProgressView("Loading invitations...")
+            if isRefreshing || planInbox.isLoading || followInbox.isLoading, isEmpty {
+                ProgressView("Loading notifications…")
                     .font(AstirTypography.label)
                     .tint(brandMode.accent)
             }
@@ -545,13 +589,19 @@ struct SharedVisitInvitationInboxScreen: View {
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
+        .fullScreenCover(item: $selectedFollower) { route in
+            ProfileDetailView(profileID: route.id)
+        }
         .sheet(item: $selectedPlan, onDismiss: { Task { await refresh() } }) { plan in
             let recipientID = store.currentUser.id
             PlacePlanInvitationScreen(invitationID: plan.id, repository: backend.placePlanInvitationRepository, analytics: store.productAnalytics) {
                 planInbox.markOpened(id: plan.id, userID: recipientID, analytics: store.productAnalytics)
             }
         }
-        .onChange(of: store.currentUser.id) { _, _ in selectedPlan = nil }
+        .onChange(of: store.currentUser.id) { _, _ in
+            selectedPlan = nil
+            selectedFollower = nil
+        }
     }
 
     private var emptyState: some View {
@@ -561,14 +611,14 @@ struct SharedVisitInvitationInboxScreen: View {
                 .foregroundStyle(WanderTheme.stateSuccess.color)
                 .frame(width: 84, height: 84)
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
-            Text("No invitations yet")
+            Text("No notifications yet")
                 .font(AstirTypography.sectionTitle)
-            Text("Plans and shared check-in invitations will show up here")
+            Text("New followers, plans, and check-in invitations will show up here")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
-            if refreshError != nil || planInbox.failed {
-                Text("Couldn’t refresh invitations").font(AstirTypography.bodySmall)
+            if refreshError != nil || planInbox.failed || followInbox.failed {
+                Text("Couldn’t refresh notifications").font(AstirTypography.bodySmall)
                 Button("Try again") { Task { await refresh() } }
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
@@ -605,7 +655,8 @@ struct SharedVisitInvitationInboxScreen: View {
         defer { isRefreshing = false }
         let didRefresh = await store.refreshSharedVisitInbox(backend: backend)
         await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository)
-        refreshError = (didRefresh || !backend.canUseSharedVisits) && !planInbox.failed ? nil : "Couldn’t refresh invitations"
+        await followInbox.refresh(userID: store.currentUser.id, repository: backend.followNotificationRepository)
+        refreshError = (didRefresh || !backend.canUseSharedVisits) && !planInbox.failed && !followInbox.failed ? nil : "Couldn’t refresh notifications"
     }
 
     @MainActor

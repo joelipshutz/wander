@@ -147,6 +147,12 @@ a recipient identifier.
 | `notification_frequency_snapshot` | After a batch with at least one claimed notification | 30-day eligible-recipient count, accepted count, average, p50, p90, and maximum |
 | `notification_frequency_bucket_snapshot` | Seven rows emitted with the frequency summary | allowlisted bucket (`0`, `1`, `2-3`, `4-7`, `8-14`, `15-29`, `30+`), bucket order, aggregate recipient count |
 
+The consolidated Feed keeps the historical `feed_people` invitation attribution
+so existing referral funnels remain comparable after removal of the People tab.
+Opening a follower row in the shared inbox emits `notification_opened` with
+`notification_type=followed_you` or `mutual_follow`, `delivery_channel=in_app`,
+and `route=profile`; no account names, handles, query text, or IDs are included.
+
 “Eligible recipient” means a profile that currently has push enabled and at
 least one active device token. The zero bucket is therefore meaningful. The
 snapshot RPC performs the per-recipient calculation inside Supabase and returns

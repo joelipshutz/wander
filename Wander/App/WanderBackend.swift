@@ -217,6 +217,7 @@ final class WanderBackend: ObservableObject {
     let listSuggestionRepository: (any ListSuggestionRepository)?
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
+    let followNotificationRepository: (any FollowNotificationRepository)?
     let eventsInterestRepository: (any EventsInterestRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
     let shareCardPreviewRepository: (any ShareCardPreviewRepository)?
@@ -270,6 +271,7 @@ final class WanderBackend: ObservableObject {
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
+            self.followNotificationRepository = SupabaseFollowNotificationRepository(rpc: client)
             self.eventsInterestRepository = SupabaseEventsInterestRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
             self.shareCardPreviewRepository = SupabaseShareCardPreviewRepository(rpc: client, storage: client, authSession: authSession)
@@ -297,6 +299,7 @@ final class WanderBackend: ObservableObject {
             self.listSuggestionRepository = nil
             self.placePhotoRepository = nil
             self.notificationRepository = nil
+            self.followNotificationRepository = nil
             self.eventsInterestRepository = nil
             self.sharedVisitRepository = nil
             self.shareCardPreviewRepository = nil
@@ -331,6 +334,7 @@ final class WanderBackend: ObservableObject {
         listSuggestionRepository: (any ListSuggestionRepository)? = nil,
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
+        followNotificationRepository: (any FollowNotificationRepository)? = nil,
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
         shareCardPreviewRepository: (any ShareCardPreviewRepository)? = nil,
         placePlanInvitationRepository: (any PlacePlanInvitationRepository)? = nil,
@@ -368,6 +372,7 @@ final class WanderBackend: ObservableObject {
         self.listSuggestionRepository = listSuggestionRepository
         self.placePhotoRepository = placePhotoRepository
         self.notificationRepository = notificationRepository
+        self.followNotificationRepository = followNotificationRepository
         self.eventsInterestRepository = eventsInterestRepository
         self.sharedVisitRepository = sharedVisitRepository
     }

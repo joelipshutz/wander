@@ -6087,6 +6087,25 @@ final class WanderStore: ObservableObject {
             .map(shell(for:))
     }
 
+    /// Search owns its error state; another concurrent place lookup must not
+    /// overwrite it through lastRemoteError. Recheck identity before caching.
+    func searchDiscoverMembers(query: String, backend: WanderBackend) async throws -> [ProfileShell] {
+        let userID = currentUser.id
+        let normalized = normalizedHandleQuery(query)
+        let local = searchProfiles(handleQuery: normalized)
+        guard normalized.count >= 2, backend.profileRepository != nil else { return local }
+        let remote = try await backend.searchProfiles(handleQuery: normalized)
+        try Task.checkCancellation()
+        guard currentUser.id == userID else { throw CancellationError() }
+        let eligible = remote.filter {
+            $0.id != userID && $0.isPrivateProfile != true && !isBlockedBetweenCurrentUser(and: $0.id)
+        }
+        upsertRemoteProfileShells(eligible, preserveExistingProfileMetadataWhenMissing: true)
+        return mergeProfileShells(local + eligible).filter {
+            !isProfilePrivate($0.id) && !isBlockedBetweenCurrentUser(and: $0.id)
+        }
+    }
+
     func discoverMembers(query: String, backend: WanderBackend? = nil) async -> [ProfileShell] {
         var profiles = searchProfiles(handleQuery: query)
         let normalizedProfileQuery = normalizedHandleQuery(query)

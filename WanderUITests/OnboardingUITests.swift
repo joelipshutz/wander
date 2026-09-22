@@ -725,9 +725,7 @@ final class OnboardingUITests: XCTestCase {
             "-WanderUseEphemeralEmptyFixtures",
             "-WanderDisableWalkthroughs",
             "-WanderInitialTab",
-            "discover",
-            "-WanderFeedSurface",
-            "people"
+            "discover"
         ]
         app.launch()
 
@@ -1051,11 +1049,11 @@ final class OnboardingUITests: XCTestCase {
         let circle = app.staticTexts["walkthrough.feed.feedActivity.circle"]
         let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
         XCTAssertTrue(circle.waitForExistence(timeout: 20))
-        let headingY = app.staticTexts["Recent"].frame.minY
+        let headingY = app.staticTexts["Activity"].frame.minY
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
-        XCTAssertLessThan(app.staticTexts["Recent"].frame.minY, headingY - 50,
+        XCTAssertLessThan(app.staticTexts["Activity"].frame.minY, headingY - 50,
                           "Only the latest card should be brought into view.")
         XCTAssertEqual(recent.label, "Keep up with their moments")
         XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
@@ -2286,7 +2284,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
     }
 
-    func testFeedPeopleAddDismissesKeyboardBeforePresentingAdd() {
+    func testFeedAddAfterPeopleSearchDismissesKeyboard() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2298,15 +2296,15 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let peopleTab = app.buttons["People"]
-        XCTAssertTrue(peopleTab.waitForExistence(timeout: 6))
-        peopleTab.tap()
-
-        let peopleSearch = app.textFields["Search name or @handle"]
-        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
-        peopleSearch.tap()
-        peopleSearch.typeText("ryan")
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 8))
+        launcher.tap()
+        let search = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(search.waitForExistence(timeout: 4))
+        search.tap()
+        search.typeText("ryan")
+        app.buttons["discover.searchBack"].tap()
+        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
 
         let addButton = app.buttons["feed.headerAdd"]
         XCTAssertTrue(addButton.isHittable)

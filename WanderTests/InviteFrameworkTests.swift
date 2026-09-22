@@ -224,23 +224,21 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(source.contains("senderProfileID: store.currentUser.id"))
     }
 
-    func testFeedPeoplePlacesContactInviteDirectlyAfterSearch() throws {
+    func testConsolidatedFeedPlacesContactInviteBeforeRecommendations() throws {
         let source = try projectSource("Wander/Features/Feed/FeedScreen.swift")
-        let search = try XCTUnwrap(source.range(of: "FeedPeopleSearchField(text: $peopleQuery)"))
-        let surfaceDeclaration = try XCTUnwrap(source.range(of: "private struct FeedPeopleSurface: View"))
-        let surface = try XCTUnwrap(source.components(separatedBy: "private struct FeedPeopleSurface: View").last)
-        let invite = try XCTUnwrap(surface.range(of: "InviteEntryPointButton(surface: .feedPeople)"))
-        let results = try XCTUnwrap(surface.range(of: "if isMemberSearchActive"))
+        let inviteSection = try projectSource("Wander/Features/Feed/FeedInviteSection.swift")
+        let content = try XCTUnwrap(source.components(separatedBy: "private var content: some View").last)
+        let invite = try XCTUnwrap(content.range(of: "FeedInviteSection()"))
+        let recommendations = try XCTUnwrap(content.range(of: "peopleRail"))
 
-        XCTAssertLessThan(search.lowerBound, surfaceDeclaration.lowerBound)
-        XCTAssertLessThan(invite.lowerBound, results.lowerBound)
-        XCTAssertFalse(surface.contains("FeedPeopleSearchField("))
-        XCTAssertTrue(surface.contains("contactProvider: store.contactProvider"))
-        XCTAssertTrue(surface.contains("senderProfileID: store.currentUser.id"))
+        XCTAssertLessThan(invite.lowerBound, recommendations.lowerBound)
+        XCTAssertTrue(inviteSection.contains("InviteEntryPointButton(surface: .feedPeople)"))
+        XCTAssertTrue(inviteSection.contains("contactProvider: store.contactProvider"))
+        XCTAssertTrue(inviteSection.contains("senderProfileID: store.currentUser.id"))
     }
 
     func testFeedWalkthroughOpensContactsAndRewardsAFivePersonCircle() throws {
-        let feed = try projectSource("Wander/Features/Feed/FeedScreen.swift")
+        let feed = try projectSource("Wander/Features/Feed/FeedInviteSection.swift")
         let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
 
         XCTAssertTrue(feed.contains("walkthroughs.isRequestingContactInvite"))

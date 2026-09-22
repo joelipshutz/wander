@@ -158,8 +158,12 @@ struct WanderApp: App {
                 contactDiscovery: contactTestRepository?.service(auth: authStore),
                 followRepository: contactTestRepository,
                 notificationRepository: SimulatorNotificationRepository(),
-                placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
-                    ? SimulatorPlacePlanInvitationRepository() : nil,
+                followNotificationRepository: SimulatorFollowNotificationRepository(
+                    includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderFollowNotificationUITest")
+                ),
+                placePlanInvitationRepository: SimulatorPlacePlanInvitationRepository(
+                    includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
+                ),
                 eventsInterestRepository: SimulatorEventsInterestRepository()
             )
             : WanderBackend(configuration: configuration, authSession: authStore)
