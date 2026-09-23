@@ -1,0 +1,127 @@
+name: Home city and Events native validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*AccountContactDetails*'
+      - '**/*HomeMetro*'
+      - '**/*HomeCity*'
+      - '**/*OnboardingPhoneNumber*'
+      - '**/*EventsAccess*'
+      - '.github/workflows/home-city-events-validation.yml'
+  workflow_dispatch:
+    inputs:
+      compact_only:
+        description: Rebuild and retry compact validation when Pro already passed for unchanged app inputs
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: home-city-events-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate project and select existing simulators
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -version
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          for name, variable in [('iPhone 17 Pro', 'PRO_DEVICE_ID'), ('iPhone 16e', 'COMPACT_DEVICE_ID')]:
+              choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == name]
+              assert choices, f'No existing {name} simulator'
+              _, device = sorted(choices, key=lambda item: item[0])[-1]
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write(variable + '=' + device['udid'] + '\n')
+              print('Using', name, device['udid'])
+          PY
+      - name: Feature units and native screen flows on iPhone 17 Pro
+        if: ${{ !inputs.compact_only }}
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/AccountContactDetailsTests
+          -only-testing:WanderTests/HomeCitySearchTests
+          -only-testing:WanderTests/EventsAccessTests
+          -only-testing:WanderTests/ContactDiscoveryTests
+          -only-testing:WanderTests/OnboardingStateTests
+          -only-testing:WanderTests/OnboardingConnectionTests
+          -only-testing:WanderTests/OnboardingEntryRegressionTests
+          -only-testing:WanderTests/FirstVisitWalkthroughTests
+          -only-testing:WanderUITests/AccountContactDetailsUITests
+          -only-testing:WanderUITests/EventsAccessUITests
+          -only-testing:WanderUITests/ContactDiscoveryUITests
+          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Release Pro simulator and wait for compact startup
+        if: success() || failure()
+        run: |
+          if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["PRO_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
+            xcrun simctl shutdown "$PRO_DEVICE_ID"
+          fi
+          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
+      - name: Repeat native screen flows on compact iPhone 16e
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$COMPACT_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/AccountContactDetailsUITests
+          -only-testing:WanderUITests/EventsAccessUITests
+          -only-testing:WanderUITests/ContactDiscoveryUITests
+          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Export screenshots and test summaries
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          for device in pro compact; do
+            if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
+              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
+              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
+            fi
+          done
+      - name: Save native screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-city-events-screens
+          path: ${{ runner.temp }}/screens
+          retention-days: 14
+      - name: Save full native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-city-events-results
+          path: |
+            ${{ runner.temp }}/pro.xcresult
+            ${{ runner.temp }}/compact.xcresult
+          retention-days: 14
+      - name: Package simulator app for local review
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" "$RUNNER_TEMP/Wander-simulator.zip"
+          fi
+      - name: Save simulator app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-city-events-simulator-app
+          path: ${{ runner.temp }}/Wander-simulator.zip
+          if-no-files-found: ignore
+          retention-days: 7

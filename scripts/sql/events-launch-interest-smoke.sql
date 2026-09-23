@@ -4,6 +4,10 @@ insert into public.profiles (id, handle, display_name, deleted_at) values
   ('user_codex_events_owner', 'codexeventsowner', 'Events Smoke Owner', null),
   ('user_codex_events_other', 'codexeventsother', 'Events Smoke Other', null)
 on conflict (id) do update set deleted_at = null;
+insert into public.account_contact_details(user_id, metro_id, home_country_code, phone_country_code) values
+  ('user_codex_events_owner', 'los-angeles', 'US', 'US'),
+  ('user_codex_events_other', 'los-angeles', 'US', 'US')
+on conflict (user_id) do update set metro_id = 'los-angeles', home_country_code = 'US';
 delete from public.events_launch_interest
 where user_id in ('user_codex_events_owner', 'user_codex_events_other');
 

@@ -14,6 +14,7 @@ final class FeatureFlagTests: XCTestCase {
                 "social_import_apify_gemini_v1",
                 "place_profile_action_variant",
                 "profile_feedback_v1",
+                "notification_reprompt_campaign",
             ]
         )
         XCTAssertEqual(FeatureFlagKey.placeProfileSaveTrayV1.definition.valueKind, .boolean)
@@ -32,6 +33,110 @@ final class FeatureFlagTests: XCTestCase {
         XCTAssertEqual(FeatureFlagKey.profileFeedbackV1.definition.bundledDefault, .boolean(false))
         XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.isEditableOnDevice)
         XCTAssertTrue(FeatureFlagKey.profileFeedbackV1.definition.allowsRemoteAccountOverride)
+        XCTAssertEqual(FeatureFlagKey.notificationRepromptCampaign.definition.bundledDefault, .integer(0))
+        XCTAssertEqual(FeatureFlagKey.notificationRepromptCampaign.definition.integerRange, 0 ... 1_000_000)
+        XCTAssertTrue(FeatureFlagKey.notificationRepromptCampaign.definition.allowsRemoteAccountOverride)
+        XCTAssertTrue(FeatureFlagKey.notificationRepromptCampaign.definition.isEditableOnDevice)
+    }
+
+    func testRemoteNotificationCampaignFailsClosedAndDeviceOverrideWaitsForRestart() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = FeatureFlagOverrideStore(defaults: defaults)
+        let remote: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
+            .notificationRepromptCampaign: .init(value: .integer(7), source: .accountOverride)
+        ]
+        let backend = WanderBackend(featureFlagRepository: FeatureFlagTestRepository(values: remote),
+                                    featureFlagDeviceOverrides: store.launchSnapshot())
+        XCTAssertNil(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"))
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 7)
+        XCTAssertNil(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_b"))
+        store.setOverride(.integer(8), for: .notificationRepromptCampaign, userID: "user_a")
+        XCTAssertEqual(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 7)
+        let restarted = WanderBackend(featureFlagDeviceOverrides: store.launchSnapshot())
+        XCTAssertEqual(restarted.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 8)
+        store.setOverride(.integer(-1), for: .notificationRepromptCampaign, userID: "user_a")
+        store.setOverride(.integer(1_000_001), for: .notificationRepromptCampaign, userID: "user_a")
+        XCTAssertEqual(store.override(for: .notificationRepromptCampaign, userID: "user_a"), .integer(8))
+        store.clearOverride(for: .notificationRepromptCampaign, userID: "user_a")
+        let reset = WanderBackend(featureFlagDeviceOverrides: store.launchSnapshot())
+        await reset.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(reset.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 0)
+    }
+
+    func testRemoteNotificationCampaignWaitsForForegroundRefreshAfterRemoteDisable() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let flags = GatedFeatureFlagTestRepository(values: [
+            .notificationRepromptCampaign: .init(value: .integer(7), source: .accountOverride)
+        ])
+        let backend = WanderBackend(featureFlagRepository: flags)
+        let gate = NotificationRepromptRefreshGate()
+        let upsells = ProductUpsellCoordinator(userDefaults: defaults)
+        upsells.bind(to: "user_a")
+        let firstOpen = NotificationRepromptRefreshGate.Context(userID: "user_a", appOpenID: UUID())
+        let initialRefresh = Task { await gate.refresh(context: firstOpen, backend: backend) }
+        while flags.startedRequestCount < 1 { await Task.yield() }
+        flags.complete()
+        await initialRefresh.value
+        XCTAssertTrue(gate.isCurrent(firstOpen))
+
+        // Campaign 7 was loaded while another screen blocked its presentation.
+        // The operator disables it while the app is in the background.
+        gate.invalidate()
+        XCTAssertFalse(gate.isCurrent(firstOpen))
+        flags.values = [.notificationRepromptCampaign: .init(value: .integer(0), source: .accountOverride)]
+        let nextOpen = NotificationRepromptRefreshGate.Context(userID: "user_a", appOpenID: UUID())
+        let foregroundRefresh = Task { await backend.refreshFeatureFlags(for: "user_a") }
+        while flags.startedRequestCount < 2 { await Task.yield() }
+        let promptRefresh = Task { await gate.refresh(context: nextOpen, backend: backend) }
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(flags.startedRequestCount, 2, "The prompt joins the existing foreground refresh.")
+        XCTAssertEqual(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 7)
+        XCTAssertFalse(gate.isCurrent(nextOpen))
+        upsells.requestRemoteNotificationReprompt(
+            campaignVersion: backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a") ?? 0,
+            userID: "user_a", isEligible: true, canPresent: gate.isCurrent(nextOpen)
+        )
+        XCTAssertNil(upsells.activePresentation, "Cached campaign 7 must not appear while refresh is pending.")
+
+        flags.complete()
+        await foregroundRefresh.value
+        await promptRefresh.value
+        XCTAssertTrue(gate.isCurrent(nextOpen))
+        XCTAssertEqual(backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a"), 0)
+        upsells.requestRemoteNotificationReprompt(
+            campaignVersion: backend.integerFeatureFlag(.notificationRepromptCampaign, for: "user_a") ?? 0,
+            userID: "user_a", isEligible: true, canPresent: gate.isCurrent(nextOpen)
+        )
+        XCTAssertNil(upsells.activePresentation)
+        XCTAssertEqual(upsells.lastShownRemoteCampaignVersion(for: "user_a"), 0)
+    }
+
+    func testRemoteNotificationRefreshCannotUnlockAnotherAccountOrOpenAfterInvalidation() async {
+        let flags = GatedFeatureFlagTestRepository(values: [
+            .notificationRepromptCampaign: .init(value: .integer(7), source: .accountOverride)
+        ])
+        let backend = WanderBackend(featureFlagRepository: flags)
+        let gate = NotificationRepromptRefreshGate()
+        let context = NotificationRepromptRefreshGate.Context(userID: "user_a", appOpenID: UUID())
+        let refresh = Task { await gate.refresh(context: context, backend: backend) }
+        while flags.startedRequestCount < 1 { await Task.yield() }
+        gate.invalidate()
+        flags.complete()
+        await refresh.value
+        XCTAssertFalse(gate.isCurrent(context), "A completion after background/sign-out must stay invalid.")
+
+        let retry = Task { await gate.refresh(context: context, backend: backend) }
+        while flags.startedRequestCount < 2 { await Task.yield() }
+        flags.complete()
+        await retry.value
+        XCTAssertTrue(gate.isCurrent(context))
+        XCTAssertFalse(gate.isCurrent(.init(userID: "user_b", appOpenID: context.appOpenID)))
+        XCTAssertFalse(gate.isCurrent(.init(userID: "user_a", appOpenID: UUID())))
+        XCTAssertFalse(gate.isCurrent(nil))
     }
 
     func testProfileFeedbackDefaultsOffAndRequiresExplicitEnablementAfterRestart() async throws {
@@ -436,7 +541,7 @@ private struct FeatureFlagTestRepository: FeatureFlagRepository {
 
 @MainActor
 private final class GatedFeatureFlagTestRepository: FeatureFlagRepository {
-    let values: [FeatureFlagKey: ResolvedFeatureFlagValue]
+    var values: [FeatureFlagKey: ResolvedFeatureFlagValue]
     private var continuation: CheckedContinuation<[FeatureFlagKey: ResolvedFeatureFlagValue], Never>?
     private(set) var startedRequestCount = 0
 

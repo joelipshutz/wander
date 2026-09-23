@@ -4821,7 +4821,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 ),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant,profile_feedback_v1)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant,profile_feedback_v1,notification_reprompt_campaign)"
                 )
             ]
         )
@@ -4859,6 +4859,30 @@ final class RemoteRepositoryTests: XCTestCase {
         let flags = try await repository.resolvedFlags(for: "user_test")
 
         XCTAssertTrue(flags.isEmpty)
+    }
+
+    func testNotificationRepromptCampaignResolvesAccountOverrideIncludingExplicitOff() async throws {
+        let table = RecordingTable()
+        table.responses["GET:feature_flags"] = Data(
+            #"[{"key":"notification_reprompt_campaign","user_id":null,"enabled":false,"value_type":"integer","integer_value":7},{"key":"notification_reprompt_campaign","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":0}]"#.utf8
+        )
+        let repository = SupabaseFeatureFlagRepository(table: table)
+        let flags = try await repository.resolvedFlags(for: "user_test")
+        XCTAssertEqual(flags[.notificationRepromptCampaign]?.integerValue, 0)
+        XCTAssertEqual(flags[.notificationRepromptCampaign]?.source, .accountOverride)
+    }
+
+    func testNotificationRepromptCampaignRejectsMalformedRemoteVersions() async throws {
+        for row in [
+            #"{"key":"notification_reprompt_campaign","user_id":null,"enabled":true,"value_type":"boolean","integer_value":null}"#,
+            #"{"key":"notification_reprompt_campaign","user_id":null,"enabled":false,"value_type":"integer","integer_value":-1}"#,
+            #"{"key":"notification_reprompt_campaign","user_id":null,"enabled":false,"value_type":"integer","integer_value":1000001}"#
+        ] {
+            let table = RecordingTable()
+            table.responses["GET:feature_flags"] = Data("[\(row)]".utf8)
+            let flags = try await SupabaseFeatureFlagRepository(table: table).resolvedFlags(for: "user_test")
+            XCTAssertNil(flags[.notificationRepromptCampaign])
+        }
     }
 
     func testDebugSettingsAccessPolicyAllowsEverySimulatorAndRequiresServerFlagOnDevice() {

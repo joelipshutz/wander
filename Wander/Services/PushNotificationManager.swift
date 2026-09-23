@@ -446,6 +446,13 @@ final class PushNotificationManager: ObservableObject {
     }
 
     func refreshAuthorizationStatus() async {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+           ProcessInfo.processInfo.arguments.contains("-WanderNotificationAuthorizationDeniedFixture") {
+            authorizationStatus = .denied
+            return
+        }
+        #endif
         #if targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-WanderNotificationAuthorizationNotDeterminedFixture") {
             authorizationStatus = .notDetermined
