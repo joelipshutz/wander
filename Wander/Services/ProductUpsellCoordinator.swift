@@ -339,7 +339,6 @@ final class ProductUpsellCoordinator: ObservableObject {
     func requestAppOpenNotificationReminder(userID: String, isEligible: Bool, canPresent: Bool) {
         guard boundUserID == userID,
               registeredAppOpenIDs[userID] == appOpenID,
-              appOpenCount(for: userID) >= 2,
               presentedAppOpenIDs[userID] != appOpenID,
               isEligible, canPresent,
               presentationBlockerCount == 0,
@@ -677,7 +676,7 @@ final class ProductUpsellCoordinator: ObservableObject {
             )
         }
         activeCompletion = request.completion
-        if registeredAppOpenIDs[request.userID] == appOpenID {
+        if request.trigger == .onboardingNotifications || registeredAppOpenIDs[request.userID] == appOpenID {
             presentedAppOpenIDs[request.userID] = appOpenID
         }
         let presentation = ProductUpsellPresentation(
@@ -708,6 +707,9 @@ final class ProductUpsellCoordinator: ObservableObject {
 
     private func recordOnboardingResolution(for presentation: ProductUpsellPresentation) {
         guard presentation.isOnboarding else { return }
+        // Finishing onboarding must not immediately stack a main-app reminder,
+        // including when the app backgrounded while this step was visible.
+        presentedAppOpenIDs[presentation.userID] = appOpenID
         userDefaults.set(true, forKey: onboardingResolutionKey(userID: presentation.userID))
     }
 

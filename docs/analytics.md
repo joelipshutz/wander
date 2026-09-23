@@ -143,9 +143,11 @@ check-in, or `existing_wanna` for an already saved Wanna. Both existing-list sel
 `place_list_item_added` and the matching `list_place_added` engagement action.
 
 Notification return reminders replace the automatic save/follow triggers. The
-first authenticated main-app use is open 1; subsequent launches and real
-background returns can show at most one reminder per open, for three actual
-appearances total (normally opens 2, 3, and 4). Inactive/active transitions from
+first authenticated main-app use is open 1 and is immediately eligible for
+existing users with notifications off. Launches and real background returns can
+show at most one reminder per open, for three actual appearances total (normally
+opens 1, 2, and 3). Completing the onboarding prompt satisfies that visit without
+consuming a later reminder. Inactive/active transitions from
 Apple permission alerts do not count as opens. Onboarding has its own allowance.
 An unanswered onboarding notification step resumes after process termination;
 only a terminal action resolves it. Each fresh presentation logs a show, but

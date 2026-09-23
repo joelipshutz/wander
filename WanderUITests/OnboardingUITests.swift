@@ -550,7 +550,7 @@ final class ImportFormRefinementUITests: XCTestCase {
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
-    func testNotificationRemindersAppearOnThreeReturnOpensThenStop() {
+    func testNotificationRemindersAppearOnFirstThreeEligibleOpensThenStop() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
@@ -565,7 +565,7 @@ final class OnboardingUITests: XCTestCase {
                 app.launch()
             }
             let primary = app.buttons["productUpsell.primary"]
-            if (2...4).contains(appOpen) {
+            if (1...3).contains(appOpen) {
                 XCTAssertTrue(primary.waitForExistence(timeout: 15), "Reminder missing on app open \(appOpen)")
                 XCTAssertEqual(primary.label, "Open Settings")
                 XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
