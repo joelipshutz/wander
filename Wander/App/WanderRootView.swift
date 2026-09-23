@@ -518,6 +518,7 @@ struct WanderRootView: View {
                     .tag(WanderTab.map)
 
                 FeedScreen(
+                    isFeedTabActive: selectedTab == .discover,
                     presentationResetRequest: presentationResetRequest,
                     onPresentation: handleDeepLinkPresentation,
                     onWillDismiss: handleDeepLinkPresentationWillDismiss,

@@ -974,7 +974,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(feed.contains(".task(id: auth.isSignedIn)"))
-        XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(retry: refresh)"))
+        XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
         XCTAssertTrue(feed.contains("title: \"Couldn’t load Feed\""))

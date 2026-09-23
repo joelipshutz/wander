@@ -1239,6 +1239,32 @@ final class RemoteRepositoryTests: XCTestCase {
         throw URLError(.timedOut)
     }
 
+    func testActivityFeedSendsEachAudienceAndCursorWithoutLegacyFallback() async throws {
+        for audience in FeedAudience.allCases {
+            let rpc = RecordingRPC()
+            rpc.responses["activity_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
+            let repository = SupabaseFeedRepository(rpc: rpc)
+            _ = try await repository.activityFeed(audience: audience, before: "cursor", limit: 99, onContent: { _ in })
+            XCTAssertEqual(rpc.calls.map(\.name), ["activity_feed"])
+            let params = try XCTUnwrap(rpc.calls.first?.body)
+            XCTAssertEqual(params["input_audience"] as? String, audience.rawValue)
+            XCTAssertEqual(params["input_before"] as? String, "cursor")
+            XCTAssertEqual(params["input_limit"] as? Int, 50)
+        }
+    }
+
+    func testMissingAudienceRPCDoesNotShowFollowedPageAsOnlyMe() async {
+        let rpc = RecordingRPC()
+        rpc.errors = [WanderRemoteError.invalidResponse("RPC activity_feed failed: PGRST202")]
+        let repository = SupabaseFeedRepository(rpc: rpc)
+        do {
+            _ = try await repository.activityFeed(audience: .onlyMe, before: nil, limit: 25, onContent: { _ in })
+            XCTFail("Missing migration must remain an explicit load failure")
+        } catch {
+            XCTAssertEqual(rpc.calls.map(\.name), ["activity_feed"])
+        }
+    }
+
     func testFollowedFeedCallsExpectedRPCAndDecodesTheHostedEmptyEnvelope() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """

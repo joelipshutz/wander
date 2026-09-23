@@ -482,7 +482,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
 
     static func rpcTimeout(for name: String) -> TimeInterval {
         switch name {
-        case "followed_feed":
+        case "followed_feed", "activity_feed":
             followedFeedTimeout
         case "activity_media":
             activityMediaTimeout
