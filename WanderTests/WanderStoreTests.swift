@@ -8172,6 +8172,18 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.map(\.id), [newProfile.id])
     }
 
+    func testClearingContactsRemovesContactGraphSuggestionsFromPeopleShelf() async {
+        let store = makeStore()
+        let reasons: [DiscoverPeopleRecommendationReason] = [.contacts, .contactFollows(3), .nearby]
+        let recommendations = reasons.enumerated().map { index, reason in
+            DiscoverPeopleRecommendation(profile: ProfileShell(id: "user_contact_graph_\(index)", handle: "graph\(index)", displayName: "Person", avatarURL: nil, bio: nil, relationship: .nonFollower), reason: reason, rank: index + 1)
+        }
+        await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(profileRepository: FakeProfileRepository(recommendations: recommendations)))
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.count, 3)
+        store.clearContactRecommendations()
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.map(\.id), [recommendations[2].id])
+    }
+
     func testDiscoverPeopleRecommendationsFailureAndIdentityChangeResetState() async {
         let store = makeStore()
         let backend = WanderBackend(

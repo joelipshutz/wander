@@ -304,6 +304,7 @@ final class WanderStore: ObservableObject {
     private var feedRefreshCompletedRevision: UInt64?
     @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
     private var syncingWannaIDs = Set<String>()
+    @Published private(set) var feedAudience: FeedAudience = .everyone
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
@@ -1245,6 +1246,7 @@ final class WanderStore: ObservableObject {
             || placeAttributes.contains { $0.localID.hasPrefix("remote_attr_") }
             || feedRefreshTask != nil
             || followedFeedPage != nil
+            || feedAudience != .everyone
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
             || !activityEngagementByID.isEmpty
@@ -1273,6 +1275,7 @@ final class WanderStore: ObservableObject {
             feedRefreshTask = nil
             feedRefreshCompletedAt = nil
             feedRefreshCompletedRevision = nil
+            feedAudience = .everyone
             followedFeedPage = nil
             feedLoadState = .idle
             lastFeedRefreshAt = nil
@@ -1565,6 +1568,7 @@ final class WanderStore: ObservableObject {
         feedRefreshTask = nil
         feedRefreshCompletedAt = nil
         feedRefreshCompletedRevision = nil
+        feedAudience = .everyone
         followedFeedPage = nil
         feedLoadState = .idle
         lastFeedRefreshAt = nil
@@ -1692,6 +1696,20 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    /// Audience is ephemeral. Cancel old work before clearing its page so a
+    /// late content/media response cannot appear beneath a different label.
+    func selectFeedAudience(_ audience: FeedAudience) {
+        guard feedAudience != audience else { return }
+        feedRefreshTask?.task.cancel()
+        feedRefreshTask = nil
+        feedRefreshCompletedAt = nil
+        feedRefreshCompletedRevision = nil
+        followedFeedPage = nil
+        feedLoadState = .idle
+        lastFeedRefreshAt = nil
+        feedAudience = audience
+    }
+
     /// Recommendations can publish while posts are waiting on the network, and
     /// posts can publish while recommendations are still pending.
     func refreshFeedSurface(
@@ -1764,14 +1782,16 @@ final class WanderStore: ObservableObject {
         backend: WanderBackend?, preservingActivityID: String?,
         requestID: UUID, requestUserID: String
     ) async -> Bool {
-        guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+        guard !Task.isCancelled, currentUser.id == requestUserID,
+              feedRefreshTask?.id == requestID else { return false }
         // A warm refresh keeps usable content visible without flashing the
         // offline/retry treatment while an ordinary request is still running.
         if followedFeedPage == nil { feedLoadState = .loading }
 
+        let audience = feedAudience
         if let backend, let repository = backend.feedRepository {
             do {
-                let page = try await loadFollowedFeed(from: repository) { [weak self] content in
+                let page = try await loadFollowedFeed(from: repository, audience: audience) { [weak self] content in
                     guard let self, !Task.isCancelled,
                           self.currentUser.id == requestUserID,
                           self.feedRefreshTask?.id == requestID,
@@ -1781,13 +1801,15 @@ final class WanderStore: ObservableObject {
                     self.feedLoadState = .loaded
                     self.lastFeedRefreshAt = content.fetchedAt
                 }
-                guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+                guard !Task.isCancelled, currentUser.id == requestUserID,
+                      feedRefreshTask?.id == requestID else { return false }
                 let resolvedPage = await mergingPinnedActivity(
                     into: displayableFeedPage(page),
                     activityID: preservingActivityID,
                     backend: backend
                 )
-                guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+                guard !Task.isCancelled, currentUser.id == requestUserID,
+                      feedRefreshTask?.id == requestID else { return false }
                 followedFeedPage = resolvedPage
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
@@ -1798,7 +1820,8 @@ final class WanderStore: ObservableObject {
                 )
                 return true
             } catch {
-                guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+                guard !Task.isCancelled, currentUser.id == requestUserID,
+                      feedRefreshTask?.id == requestID else { return false }
                 lastRemoteError = remoteErrorMessage(error)
                 feedLoadState = followedFeedPage == nil ? .failed : .stale
                 return false
@@ -1806,13 +1829,21 @@ final class WanderStore: ObservableObject {
         }
 
         guard currentUser.id == requestUserID else { return false }
-        let page = fixtureFollowedFeedPage(relativeTo: .now)
+        let fixture = fixtureFollowedFeedPage(relativeTo: .now)
+        let page = FollowedFeedPage(
+            activity: fixture.activity.filter {
+                audience.includes(actorID: $0.actor.id, currentUserID: currentUser.id,
+                                  relationship: relationship(to: $0.actor.id))
+            },
+            featuredPlaces: fixture.featuredPlaces, nextCursor: nil, fetchedAt: fixture.fetchedAt
+        )
         let resolvedPage = await mergingPinnedActivity(
             into: page,
             activityID: preservingActivityID,
             backend: nil
         )
-        guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+        guard !Task.isCancelled, currentUser.id == requestUserID,
+              feedRefreshTask?.id == requestID else { return false }
         followedFeedPage = resolvedPage
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
@@ -1827,7 +1858,9 @@ final class WanderStore: ObservableObject {
     ) async -> FollowedFeedPage {
         guard let activityID,
               !refreshedPage.activity.contains(where: { $0.id == activityID }),
-              let pinnedActivity = followedFeedPage?.activity.first(where: { $0.id == activityID })
+              let pinnedActivity = followedFeedPage?.activity.first(where: { $0.id == activityID }),
+              feedAudience.includes(actorID: pinnedActivity.actor.id, currentUserID: currentUser.id,
+                                    relationship: pinnedActivity.actor.relationship)
         else { return refreshedPage }
 
         let validatedActivity: FeedActivity
@@ -1851,6 +1884,8 @@ final class WanderStore: ObservableObject {
             discardCachedActivity(activityID)
             return refreshedPage
         }
+        guard feedAudience.includes(actorID: validatedActivity.actor.id, currentUserID: currentUser.id,
+                                    relationship: validatedActivity.actor.relationship) else { return refreshedPage }
 
         return FollowedFeedPage(
             activity: FeedPresentation.newestFirst(refreshedPage.activity + [validatedActivity]),
@@ -2517,14 +2552,15 @@ final class WanderStore: ObservableObject {
     /// ordinary transport and server failures remain visible to the caller.
     private func loadFollowedFeed(
         from repository: any FeedRepository,
+        audience: FeedAudience,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         do {
-            return try await repository.followedFeed(before: nil, limit: 25, onContent: onContent)
+            return try await repository.activityFeed(audience: audience, before: nil, limit: 25, onContent: onContent)
         } catch {
             guard Self.shouldRetryFollowedFeed(after: error) else { throw error }
             try await Task.sleep(for: .milliseconds(300))
-            return try await repository.followedFeed(before: nil, limit: 25, onContent: onContent)
+            return try await repository.activityFeed(audience: audience, before: nil, limit: 25, onContent: onContent)
         }
     }
 
@@ -2634,6 +2670,15 @@ final class WanderStore: ObservableObject {
 
         var displayActivity = activity
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderFeedAudienceUITest"),
+           let ownPlace = currentUserVisiblePlaces.first {
+            displayActivity.append(FeedActivity(
+                id: "fixture-feed-own", kind: ownPlace.userPlace.status == .been ? .placeBeen : .placeWannaGo,
+                actor: shell(for: currentUser), place: ownPlace,
+                occurredAt: now.addingTimeInterval(-60 * 60)
+            ))
+        }
+
         // An explicit UI-test fixture exercises grouping through the real Feed
         // and original-post routes without writing or reading remote activity.
         if ProcessInfo.processInfo.arguments.contains("-WanderFeedGroupingUITest"),
@@ -6314,7 +6359,7 @@ final class WanderStore: ObservableObject {
         discoverPeopleRecommendationsGeneration += 1
         if case .loading = discoverPeopleRecommendationsState { discoverPeopleRecommendationsState = .idle }
         if case .loaded(let recommendations) = discoverPeopleRecommendationsState {
-            discoverPeopleRecommendationsState = .loaded(recommendations.filter { $0.reason != .contacts })
+            discoverPeopleRecommendationsState = .loaded(recommendations.filter { !$0.reason.usesContacts })
         }
     }
 

@@ -25,22 +25,14 @@ struct DiscoverPersonSearchRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("discover.person.\(profile.id)")
-            Button(action: follow) {
-                Group {
-                    if isLoading { ProgressView() }
-                    else { Text(isFollowing ? "Following" : failed ? "Retry" : "Follow") }
-                }
-                .font(AstirTypography.label)
-                .foregroundStyle(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
-                .tint(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .frame(minWidth: 80, minHeight: WanderTheme.tapMinimum)
-                .background(isFollowing ? brandMode.recessedBackground : brandMode.accent)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-            }
-            .buttonStyle(RecommendationFollowPressStyle())
-            .disabled(isFollowing || isLoading)
-            .accessibilityLabel("\(isFollowing ? "Following" : "Follow") \(profile.displayName)")
+            PeopleFollowButton(
+                displayName: profile.displayName,
+                isFollowing: isFollowing,
+                isPending: isLoading,
+                didFail: failed,
+                action: follow
+            )
+            .frame(width: 112)
             .accessibilityIdentifier("discover.person.\(profile.id).follow")
         }
         .foregroundStyle(brandMode.primaryText)

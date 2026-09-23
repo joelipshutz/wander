@@ -196,10 +196,12 @@ struct AppEntryView: View {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
+                productUpsells.recordAppBackground()
                 foregroundRefreshPolicy.didEnterBackground(
                     atUptime: ProcessInfo.processInfo.systemUptime
                 )
             case .active:
+                productUpsells.recordAppForeground()
                 guard didFinishInitialResolution else { return }
                 // Returning from Mail or an identity provider must preserve the
                 // inline form and its pending verification attempt. Its auth

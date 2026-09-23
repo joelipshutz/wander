@@ -168,31 +168,18 @@ private struct OnboardingFriendRow: View {
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
-                if reason == .contacts {
-                    Text("In your contacts").font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText).fixedSize(horizontal: false, vertical: true)
-                }
+                    if let reason, !reason.compactDisplayText.isEmpty {
+                        Text(reason.compactDisplayText).font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel(reason.displayText(for: profile))
+                    }
 
                 }
                 Spacer(minLength: WanderTheme.spacing1)
-                Button(action: follow) {
-                    HStack(spacing: 4) {
-                        if isPending {
-                            ProgressView().controlSize(.small)
-                        } else if isFollowing {
-                            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
-                        }
-                        Text(isFollowing ? "Following" : "Follow")
-                            .font(AstirTypography.label)
-                    }
-                    .foregroundStyle(isFollowing ? brandMode.secondaryText : brandMode.accentForeground)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .frame(minWidth: 88, minHeight: WanderTheme.tapMinimum)
-                    .background(isFollowing ? brandMode.border.opacity(0.3) : brandMode.accent, in: RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-                .disabled(isFollowing || isPending)
-                .accessibilityLabel(isFollowing ? "Following \(profile.displayName)" : "Follow \(profile.displayName)")
+                PeopleFollowButton(displayName: profile.displayName, isFollowing: isFollowing,
+                    isPending: isPending, didFail: error != nil, action: follow)
+                    .frame(width: 112)
                 .accessibilityIdentifier("onboarding.friends.follow.\(profile.id)")
             }
             if let error {

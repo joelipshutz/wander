@@ -108,7 +108,10 @@ struct WanderApp: App {
             wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
         )
         _productUpsells = StateObject(
-            wrappedValue: ProductUpsellCoordinator(analytics: contextualAnalytics)
+            wrappedValue: ProductUpsellCoordinator(
+                userDefaults: ProductUpsellDebugPolicy.testUserDefaults() ?? .standard,
+                analytics: contextualAnalytics
+            )
         )
         _calendarReservations = StateObject(
             wrappedValue: CalendarReservationManager(analytics: contextualAnalytics)
@@ -149,6 +152,13 @@ struct WanderApp: App {
             #endif
         }
         #if DEBUG && targetEnvironment(simulator)
+        let fixtureMetro = forcedOnboardingStep == nil ? EventsAccessPolicy.fixtureMetroID() : nil
+        let simulatorContactDetails = SimulatorAccountContactDetailsRepository(details: fixtureMetro.map {
+            AccountContactDetails(metroID: $0, homeCountryCode: HomeMetro.find($0)?.country, phoneCountryCode: "US", phoneE164: nil)
+        })
+        if usesSimulatorTestSession || usesNativeOnboardingReview, let userID = authStore.state.session?.userID {
+            HomeMetroSelectionStore().remember(fixtureMetro, for: userID)
+        }
         let contactTestRepository = ContactDiscoveryUITestRepository.isActive ? ContactDiscoveryUITestRepository() : nil
         let testProfileRepository: (any ProfileRepository)? = contactTestRepository != nil
             ? contactTestRepository : (forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil)
@@ -164,7 +174,9 @@ struct WanderApp: App {
                 placePlanInvitationRepository: SimulatorPlacePlanInvitationRepository(
                     includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
                 ),
-                eventsInterestRepository: SimulatorEventsInterestRepository()
+                eventsInterestRepository: SimulatorEventsInterestRepository(),
+                accountContactDetailsRepository: simulatorContactDetails,
+                eventsAccessRepository: SimulatorEventsAccessRepository(details: simulatorContactDetails)
             )
             : WanderBackend(configuration: configuration, authSession: authStore)
         #else

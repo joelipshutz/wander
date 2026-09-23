@@ -62,7 +62,7 @@ final class OnboardingFriendSuggestionsModel: ObservableObject {
 
     func clearContactRecommendations() {
         loadGeneration += 1
-        recommendations.removeAll { $0.reason == .contacts }
+        recommendations.removeAll { $0.reason.usesContacts }
     }
 
     func load(force: Bool = false) async {

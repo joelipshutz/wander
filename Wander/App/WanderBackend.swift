@@ -219,6 +219,8 @@ final class WanderBackend: ObservableObject {
     let notificationRepository: (any NotificationRepository)?
     let followNotificationRepository: (any FollowNotificationRepository)?
     let eventsInterestRepository: (any EventsInterestRepository)?
+    let accountContactDetailsRepository: (any AccountContactDetailsRepository)?
+    let eventsAccessRepository: (any EventsAccessRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
     let shareCardPreviewRepository: (any ShareCardPreviewRepository)?
     let placePlanInvitationRepository: (any PlacePlanInvitationRepository)?
@@ -273,6 +275,8 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
             self.followNotificationRepository = SupabaseFollowNotificationRepository(rpc: client)
             self.eventsInterestRepository = SupabaseEventsInterestRepository(rpc: client)
+            self.accountContactDetailsRepository = SupabaseAccountContactDetailsRepository(rpc: client)
+            self.eventsAccessRepository = SupabaseEventsAccessRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
             self.shareCardPreviewRepository = SupabaseShareCardPreviewRepository(rpc: client, storage: client, authSession: authSession)
             self.placePlanInvitationRepository = SupabasePlacePlanInvitationRepository(rpc: client, storage: client)
@@ -301,6 +305,8 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = nil
             self.followNotificationRepository = nil
             self.eventsInterestRepository = nil
+            self.accountContactDetailsRepository = nil
+            self.eventsAccessRepository = nil
             self.sharedVisitRepository = nil
             self.shareCardPreviewRepository = nil
             self.placePlanInvitationRepository = nil
@@ -339,6 +345,8 @@ final class WanderBackend: ObservableObject {
         shareCardPreviewRepository: (any ShareCardPreviewRepository)? = nil,
         placePlanInvitationRepository: (any PlacePlanInvitationRepository)? = nil,
         eventsInterestRepository: (any EventsInterestRepository)? = nil,
+        accountContactDetailsRepository: (any AccountContactDetailsRepository)? = nil,
+        eventsAccessRepository: (any EventsAccessRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
         featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
         placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
@@ -374,6 +382,8 @@ final class WanderBackend: ObservableObject {
         self.notificationRepository = notificationRepository
         self.followNotificationRepository = followNotificationRepository
         self.eventsInterestRepository = eventsInterestRepository
+        self.accountContactDetailsRepository = accountContactDetailsRepository
+        self.eventsAccessRepository = eventsAccessRepository
         self.sharedVisitRepository = sharedVisitRepository
     }
 
@@ -400,6 +410,8 @@ final class WanderBackend: ObservableObject {
             || notificationRepository != nil
             || sharedVisitRepository != nil
             || eventsInterestRepository != nil
+            || accountContactDetailsRepository != nil
+            || eventsAccessRepository != nil
     }
 
     func socialImportUnderstandingProvider(
@@ -775,13 +787,28 @@ final class WanderBackend: ObservableObject {
     }
 
     func peopleRecommendations(userID: String, limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {
-        async let contacts = try? contactDiscovery.matches(userID: userID)
-        async let general = try? discoverProfileRecommendations(limit: limit)
-        let (matched, suggested) = await (contacts, general)
+        let matched = (try? await contactDiscovery.matches(userID: userID)) ?? []
         try Task.checkCancellation()
-        guard suggested != nil || !(matched ?? []).isEmpty else { throw ContactDiscoveryError.unavailable }
-        let permittedMatches = await contactDiscovery.canUseResults(userID: userID) ? (matched ?? []) : []
-        return PeopleRecommendationMerge.combine(contacts: permittedMatches, general: suggested ?? [], limit: limit)
+        let permitted = await contactDiscovery.canUseResults(userID: userID) ? matched : []
+        if let profileRepository,
+           let ranked = try? await profileRepository.rankedPeopleRecommendations(contactIDs: permitted.map(\.id), limit: limit) {
+            try Task.checkCancellation()
+            let canUseContacts = await contactDiscovery.canUseResults(userID: userID)
+            if permitted.isEmpty || canUseContacts { return ranked }
+            // Contact graph support can affect both membership and order, even
+            // for someone who is not a contact. Re-rank without the address book.
+            if let independent = try? await profileRepository.rankedPeopleRecommendations(contactIDs: [], limit: limit) {
+                try Task.checkCancellation()
+                return independent
+            }
+        }
+        // A staged server rollout or temporary ranking failure keeps the same
+        // contact/general fallback on both onboarding and the People shelf.
+        let suggested = try? await discoverProfileRecommendations(limit: limit)
+        try Task.checkCancellation()
+        guard suggested != nil || !permitted.isEmpty else { throw ContactDiscoveryError.unavailable }
+        let finalContacts = await contactDiscovery.canUseResults(userID: userID) ? permitted : []
+        return PeopleRecommendationMerge.combine(contacts: finalContacts, general: suggested ?? [], limit: limit)
     }
 
     func discoverProfileRecommendations(limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {
