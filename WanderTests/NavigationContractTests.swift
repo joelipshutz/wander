@@ -937,7 +937,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
 
-        XCTAssertTrue(feed.contains(#".task(id: "\(auth.isSignedIn)-\(store.currentUser.id)")"#))
+        XCTAssertTrue(feed.contains(#".task(id: "\(auth.isSignedIn)-\(store.currentUser.id)-\(store.feedAudience.rawValue)")"#))
         XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
