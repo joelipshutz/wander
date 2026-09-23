@@ -10,6 +10,10 @@ notification event itself, including its notification inbox/badge, rather than
 merely removing the push sound. Receiver settings and audience controls are
 separate work (REC-590 and REC-591).
 
+The [implementation coverage and manual test checklist](rec589-sender-notification-testing.md)
+separates newly added controls from existing notification behavior for every
+action below.
+
 | Sender action | Control | Default and behavior |
 | --- | --- | --- |
 | First or repeat check-in | Silent toggle in final form | Off; one choice also covers attached list additions |
@@ -28,6 +32,12 @@ The control belongs to a draft/action, not an account-wide setting. A later
 unrelated save starts from its appropriate default. Inline import detail forms
 inherit the outer import choice. The helper explains that visibility stays the
 same and explicitly selected invitees still receive invitations.
+
+Silent off permits existing eligible announcements. It does not override the
+standalone follower producer's existing date rule: visits before the current
+database day (UTC), future visits, and backfills do not announce. The grouped
+import path can announce historical check-ins when Notify is explicitly chosen.
+Plain Wanna saves do not have a follower check-in announcement producer.
 
 ## Import interaction and examples
 
