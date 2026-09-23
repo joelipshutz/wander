@@ -116,6 +116,12 @@ async function main() {
         await client.query("rollback to savepoint launch_profile_smoke");
         await client.query("release savepoint launch_profile_smoke");
         console.log("ok - launch follows and suggestion controls preserve account and privacy boundaries");
+        await client.query("savepoint comment_likes_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/activity_comment_likes.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint comment_likes_smoke");
+        await client.query("release savepoint comment_likes_smoke");
+        console.log("ok - comment likes preserve identity, visibility, idempotency, and deletion contracts");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -133,6 +139,16 @@ async function main() {
         await client.query(readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8"));
         await client.query("rollback to savepoint events_interest_smoke");
         await client.query("release savepoint events_interest_smoke");
+        await client.query("savepoint account_details_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/account_contact_details.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint account_details_smoke");
+        await client.query("release savepoint account_details_smoke");
+        await client.query("savepoint events_home_gate_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/events_home_metro_gate.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint events_home_gate_smoke");
+        await client.query("release savepoint events_home_gate_smoke");
         console.log("ok - Events interest persists once per authenticated account and keeps its roster private");
         await client.query("savepoint profile_feedback_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
@@ -2640,6 +2656,10 @@ release savepoint migration_preview_smoke;
 -- This suite sets the JSON JWT claims, which take precedence over the scalar
 -- claims used below. Restore both its fixtures and session state afterward.
 reset role;
+savepoint comment_likes_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/activity_comment_likes.sql", import.meta.url)), "rollback")}
+rollback to savepoint comment_likes_smoke;
+release savepoint comment_likes_smoke;
 savepoint repeat_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;
@@ -2662,6 +2682,14 @@ savepoint events_interest_smoke;
 ${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
 rollback to savepoint events_interest_smoke;
 release savepoint events_interest_smoke;
+savepoint account_details_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/account_contact_details.sql", import.meta.url)), "rollback")}
+rollback to savepoint account_details_smoke;
+release savepoint account_details_smoke;
+savepoint events_home_gate_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/events_home_metro_gate.sql", import.meta.url)), "rollback")}
+rollback to savepoint events_home_gate_smoke;
+release savepoint events_home_gate_smoke;
 savepoint profile_feedback_smoke;
 ${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/profile_feedback.sql", import.meta.url)), "rollback")}
 rollback to savepoint profile_feedback_smoke;

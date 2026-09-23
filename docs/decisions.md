@@ -1,8 +1,69 @@
 # Decisions
 
-Last updated: 2026-09-18
+Last updated: 2026-09-21
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Onboarding home city and phone (REC-584)
+
+Joe approved an editable home city prefilled from location and a phone input with
+the country dialing code selected from the detected country. These share the
+existing Location step after its permission primer. The onboarding step order,
+founders welcome, first-visit walkthrough and their landing behavior stay intact.
+The country code is separate from the national number; US numbers have ten
+national digits. Other countries use their numbering plan through PhoneNumberKit
+5.0.8. Phone remains optional; the label simply reads Phone number. This step
+uses the standard onboarding scaffold and one Continue action. It has no Not now
+skip action or separate keyboard Done toolbar; Continue saves the confirmed city
+and any entered phone before advancing to Contacts.
+
+The home field searches worldwide cities inline through MapKit, with region and
+country labels to distinguish same-name places. It immediately shows Los Angeles
+as a fallback, then uses an already-authorized recent location or a bounded
+three-second lookup to suggest the current locality. Search debounces 150 ms,
+cancels superseded work, ignores stale responses and caches at most 20 queries.
+Only a selected completion gets a detail lookup; incomplete text cannot be saved.
+Approximate location is a suggestion, never proof of residence, and phone area
+codes do not infer home. A saved city wins over travel location and can be edited
+in Settings → City & phone. Late hydration/geocoding cannot replace edits. The
+phone country follows city selection until the user edits the phone or country.
+Manual review schemes use the same worldwide provider as production; a limited
+city fixture list requires an explicit automated-test argument.
+
+Home city and optional unverified phone are private account data in separate
+owner-only RPCs, not public profile fields or verified contact-match identifiers.
+City name, country, region and county are stored without exact coordinates. Only
+the coarse Events eligibility metro key is cached locally per account. Phone is excluded from
+analytics, session replay, raw RPC errors and local defaults. Hard and soft
+account deletion purge the private record. The public profile's freeform home
+area remains separate; Events uses the private confirmed metro.
+
+Events is visible only when the saved city belongs to Los Angeles County,
+including smaller cities such as Long Beach and Pasadena. Client and server
+derive eligibility from country, region and county. Orange County, Inland Empire,
+other cities and unknown homes have four tabs, preserving their order. Existing members can confirm their city in Settings → City & phone.
+A request for a hidden Events tab falls back to Feed. Eligible first-visit
+walkthroughs still land on Map and follow the existing Map → Feed sequence.
+The per-account cached home keeps eligibility stable while offline or traveling;
+launch and foreground refresh the server's saved choice without requesting GPS.
+Settings saves update visibility immediately. The server independently restricts
+Events interest reads and registration to the saved Los Angeles metro. Previous
+interest survives a home edit and is restored if the member changes back to LA.
+
+## Lists within Wanna and check-in saves (REC-567)
+
+Wanna places **Add to lists** below the note and above the date, outside More
+options. Check-in places it directly below Friends, before Photos and More options.
+List selection remains optional and is available for first saves, repeat saves,
+and edits. Lists already containing the canonical place are disabled and labeled
+**Already in list**; repeat visits never create duplicate entries for that place
+in a list.
+
+Picker choices are staged until the parent save succeeds. Canceling the picker
+preserves the form; closing an unsaved form adds no list memberships. List delivery
+reuses the committed save and reports partial sync separately. Retrying list
+delivery never creates another check-in or Wanna. Each list retains its visibility
+and ownership, and selecting lists never changes the save's audience.
 
 ## Initial map preparation and retained returns (REC-484)
 
@@ -395,6 +456,33 @@ Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
 
+## Your Map includes Check-in and Wanna places (REC-573 / REC-574)
+
+Your Map's preview, total and Places/Cities/Countries breakdowns include both
+eligible Check-in and Wanna saves. A canonical place counts once; a place with
+both statuses uses the main Map's mixed solid/dashed marker. Status/time filters
+must still match a newer Wanna independently of an older check-in. The activity
+calendar and check-in totals retain their check-in-only meaning.
+
+Your Map Explore reuses the main Map's native renderer, pin hit testing and
+selection policies. Pan and empty-map tap dismiss the compact selection; zoom
+retains it. Selection, dismissal and returning from a place profile preserve the
+viewport and active lens.
+
+Every matching Check-in/Wanna place remains rendered in Your Map at every zoom
+level. There is no pin-count cap or collision-based hiding; dense markers may
+overlap at their real coordinates. Active filters and canonical-place
+deduplication still apply. The main Map retains its existing collision policy.
+
+At wider zooms, Your Map shows tiny neutral gray dots alongside spatially
+scattered category pins. Check-in dots are filled; Wanna-only dots are hollow.
+Selecting any dot promotes it to its full category pin without moving the
+camera. At neighborhood detail (3 meters per screen point or closer), every
+marker becomes a category pin, including coincident places. It returns to
+adaptive detail beyond 4 meters per point so small pinch changes do not flicker
+between modes. Existing category representatives get modest spacing tolerance
+during movement, and detail changes crossfade unless Reduce Motion is enabled.
+
 ## 2026-09-21 — Shared cards open the installed app directly (REC-577)
 
 Published `/cards/<entity>/<id>?card=<token>` links should open the exact entity
@@ -414,3 +502,27 @@ cannot parse card paths and association rules cannot select an app version.
 Keep the website PR unmerged until the tester-update gate is satisfied; account
 for Apple's association cache when verifying. Coordinate domain changes with
 REC-586 without removing existing getrec.me link support.
+
+## 2026-09-22 — Canonical Astir public links (REC-599)
+
+New profile, place, activity, list, invitation, and published-card links use
+`https://astirmovement.com` with their existing paths, encoded identifiers, and
+preview tokens. The app also accepts `www.astirmovement.com` and previously
+shared `getrec.me` links. Associated Domains includes both Astir hosts and the
+legacy apex; the internal `recme://` scheme and Clerk identity stay stable.
+
+The website serves card-capable Apple association rules only on the Astir
+hosts. Older released apps have no Astir association, so they retain the web
+fallback. The legacy host's card association remains gated by REC-577's tester
+update requirement. Previously sent messages and published artwork are immutable
+copies; they are not rewritten by changing the generator.
+
+Client-generated links require an app update. Apply the notification-link
+migration after its rollback-only regression passes; it preserves the existing
+activity-id payload used by older notification clients and does not rewrite
+queued notifications. Share Kit supplies `https://astirmovement.com/share/tiktok`
+as the request redirectURI; its portal has no separate callback-list field
+for this product. Verify the Astir URL prefix for the existing sandbox and
+production configurations, serve the return path in the association file,
+and retain the verified legacy domain for installed clients. Provider
+production approval is separate from domain ownership verification.

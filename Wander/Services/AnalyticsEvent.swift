@@ -166,6 +166,7 @@ enum AnalyticsHumanNeed: String, CaseIterable {
 enum AnalyticsEngagementAction: String {
     case activityCommented = "activity_commented"
     case activityLiked = "activity_liked"
+    case activityCommentLiked = "activity_comment_liked"
     case checkInCreated = "check_in_created"
     case contactInviteSent = "contact_invite_sent"
     case followCreated = "follow_created"
@@ -349,6 +350,7 @@ enum WanderAnalyticsEvents {
     static let followRemoved = "follow_removed"
     static let blockCreated = "block_created"
     static let activityLikeChanged = "activity_like_changed"
+    static let activityCommentLikeChanged = "activity_comment_like_changed"
     static let activityCommentCreated = "activity_comment_created"
     static let activityShareOpened = "activity_share_opened"
     static let activityShareCompleted = "activity_share_completed"

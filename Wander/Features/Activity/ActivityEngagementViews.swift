@@ -562,7 +562,13 @@ struct ActivityPostcardView: View {
     @ViewBuilder
     private var ratingBadge: some View {
         if let rating = context.rating {
-            Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+            HStack(spacing: 5) {
+                Image(systemName: "star.fill")
+                    .accessibilityHidden(true)
+                Text(PlaceRating.averageDisplay(rating))
+                    .accessibilityIdentifier("\(postcardAccessibilityIdentifier).rating.value")
+                    .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
+            }
                 .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
                 .padding(.horizontal, 9)
@@ -574,7 +580,6 @@ struct ActivityPostcardView: View {
                     }
                 }
                 .fixedSize(horizontal: true, vertical: false)
-                .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
         }
     }
 
@@ -1031,8 +1036,12 @@ struct ActivityCommentsScreen: View {
 
     @ViewBuilder
     private func commentRow(_ comment: ActivityComment) -> some View {
-        if store.canDeleteActivityComment(comment) {
-            ActivityCommentRow(comment: comment, onDelete: { delete(comment) })
+        if comment.author.id == store.currentUser.id {
+            ActivityCommentRow(comment: comment,
+                               canLike: store.canLikeActivityComment(comment),
+                               isLikePending: store.isActivityCommentLikePending(comment.id),
+                               onLike: { toggleLike(comment) },
+                               onDelete: store.canDeleteActivityComment(comment) ? { delete(comment) } : nil)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         delete(comment)
@@ -1040,12 +1049,16 @@ struct ActivityCommentsScreen: View {
                         Label("Delete", systemImage: "trash")
                     }
                     .accessibilityLabel("Delete comment")
+                    .disabled(!store.canDeleteActivityComment(comment))
                 }
                 .accessibilityAction(named: "Delete comment") {
                     delete(comment)
                 }
         } else {
-            ActivityCommentRow(comment: comment, onReport: { presentReport(for: comment) })
+            ActivityCommentRow(comment: comment,
+                               canLike: store.canLikeActivityComment(comment),
+                               isLikePending: store.isActivityCommentLikePending(comment.id),
+                               onLike: { toggleLike(comment) }, onReport: { presentReport(for: comment) })
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button {
                         presentReport(for: comment)
@@ -1084,6 +1097,19 @@ struct ActivityCommentsScreen: View {
                 sharePreviewPresentation = presentation
             }
         )
+    }
+
+    private func toggleLike(_ comment: ActivityComment) {
+        auth.requireSignIn(for: .socialActivity) {
+            Task { @MainActor in
+                let userID = store.currentUser.id
+                let succeeded = await store.toggleActivityCommentLike(
+                    comment, backend: auth.isSignedIn ? backend : nil
+                )
+                guard !Task.isCancelled, userID == store.currentUser.id else { return }
+                commentError = succeeded ? nil : store.activityEngagementError(for: context.activityID)
+            }
+        }
     }
 
     private var metadataIcon: String {
@@ -1509,15 +1535,24 @@ struct ActivityCommentsRouteScreen: View {
 private struct ActivityCommentRow: View {
     @Environment(\.astirBrandMode) private var brandMode
     let comment: ActivityComment
+    let canLike: Bool
+    let isLikePending: Bool
+    let onLike: () -> Void
     var onDelete: (() -> Void)?
     var onReport: (() -> Void)?
 
     init(
         comment: ActivityComment,
+        canLike: Bool,
+        isLikePending: Bool,
+        onLike: @escaping () -> Void,
         onDelete: (() -> Void)? = nil,
         onReport: (() -> Void)? = nil
     ) {
         self.comment = comment
+        self.canLike = canLike
+        self.isLikePending = isLikePending
+        self.onLike = onLike
         self.onDelete = onDelete
         self.onReport = onReport
     }
@@ -1547,33 +1582,55 @@ private struct ActivityCommentRow: View {
                     .foregroundStyle(brandMode.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .opacity(comment.isPending ? 0.58 : 1)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
+            .opacity(comment.isPending ? 0.58 : 1)
 
             Spacer(minLength: 0)
 
-            if onDelete != nil || onReport != nil {
-                Menu {
-                    if let onReport {
-                        Button(action: onReport) {
-                            Label("Report comment", systemImage: "exclamationmark.bubble")
-                        }
+            HStack(spacing: 0) {
+                Button(action: onLike) {
+                    HStack(spacing: 5) {
+                        Image(systemName: comment.viewerHasLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(comment.likeCount.formatted())
+                            .font(AstirTypography.metadata)
+                            .monospacedDigit()
                     }
-                    if let onDelete {
-                        Button(role: .destructive, action: onDelete) {
-                            Label("Delete comment", systemImage: "trash")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(brandMode.secondaryText)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    .foregroundStyle(comment.viewerHasLiked ? brandMode.accent : brandMode.secondaryText)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
                 }
-                .accessibilityLabel("Comment actions")
+                .buttonStyle(.plain)
+                .disabled(!canLike || isLikePending)
+                .opacity(isLikePending ? 0.6 : 1)
+                .accessibilityIdentifier("activity.comment.like.\(comment.id)")
+                .accessibilityLabel(comment.viewerHasLiked ? "Unlike comment" : "Like comment")
+                .accessibilityValue(comment.likeCount == 1 ? "1 like" : "\(comment.likeCount) likes")
+                if onDelete != nil || onReport != nil {
+                    Menu {
+                        if let onReport {
+                            Button(action: onReport) {
+                                Label("Report comment", systemImage: "exclamationmark.bubble")
+                            }
+                        }
+                        if let onDelete {
+                            Button(role: .destructive, action: onDelete) {
+                                Label("Delete comment", systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(brandMode.secondaryText)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Comment actions")
+                    .accessibilityIdentifier("activity.comment.actions.\(comment.id)")
+                }
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, WanderTheme.spacing1)
         .accessibilityElement(children: .contain)

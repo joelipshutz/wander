@@ -12,12 +12,12 @@ const DEFAULTS = {
 
 const COPY = {
   subtitle: "Places from people you trust",
-  privacyPolicyUrl: "https://getrec.me/privacy",
-  privacyChoicesUrl: "https://getrec.me/privacy-choices",
+  privacyPolicyUrl: "https://astirmovement.com/privacy",
+  privacyChoicesUrl: "https://astirmovement.com/privacy-choices",
   promotionalText: "Remember places worth returning to—and find your next one through people you trust.",
   keywords: "map,friends,restaurants,travel,save,discover,lists,checkin,local,food,cafes,bars,hikes,trip",
-  marketingUrl: "https://getrec.me/",
-  supportUrl: "https://getrec.me/support",
+  marketingUrl: "https://astirmovement.com/",
+  supportUrl: "https://astirmovement.com/support",
   description: `Find places through people you trust—not anonymous ratings.
 
 rec.me turns real experiences from friends into a living map you can actually use. See where your people went, what they thought, and what fits the moment when you need a place now.
@@ -38,11 +38,11 @@ WITH REC.ME, YOU CAN
 
 Your map gets more useful with every memory—and every person you trust.
 
-Need help? Visit https://getrec.me/support
+Need help? Visit https://astirmovement.com/support
 
-Privacy: https://getrec.me/privacy
+Privacy: https://astirmovement.com/privacy
 
-Terms: https://getrec.me/terms`,
+Terms: https://astirmovement.com/terms`,
 };
 
 function parseArgs(argv) {

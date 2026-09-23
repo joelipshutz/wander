@@ -119,7 +119,7 @@ struct ShareCardDesignMockupRoot: View {
                     ActivitySharePreviewScreen(card: kind.card(count: count, dated: dated),
                         content: .place(item: ProcessInfo.processInfo.arguments.contains("-ShareCardExternalPlace")
                             ? PlaceExternalLinks.directionsAction(placeName: "Sample place", latitude: 0, longitude: 0)!.url
-                            : URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000264")!, name: "Sample preview", message: "Sample preview"),
+                            : URL(string: "https://astirmovement.com/places/40000000-0000-0000-0000-000000000264")!, name: "Sample preview", message: "Sample preview"),
                         loadImages: { kind.images })
                         .environmentObject(shareBackend)
                 }

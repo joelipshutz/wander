@@ -47,6 +47,39 @@ import UIKit
         XCTAssertFalse(audio.isPlaying)
         XCTAssertNotNil(audio.errorMessage)
     }
+
+    func testRepeatedBackgroundTransitionsPreserveVoiceAndResumePlayback() async throws {
+        let audio = FeedbackAudioRecorder()
+        let note = FeedbackAudioRecorder.silentTestRecording()
+        audio.attachment = note
+        defer { audio.close() }
+
+        for _ in 0..<3 {
+            let previousPosition = audio.playbackSeconds
+            audio.togglePlayback()
+            XCTAssertTrue(audio.isPlaying)
+            try await Task.sleep(for: .milliseconds(350))
+            audio.pauseForBackground()
+            let pausedPosition = audio.playbackSeconds
+            XCTAssertFalse(audio.isPlaying)
+            XCTAssertGreaterThan(pausedPosition, previousPosition)
+            XCTAssertLessThan(pausedPosition, audio.playbackDuration)
+            XCTAssertEqual(audio.attachment, note)
+            XCTAssertNil(audio.errorMessage)
+
+            // Inactive and background can both arrive for one trip away.
+            audio.pauseForBackground()
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertEqual(audio.playbackSeconds, pausedPosition, accuracy: 0.01)
+            XCTAssertEqual(audio.attachment, note)
+        }
+        audio.stopPlayback()
+        XCTAssertEqual(audio.playbackSeconds, 0)
+        XCTAssertEqual(audio.attachment, note)
+        audio.togglePlayback()
+        XCTAssertTrue(audio.isPlaying)
+        XCTAssertNil(audio.errorMessage)
+    }
     #endif
 
     func testEmptyAndWhitespaceCannotSubmitButPhotoOrVoiceAloneCan() {
@@ -79,12 +112,13 @@ import UIKit
         XCTAssertTrue(model.canSubmit)
     }
 
-    func testFailurePreservesPayloadAndRetryIdentityAndOnlySuccessEmitsAnalytics() async {
+    func testFailurePreservesPayloadAndRetryIdentityAndOnlySuccessEmitsAnalytics() async throws {
         let repository = FeedbackDouble()
         let analytics = FeedbackAnalyticsDouble()
         let model = FeedbackComposer()
         model.text = "Private feature request"
         model.photos = [FeedbackAttachment(kind: .photo, data: Data([1]))]
+        model.voice = FeedbackAttachment(kind: .voice, data: Data([2]), duration: 20)
         repository.fails = true
         await model.submit(repository: repository, analytics: analytics)
         XCTAssertFalse(model.isSubmitted)
@@ -97,8 +131,9 @@ import UIKit
         XCTAssertTrue(model.isSubmitted)
         XCTAssertEqual(repository.submissions.count, 2)
         XCTAssertEqual(repository.submissions[0], repository.submissions[1])
+        XCTAssertEqual(repository.submissions[1].attachments, model.photos + [try XCTUnwrap(model.voice)])
         XCTAssertEqual(analytics.events, [AnalyticsEvent(name: "feedback_submitted", properties: [
-            "surface": "profile", "photo_count": "1", "has_voice_note": "false"
+            "surface": "profile", "photo_count": "1", "has_voice_note": "true"
         ])])
         await model.submit(repository: repository, analytics: analytics)
         XCTAssertEqual(repository.submissions.count, 2)
@@ -154,6 +189,26 @@ import UIKit
         XCTAssertEqual(transport.operations, ["begin_own_feedback", "upload"])
     }
 
+    func testPartialMixedAttachmentUploadRetriesTheSameObjectsBeforeFinalizing() async throws {
+        let transport = FeedbackTransport()
+        transport.failUploadAt = 2
+        let repository = SupabaseFeedbackRepository(rpc: transport, storage: transport)
+        let submission = FeedbackSubmission(id: UUID(), text: "Context for the recording", attachments: [
+            FeedbackAttachment(kind: .photo, data: Data([1, 2, 3])),
+            FeedbackAttachment(kind: .voice, data: Data([4, 5, 6]), duration: 20)
+        ], appVersion: "1.0", buildNumber: "test")
+        do { try await repository.submit(submission); XCTFail("Expected interrupted upload") } catch {}
+        XCTAssertEqual(transport.operations, ["begin_own_feedback", "upload", "upload"])
+        try await repository.submit(submission)
+        XCTAssertEqual(transport.operations, ["begin_own_feedback", "upload", "upload",
+                                              "begin_own_feedback", "upload", "upload", "submit_own_feedback"])
+        let expectedPaths = submission.attachments.map {
+            submission.id.uuidString.lowercased() + "/" + $0.filename
+        }
+        XCTAssertEqual(transport.paths, expectedPaths + expectedPaths)
+        XCTAssertEqual(transport.contentTypes, ["image/jpeg", "audio/mp4", "image/jpeg", "audio/mp4"])
+    }
+
     func testPhotosPreserveAspectRatioAndDownsample() throws {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 800)).image { context in
             UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 400, height: 800))
@@ -186,8 +241,10 @@ private final class FeedbackAnalyticsDouble: AnalyticsClient {
 @MainActor private final class FeedbackTransport: RemoteProcedureCalling, RemoteStorageCalling {
     var operations: [String] = []
     var paths: [String] = []
+    var contentTypes: [String] = []
     var alreadySubmitted = false
     var uploadFails = false
+    var failUploadAt: Int?
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
         operations.append(name)
         let submitted = name == "submit_own_feedback" || alreadySubmitted
@@ -195,10 +252,10 @@ private final class FeedbackAnalyticsDouble: AnalyticsClient {
     }
     func uploadObject(bucket: String, path: String, data: Data, contentType: String, upsert: Bool) async throws {
         XCTAssertEqual(bucket, "feedback-attachments")
-        XCTAssertEqual(contentType, "image/jpeg")
         XCTAssertTrue(upsert)
+        contentTypes.append(contentType)
         paths.append(path); operations.append("upload")
-        if uploadFails { throw URLError(.networkConnectionLost) }
+        if uploadFails || paths.count == failUploadAt { throw URLError(.networkConnectionLost) }
     }
     func deleteObject(bucket: String, path: String) async throws {}
     func downloadObject(bucket: String, path: String) async throws -> Data { Data() }

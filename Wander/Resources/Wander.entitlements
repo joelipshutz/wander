@@ -6,6 +6,8 @@
 	<string>$(APS_ENVIRONMENT)</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:astirmovement.com</string>
+		<string>applinks:www.astirmovement.com</string>
 		<string>applinks:getrec.me</string>
 		<string>webcredentials:clerk.getrec.me</string>
 	</array>

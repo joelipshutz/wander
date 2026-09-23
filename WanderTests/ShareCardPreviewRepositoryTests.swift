@@ -132,6 +132,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         for route in routes {
             let original = try XCTUnwrap(route.url)
             let shared = try XCTUnwrap(ShareCardLinkTarget.link(original, token: token))
+            XCTAssertEqual(shared.host, "astirmovement.com")
             XCTAssertEqual(shared.path, "/cards" + original.path)
             XCTAssertEqual(WanderDeepLinkRoute.parse(shared), route)
             XCTAssertNil(ShareCardLinkTarget(url: shared), "A published wrapper must not be published again")
@@ -145,15 +146,43 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
             XCTAssertNil(inbox.pendingRequest)
             for query in ["card=x", "card=\(token)&card=\(token)", "card=\(token)&edit=true"] {
                 XCTAssertNil(WanderDeepLinkRoute.parse(URL(string: original.absoluteString + "?" + query)!))
-                XCTAssertNil(WanderDeepLinkRoute.parse(URL(string: "https://getrec.me/cards" + original.path + "?" + query)!))
+                XCTAssertNil(WanderDeepLinkRoute.parse(URL(string: "https://astirmovement.com/cards" + original.path + "?" + query)!))
             }
+        }
+    }
+
+    func testLegacyAndWWWTargetsPublishCanonicalAstirLinksWithoutChangingEncodedIdentity() throws {
+        let token = String(repeating: "a", count: 48)
+        for host in ["getrec.me", "astirmovement.com", "www.astirmovement.com"] {
+            let original = try XCTUnwrap(URL(string: "https://\(host)/profiles/user%2F%E6%9D%B1%E4%BA%AC"))
+            XCTAssertEqual(ShareCardLinkTarget(url: original)?.identifier, "user/東京")
+            let shared = try XCTUnwrap(ShareCardLinkTarget.link(original, token: token))
+            XCTAssertEqual(shared.absoluteString,
+                           "https://astirmovement.com/cards/profiles/user%2F%E6%9D%B1%E4%BA%AC?card=\(token)")
+            let legacy = try XCTUnwrap(URL(string: shared.absoluteString.replacingOccurrences(
+                of: "https://astirmovement.com", with: "https://getrec.me")))
+            XCTAssertEqual(WanderDeepLinkRoute.parse(legacy), .sharedProfile(profileID: "user/東京"))
+        }
+    }
+
+    func testPublisherRejectsUnsupportedHostsAndAlreadyPublishedLinks() throws {
+        let token = String(repeating: "a", count: 48)
+        for raw in ["https://astirmovement.com.evil.example/profiles/user",
+                    "https://getrec.me.evil.example/profiles/user",
+                    "https://user@astirmovement.com/profiles/user",
+                    "https://astirmovement.com:8443/profiles/user",
+                    "https://astirmovement.com/profiles/user?private=yes",
+                    "https://astirmovement.com/cards/profiles/user?card=\(token)"] {
+            let url = try XCTUnwrap(URL(string: raw))
+            XCTAssertNil(ShareCardLinkTarget(url: url))
+            XCTAssertNil(ShareCardLinkTarget.link(url, token: token))
         }
     }
 
     func testCardLinksRejectMalformedRoutesAndKeepPendingValidDestination() throws {
         let id = "40000000-0000-0000-0000-000000000001"
         let token = String(repeating: "a", count: 48)
-        let base = "https://getrec.me/cards/places/\(id)"
+        let base = "https://astirmovement.com/cards/places/\(id)"
         let valid = try XCTUnwrap(URL(string: base + "?card=" + token))
         var inbox = WanderDeepLinkInbox()
         inbox.receive(valid)
@@ -163,12 +192,12 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
             base + "?card=" + token + "%0A",
             base + "?card=" + token.uppercased(), base + "?card=" + token + "#extra",
             base + "/?card=" + token, base + "/extra?card=" + token,
-            "https://getrec.me/cards/places/not-a-uuid?card=" + token,
-            "https://getrec.me/cards/plans/\(token)?card=" + token,
-            "https://getrec.me/cards/unknown/\(id)?card=" + token,
-            "https://getrec.me/cards/cards/places/\(id)?card=" + token,
-            "https://getrec.me.evil.example/cards/places/\(id)?card=" + token,
-            "https://getrec.me:8443/cards/places/\(id)?card=" + token,
+            "https://astirmovement.com/cards/places/not-a-uuid?card=" + token,
+            "https://astirmovement.com/cards/plans/\(token)?card=" + token,
+            "https://astirmovement.com/cards/unknown/\(id)?card=" + token,
+            "https://astirmovement.com/cards/cards/places/\(id)?card=" + token,
+            "https://astirmovement.com.evil.example/cards/places/\(id)?card=" + token,
+            "https://astirmovement.com:8443/cards/places/\(id)?card=" + token,
             "https://user@getrec.me/cards/places/\(id)?card=" + token,
             "http://getrec.me/cards/places/\(id)?card=" + token,
             "recme://cards/places/\(id)?card=" + token

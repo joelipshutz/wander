@@ -375,6 +375,7 @@ struct WanderRootView: View {
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var activityNavigation = ActivityNavigationCoordinator()
+    @StateObject private var eventsAccess: EventsAccessModel
     #if DEBUG
     @State private var seededNotificationFixture = false
     #endif
@@ -423,7 +424,12 @@ struct WanderRootView: View {
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         let opensImportHub = launchArguments.contains("-WanderOpenImportHub")
-        _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
+        var initialMetro = initialSession.flatMap { HomeMetroSelectionStore().metroID(for: $0.userID) }
+        #if DEBUG && targetEnvironment(simulator)
+        if launchArguments.contains("-WanderAuthenticatedUITest") { initialMetro = EventsAccessPolicy.fixtureMetroID() }
+        #endif
+        _eventsAccess = StateObject(wrappedValue: EventsAccessModel(userID: initialSession?.userID, initialMetroID: initialMetro))
+        _selectedTab = State(initialValue: EventsAccessPolicy.resolvedTab(requestedTab == .add ? .map : requestedTab, metroID: initialMetro))
         _isPresentingAdd = State(
             initialValue: opensImportHub ? false : Self.resolvedInitialAddPresentation()
         )
@@ -531,14 +537,16 @@ struct WanderRootView: View {
                     .tabItem { tabItemLabel(for: .discover) }
                     .tag(WanderTab.discover)
 
-                EventsComingSoonScreen(
-                    isSelected: selectedTab == .events && !isPresentingAdd,
-                    userID: auth.state.session?.userID,
-                    repository: backend.eventsInterestRepository,
-                    analytics: analytics
-                )
+                if eventsAreAvailable {
+                    EventsComingSoonScreen(
+                        isSelected: selectedTab == .events && !isPresentingAdd,
+                        userID: auth.state.session?.userID,
+                        repository: backend.eventsInterestRepository,
+                        analytics: analytics
+                    )
                     .tabItem { tabItemLabel(for: .events) }
                     .tag(WanderTab.events)
+                }
 
                 ListsScreen()
                     .tabItem { tabItemLabel(for: .lists) }
@@ -565,14 +573,14 @@ struct WanderRootView: View {
         }
         .tint(astirBrandMode.accent)
         .background {
-            WanderNativeTabAppearance(selection: selectedTab)
+            WanderNativeTabAppearance(selection: selectedTab, tabs: availableTabs)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
-                    tabs: WanderTab.primaryTabs,
+                    tabs: availableTabs,
                     onItemControlsFrameChange: { frame in
                         guard nativeTabItemControlsFrame != frame else { return }
                         nativeTabItemControlsFrame = frame
@@ -1160,6 +1168,9 @@ struct WanderRootView: View {
             }
             guard phase == .active, isSessionValidated else { return }
             presentDeferredProductUpsellIfPossible()
+            Task {
+                await eventsAccess.load(userID: eventsAccessLoadUserID, repository: backend.eventsAccessRepository)
+            }
             switch walkthroughs.restoreJourneyIfNeeded() {
             case .resumed(let surface):
                 if completeCommittedWalkthroughDraftIfNeeded() {
@@ -1253,6 +1264,16 @@ struct WanderRootView: View {
         .onChange(of: pushNotifications.notificationsAreEnabled) { _, _ in
             presentDeferredProductUpsellIfPossible()
         }
+        .task(id: eventsAccessLoadUserID) {
+            await eventsAccess.load(userID: eventsAccessLoadUserID, repository: backend.eventsAccessRepository)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: HomeMetroSelectionStore.didChange)) { notice in
+            guard let changedUserID = notice.object as? String, changedUserID == auth.state.session?.userID else { return }
+            eventsAccess.cachedSelectionDidChange(userID: changedUserID)
+        }
+        .onChange(of: eventsAreAvailable) { _, available in
+            if !available, selectedTab == .events { selectedTab = .discover }
+        }
         .onChange(of: blocksProductUpsellPresentation) { _, isBlocked in
             if isBlocked {
                 productUpsells.suspendActivePresentation()
@@ -1294,8 +1315,9 @@ struct WanderRootView: View {
 
     private var tabSelection: Binding<WanderTab> {
         Binding {
-            selectedTab
+            EventsAccessPolicy.resolvedTab(selectedTab, metroID: currentHomeMetro)
         } set: { newTab in
+            guard newTab != .events || eventsAreAvailable else { return }
             guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
                 presentAddSheet()
@@ -1312,6 +1334,11 @@ struct WanderRootView: View {
             }
         }
     }
+
+    private var currentHomeMetro: String? { eventsAccess.homeMetro(for: auth.state.session?.userID) }
+    private var eventsAreAvailable: Bool { EventsAccessPolicy.isEligible(metroID: currentHomeMetro) }
+    private var availableTabs: [WanderTab] { EventsAccessPolicy.availableTabs(metroID: currentHomeMetro) }
+    private var eventsAccessLoadUserID: String? { isSessionValidated ? auth.state.session?.userID : nil }
 
     private func presentAddSheet() {
         dismissKeyboard()
@@ -2500,6 +2527,14 @@ struct WanderRootView: View {
     }
 
     private func routeWalkthrough(to surface: WalkthroughSurface) {
+        if surface == .events, !eventsAreAvailable {
+            // Events has no active NUX steps. Retire an obsolete request rather
+            // than routing a restored/debug checkpoint to a hidden tab.
+            walkthroughs.consumeRequestedSurface(.events)
+            selectedTab = .discover
+            walkthroughs.activate(.feed)
+            return
+        }
         if surface == .add,
            placeSaveDraftStore.draft?.walkthroughContentVersion != nil {
             // A process can be killed after the NUX form is durable but before
@@ -3397,6 +3432,7 @@ enum WanderTabBarWalkthroughTargetGeometry {
 /// contrast modes when the selected content changes from paper to black film.
 private struct WanderNativeTabAppearance: UIViewRepresentable {
     let selection: WanderTab
+    let tabs: [WanderTab]
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -3413,6 +3449,7 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
     }
 
     func updateUIView(_ anchor: WanderTabFrameAnchorView, context: Context) {
+        context.coordinator.tabs = tabs
         context.coordinator.apply(from: anchor)
         context.coordinator.afterSelection(from: anchor)
     }
@@ -3423,6 +3460,7 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
     }
 
     @MainActor final class Coordinator {
+        var tabs: [WanderTab] = []
         private weak var bar: UITabBar?
         private let material = UIVisualEffectView()
         private var selectionUpdate: Task<Void, Never>?
@@ -3503,7 +3541,7 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
         private func syncGeometry() {
             guard let bar, let parent = bar.superview else { material.isHidden = true; return }
             guard #available(iOS 26.0, *),
-                  let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: WanderTab.primaryTabs),
+                  let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: tabs),
                   let first = controls.first else { material.isHidden = true; return }
             let controlsFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
                 $0.union(bar.convert($1.bounds, from: $1))

@@ -993,7 +993,7 @@ final class NavigationContractTests: XCTestCase {
             SharedProfileRoute(profileID: "user joe")
         )
         XCTAssertEqual(
-            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://getrec.me/profiles/user_joe"))),
+            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://astirmovement.com/profiles/user_joe"))),
             SharedProfileRoute(profileID: "user_joe")
         )
         XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://rec.me/profiles/user_joe"))))
@@ -1006,7 +1006,7 @@ final class NavigationContractTests: XCTestCase {
             WanderShareContent.profile(serverID: "user joe", displayName: "Joe Example", handle: "joe")
         )
 
-        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20joe")
+        XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user%20joe")
         XCTAssertEqual(content.items, [content.item])
         XCTAssertEqual(content.subject, "Discover Joe’s world")
         XCTAssertEqual(content.message, "See @joe on Astir")
@@ -1018,7 +1018,7 @@ final class NavigationContractTests: XCTestCase {
     @MainActor
     func testAppInviteUsesOneProfileLinkWithWebsiteInstallationFallback() {
         let content = WanderShareContent.appInvite(senderProfileID: "user sender")
-        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20sender")
+        XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user%20sender")
         XCTAssertEqual(content.items, [content.item])
         XCTAssertEqual(content.messageBody, content.item.absoluteString)
         XCTAssertEqual(WanderShareContent.appInvite(senderProfileID: nil).items, [WanderShareContent.publicTestFlightURL])
@@ -1037,7 +1037,7 @@ final class NavigationContractTests: XCTestCase {
                 name: "Ggiata",
                 message: "Worth remembering"
             )?.item.absoluteString,
-            "https://getrec.me/places/\(placeID)"
+            "https://astirmovement.com/places/\(placeID)"
         )
         XCTAssertEqual(
             WanderShareContent.activity(
@@ -1045,21 +1045,21 @@ final class NavigationContractTests: XCTestCase {
                 placeName: "Ggiata",
                 message: "See this check-in"
             )?.item.absoluteString,
-            "https://getrec.me/activities/\(activityID)"
+            "https://astirmovement.com/activities/\(activityID)"
         )
         XCTAssertEqual(
             WanderShareContent.list(
                 serverID: listID,
                 name: "Saturday plan"
             )?.item.absoluteString,
-            "https://getrec.me/lists/\(listID)"
+            "https://astirmovement.com/lists/\(listID)"
         )
         XCTAssertEqual(
             WanderShareContent.listInvite(
                 token: inviteToken,
                 name: "Saturday plan"
             )?.item.absoluteString,
-            "https://getrec.me/invites/\(inviteToken)"
+            "https://astirmovement.com/invites/\(inviteToken)"
         )
         XCTAssertNil(
             WanderShareContent.activity(
@@ -1089,7 +1089,7 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20maya")
+        XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user%20maya")
         XCTAssertEqual(content.items, [content.item, imageFileURL])
         XCTAssertEqual(content.subject, "Maya Chen's map")
         XCTAssertEqual(content.message, "Explore @maya's saved places on Astir")
@@ -1149,7 +1149,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertEqual(content.items, [
-            URL(string: "https://getrec.me/profiles/user_maya")!,
+            URL(string: "https://astirmovement.com/profiles/user_maya")!,
             imageFileURL
         ])
         XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
@@ -1163,17 +1163,17 @@ final class NavigationContractTests: XCTestCase {
             applicationActivities: nil
         )
         let source = WanderShareActivityItemSource(
-            url: URL(string: "https://getrec.me/profiles/user_maya")!,
+            url: URL(string: "https://astirmovement.com/profiles/user_maya")!,
             subject: "Maya Chen's Santa Monica map"
         )
 
         XCTAssertEqual(
             source.activityViewControllerPlaceholderItem(controller) as? URL,
-            URL(string: "https://getrec.me/profiles/user_maya")!
+            URL(string: "https://astirmovement.com/profiles/user_maya")!
         )
         XCTAssertEqual(
             source.activityViewController(controller, itemForActivityType: nil) as? URL,
-            URL(string: "https://getrec.me/profiles/user_maya")!
+            URL(string: "https://astirmovement.com/profiles/user_maya")!
         )
         XCTAssertEqual(
             source.activityViewController(controller, subjectForActivityType: nil),
@@ -2275,7 +2275,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onOpenImportHub: presentImportHub"))
         XCTAssertTrue(addScreen.contains("importCompletionDetent: PresentationDetent = .large"))
         XCTAssertTrue(importViews.contains("Image(systemName: \"questionmark\")"))
-        XCTAssertTrue(importViews.contains("https://getrec.me/import-help"))
+        XCTAssertTrue(importViews.contains("https://astirmovement.com/import-help"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }
@@ -2463,12 +2463,7 @@ final class NavigationContractTests: XCTestCase {
         let optionalDetails = try sourceSection(
             mapScreen,
             after: "private var optionalDetailsDisclosure: some View",
-            before: "private var optionalDetailsSummary: String"
-        )
-        let optionalSummary = try sourceSection(
-            mapScreen,
-            after: "private var optionalDetailsSummary: String",
-            before: "private var removeSaveSection: some View"
+            before: "private var offersListSelection: Bool"
         )
 
         XCTAssertFalse(detailsContent.contains("saveAsSection"))
@@ -2493,8 +2488,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains("checkInQuestionsSection"))
         XCTAssertFalse(optionalDetails.contains("plannedDateSection"))
         XCTAssertTrue(optionalDetails.contains("if isShowingOptionalDetails"))
-        XCTAssertTrue(optionalSummary.contains("\"tags\""))
-        XCTAssertFalse(optionalSummary.contains("fit, tags & privacy"))
+        XCTAssertTrue(optionalDetails.contains("\"tags\""))
+        XCTAssertFalse(optionalDetails.contains("fit, tags & privacy"))
         XCTAssertFalse(optionalDetails.contains("date, note"))
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
         XCTAssertFalse(optionalDetails.contains("WanderTheme.sunTint.color"))
@@ -3118,7 +3113,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("saved as wanna this day"))
         XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun"))
         XCTAssertFalse(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
-        XCTAssertTrue(source.contains("var includesAllStatuses: Bool {\n        false\n    }"))
+        XCTAssertTrue(source.contains("var includesAllStatuses: Bool {\n        source == .mapSummary\n    }"))
     }
 
     func testProfileCalendarDayDetailUsesSideBySideDropdownsWithoutSearch() throws {
@@ -3184,7 +3179,7 @@ final class NavigationContractTests: XCTestCase {
                 .last
         )
 
-        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) checked-in \\(placeLabel)"))
+        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) saved \\(placeLabel)"))
         XCTAssertTrue(mapSection.contains("ProfileMapSummaryShareButton("))
         XCTAssertTrue(mapSection.contains("points: insights.mapPoints(matching: item)"))
         XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))
