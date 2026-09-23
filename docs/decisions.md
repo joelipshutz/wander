@@ -1,8 +1,23 @@
 # Decisions
 
-Last updated: 2026-09-18
+Last updated: 2026-09-21
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Lists within Wanna and check-in saves (REC-567)
+
+Wanna places **Add to lists** below the note and above the date, outside More
+options. Check-in places it directly below Friends, before Photos and More options.
+List selection remains optional and is available for first saves, repeat saves,
+and edits. Lists already containing the canonical place are disabled and labeled
+**Already in list**; repeat visits never create duplicate entries for that place
+in a list.
+
+Picker choices are staged until the parent save succeeds. Canceling the picker
+preserves the form; closing an unsaved form adds no list memberships. List delivery
+reuses the committed save and reports partial sync separately. Retrying list
+delivery never creates another check-in or Wanna. Each list retains its visibility
+and ownership, and selecting lists never changes the save's audience.
 
 ## Initial map preparation and retained returns (REC-484)
 
@@ -395,6 +410,33 @@ Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
 
+## Your Map includes Check-in and Wanna places (REC-573 / REC-574)
+
+Your Map's preview, total and Places/Cities/Countries breakdowns include both
+eligible Check-in and Wanna saves. A canonical place counts once; a place with
+both statuses uses the main Map's mixed solid/dashed marker. Status/time filters
+must still match a newer Wanna independently of an older check-in. The activity
+calendar and check-in totals retain their check-in-only meaning.
+
+Your Map Explore reuses the main Map's native renderer, pin hit testing and
+selection policies. Pan and empty-map tap dismiss the compact selection; zoom
+retains it. Selection, dismissal and returning from a place profile preserve the
+viewport and active lens.
+
+Every matching Check-in/Wanna place remains rendered in Your Map at every zoom
+level. There is no pin-count cap or collision-based hiding; dense markers may
+overlap at their real coordinates. Active filters and canonical-place
+deduplication still apply. The main Map retains its existing collision policy.
+
+At wider zooms, Your Map shows tiny neutral gray dots alongside spatially
+scattered category pins. Check-in dots are filled; Wanna-only dots are hollow.
+Selecting any dot promotes it to its full category pin without moving the
+camera. At neighborhood detail (3 meters per screen point or closer), every
+marker becomes a category pin, including coincident places. It returns to
+adaptive detail beyond 4 meters per point so small pinch changes do not flicker
+between modes. Existing category representatives get modest spacing tolerance
+during movement, and detail changes crossfade unless Reduce Motion is enabled.
+
 ## 2026-09-21 — Shared cards open the installed app directly (REC-577)
 
 Published `/cards/<entity>/<id>?card=<token>` links should open the exact entity
@@ -414,3 +456,27 @@ cannot parse card paths and association rules cannot select an app version.
 Keep the website PR unmerged until the tester-update gate is satisfied; account
 for Apple's association cache when verifying. Coordinate domain changes with
 REC-586 without removing existing getrec.me link support.
+
+## 2026-09-22 — Canonical Astir public links (REC-599)
+
+New profile, place, activity, list, invitation, and published-card links use
+`https://astirmovement.com` with their existing paths, encoded identifiers, and
+preview tokens. The app also accepts `www.astirmovement.com` and previously
+shared `getrec.me` links. Associated Domains includes both Astir hosts and the
+legacy apex; the internal `recme://` scheme and Clerk identity stay stable.
+
+The website serves card-capable Apple association rules only on the Astir
+hosts. Older released apps have no Astir association, so they retain the web
+fallback. The legacy host's card association remains gated by REC-577's tester
+update requirement. Previously sent messages and published artwork are immutable
+copies; they are not rewritten by changing the generator.
+
+Client-generated links require an app update. Apply the notification-link
+migration after its rollback-only regression passes; it preserves the existing
+activity-id payload used by older notification clients and does not rewrite
+queued notifications. Share Kit supplies `https://astirmovement.com/share/tiktok`
+as the request redirectURI; its portal has no separate callback-list field
+for this product. Verify the Astir URL prefix for the existing sandbox and
+production configurations, serve the return path in the association file,
+and retain the verified legacy domain for installed clients. Provider
+production approval is separate from domain ownership verification.

@@ -1431,7 +1431,7 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
     let calendarDay: ProfileCalendarDaySummary?
 
     var includesAllStatuses: Bool {
-        false
+        source == .mapSummary
     }
 
     static func calendar(_ summary: ProfileCalendarDaySummary, calendar: Calendar = .current) -> Self {

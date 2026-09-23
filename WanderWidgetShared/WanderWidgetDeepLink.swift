@@ -1,5 +1,15 @@
 import Foundation
 
+/// New public links use Astir; previously shared rec.me links remain readable.
+enum WanderPublicWebsite {
+    static let host = "astirmovement.com"
+
+    static func acceptsUniversalLinkHost(_ value: String?) -> Bool {
+        guard let value = value?.lowercased() else { return false }
+        return value == host || value == "www.astirmovement.com" || value == "getrec.me"
+    }
+}
+
 struct WanderCalendarDate: Equatable, Hashable, Sendable {
     let year: Int
     let month: Int
@@ -133,7 +143,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             guard let host = components.host?.lowercased() else { return nil }
             return parseAppURL(host: host, components: components)
         case "https":
-            guard components.host?.lowercased() == "getrec.me" else { return nil }
+            guard WanderPublicWebsite.acceptsUniversalLinkHost(components.host) else { return nil }
             return parseUniversalLink(components: components)
         default:
             return nil
@@ -381,7 +391,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
 
         var components = URLComponents()
         components.scheme = "https"
-        components.host = "getrec.me"
+        components.host = WanderPublicWebsite.host
         components.percentEncodedPath = "/\(root)/\(encodedID)"
         return components.url
     }

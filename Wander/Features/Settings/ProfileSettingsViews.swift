@@ -759,11 +759,11 @@ private struct SettingsResourcesScreen: View {
 }
 
 private enum RecmeSettingsWebDestination {
-    static let support = URL(string: "https://getrec.me/support")!
-    static let privacy = URL(string: "https://getrec.me/privacy")!
-    static let terms = URL(string: "https://getrec.me/terms")!
-    static let community = URL(string: "https://getrec.me/community")!
-    static let privacyChoices = URL(string: "https://getrec.me/privacy-choices")!
+    static let support = URL(string: "https://astirmovement.com/support")!
+    static let privacy = URL(string: "https://astirmovement.com/privacy")!
+    static let terms = URL(string: "https://astirmovement.com/terms")!
+    static let community = URL(string: "https://astirmovement.com/community")!
+    static let privacyChoices = URL(string: "https://astirmovement.com/privacy-choices")!
 }
 
 private struct SettingsExternalLink: View {

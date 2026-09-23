@@ -133,7 +133,12 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 
 The shared add-to-lists picker attributes successful additions to its entry
 surface: `map` for Map and place-profile actions, `discover` for Discover search
-results. Both existing-list selection and new-list creation emit
+results, `check_in` for the Add to lists row below Friends in a check-in,
+and `wanna` for the visible Add to lists row in a Wanna editor. List additions
+from either editor emit once when membership is stored locally;
+delivery retries and existing membership do not emit again. Only the existing
+coarse properties are sent: `companion_save=none` when the owned place has a
+check-in, or `existing_wanna` for an already saved Wanna. Both existing-list selection and new-list creation emit
 `place_list_item_added` and the matching `list_place_added` engagement action.
 
 The push worker also emits three server-side operational events. They use

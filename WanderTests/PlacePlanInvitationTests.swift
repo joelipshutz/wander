@@ -5,7 +5,7 @@ import XCTest
     func testInvitationLinksRouteToPlansAndSurviveColdStart() throws {
         let token = String(repeating: "ab", count: 24)
         let route = WanderDeepLinkRoute.placePlanInvitation(token: token)
-        for raw in ["https://getrec.me/plans/\(token)", "recme://plans/\(token)"] {
+        for raw in ["https://getrec.me/plans/\(token)", "https://astirmovement.com/plans/\(token)", "recme://plans/\(token)"] {
             let url = try XCTUnwrap(URL(string: raw))
             XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
             var inbox = WanderDeepLinkInbox()
@@ -13,9 +13,9 @@ import XCTest
             XCTAssertNil(inbox.request(ifSessionValidated: false))
             XCTAssertEqual(inbox.request(ifSessionValidated: true)?.route, route)
         }
-        XCTAssertEqual(route.url?.absoluteString, "https://getrec.me/plans/\(token)")
-        for raw in ["https://getrec.me/plans/bad", "https://getrec.me/plans/\(token)/extra",
-                    "https://getrec.me/plans/\(token)?edit=true", "https://getrec.me/plans/\(token)#edit",
+        XCTAssertEqual(route.url?.absoluteString, "https://astirmovement.com/plans/\(token)")
+        for raw in ["https://astirmovement.com/plans/bad", "https://astirmovement.com/plans/\(token)/extra",
+                    "https://astirmovement.com/plans/\(token)?edit=true", "https://astirmovement.com/plans/\(token)#edit",
                     "https://elsewhere.example/plans/\(token)", "recme://plans/\(token.uppercased())"] {
             XCTAssertNil(WanderDeepLinkRoute.parse(try XCTUnwrap(URL(string: raw))))
         }

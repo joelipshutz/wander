@@ -1172,7 +1172,7 @@ enum ActivityShareProviderConfiguration {
     static var metaAppID: String? { configuredValue(for: "WANDER_META_APP_ID") }
     static var snapClientID: String? { configuredValue(for: "WANDER_SNAPCHAT_CLIENT_ID") }
     static var tikTokClientKey: String? { configuredValue(for: "TikTokClientKey") }
-    static let tikTokRedirectURI = "https://getrec.me/share/tiktok"
+    static let tikTokRedirectURI = "https://astirmovement.com/share/tiktok"
 
     static func configuredValue(for key: String, bundle: Bundle = .main) -> String? {
         normalizedValue(bundle.object(forInfoDictionaryKey: key) as? String)
