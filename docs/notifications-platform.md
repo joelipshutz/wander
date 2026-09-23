@@ -57,10 +57,12 @@ The producer sends only to followers who can read the associated `user_places` r
 ## Permission And Routing
 
 Every notification primer uses the same animated example notification cards as
-onboarding, with the existing trigger-specific headline and permission actions.
+onboarding, with the shared “Keep up with your people” headline and existing permission actions.
 Operators can also request a separate remote re-prompt campaign for selected
 accounts or all eligible accounts. See [remote notification re-prompts](feature-flags.md#remote-notification-re-prompts)
 for targeting, campaign versions, device-scoped exposure tracking, and cancellation.
+
+If the app is terminated on the onboarding notification step before a terminal action, that step resumes on launch. A show count is not an answer. These onboarding reopens do not consume any later return reminders.
 
 Notification setup keeps its onboarding prompt and adds a separate three-reminder sequence on return visits. The first authenticated main-app use is open 1; while notifications remain off, the next three eligible opens show the example-notification dialog (normally opens 2, 3, and 4). Both cold launches and real background returns count. Auth revalidation, root remounts, and permission-alert inactive/active transitions do not count again. This replaces the automatic save/follow prompts; their content remains available in debug previews. Open and impression counts persist per account/device, starting on first use of this supporting build, independently of onboarding or previously shown contextual prompts. A blocked open does not consume an impression, and a reminder waits for current-account preferences, fresh iOS authorization, and competing presentations to clear. It stops appearing while both iOS authorization and backend push preferences are enabled. Nonblocking import-completion and shared-visit banners do not defer or suspend the dialog; they remain behind it. Actual modal alerts, sheets, onboarding, and active walkthroughs still block presentation.
 

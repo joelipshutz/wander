@@ -618,6 +618,23 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testUnansweredOnboardingNotificationPromptResumesAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep", "notifications",
+            "-WanderNotificationAuthorizationNotDeterminedFixture"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
+        for _ in 1...2 {
+            app.launch()
+            XCTAssertTrue(app.buttons["productUpsell.primary"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["Onboarding step 5 of 5"].exists)
+            app.terminate()
+        }
+    }
+
     func testContextualNotificationUpsellsUseConfiguredSaveAndFollowCopy() {
         let app = XCUIApplication()
         let baseArguments = [

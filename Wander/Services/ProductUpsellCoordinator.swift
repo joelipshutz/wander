@@ -459,11 +459,19 @@ final class ProductUpsellCoordinator: ObservableObject {
             return
         }
 
-        guard bypassesFrequencyCap || (
-                  impressionCount(for: configuration.id, userID: userID) < configuration.maxLifetimeImpressions
-                      && impressionCount(for: trigger, campaignID: configuration.id, userID: userID)
-                          < configuration.maxLifetimeImpressionsPerTrigger
-              )
+        // Seeing the onboarding step is not a decision. A killed process must
+        // resume it until a terminal action resolves the step, even if an older
+        // build already persisted an impression. Later reminders keep their caps.
+        let isWithinFrequencyPolicy: Bool
+        if trigger == .onboardingNotifications {
+            isWithinFrequencyPolicy = !userDefaults.bool(forKey: onboardingResolutionKey(userID: userID))
+        } else {
+            isWithinFrequencyPolicy = impressionCount(for: configuration.id, userID: userID)
+                < configuration.maxLifetimeImpressions
+                && impressionCount(for: trigger, campaignID: configuration.id, userID: userID)
+                    < configuration.maxLifetimeImpressionsPerTrigger
+        }
+        guard bypassesFrequencyCap || isWithinFrequencyPolicy
         else {
             completion()
             return
@@ -604,6 +612,9 @@ final class ProductUpsellCoordinator: ObservableObject {
         with action: ProductUpsellAction
     ) {
         if activePresentation?.id == presentationID {
+            if let presentation = activePresentation {
+                recordOnboardingResolution(for: presentation)
+            }
             recordAction(action, for: presentationID)
             endAction(for: presentationID)
             let completion = activeCompletion
@@ -613,6 +624,9 @@ final class ProductUpsellCoordinator: ObservableObject {
             return
         }
         guard suspendedPresentation?.presentation.id == presentationID else { return }
+        if let presentation = suspendedPresentation?.presentation {
+            recordOnboardingResolution(for: presentation)
+        }
         recordAction(action, for: presentationID)
         endAction(for: presentationID)
         let completion = suspendedPresentation?.completion
@@ -690,6 +704,15 @@ final class ProductUpsellCoordinator: ObservableObject {
         suspendedPresentation = nil
         activePresentation = nil
         actionInFlightPresentationIDs.removeAll()
+    }
+
+    private func recordOnboardingResolution(for presentation: ProductUpsellPresentation) {
+        guard presentation.isOnboarding else { return }
+        userDefaults.set(true, forKey: onboardingResolutionKey(userID: presentation.userID))
+    }
+
+    private func onboardingResolutionKey(userID: String) -> String {
+        "recme.productUpsell.notifications.\(userID).onboardingResolved.v1"
     }
 
     private func impressionKey(campaignID: ProductUpsellCampaignID, userID: String) -> String {

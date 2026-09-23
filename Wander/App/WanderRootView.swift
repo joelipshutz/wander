@@ -370,6 +370,7 @@ struct WanderRootView: View {
     @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
     @State private var didRequestForcedProductUpsell = false
     @State private var notificationAuthorizationAppOpenID: UUID?
+    @StateObject private var notificationCampaignRefresh = NotificationRepromptRefreshGate()
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -1163,6 +1164,7 @@ struct WanderRootView: View {
             store.clearContactRecommendations()
             needsContactRecommendationsRefresh = true
             if phase == .background {
+                notificationCampaignRefresh.invalidate()
                 placeSaveDraftStore.flush()
                 walkthroughs.recordSuspension()
             }
@@ -1251,6 +1253,12 @@ struct WanderRootView: View {
 
     private var stateObservedRoot: some View {
         recoveryObservedRoot
+        .task(id: notificationCampaignRefreshContext) {
+            let context = notificationCampaignRefreshContext
+            await notificationCampaignRefresh.refresh(context: context, backend: backend)
+            guard !Task.isCancelled, context == notificationCampaignRefreshContext else { return }
+            presentDeferredProductUpsellIfPossible()
+        }
         .task(id: productUpsells.appOpenID) {
             let appOpenID = productUpsells.appOpenID
             await pushNotifications.refreshAuthorizationStatus()
@@ -2258,10 +2266,17 @@ struct WanderRootView: View {
         return backend.integerFeatureFlag(.notificationRepromptCampaign, for: userID) ?? 0
     }
 
+    private var notificationCampaignRefreshContext: NotificationRepromptRefreshGate.Context? {
+        guard isSessionValidated, scenePhase != .background,
+              let userID = auth.state.session?.userID else { return nil }
+        return .init(userID: userID, appOpenID: productUpsells.appOpenID)
+    }
+
     private func requestRemoteNotificationRepromptIfPossible() {
         guard isSessionValidated, scenePhase == .active,
               let userID = auth.state.session?.userID,
-              pushNotifications.notificationPreferencesUserID == userID else { return }
+              pushNotifications.notificationPreferencesUserID == userID,
+              notificationCampaignRefresh.isCurrent(notificationCampaignRefreshContext) else { return }
         productUpsells.bind(to: userID)
         productUpsells.requestRemoteNotificationReprompt(
             campaignVersion: remoteNotificationRepromptCampaign,
@@ -3719,6 +3734,39 @@ enum WanderInitialPresentation: String, Identifiable {
     case settings
 
     var id: String { rawValue }
+}
+
+/// Only remote primers wait for this refresh. Other flag consumers can keep
+/// their cached values, and automatic return reminders remain independent.
+@MainActor
+final class NotificationRepromptRefreshGate: ObservableObject {
+    struct Context: Equatable {
+        let userID: String
+        let appOpenID: UUID
+    }
+
+    @Published private var refreshedContext: Context?
+    private var refreshID = UUID()
+
+    func invalidate() {
+        refreshID = UUID()
+        refreshedContext = nil
+    }
+
+    func refresh(context: Context?, backend: WanderBackend) async {
+        invalidate()
+        guard let context else { return }
+        let requestID = refreshID
+        // Join the existing launch/foreground request when one is in flight.
+        await backend.refreshFeatureFlags(for: context.userID)
+        guard !Task.isCancelled, requestID == refreshID else { return }
+        refreshedContext = context
+    }
+
+    func isCurrent(_ context: Context?) -> Bool {
+        guard let context else { return false }
+        return refreshedContext == context
+    }
 }
 
 struct SharedProfileRoute: Equatable, Identifiable {

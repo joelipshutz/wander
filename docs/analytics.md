@@ -147,6 +147,9 @@ first authenticated main-app use is open 1; subsequent launches and real
 background returns can show at most one reminder per open, for three actual
 appearances total (normally opens 2, 3, and 4). Inactive/active transitions from
 Apple permission alerts do not count as opens. Onboarding has its own allowance.
+An unanswered onboarding notification step resumes after process termination;
+only a terminal action resolves it. Each fresh presentation logs a show, but
+onboarding reopens never consume the three later reminders.
 Counts persist per account/device; existing installations begin this sequence
 on first use of the supporting build. Blocked or notification-enabled opens do
 not consume a reminder. A remote primer and a return reminder never stack in

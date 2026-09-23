@@ -62,6 +62,56 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         }
     }
 
+    func testUnansweredOnboardingResumesAcrossRelaunchesBeyondTheOldImpressionCap() throws {
+        let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let analytics = ProductUpsellRecordingAnalyticsClient()
+
+        // This also exercises migration from the old impression-only behavior:
+        // the persisted show count exists, but no answer was recorded.
+        for visit in 1...5 {
+            let coordinator = ProductUpsellCoordinator(userDefaults: defaults, analytics: analytics)
+            coordinator.bind(to: "user_a")
+            coordinator.request(trigger: .onboardingNotifications, userID: "user_a", isEligible: true)
+            let presentation = try XCTUnwrap(coordinator.activePresentation)
+            XCTAssertEqual(presentation.impressionNumber, visit)
+            XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), 0)
+            XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 0)
+            coordinator.recordAction(.openedSettings, for: presentation.id)
+            // Opening Settings or terminating without an answer must not resolve onboarding.
+        }
+        XCTAssertEqual(analytics.events.filter { $0.name == WanderAnalyticsEvents.productUpsellShown }.count, 5)
+    }
+
+    func testOnboardingResolutionPersistsOnlyForTheCompletedPresentationAndAccount() throws {
+        for action in [ProductUpsellAction.enabled, .declined, .dismissed] {
+            for suspended in [false, true] {
+                let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+                let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+                defer { defaults.removePersistentDomain(forName: suite) }
+                let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+                coordinator.request(trigger: .onboardingNotifications, userID: "user_a", isEligible: true)
+                let id = try XCTUnwrap(coordinator.activePresentation?.id)
+                coordinator.complete(presentationID: UUID(), with: action)
+                XCTAssertTrue(coordinator.ownsPresentation(id: id), "A stale completion cannot resolve the step.")
+                if suspended { coordinator.suspendActivePresentation() }
+                coordinator.complete(presentationID: id, with: action)
+
+                let relaunched = ProductUpsellCoordinator(userDefaults: defaults)
+                var didSkipAnsweredStep = false
+                relaunched.request(trigger: .onboardingNotifications, userID: "user_a", isEligible: true) {
+                    didSkipAnsweredStep = true
+                }
+                XCTAssertNil(relaunched.activePresentation)
+                XCTAssertTrue(didSkipAnsweredStep)
+                relaunched.bind(to: "user_b")
+                relaunched.request(trigger: .onboardingNotifications, userID: "user_b", isEligible: true)
+                XCTAssertEqual(relaunched.activePresentation?.userID, "user_b")
+            }
+        }
+    }
+
     func testPromptAnalyticsCorrelateShowsClicksAndOutcomesWithoutPrivateData() throws {
         let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

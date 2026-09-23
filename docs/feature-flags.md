@@ -95,7 +95,7 @@ server receipt and does not deduplicate across devices or a fresh installation.
 An already visible notification primer satisfies the current campaign without
 stacking another dialog. Blocked requests are reconciled from the current flag
 after the competing UI clears; disabling a campaign leaves no obsolete queued
-prompt. Remote impressions use a separate campaign counter and do not consume
+prompt. On each main-app visit, remote presentation waits for that account’s feature-flag refresh to finish so a cached campaign cannot outrun a newly fetched off value. Automatic reminders do not wait for remote campaign loading. Remote impressions use a separate campaign counter and do not consume
 or depend on the three automatic return reminders or the onboarding allowance.
 Automatic reminders now appear on subsequent main-app opens, normally opens
 2, 3, and 4, replacing the save/follow triggers. Initial use is skipped; blocked
