@@ -1,6 +1,6 @@
 # Shared people recommendations — REC-587
 
-Onboarding and the People recommendation shelf call `WanderBackend.peopleRecommendations` and use one ordered result from `ranked_people_recommendations`. Search remains a separate, explicit lookup. The ranking is provided by migration `20260921180000_ranked_people_recommendations.sql`.
+Onboarding and the People recommendation shelf call `WanderBackend.peopleRecommendations` and use one ordered result from `ranked_people_recommendations`. Search remains a separate, explicit lookup. The ranking is provided by migration `20260923183000_ranked_people_recommendations.sql`.
 
 The score adds independent signals rather than throwing away location or social context when someone is a contact:
 
@@ -20,7 +20,7 @@ Contact graph support works before you follow the matched contact: one supportin
 
 With no contact matches or no contact permission, the same ranking still returns eligible profiles using curated priority, existing follows, follows-you, home area and profile completeness. It is not restricted to the local area and does not use overall follower popularity.
 
-Location means the home area chosen in onboarding/profile settings, with whitespace/case normalized. Empty areas never match. There is no background GPS lookup, fuzzy same-city assumption, inferred demographic signal or access to private saves. A reason label explains the strongest relevant personal signal; all applicable points still contribute.
+Location uses the viewer's saved onboarding/Settings home-city name, falling back to their public profile home area when no city is saved, with whitespace/case normalized. Candidates are compared using only their public profile home area. Other accounts' private home-city records are not read or exposed. Empty areas never match. There is no background GPS lookup, fuzzy same-city assumption, inferred demographic signal or access to private saves. A reason label explains the strongest relevant personal signal; all applicable points still contribute.
 
 The ranking RPC accepts only matched profile IDs, not phone numbers or emails. Those IDs influence only the current response and are not retained. They cannot widen profile visibility. Both surfaces exclude self, existing follows, private/deleted/hidden profiles and blocks in either direction, even for curated accounts and contacts. The RPC retains caller RLS and permits only authenticated callers. Revoking contact access removes direct-contact and contact-graph rows from both surfaces immediately. If access disappears during an in-flight ranking request, the client reranks without contact IDs so membership and order no longer depend on contacts. The client falls back to the existing contact/general suggestions if the new endpoint is unavailable during rollout; that older endpoint has no contact-graph signal.
 

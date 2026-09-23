@@ -38,6 +38,28 @@ select pg_temp.require((select count(*)=6 from public.ranked_people_recommendati
 select pg_temp.require((select count(*)=2 from public.ranked_people_recommendations('{}',2)),'requested limit honored');
 select pg_temp.require(not exists(select 1 from public.ranked_people_recommendations(array_fill('x'::text,array[101]),20)),'oversized contact list fails closed');
 reset role;
+savepoint saved_home_city;
+-- Current onboarding saves private account details, not public profile home_area.
+update public.profiles set home_area='New York' where id='user_rank_viewer';
+insert into public.account_contact_details(user_id,phone_country_code,home_city) values
+ ('user_rank_general','US','{"name":"Los Angeles","country_code":"US","region":"CA"}');
+set local role authenticated;
+select * from public.save_own_account_contact_details(
+ '{"phone_country_code":"US","home_city":{"name":"  LOS   ANGELES  ","country_code":"US","region":"CA","county":"Los Angeles"}}'::jsonb);
+select pg_temp.require((select reason_kind='nearby' from public.ranked_people_recommendations('{}',20)
+ where id='user_rank_local'),'saved onboarding city supplies local relevance without contacts, ahead of stale public viewer area');
+select pg_temp.require((select reason_kind='suggested' from public.ranked_people_recommendations('{}',20)
+ where id='user_rank_contact'),'old public viewer area does not override the saved city');
+select pg_temp.require((select reason_kind='suggested' from public.ranked_people_recommendations('{}',20)
+ where id='user_rank_general'),'candidate private city is never consulted or revealed');
+select pg_temp.require((select array_agg(id order by result_rank) from public.ranked_people_recommendations('{}',20)
+ where id in ('user_rank_local','user_rank_contact'))=array['user_rank_local','user_rank_contact'],
+ 'no-contact fallback boosts publicly local accounts');
+select pg_temp.require(not has_table_privilege('authenticated','public.account_contact_details','select'),
+ 'ranking does not broaden private account detail access');
+reset role;
+rollback to savepoint saved_home_city;
+release savepoint saved_home_city;
 savepoint contact_graph;
 insert into public.profiles(id,handle,display_name,created_at)
  select 'user_rank_peer_'||n,'rankpeer'||n,'Contact '||n,'2026-01-01'::timestamptz from generate_series(1,6) n;

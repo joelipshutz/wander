@@ -1,5 +1,5 @@
 begin;
--- REC-587 review candidate. Contact IDs affect only this viewer's ranking;
+-- REC-587 shared people ranking. Contact IDs affect only this viewer's ranking;
 -- they grant no visibility and are neither persisted nor treated as follows.
 create function public.ranked_people_recommendations(
   input_contact_ids text[] default '{}', input_limit integer default 20
@@ -11,7 +11,13 @@ create function public.ranked_people_recommendations(
 )
 language sql stable security invoker set search_path = pg_catalog, public, app as $$
   with viewer as (
-    select p.id, nullif(lower(regexp_replace(trim(p.home_area), '\s+', ' ', 'g')), '') as area
+    -- Read only the caller's saved onboarding city through its existing owner-only
+    -- RPC. Candidate locations remain public profile areas; no new private grants.
+    select p.id, coalesce(
+      nullif(lower(regexp_replace(trim((select d.home_city->>'name'
+        from public.own_account_contact_details() d)), '\s+', ' ', 'g')), ''),
+      nullif(lower(regexp_replace(trim(p.home_area), '\s+', ' ', 'g')), '')
+    ) as area
     from public.profiles p where p.id = app.current_user_id() and p.deleted_at is null
   ), connections as (
     -- One row per trusted person, even if they are both a contact and a follow.
