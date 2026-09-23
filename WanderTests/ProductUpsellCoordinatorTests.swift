@@ -4,7 +4,7 @@ import UserNotifications
 
 @MainActor
 final class ProductUpsellCoordinatorTests: XCTestCase {
-    func testReturnRemindersAppearOnSecondThirdAndFourthOpenAcrossRelaunches() throws {
+    func testRemindersAppearOnFirstThreeEligibleOpensAcrossRelaunches() throws {
         let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -16,8 +16,8 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             coordinator.recordAppOpen(for: "user_a")
             coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
             XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), appOpen)
-            XCTAssertEqual(coordinator.activePresentation?.trigger, (2...4).contains(appOpen) ? .appOpened : nil)
-            XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), min(3, appOpen - 1))
+            XCTAssertEqual(coordinator.activePresentation?.trigger, (1...3).contains(appOpen) ? .appOpened : nil)
+            XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), min(3, appOpen))
             coordinator.completeCurrent(with: .dismissed)
             coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
             XCTAssertNil(coordinator.activePresentation, "Dismissing cannot immediately re-prompt in the same open.")
@@ -52,7 +52,8 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             )
             coordinator.recordAppOpen(for: "existing_user")
             coordinator.requestAppOpenNotificationReminder(userID: "existing_user", isEligible: eligible, canPresent: true)
-            XCTAssertNil(coordinator.activePresentation, "Initial use of the supporting build is skipped.")
+            XCTAssertEqual(coordinator.activePresentation != nil, shouldShow, "Existing users are eligible on their first visit.")
+            coordinator.completeCurrent(with: .dismissed)
             coordinator.recordAppBackground()
             coordinator.recordAppForeground()
             coordinator.recordAppOpen(for: "existing_user")
@@ -199,6 +200,36 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             XCTAssertNil(coordinator.activePresentation)
         }
         XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 1)
+    }
+
+    func testFinishingOnboardingDoesNotStackFirstVisitReminderEvenAfterBackgrounding() throws {
+        for backgroundDuringOnboarding in [false, true] {
+            let suite = "ProductUpsellCoordinatorTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let coordinator = ProductUpsellCoordinator(userDefaults: defaults)
+            coordinator.bind(to: "new_user")
+            coordinator.request(trigger: .onboardingNotifications, userID: "new_user", isEligible: true)
+            XCTAssertNotNil(coordinator.activePresentation)
+            if backgroundDuringOnboarding {
+                coordinator.recordAppBackground()
+                coordinator.recordAppForeground()
+            }
+            coordinator.completeCurrent(with: .declined)
+            coordinator.recordAppOpen(for: "new_user")
+            coordinator.requestAppOpenNotificationReminder(userID: "new_user", isEligible: true, canPresent: true)
+            coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "new_user", isEligible: true, canPresent: true)
+            XCTAssertNil(coordinator.activePresentation, "The onboarding answer already handled this visit.")
+            XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "new_user"), 0)
+            for reminder in 1...3 {
+                coordinator.recordAppBackground()
+                coordinator.recordAppForeground()
+                coordinator.recordAppOpen(for: "new_user")
+                coordinator.requestAppOpenNotificationReminder(userID: "new_user", isEligible: true, canPresent: true)
+                XCTAssertEqual(coordinator.activePresentation?.impressionNumber, reminder)
+                coordinator.completeCurrent(with: .dismissed)
+            }
+        }
     }
 
     func testAppOpenReminderCountsAreIndependentOfOnboardingAndLegacyPrompts() throws {
