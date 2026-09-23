@@ -187,6 +187,8 @@ final class DiscoverParserTests: XCTestCase {
             ("Joe's favorite coffee", "joe"),
             ("Joe’s favorite coffee", "joe"),
             ("what's Joe's favorite coffee", "joe"),
+            ("List Joe’s favorite coffee", "joe"),
+            ("Tell me about Joe’s favorite coffee", "joe"),
             ("show me Joe Lipshutz's favorite coffee", "joe lipshutz"),
             ("José Núñez’s favorite coffee", "jose nunez"),
             ("James' favorite coffee", "james"),

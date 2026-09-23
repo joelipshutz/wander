@@ -201,9 +201,17 @@ enum DiscoverOwnerQueryPolicy {
     }
 
     static func mention(in query: String) -> Mention? {
-        let normalized = folded(query)
+        var normalized = folded(query).trimmingCharacters(in: .whitespacesAndNewlines)
+        var introduction = ""
+        if let range = normalized.range(
+            of: #"^(?:please\s+)?(?:tell\s+me\s+about|list|show(?:\s+me)?|find(?:\s+me)?|what['’]s|what\s+are)\s+"#,
+            options: .regularExpression
+        ) {
+            introduction = String(normalized[range])
+            normalized.removeSubrange(range)
+        }
         if let match = firstCapture(in: normalized, pattern: #"@([a-z0-9_][a-z0-9_.-]{1,30})"#) {
-            return Mention(ownerQuery: match.value, consumedPhrase: match.value, isHandle: true)
+            return Mention(ownerQuery: match.value, consumedPhrase: introduction + match.value, isHandle: true)
         }
 
         if let match = firstCapture(
@@ -212,7 +220,7 @@ enum DiscoverOwnerQueryPolicy {
             ignoring: ignoredOwnerWords
         ) {
             let name = fullName(endingWith: match.value, before: normalized[..<match.range.lowerBound])
-            return Mention(ownerQuery: name, consumedPhrase: name, isHandle: false)
+            return Mention(ownerQuery: name, consumedPhrase: introduction + name, isHandle: false)
         }
 
         if let match = firstCapture(
@@ -221,7 +229,7 @@ enum DiscoverOwnerQueryPolicy {
             ignoring: ignoredOwnerWords
         ) {
             let name = fullName(endingWith: match.value, before: normalized[..<match.range.lowerBound])
-            return Mention(ownerQuery: name, consumedPhrase: name + "'", isHandle: false)
+            return Mention(ownerQuery: name, consumedPhrase: introduction + name + "'", isHandle: false)
         }
 
         if let match = firstCapture(
@@ -230,7 +238,7 @@ enum DiscoverOwnerQueryPolicy {
             ignoring: ignoredOwnerWords
         ) {
             let name = fullName(endingWith: match.value, before: normalized[..<match.range.lowerBound])
-            return Mention(ownerQuery: name, consumedPhrase: name + "s", isHandle: false)
+            return Mention(ownerQuery: name, consumedPhrase: introduction + name + "s", isHandle: false)
         }
 
         return nil
@@ -297,8 +305,8 @@ enum DiscoverOwnerQueryPolicy {
     ]
 
     private static let nameBoundaries: Set<String> = ignoredOwnerWords.union([
-        "a", "an", "and", "are", "at", "by", "check", "coffee", "find", "for", "from",
-        "give", "in", "is", "like", "me", "my", "of", "on", "or", "places", "please",
+        "a", "about", "an", "and", "are", "at", "by", "check", "coffee", "find", "for", "from",
+        "give", "in", "is", "like", "list", "me", "my", "of", "on", "or", "places", "please",
         "search", "see", "show", "some", "spots", "tell", "the", "to", "want", "what", "with"
     ])
 }

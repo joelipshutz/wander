@@ -5,7 +5,7 @@ import XCTest
     func testPossessivePlaceSearchResolvesFirstNameAndFullNameInBothStages() async {
         let fixtures = ownerSearchFixtures()
         let store = WanderStore(fixtures: fixtures)
-        for query in ["joe's favorite coffee", "Joe’s favorite coffee", "Joes favorite coffee", "show me Joe Lipshutz's favorite coffee"] {
+        for query in ["joe's favorite coffee", "Joe’s favorite coffee", "Joes favorite coffee", "show me Joe Lipshutz's favorite coffee", "List Joe’s favorite coffee", "Tell me about Joe’s favorite coffee", "what's Joe's favorite coffee"] {
             let immediate = store.searchTrustedPlaces(query: query)
             let refined = await store.discover(query: query, includeProfiles: false)
             for results in [immediate, refined] {
@@ -44,7 +44,7 @@ import XCTest
     func testOwnerFavoriteSearchCannotBorrowAnotherPersonsRatingOrWannaGoSave() async {
         let fixtures = ownerSearchFixtures()
         fixtures.userPlaces.first { $0.id == "up_joe_woodcat" }?.ratingScore = 2
-        fixtures.userPlaces.first { $0.id == "up_joe_circuit_coffee" }?.status = .wannaGo
+        fixtures.userPlaces.first { $0.id == "up_joe_circuit_coffee" }?.statusRaw = PlaceStatus.wannaGo.rawValue
         let store = WanderStore(fixtures: fixtures)
         XCTAssertTrue(store.searchTrustedPlaces(query: "Joe's favorite coffee").places.isEmpty)
         let refined = await store.discover(query: "Joe's favorite coffee", includeProfiles: false)
