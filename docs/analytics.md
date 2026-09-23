@@ -374,3 +374,39 @@ newest first, up to 10,000 rows; narrow by username, audit_status or notificatio
 when needed. Global event-property filters also affect other event-backed tables;
 clear audit-specific filters when browsing the user directory. All new queries and
 export paths exclude Joe/Ryan. No actual push is sent by the reporting/test routes.
+
+### Daily notification user states
+
+`Notifications — users by delivery state each day` shows All users plus five
+exclusive states. Each point uses the last complete recipient snapshot from that
+UTC day and only permission observations available at that snapshot, up to 30 days
+old. It covers all undeleted accounts in the snapshot, including users with no
+activity or sends, with the existing staff/test exclusions. It ignores the
+dashboard's individual-user and audit filters so the population lines remain
+comparable. The states sum to All users:
+
+- **Notifications off:** the known app master toggle is off, or iOS is denied/restricted.
+- **Permission unconfirmed:** app preference or iOS permission is unknown, or the
+  system prompt has not been answered. The directory's permission filter still
+  distinguishes unknown from not prompted.
+- **Enabled, delivery issue:** app push is on and observed iOS permission is
+  enabled/limited, but no active production token exists or at least one
+  notification failed that UTC day. This state takes precedence over acceptance.
+- **Enabled + APNs accepted:** the same confirmed enablement, an active production
+  token, at least one accepted production notification that UTC day and no failed
+  notifications that day. This is not proof of device display or every delivery.
+- **Enabled, delivery unverified:** confirmed enablement and an active production
+  token, but no accepted or failed notification that day. A token never tested
+  against APNs is not presumed valid.
+
+Daily acceptance/failure counts come from the ledger captured in that day's
+snapshot. Device-token rejection deactivates the token in the existing worker;
+an untried bad token cannot be detected from token registration alone. Pending
+retries are not terminal notification failures. Multiple devices and category
+preferences can differ from this account-level master/readiness state.
+
+History starts with the snapshot collector; today's settings are never backfilled
+into prior dates. Incomplete generations are ignored, complete empty generations
+produce zeroes, and days without a complete snapshot remain null. Today is partial
+and refreshes on the existing 15-minute schedule. Actual native permission data
+still requires release; APNs acceptance alone cannot fill that missing permission.

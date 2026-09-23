@@ -25,7 +25,8 @@
     "test:social-import-eval": "node --test social-import-eval.test.mjs social-import-eval/model-cost-comparison.test.mjs",
     "test:social-import-selection": "node --test social-import-eval/app-selection.test.mjs",
     "analytics:permissions": "node posthog-permissions-dashboard.mjs --apply",
-    "analytics:test-permissions": "node posthog-permissions-fixture.mjs"
+    "analytics:test-permissions": "node posthog-permissions-fixture.mjs",
+    "analytics:test-notification-states": "node posthog-notification-states-fixture.mjs"
   },
   "dependencies": {
     "pg": "8.22.0"

@@ -43,6 +43,71 @@ select day, ${permissions.map(p=>`round(100.0*countIf(permission='${p}' and stat
 from observed group by day order by day`;
 }
 
+export const notificationStateColumns = [
+  'All users', 'Enabled + APNs accepted', 'Enabled, delivery unverified',
+  'Enabled, delivery issue', 'Notifications off', 'Permission unconfirmed',
+];
+
+export function notificationStateDailySQL() {
+  // Select one complete generation per UTC day, not each user's latest-ever row.
+  // This prevents incomplete exports, deleted accounts and today's settings rewriting history.
+  return `with completed_batches as (
+  select toString(properties.snapshot_id) as batch_id,max(toInt(properties.recipient_count)) as expected_rows
+  from events where event='notification_recipient_snapshot_completed'
+    and properties.analytics_audience='external_recipients_v1' and timestamp>=now()-interval 32 day group by batch_id
+), available_batches as (
+  select toString(properties.snapshot_id) as batch_id,toInt(uniqExact(distinct_id)) as actual_rows
+  from events where event='notification_recipient_snapshot'
+    and properties.analytics_audience='external_recipients_v1' and timestamp>=now()-interval 32 day group by batch_id
+), complete_days as (
+  select toDate(substring(c.batch_id,1,10)) as day,max(c.batch_id) as snapshot_id,1 as is_complete
+  from completed_batches c left join available_batches a on a.batch_id=c.batch_id
+  where coalesce(a.actual_rows,0)=c.expected_rows group by day
+), recipients as (
+  select toString(properties.snapshot_id) as snapshot_id,distinct_id as user_id,
+    argMax(person_id,timestamp) as person_key,
+    argMax(toString(properties.push_enabled),timestamp) as push_enabled,
+    argMax(toString(properties.preferences_known),timestamp) as preferences_known,
+    argMax(toInt(properties.active_production_tokens),timestamp) as active_tokens,
+    argMax(toString(properties.daily_counts),timestamp) as daily_counts
+  from events where event='notification_recipient_snapshot' and ${recipientGuard}
+    and properties.analytics_audience='external_recipients_v1' and timestamp>=now()-interval 32 day
+    and properties.snapshot_id in (select snapshot_id from complete_days) group by snapshot_id,user_id
+), observations as (
+  select person_id, timestamp as observed_at,toString(properties.status) as os_status
+  from events where event='permission_status_observed' and properties.permission='notifications'
+    and ${productionSQL} and timestamp>=now()-interval 62 day
+), user_days as (
+  select r.snapshot_id,r.user_id,r.push_enabled,r.preferences_known,r.active_tokens,r.daily_counts,
+    argMaxIf(p.os_status,p.observed_at,p.observed_at<=toDateTime(r.snapshot_id)
+      and p.observed_at>=toDateTime(r.snapshot_id)-interval 30 day) as os_status
+  from recipients r left join observations p on p.person_id=r.person_key
+  group by r.snapshot_id,r.user_id,r.push_enabled,r.preferences_known,r.active_tokens,r.daily_counts
+), day_counts as (
+  select *,toDate(substring(snapshot_id,1,10)) as day,
+    arrayFirst(item->JSONExtractString(item,'day')=substring(snapshot_id,1,10),
+      JSONExtractArrayRaw(coalesce(daily_counts,'[]'))) as counts
+  from user_days
+), states as (
+  select day,multiIf(
+    os_status in ('denied','restricted') or (preferences_known='true' and push_enabled='false'),'off',
+    preferences_known!='true' or push_enabled!='true' or coalesce(os_status,'unknown') not in ('enabled','limited'),'unconfirmed',
+    active_tokens=0 or JSONExtractInt(counts,'failed')>0,'issue',
+    JSONExtractInt(counts,'accepted')>0,'accepted','unverified') as state
+  from day_counts
+), totals as (
+  select day,count() as all_users,countIf(state='accepted') as accepted,
+    countIf(state='unverified') as unverified,countIf(state='issue') as issue,
+    countIf(state='off') as off,countIf(state='unconfirmed') as unconfirmed
+  from states group by day
+), calendar as (
+  select toDate(now())-29+arrayJoin(range(30)) as day
+)
+select c.day as day,${[['all_users','All users'],['accepted','Enabled + APNs accepted'],['unverified','Enabled, delivery unverified'],['issue','Enabled, delivery issue'],['off','Notifications off'],['unconfirmed','Permission unconfirmed']].map(([key,label])=>`if(coalesce(d.is_complete,0)=1,coalesce(t.${key},0),null) as \`${label}\``).join(',\n  ')}
+from calendar c left join complete_days d on d.day=c.day left join totals t on t.day=c.day
+where c.day>=(select min(day) from complete_days) order by day`;
+}
+
 export const recipientGuard = `distinct_id not in (${sqlList(INTERNAL_USER_IDS)}) and ${staffExclusionSQL}
   and person_id not in cohort 481950
   and coalesce(toString(person.properties.$internal_or_test_user),'false')!='true'`;
@@ -186,12 +251,14 @@ select p.permission,coalesce(nullIf(l.status,''),'unknown') as status, if(empty(
 left join latest l on l.permission=p.permission where (select count() from selected)=1 order by p.permission`)},
   {key:'permissions-recipient-daily',name:'Selected user — notifications per day',description:'UTC daily counts, last 30 calendar days including today. Accepted = one notification accepted for at least one production token. Failures/skips use outcome date; pending uses creation date. Opens use tap date. APNs acceptance does not confirm device display.',query:chart(recipientDailySQL(),['accepted_by_apns','recorded_opens'],'ActionsBar')},
   {key:'permissions-recipient-daily-details',name:'Selected user — daily delivery details',description:'Same daily data with failures, skips and currently pending notifications. Zeroes come from the stored delivery ledger; no match or missing snapshot yields no rows. Opens are recorded taps, not matched delivery receipts; do not divide these columns into a per-message open rate.',query:table(recipientDailySQL())},
+  {key:'notifications-user-states-daily',name:'Notifications — users by delivery state each day',description:'Daily UTC users at the last complete snapshot; today is partial. Five states sum to All users. Enabled requires app push on and observed iOS permission. APNs accepted means production acceptance that day; issue means missing token or failed send. Unconfirmed includes unknown/not prompted. Missing days blank. Ignores dashboard filters.',query:chart(notificationStateDailySQL(),notificationStateColumns)},
 ];
 
 export const permissionSections = [
+  {title:'Daily notification health',body:'Daily user counts: the five states add up to All users. Enabled + APNs accepted requires confirmed iOS permission, app notifications on, a production token and an Apple acceptance that day with no failed notifications. Enabled, delivery issue covers missing/invalidated tokens or failed notifications; enabled without a send stays unverified. Off includes the app toggle or iOS denial. Permission unconfirmed includes not yet prompted and unknown; use the user list below to distinguish them. Today updates every 15 minutes. Earlier settings are never inferred from today. Joe and Ryan are excluded.',insightKeys:['notifications-user-states-daily']},
   {title:'Notification users and audit',body:'Choose Notification permission to filter the user list and audits: all, on, off, not_prompted, or unknown. On includes limited/quiet permission; off includes denied/restricted. App push_enabled is a separate in-app toggle. Add a username filter for one recipient; Use audit_status or notification_type for the audit; clear those filters to browse the user list. New audit rows retain failures and retries with recipient and message text; historical_snapshot rows only preserve the latest old state. Notifications accepted by Apple are not confirmed as displayed. Joe and Ryan are excluded.',insightKeys:permissionInsights.slice(0,3).map(x=>x.key)},
   {title:'Permission enablement',body:'Population metrics in this section cover all external users; username filtering applies to the delivery section below. Current enablement comes from system observations on the new app build. Unknown is separate from denied. Limited contacts/quiet notifications count as enabled, with limited counts visible. Photo permission means saving images; the system photo picker does not request full-library access.',insightKeys:permissionInsights.slice(3,7).map(x=>x.key)},
-  {title:'Notification delivery by username',body:'Use Add filter → Event properties → username → equals, then type or choose a username. The detail charts appear when exactly one account matches; the directory lists available accounts. Counts refresh every 15 minutes and cover the last 30 UTC calendar days. “Accepted by APNs” means Apple accepted the request, not proof of banner delivery. Notification text is shown only in the audit section above; device tokens are never exported.',insightKeys:permissionInsights.slice(7).map(x=>x.key)},
+  {title:'Notification delivery by username',body:'Use Add filter → Event properties → username → equals, then type or choose a username. The detail charts appear when exactly one account matches; the directory lists available accounts. Counts refresh every 15 minutes and cover the last 30 UTC calendar days. “Accepted by APNs” means Apple accepted the request, not proof of banner delivery. Notification text is shown only in the audit section above; device tokens are never exported.',insightKeys:permissionInsights.slice(7,12).map(x=>x.key)},
 ];
 
 export async function applyPermissionsDashboard() {
@@ -207,11 +274,12 @@ export async function applyPermissionsDashboard() {
   const headers=[];
   for(const section of permissionSections) headers.push(await upsertSectionTile(project,dashboard.id,section,current.tiles));
   const saved=await api(`/api/projects/${project}/dashboards/${dashboard.id}/`);
-  // Recipient and message columns need a full row on desktop. Preserve all other tile sizes.
-  const wideKeys=permissionInsights.slice(0,3).map(definition=>'recme:iac:insight:'+definition.key);
+  // Recipient/message columns and the six-line daily chart need a full desktop row.
+  // Newly created insight tiles may not have layouts until their first UI render.
+  const wideKeys=[...permissionInsights.slice(0,3).map(definition=>'recme:iac:insight:'+definition.key),'recme:iac:insight:notifications-user-states-daily'];
   const wideTiles=saved.tiles.filter(tile=>tile.insight?.tags?.some(tag=>wideKeys.includes(tag)));
   await api(`/api/projects/${project}/dashboards/${dashboard.id}/`,{method:'PATCH',body:{
-    tiles:wideTiles.map(tile=>({id:tile.id,layouts:{...tile.layouts,sm:{...tile.layouts?.sm,x:0,w:12}}})),
+    tiles:wideTiles.map(tile=>({id:tile.id,layouts:{...tile.layouts,sm:{y:0,h:6,...tile.layouts?.sm,x:0,w:12}}})),
   }});
   const order=permissionSections.flatMap((section,i)=>[headers[i].id,...section.insightKeys.map(key=>saved.tiles.find(t=>t.insight?.tags?.includes('recme:iac:insight:'+key)).id)]);
   for(const tile of saved.tiles) if(!order.includes(tile.id))order.push(tile.id);
