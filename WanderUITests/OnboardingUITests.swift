@@ -568,7 +568,7 @@ final class OnboardingUITests: XCTestCase {
             if (2...4).contains(appOpen) {
                 XCTAssertTrue(primary.waitForExistence(timeout: 15), "Reminder missing on app open \(appOpen)")
                 XCTAssertEqual(primary.label, "Open Settings")
-                XCTAssertTrue(app.staticTexts["See when your friends check in"].exists)
+                XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
                 let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
                 capture.name = "Notification reminder on app open \(appOpen)"
                 capture.lifetime = .keepAlways
@@ -603,7 +603,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         let notificationContinue = app.buttons["productUpsell.primary"]
         XCTAssertTrue(notificationContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(notificationContinue.isHittable)
@@ -632,7 +632,7 @@ final class OnboardingUITests: XCTestCase {
             "place_saved"
         ]
         app.launch()
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["productUpsell.primary"].isHittable)
         XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["Onboarding step 5 of 5"].exists)
@@ -648,7 +648,7 @@ final class OnboardingUITests: XCTestCase {
             "follow_created"
         ]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Keep up with people you follow"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["productUpsell.primary"].isHittable)
         XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
 
@@ -730,7 +730,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         let notificationContinue = app.buttons["productUpsell.primary"]
         XCTAssertTrue(notificationContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(notificationContinue.isHittable)

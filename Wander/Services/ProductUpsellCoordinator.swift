@@ -62,22 +62,22 @@ struct ProductUpsellCatalog {
                 contentByTrigger: [
                     .onboardingNotifications: ProductUpsellContent(
                         eyebrow: "STAY IN THE LOOP",
-                        title: "See when your friends check in",
-                        message: "Get a heads-up when people you follow save a place or check in somewhere worth knowing.",
+                        title: "Keep up with your people",
+                        message: "See when your friends check in, tag you, or you get a new follower.",
                         systemImage: "bell.and.waves.left.and.right.fill",
                         palette: .sun
                     ),
                     .placeSaved: ProductUpsellContent(
                         eyebrow: "STAY IN THE LOOP",
-                        title: "See when your friends check in",
-                        message: "Get a heads-up when people you follow save a place or check in somewhere worth knowing.",
+                        title: "Keep up with your people",
+                        message: "See when your friends check in, tag you, or you get a new follower.",
                         systemImage: "bell.and.waves.left.and.right.fill",
                         palette: .sun
                     ),
                     .followCreated: ProductUpsellContent(
                         eyebrow: "STAY IN THE LOOP",
-                        title: "Keep up with people you follow",
-                        message: "Get a heads-up when they save a place or check in somewhere worth knowing.",
+                        title: "Keep up with your people",
+                        message: "See when your friends check in, tag you, or you get a new follower.",
                         systemImage: "person.crop.circle.badge.checkmark",
                         palette: .sun
                     )
@@ -92,8 +92,8 @@ struct ProductUpsellCatalog {
                 contentByTrigger: [
                     .appOpened: ProductUpsellContent(
                         eyebrow: "STAY IN THE LOOP",
-                        title: "See when your friends check in",
-                        message: "Get a heads-up when people you follow save a place or check in somewhere worth knowing.",
+                        title: "Keep up with your people",
+                        message: "See when your friends check in, tag you, or you get a new follower.",
                         systemImage: "bell.and.waves.left.and.right.fill",
                         palette: .sun
                     )
@@ -108,8 +108,8 @@ struct ProductUpsellCatalog {
                 contentByTrigger: [
                     .remoteNotificationReprompt: ProductUpsellContent(
                         eyebrow: "STAY IN THE LOOP",
-                        title: "See when your friends check in",
-                        message: "Get a heads-up when people you follow save a place or check in somewhere worth knowing.",
+                        title: "Keep up with your people",
+                        message: "See when your friends check in, tag you, or you get a new follower.",
                         systemImage: "bell.and.waves.left.and.right.fill",
                         palette: .sun
                     )
