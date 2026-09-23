@@ -1,5 +1,28 @@
 import Foundation
 
+/// A session-only audience choice, applied by the server before pagination.
+enum FeedAudience: String, CaseIterable, Equatable {
+    case everyone
+    case onlyMe = "only_me"
+    case onlyFriends = "only_friends"
+
+    var title: String {
+        switch self {
+        case .everyone: "Everyone"
+        case .onlyMe: "Only Me"
+        case .onlyFriends: "Only Friends"
+        }
+    }
+
+    func includes(actorID: String, currentUserID: String, relationship: ViewerRelationship) -> Bool {
+        switch self {
+        case .everyone: true
+        case .onlyMe: actorID == currentUserID
+        case .onlyFriends: actorID != currentUserID && relationship == .mutual
+        }
+    }
+}
+
 /// Immutable activity kinds emitted by the Feed database contract.
 ///
 /// A Feed card must describe the action that happened at `occurredAt`, rather

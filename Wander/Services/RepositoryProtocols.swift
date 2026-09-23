@@ -2006,6 +2006,10 @@ extension PlaceRepository {
 
 @MainActor
 protocol FeedRepository {
+    func activityFeed(
+        audience: FeedAudience, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage
     /// Delivers authorized text/cards before optional media network requests.
     func followedFeed(
@@ -2016,6 +2020,16 @@ protocol FeedRepository {
 }
 
 extension FeedRepository {
+    func activityFeed(
+        audience: FeedAudience, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        guard audience == .everyone else {
+            throw WanderRemoteError.notImplemented("Feed audience")
+        }
+        return try await followedFeed(before: before, limit: limit, onContent: onContent)
+    }
+
     func followedFeed(
         before: String?,
         limit: Int,

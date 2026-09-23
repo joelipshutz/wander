@@ -28,6 +28,7 @@ struct FeedScreen: View {
     @State private var accumulatedFeedScrollTravel: CGFloat = 0
     @FocusState private var peopleSearchFieldFocused: Bool
     @Namespace private var searchTransitionNamespace
+    private let isFeedTabActive: Bool
     private let onAdd: () -> Void
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let onPresentation: (WanderDeepLinkPresentationToken) -> Void
@@ -35,12 +36,14 @@ struct FeedScreen: View {
     private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
 
     init(
+        isFeedTabActive: Bool = true,
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         onPresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         onAdd: @escaping () -> Void = {}
     ) {
+        self.isFeedTabActive = isFeedTabActive
         self.presentationResetRequest = presentationResetRequest
         self.onPresentation = onPresentation
         self.onWillDismiss = onWillDismiss
@@ -59,6 +62,15 @@ struct FeedScreen: View {
     ]
 
     private var page: FollowedFeedPage? { store.followedFeedPage }
+    private var visibleActivity: [FeedActivity] {
+        (page?.activity ?? []).filter {
+            store.feedAudience.includes(actorID: $0.actor.id, currentUserID: store.currentUser.id,
+                                        relationship: $0.actor.relationship)
+        }
+    }
+    private var audienceSelection: Binding<FeedAudience> {
+        Binding(get: { store.feedAudience }, set: { store.selectFeedAudience($0) })
+    }
 
     var body: some View {
         NavigationStack {
@@ -136,7 +148,10 @@ struct FeedScreen: View {
                 guard height > 0 else { return }
                 floatingHeaderHeight = height
             }
-            .task(id: "\(auth.isSignedIn)-\(store.currentUser.id)") {
+            .onChange(of: isFeedTabActive) { _, isActive in
+                if isActive { store.selectFeedAudience(.everyone) }
+            }
+            .task(id: "\(auth.isSignedIn)-\(store.currentUser.id)-\(store.feedAudience.rawValue)") {
                 // Commit the selected tab's first frame before starting the
                 // remote refresh and its published state changes.
                 await Task.yield()
@@ -489,7 +504,7 @@ struct FeedScreen: View {
             peopleRail
         }
         if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
-            FeedLoadingState()
+            FeedLoadingState(audience: audienceSelection)
         } else if let page, !page.activity.isEmpty {
             if FeedPresentation.showsFeaturedPlaces, !page.featuredPlaces.isEmpty {
                 FeedSectionHeading(title: "Featured for you")
@@ -500,13 +515,17 @@ struct FeedScreen: View {
                 )
             }
 
-            FeedSectionHeading(title: "Recent", detail: freshnessDetail)
-            FeedActivityList(
-                activity: page.activity,
-                openProfile: openProfile,
-                openPlace: openPlace,
-                openList: openList
-            )
+            FeedSectionHeading(title: "Recent", detail: freshnessDetail, audience: audienceSelection)
+            if visibleActivity.isEmpty {
+                FeedAudienceEmptyState(audience: audienceSelection)
+            } else {
+                FeedActivityList(
+                    activity: visibleActivity,
+                    openProfile: openProfile,
+                    openPlace: openPlace,
+                    openList: openList
+                )
+            }
 
             if store.feedLoadState == .stale {
                 FeedRetryRow(
@@ -517,17 +536,20 @@ struct FeedScreen: View {
                 )
             }
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
-            FeedRefreshRecoveryState(retry: refresh)
+            FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)
         } else {
-            FeedSectionHeading(title: "Recent")
-            FeedEmptyState(
-                recommendations: FeedPresentation.showsFeaturedPlaces ? peopleRecommendations : [],
-                followingProfileIDs: followingProfileIDs,
-                openSearch: openDiscoverSearch,
-                openProfile: openProfile,
-                follow: follow
-            )
-
+            FeedSectionHeading(title: "Recent", audience: audienceSelection)
+            if store.feedAudience != .everyone {
+                FeedAudienceEmptyState(audience: audienceSelection)
+            } else {
+                FeedEmptyState(
+                    recommendations: FeedPresentation.showsFeaturedPlaces ? peopleRecommendations : [],
+                    followingProfileIDs: followingProfileIDs,
+                    openSearch: openDiscoverSearch,
+                    openProfile: openProfile,
+                    follow: follow
+                )
+            }
         }
     }
 
@@ -1560,8 +1582,28 @@ private struct FeedSectionHeading: View {
     @Environment(\.astirBrandMode) private var astirBrandMode
     let title: String
     var detail: String? = nil
+    var audience: Binding<FeedAudience>? = nil
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                titleContent
+                if let audience {
+                    Spacer(minLength: WanderTheme.spacing2)
+                    FeedAudienceMenu(selection: audience)
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                titleContent
+                if let audience {
+                    FeedAudienceMenu(selection: audience)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var titleContent: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
                 .font(AstirTypography.sectionTitle)
@@ -1802,7 +1844,7 @@ private struct FeedActivityModule: View {
             actor: activity.actor,
             placeName: "Map activity",
             placeServerID: nil,
-            placeDetail: "From someone you follow",
+            placeDetail: activity.actor.relationship == .owner ? "Your activity" : "From someone you follow",
             ticketKind: activity.resolvedTicketKind,
             occurredAt: activity.occurredAt,
             note: activity.note,
@@ -1990,6 +2032,7 @@ struct FeedResolvedPlacePhoto: View {
 
 private struct FeedLoadingState: View {
     @Environment(\.astirBrandMode) private var brandMode
+    let audience: Binding<FeedAudience>
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             if FeedPresentation.showsFeaturedPlaces {
@@ -2002,7 +2045,8 @@ private struct FeedLoadingState: View {
                     }
                 }
             }
-            FeedSectionHeading(title: "Recent")
+            FeedSectionHeading(title: "Recent", audience: audience)
+                .unredacted()
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -2020,6 +2064,7 @@ private struct FeedLoadingState: View {
 /// follow-people empty state. The placeholders deliberately do not invent
 /// social activity that the app failed to retrieve.
 private struct FeedRefreshRecoveryState: View {
+    let audience: Binding<FeedAudience>
     let retry: () async -> Void
 
     var body: some View {
@@ -2029,7 +2074,7 @@ private struct FeedRefreshRecoveryState: View {
                 FeedRecoveryFeaturedRail()
             }
 
-            FeedSectionHeading(title: "Recent", detail: "Unavailable")
+            FeedSectionHeading(title: "Recent", detail: "Unavailable", audience: audience)
             FeedRecoveryActivityList()
 
             FeedRetryRow(
