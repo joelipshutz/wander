@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { pathToFileURL } from "node:url";
+import { notificationPromptInsights } from "./posthog-notification-prompts.mjs";
 
 const DASHBOARD_TAG = "recme:iac:dashboard:product-funnel";
 const INSIGHT_TAG_PREFIX = "recme:iac:insight:";
@@ -114,6 +115,7 @@ from observed group by cohort_week order by cohort_week desc`;
 }
 
 const insights = [
+  ...notificationPromptInsights(productionSQL),
   {
     key: "acquisition-first-opens", name: "Acquisition — first observed opens",
     description: "Unique people with an install-local first-open marker. Reinstalls and historical upgrades can emit again; this is not App Store download attribution. Schema 3 production baseline.",
@@ -432,7 +434,8 @@ const sections = [
       "notifications-delivery-health",
       "notifications-open-rate",
       "notifications-frequency-summary",
-      "notifications-frequency-histogram"
+      "notifications-frequency-histogram",
+      ...notificationPromptInsights(productionSQL).map(({ key }) => key)
     ]
   }
 ];
@@ -460,6 +463,7 @@ function parseArgs(args) {
     apply: args.includes("--apply"),
     check: args.includes("--check"),
     verify: args.includes("--verify"),
+    notificationPromptsOnly: args.includes("--notification-prompts-only"),
   };
 }
 
@@ -551,7 +555,7 @@ function configuredProjectID() {
 
 // The existing key has insight:read but no direct query scope. Refreshing saved
 // insights is a supported API operation; return aggregate status, not row data.
-async function verifyDashboard() {
+async function verifyDashboard({ notificationPromptsOnly = false } = {}) {
   const projectID = configuredProjectID();
   const dashboards = await listAll(`/api/projects/${projectID}/dashboards/?limit=200`);
   const match = dashboards.find(item => item.tags?.includes(DASHBOARD_TAG));
@@ -559,6 +563,7 @@ async function verifyDashboard() {
   const dashboard = await api(`/api/projects/${projectID}/dashboards/${match.id}/`);
   const results = [];
   for (const definition of insights) {
+    if (notificationPromptsOnly && !definition.key.startsWith("notification-prompts-")) continue;
     const tile = dashboard.tiles?.find(item => item.insight?.tags?.includes(`${INSIGHT_TAG_PREFIX}${definition.key}`));
     if (!tile) throw new Error(`Missing managed insight: ${definition.key}`);
     const insight = await api(`/api/projects/${projectID}/insights/${tile.insight.id}/?refresh=force_blocking`);
@@ -630,16 +635,33 @@ async function applyDashboard() {
   return { dashboardID: dashboard.id, insightIDs: created.map(({ id }) => id) };
 }
 
+// The live dashboard may contain newer definitions from another pending PR.
+// This scoped apply only adds/updates our four insights and preserves every
+// existing tile, its order, dashboard metadata, and unrelated insight query.
+async function applyNotificationPromptInsights() {
+  const projectID = configuredProjectID();
+  const dashboards = await listAll(`/api/projects/${projectID}/dashboards/?limit=200`);
+  const match = dashboards.find(item => item.tags?.includes(DASHBOARD_TAG));
+  if (!match) throw new Error("Managed launch dashboard is missing");
+  const existing = await listAll(`/api/projects/${projectID}/insights/?limit=200`);
+  const created = [];
+  for (const definition of notificationPromptInsights(productionSQL)) {
+    created.push(await upsertInsight(projectID, match.id, definition, existing));
+  }
+  return { dashboardID: match.id, insightIDs: created.map(({ id }) => id) };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseArgs(process.argv.slice(2));
   const summary = assertDefinition();
   if (options.verify) {
-    console.log(JSON.stringify({ mode: "verify", ...(await verifyDashboard()) }, null, 2));
+    console.log(JSON.stringify({ mode: "verify", ...(await verifyDashboard(options)) }, null, 2));
   } else if (options.check || !options.apply) {
     console.log(JSON.stringify({ mode: "check", ...summary }, null, 2));
   } else {
-    console.log(JSON.stringify({ mode: "apply", ...summary, ...(await applyDashboard()) }, null, 2));
+    const result = options.notificationPromptsOnly ? await applyNotificationPromptInsights() : await applyDashboard();
+    console.log(JSON.stringify({ mode: "apply", ...summary, ...result }, null, 2));
   }
 }
 
-export { applyDashboard, assertDefinition, insights, sections, retentionSQL, clientProperties, verifyDashboard };
+export { applyDashboard, applyNotificationPromptInsights, assertDefinition, insights, sections, retentionSQL, clientProperties, verifyDashboard, notificationPromptInsights, productionSQL };

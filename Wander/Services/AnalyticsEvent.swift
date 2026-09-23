@@ -322,6 +322,7 @@ enum WanderAnalyticsEvents {
     static let onboardingFriendSuggestionsCompleted = "onboarding_friend_suggestions_completed"
     static let onboardingCompleted = "onboarding_completed"
     static let productUpsellShown = "product_upsell_shown"
+    static let productUpsellButtonClicked = "product_upsell_button_clicked"
     static let productUpsellActioned = "product_upsell_actioned"
     static let appSurfaceViewed = "app_surface_viewed"
     static let engagementActionPerformed = "engagement_action_performed"
