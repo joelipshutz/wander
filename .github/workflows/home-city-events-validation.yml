@@ -11,6 +11,11 @@ on:
       - '**/*EventsAccess*'
       - '.github/workflows/home-city-events-validation.yml'
   workflow_dispatch:
+    inputs:
+      compact_only:
+        description: Rebuild and retry compact validation when Pro already passed for unchanged app inputs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,6 +51,7 @@ jobs:
               print('Using', name, device['udid'])
           PY
       - name: Feature units and native screen flows on iPhone 17 Pro
+        if: ${{ !inputs.compact_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
@@ -62,10 +68,17 @@ jobs:
           -only-testing:WanderUITests/EventsAccessUITests
           -only-testing:WanderUITests/ContactDiscoveryUITests
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Release Pro simulator and wait for compact startup
+        if: success() || failure()
+        run: |
+          if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["PRO_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
+            xcrun simctl shutdown "$PRO_DEVICE_ID"
+          fi
+          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
       - name: Repeat native screen flows on compact iPhone 16e
         if: success() || failure()
         run: >-
-          xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$COMPACT_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/AccountContactDetailsUITests
