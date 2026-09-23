@@ -86,8 +86,12 @@ import XCTest
         let settings = app.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
         let link = app.buttons["settings.contactDiscovery"]
-        XCTAssertTrue(link.waitForExistence(timeout: 10))
-        for _ in 0..<8 where !link.isHittable { app.swipeUp() }
+        // Settings uses a lazy List; scroll before requiring this lower row.
+        for _ in 0..<8 {
+            if link.exists && link.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
         XCTAssertTrue(link.isHittable); link.tap()
     }
     private func backToFeed(_ app: XCUIApplication) {
