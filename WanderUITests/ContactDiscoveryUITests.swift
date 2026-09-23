@@ -127,7 +127,11 @@ import XCTest
         backToFeed(app)
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
         app.activate()
+        // Denied notifications can show the return-open reminder independently
+        // of contact revocation. Finish it before inspecting the resumed feed.
+        completeNotificationPromptIfPresented(app)
         XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"].firstMatch)
         wait(for: [gone], timeout: 10)
