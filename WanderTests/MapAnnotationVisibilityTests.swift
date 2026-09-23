@@ -4,6 +4,76 @@ import XCTest
 
 @MainActor
 final class MapAnnotationVisibilityTests: XCTestCase {
+    func testYourMapKeepsEveryDensePinVisibleWithoutZooming() async throws {
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 320, height: 600))
+        let delegate = AllPinsDelegate()
+        map.delegate = delegate
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = map.bounds
+        let controller = UIViewController()
+        controller.view = map
+        window.rootViewController = controller
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            withExtendedLifetime(delegate) {}
+        }
+
+        // A hundred mixed-status places share a tiny area at city overview zoom.
+        // Default MapKit priority hides most of these even though all are in view.
+        let pins = (0..<100).map { index in
+            let pin = MKPointAnnotation()
+            pin.title = String(index)
+            pin.coordinate = CLLocationCoordinate2D(
+                latitude: 34 + Double(index % 10) * 0.00001,
+                longitude: -118 + Double(index / 10) * 0.00001
+            )
+            return pin
+        }
+        map.setRegion(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+            span: MKCoordinateSpan(latitudeDelta: 0.34, longitudeDelta: 0.34)
+        ), animated: false)
+        map.addAnnotations(pins)
+        func visibleCount() -> Int {
+            pins.filter { MapHitTesting.isAnnotationViewVisible(map.view(for: $0), in: map) }.count
+        }
+        for _ in 0..<100 where visibleCount() != pins.count {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(visibleCount(), pins.count, "No saved pin may be hidden by density or zoom")
+        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Map dot" }.count, 80)
+        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Category pin" }.count, 20)
+        for pin in pins {
+            let view = try XCTUnwrap(map.view(for: pin))
+            XCTAssertEqual(view.displayPriority, .required)
+            XCTAssertNil(view.clusteringIdentifier)
+        }
+    }
+
+    func testPinVisibilityPolicySurvivesSelectionAndReuse() {
+        let view = NativeMapPinAnnotationView(annotation: nil, reuseIdentifier: nil)
+        let profile = allPinsDescriptor(index: 0)
+        view.configure(descriptor: profile, isDark: false, reduceMotion: true)
+        XCTAssertEqual(view.displayPriority, .required)
+
+        var mainMap = profile
+        mainMap.keepsVisibleWhenColliding = false
+        XCTAssertNotEqual(profile, mainMap, "A visibility change must refresh the native view")
+        view.prepareForReuse()
+        view.configure(descriptor: mainMap, isDark: false, reduceMotion: true)
+        XCTAssertEqual(view.displayPriority, .defaultHigh)
+
+        var selectedMainMap = allPinsDescriptor(index: 0, selected: true)
+        selectedMainMap.keepsVisibleWhenColliding = false
+        view.configure(descriptor: selectedMainMap, isDark: false, reduceMotion: true)
+        XCTAssertEqual(view.displayPriority, .required)
+        view.configure(descriptor: profile, isDark: false, reduceMotion: true)
+        XCTAssertEqual(view.displayPriority, .required, "Deselecting must not hide a Your Map pin")
+    }
+
     func testMapKitCollisionSuppressionAndZoomReveal() async throws {
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 320, height: 600))
         let delegate = CollisionDelegate()
@@ -124,6 +194,34 @@ final class MapAnnotationVisibilityTests: XCTestCase {
         map.addSubview(container)
         container.addSubview(pin)
         return (map, container, pin)
+    }
+}
+
+private func allPinsDescriptor(index: Int, selected: Bool = false) -> NativeMapAnnotationDescriptor {
+    let status: PlaceStatus = index.isMultiple(of: 2) ? .been : .wannaGo
+    return NativeMapAnnotationDescriptor(
+        id: "dense-\(index)", kind: .saved("dense-\(index)"), title: "Place \(index)", emoji: "☕️",
+        coordinate: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+        outlines: MapPinOutlineBuilder.outlines(for: [MapPinSaveState(ownership: .currentUser, status: status)]),
+        isSearchResult: false, isSelected: selected, opacity: 1,
+        animatesEntrance: false, entranceDelay: 0, accessibilityLabel: "Place \(index)", bounceRevision: 0,
+        keepsVisibleWhenColliding: true
+    )
+}
+
+@MainActor
+private final class AllPinsDelegate: NSObject, MKMapViewDelegate {
+    func mapView(_ mapView: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
+        let view = NativeMapPinAnnotationView(annotation: annotation, reuseIdentifier: nil)
+        let index = Int((annotation.title ?? nil) ?? "0") ?? 0
+        var descriptor = allPinsDescriptor(index: index)
+        descriptor.detail = index.isMultiple(of: 5) ? .category : .dot
+        view.configure(
+            descriptor: descriptor,
+            isDark: false,
+            reduceMotion: true
+        )
+        return view
     }
 }
 

@@ -112,7 +112,7 @@ struct CommunityReportSheet: View {
                 }
                 .accessibilityIdentifier("communityReport.submit")
 
-                Link(destination: URL(string: "https://getrec.me/community")!) {
+                Link(destination: URL(string: "https://astirmovement.com/community")!) {
                     Label("Read the Astir community guidelines", systemImage: "arrow.up.right")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.accentText)

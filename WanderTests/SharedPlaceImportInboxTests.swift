@@ -304,6 +304,28 @@ final class ShareExtensionItemLoaderTests: XCTestCase {
 
 @MainActor
 final class SharedPlaceImportInboxDrainerTests: XCTestCase {
+    func testOnlyGoogleListFilesMarkTheCaptureAsASourceList() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SharedPlaceImportListIntent-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        let store = PlaceImportStore(
+            persistence: SharedImportTestPersistence(), resolver: SharedImportTestResolver()
+        )
+        _ = try inbox.capture([
+            .text("https://maps.app.goo.gl/example", suggestedName: "Clover Cafe"),
+            .file(Data("name,address\nClover Cafe,Los Angeles".utf8),
+                fileName: "Saved Places.csv", contentTypeIdentifier: "public.comma-separated-values-text")
+        ])
+
+        let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: store)
+
+        XCTAssertEqual(report.importedBatchCount, 2)
+        XCTAssertEqual(store.batches.map(\.source), [.googleMaps, .googleMaps])
+        XCTAssertNil(store.batches.first?.sourceListName, "A share title does not identify a source list")
+        XCTAssertEqual(store.batches.last?.sourceListName, "Saved Places.csv")
+    }
+
     func testDrainRoutesAndImportsEveryPayloadExactlyOnce() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SharedPlaceImportDrainerTests-\(UUID().uuidString)", isDirectory: true)

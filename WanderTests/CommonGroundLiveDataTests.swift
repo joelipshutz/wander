@@ -334,7 +334,7 @@ final class CommonGroundLiveDataTests: XCTestCase {
         let token = String(repeating: "a", count: 48)
         let share = try XCTUnwrap(draft.shareContent(invitationToken: token))
 
-        XCTAssertEqual(share.item.absoluteString, "https://getrec.me/plans/\(token)")
+        XCTAssertEqual(share.item.absoluteString, "https://astirmovement.com/plans/\(token)")
         XCTAssertTrue(draft.canCreateInvitation)
         XCTAssertEqual(draft.suggestedDate, date)
         XCTAssertTrue(share.message.contains("Meet by the window?"))

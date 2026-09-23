@@ -113,7 +113,7 @@ final class CommonGroundInvitationDraftTests: XCTestCase {
         let draft = try draft("not-no-bar")
         let token = String(repeating: "b7", count: 24)
         let content = try XCTUnwrap(draft.shareContent(invitationToken: token))
-        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/plans/\(token)")
+        XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/plans/\(token)")
         XCTAssertEqual(content.subject, draft.linkTitle)
         for invalid in ["", "place-id", String(repeating: "g", count: 48), token + "?redirect=elsewhere", "../" + token] {
             XCTAssertNil(draft.shareContent(invitationToken: invalid))

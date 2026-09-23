@@ -482,6 +482,8 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
 
     static func rpcTimeout(for name: String) -> TimeInterval {
         switch name {
+        case "own_account_contact_details", "save_own_account_contact_details":
+            12
         case "followed_feed":
             followedFeedTimeout
         case "activity_media":
@@ -491,6 +493,10 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         default:
             60
         }
+    }
+
+    static func redactsAccountDetailsResponse(for name: String) -> Bool {
+        name == "own_account_contact_details" || name == "save_own_account_contact_details"
     }
 
     private func decodeRPCResponse<Value: Decodable>(
@@ -522,7 +528,11 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             )
         }
         guard (200..<300).contains(response.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
+            // Database errors can echo row contents. Never log or propagate a
+            // phone-bearing response from the private account-details endpoints.
+            let body = Self.redactsAccountDetailsResponse(for: name)
+                ? "private account details request failed"
+                : (String(data: data, encoding: .utf8) ?? "unreadable response")
             #if DEBUG
             WanderDebugLog.remote.error("rpc failed name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
             #endif
@@ -550,6 +560,9 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         do {
             return try decoder.decode(Value.self, from: data)
         } catch {
+            if Self.redactsAccountDetailsResponse(for: name) {
+                throw WanderRemoteError.invalidResponse("Invalid private account details response")
+            }
             #if DEBUG
             WanderDebugLog.remote.error("rpc decode failed name=\(name, privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
             #endif

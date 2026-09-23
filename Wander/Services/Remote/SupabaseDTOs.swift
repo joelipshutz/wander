@@ -684,6 +684,8 @@ struct RemoteActivityCommentDTO: Codable, Equatable {
     let author: RemoteProfileShellDTO
     let body: String
     let createdAt: Date
+    let likeCount: Int?
+    let viewerHasLiked: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -691,6 +693,8 @@ struct RemoteActivityCommentDTO: Codable, Equatable {
         case author
         case body
         case createdAt = "created_at"
+        case likeCount = "like_count"
+        case viewerHasLiked = "viewer_has_liked"
     }
 
     var comment: ActivityComment {
@@ -699,8 +703,29 @@ struct RemoteActivityCommentDTO: Codable, Equatable {
             activityID: activityID,
             author: author.profileShell(fallbackRelationship: .nonFollower),
             body: body,
-            createdAt: createdAt
+            createdAt: createdAt,
+            likeCount: likeCount ?? 0,
+            viewerHasLiked: viewerHasLiked ?? false
         )
+    }
+}
+
+struct RemoteActivityCommentLikeDTO: Decodable {
+    let commentID: String
+    let activityID: String
+    let likeCount: Int
+    let viewerHasLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case commentID = "comment_id"
+        case activityID = "activity_id"
+        case likeCount = "like_count"
+        case viewerHasLiked = "viewer_has_liked"
+    }
+
+    var summary: ActivityCommentLikeSummary {
+        ActivityCommentLikeSummary(commentID: commentID, activityID: activityID,
+                                   likeCount: max(0, likeCount), viewerHasLiked: viewerHasLiked)
     }
 }
 

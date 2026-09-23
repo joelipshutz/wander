@@ -99,6 +99,67 @@ import XCTest
         XCTAssertEqual(field.value as? String, "A little context for my voice note")
     }
 
+    func testVoiceAndTextSurviveRepeatedBackgroundAndForeground() {
+        let app = application()
+        app.launchArguments.append("-WanderFeedbackVoiceUITest")
+        app.launch()
+        let feedback = app.buttons["profile.feedback"]
+        XCTAssertTrue(feedback.waitForExistence(timeout: 20))
+        feedback.tap()
+        app.buttons["feedback.tab.text"].tap()
+        let field = app.textViews["feedback.text"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("Keep this context when I leave the app")
+        app.buttons["feedback.tab.voice"].tap()
+
+        for cycle in 1...3 {
+            let play = app.buttons["feedback.play"]
+            XCTAssertTrue(play.waitForExistence(timeout: 5))
+            play.tap()
+            XCTAssertEqual(play.label, "Pause voice note")
+            backgroundAndReturn(app)
+            let paused = NSPredicate(format: "label == %@", "Play voice note")
+            expectation(for: paused, evaluatedWith: play)
+            waitForExpectations(timeout: 5)
+            XCTAssertFalse(app.descendants(matching: .any)["feedback.error"].exists)
+            XCTAssertTrue(app.buttons["feedback.submit"].isEnabled)
+            XCTAssertTrue(app.buttons["feedback.photos"].isEnabled)
+            capture("Feedback return \(cycle)")
+            app.buttons["feedback.tab.text"].tap()
+            XCTAssertEqual(field.value as? String, "Keep this context when I leave the app")
+            app.buttons["feedback.tab.voice"].tap()
+        }
+        app.buttons["feedback.submit"].tap()
+        XCTAssertTrue(app.staticTexts["You made Astir better."].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(feedback.waitForExistence(timeout: 5))
+    }
+
+    func testEmptyVoiceFormRemainsUsableAfterBackgroundAndReopening() {
+        let app = application()
+        app.launch()
+        let feedback = app.buttons["profile.feedback"]
+        XCTAssertTrue(feedback.waitForExistence(timeout: 20))
+        for _ in 0..<3 {
+            feedback.tap()
+            XCTAssertTrue(app.buttons["feedback.record"].waitForExistence(timeout: 5))
+            backgroundAndReturn(app)
+            XCTAssertTrue(app.buttons["feedback.record"].isEnabled)
+            XCTAssertTrue(app.buttons["feedback.photos"].isEnabled)
+            XCTAssertFalse(app.buttons["feedback.submit"].isEnabled)
+            app.buttons["Close feedback"].tap()
+            XCTAssertTrue(feedback.waitForExistence(timeout: 5))
+        }
+    }
+
+    private func backgroundAndReturn(_ app: XCUIApplication) {
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5) || app.state == .runningBackgroundSuspended)
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+    }
+
     private func application() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUsePerformanceFixtures",

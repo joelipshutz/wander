@@ -1551,6 +1551,48 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testCommentLikeUsesSeparateRPCWithDesiredStateAndNoActorParameter() async throws {
+        let rpc = RecordingRPC()
+        let commentID = "50000000-0000-0000-0000-000000000201"
+        rpc.responses["set_activity_comment_like"] = Data("""
+        {"comment_id":"\(commentID)","activity_id":"40000000-0000-0000-0000-000000000201", "like_count":4,"viewer_has_liked":true}
+        """.utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc)
+        let result = try await repository.setCommentLike(commentID: commentID, isLiked: true)
+        XCTAssertEqual(result.likeCount, 4)
+        XCTAssertTrue(result.viewerHasLiked)
+        XCTAssertEqual(rpc.calls.map(\.name), ["set_activity_comment_like"])
+        XCTAssertEqual(Set(rpc.rawBodies[0].keys), ["input_comment_id", "input_is_liked"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_comment_id"] as? String, commentID)
+        XCTAssertEqual(rpc.rawBodies[0]["input_is_liked"] as? Bool, true)
+        _ = try await repository.setCommentLike(commentID: commentID, isLiked: false)
+        XCTAssertEqual(rpc.rawBodies[1]["input_is_liked"] as? Bool, false)
+        do {
+            _ = try await repository.setCommentLike(commentID: UUID().uuidString, isLiked: true)
+            XCTFail("Mismatched comment response must fail")
+        } catch { XCTAssertTrue(error is WanderRemoteError) }
+    }
+
+    func testCommentDTOHandlesOldResponsesAndReloadedLikeState() throws {
+        let base: [String: Any] = [
+            "id": "comment", "activity_id": "activity", "body": "Comment",
+            "created_at": "2026-09-21T12:00:00Z",
+            "author": ["id": "author", "handle": "author", "display_name": "Author", "relationship": "follower"]
+        ]
+        let old = try RemoteDecoding.decoder.decode(RemoteActivityCommentDTO.self,
+            from: JSONSerialization.data(withJSONObject: base)).comment
+        XCTAssertEqual(old.likeCount, 0)
+        XCTAssertFalse(old.viewerHasLiked)
+        var modern = base
+        modern["like_count"] = 9
+        modern["viewer_has_liked"] = true
+        let decoded = try RemoteDecoding.decoder.decode(RemoteActivityCommentDTO.self,
+            from: JSONSerialization.data(withJSONObject: modern)).comment
+        XCTAssertEqual(decoded.likeCount, 9)
+        XCTAssertTrue(decoded.viewerHasLiked)
+        XCTAssertEqual(decoded.id, old.id)
+    }
+
     func testDeleteActivityCommentCallsOwnerScopedRPCAndDecodesEngagement() async throws {
         let rpc = RecordingRPC()
         rpc.responses["delete_own_activity_comment"] = """
@@ -4494,19 +4536,19 @@ final class RemoteRepositoryTests: XCTestCase {
             .profile(id: "user_joe")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/lists/44000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/lists/44000000-0000-0000-0000-000000000001")!),
             .list(id: "44000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/activities/41000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/activities/41000000-0000-0000-0000-000000000001")!),
             .activityComments(id: "41000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/\(inviteToken)")!),
+            PushNotificationManager.destination(from: URL(string: "https://astirmovement.com/invites/\(inviteToken)")!),
             .listInvite(token: inviteToken)
         )
         XCTAssertEqual(
