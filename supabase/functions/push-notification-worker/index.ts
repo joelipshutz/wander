@@ -1,4 +1,5 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
+import { exportNotificationAudit } from "./audit-analytics.ts";
 import { recipientAnalyticsEvents, type RecipientSnapshot } from "./recipient-analytics.ts";
 
 export type PushToken = {
@@ -124,7 +125,9 @@ export async function handleRequest(req: Request): Promise<Response> {
     }
     // Queries only expose a complete generation, never a partially exported directory.
     if (!await capturePostHogEvents([completion])) return Response.json({ error: "snapshot_capture_failed" }, { status: 502 });
-    return Response.json({ snapshot_at: snapshot.snapshot_at, recipients: rows.length });
+    const audit = await exportNotificationAudit(serviceRpc, capturePostHogEvents, INTERNAL_ANALYTICS_USER_IDS);
+    if (!audit.ok) return Response.json({ error: "audit_capture_failed" }, { status: 502 });
+    return Response.json({ snapshot_at: snapshot.snapshot_at, recipients: rows.length, audit_exported: audit.exported });
   }
   const limit = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 20);
   const events = await serviceRpc<PushEvent[]>(

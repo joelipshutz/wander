@@ -58,3 +58,23 @@ const emptyBatch=[...rows,['notification_recipient_snapshot_completed','operatio
   snapshot_id:'2026-09-21T12:00:00Z',analytics_audience:'external_recipients_v1',recipient_count:'0',
 }]];
 await run('completed empty generation supersedes older recipients',fixtureSQL(recipientDailySQL(),emptyBatch,"properties.username='user_a'"),result=>assert.equal(result.length,0));
+
+const {notificationUsersSQL,notificationAuditSQL}=await import('./posthog-permissions-dashboard.mjs');
+const userRows=['a','b','c','d','e'].map(id=>row('2026-09-21T10:00:00Z','user_'+id,0));
+userRows.push(['notification_recipient_snapshot_completed','operations','2026-09-21 12:00:00',{snapshot_id:'2026-09-21T10:00:00Z',analytics_audience:'external_recipients_v1',recipient_count:'5'}]);
+for(const [user,status] of [['a','enabled'],['b','limited'],['c','denied'],['d','not_determined']])userRows.push(['permission_status_observed','user_'+user,'2026-09-21 12:00:00',{permission:'notifications',status}]);
+userRows.push(['permission_status_observed','user_a','2026-09-21 11:00:00',{permission:'notifications',status:'denied'}]);
+for(const [state,users] of [['on',['user_a','user_b']],['off',['user_c']],['not_prompted',['user_d']],['unknown',['user_e']],['all',['user_a','user_b','user_c','user_d','user_e']]]) {
+ await run('notification permission filter '+state,fixtureSQL(notificationUsersSQL().replaceAll('{variables.notification_permission}',quote(state)),userRows),result=>assert.deepEqual(result.map(row=>row[0]),users));
+}
+const auditRow=(id,user,status,kind='device_attempt')=>['notification_delivery_audit',user,'2026-09-21 14:00:00',{
+ audit_id:id,notification_ref:'same_notification',analytics_audience:'external_recipients_v1',username:user,occurred_at:'2026-09-21 13:00:00',record_kind:kind,audit_status:status,notification_type:'followed_you',notification_title:'Fixture title',notification_body:'Fixture body',failure_reason:'ServiceUnavailable',http_status:'503',attempt_count:'1',delivery_environment:'production',history_source:'live_transition',
+}];
+const auditRows=[...userRows,auditRow('failed_a','user_a','retryable_failure'),auditRow('failed_a','user_a','retryable_failure'),auditRow('accepted_a','user_a','accepted'),auditRow('failed_c','user_c','permanent_token_failure')];
+await run('audit deduplicates export retries and retains failure before acceptance with recipient and text',fixtureSQL(notificationAuditSQL().replaceAll('{variables.notification_permission}',"'all'"),auditRows),result=>{
+ assert.equal(result.length,3);assert.equal(result.filter(row=>row[5]==='retryable_failure').length,1);
+ assert.ok(result.every(row=>row[3]==='Fixture title'&&row[4]==='Fixture body'&&row[1].startsWith('user_')));
+});
+await run('failed-attempt audit respects permission group and username',fixtureSQL(notificationAuditSQL(true).replaceAll('{variables.notification_permission}',"'on'"),auditRows,"properties.username='user_a'"),result=>{
+ assert.equal(result.length,1);assert.equal(result[0][5],'retryable_failure');
+});

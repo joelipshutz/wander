@@ -212,8 +212,9 @@ Aggregate notification operations continue to export only counts. On September 2
 Joe explicitly requested a username-searchable delivery dashboard. The separate
 `notification_recipient_snapshot` path may export the opaque account ID as
 `distinct_id`, public username, notification preference booleans, active production
-token count, and 30 UTC days of counts. It never exports notification/event IDs,
-actor IDs, APNs IDs, device tokens, titles/bodies, deep links, or notification `data`.
+token count, and 30 UTC days of counts. That snapshot never exports notification/event IDs, actor IDs, APNs IDs, device
+tokens, titles/bodies, deep links, or notification `data`. The separately authorized
+September 23 audit path below includes notification text and diagnostic references.
 This exception is limited to the authenticated PostHog diagnostics dashboard;
 client event sanitization remains unchanged.
 
@@ -333,3 +334,43 @@ refuse snapshots older than two days. Snapshot timestamps remain visible. A fail
 refresh therefore leaves the last complete snapshot visible with its original time,
 never a fabricated zero. Joe and Ryan are excluded in SQL, the worker, and dashboard
 queries. Existing test-person/cohort exclusions remain in the dashboard.
+
+
+### Notification permission filters and delivery audit (September 23)
+
+The Permissions & Notification Delivery dashboard has a `Notification permission`
+list variable (`notification_permission`) with `all`, `on`, `off`, `not_prompted`,
+and `unknown`. Its checked-in UUID belongs only to Astir PostHog project 557259.
+It filters the new user directory and both audit tables using the latest observed
+notification OS status per person in the last 30 days. Enabled/limited map to on,
+denied/restricted to off, and not_determined to not_prompted. Missing observations
+remain unknown. The in-app master push preference is a separate column; it cannot
+prove OS permission or whether the prompt appeared. Existing one-user daily charts
+continue to use the username filter. The new native status collector still requires
+an app release; old onboarding false/skipped results cannot backfill OS status.
+
+Joe explicitly requested recipient and notification text columns on September 23.
+The separate `notification_delivery_audit` export now allows public username, opaque
+recipient identity, notification title/body, a non-actionable hashed notification
+reference and an audit record UUID. It also exports type, timestamps, status,
+attempt count, production/sandbox environment, machine failure code, HTTP status,
+and history source. Device tokens, APNs IDs, actor IDs, deep links, arbitrary payload
+JSON, and raw network exception text remain excluded. These diagnostic fields do
+not alter the existing aggregate/client analytics contracts.
+
+The service-only audit outbox is append-only for event transitions and device
+attempts, apart from an export acknowledgement. The worker exports bounded batches
+on the existing report-only cron and acknowledges only accepted batches; retries
+are deduplicated by audit UUID in dashboard SQL. A failed attempt remains visible
+when a later retry succeeds. Each device attempt is a separate row; notification
+state rows are not additional device deliveries. `sent`/`accepted` mean server/APNs
+acceptance, not confirmed device display. Both production and sandbox attempts are
+shown with their environment; queued/skipped state records have no device environment.
+
+Initial backfill records the latest retained notification/device state from the
+last 30 days as `historical_snapshot`; overwritten historical retries cannot be
+reconstructed. New rows are `live_transition`. Audit tables show the last 30 days,
+newest first, up to 10,000 rows; narrow by username, audit_status or notification_type
+when needed. Global event-property filters also affect other event-backed tables;
+clear audit-specific filters when browsing the user directory. All new queries and
+export paths exclude Joe/Ryan. No actual push is sent by the reporting/test routes.

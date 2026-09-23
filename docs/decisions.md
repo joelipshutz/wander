@@ -492,3 +492,16 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+
+## 2026-09-23 — Recipient and message columns in the notification audit (REC-581)
+
+Joe requested filters for notifications on/off/not prompted and a notification
+trail including failures, who receives each notification, and what it says.
+Permit the dedicated service-only audit export to include recipient username,
+notification title/body, and diagnostic references in the existing authenticated
+Astir PostHog project. This narrowly expands the September 21 counts-only
+exception; tokens, raw transport errors, APNs IDs and arbitrary notification
+payloads remain excluded. Keep immutable future attempt history and distinguish
+backfilled latest-state records from actual recorded transitions. Missing OS
+permission observations remain unknown, never presumed unprompted.

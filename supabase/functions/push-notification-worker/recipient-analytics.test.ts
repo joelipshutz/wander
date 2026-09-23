@@ -40,6 +40,7 @@ Deno.test('reporting route never sends pushes and publishes completion only afte
       globalThis.fetch=((input: string|URL|Request, init?: RequestInit)=>{
         const url=String(input);
         if(url.endsWith('/rest/v1/rpc/notification_recipient_analytics_snapshot')) {rpcCalls++;return Promise.resolve(Response.json(fixture));}
+        if(url.endsWith('/rest/v1/rpc/notification_audit_export_batch')) return Promise.resolve(Response.json([]));
         assert(url==='https://us.i.posthog.com/batch/','reporting route attempted an unrelated request');
         const batch=JSON.parse(String(init?.body)).batch;captures.push(batch.map((row:{event:string})=>row.event));
         return Promise.resolve(new Response('{}',{status:rejectRows?500:200}));
