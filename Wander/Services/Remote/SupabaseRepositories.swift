@@ -386,6 +386,10 @@ struct SupabasePlaceRepository: PlaceRepository {
         self.functions = functions
     }
 
+    func ratingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries {
+        try await rpc.call("place_rating_summaries", params: lookup)
+    }
+
     func places(in viewport: MapViewport) async throws -> [VisiblePlace] {
         let rows: [RemoteVisiblePlaceDTO] = try await rpc.call(
             "visible_places_in_view",

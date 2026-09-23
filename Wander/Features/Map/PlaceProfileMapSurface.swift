@@ -2078,15 +2078,8 @@ private struct PlaceProfileFullView: View {
         }
     }
 
-    @ViewBuilder
     private var ratingSection: some View {
-        if hasRatingSection {
-            PlaceProfileRatingsRail(presentation: presentation)
-        } else {
-            PlaceProfileSubtleCard(
-                text: "Add your rating and tags when this place belongs on your map."
-            )
-        }
+        PlaceProfileRatingsRail(presentation: presentation, place: place)
     }
 
     @ViewBuilder
@@ -2202,10 +2195,6 @@ private struct PlaceProfileFullView: View {
 
     private var displayTags: [String] {
         PlaceProfileCopy.displayTags(presentation: presentation)
-    }
-
-    private var hasRatingSection: Bool {
-        !saves.isEmpty || presentation.fitRating != nil || displayRating != nil
     }
 
     private var actionItems: [PlaceExternalAction] {

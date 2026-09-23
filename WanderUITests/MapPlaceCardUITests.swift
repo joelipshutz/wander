@@ -2,6 +2,32 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
+            "-WanderMapPlace", "Featured Coffee QA"
+        ]
+        app.launch()
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        card.tap()
+        XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
+        for (title, subtitle) in [
+            ("Your rating", "No rating yet"),
+            ("Friends rating", "No visible ratings yet"),
+            ("Astir rating", "No ratings yet")
+        ] {
+            let metric = app.descendants(matching: .any).matching(
+                NSPredicate(format: "label == %@", title + ", —/5, " + subtitle)
+            ).firstMatch
+            XCTAssertTrue(metric.waitForExistence(timeout: 5), "Missing empty \(title)")
+        }
+        XCTAssertFalse(app.staticTexts["Fit score"].exists)
+        capture("REC590 unrated place keeps Your Friends Astir")
+    }
+
     func testFeaturedRingAndTemporaryRatingPresentation() {
         for rated in [false, true] {
             let app = XCUIApplication()

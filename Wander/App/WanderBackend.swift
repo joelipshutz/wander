@@ -850,6 +850,11 @@ final class WanderBackend: ObservableObject {
         return try await placeRepository.places(in: viewport)
     }
 
+    func placeRatingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries {
+        guard let placeRepository else { throw WanderRemoteError.notConfigured }
+        return try await placeRepository.ratingSummaries(for: lookup)
+    }
+
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         guard let placeRepository else {
             throw WanderRemoteError.notConfigured

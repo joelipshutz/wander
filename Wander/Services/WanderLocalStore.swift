@@ -2871,6 +2871,7 @@ final class WanderStore: ObservableObject {
     }
 
     func visiblePlaces(in list: LocalPlaceList) -> [VisiblePlace] {
+        guard let list = currentReadableList(matching: list) else { return [] }
         let candidates = visiblePlaces()
         let lookup = visiblePlaceListLookupCache ?? visiblePlaceListLookup(candidates: candidates)
         return listItems(for: list).compactMap { item in
@@ -2892,6 +2893,9 @@ final class WanderStore: ObservableObject {
         let itemsReadyAt = CFAbsoluteTimeGetCurrent()
         visibleListFallbackResolutionCount = 0
         let placesByListID = Dictionary(uniqueKeysWithValues: lists.map { list in
+            guard currentReadableList(matching: list) != nil else {
+                return (list.id, [VisiblePlace]())
+            }
             let visiblePlaces = itemsByListID[list.id, default: []].compactMap { item in
                 visiblePlace(for: item, lookup: lookup)
             }
@@ -3021,7 +3025,8 @@ final class WanderStore: ObservableObject {
         _ visiblePlace: VisiblePlace,
         to list: LocalPlaceList,
         backend: WanderBackend?,
-        analyticsSurface: String? = nil
+        analyticsSurface: String? = nil,
+        keepNewCompanionPrivate: Bool = false
     ) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
@@ -3042,7 +3047,30 @@ final class WanderStore: ObservableObject {
                 : .existingWanna(userPlaceID: $0.userPlace.id)
         } ?? .none
         if ownerUserPlaceID == nil && autoSaveListAddsToWant {
-            let result = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
+            let result: SaveResult
+            if list.visibility == .stealth || keepNewCompanionPrivate {
+                // The social-save RPC uses the account default. A private-list
+                // companion must be private in its first write, including retries.
+                let place = visiblePlace.place
+                result = await saveCandidate(
+                    PlaceCandidate(
+                        id: place.id, name: place.canonicalName, category: place.primaryCategory,
+                        primaryCategory: place.primaryCategory, subcategory: place.subcategory,
+                        categorySource: place.categorySource, categoryConfidence: place.categoryConfidence,
+                        rawProviderType: place.rawProviderType, address: place.address,
+                        locality: place.locality, region: place.region, country: place.country,
+                        latitude: place.latitude, longitude: place.longitude,
+                        sourceProvider: place.sourceProvider, sourceProviderPlaceID: place.sourceProviderPlaceID,
+                        websiteURLString: place.websiteURLString, phoneNumber: place.phoneNumber,
+                        timeZoneIdentifier: place.timeZoneIdentifier, actionLinksJSON: place.actionLinksJSON,
+                        confidence: place.confidence ?? 1
+                    ),
+                    status: .wannaGo, visibility: .selfOnly, note: nil,
+                    sourceType: .manual, backend: backend
+                )
+            } else {
+                result = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
+            }
             ownerUserPlaceID = result.userPlaceID
             companionSave = .createdWanna(userPlaceID: result.userPlaceID)
         }
@@ -3208,7 +3236,8 @@ final class WanderStore: ObservableObject {
         _ candidate: PlaceCandidate,
         to list: LocalPlaceList,
         backend: WanderBackend?,
-        analyticsSurface: String? = nil
+        analyticsSurface: String? = nil,
+        keepNewCompanionPrivate: Bool = false
     ) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
@@ -3219,7 +3248,8 @@ final class WanderStore: ObservableObject {
                 existingVisiblePlace,
                 to: list,
                 backend: backend,
-                analyticsSurface: analyticsSurface
+                analyticsSurface: analyticsSurface,
+                keepNewCompanionPrivate: keepNewCompanionPrivate
             )
         }
 
@@ -3239,7 +3269,7 @@ final class WanderStore: ObservableObject {
         let saveResult = await saveCandidate(
             candidate,
             status: .wannaGo,
-            visibility: effectiveDefaultVisibility,
+            visibility: list.visibility == .stealth || keepNewCompanionPrivate ? .selfOnly : effectiveDefaultVisibility,
             note: nil,
             sourceType: .manual,
             backend: backend
@@ -3961,6 +3991,14 @@ final class WanderStore: ObservableObject {
     private func remoteID(_ value: String?) -> String? {
         guard let value, UUID(uuidString: value) != nil else { return nil }
         return value
+    }
+
+    private func currentReadableList(matching requested: LocalPlaceList) -> LocalPlaceList? {
+        let referenceIDs = listReferenceIDs(for: requested)
+        guard let current = placeLists.first(where: {
+            referenceIDs.contains($0.id) || referenceIDs.contains($0.localID)
+        }), current.deletedAt == nil, canRead(current) else { return nil }
+        return current
     }
 
     private func canRead(_ list: LocalPlaceList) -> Bool {

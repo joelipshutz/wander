@@ -17825,9 +17825,7 @@ struct PlaceSheet: View {
                 actionButton(size: 46, iconSize: 21)
             }
 
-            if hasRatings {
-                PlaceProfileRatingStrip(presentation: presentation, compact: true)
-            }
+            PlaceProfileRatingStrip(presentation: presentation, place: place, compact: true)
 
             if !presentation.commonTags.isEmpty {
                 PlaceCommonTagScroller(tags: presentation.commonTags)
@@ -17842,9 +17840,7 @@ struct PlaceSheet: View {
     private var expandedContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             expandedHeader
-            if hasRatings {
-                PlaceProfileRatingStrip(presentation: presentation, compact: false)
-            }
+            PlaceProfileRatingStrip(presentation: presentation, place: place, compact: false)
             if !presentation.commonTags.isEmpty {
                 PlaceCommonTagScroller(tags: presentation.commonTags)
             }
@@ -17976,10 +17972,6 @@ struct PlaceSheet: View {
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
         )
-    }
-
-    private var hasRatings: Bool {
-        !saves.isEmpty || presentation.fitRating != nil || presentation.overallRating != nil || presentation.ownRating != nil
     }
 
     private var whyItFitsSection: some View {
@@ -18179,11 +18171,13 @@ private struct PlaceFact: Identifiable {
 
 private struct PlaceProfileRatingStrip: View {
     let presentation: PlaceProfilePresentation
+    let place: PlaceSheetPlace
     let compact: Bool
 
     var body: some View {
         PlaceProfileRatingsRail(
             presentation: presentation,
+            place: place,
             compact: compact
         )
     }

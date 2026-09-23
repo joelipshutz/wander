@@ -480,3 +480,26 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+## 2026-09-22 — Ratings and automatic saves from private lists (REC-590)
+
+Place profiles always display Your rating, Friends rating, and Astir rating.
+Astir replaces the displayed Fit score. The implementation follows the proposed
+weighting default: Your and Astir averages count rated check-ins; Friends averages
+each followed person's readable ratings and counts only those people. This
+weighting was not a separate explicit approval. Hidden activity contributes to neither the Friends score
+nor its count, but remains in the anonymous numeric Astir aggregate. Deleted
+accounts and deleted check-ins are excluded. Empty aggregates display `—/5`;
+loading and failed requests remain distinct from a successful empty response.
+
+A new Wanna automatically created by adding a place to a stealth list is
+self-only from its first local and remote write, including retries. When
+several lists are selected together, a stealth selection determines that new
+companion save's audience. Moving an existing save into a list does not rewrite
+the audience explicitly chosen earlier; moving a private Wanna into a public
+list does not publish the Wanna. Historical saves require a separate cleanup
+decision because list membership alone does not prove how a save was created.
+
+Small-sample inference from the global aggregate is deferred to REC-608. These
+rating and list changes do not by themselves complete account-based audiences,
+follow requests, per-activity exclusions, or revocable content delivery.

@@ -1875,7 +1875,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(ratingsRail.contains("WanderTypography.editorialRatingSuffix"))
         XCTAssertTrue(ratingsRail.contains("WanderTheme.borderHairline.color"))
         XCTAssertFalse(ratingsRail.contains("WanderTheme.surfaceSand.color"))
-        XCTAssertTrue(placeProfile.contains("PlaceProfileRatingsRail(presentation: presentation)"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfileRatingsRail(presentation: presentation, place: place)"))
 
         let checkInRatings = try XCTUnwrap(
             placeProfile.components(separatedBy: "private struct PlaceProfileSaveCard: View").last?

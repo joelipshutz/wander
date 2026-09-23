@@ -2,6 +2,46 @@ import XCTest
 @testable import Wander
 
 final class PlaceRatingSummariesTests: XCTestCase {
+    @MainActor
+    func testSearchRatingLookupDoesNotRequireAnyVisibleSavedActivity() {
+        let candidate = PlaceCandidate(id: "provider-search-result", name: "Coffee", category: "coffee",
+            latitude: 34, longitude: -118, sourceProvider: "mapkit", sourceProviderPlaceID: "coffee-123", confidence: 1)
+        let lookup = PlaceRatingLookup(candidate: candidate, knownPlaces: [])
+        XCTAssertTrue(lookup.canQuery)
+        XCTAssertNil(lookup.placeID)
+        XCTAssertEqual(lookup.sourceProvider, "mapkit")
+        XCTAssertEqual(lookup.sourceProviderPlaceID, "coffee-123")
+    }
+
+    @MainActor
+    func testRatingsUseSyncedIdentityAndDoNotTreatLocalUUIDAsServerIdentity() {
+        let localID = "11111111-1111-4111-8111-111111111111"
+        let serverID = "22222222-2222-4222-8222-222222222222"
+        let local = LocalPlace(localID: localID, canonicalName: "Coffee", category: "coffee", latitude: 34, longitude: -118)
+        let candidate = PlaceCandidate(id: localID, name: "Coffee", category: "coffee",
+            latitude: 34, longitude: -118, sourceProvider: "mapkit", confidence: 1)
+        XCTAssertFalse(PlaceRatingLookup(candidate: candidate, knownPlaces: [local]).canQuery)
+        local.serverID = serverID
+        XCTAssertEqual(PlaceRatingLookup(candidate: candidate, knownPlaces: [local]).placeID, serverID)
+    }
+
+    func testRailAlwaysKeepsYourFriendsAndAstirSlotsWithoutFitOrFakeFive() throws {
+        let empty = PlaceRatingsState.loaded(.init(own: .empty, friends: .empty, astir: .empty)).metrics
+        XCTAssertEqual(empty.map(\.title), ["Your rating", "Friends rating", "Astir rating"])
+        XCTAssertEqual(empty.map { $0.value + $0.suffix }, ["—/5", "—/5", "—/5"])
+        let hiddenOnly = PlaceRatingsState.loaded(.init(
+            own: .empty, friends: .empty, astir: try PlaceRatingAggregate(score: 4.5, count: 1)
+        )).metrics
+        XCTAssertEqual(hiddenOnly.map(\.value), ["—", "—", "4.5"])
+        XCTAssertEqual(hiddenOnly[1].subtitle, "No visible ratings yet")
+        XCTAssertEqual(hiddenOnly[2].subtitle, "1 rating")
+    }
+
+    func testFailedAndLoadingRatingsAreNotPresentedAsAnEmptySuccessfulResponse() {
+        XCTAssertTrue(PlaceRatingsState.loading.metrics.allSatisfy { $0.subtitle == "Loading…" })
+        XCTAssertTrue(PlaceRatingsState.unavailable.metrics.allSatisfy { $0.subtitle == "Unavailable" })
+    }
+
     func testHiddenOnlyFriendsContributionCanRemainInAstir() throws {
         let result = try decode("""
         {"own":{"score":null,"count":0},"friends":{"score":null,"count":0},"astir":{"score":4.5,"count":1}}

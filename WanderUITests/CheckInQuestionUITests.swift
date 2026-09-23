@@ -179,7 +179,8 @@ final class CheckInQuestionUITests: XCTestCase {
         let selected = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label ENDSWITH %@", ", selected"), object: row
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed,
+                       "List selection did not update: \(row.debugDescription)")
     }
 
     func testRestoreCancellationKeepsCustomizationOpen() {

@@ -1954,6 +1954,7 @@ extension PlaceCandidateResolving {
 
 @MainActor
 protocol PlaceRepository {
+    func ratingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries
     func places(in viewport: MapViewport) async throws -> [VisiblePlace]
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
     func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
@@ -1964,6 +1965,10 @@ protocol PlaceRepository {
 }
 
 extension PlaceRepository {
+    func ratingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries {
+        throw WanderRemoteError.notImplemented("place rating summaries")
+    }
+
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("rec.me place search")
     }

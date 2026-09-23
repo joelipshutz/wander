@@ -11485,6 +11485,24 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.collaborators(for: list).isEmpty)
     }
 
+    func testRevokedListCannotRevealMembershipThroughAnOtherwiseVisiblePlace() throws {
+        for legacy in [false, true] {
+            let store = WanderStore(fixtures: makeListCompatibilityFixtures(
+                legacy: legacy, owner: false, removedMember: true
+            ))
+            let list = try XCTUnwrap(store.placeLists.first)
+            XCTAssertEqual(store.visiblePlaces(in: list).count, 1)
+            XCTAssertEqual(store.visiblePlacesByListID(in: [list])[list.id]?.count, 1)
+
+            store.block(userID: list.ownerUserID)
+
+            XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.place.id == "place_circuit_coffee" },
+                          "The place remains independently visible; list membership must still be hidden")
+            XCTAssertTrue(store.visiblePlaces(in: list).isEmpty)
+            XCTAssertEqual(store.visiblePlacesByListID(in: [list])[list.id]?.count, 0)
+        }
+    }
+
     private func makeListCompatibilityFixtures(
         legacy: Bool,
         owner: Bool,
@@ -12460,6 +12478,76 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(repository.itemRequests.map(\.draft.placeID), [placeID])
         XCTAssertEqual(repository.itemRequests.map(\.draft.ownerUserPlaceID), [userPlaceID])
         XCTAssertEqual(store.visiblePlaceLists(scope: .collabs).first?.cachedItemCount, 1)
+    }
+
+    func testStealthListCandidateCreatesPrivateWannaInInitialRemotePayload() async throws {
+        let store = makeStore()
+        let repository = FakeUserPlaceRepository(result: SaveResult(
+            userPlaceID: "33333333-3333-4333-8333-333333333333", syncState: .synced,
+            placeID: "22222222-2222-4222-8222-222222222222"
+        ))
+        let list = try XCTUnwrap(store.createPlaceList(name: "Private ideas", description: "", visibility: .stealth))
+        let candidate = PlaceCandidate(id: "private_list_cafe", name: "Private List Cafe", category: "coffee",
+                                       latitude: 34.051, longitude: -118.245, confidence: 1)
+        let result = await store.addCandidate(candidate, to: list, backend: WanderBackend(userPlaceRepository: repository))
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
+        let save = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.place.canonicalName == candidate.name })
+        XCTAssertEqual(save.userPlace.visibility, .selfOnly)
+        XCTAssertEqual(save.userPlace.status, .wannaGo)
+    }
+
+    func testStealthListSocialCompanionAvoidsPublicSocialSaveRPC() async throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(store.createPlaceList(name: "Private suggestions", description: "", visibility: .stealth))
+        let source = try XCTUnwrap(store.visiblePlaces().first {
+            $0.place.canonicalName == "Griffith Observatory Trail" && $0.owner.id != store.currentUser.id
+        })
+        let repository = FakeUserPlaceRepository(error: WanderRemoteError.notConfigured)
+        let result = await store.addVisiblePlace(source, to: list, backend: WanderBackend(userPlaceRepository: repository))
+        XCTAssertTrue(result.createdWantSave)
+        XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
+        let save = try XCTUnwrap(store.currentUserVisiblePlaces.first { VisiblePlaceGrouping.matches($0, source) })
+        XCTAssertEqual(save.userPlace.visibility, .selfOnly)
+        XCTAssertEqual(save.userPlace.syncState, .failed)
+        let retry = FakeUserPlaceRepository()
+        _ = await store.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: retry))
+        XCTAssertEqual(retry.savedDrafts.first { $0.place.canonicalName == source.place.canonicalName }?.visibility, .selfOnly)
+    }
+
+    func testMixedListChoiceKeepsFirstSuccessfulPublicListCompanionPrivate() async throws {
+        for socialSource in [false, true] {
+            let store = makeStore()
+            let publicList = try XCTUnwrap(store.createPlaceList(name: "Public ideas", description: "", visibility: .followers))
+            let source = try XCTUnwrap(store.visiblePlaces().first {
+                $0.place.canonicalName == "Griffith Observatory Trail" && $0.owner.id != store.currentUser.id
+            })
+            let target: MapPlaceListTarget = socialSource ? .visiblePlace(source) : .candidate(PlaceCandidate(
+                id: "mixed_choice", name: "Mixed Choice Cafe", category: "coffee", latitude: 34.055, longitude: -118.255, confidence: 1
+            ))
+            let repository = FakeUserPlaceRepository(error: WanderRemoteError.notConfigured)
+            // A stealth selection can fail before a successful public addition.
+            // That public addition still receives the whole selection's privacy.
+            _ = await target.add(to: publicList, store: store,
+                backend: WanderBackend(userPlaceRepository: repository), keepNewCompanionPrivate: true)
+            XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
+            let own = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.place.canonicalName == target.placeName })
+            XCTAssertEqual(own.userPlace.visibility, .selfOnly)
+        }
+    }
+
+    func testListMembershipDoesNotRewritePreviouslyChosenWannaAudience() async throws {
+        for visibility in [PlaceVisibility.selfOnly, .followers] {
+            let store = makeStore()
+            let candidate = PlaceCandidate(id: "chosen_audience", name: "Chosen Audience Cafe", category: "coffee",
+                                           latitude: 34.055, longitude: -118.255, confidence: 1)
+            _ = store.saveCandidate(candidate, status: .wannaGo, visibility: visibility, note: nil, sourceType: .manual)
+            let list = try XCTUnwrap(store.createPlaceList(name: "Another list", description: "",
+                visibility: visibility == .selfOnly ? .followers : .stealth))
+            let result = await store.addCandidate(candidate, to: list, backend: nil)
+            XCTAssertFalse(result.createdWantSave)
+            XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == candidate.name }?.userPlace.visibility, visibility)
+        }
     }
 
     func testAddingUnsavedCandidateToListCreatesWantSaveAndListItem() async {

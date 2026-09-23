@@ -104,6 +104,10 @@ async function main() {
           : "hosted schema";
         console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
+        await client.query(privateListCompanionSmokeSQL());
+        console.log("ok - a stealth-list companion stays private in Feed and activity links");
+        await client.query(placeRatingSummariesSmokeSQL());
+        console.log("ok - independent ratings exclude hidden Friends contributions while preserving the Astir aggregate");
         await client.query("savepoint contact_discovery_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback"));
@@ -1436,6 +1440,10 @@ begin;
 
 ${migrationPreviewSQL}
 
+${privateListCompanionSmokeSQL()}
+
+${placeRatingSummariesSmokeSQL()}
+
 ${buildProductionSecuritySmokeSQL()}
 
 ${buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID)}
@@ -2682,6 +2690,18 @@ rollback to savepoint feedback_slack_smoke;
 release savepoint feedback_slack_smoke;
 rollback;
 `;
+}
+
+function privateListCompanionSmokeSQL() {
+  return transactionBody(readFileSync(
+    new URL("../supabase/tests/rec590_private_list_companion.sql", import.meta.url), "utf8"
+  ), "rollback");
+}
+
+function placeRatingSummariesSmokeSQL() {
+  return transactionBody(readFileSync(
+    new URL("../supabase/tests/rec590_place_rating_summaries.sql", import.meta.url), "utf8"
+  ), "rollback");
 }
 
 function buildProductionSecuritySmokeSQL() {

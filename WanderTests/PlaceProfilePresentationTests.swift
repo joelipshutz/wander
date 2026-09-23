@@ -1000,7 +1000,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceRatingExplanation.ratings.title, "Ratings")
         XCTAssertEqual(
             PlaceRatingExplanation.ratings.message,
-            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Unrated Featured places show a temporary 5 until the first Astir rating. That value never counts toward an average or Fit score. Fit score is personalized from your ratings, categories, tags, and people you follow."
+            "Your rating averages your rated check-ins here. Friends rating averages each followed person's visible ratings; activity hidden from you does not count. Astir rating averages all rated check-ins, including private activity, without showing who contributed. A dash means there are no ratings yet."
         )
         XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About the Ratings")
     }

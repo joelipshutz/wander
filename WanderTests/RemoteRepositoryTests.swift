@@ -3,6 +3,38 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testSearchRatingsSendPublicProviderIdentityWithoutViewerOrActivityContent() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["place_rating_summaries"] = Data("""
+        {"own":{"score":null,"count":0},"friends":{"score":null,"count":0},"astir":{"score":4,"count":1}}
+        """.utf8)
+        let result = try await SupabasePlaceRepository(rpc: rpc).ratingSummaries(for: .init(
+            placeID: nil, sourceProvider: "mapkit", sourceProviderPlaceID: "provider-coffee"
+        ))
+        XCTAssertEqual(result.astir.count, 1)
+        let body = try XCTUnwrap(rpc.rawBodies.first)
+        XCTAssertEqual(Set(body.keys), ["input_source_provider", "input_source_provider_place_id"])
+        XCTAssertEqual(body["input_source_provider_place_id"] as? String, "provider-coffee")
+    }
+
+    func testPlaceRatingsUseIndependentServerAggregatesAndOnlySendPlaceID() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["place_rating_summaries"] = Data("""
+        {"own":{"score":null,"count":0},"friends":{"score":null,"count":0},"astir":{"score":4.5,"count":3}}
+        """.utf8)
+        let repository = SupabasePlaceRepository(rpc: rpc)
+        let result = try await repository.ratingSummaries(for: .init(placeID: "11111111-1111-4111-8111-111111111111"))
+        XCTAssertEqual(result.friends.count, 0)
+        XCTAssertEqual(result.astir.count, 3)
+        XCTAssertEqual(rpc.calls.map(\.name), ["place_rating_summaries"])
+        XCTAssertEqual(Set(try XCTUnwrap(rpc.rawBodies.first).keys), ["input_place_id"])
+        rpc.responses["place_rating_summaries"] = Data("{\"friends\":{\"score\":4,\"count\":1}}".utf8)
+        do {
+            _ = try await repository.ratingSummaries(for: .init(placeID: "11111111-1111-4111-8111-111111111111"))
+            XCTFail("Missing global data must not fall back to Friends")
+        } catch { }
+    }
+
     func testRepeatWannaUsesOwnerRPCAndDecodesHistorySnapshots() async throws {
         let rpc = RecordingRPC()
         let response = """
