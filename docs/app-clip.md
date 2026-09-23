@@ -4,6 +4,11 @@ REC-408 adds `AstirClip` (`com.grayline.wander.Clip`) to the existing parent app
 `com.grayline.wander`. The shared-link increment includes profile/map, place,
 list, activity and list-invitation links. Physical event QR attendance is separate.
 
+The [App Clip service map](app-clip-service-map.json) records the relevant account
+identifiers and their verification sources. Repository configuration and direct
+service verification are labeled separately; unresolved dashboard checks remain
+explicitly pending. It contains no credentials or private keys.
+
 ## Behavior
 
 The Clip displays public share artwork, then uses the same account-authorized

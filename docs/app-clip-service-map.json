@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "scope": "Astir shared-link App Clip",
+  "checkedOn": "2026-09-23",
+  "verificationComplete": false,
+  "apple": {
+    "teamID": "Y7TVK75RZ8",
+    "appStoreAppID": "6776850787",
+    "parentBundleID": "com.grayline.wander",
+    "clipBundleID": "com.grayline.wander.Clip",
+    "continuationAppGroup": "group.com.grayline.wander.clip",
+    "evidence": ["project.yml", "scripts/testflight-release.mjs", "WanderAppClip/Resources/AstirClip.entitlements"],
+    "verification": "Repository configuration confirmed; Apple account registration not yet inspected.",
+    "pending": [
+      "Confirm the parent app belongs to this team in App Store Connect.",
+      "Confirm Clip App ID registration, parent association, App Group membership and provisioning capabilities.",
+      "Confirm Sign in with Apple grouping and the default App Clip experience."
+    ]
+  },
+  "clerk": {
+    "frontendHost": "clerk.getrec.me",
+    "configuredEnvironment": "production",
+    "expectedOwnerLogin": "joe@bondaiapp.com",
+    "applicationIDFromSetupRecord": "app_3Eb3JbpbMDjOA2qKUCqfsZwfct9",
+    "productionInstanceID": null,
+    "evidence": ["project.yml", "Wander/Config/Auth.xcconfig", "docs/setup.md", "https://linear.app/recme/issue/REC-182"],
+    "verification": "Production frontend and publishable-key environment confirmed in app configuration; live owner workspace and instance identity still require dashboard verification.",
+    "pending": [
+      "Verify the owner workspace, application ID and production instance ID against the configured frontend host.",
+      "Verify parent and Clip native application registrations use team prefix Y7TVK75RZ8.",
+      "Verify Apple, Google, email-code, password and additional-verification policies.",
+      "Verify Supabase token claims and existing canonical account identity continuity."
+    ]
+  },
+  "supabase": {
+    "projectRef": "rugmtlgufrhlxwfkumhw",
+    "projectName": "wander",
+    "apiURL": "https://rugmtlgufrhlxwfkumhw.supabase.co",
+    "organizationID": "kmuvkdjwociyvuuxnbqb",
+    "organizationName": "joe@bondaiapp.com's Org",
+    "region": "us-west-2",
+    "status": "ACTIVE_HEALTHY",
+    "evidence": ["Supabase project and organization read APIs, 2026-09-23", "project.yml"],
+    "verification": "Project identity, organization, region and health confirmed directly. Organization name does not independently establish an individual member's role.",
+    "pending": ["Verify the current Clerk third-party-auth issuer configuration against the production instance."]
+  },
+  "sharing": {
+    "canonicalHost": "astirmovement.com",
+    "additionalHosts": ["www.astirmovement.com", "getrec.me"],
+    "appClipApplicationIdentifier": "Y7TVK75RZ8.com.grayline.wander.Clip",
+    "websiteRepository": "joelipshutz/astir-site",
+    "discoverySetting": "ASTIR_APP_CLIP_ENABLED",
+    "defaultDiscoveryEnabled": false,
+    "verification": "Draft website and native configuration agree; deployed AASA and published Apple experience remain unverified."
+  }
+}
