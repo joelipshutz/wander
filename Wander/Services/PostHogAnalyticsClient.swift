@@ -32,7 +32,7 @@ final class PostHogAnalyticsClient: AnalyticsClient {
 #if canImport(PostHog)
     private let sdk: PostHogSDK
 
-    init?(configuration: PostHogAnalyticsConfiguration, sdk: PostHogSDK = .shared) {
+    init?(configuration: PostHogAnalyticsConfiguration, sdk: PostHogSDK = .shared, captureReplay: Bool = true) {
         guard let projectToken = configuration.projectToken,
               !projectToken.isEmpty
         else { return nil }
@@ -41,19 +41,20 @@ final class PostHogAnalyticsClient: AnalyticsClient {
 
         let postHogConfig = Self.sdkConfiguration(
             projectToken: projectToken,
-            host: configuration.host
+            host: configuration.host,
+            captureReplay: captureReplay
         )
         sdk.setup(postHogConfig)
     }
 
-    static func sdkConfiguration(projectToken: String, host: String) -> PostHogConfig {
+    static func sdkConfiguration(projectToken: String, host: String, captureReplay: Bool = true) -> PostHogConfig {
         let configuration = PostHogConfig(projectToken: projectToken, host: host)
         configuration.captureApplicationLifecycleEvents = false
         configuration.captureScreenViews = false
         configuration.captureElementInteractions = false
         // Replay needs swizzling even though event autocapture stays disabled.
-        configuration.enableSwizzling = true
-        configuration.sessionReplay = true
+        configuration.enableSwizzling = captureReplay
+        configuration.sessionReplay = captureReplay
         // SwiftUI requires screenshot mode. Mask on-device before upload;
         // MapKit surfaces are additionally masked in the view layer.
         configuration.sessionReplayConfig.screenshotMode = true
@@ -92,7 +93,7 @@ final class PostHogAnalyticsClient: AnalyticsClient {
         sdk.reset()
     }
 #else
-    init?(configuration: PostHogAnalyticsConfiguration) {
+    init?(configuration: PostHogAnalyticsConfiguration, captureReplay: Bool = true) {
         return nil
     }
 

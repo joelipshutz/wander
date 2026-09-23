@@ -134,7 +134,7 @@ extension AnalyticsEvent {
             return nil
         }
         return AnalyticsEvent(name: WanderAnalyticsEvents.coreActionPerformed,
-                              properties: ["action": action, "completion": "local"])
+                              properties: ["action": action, "completion": event.properties["surface"] == "app_clip" ? "server" : "local"])
     }
 }
 
@@ -171,6 +171,7 @@ enum AnalyticsEngagementAction: String {
     case contactInviteSent = "contact_invite_sent"
     case followCreated = "follow_created"
     case listCreated = "list_created"
+    case listJoined = "list_joined"
     case listPlaceAdded = "list_place_added"
     case ownProfileViewed = "own_profile_viewed"
     case placeSaved = "place_saved"
@@ -294,6 +295,9 @@ struct AcquisitionAttribution: Equatable {
 }
 
 enum WanderAnalyticsEvents {
+    static let appClipOpened = "app_clip_opened"
+    static let appClipAuthCompleted = "app_clip_auth_completed"
+    static let placeListInviteAccepted = "place_list_invite_accepted"
     static let coreActionPerformed = "core_action_performed"
     static let saveFlowOpened = "save_flow_opened"
     static let saveFlowSubmitted = "save_flow_submitted"

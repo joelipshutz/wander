@@ -1,8 +1,19 @@
 # Open Questions
 
-Last updated: 2026-09-17
+Last updated: 2026-09-22
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## App Clip release evidence (REC-408)
+
+The shared-link scope is decided: native sign-in, profile setup, Save and Join
+run inside the Clip. Release remains blocked on signed-device proof of Clerk
+provider registration, Apple account continuity, Keychain migration into the full
+app, and same-account link continuation through onboarding. Verify any configured
+MFA/additional-verification requirement; the initial Clip currently reports that
+case instead of completing a second-factor flow. Hosted rollback-only save RPC
+validation and the published Messages experience also remain unverified.
+See [the implementation and rollout guide](app-clip.md).
 
 ## Onboarding copy and explorations (REC-529)
 

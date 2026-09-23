@@ -75,6 +75,8 @@ struct AppEntryView: View {
 
     @State private var didFinishInitialResolution = false
     @State private var deepLinkInbox = WanderDeepLinkInbox()
+    @State private var receivedExplicitLink = false
+    @State private var appClipRequestID: UUID?
     @State private var foregroundRefreshPolicy = AppEntryForegroundRefreshPolicy()
 
     var body: some View {
@@ -117,6 +119,10 @@ struct AppEntryView: View {
                         ),
                         onDeepLinkLaunchRequestHandled: { requestID in
                             deepLinkInbox.consume(requestID)
+                            if appClipRequestID == requestID {
+                                AppClipHandoff.clear()
+                                appClipRequestID = nil
+                            }
                         },
                         analytics: analytics,
                         parser: parser,
@@ -183,6 +189,7 @@ struct AppEntryView: View {
             #endif
             await coordinator.start()
             didFinishInitialResolution = true
+            adoptAppClipContinuation()
         }
         .onChange(of: auth.state) { _, state in
             productUpsells.bind(to: state.session?.userID)
@@ -192,6 +199,7 @@ struct AppEntryView: View {
         }
         .onChange(of: notificationGateState, initial: true) { _, state in
             state.synchronize()
+            adoptAppClipContinuation()
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -257,6 +265,11 @@ struct AppEntryView: View {
             return
         }
         #endif
+        if WanderDeepLinkRoute.parse(url) != nil {
+            receivedExplicitLink = true
+            appClipRequestID = nil
+            AppClipHandoff.clear()
+        }
         if let attribution = AcquisitionAttribution(url: url) {
             analytics.track(
                 AnalyticsEvent(
@@ -274,6 +287,22 @@ struct AppEntryView: View {
             return
         }
         deepLinkInbox.receive(url)
+    }
+
+    private func adoptAppClipContinuation() {
+        guard auth.isSessionValidated, case .signedIn(let session) = auth.state,
+              let continuation = AppClipHandoff.load() else { return }
+        guard let route = continuation.route(for: session.userID) else {
+            AppClipHandoff.clear()
+            return
+        }
+        guard !receivedExplicitLink, deepLinkInbox.pendingRequest == nil else { return }
+        // The existing inbox waits through onboarding and normal authorization.
+        // A new incoming link always takes precedence over installation state.
+        deepLinkInbox.receive(route.url)
+        appClipRequestID = deepLinkInbox.pendingRequest?.id
+        // Retain the bounded record until the destination actually consumes it;
+        // quitting during onboarding must not lose the installation handoff.
     }
 }
 

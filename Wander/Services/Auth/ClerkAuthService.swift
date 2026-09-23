@@ -703,7 +703,8 @@ final class ClerkAuthService: AuthSessionProviding {
         }
         guard let session = Clerk.shared.session,
               Self.isActiveSessionStatus(session.status),
-              session.user != nil
+              let user = session.user,
+              state.session?.userID == Self.authSession(from: user).userID
         else {
             #if DEBUG
             WanderDebugLog.remote.error("clerk supabase token skipped reason=no_current_user")
@@ -716,6 +717,13 @@ final class ClerkAuthService: AuthSessionProviding {
                 WanderDebugLog.remote.error("clerk supabase token failed reason=nil_token")
                 #endif
                 throw AuthSessionError.tokenUnavailable
+            }
+            // Authentication can change while token retrieval is suspended.
+            // Never return a token from a different account/session to a
+            // caller that already selected the write it is about to perform.
+            guard Clerk.shared.session?.id == session.id,
+                  state.session?.userID == Self.authSession(from: user).userID else {
+                throw AuthSessionError.sessionUnavailable
             }
             #if DEBUG
             WanderDebugLog.remote.debug("clerk supabase token succeeded")
