@@ -59,12 +59,38 @@ import XCTest
         app.launchArguments = ["-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
             "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover",
             "-WanderFeedSurface", "people"] + extras
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.ContactDiscovery.\(UUID().uuidString)"
         app.launch()
+        completeNotificationPromptIfPresented(app)
         return app
     }
+    // A signed-in launch can show the first-visit notification primer before
+    // any follow. Finish it as a user would; waiting only for the underlying
+    // contact button to exist does not mean that button can receive touches.
+    private func completeNotificationPromptIfPresented(_ app: XCUIApplication) {
+        let primary = app.buttons["productUpsell.primary"]
+        guard primary.waitForExistence(timeout: 8) else { return }
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+        if primary.label == "Open Settings" {
+            app.buttons["productUpsell.secondary"].tap()
+        } else {
+            XCTAssertEqual(primary.label, "Continue")
+            primary.tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let deny = springboard.alerts.buttons.matching(
+                NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")
+            ).firstMatch
+            if deny.waitForExistence(timeout: 5) { deny.tap() }
+        }
+        XCTAssertTrue(primary.waitForNonExistence(timeout: 10))
+    }
+
     private func openContactSettings(_ app: XCUIApplication) {
         let link = app.buttons["feed.contactDiscovery"]
-        XCTAssertTrue(link.waitForExistence(timeout: 15)); link.tap()
+        XCTAssertTrue(link.waitForExistence(timeout: 15))
+        let hittable = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: link)
+        wait(for: [hittable], timeout: 10)
+        link.tap()
     }
     private func backToFeed(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -83,15 +109,7 @@ import XCTest
         capture("Following screen contact suggestions")
         friend.tap()
         XCTAssertEqual(friend.label, "Following Contact Friend")
-        // The first successful follow can present the contextual notifications
-        // campaign. Complete that real flow before reopening contact settings.
-        let notificationContinue = app.buttons["productUpsell.primary"]
-        if notificationContinue.waitForExistence(timeout: 3) {
-            notificationContinue.tap()
-            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            let deny = springboard.alerts.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")).firstMatch
-            if deny.waitForExistence(timeout: 3) { deny.tap() }
-        }
+        completeNotificationPromptIfPresented(app)
         openContactSettings(app)
         app.buttons["contacts.settings.disable"].tap()
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
