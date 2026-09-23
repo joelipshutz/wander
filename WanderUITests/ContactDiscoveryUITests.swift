@@ -18,6 +18,7 @@ import XCTest
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertEqual(friend.label, "Follow Contact Friend")
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["3 of your contacts follow General Friend"].firstMatch.exists)
         XCTAssertLessThan(friend.frame.minY, app.buttons["onboarding.friends.follow.user_general_friend"].frame.minY)
         XCTAssertEqual(app.buttons.matching(identifier: "onboarding.friends.follow.user_contact_friend").count, 1)
         capture("Contact suggestion before follow")
@@ -31,6 +32,7 @@ import XCTest
         XCTAssertTrue(skip.waitForExistence(timeout: 15)); skip.tap()
         XCTAssertTrue(app.buttons["onboarding.friends.follow.user_general_friend"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["3 of your contacts follow General Friend"].firstMatch.exists)
     }
     func testDeniedPermissionCanContinueAndSearch() {
         let app = launch(["-WanderContactDiscoveryDenied"])
@@ -114,6 +116,39 @@ import XCTest
         openContactSettings(app)
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 5))
     }
+    func testOnboardingFollowMatchesShelfPendingAndRetryBehavior() {
+        let app = launch(["-WanderContactDiscoveryDelayedFollow"])
+        let find = app.buttons["onboarding.contacts.findFriends"]
+        XCTAssertTrue(find.waitForExistence(timeout: 15)); find.tap()
+        let friend = app.buttons["onboarding.friends.follow.user_contact_friend"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10)); friend.tap()
+        XCTAssertEqual(friend.label, "Following Contact Friend")
+        XCTAssertFalse(friend.isEnabled)
+        XCTAssertFalse(friend.descendants(matching: .activityIndicator).firstMatch.exists)
+        capture("Onboarding instant Following")
+        let failed = expectation(for: NSPredicate(format: "label CONTAINS %@", "Couldn't follow"), evaluatedWith: friend)
+        wait(for: [failed], timeout: 8)
+        XCTAssertTrue(friend.isEnabled)
+        capture("Onboarding retry after failure")
+        friend.tap()
+        XCTAssertEqual(friend.label, "Following Contact Friend")
+    }
+
+    func testOnboardingVerticalDragFromFollowDoesNotSubmit() {
+        let app = launch(["-WanderContactDiscoveryLongList", "-WanderContactDiscoveryDelayedFollow"])
+        let find = app.buttons["onboarding.contacts.findFriends"]
+        XCTAssertTrue(find.waitForExistence(timeout: 15)); find.tap()
+        let friend = app.buttons["onboarding.friends.follow.user_contact_friend"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10))
+        let originalY = friend.frame.minY
+        let start = friend.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -70)))
+        XCTAssertLessThan(friend.frame.minY, originalY - 20)
+        XCTAssertEqual(friend.label, "Follow Contact Friend")
+        XCTAssertTrue(friend.isEnabled)
+        capture("Onboarding vertical drag cancels Follow")
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)

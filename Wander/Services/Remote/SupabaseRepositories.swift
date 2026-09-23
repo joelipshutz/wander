@@ -148,6 +148,13 @@ struct SupabaseProfileRepository: ProfileRepository {
         return rows.map { $0.recommendation() }
     }
 
+    func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        struct Params: Encodable { let input_contact_ids: [String]; let input_limit: Int }
+        let rows: [RemoteDiscoverPeopleRecommendationDTO] = try await rpc.call(
+            "ranked_people_recommendations", params: Params(input_contact_ids: contactIDs, input_limit: limit))
+        return rows.map { $0.recommendation() }
+    }
+
     func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
         let response: RemoteCurrentProfileDTO = try await rpc.call(
             "update_profile_privacy",

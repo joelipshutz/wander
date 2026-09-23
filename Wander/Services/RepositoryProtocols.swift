@@ -45,16 +45,28 @@ struct ProfileViewState {
 
 enum DiscoverPeopleRecommendationReason: Equatable {
     case contacts
+    case nearby
     case followsYou
     case sharedFollows(Int)
+    case contactFollows(Int)
     case suggested
+
+    var usesContacts: Bool {
+        switch self {
+        case .contacts, .contactFollows: true
+        default: false
+        }
+    }
 
     var compactDisplayText: String {
         switch self {
         case .contacts: "In your contacts"
+        case .nearby: "In your area"
         case .followsYou: "Follows you"
         case .sharedFollows(let count):
             count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
+        case .contactFollows(let count):
+            count == 1 ? "Followed by 1 contact" : "Followed by \(count) contacts"
         case .suggested: ""
         }
     }
@@ -63,12 +75,18 @@ enum DiscoverPeopleRecommendationReason: Equatable {
         switch self {
         case .contacts:
             return "In your contacts"
+        case .nearby:
+            return profile.homeArea.map { "Also in \($0)" } ?? "In your area"
         case .followsYou:
             return "Follows you"
         case .sharedFollows(let count):
             return count == 1
                 ? "1 person you follow follows \(profile.displayName)"
                 : "\(count) people you follow follow \(profile.displayName)"
+        case .contactFollows(let count):
+            return count == 1
+                ? "1 of your contacts follows \(profile.displayName)"
+                : "\(count) of your contacts follow \(profile.displayName)"
         case .suggested:
             return ""
         }
@@ -1884,10 +1902,15 @@ protocol ProfileRepository {
     func profile(id: String) async throws -> ProfileViewState
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell]
     func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation]
+    func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation]
     func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile
 }
 
 extension ProfileRepository {
+    func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        throw WanderRemoteError.notImplemented("ranked people recommendations RPC")
+    }
+
     func isHandleAvailable(_ handle: String) async throws -> Bool {
         throw WanderRemoteError.notImplemented("profile handle availability RPC")
     }

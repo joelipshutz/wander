@@ -6332,7 +6332,7 @@ final class WanderStore: ObservableObject {
         discoverPeopleRecommendationsGeneration += 1
         if case .loading = discoverPeopleRecommendationsState { discoverPeopleRecommendationsState = .idle }
         if case .loaded(let recommendations) = discoverPeopleRecommendationsState {
-            discoverPeopleRecommendationsState = .loaded(recommendations.filter { $0.reason != .contacts })
+            discoverPeopleRecommendationsState = .loaded(recommendations.filter { !$0.reason.usesContacts })
         }
     }
 
