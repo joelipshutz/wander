@@ -550,6 +550,47 @@ final class ImportFormRefinementUITests: XCTestCase {
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testNotificationRemindersAppearOnThreeReturnOpensThenStop() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
+            "-WanderNotificationAuthorizationDeniedFixture", "-WanderImportNoticeUITest"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
+
+        for appOpen in 1...5 {
+            if appOpen == 3 {
+                app.activate() // A quick background return must count even within the auth refresh grace period.
+            } else {
+                app.launch()
+            }
+            let primary = app.buttons["productUpsell.primary"]
+            if (2...4).contains(appOpen) {
+                XCTAssertTrue(primary.waitForExistence(timeout: 15), "Reminder missing on app open \(appOpen)")
+                XCTAssertEqual(primary.label, "Open Settings")
+                XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+                let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                capture.name = "Notification reminder on app open \(appOpen)"
+                capture.lifetime = .keepAlways
+                add(capture)
+                app.buttons["productUpsell.secondary"].tap()
+                XCTAssertTrue(primary.waitForNonExistence(timeout: 5))
+                XCTAssertFalse(primary.waitForExistence(timeout: 2), "No repeated reminder in the same open")
+            } else {
+                XCTAssertFalse(primary.waitForExistence(timeout: 8), "No reminder on app open \(appOpen)")
+            }
+            // The nonblocking banner persists across the reminder. It must not
+            // prevent eligible return prompts or disappear when they dismiss.
+            XCTAssertTrue(app.buttons["import.notice.dismiss"].waitForExistence(timeout: 5))
+            if appOpen == 2 {
+                XCUIDevice.shared.press(.home)
+                XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+            } else {
+                app.terminate()
+            }
+        }
+    }
+
     func testNotificationUpsellUsesTheCentralCampaignInOnboarding() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -562,7 +603,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         let notificationContinue = app.buttons["productUpsell.primary"]
         XCTAssertTrue(notificationContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(notificationContinue.isHittable)
@@ -575,6 +616,23 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-425 notification upsell in onboarding"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testUnansweredOnboardingNotificationPromptResumesAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep", "notifications",
+            "-WanderNotificationAuthorizationNotDeterminedFixture"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
+        for _ in 1...2 {
+            app.launch()
+            XCTAssertTrue(app.buttons["productUpsell.primary"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["Onboarding step 5 of 5"].exists)
+            app.terminate()
+        }
     }
 
     func testContextualNotificationUpsellsUseConfiguredSaveAndFollowCopy() {
@@ -591,7 +649,7 @@ final class OnboardingUITests: XCTestCase {
             "place_saved"
         ]
         app.launch()
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["productUpsell.primary"].isHittable)
         XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["Onboarding step 5 of 5"].exists)
@@ -607,7 +665,7 @@ final class OnboardingUITests: XCTestCase {
             "follow_created"
         ]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Keep up with people you follow"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["productUpsell.primary"].isHittable)
         XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
 
@@ -689,7 +747,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         let notificationContinue = app.buttons["productUpsell.primary"]
         XCTAssertTrue(notificationContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(notificationContinue.isHittable)
