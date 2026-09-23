@@ -2048,11 +2048,11 @@ final class ProfileMapSnapshotCache {
                 )
                 for arc in outline.arcs {
                     context.cgContext.setLineDash(phase: 0, lengths: arc.dashPattern.map { $0 * 0.45 })
-                    let rotation = arc.rotationDegrees * .pi / 180
+                    let rotation = CGFloat(arc.rotationDegrees) * CGFloat.pi / 180
                     context.cgContext.addArc(
                         center: point, radius: 4.5,
-                        startAngle: arc.trimFrom * 2 * .pi + rotation,
-                        endAngle: arc.trimTo * 2 * .pi + rotation,
+                        startAngle: arc.trimFrom * 2 * CGFloat.pi + rotation,
+                        endAngle: arc.trimTo * 2 * CGFloat.pi + rotation,
                         clockwise: false
                     )
                     context.cgContext.strokePath()
