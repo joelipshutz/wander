@@ -1182,3 +1182,19 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         #endif
     }
 }
+
+private struct SenderPolicyRPCParams<Payload: Encodable>: Encodable {
+    let input_payload: Payload
+    let input_policy: SenderNotificationPolicy
+}
+
+extension RemoteProcedureCalling {
+    func callWithSenderPolicy<Value: Decodable, Params: Encodable>(
+        _ name: String, params: Params, policy: SenderNotificationPolicy
+    ) async throws -> Value {
+        if policy == .standard && name != "save_visible_place" { return try await call(name, params: params) }
+        // No legacy fallback: a network/schema error must not announce a silent save.
+        return try await call(name + "_with_sender_policy",
+            params: SenderPolicyRPCParams(input_payload: params, input_policy: policy))
+    }
+}

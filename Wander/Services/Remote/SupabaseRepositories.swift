@@ -900,7 +900,7 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     }
 }
 
-struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository, WannaSaveRepository {
+struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, SenderSocialPlaceSaveRepository, ImportNotificationRepository, CheckInRepository, WannaSaveRepository {
     private let rpc: RemoteProcedureCalling
 
     init(rpc: RemoteProcedureCalling) {
@@ -939,9 +939,10 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
         for attribute in draft.attributes {
             try CommunityContentPolicy.validateJSONText(attribute.valueJSON)
         }
-        let result: SaveOwnPlaceResponse = try await rpc.call(
+        let result: SaveOwnPlaceResponse = try await rpc.callWithSenderPolicy(
             "save_own_place",
-            params: SaveOwnPlaceParams(draft: draft)
+            params: SaveOwnPlaceParams(draft: draft),
+            policy: draft.senderNotificationPolicy
         )
         return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced, placeID: result.placeID)
     }
@@ -987,9 +988,10 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
             draft.historicalWant?.note
         )
         try CommunityContentPolicy.validateJSONText(draft.visit.attributeAnswersJSON)
-        let result: SaveOwnCheckInResponse = try await rpc.call(
+        let result: SaveOwnCheckInResponse = try await rpc.callWithSenderPolicy(
             "save_own_check_in",
-            params: SaveOwnCheckInParams(draft: draft)
+            params: SaveOwnCheckInParams(draft: draft),
+            policy: draft.visit.senderNotificationPolicy
         )
         return CheckInSaveResult(
             saveResult: SaveResult(
@@ -1035,13 +1037,33 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
         )
     }
 
+    func finalizeImportNotification(_ commit: ImportNotificationCommit, visitIDs: [String]) async throws {
+        struct Params: Encodable {
+            let input_import_id: String
+            let input_commit_id: String
+            let input_silent: Bool
+            let input_visit_ids: [String]
+        }
+        let _: Bool = try await rpc.call("finalize_import_notification", params: Params(
+            input_import_id: commit.importID, input_commit_id: commit.id,
+            input_silent: commit.silent, input_visit_ids: visitIDs))
+    }
+
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {
-        let result: SaveVisiblePlaceResponse = try await rpc.call(
+        try await saveVisiblePlace(placeID: placeID, sourceUserPlaceID: sourceUserPlaceID,
+                                   senderNotificationPolicy: .standard)
+    }
+
+    func saveVisiblePlace(placeID: String, sourceUserPlaceID: String,
+                          senderNotificationPolicy: SenderNotificationPolicy) async throws -> SaveResult {
+        let result: SaveVisiblePlaceResponse = try await rpc.callWithSenderPolicy(
             "save_visible_place",
-            params: SaveVisiblePlaceParams(inputPlaceID: placeID, inputSourceUserPlaceID: sourceUserPlaceID)
+            params: SaveVisiblePlaceParams(inputPlaceID: placeID, inputSourceUserPlaceID: sourceUserPlaceID),
+            policy: senderNotificationPolicy
         )
         return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced)
     }
+
 }
 
 struct SupabaseVisitRepository: VisitRepository {
@@ -1286,6 +1308,9 @@ private struct PlaceVisitDetailRow: Decodable {
 }
 
 private struct PlaceVisitUpsertBody: Encodable {
+    let notificationSilent: Bool
+    let senderImportID: String?
+    let senderImportCommitID: String?
     let id: String?
     let userPlaceID: String
     let visitedAt: Date
@@ -1296,6 +1321,9 @@ private struct PlaceVisitUpsertBody: Encodable {
     let deletedAt: Date?
 
     init(draft: PlaceVisitDraft) {
+        notificationSilent = draft.senderNotificationPolicy.suppressesIndividualAlerts
+        senderImportID = draft.senderNotificationPolicy.importID
+        senderImportCommitID = draft.senderNotificationPolicy.importCommitID
         self.id = draft.id
         self.userPlaceID = draft.userPlaceID
         self.visitedAt = draft.visitedAt
@@ -1307,6 +1335,9 @@ private struct PlaceVisitUpsertBody: Encodable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case notificationSilent = "notification_silent"
+        case senderImportID = "sender_import_id"
+        case senderImportCommitID = "sender_import_commit_id"
         case id
         case userPlaceID = "user_place_id"
         case visitedAt = "visited_at"
@@ -1485,9 +1516,10 @@ struct SupabaseSharedVisitRepository: SharedVisitRepository {
     }
 
     func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
-        let response: SharedVisitAcceptanceResponse = try await rpc.call(
+        let response: SharedVisitAcceptanceResponse = try await rpc.callWithSenderPolicy(
             "accept_shared_visit",
-            params: SharedVisitAcceptanceParams(draft: draft)
+            params: SharedVisitAcceptanceParams(draft: draft),
+            policy: draft.senderNotificationPolicy
         )
         return response.result
     }
@@ -2082,9 +2114,10 @@ struct SupabasePlaceListRepository: PlaceListRepository {
     }
 
     func addItem(_ draft: PlaceListItemDraft) async throws -> String {
-        try await rpc.call(
+        try await rpc.callWithSenderPolicy(
             "add_place_list_item",
-            params: AddPlaceListItemParams(draft: draft)
+            params: AddPlaceListItemParams(draft: draft),
+            policy: draft.senderNotificationPolicy
         )
     }
 

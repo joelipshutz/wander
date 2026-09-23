@@ -675,6 +675,7 @@ struct PlaceDraft: Equatable {
 }
 
 struct UserPlaceDraft: Equatable {
+    var senderNotificationPolicy: SenderNotificationPolicy
     let place: PlaceDraft
     let status: PlaceStatus
     let visibility: PlaceVisibility
@@ -704,8 +705,10 @@ struct UserPlaceDraft: Equatable {
         nearbyConfirmed: Bool,
         plannedDate: Date? = nil,
         sourceType: String,
-        attributes: [PlaceAttributeDraft]
+        attributes: [PlaceAttributeDraft],
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) {
+        self.senderNotificationPolicy = senderNotificationPolicy
         self.place = place
         self.status = status
         self.visibility = visibility
@@ -893,6 +896,8 @@ struct PlaceVisitDraft: Equatable {
     let ratingScore: Double?
     let attributeAnswersJSON: String
     let backfilledFromUserPlace: Bool
+    var senderNotificationPolicy: SenderNotificationPolicy = .standard
+
 }
 
 struct PlaceVisitResult: Equatable, Sendable {
@@ -1417,6 +1422,8 @@ struct PlaceListItemDraft: Equatable {
     let placeID: String
     let ownerUserPlaceID: String?
     let sourceUserPlaceID: String?
+    var senderNotificationPolicy: SenderNotificationPolicy = .standard
+
 }
 
 struct ProfileAvatarResult: Equatable {
@@ -1828,6 +1835,8 @@ struct SharedVisitAcceptanceDraft: Equatable {
     let ratingScore: Double?
     let attributes: [PlaceAttributeDraft]
     let selectedPhotoIDs: [String]
+    var senderNotificationPolicy: SenderNotificationPolicy = .standard
+
 }
 
 struct SharedVisitPhotoCopy: Equatable {

@@ -153,6 +153,10 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(addSuggestion.waitForExistence(timeout: 8))
         addSuggestion.tap()
 
+        let silentAddition = app.buttons["Add silently"]
+        XCTAssertTrue(silentAddition.waitForExistence(timeout: 5))
+        silentAddition.tap()
+
         app.navigationBars.buttons["Done"].tap()
         XCTAssertTrue(app.staticTexts["29 places"].waitForExistence(timeout: 8))
 

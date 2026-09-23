@@ -5777,7 +5777,8 @@ struct MapScreen: View {
             note: submission.note,
             ratingScore: submission.ratingScore,
             attributes: submission.attributes,
-            selectedPhotoIDs: inheritedPhotoPayloads.map(\.sourcePhotoID)
+            selectedPhotoIDs: inheritedPhotoPayloads.map(\.sourcePhotoID),
+            senderNotificationPolicy: submission.senderNotificationPolicy
         )
 
         do {
@@ -12238,6 +12239,13 @@ struct MapPlaceSaveSubmission {
     var customQuestionAnswersLoaded: Bool = true
     var ownerUserID: String? = nil
     var wannaOperationID: UUID? = nil
+    var senderNotificationPolicy: SenderNotificationPolicy = .standard
+
+    func withSenderNotificationPolicy(_ policy: SenderNotificationPolicy) -> Self {
+        var copy = self
+        copy.senderNotificationPolicy = policy
+        return copy
+    }
 
     func replacingImportCandidate(
         _ candidate: PlaceCandidate,
@@ -12270,7 +12278,8 @@ struct MapPlaceSaveSubmission {
             customQuestionAnswers: status == .been ? customQuestionAnswers : nil,
             customQuestionOwnerID: customQuestionOwnerID,
             customQuestionAnswersLoaded: status != .been || customQuestionAnswersLoaded,
-            ownerUserID: ownerUserID
+            ownerUserID: ownerUserID,
+            senderNotificationPolicy: senderNotificationPolicy
         )
     }
 }
@@ -12468,7 +12477,8 @@ func createExplicitVisitIfNeeded(
         note: submission.note,
         ratingScore: submission.ratingScore,
         attributes: submission.attributes,
-        visibility: submission.visibility
+        visibility: submission.visibility,
+        senderNotificationPolicy: submission.senderNotificationPolicy
     )
 }
 
@@ -12500,6 +12510,7 @@ func persistNewPlaceSaveSubmission(
             plannedDate: submission.plannedDate,
             attributes: submission.attributes,
             sourceType: sourceType,
+            senderNotificationPolicy: submission.senderNotificationPolicy,
             backend: nil
         )
         // Closing the form acknowledges durable local storage. The same UUID
@@ -12526,6 +12537,7 @@ func persistNewPlaceSaveSubmission(
         visitedAt: submission.visitedAt,
         plannedDate: submission.plannedDate,
         attributes: submission.attributes,
+        senderNotificationPolicy: submission.senderNotificationPolicy,
         backend: backend
     )
     let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
@@ -12572,7 +12584,8 @@ func persistImportedPlaceSaveSubmission(
         ratingScore: submission.ratingScore,
         visitedAt: submission.visitedAt,
         plannedDate: submission.plannedDate,
-        attributes: shouldApplyDetails ? submission.attributes : nil
+        attributes: shouldApplyDetails ? submission.attributes : nil,
+        senderNotificationPolicy: submission.senderNotificationPolicy == .standard ? .silent : submission.senderNotificationPolicy
     )
 
     guard shouldApplyDetails else { return result }
@@ -13356,6 +13369,7 @@ struct MapPlaceSaveEditor: View {
     @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
+    @State private var silentNotifications: Bool?
     @State private var selectedListIDs: Set<String>
     @State private var isChoosingLists = false
     @State private var completedPlaceSaveForLists: SaveResult?
@@ -13498,6 +13512,7 @@ struct MapPlaceSaveEditor: View {
             initialValue: restoredAttachments ?? initialContext.initialPhotoAttachments
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
+        _silentNotifications = State(initialValue: restoredForm?.silentNotifications)
         _selectedListIDs = State(initialValue: restoredForm?.selectedListIDs ?? [])
         let initialShowsOptionalDetails = restoredForm?.isShowingOptionalDetails ?? false
         _isShowingOptionalDetails = State(initialValue: initialShowsOptionalDetails)
@@ -13556,7 +13571,8 @@ struct MapPlaceSaveEditor: View {
                 selectedInviteeUserIDs: selectedInviteeUserIDs,
                 isShowingOptionalDetails: isShowingOptionalDetails,
                 customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil,
-                selectedListIDs: selectedListIDs
+                selectedListIDs: selectedListIDs,
+                silentNotifications: silentNotifications
             ),
             submittedAt: saveAttemptedAt
         )
@@ -13648,8 +13664,21 @@ struct MapPlaceSaveEditor: View {
             customQuestionAnswersLoaded: selectedStatus != .been
                 || (didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id),
             ownerUserID: editorOwnerID,
-            wannaOperationID: draftID ?? context.id
+            wannaOperationID: draftID ?? context.id,
+            senderNotificationPolicy: SenderNotificationPolicy(silent: effectiveSilentNotifications)
         )
+    }
+
+    private var effectiveSilentNotifications: Bool {
+        silentNotifications ?? (selectedStatus == .been && visitedAt < Calendar.current.startOfDay(for: .now))
+    }
+
+    private var offersSilentControl: Bool {
+        guard presentation == .sheet else { return false }
+        switch context.mode {
+        case .editVisit, .editWant: return offersListSelection && !selectedListIDs.isEmpty
+        default: return true
+        }
     }
 
     private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
@@ -14078,6 +14107,11 @@ struct MapPlaceSaveEditor: View {
             }
 
             optionalDetailsDisclosure
+
+            if offersSilentControl {
+                SilentSaveToggle(isSilent: Binding(get: { effectiveSilentNotifications },
+                    set: { silentNotifications = $0 }), hasInvitations: !selectedInviteeUserIDs.isEmpty)
+            }
 
             visibilitySection
                 .id(WalkthroughTargetID.savePrivacy)
@@ -15465,7 +15499,8 @@ struct MapPlaceSaveEditor: View {
                     listIDs: listIDsToSave,
                     ownerUserID: editorOwnerID ?? "",
                     backend: auth.isSignedIn ? backend : nil,
-                    analyticsSurface: submission.status == .been ? "check_in" : "wanna"
+                    analyticsSurface: submission.status == .been ? "check_in" : "wanna",
+                    senderNotificationPolicy: submission.senderNotificationPolicy
                 )
             }
             await MainActor.run {
@@ -15531,7 +15566,8 @@ struct MapPlaceSaveEditor: View {
                 listIDs: selectedListIDs,
                 ownerUserID: editorOwnerID ?? "",
                 backend: auth.isSignedIn ? backend : nil,
-                analyticsSurface: selectedStatus == .been ? "check_in" : "wanna"
+                analyticsSurface: selectedStatus == .been ? "check_in" : "wanna",
+                senderNotificationPolicy: currentSubmission.senderNotificationPolicy
             )
             guard editorOwnerID == store.currentUser.id else { return }
             isSaving = false

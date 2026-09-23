@@ -1048,11 +1048,16 @@ final class WanderBackend: ObservableObject {
         return try await communityReportRepository.submit(submission)
     }
 
-    func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {
+    func saveVisiblePlace(placeID: String, sourceUserPlaceID: String, senderNotificationPolicy: SenderNotificationPolicy = .standard) async throws -> SaveResult {
         guard let socialPlaceSaveRepository else {
             throw WanderRemoteError.notConfigured
         }
 
+        if let repository = socialPlaceSaveRepository as? any SenderSocialPlaceSaveRepository {
+            return try await repository.saveVisiblePlace(placeID: placeID, sourceUserPlaceID: sourceUserPlaceID,
+                                                         senderNotificationPolicy: senderNotificationPolicy)
+        }
+        guard senderNotificationPolicy == .standard else { throw WanderRemoteError.notConfigured }
         return try await socialPlaceSaveRepository.saveVisiblePlace(
             placeID: placeID,
             sourceUserPlaceID: sourceUserPlaceID
@@ -1089,7 +1094,8 @@ final class WanderBackend: ObservableObject {
             note: draft.visit.note,
             ratingScore: draft.visit.ratingScore,
             attributeAnswersJSON: draft.visit.attributeAnswersJSON,
-            backfilledFromUserPlace: false
+            backfilledFromUserPlace: false,
+            senderNotificationPolicy: draft.visit.senderNotificationPolicy
         )
         let visitResult = try await visitRepository.upsertVisit(visitDraft)
         return CheckInSaveResult(saveResult: saveResult, visitResult: visitResult)
