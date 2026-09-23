@@ -36,13 +36,9 @@ struct DiscoverPersonSearchRow: View {
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minWidth: 80, minHeight: WanderTheme.tapMinimum)
                 .background(isFollowing ? brandMode.recessedBackground : brandMode.accent)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                        .stroke(isFollowing ? brandMode.border : brandMode.accent)
-                )
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(RecommendationFollowPressStyle())
             .disabled(isFollowing || isLoading)
             .accessibilityLabel("\(isFollowing ? "Following" : "Follow") \(profile.displayName)")
             .accessibilityIdentifier("discover.person.\(profile.id).follow")

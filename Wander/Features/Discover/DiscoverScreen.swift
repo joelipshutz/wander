@@ -2325,8 +2325,8 @@ struct PeopleRecommendationCard: View {
 
 /// Keep native Button/ScrollView gesture cancellation, with no press fade or
 /// label morph. The haptic starts on press rather than a later model update.
-private struct RecommendationFollowPressStyle: ButtonStyle {
-    let onPress: () -> Void
+struct RecommendationFollowPressStyle: ButtonStyle {
+    var onPress: () -> Void = {}
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
