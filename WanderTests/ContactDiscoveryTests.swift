@@ -52,6 +52,7 @@ private actor DiscoveryContacts: ContactProvider {
 
 @MainActor private final class RankedDiscoveryRepository: ProfileRepository, FollowRepository {
     var receivedContactIDs: [String] = []
+    var contactIDRequests: [[String]] = []
     var receivedLimit: Int?
     var ranked: [DiscoverPeopleRecommendation] = []
     var general: [DiscoverPeopleRecommendation] = []
@@ -63,6 +64,7 @@ private actor DiscoveryContacts: ContactProvider {
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] { [] }
     func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation] {
         receivedContactIDs = contactIDs; receivedLimit = limit
+        contactIDRequests.append(contactIDs)
         if let rankedAction { return try await rankedAction() }
         return ranked
     }
@@ -296,23 +298,61 @@ private actor DiscoveryContacts: ContactProvider {
         XCTAssertEqual(profiles.followWrites, 0)
     }
 
-    func testBackendRevocationDuringRankingDiscardsContactResults() async throws {
+    func testBackendRevocationDuringRankingReplacesContactInfluencedOrder() async throws {
         let contacts = DiscoveryRepository(); contacts.results = [person("friend")]
         let provider = DiscoveryContacts()
         let service = ContactDiscoveryService(repository: contacts, provider: provider, defaults: defaults, activeUserID: { "viewer" })
         try await service.enable(userID: "viewer")
         let profiles = RankedDiscoveryRepository()
+        let independent: [DiscoverPeopleRecommendation] = [
+            .init(profile: person("local"), reason: .nearby, rank: 1),
+            .init(profile: person("social"), reason: .suggested, rank: 2)]
         let started = expectation(description: "ranking suspended")
         var continuation: CheckedContinuation<[DiscoverPeopleRecommendation], Never>?
-        profiles.rankedAction = { await withCheckedContinuation { continuation = $0; started.fulfill() } }
+        profiles.rankedAction = {
+            if profiles.receivedContactIDs.isEmpty { return independent }
+            return await withCheckedContinuation { continuation = $0; started.fulfill() }
+        }
         let backend = WanderBackend(profileRepository: profiles, contactDiscovery: service, followRepository: profiles)
         let task = Task { try await backend.peopleRecommendations(userID: "viewer") }
         await fulfillment(of: [started], timeout: 3)
         await provider.setStatus(.denied)
         continuation?.resume(returning: [.init(profile: person("friend"), reason: .contacts, rank: 1),
-            .init(profile: person("local"), reason: .nearby, rank: 2)])
+            .init(profile: person("social"), reason: .contactFollows(3), rank: 2),
+            .init(profile: person("local"), reason: .nearby, rank: 3)])
         let result = try await task.value
-        XCTAssertEqual(result.map(\.id), ["local"])
+        XCTAssertEqual(result, independent)
+        XCTAssertEqual(profiles.contactIDRequests, [["friend"], []])
+        XCTAssertEqual(profiles.generalReads, 0)
         XCTAssertEqual(profiles.followWrites, 0)
+    }
+
+    func testDisablingContactsDuringRankingFallsBackSafelyIfRerankingFails() async throws {
+        let contacts = DiscoveryRepository(); contacts.results = [person("friend")]
+        let service = ContactDiscoveryService(repository: contacts, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let profiles = RankedDiscoveryRepository()
+        profiles.general = [.init(profile: person("general"), reason: .suggested, rank: 1)]
+        profiles.rankedAction = {
+            if profiles.receivedContactIDs.isEmpty { throw ContactDiscoveryError.unavailable }
+            try await service.disable(userID: "viewer")
+            return [.init(profile: self.person("social"), reason: .contactFollows(3), rank: 1)]
+        }
+        let result = try await WanderBackend(profileRepository: profiles, contactDiscovery: service).peopleRecommendations(userID: "viewer")
+        XCTAssertEqual(result, profiles.general)
+        XCTAssertEqual(profiles.contactIDRequests, [["friend"], []])
+        XCTAssertEqual(profiles.generalReads, 1)
+    }
+
+    func testNoContactConsentRanksWithoutContactIDsOrReadingAddressBook() async throws {
+        let provider = DiscoveryContacts()
+        let service = ContactDiscoveryService(repository: DiscoveryRepository(), provider: provider, defaults: defaults, activeUserID: { "viewer" })
+        let profiles = RankedDiscoveryRepository()
+        profiles.ranked = [.init(profile: person("social"), reason: .sharedFollows(2), rank: 1)]
+        let result = try await WanderBackend(profileRepository: profiles, contactDiscovery: service).peopleRecommendations(userID: "viewer")
+        XCTAssertEqual(result, profiles.ranked)
+        XCTAssertEqual(profiles.contactIDRequests, [[]])
+        let reads = await provider.readCount()
+        XCTAssertEqual(reads, 0)
     }
 }

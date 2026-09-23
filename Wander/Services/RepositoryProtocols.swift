@@ -48,7 +48,15 @@ enum DiscoverPeopleRecommendationReason: Equatable {
     case nearby
     case followsYou
     case sharedFollows(Int)
+    case contactFollows(Int)
     case suggested
+
+    var usesContacts: Bool {
+        switch self {
+        case .contacts, .contactFollows: true
+        default: false
+        }
+    }
 
     var compactDisplayText: String {
         switch self {
@@ -57,6 +65,8 @@ enum DiscoverPeopleRecommendationReason: Equatable {
         case .followsYou: "Follows you"
         case .sharedFollows(let count):
             count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
+        case .contactFollows(let count):
+            count == 1 ? "Followed by 1 contact" : "Followed by \(count) contacts"
         case .suggested: ""
         }
     }
@@ -73,6 +83,10 @@ enum DiscoverPeopleRecommendationReason: Equatable {
             return count == 1
                 ? "1 person you follow follows \(profile.displayName)"
                 : "\(count) people you follow follow \(profile.displayName)"
+        case .contactFollows(let count):
+            return count == 1
+                ? "1 of your contacts follows \(profile.displayName)"
+                : "\(count) of your contacts follow \(profile.displayName)"
         case .suggested:
             return ""
         }

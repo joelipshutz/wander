@@ -50,6 +50,7 @@ struct RemoteDiscoverPeopleRecommendationDTO: Codable, Equatable {
     let reasonKind: String
     let sharedFollowCount: Int
     let resultRank: Int
+    let contactFollowCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -63,6 +64,7 @@ struct RemoteDiscoverPeopleRecommendationDTO: Codable, Equatable {
         case reasonKind = "reason_kind"
         case sharedFollowCount = "shared_follow_count"
         case resultRank = "result_rank"
+        case contactFollowCount = "contact_follow_count"
     }
 
     func recommendation() -> DiscoverPeopleRecommendation {
@@ -82,6 +84,7 @@ struct RemoteDiscoverPeopleRecommendationDTO: Codable, Equatable {
         case "nearby": .nearby
         case "follows_you": .followsYou
         case "shared_follows": .sharedFollows(max(sharedFollowCount, 1))
+        case "contact_follows": .contactFollows(max(contactFollowCount ?? 1, 1))
         default: .suggested
         }
         return DiscoverPeopleRecommendation(profile: profile, reason: reason, rank: resultRank)

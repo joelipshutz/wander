@@ -18,6 +18,7 @@ import XCTest
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertEqual(friend.label, "Follow Contact Friend")
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["3 of your contacts follow General Friend"].firstMatch.exists)
         XCTAssertLessThan(friend.frame.minY, app.buttons["onboarding.friends.follow.user_general_friend"].frame.minY)
         XCTAssertEqual(app.buttons.matching(identifier: "onboarding.friends.follow.user_contact_friend").count, 1)
         capture("Contact suggestion before follow")
@@ -31,6 +32,7 @@ import XCTest
         XCTAssertTrue(skip.waitForExistence(timeout: 15)); skip.tap()
         XCTAssertTrue(app.buttons["onboarding.friends.follow.user_general_friend"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["3 of your contacts follow General Friend"].firstMatch.exists)
     }
     func testDeniedPermissionCanContinueAndSearch() {
         let app = launch(["-WanderContactDiscoveryDenied"])

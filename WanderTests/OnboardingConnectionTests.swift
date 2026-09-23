@@ -23,6 +23,21 @@ final class OnboardingConnectionTests: XCTestCase {
         XCTAssertEqual(writes, 0)
     }
 
+    func testClearingContactsRemovesBothDirectAndContactGraphSuggestions() async {
+        let suggestions: [DiscoverPeopleRecommendation] = [
+            .init(profile: person("contact"), reason: .contacts, rank: 1),
+            .init(profile: person("social"), reason: .contactFollows(3), rank: 2),
+            .init(profile: person("local"), reason: .nearby, rank: 3)]
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: { suggestions }, search: { _ in [] }, following: { [] }, follow: { _ in }
+        )
+        await model.load()
+        XCTAssertEqual(model.recommendations, suggestions)
+        XCTAssertEqual(suggestions[1].reason.displayText(for: person("social")), "3 of your contacts follow Social")
+        model.clearContactRecommendations()
+        XCTAssertEqual(model.recommendations.map(\.id), ["local"])
+    }
+
     func testFailedFollowCanRetryAndSuccessIsNeverRepeated() async {
         let ryan = person("ryan")
         var attempts = 0

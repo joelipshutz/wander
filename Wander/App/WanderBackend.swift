@@ -777,11 +777,18 @@ final class WanderBackend: ObservableObject {
            let ranked = try? await profileRepository.rankedPeopleRecommendations(contactIDs: permitted.map(\.id), limit: limit) {
             try Task.checkCancellation()
             let canUseContacts = await contactDiscovery.canUseResults(userID: userID)
-            return ranked.filter { $0.reason != .contacts || canUseContacts }
+            if permitted.isEmpty || canUseContacts { return ranked }
+            // Contact graph support can affect both membership and order, even
+            // for someone who is not a contact. Re-rank without the address book.
+            if let independent = try? await profileRepository.rankedPeopleRecommendations(contactIDs: [], limit: limit) {
+                try Task.checkCancellation()
+                return independent
+            }
         }
         // A staged server rollout or temporary ranking failure keeps the same
         // contact/general fallback on both onboarding and the People shelf.
         let suggested = try? await discoverProfileRecommendations(limit: limit)
+        try Task.checkCancellation()
         guard suggested != nil || !permitted.isEmpty else { throw ContactDiscoveryError.unavailable }
         let finalContacts = await contactDiscovery.canUseResults(userID: userID) ? permitted : []
         return PeopleRecommendationMerge.combine(contacts: finalContacts, general: suggested ?? [], limit: limit)
