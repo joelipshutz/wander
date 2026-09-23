@@ -193,7 +193,7 @@ struct OnboardingNotificationExamples: View {
 
     private let examples: [(icon: String, title: String, message: String)] = [
         ("mappin.and.ellipse", "Ryan checked in", "A new place to discover."),
-        ("bubble.left", "Joe commented on your check-in", "“This spot looks amazing.”"),
+        ("bubble.left", "Joe commented on your check-in", "“This place looks gas”"),
         ("person.crop.circle.badge.checkmark", "Mina followed you", "Your circle is growing.")
     ]
 
