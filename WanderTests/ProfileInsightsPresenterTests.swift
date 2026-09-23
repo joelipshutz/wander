@@ -56,7 +56,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         }
     }
 
-    func testInsightsKeepMapAndCalendarBeenOnly() throws {
+    func testInsightsIncludeWannaInMapAndKeepCalendarBeenOnly() throws {
         let fixture = makeFixture()
         let insights = ProfileInsightsPresenter.present(
             ownerID: fixture.ownerID,
@@ -70,12 +70,12 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(insights.monthSpotCount, 2)
         XCTAssertEqual(insights.monthCategoryCount, 2)
         XCTAssertEqual(insights.monthCityCount, 2)
-        XCTAssertEqual(insights.mapPlaceCount, 2)
-        XCTAssertEqual(insights.mapCityCount, 2)
-        XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido", "Woodcat Coffee"])
-        XCTAssertEqual(insights.placeSummaries.map(\.title), ["Coffee, Tea, & Sweets", "Restaurants & Food"])
-        XCTAssertEqual(insights.countrySummaries.map(\.title), ["United States"])
-        XCTAssertEqual(insights.countrySummaries.map(\.count), [2])
+        XCTAssertEqual(insights.mapPlaceCount, 3)
+        XCTAssertEqual(insights.mapCityCount, 3)
+        XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido", "Wanna Noodles", "Woodcat Coffee"])
+        XCTAssertEqual(insights.placeSummaries.map(\.title), ["Restaurants & Food", "Coffee, Tea, & Sweets"])
+        XCTAssertEqual(insights.countrySummaries.map(\.title), ["United States", "Japan"])
+        XCTAssertEqual(insights.countrySummaries.map(\.count), [2, 1])
         XCTAssertEqual(
             insights.placeSummaries.first { $0.id == WanderPlaceCategory.coffeeTeaSweets }?.placeIDs,
             ["coffee"]
@@ -84,7 +84,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             insights.placeSummaries.first { $0.id == WanderPlaceCategory.coffeeTeaSweets }
         )
         XCTAssertEqual(insights.mapPoints(matching: coffeeSummary).map(\.name), ["Woodcat Coffee"])
-        XCTAssertFalse(insights.mapPoints.contains { $0.name == "Wanna Noodles" })
+        XCTAssertEqual(insights.mapPoints.first { $0.name == "Wanna Noodles" }?.status, .wannaGo)
         XCTAssertEqual(insights.monthVisitCount, 3)
         XCTAssertEqual(insights.monthWannaCount, 0)
 
@@ -100,7 +100,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(daySummary.placeIDs, ["dinner"])
     }
 
-    func testMapTotalsIncludeResolvedBeenPlacesAndCitiesWithoutMappableCoordinates() {
+    func testMapTotalsIncludeAllResolvedSavedPlacesAndCitiesWithoutMappableCoordinates() {
         let fixture = makeFixture()
         fixture.places[0].latitude = 0
         fixture.places[0].longitude = 0
@@ -114,10 +114,10 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             calendar: fixture.calendar
         )
 
-        XCTAssertEqual(insights.mapPlaceCount, 2)
-        XCTAssertEqual(insights.mapCityCount, 2)
-        XCTAssertEqual(insights.citySummaries.map(\.title).sorted(), ["Los Angeles", "New York"])
-        XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido"])
+        XCTAssertEqual(insights.mapPlaceCount, 3)
+        XCTAssertEqual(insights.mapCityCount, 3)
+        XCTAssertEqual(insights.citySummaries.map(\.title).sorted(), ["Los Angeles", "New York", "Tokyo"])
+        XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido", "Wanna Noodles"])
     }
 
     func testCalendarDaySummariesCountRepeatedOwnerVisitsAndExcludeWanna() throws {
@@ -482,7 +482,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             calendar: fixture.calendar
         )
 
-        XCTAssertEqual(insights.mapPoints.count, 2)
+        XCTAssertEqual(insights.mapPoints.count, 3)
         XCTAssertEqual(insights.placeSummaries.first { $0.id == WanderPlaceCategory.thingsToDo }?.count, 1)
     }
 
@@ -641,6 +641,12 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         }
         assertCacheInvalidates("user place category override") {
             $0.userPlaces[0].categoryOverride = WanderPlaceCategory.thingsToDo
+        }
+        assertCacheInvalidates("user place viewer category") {
+            $0.userPlaces[0].viewerPrimaryCategory = WanderPlaceCategory.thingsToDo
+        }
+        assertCacheInvalidates("user place update priority") {
+            $0.userPlaces[0].updatedAt = $0.userPlaces[0].updatedAt.addingTimeInterval(3_600)
         }
         assertCacheInvalidates("user place saved date") {
             $0.userPlaces[0].savedAt = $0.userPlaces[0].savedAt.addingTimeInterval(3_600)
@@ -854,7 +860,7 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
 
         XCTAssertEqual(mapRoute.source, .mapSummary)
         XCTAssertTrue(mapRoute.source.presentsInteractiveMap)
-        XCTAssertFalse(mapRoute.includesAllStatuses)
+        XCTAssertTrue(mapRoute.includesAllStatuses)
         XCTAssertEqual(calendarRoute.source, .calendar)
         XCTAssertTrue(calendarRoute.source.presentsInteractiveMap)
         XCTAssertFalse(calendarRoute.includesAllStatuses)

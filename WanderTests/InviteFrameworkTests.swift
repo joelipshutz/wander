@@ -294,7 +294,7 @@ final class InviteFrameworkTests: XCTestCase {
         )
         XCTAssertEqual(content.message, ContactInviteWalkthroughContent.inviteProse)
         XCTAssertEqual(content.messageBody, content.item.absoluteString)
-        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user-sender")
+        XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user-sender")
         XCTAssertEqual(content.items.count, 1)
     }
 
@@ -322,7 +322,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("Your address book stays on this device"))
         XCTAssertTrue(sheet.contains("Invites open in Messages for you to send"))
         let provider = try projectSource("Wander/Services/ContactProvider.swift")
-        XCTAssertFalse(provider.contains("CNContactEmailAddressesKey"))
+        let invitationRead = try XCTUnwrap(provider.components(separatedBy: "func matches() async throws -> [ContactMatch] {").last?.components(separatedBy: "private static func authorization").first)
+        XCTAssertFalse(invitationRead.contains("CNContactEmailAddressesKey"))
         XCTAssertTrue(provider.contains("guard let phoneNumber, !phoneNumber.isEmpty else { return nil }"))
     }
 

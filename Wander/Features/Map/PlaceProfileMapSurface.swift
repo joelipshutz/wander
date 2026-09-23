@@ -179,7 +179,8 @@ struct PlaceProfileFullScreen: View {
             category: place.primaryCategory,
             saves: resolvedSaves,
             tasteSaves: tasteSaves,
-            currentUserID: currentUserID
+            currentUserID: currentUserID,
+            featuredEvidence: saves
         )
     }
 
@@ -569,6 +570,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
     private var hostingConstraints: [NSLayoutConstraint] = []
     private var animator: UIViewPropertyAnimator?
     private var pendingRootView: Content?
+    private var isRootUpdateScheduled = false
     private var appliesInitialPosition = true
     private(set) var isPresented: Bool
     private var isAccessibilityModal: Bool
@@ -620,10 +622,21 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
     }
 
     func updateRootView(_ rootView: Content) {
-        if animator != nil {
-            pendingRootView = rootView
-        } else {
-            contentState.content = rootView
+        pendingRootView = rootView
+        scheduleRootViewUpdate()
+    }
+
+    private func scheduleRootViewUpdate() {
+        guard animator == nil, !isRootUpdateScheduled else { return }
+        isRootUpdateScheduled = true
+        // UIViewControllerRepresentable calls updateRootView during a SwiftUI
+        // update. Publish after that pass to preserve active save-sheet state.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            isRootUpdateScheduled = false
+            guard animator == nil, let pendingRootView else { return }
+            self.pendingRootView = nil
+            contentState.content = pendingRootView
         }
     }
 
@@ -688,10 +701,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
             if !isPresented {
                 detachHostingView()
             }
-            if let pendingRootView {
-                self.pendingRootView = nil
-                contentState.content = pendingRootView
-            }
+            scheduleRootViewUpdate()
             onTransitionCompleted(isPresented)
         }
         self.animator = animator
@@ -1199,7 +1209,8 @@ private struct PlaceProfilePreviewCard: View {
             providerScore: displayedPhoto?.providerRating,
             providerCount: displayedPhoto?.providerUserRatingCount,
             recmeRating: presentation.overallRating ?? presentation.ownRating,
-            providerName: displayedPhoto?.provider
+            providerName: displayedPhoto?.provider,
+            isUnratedFeatured: presentation.isUnratedFeatured
         )
     }
 
@@ -1224,7 +1235,7 @@ private struct PlaceProfilePreviewCard: View {
         [
             place.name,
             place.compactPlaceType,
-            ratingPresentation.map { "Rated \($0.scoreText) out of 5" },
+            ratingPresentation?.accessibilityLabel,
             distanceText,
             hoursPresentation.map { [$0.statusText, $0.detailText].compactMap { $0 }.joined(separator: ", ") }
         ]
@@ -1529,6 +1540,9 @@ private struct PlaceCardRatingDistanceRow: View {
 
                 if let providerName = rating.providerDisplayName {
                     PlaceCardProviderRatingBadge(providerName: providerName)
+                } else if rating.source == .featured {
+                    Text("Featured")
+                        .font(.system(size: 10, weight: .bold))
                 }
             }
 
@@ -2235,13 +2249,13 @@ private struct PlaceProfileFullView: View {
                 kind: .website,
                 title: "Website",
                 systemImage: "globe",
-                url: URL(string: "https://getrec.me")!
+                url: URL(string: "https://astirmovement.com")!
             ),
             PlaceExternalAction(
                 kind: .reserve,
                 title: "Reservation",
                 systemImage: "calendar.badge.plus",
-                url: URL(string: "https://getrec.me")!
+                url: URL(string: "https://astirmovement.com")!
             )
         ]
     }

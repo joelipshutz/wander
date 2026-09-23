@@ -2,6 +2,25 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testFeaturedRingAndTemporaryRatingPresentation() {
+        for rated in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = [
+                "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+                "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
+                "-WanderMapPlace", "Featured Coffee QA"
+            ]
+            if rated { app.launchArguments.append("-WanderFeaturedRatingFixtureRated") }
+            app.launch()
+            let card = app.buttons["map.selectedPlaceCard"]
+            XCTAssertTrue(card.waitForExistence(timeout: 15))
+            XCTAssertTrue(card.label.contains(rated ? "Rated 3.5 out of 5" : "Featured, 5 out of 5, not yet rated"))
+            XCTAssertFalse(app.descendants(matching: .any)["map.selectedPlaceRatingProvider"].exists)
+            capture(rated ? "REC579 Featured actual rating" : "REC579 Featured temporary five")
+            app.terminate()
+        }
+    }
+
     func testREC352AdaptiveCategorySearchEvidence() {
         let app = launchREC352AdaptiveSearchFixture()
         let searchField = app.textFields["map.searchField"]

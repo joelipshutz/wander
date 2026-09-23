@@ -235,7 +235,7 @@ struct ShareCardArtwork: View {
                 }
                 HStack {
                     Rectangle().fill(brand.accent).frame(width: 22, height: 2)
-                    Text("getrec.me").font(.custom("AvenirNext-DemiBold", size: 12))
+                    Text(WanderPublicWebsite.host).font(.custom("AvenirNext-DemiBold", size: 12))
                     Spacer()
                     Image(systemName: content.kind == .wanna ? "bookmark" : "arrow.up.right")
                 }.padding(.top, 6)

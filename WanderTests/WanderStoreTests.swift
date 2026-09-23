@@ -7653,6 +7653,29 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
     }
 
+    func testCommentLikeAnalyticsAreDistinctAndContainNoCommentContent() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: .empty(), analytics: analytics)
+        _ = await store.addActivityComment(activityID: "private-activity-id", body: "Private comment text", backend: nil)
+        let comment = try XCTUnwrap(store.activityComments(for: "private-activity-id").first)
+        _ = await store.toggleActivityCommentLike(comment, backend: nil)
+        _ = await store.toggleActivityCommentLike(comment, backend: nil)
+        let changes = analytics.events.filter { $0.name == WanderAnalyticsEvents.activityCommentLikeChanged }
+        XCTAssertEqual(changes.map { $0.properties["is_liked"] }, ["true", "false"])
+        XCTAssertTrue(changes.allSatisfy { Set($0.properties.keys) == ["is_liked", "outcome"] })
+        XCTAssertFalse(analytics.events.contains { $0.name == WanderAnalyticsEvents.activityLikeChanged })
+        let engagement = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.engagementActionPerformed && $0.properties["action"] == "activity_comment_liked"
+        }
+        XCTAssertEqual(engagement.count, 1)
+        XCTAssertEqual(engagement.first?.properties["need"], "connect")
+        XCTAssertEqual(engagement.first?.properties["surface"], "activity_comments")
+        let values = (changes + engagement).flatMap(\.properties.values).joined(separator: " ")
+        for privateValue in [comment.id, comment.activityID, comment.author.id, comment.body] {
+            XCTAssertFalse(values.contains(privateValue))
+        }
+    }
+
     func testProductActionsEmitCanonicalHumanNeedAnalyticsWithoutContent() async throws {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.seed(), analytics: analytics)
@@ -8063,6 +8086,22 @@ final class WanderStoreTests: XCTestCase {
         await store.refreshDiscoverPeopleRecommendations(backend: backend)
 
         XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+    }
+
+    func testClearingContactRecommendationsInvalidatesOlderInFlightRefresh() async {
+        let store = makeStore()
+        let oldProfile = ProfileShell(id: "user_removed_contact", handle: "removed", displayName: "Removed", avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let newProfile = ProfileShell(id: "user_new_suggestion", handle: "new", displayName: "New", avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let oldRepo = FakeProfileRepository(recommendations: [.init(profile: oldProfile, reason: .contacts, rank: 1)])
+        oldRepo.suspendRecommendations = true
+        let oldTask = Task { await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(profileRepository: oldRepo)) }
+        while oldRepo.recommendationLimits.isEmpty { await Task.yield() }
+        store.clearContactRecommendations()
+        let newRepo = FakeProfileRepository(recommendations: [.init(profile: newProfile, reason: .suggested, rank: 1)])
+        await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(profileRepository: newRepo), force: true)
+        oldRepo.suspendRecommendations = false
+        await oldTask.value
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.map(\.id), [newProfile.id])
     }
 
     func testDiscoverPeopleRecommendationsFailureAndIdentityChangeResetState() async {

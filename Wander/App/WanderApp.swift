@@ -156,9 +156,14 @@ struct WanderApp: App {
         if usesSimulatorTestSession || usesNativeOnboardingReview, let userID = authStore.state.session?.userID {
             HomeMetroSelectionStore().remember(fixtureMetro, for: userID)
         }
+        let contactTestRepository = ContactDiscoveryUITestRepository.isActive ? ContactDiscoveryUITestRepository() : nil
+        let testProfileRepository: (any ProfileRepository)? = contactTestRepository != nil
+            ? contactTestRepository : (forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil)
         let backendStore = (usesSimulatorTestSession || usesNativeOnboardingReview)
             ? WanderBackend(
-                profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
+                profileRepository: testProfileRepository,
+                contactDiscovery: contactTestRepository?.service(auth: authStore),
+                followRepository: contactTestRepository,
                 notificationRepository: SimulatorNotificationRepository(),
                 placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
                     ? SimulatorPlacePlanInvitationRepository() : nil,

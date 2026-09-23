@@ -1058,8 +1058,9 @@ struct MapPinRenderCatalog {
                }) {
                 places.append(currentUserSave)
             }
-            let states = MapPinSaveState.personalStates(for: places, currentUserID: currentUserID)
-            outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(for: states)
+            outlinesByGroupKey[group.key] = MapPinOutlineBuilder.outlines(
+                for: places, currentUserID: currentUserID
+            )
         }
 
         self.outlinesByGroupKey = outlinesByGroupKey
@@ -1248,6 +1249,7 @@ struct NativeMapCameraRequest {
     let region: MKCoordinateRegion
     let revision: UInt64
     let animated: Bool
+    var restoredCamera: MKMapCamera? = nil
 }
 
 enum NativeMapAnnotationKind: Equatable {
@@ -1269,8 +1271,14 @@ struct NativeMapAnnotationDescriptor: Equatable {
     let entranceDelay: TimeInterval
     let accessibilityLabel: String
     let bounceRevision: UInt64
+    var accessibilityIdentifierOverride: String? = nil
+    var keepsVisibleWhenColliding = false
+    var detail: MapPinDetail = .category
+
+    var resolvedDetail: MapPinDetail { isSelected ? .category : detail }
 
     var accessibilityIdentifier: String? {
+        if let accessibilityIdentifierOverride { return accessibilityIdentifierOverride }
         switch kind {
         case let .saved(groupKey):
             return isSelected ? "map.pin.active.saved.\(groupKey)" : nil
@@ -1287,6 +1295,7 @@ struct NativeMapAnnotationDescriptor: Equatable {
             outlines.map(\.id).joined(separator: ","),
             isSearchResult ? "search" : "saved",
             isSelected ? "selected" : "inactive",
+            resolvedDetail.rawValue,
             isSelected ? title : "",
             String(bounceRevision)
         ].joined(separator: "|")
@@ -1310,6 +1319,9 @@ struct NativeMapAnnotationDescriptor: Equatable {
             && lhs.entranceDelay == rhs.entranceDelay
             && lhs.accessibilityLabel == rhs.accessibilityLabel
             && lhs.bounceRevision == rhs.bounceRevision
+            && lhs.accessibilityIdentifierOverride == rhs.accessibilityIdentifierOverride
+            && lhs.keepsVisibleWhenColliding == rhs.keepsVisibleWhenColliding
+            && lhs.detail == rhs.detail
     }
 }
 
@@ -3666,7 +3678,7 @@ struct MapScreen: View {
             places.append(currentUserSave)
         }
         return MapPinOutlineBuilder.outlines(
-            for: MapPinSaveState.personalStates(for: places, currentUserID: store.currentUser.id)
+            for: places, currentUserID: store.currentUser.id
         )
     }
 
@@ -6685,7 +6697,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 
 /// A native parent hides MapKit's own accessibility container as well as its
 /// descendants during preparation, without removing or dimming the renderer.
-private final class NativeMapContainerView: UIView {
+final class NativeMapContainerView: UIView {
     let mapView = MKMapView(frame: .zero)
 
     init() {
@@ -6708,7 +6720,7 @@ private final class NativeMapContainerView: UIView {
 /// A MapKit-owned annotation surface. MapKit virtualizes and reuses these views
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
-private struct NativeMapView: UIViewRepresentable {
+struct NativeMapView: UIViewRepresentable {
     let attributionBottomClearance: CGFloat
     let isInteractionEnabled: Bool
     let annotations: [NativeMapAnnotationDescriptor]
@@ -6724,6 +6736,9 @@ private struct NativeMapView: UIViewRepresentable {
     let onUserInteraction: () -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
     let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
+    var allowsNativeFeatureSelection = true
+    var usesAdaptivePinDetail = false
+    var onCameraSnapshot: ((MKMapCamera) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -6743,7 +6758,7 @@ private struct NativeMapView: UIViewRepresentable {
         )
         configuration.pointOfInterestFilter = .includingAll
         mapView.preferredConfiguration = configuration
-        mapView.selectableMapFeatures = [.pointsOfInterest]
+        mapView.selectableMapFeatures = allowsNativeFeatureSelection ? [.pointsOfInterest] : []
         mapView.delegate = context.coordinator
         mapView.showsScale = false
         mapView.showsCompass = false
@@ -6779,6 +6794,8 @@ private struct NativeMapView: UIViewRepresentable {
         private var annotationViewportIndex = MapAnnotationViewportIndex()
         private var pinViewReferencesByID: [String: WeakNativeMapPinAnnotationView] = [:]
         private var renderedViewport: MapViewport?
+        private var adaptiveDetailPolicy = MapAdaptivePinDetailPolicy()
+        private var adaptiveDetailRefresh: DispatchWorkItem?
         private var annotationAccessibilityRefreshScheduled = false
         private var lastCameraRevision: UInt64?
         private var lastFeatureClearRevision: UInt64 = 0
@@ -6809,6 +6826,7 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            let detailModeChanged = parent.usesAdaptivePinDetail != self.parent.usesAdaptivePinDetail
             mapView.isUserInteractionEnabled = parent.isInteractionEnabled
             mapView.accessibilityElementsHidden = !parent.isInteractionEnabled
             if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
@@ -6817,6 +6835,12 @@ private struct NativeMapView: UIViewRepresentable {
                 )
             }
             self.parent = parent
+            if detailModeChanged {
+                adaptiveDetailRefresh?.cancel()
+                adaptiveDetailRefresh = nil
+                adaptiveDetailPolicy = MapAdaptivePinDetailPolicy()
+                refreshVisibleAnnotationViews(in: mapView)
+            }
             mapView.showsUserLocation = parent.showsUserLocation
             let interfaceStyle: UIUserInterfaceStyle = parent.isDark ? .dark : .light
             if mapView.overrideUserInterfaceStyle != interfaceStyle {
@@ -6828,6 +6852,7 @@ private struct NativeMapView: UIViewRepresentable {
             applyNativeFeatureClearIfNeeded(to: mapView)
             applyCameraRequestIfNeeded(to: mapView)
             synchronizeAnnotations(in: mapView)
+            refreshAdaptivePinDetail(in: mapView)
         }
 
         func attachGestureObservers(to mapView: MKMapView) {
@@ -6836,6 +6861,8 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func detachGestureObservers(from mapView: MKMapView) {
+            adaptiveDetailRefresh?.cancel()
+            adaptiveDetailRefresh = nil
             mapView.removeGestureRecognizer(tapRecognizer)
             mapView.removeGestureRecognizer(longPressRecognizer)
         }
@@ -6905,12 +6932,17 @@ private struct NativeMapView: UIViewRepresentable {
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             parent.onCameraChange(mapView.region)
+            scheduleAdaptivePinDetailRefresh(in: mapView)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             let isUserInitiated = !isProgrammaticCameraChangeInFlight
             isProgrammaticCameraChangeInFlight = false
             synchronizeAnnotations(in: mapView)
+            adaptiveDetailRefresh?.cancel()
+            adaptiveDetailRefresh = nil
+            refreshAdaptivePinDetail(in: mapView)
+            parent.onCameraSnapshot?(mapView.camera.copy() as! MKMapCamera)
             parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
         }
 
@@ -7018,6 +7050,11 @@ private struct NativeMapView: UIViewRepresentable {
             guard lastCameraRevision != parent.cameraRequest.revision else { return }
             let isInitialRequest = lastCameraRevision == nil
             lastCameraRevision = parent.cameraRequest.revision
+            if let camera = parent.cameraRequest.restoredCamera {
+                isProgrammaticCameraChangeInFlight = true
+                mapView.setCamera(camera, animated: false)
+                return
+            }
             isProgrammaticCameraChangeInFlight = MapSelectionGesturePolicy.classify(
                 from: mapView.region,
                 to: parent.cameraRequest.region
@@ -7045,6 +7082,41 @@ private struct NativeMapView: UIViewRepresentable {
                 guard let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView else {
                     continue
                 }
+                configure(view, for: annotation)
+            }
+        }
+
+        private func scheduleAdaptivePinDetailRefresh(in mapView: MKMapView) {
+            guard parent.usesAdaptivePinDetail, adaptiveDetailRefresh == nil else { return }
+            let work = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else { return }
+                self.adaptiveDetailRefresh = nil
+                self.refreshAdaptivePinDetail(in: mapView)
+            }
+            adaptiveDetailRefresh = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+        }
+
+        private func refreshAdaptivePinDetail(in mapView: MKMapView) {
+            guard parent.usesAdaptivePinDetail, mapView.bounds.width > 0 else { return }
+            let previous = adaptiveDetailPolicy.categoryIDs
+            let candidates = annotationsByID.values.map { annotation in
+                MapAdaptivePinDetailPolicy.Candidate(
+                    id: annotation.stableID,
+                    point: mapView.convert(annotation.coordinate, toPointTo: mapView),
+                    isSelected: annotation.descriptor.isSelected
+                )
+            }
+            let metersPerPoint = mapView.visibleMapRect.width
+                * MKMetersPerMapPointAtLatitude(mapView.centerCoordinate.latitude)
+                / Double(mapView.bounds.width)
+            let next = adaptiveDetailPolicy.resolve(
+                candidates, metersPerPoint: metersPerPoint, viewport: mapView.bounds
+            )
+            for id in previous.symmetricDifference(next) {
+                guard let annotation = annotationsByID[id],
+                      let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView
+                else { continue }
                 configure(view, for: annotation)
             }
         }
@@ -7086,8 +7158,13 @@ private struct NativeMapView: UIViewRepresentable {
             _ view: NativeMapPinAnnotationView,
             for annotation: NativeMapAnnotation
         ) {
+            var descriptor = annotation.descriptor
+            if parent.usesAdaptivePinDetail {
+                descriptor.detail = adaptiveDetailPolicy.categoryIDs.contains(annotation.stableID)
+                    ? .category : .dot
+            }
             view.configure(
-                descriptor: annotation.descriptor,
+                descriptor: descriptor,
                 isDark: parent.isDark,
                 reduceMotion: parent.reduceMotion
             )
@@ -7207,7 +7284,7 @@ private final class NativeMapAnnotation: NSObject, MKAnnotation {
     }
 }
 
-private final class NativeMapPinAnnotationView: MKAnnotationView {
+final class NativeMapPinAnnotationView: MKAnnotationView {
     static let savedReuseIdentifier = "recme.map.pin.saved"
     static let searchReuseIdentifier = "recme.map.pin.search"
     static let reuseIdentifiers = [
@@ -7223,6 +7300,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
     private var renderSignature = ""
     private var bounceRevision: UInt64 = 0
     private var presentedAnnotationID: String?
+    private var presentedDetail: MapPinDetail = .category
 
     override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -7241,6 +7319,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         renderSignature = ""
         bounceRevision = 0
         presentedAnnotationID = nil
+        presentedDetail = .category
         onAccessibilityActivate = nil
         isAccessibilityElement = false
         alpha = 1
@@ -7273,17 +7352,31 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         }
         presentedAnnotationID = descriptor.id
         if renderSignature != nextSignature {
-            image = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
+            let nextImage = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
+            if !isNewAnnotation, presentedDetail != descriptor.resolvedDetail, !reduceMotion {
+                UIView.transition(with: self, duration: 0.16,
+                                  options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState]) {
+                    self.image = nextImage
+                }
+            } else {
+                image = nextImage
+            }
             renderSignature = nextSignature
         }
+        presentedDetail = descriptor.resolvedDetail
 
         centerOffset = NativeMapPinImageRenderer.centerOffset(for: descriptor)
         accessibilityLabel = descriptor.accessibilityLabel
         accessibilityIdentifier = descriptor.accessibilityIdentifier
         accessibilityTraits = .button
+        accessibilityValue = descriptor.resolvedDetail == .dot ? "Map dot" : "Category pin"
         clusteringIdentifier = nil
-        displayPriority = descriptor.isSelected ? .required : .defaultHigh
+        // Your Map is a complete view of saved places, including dense areas.
+        // Required priority prevents MapKit from hiding overlapping markers.
+        displayPriority = descriptor.keepsVisibleWhenColliding || descriptor.isSelected
+            ? .required : .defaultHigh
         zPriority = descriptor.isSelected ? .max : .defaultUnselected
+        if descriptor.resolvedDetail == .dot { zPriority = .min }
         selectedZPriority = descriptor.isSelected ? .max : .defaultSelected
 
         if shouldAnimateEntrance {
@@ -7389,6 +7482,12 @@ private enum NativeMapPinImageRenderer {
             return cached
         }
 
+        if descriptor.resolvedDetail == .dot {
+            let image = dotImage(for: descriptor, isDark: isDark)
+            imageCache.setObject(image, forKey: cacheKey)
+            return image
+        }
+
         let metrics = canvasMetrics(for: descriptor)
         let format = UIGraphicsImageRendererFormat.preferred()
         format.opaque = false
@@ -7411,6 +7510,26 @@ private enum NativeMapPinImageRenderer {
         }
         imageCache.setObject(image, forKey: cacheKey)
         return image
+    }
+
+    private static func dotImage(for descriptor: NativeMapAnnotationDescriptor, isDark: Bool) -> UIImage {
+        let size = CGSize(width: 16, height: 16)
+        let gray = UIColor.systemGray.resolvedColor(with:
+            UITraitCollection(userInterfaceStyle: isDark ? .dark : .light))
+        let background = UIColor(isDark ? WanderMapAppearance.nightRaised.color : WanderTheme.surfaceRaised.color)
+        let hollow = !descriptor.outlines.isEmpty && descriptor.outlines.allSatisfy {
+            $0.status == .wannaGo && $0.secondaryStatus == nil
+        }
+        return UIGraphicsImageRenderer(size: size).image { renderer in
+            let context = renderer.cgContext
+            context.setFillColor(background.cgColor)
+            context.fillEllipse(in: CGRect(x: 3.5, y: 3.5, width: 9, height: 9))
+            context.setFillColor((hollow ? background : gray).cgColor)
+            context.setStrokeColor(gray.cgColor)
+            context.setLineWidth(1.5)
+            context.addEllipse(in: CGRect(x: 5, y: 5, width: 6, height: 6))
+            context.drawPath(using: .fillStroke)
+        }
     }
 
     private struct CanvasMetrics {
@@ -10406,18 +10525,20 @@ struct MapPinOutlineStroke: View {
 enum MapPinSaveOwnership: Equatable {
     case currentUser
     case social
+    case featured
 
     var key: String {
         switch self {
         case .currentUser: "current_user"
         case .social: "social"
+        case .featured: "featured"
         }
     }
 
     var color: Color {
         switch self {
         case .currentUser: WanderTheme.pinYou.color
-        case .social: WanderTheme.pinSocial.color
+        case .social, .featured: WanderTheme.pinSocial.color
         }
     }
 }
@@ -11034,6 +11155,19 @@ struct MapPinOutlineArc: Equatable {
 }
 
 enum MapPinOutlineBuilder {
+    static func outlines(for places: [VisiblePlace], currentUserID: String) -> [MapPinOutline] {
+        let personalOutlines = outlines(
+            for: MapPinSaveState.personalStates(for: places, currentUserID: currentUserID)
+        )
+        guard personalOutlines.isEmpty,
+              places.contains(where: { $0.isCommunityAggregate && $0.userPlace.deletedAt == nil })
+        else { return personalOutlines }
+
+        // Anonymous Featured evidence gets a visible ring without implying
+        // that the viewer or a followed person has checked in.
+        return [MapPinOutline(ownership: .featured, status: .been)]
+    }
+
     static func outlines(for states: [MapPinSaveState]) -> [MapPinOutline] {
         [
             outline(for: .currentUser, in: states),
@@ -11053,7 +11187,7 @@ enum MapPinOutlineBuilder {
             currentUserID: currentUserID
         ) {
             let outlines = outlines(
-                for: MapPinSaveState.personalStates(for: group.places, currentUserID: currentUserID)
+                for: group.places, currentUserID: currentUserID
             )
 
             for visiblePlace in group.places {
@@ -11090,6 +11224,7 @@ enum MapPinOutlineBuilder {
 enum MapPinAccessibility {
     static func label(outlines: [MapPinOutline], category: String, placeName: String) -> String {
         let stateSummaries = outlines.map { outline in
+            if outline.ownership == .featured { return "Featured" }
             let owner = outline.ownership == .currentUser ? "you" : "social"
             let primaryStatus = outline.status == .been ? CheckInCopy.pastTense : "wanna"
 
@@ -13221,6 +13356,11 @@ struct MapPlaceSaveEditor: View {
     @State private var didInvalidateForAccountChange = false
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
+    @State private var selectedListIDs: Set<String>
+    @State private var isChoosingLists = false
+    @State private var completedPlaceSaveForLists: SaveResult?
+    @State private var listSaveResult = PlaceSaveListResult()
+    @State private var showsListSaveResult = false
     @StateObject private var questionPresentation = CheckInQuestionPresentation()
     @State private var selectedAnswers: [String: Set<String>]
     @State private var unifiedTags: Set<String>
@@ -13358,6 +13498,7 @@ struct MapPlaceSaveEditor: View {
             initialValue: restoredAttachments ?? initialContext.initialPhotoAttachments
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
+        _selectedListIDs = State(initialValue: restoredForm?.selectedListIDs ?? [])
         let initialShowsOptionalDetails = restoredForm?.isShowingOptionalDetails ?? false
         _isShowingOptionalDetails = State(initialValue: initialShowsOptionalDetails)
         var initialModeDrafts = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
@@ -13414,7 +13555,8 @@ struct MapPlaceSaveEditor: View {
                 photoAttachments: visitPhotoAttachments.compactMap(\.draftPhoto),
                 selectedInviteeUserIDs: selectedInviteeUserIDs,
                 isShowingOptionalDetails: isShowingOptionalDetails,
-                customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil
+                customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil,
+                selectedListIDs: selectedListIDs
             ),
             submittedAt: saveAttemptedAt
         )
@@ -13534,6 +13676,28 @@ struct MapPlaceSaveEditor: View {
                 onContentExpansionRequested()
             }
         }
+        .sheet(isPresented: $isChoosingLists) {
+            MapPlaceListPickerSheet(
+                target: .candidate(selectedCandidate),
+                stagedListIDs: selectedListIDs,
+                onStage: { listIDs in
+                    guard bindEditorOwnerIfNeeded() else { return }
+                    selectedListIDs = listIDs
+                },
+                stagedSaveStatus: selectedStatus,
+                analyticsSurface: selectedStatus == .been ? "check_in" : "wanna",
+                onComplete: { _ in }
+            )
+        }
+        .alert(selectedStatus == .been ? "Check-in saved" : "Wanna saved", isPresented: $showsListSaveResult) {
+            if listSaveResult.pendingCount + listSaveResult.failedCount > 0 {
+                Button("Retry lists") { retrySelectedLists() }
+            }
+            Button("Done") { completePlaceListSave() }
+        } message: {
+            Text([listSaveResult.message, completedPlaceSaveForLists?.localDetailsWarning]
+                .compactMap { $0 }.joined(separator: "\n\n"))
+        }
         .disabled(editorOwnerID != nil && editorOwnerID != store.currentUser.id)
         .onChange(of: store.currentUser.id, initial: true) { _, _ in
             guard bindEditorOwnerIfNeeded() else { return }
@@ -13555,6 +13719,7 @@ struct MapPlaceSaveEditor: View {
                     VStack(alignment: .leading, spacing: isReadyForDetails ? WanderTheme.spacing3 : WanderTheme.spacing4) {
                         header
                         singleScreenContent
+                            .disabled(isSaving || completedPlaceSaveForLists != nil)
                     }
                     .walkthroughTarget(isReadyForDetails ? nil : .saveStatus)
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -13597,7 +13762,7 @@ struct MapPlaceSaveEditor: View {
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
         .interactiveDismissDisabled(
             walkthroughs.activeSurface == .saveFlow || isSaving || isRemoving
-                || questionPresentation.request != nil
+                || questionPresentation.request != nil || completedPlaceSaveForLists != nil
         )
         .modifier(MapPlaceSaveEditorLifecycleModifier(
             context: context,
@@ -13634,6 +13799,7 @@ struct MapPlaceSaveEditor: View {
     private var inlineEditor: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             singleScreenContent
+                .disabled(isSaving || completedPlaceSaveForLists != nil)
 
             if presentation.showsInlineSaveAction, isReadyForDetails {
                 saveFooter
@@ -13697,6 +13863,10 @@ struct MapPlaceSaveEditor: View {
                 visitPhotoAttachments = []
                 selectedInviteeUserIDs = []
                 completedSaveWithWarning = nil
+                selectedListIDs = []
+                isChoosingLists = false
+                completedPlaceSaveForLists = nil
+                showsListSaveResult = false
                 pendingWalkthroughSaveResult = nil
                 onClose()
             }
@@ -13788,7 +13958,11 @@ struct MapPlaceSaveEditor: View {
 
             if walkthroughs.activeSurface != .saveFlow {
                 Button {
-                    onClose()
+                    if completedPlaceSaveForLists != nil {
+                        completePlaceListSave()
+                    } else {
+                        onClose()
+                    }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .black))
@@ -13871,6 +14045,10 @@ struct MapPlaceSaveEditor: View {
                 .id(WalkthroughTargetID.saveNote)
                 .walkthroughTarget(.saveNote)
 
+            if selectedStatus == .wannaGo, offersListSelection {
+                saveListsRow
+            }
+
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
@@ -13928,6 +14106,10 @@ struct MapPlaceSaveEditor: View {
                     .disabled(!canInviteFriends)
             }
 
+            if offersListSelection {
+                saveListsRow
+            }
+
             if context.allowsPhotoAttachments {
                 MapSaveVisitPhotoSection(
                     canAddPhotos: true,
@@ -13960,6 +14142,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var primaryActionTitle: String {
+        if completedPlaceSaveForLists != nil { return "Retry lists" }
         if selectedStatus == .wannaGo {
             if case .editWant = context.mode {
                 return "Update Wanna"
@@ -13970,6 +14153,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var progressActionTitle: String {
+        if completedPlaceSaveForLists != nil { return "Updating lists…" }
         if case .editWant = context.mode {
             return "Updating Wanna..."
         }
@@ -14282,7 +14466,7 @@ struct MapPlaceSaveEditor: View {
                         .font(AstirTypography.control)
                         .foregroundStyle(astirBrandMode.primaryText)
 
-                    Text(optionalDetailsSummary)
+                    Text("tags")
                         .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
@@ -14316,6 +14500,7 @@ struct MapPlaceSaveEditor: View {
             .disabled(isWalkthroughAutomating(.saveMoreOptions))
             .walkthroughTarget(.saveMoreOptions)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
+            .accessibilityIdentifier("save.moreOptions")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
@@ -14343,8 +14528,47 @@ struct MapPlaceSaveEditor: View {
         }
     }
 
-    private var optionalDetailsSummary: String {
-        "tags"
+    private var offersListSelection: Bool {
+        // Import staging already owns its list selection. Every saving editor,
+        // including repeat saves and edits, can organize the underlying place.
+        presentation != .inlineStaging
+    }
+
+    private var saveListsRow: some View {
+        Button {
+            dismissKeyboard()
+            isChoosingLists = true
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: PlaceListSymbol.systemImage)
+                    .foregroundStyle(WanderTheme.pinSocial.color)
+                Text("Add to lists")
+                    .font(AstirTypography.control)
+                    .foregroundStyle(astirBrandMode.primaryText)
+                Spacer(minLength: WanderTheme.spacing2)
+                if !selectedListIDs.isEmpty {
+                    Text("\(selectedListIDs.count) selected")
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(astirBrandMode.secondaryText)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .background(astirBrandMode.raisedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("save.lists")
+        .accessibilityValue("\(selectedListIDs.count) selected")
+        .accessibilityHint("Optional. Lists are updated only when you save.")
     }
 
     private var removeSaveSection: some View {
@@ -15166,6 +15390,10 @@ struct MapPlaceSaveEditor: View {
     private func save() {
         guard bindEditorOwnerIfNeeded() else { return }
         guard !isSaving else { return }
+        if completedPlaceSaveForLists != nil {
+            retrySelectedLists()
+            return
+        }
         guard saveAttemptedAt == nil else { return }
         if selectedStatus == .been {
             loadPrivateQuestionAnswersIfNeeded()
@@ -15222,6 +15450,7 @@ struct MapPlaceSaveEditor: View {
         errorMessage = nil
 
         let submission = currentSubmission
+        let listIDsToSave = offersListSelection ? selectedListIDs : []
         let analyticsMode = analyticsSaveMode
         store.productAnalytics.track(SaveFlowAnalyticsTracker.event(
             WanderAnalyticsEvents.saveFlowSubmitted, mode: analyticsMode, status: selectedStatus.rawValue))
@@ -15229,6 +15458,16 @@ struct MapPlaceSaveEditor: View {
         Task {
             guard editorOwnerID == store.currentUser.id else { return }
             let result = await onSave(submission)
+            if let result, !listIDsToSave.isEmpty, editorOwnerID == store.currentUser.id {
+                completedPlaceSaveForLists = result
+                listSaveResult = await store.addSavedPlaceToLists(
+                    userPlaceID: result.userPlaceID,
+                    listIDs: listIDsToSave,
+                    ownerUserID: editorOwnerID ?? "",
+                    backend: auth.isSignedIn ? backend : nil,
+                    analyticsSurface: submission.status == .been ? "check_in" : "wanna"
+                )
+            }
             await MainActor.run {
                 guard editorOwnerID == store.currentUser.id else { return }
                 let outcome: AnalyticsSaveOutcome
@@ -15242,6 +15481,11 @@ struct MapPlaceSaveEditor: View {
                     status: submission.status.rawValue, outcome: outcome))
                 isSaving = false
                 if let result {
+                    if completedPlaceSaveForLists != nil, listSaveResult.needsAttention {
+                        showsListSaveResult = true
+                        return
+                    }
+                    completedPlaceSaveForLists = nil
                     if result.localDetailsWarning != nil {
                         completedSaveWithWarning = result
                         return
@@ -15275,6 +15519,38 @@ struct MapPlaceSaveEditor: View {
                         : "Sign in to add this to Wanna."
                 }
             }
+        }
+    }
+
+    private func retrySelectedLists() {
+        guard bindEditorOwnerIfNeeded(), !isSaving, let result = completedPlaceSaveForLists else { return }
+        isSaving = true
+        Task { @MainActor in
+            listSaveResult = await store.addSavedPlaceToLists(
+                userPlaceID: result.userPlaceID,
+                listIDs: selectedListIDs,
+                ownerUserID: editorOwnerID ?? "",
+                backend: auth.isSignedIn ? backend : nil,
+                analyticsSurface: selectedStatus == .been ? "check_in" : "wanna"
+            )
+            guard editorOwnerID == store.currentUser.id else { return }
+            isSaving = false
+            if listSaveResult.needsAttention {
+                showsListSaveResult = true
+            } else {
+                completePlaceListSave()
+            }
+        }
+    }
+
+    private func completePlaceListSave() {
+        guard bindEditorOwnerIfNeeded(), let result = completedPlaceSaveForLists else { return }
+        completedPlaceSaveForLists = nil
+        showsListSaveResult = false
+        if result.localDetailsWarning != nil, !listSaveResult.needsAttention {
+            completedSaveWithWarning = result
+        } else {
+            onSaveCompleted(result)
         }
     }
 

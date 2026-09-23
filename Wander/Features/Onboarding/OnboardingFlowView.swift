@@ -18,7 +18,6 @@ struct OnboardingFlowView: View {
     @State private var didTrackStart = false
     @State private var showsLocationDetails = false
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
-    @StateObject private var contactsPermission = OnboardingContactsPermissionManager()
 
     init(
         session: AuthSession,
@@ -66,16 +65,8 @@ struct OnboardingFlowView: View {
                     )
                 }
             case .contacts:
-                OnboardingPermissionView(
-                    step: .contacts,
-                    systemImage: "person.2.fill",
-                    accent: WanderTheme.pinSocial.color,
-                    title: "Connect with your people",
-                    message: "Use your contacts to connect with people you know.",
-                    bullets: [],
-                    primaryTitle: "Continue",
-                    analytics: analytics,
-                    request: { await contactsPermission.requestAccess() },
+                OnboardingContactsView(
+                    userID: session.userID, service: backend.contactDiscovery, analytics: analytics,
                     continueAction: { advance(from: .contacts) }
                 )
             case .friends:

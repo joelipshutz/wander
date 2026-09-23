@@ -178,7 +178,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
 
         XCTAssertEqual(
             url.absoluteString,
-            "https://getrec.me/profiles/user%2F%E6%9D%B1%E4%BA%AC"
+            "https://astirmovement.com/profiles/user%2F%E6%9D%B1%E4%BA%AC"
         )
         XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
         XCTAssertNil(WanderDeepLinkRoute.sharedProfile(profileID: " \n ").url)
@@ -188,23 +188,23 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         let routes: [(WanderDeepLinkRoute, String)] = [
             (
                 .sharedProfile(profileID: "user_joe"),
-                "https://getrec.me/profiles/user_joe"
+                "https://astirmovement.com/profiles/user_joe"
             ),
             (
                 .sharedPlace(placeID: "40000000-0000-0000-0000-000000000001"),
-                "https://getrec.me/places/40000000-0000-0000-0000-000000000001"
+                "https://astirmovement.com/places/40000000-0000-0000-0000-000000000001"
             ),
             (
                 .sharedActivity(activityID: "42000000-0000-0000-0000-000000000001"),
-                "https://getrec.me/activities/42000000-0000-0000-0000-000000000001"
+                "https://astirmovement.com/activities/42000000-0000-0000-0000-000000000001"
             ),
             (
                 .sharedList(listID: "44000000-0000-0000-0000-000000000001"),
-                "https://getrec.me/lists/44000000-0000-0000-0000-000000000001"
+                "https://astirmovement.com/lists/44000000-0000-0000-0000-000000000001"
             ),
             (
                 .listInvite(token: String(repeating: "ab", count: 24)),
-                "https://getrec.me/invites/\(String(repeating: "ab", count: 24))"
+                "https://astirmovement.com/invites/\(String(repeating: "ab", count: 24))"
             )
         ]
 
@@ -212,6 +212,11 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             let url = try XCTUnwrap(route.url)
             XCTAssertEqual(url.absoluteString, expectedURL)
             XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
+            for host in ["getrec.me", "www.astirmovement.com", "ASTIRMOVEMENT.COM"] {
+                var components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+                components.host = host
+                XCTAssertEqual(WanderDeepLinkRoute.parse(try XCTUnwrap(components.url)), route)
+            }
         }
     }
 
@@ -238,12 +243,17 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "recme://profiles/user/extra",
             "http://getrec.me/profiles/user",
             "https://www.getrec.me/profiles/user",
-            "https://getrec.me/profiles/user/extra",
-            "https://getrec.me/profiles/user?q=private",
-            "https://getrec.me/places/not-a-uuid",
-            "https://getrec.me/activities/not-a-uuid",
-            "https://getrec.me/lists/not-a-uuid",
-            "https://getrec.me/invites/too-short"
+            "http://astirmovement.com/profiles/user",
+            "https://astirmovement.com.evil.example/profiles/user",
+            "https://evilastirmovement.com/profiles/user",
+            "https://user@astirmovement.com/profiles/user",
+            "https://astirmovement.com:8443/profiles/user",
+            "https://astirmovement.com/profiles/user/extra",
+            "https://astirmovement.com/profiles/user?q=private",
+            "https://astirmovement.com/places/not-a-uuid",
+            "https://astirmovement.com/activities/not-a-uuid",
+            "https://astirmovement.com/lists/not-a-uuid",
+            "https://astirmovement.com/invites/too-short"
         ]
 
         for rawURL in rejected {
@@ -755,7 +765,8 @@ final class WanderCalendarWidgetSnapshotTests: XCTestCase {
 
         let schedule = WanderCalendarTimelineSchedule.make(
             startingAt: now,
-            snapshot: snapshot
+            snapshot: snapshot,
+            referenceCalendar: calendar
         )
         let components = schedule.entryDates.map {
             calendar.dateComponents([.year, .month, .day, .hour], from: $0)

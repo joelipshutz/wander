@@ -312,8 +312,12 @@ final class WanderStore: ObservableObject {
     private var loadedRemotePlaceActivityIDs = Set<String>()
     private var pendingActivityLikeIDs = Set<String>()
     private var pendingActivityCommentDeletionIDs = Set<String>()
+    @Published private var pendingActivityCommentLikeIDs = Set<String>()
+    private var activityCommentLikeRevisions: [String: UUID] = [:]
+    private var activityCommentsGeneration = UUID()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
+    private var discoverPeopleRecommendationsGeneration = 0
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
     var defaultVisibility: PlaceVisibility {
         willSet {
@@ -1194,6 +1198,7 @@ final class WanderStore: ObservableObject {
             }
             apply(session: session)
             if previousUserID != currentUser.id {
+                discoverPeopleRecommendationsGeneration += 1
                 discoverPeopleRecommendationsState = .idle
             }
             analytics.identify(userID: session.userID)
@@ -1203,6 +1208,7 @@ final class WanderStore: ObservableObject {
         case .signedOut, .unavailable:
             clearSessionScopedRemoteState()
             applySignedOutProfile()
+            discoverPeopleRecommendationsGeneration += 1
             discoverPeopleRecommendationsState = .idle
             analytics.resetIdentity()
             #if DEBUG
@@ -1269,6 +1275,9 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID = [:]
             pendingActivityLikeIDs = []
             pendingActivityCommentDeletionIDs = []
+            pendingActivityCommentLikeIDs = []
+            activityCommentLikeRevisions = [:]
+            activityCommentsGeneration = UUID()
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -1542,6 +1551,7 @@ final class WanderStore: ObservableObject {
         saveStreakRecoveryDatesByUserID = [:]
         saveStreakCelebration = nil
         remoteVisiblePlaceCache = []
+        discoverPeopleRecommendationsGeneration += 1
         discoverPeopleRecommendationsState = .idle
         feedRefreshTask?.task.cancel()
         feedRefreshTask = nil
@@ -1557,6 +1567,9 @@ final class WanderStore: ObservableObject {
         activityEngagementErrorByID = [:]
         pendingActivityLikeIDs = []
         pendingActivityCommentDeletionIDs = []
+        pendingActivityCommentLikeIDs = []
+        activityCommentLikeRevisions = [:]
+        activityCommentsGeneration = UUID()
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1977,7 +1990,9 @@ final class WanderStore: ObservableObject {
     }
 
     func activityComments(for activityID: String) -> [ActivityComment] {
-        activityCommentsByID[activityID, default: []]
+        activityCommentsByID[activityID, default: []].filter {
+            !isBlockedBetweenCurrentUser(and: $0.author.id)
+        }
     }
 
     func activityEngagementError(for activityID: String) -> String? {
@@ -1988,10 +2003,98 @@ final class WanderStore: ObservableObject {
         comment.author.id == currentUser.id
             && !comment.isPending
             && !pendingActivityCommentDeletionIDs.contains(comment.id)
+            && !pendingActivityCommentLikeIDs.contains(comment.id)
     }
 
     func isActivityLikePending(_ activityID: String) -> Bool {
         pendingActivityLikeIDs.contains(activityID)
+    }
+
+    func isActivityCommentLikePending(_ commentID: String) -> Bool {
+        pendingActivityCommentLikeIDs.contains(commentID)
+    }
+
+    func canLikeActivityComment(_ comment: ActivityComment) -> Bool {
+        !comment.isPending
+            && !pendingActivityCommentDeletionIDs.contains(comment.id)
+            && !isBlockedBetweenCurrentUser(and: comment.author.id)
+            && activityComments(for: comment.activityID).contains { $0.id == comment.id }
+    }
+
+    @discardableResult
+    func toggleActivityCommentLike(_ comment: ActivityComment, backend: WanderBackend?) async -> Bool {
+        guard canLikeActivityComment(comment),
+              !isActivityCommentLikePending(comment.id),
+              let previous = activityComments(for: comment.activityID).first(where: { $0.id == comment.id })
+        else { return false }
+
+        let requestUserID = currentUser.id
+        let generation = activityCommentsGeneration
+        let revision = UUID()
+        let requestedLike = !previous.viewerHasLiked
+        activityCommentLikeRevisions[comment.id] = revision
+        updateActivityCommentLikes(previous.settingLike(requestedLike))
+        activityEngagementErrorByID[comment.activityID] = nil
+
+        if UUID(uuidString: comment.id) == nil, UUID(uuidString: comment.activityID) == nil {
+            trackActivityCommentLike(requestedLike, outcome: "local_only")
+            return true
+        }
+
+        pendingActivityCommentLikeIDs.insert(comment.id)
+        defer {
+            if generation == activityCommentsGeneration, activityCommentLikeRevisions[comment.id] == revision {
+                pendingActivityCommentLikeIDs.remove(comment.id)
+            }
+        }
+        do {
+            guard let repository = backend?.activityEngagementRepository else {
+                throw WanderRemoteError.notAuthenticated
+            }
+            let result = try await repository.setCommentLike(commentID: comment.id, isLiked: requestedLike)
+            guard generation == activityCommentsGeneration, currentUser.id == requestUserID,
+                  activityCommentLikeRevisions[comment.id] == revision
+            else { return false }
+            guard canLikeActivityComment(previous) else {
+                // A block or authoritative removal during the write must not
+                // leave an optimistic row to reappear after access changes.
+                activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
+                return false
+            }
+            guard result.commentID.caseInsensitiveCompare(comment.id) == .orderedSame,
+                  result.activityID.caseInsensitiveCompare(comment.activityID) == .orderedSame
+            else { throw WanderRemoteError.invalidResponse("Comment like response did not match the request") }
+            updateActivityCommentLikes(previous.withLikes(count: result.likeCount, isLiked: result.viewerHasLiked))
+            trackActivityCommentLike(requestedLike, outcome: "succeeded")
+            return true
+        } catch {
+            guard generation == activityCommentsGeneration, currentUser.id == requestUserID,
+                  activityCommentLikeRevisions[comment.id] == revision
+            else { return false }
+            guard canLikeActivityComment(previous) else {
+                activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
+                return false
+            }
+            updateActivityCommentLikes(previous)
+            activityEngagementErrorByID[comment.activityID] = "Couldn't update this comment's like. Try again."
+            return false
+        }
+    }
+
+    private func updateActivityCommentLikes(_ comment: ActivityComment) {
+        // Never resurrect a comment deleted or removed by an authoritative refresh.
+        activityCommentsByID[comment.activityID] = activityComments(for: comment.activityID).map {
+            $0.id == comment.id ? $0.withLikes(count: comment.likeCount, isLiked: comment.viewerHasLiked) : $0
+        }
+    }
+
+    private func trackActivityCommentLike(_ isLiked: Bool, outcome: String) {
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.activityCommentLikeChanged,
+                                       properties: ["is_liked": isLiked ? "true" : "false", "outcome": outcome]))
+        if isLiked {
+            analytics.track(.engagement(need: .connect, action: .activityCommentLiked,
+                                        surface: "activity_comments", properties: ["outcome": outcome]))
+        }
     }
 
     func refreshActivityEngagement(activityIDs: [String], backend: WanderBackend?) async {
@@ -2151,6 +2254,9 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
         let requestUserID = currentUser.id
+        let generation = activityCommentsGeneration
+        let likeRevisions = activityCommentLikeRevisions
+        let pendingLikesAtRead = pendingActivityCommentLikeIDs
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
         else { return true }
@@ -2160,11 +2266,22 @@ final class WanderStore: ObservableObject {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.comments(activityID: activityID, before: nil, limit: 50)
             }
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  generation == activityCommentsGeneration else { return false }
             let pendingDeletedComments = page.comments.filter {
                 pendingActivityCommentDeletionIDs.contains($0.id)
             }
-            activityCommentsByID[activityID] = page.comments.filter {
+            let currentComments = Dictionary(uniqueKeysWithValues: activityComments(for: activityID).map { ($0.id, $0) })
+            activityCommentsByID[activityID] = page.comments.map { comment in
+                // Reads started before a write (or during one) cannot replace its newer state.
+                if (pendingActivityCommentLikeIDs.contains(comment.id)
+                    || pendingLikesAtRead.contains(comment.id)
+                    || likeRevisions[comment.id] != activityCommentLikeRevisions[comment.id]),
+                   let current = currentComments[comment.id] {
+                    return comment.withLikes(count: current.likeCount, isLiked: current.viewerHasLiked)
+                }
+                return comment
+            }.filter {
                 !pendingActivityCommentDeletionIDs.contains($0.id)
             }.sorted { lhs, rhs in
                 if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
@@ -2187,7 +2304,8 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = nil
             return true
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  generation == activityCommentsGeneration else { return false }
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
         }
@@ -2294,7 +2412,7 @@ final class WanderStore: ObservableObject {
         else { return false }
 
         let previousSummary = activityEngagement(for: comment.activityID)
-        activityCommentsByID[comment.activityID]?.remove(at: previousIndex)
+        activityCommentsByID[comment.activityID]?.removeAll { $0.id == comment.id }
         activityEngagementByID[comment.activityID] = previousSummary.removingComment()
         activityEngagementErrorByID[comment.activityID] = nil
 
@@ -2969,7 +3087,8 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func addCurrentUserPlace(
         userPlaceID: String,
-        to list: LocalPlaceList
+        to list: LocalPlaceList,
+        analyticsSurface: String? = nil
     ) -> ListPlaceAddResult {
         guard canAddPlaces(to: list),
               let userPlace = currentUserPlace(matching: userPlaceID)
@@ -3015,12 +3134,74 @@ final class WanderStore: ObservableObject {
             placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
         persist()
+        let companionSave: ListPlaceAddResult.CompanionSave = userPlace.status == .been
+            ? .none : .existingWanna(userPlaceID: userPlace.id)
+        if let analyticsSurface {
+            trackListPlaceAdded(to: list, companionSave: companionSave, surface: analyticsSurface)
+        }
         return ListPlaceAddResult(
             outcome: .added,
-            companionSave: userPlace.status == .been
-                ? .none
-                : .existingWanna(userPlaceID: userPlace.id)
+            companionSave: companionSave
         )
+    }
+
+    /// Queue every permitted membership locally before the first network wait.
+    /// Uses the committed save ID, never a candidate that could create a Wanna.
+    func addSavedPlaceToLists(
+        userPlaceID: String,
+        listIDs: Set<String>,
+        ownerUserID: String,
+        backend: WanderBackend?,
+        analyticsSurface: String = "check_in"
+    ) async -> PlaceSaveListResult {
+        guard currentUser.id == ownerUserID,
+              let userPlace = currentUserPlace(matching: userPlaceID)
+        else { return PlaceSaveListResult(unavailableCount: listIDs.count) }
+
+        var itemReferences: [(itemID: String, listID: String)] = []
+        var selectedLocalListIDs: Set<String> = []
+        var outcome = PlaceSaveListResult()
+        for listID in listIDs.sorted() {
+            guard let list = placeLists.first(where: {
+                ($0.id == listID || $0.localID == listID) && $0.deletedAt == nil
+                    && $0.syncState != .tombstoned && $0.syncState != .pendingDelete
+            }), canAddPlaces(to: list) else {
+                outcome.unavailableCount += 1
+                continue
+            }
+            guard selectedLocalListIDs.insert(list.localID).inserted else { continue }
+            let result = addCurrentUserPlace(userPlaceID: userPlaceID, to: list, analyticsSurface: analyticsSurface)
+            guard result.outcome != .permissionDenied,
+                  let item = listItems(for: list).first(where: { item in
+                      item.ownerUserPlaceID == userPlace.id || item.sourceUserPlaceID == userPlace.id
+                          || place(matching: userPlace.placeID).map { listItem(item, represents: $0) } == true
+                  }) else {
+                outcome.unavailableCount += 1
+                continue
+            }
+            itemReferences.append((item.localID, list.localID))
+        }
+        flushPersistence()
+
+        for reference in itemReferences {
+            guard currentUser.id == ownerUserID else { return outcome }
+            if let backend {
+                await syncPlaceListItem(localOrServerID: reference.itemID, listID: reference.listID, backend: backend)
+            }
+            guard currentUser.id == ownerUserID else { return outcome }
+            guard let item = placeListItems.first(where: { $0.localID == reference.itemID }),
+                  item.deletedAt == nil else {
+                outcome.unavailableCount += 1
+                continue
+            }
+            switch item.syncState {
+            case .synced: outcome.syncedCount += 1
+            case .failed, .serverDenied: outcome.failedCount += 1
+            case .pendingDelete, .tombstoned: outcome.unavailableCount += 1
+            default: outcome.pendingCount += 1
+            }
+        }
+        return outcome
     }
 
     func addCandidate(
@@ -3429,6 +3610,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func performPendingPlaceListSync(backend: WanderBackend) async -> Int {
+        let ownerID = currentUser.id
         var processedLocalIDs = Set<String>()
         var syncedCount = 0
         while let list = placeLists.first(where: { list in
@@ -3440,6 +3622,21 @@ final class WanderStore: ObservableObject {
             if await syncPlaceList(localOrServerID: list.id, backend: backend) {
                 syncedCount += 1
             }
+            guard currentUser.id == ownerID else { return syncedCount }
+        }
+
+        // List metadata may already be synced while membership is still pending.
+        // Collaborators must also retry items without upserting someone else's list.
+        let pendingItems = placeListItems.filter {
+            $0.addedByUserID == ownerID && $0.deletedAt == nil
+                && [.pendingCreate, .pendingUpdate, .failed, .localOnly].contains($0.syncState)
+        }.map { ($0.localID, $0.listID) }
+        for (itemID, listID) in pendingItems {
+            guard currentUser.id == ownerID else { return syncedCount }
+            guard let list = placeLists.first(where: { $0.id == listID || $0.localID == listID }),
+                  !processedLocalIDs.contains(list.localID), list.deletedAt == nil, canAddPlaces(to: list)
+            else { continue }
+            await syncPlaceListItem(localOrServerID: itemID, listID: listID, backend: backend)
         }
 
         #if DEBUG
@@ -3500,6 +3697,7 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     private func performPlaceListSync(localOrServerID: String, backend: WanderBackend) async -> Bool {
+        let ownerID = currentUser.id
         guard let index = placeLists.firstIndex(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }),
               canManage(placeLists[index])
         else { return false }
@@ -3516,6 +3714,7 @@ final class WanderStore: ObservableObject {
 
             do {
                 try await backend.deletePlaceList(listID: remoteListID)
+                guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
                 }
@@ -3523,6 +3722,7 @@ final class WanderStore: ObservableObject {
                 persist()
                 return true
             } catch {
+                guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
                 }
@@ -3550,6 +3750,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let remoteListID = try await backend.upsertPlaceList(draft)
+            guard currentUser.id == ownerID else { return false }
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID || $0.serverID == remoteListID }) {
                 placeLists[currentIndex].serverID = remoteListID
                 replaceListIDReferences(previousID: previousID, canonicalID: placeLists[currentIndex].id)
@@ -3557,6 +3758,7 @@ final class WanderStore: ObservableObject {
             }
 
             try await backend.setPlaceListCollaborators(listID: remoteListID, userIDs: collaboratorUserIDs)
+            guard currentUser.id == ownerID else { return false }
 
             let deletedItemIDs = placeListItems
                 .filter {
@@ -3571,6 +3773,7 @@ final class WanderStore: ObservableObject {
                     listID: remoteListID,
                     backend: backend
                 )
+                guard currentUser.id == ownerID else { return false }
             }
 
             let itemIDs = placeListItems
@@ -3578,10 +3781,12 @@ final class WanderStore: ObservableObject {
                 .map(\.id)
             for itemID in itemIDs {
                 await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
+                guard currentUser.id == ownerID else { return false }
             }
 
             if let data = list.snapshotCoverData, list.snapshotCoverPath == nil {
                 let path = try await backend.uploadListSnapshotCover(listID: remoteListID, jpegData: data)
+                guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
                     placeLists[currentIndex].snapshotCoverPath = path
                 }
@@ -3599,6 +3804,7 @@ final class WanderStore: ObservableObject {
             persist()
             return true
         } catch {
+            guard currentUser.id == ownerID else { return false }
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID }) {
                 if placeListMatchesSnapshot(placeLists[currentIndex], snapshot: list, collaboratorUserIDs: collaboratorUserIDs) {
                     placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
@@ -3636,6 +3842,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func syncPlaceListItem(localOrServerID: String, listID: String, backend: WanderBackend) async {
+        let ownerID = currentUser.id
         guard let initialItem = placeListItems.first(where: { item in
             item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
         }) else {
@@ -3645,6 +3852,7 @@ final class WanderStore: ObservableObject {
         if remoteID(initialItem.listID) == nil {
             _ = await syncPlaceList(localOrServerID: listID, backend: backend)
         }
+        guard currentUser.id == ownerID else { return }
 
         guard let itemIndex = placeListItems.firstIndex(where: { item in
             item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
@@ -3658,8 +3866,11 @@ final class WanderStore: ObservableObject {
 
         do {
             let remoteItemID = try await backend.addPlaceListItem(draft)
-            placeListItems[itemIndex].serverID = remoteItemID
-            placeListItems[itemIndex].syncStateRaw = SyncState.synced.rawValue
+            guard currentUser.id == ownerID,
+                  let currentIndex = placeListItems.firstIndex(where: { $0.localID == initialItem.localID }),
+                  placeListItems[currentIndex].deletedAt == nil else { return }
+            placeListItems[currentIndex].serverID = remoteItemID
+            placeListItems[currentIndex].syncStateRaw = SyncState.synced.rawValue
             if let listIndex = placeLists.firstIndex(where: { $0.id == draft.listID || $0.serverID == draft.listID }) {
                 placeLists[listIndex].syncStateRaw = SyncState.synced.rawValue
                 placeLists[listIndex].cachedItemCount = listItems(for: placeLists[listIndex]).count
@@ -3668,7 +3879,10 @@ final class WanderStore: ObservableObject {
             lastRemoteError = nil
             persist()
         } catch {
-            placeListItems[itemIndex].syncStateRaw = SyncState.failed.rawValue
+            guard currentUser.id == ownerID,
+                  let currentIndex = placeListItems.firstIndex(where: { $0.localID == initialItem.localID }),
+                  placeListItems[currentIndex].deletedAt == nil else { return }
+            placeListItems[currentIndex].syncStateRaw = SyncState.failed.rawValue
             lastRemoteError = remoteErrorMessage(error)
             persist()
         }
@@ -6027,6 +6241,7 @@ final class WanderStore: ObservableObject {
         }
         #endif
         guard let backend, backend.profileRepository != nil else {
+            discoverPeopleRecommendationsGeneration += 1
             discoverPeopleRecommendationsState = .idle
             return
         }
@@ -6041,14 +6256,13 @@ final class WanderStore: ObservableObject {
         }
 
         let requestingUserID = currentUser.id
+        discoverPeopleRecommendationsGeneration += 1
+        let generation = discoverPeopleRecommendationsGeneration
         discoverPeopleRecommendationsState = .loading
 
         do {
-            let recommendations = try await backend.discoverProfileRecommendations(limit: limit)
-            guard currentUser.id == requestingUserID else {
-                discoverPeopleRecommendationsState = .idle
-                return
-            }
+            let recommendations = try await backend.peopleRecommendations(userID: requestingUserID, limit: limit)
+            guard currentUser.id == requestingUserID, generation == discoverPeopleRecommendationsGeneration else { return }
 
             let visibleRecommendations = recommendations.filter { recommendation in
                 recommendation.profile.id != currentUser.id
@@ -6063,12 +6277,17 @@ final class WanderStore: ObservableObject {
             discoverPeopleRecommendationsState = .loaded(visibleRecommendations)
             lastRemoteError = nil
         } catch {
-            guard currentUser.id == requestingUserID else {
-                discoverPeopleRecommendationsState = .idle
-                return
-            }
+            guard currentUser.id == requestingUserID, generation == discoverPeopleRecommendationsGeneration else { return }
             lastRemoteError = remoteErrorMessage(error)
             discoverPeopleRecommendationsState = .failed
+        }
+    }
+
+    func clearContactRecommendations() {
+        discoverPeopleRecommendationsGeneration += 1
+        if case .loading = discoverPeopleRecommendationsState { discoverPeopleRecommendationsState = .idle }
+        if case .loaded(let recommendations) = discoverPeopleRecommendationsState {
+            discoverPeopleRecommendationsState = .loaded(recommendations.filter { $0.reason != .contacts })
         }
     }
 

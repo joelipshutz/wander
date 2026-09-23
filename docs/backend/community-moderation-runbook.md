@@ -15,12 +15,12 @@ rec.me must not ship user-generated content without all of the following operati
 - a human owner who checks the queue and acts within the service levels below; and
 - live Community Guidelines and Support links.
 
-The public endpoints were verified to return HTTP 200 on 2026-08-13:
+The public endpoints were verified to return HTTP 200 on 2026-09-22:
 
-- `https://getrec.me/community`
-- `https://getrec.me/support`
-- `https://getrec.me/privacy`
-- `https://getrec.me/terms`
+- `https://astirmovement.com/community`
+- `https://astirmovement.com/support`
+- `https://astirmovement.com/privacy`
+- `https://astirmovement.com/terms`
 
 The Support page must publish `getrec.me@gmail.com` for launch. Before submission, the launch owner must send and receive a test message, send an authenticated reply, and confirm the mailbox is monitored during the coverage window. `joe@grayline-studio.com` is the fallback contact.
 
