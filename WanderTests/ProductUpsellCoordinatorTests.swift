@@ -266,8 +266,11 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         coordinator.recordAppOpen(for: "user_b")
         coordinator.recordAppOpen(for: "user_a")
         coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation, "A stale account cannot request a reminder.")
         coordinator.requestAppOpenNotificationReminder(userID: "user_b", isEligible: true, canPresent: true)
-        XCTAssertNil(coordinator.activePresentation)
+        XCTAssertEqual(coordinator.activePresentation?.userID, "user_b", "The current account is eligible on its first visit.")
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 0)
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_b"), 1)
         XCTAssertEqual(coordinator.appOpenCount(for: "user_a"), 2)
         XCTAssertEqual(coordinator.appOpenCount(for: "user_b"), 1)
         coordinator.bind(to: "user_a")
@@ -344,6 +347,22 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
             coordinator.completeCurrent(with: .dismissed)
         }
 
+        // Exhaust the actual return-reminder budget on separate visits.
+        // Onboarding already handled the starting visit, so do not stack there.
+        for _ in 0..<3 {
+            coordinator.recordAppBackground()
+            coordinator.recordAppForeground()
+            coordinator.recordAppOpen(for: "user_a")
+            coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+            XCTAssertEqual(coordinator.activePresentation?.trigger, .appOpened)
+            coordinator.completeCurrent(with: .dismissed)
+        }
+        XCTAssertEqual(coordinator.impressionCount(for: .notificationAppOpen, userID: "user_a"), 3)
+        coordinator.recordAppBackground()
+        coordinator.recordAppForeground()
+        coordinator.recordAppOpen(for: "user_a")
+        coordinator.requestAppOpenNotificationReminder(userID: "user_a", isEligible: true, canPresent: true)
+        XCTAssertNil(coordinator.activePresentation, "The automatic budget is exhausted.")
         coordinator.requestRemoteNotificationReprompt(campaignVersion: 1, userID: "user_a", isEligible: true, canPresent: true)
         XCTAssertEqual(coordinator.activePresentation?.trigger, .remoteNotificationReprompt)
         XCTAssertEqual(coordinator.impressionCount(for: .notifications, userID: "user_a"), 3)
