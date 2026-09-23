@@ -11,8 +11,8 @@ simulator data; they do not sign in, send SMS or write a real account:
 | Events Unknown Home Review | Feed, with four tabs; home has not been confirmed |
 
 The review schemes are simulator-only. Their saved form values last for the app
-process and reset on the next fixture launch. Use a dedicated test account after
-the migrations are deployed to verify cross-launch and cross-device persistence.
+process and reset on the next fixture launch. Use a dedicated test account with
+the deployed backend to verify cross-launch and cross-device persistence.
 
 For full-app manual testing, select the normal **Wander** scheme and use the
 simulator app packaged by the native workflow. The workflow keeps Xcode's
@@ -25,7 +25,7 @@ opens real authentication without submitting credentials or creating an account.
 If the simulator previously used a review scheme, launch once with
 `-WanderUseLiveAuth` to clear its persisted fixture selection, then launch with
 no arguments. This preserves existing app data and real account state. Full city
-save/relaunch and Events acceptance still require the backend deployment below.
+save/relaunch and Events acceptance use the deployed backend described below.
 
 On Joe's Mac, run builds and tests through the workspace resource helper. It
 requires 50 GiB free and reserves the selected existing simulator. From this
@@ -38,16 +38,18 @@ python3 ../.tools/ios-work.py build -- test \
   -only-testing:WanderTests/AccountContactDetailsTests \
   -only-testing:WanderTests/HomeCitySearchTests \
   -only-testing:WanderTests/EventsAccessTests \
+  -only-testing:WanderTests/ContactDiscoveryTests \
   -only-testing:WanderTests/OnboardingStateTests \
   -only-testing:WanderTests/OnboardingConnectionTests \
   -only-testing:WanderTests/OnboardingEntryRegressionTests \
   -only-testing:WanderTests/FirstVisitWalkthroughTests \
   -only-testing:WanderUITests/AccountContactDetailsUITests \
   -only-testing:WanderUITests/EventsAccessUITests \
-  CODE_SIGNING_ALLOWED=NO
+  -only-testing:WanderUITests/ContactDiscoveryUITests \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
 ```
 
-Repeat the two UI suites on existing iPhone 16e
+Repeat the three UI suites on existing iPhone 16e
 `6CB5D49F-FA87-4D3E-9C2E-F9A1296F257C`. UI tests attach the form, keyboard,
 country picker, inline city search states, and each Events eligibility layout to the result.
 
@@ -151,8 +153,8 @@ the relevant feature/onboarding suites and is not a full-app suite pass claim.
 The owner-private payload includes `home_city` (name, ISO country, region,
 county), with no exact coordinates. The server validates those fields and derives
 LA eligibility from the city even if a caller supplies a contradictory metro ID.
-Legacy saved metro records remain readable. The two migrations are undeployed,
-so the worldwide-city extension is included in the original draft migration.
-The full hosted rollback-only smoke suite passed after this change; a separate
-read verified that neither the new table nor RPC was left deployed. Production
-cross-launch/cross-device acceptance requires deployment and a dedicated account.
+Legacy saved metro records remain readable. Both deployed migrations include the
+worldwide-city extension. The full hosted rollback-only smoke suite passed
+against the deployed schema, including after integration with the newer Contacts
+changes. Live native cross-launch/cross-device acceptance still requires a
+dedicated test account.
