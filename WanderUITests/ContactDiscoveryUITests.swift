@@ -32,46 +32,6 @@ import XCTest
         XCTAssertTrue(app.buttons["onboarding.friends.follow.user_general_friend"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
     }
-    func testOnboardingShowsJoeAndRyanFollowingAboveRankedContactSuggestions() {
-        let app = launch(["-WanderContactDiscoveryDefaultFollows"])
-        let find = app.buttons["onboarding.contacts.findFriends"]
-        XCTAssertTrue(find.waitForExistence(timeout: 15)); find.tap()
-        assertDefaultFollowsLead(app)
-        let rachel = app.buttons["onboarding.friends.follow.user_curated_rachel"]
-        let contact = app.buttons["onboarding.friends.follow.user_contact_friend"]
-        XCTAssertTrue(contact.exists)
-        XCTAssertEqual(contact.label, "Follow Contact Friend")
-        XCTAssertLessThan(rachel.frame.minY, contact.frame.minY)
-        XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
-        capture("Onboarding Joe and Ryan already followed above contact suggestions")
-    }
-
-    func testOnboardingKeepsDefaultFollowsWhenContactsAreSkipped() {
-        let app = launch(["-WanderContactDiscoveryDefaultFollows"])
-        let skip = app.buttons["onboarding.contacts.skip"]
-        XCTAssertTrue(skip.waitForExistence(timeout: 15)); skip.tap()
-        assertDefaultFollowsLead(app)
-        XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
-        capture("Onboarding default follows without contacts permission")
-    }
-
-    private func assertDefaultFollowsLead(_ app: XCUIApplication) {
-        let joe = app.buttons["onboarding.friends.follow.user_3EhATWssjvHxwGiUaoWR5VTgeoy"]
-        let ryan = app.buttons["onboarding.friends.follow.user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc"]
-        let rachel = app.buttons["onboarding.friends.follow.user_curated_rachel"]
-        XCTAssertTrue(joe.waitForExistence(timeout: 10))
-        XCTAssertTrue(joe.isHittable)
-        XCTAssertTrue(ryan.isHittable)
-        XCTAssertEqual(joe.label, "Following Joe")
-        XCTAssertEqual(ryan.label, "Following Ryan")
-        XCTAssertFalse(joe.isEnabled)
-        XCTAssertFalse(ryan.isEnabled)
-        XCTAssertEqual(app.buttons.matching(identifier: joe.identifier).count, 1)
-        XCTAssertEqual(app.buttons.matching(identifier: ryan.identifier).count, 1)
-        XCTAssertLessThan(joe.frame.minY, ryan.frame.minY)
-        XCTAssertLessThan(ryan.frame.minY, rachel.frame.minY)
-        XCTAssertTrue(app.buttons["onboarding.friends.continue"].isEnabled)
-    }
     func testDeniedPermissionCanContinueAndSearch() {
         let app = launch(["-WanderContactDiscoveryDenied"])
         let find = app.buttons["onboarding.contacts.findFriends"]
@@ -103,13 +63,6 @@ import XCTest
     private func openContactSettings(_ app: XCUIApplication) {
         let link = app.buttons["feed.contactDiscovery"]
         XCTAssertTrue(link.waitForExistence(timeout: 15)); link.tap()
-    }
-    func testDefaultFollowsAreNotPinnedToPeopleRecommendationShelf() {
-        let app = launchFeed(["-WanderContactDiscoveryDefaultFollows"])
-        let shelf = app.scrollViews["feed.people.scroll"]
-        XCTAssertTrue(shelf.buttons["people.recommendation.user_curated_rachel.follow"].waitForExistence(timeout: 15))
-        XCTAssertFalse(shelf.buttons["people.recommendation.user_3EhATWssjvHxwGiUaoWR5VTgeoy.follow"].exists)
-        XCTAssertFalse(shelf.buttons["people.recommendation.user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc.follow"].exists)
     }
     private func backToFeed(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()

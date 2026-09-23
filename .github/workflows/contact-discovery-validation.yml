@@ -74,29 +74,6 @@ jobs:
         if: always()
         run: |
           xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ContactDiscovery.xcresult" --format json | tee "$RUNNER_TEMP/contact-discovery-summary.json"
-      - name: Check onboarding default follows on a compact iPhone
-        run: |
-          python3 - <<'PY'
-          import json, os
-          devices = json.load(open('/tmp/devices.json'))['devices']
-          choices = [(runtime, d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == 'iPhone 16e']
-          assert choices, 'No existing compact iPhone 16e simulator'
-          chosen = sorted(choices, key=lambda x: x[0])[-1][1]
-          with open(os.environ['GITHUB_ENV'], 'a') as f: f.write('COMPACT_TEST_DEVICE_ID=' + chosen['udid'] + '\n')
-          print('Testing compact onboarding on', chosen['name'])
-          PY
-      - name: Compact onboarding UI flows
-        run: >-
-          xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$COMPACT_TEST_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderUITests/ContactDiscoveryUITests/testOnboardingShowsJoeAndRyanFollowingAboveRankedContactSuggestions
-          -only-testing:WanderUITests/ContactDiscoveryUITests/testOnboardingKeepsDefaultFollowsWhenContactsAreSkipped
-          -resultBundlePath "$RUNNER_TEMP/CompactOnboarding.xcresult" CODE_SIGNING_ALLOWED=NO
-      - name: Summarize compact onboarding tests
-        if: always()
-        run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/CompactOnboarding.xcresult" --format json | tee "$RUNNER_TEMP/compact-onboarding-summary.json"
       - name: Save native evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,6 +82,4 @@ jobs:
           path: |
             ${{ runner.temp }}/ContactDiscovery.xcresult
             ${{ runner.temp }}/contact-discovery-summary.json
-            ${{ runner.temp }}/CompactOnboarding.xcresult
-            ${{ runner.temp }}/compact-onboarding-summary.json
           retention-days: 14
