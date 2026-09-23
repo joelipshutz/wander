@@ -5,6 +5,9 @@
   "scripts": {
     "analytics:check": "node posthog-product-dashboard.mjs --check && node --test posthog-product-dashboard.test.mjs",
     "analytics:test-retention": "node posthog-retention-fixture.mjs",
+    "analytics:test-follows": "node posthog-follow-fixture.mjs",
+    "analytics:test-entry": "node posthog-entry-fixture.mjs",
+    "analytics:test-notification-opens": "node posthog-notification-open-fixture.mjs",
     "analytics:verify": "node posthog-product-dashboard.mjs --verify",
     "analytics:apply": "node posthog-product-dashboard.mjs --apply",
     "audit:clerk-continuity": "node clerk-account-continuity-audit.mjs",
@@ -20,7 +23,10 @@
     "eval:social-import:rescore": "node social-import-eval/rescore.mjs",
     "eval:social-import:cost": "node social-import-eval/model-cost-comparison.mjs",
     "test:social-import-eval": "node --test social-import-eval.test.mjs social-import-eval/model-cost-comparison.test.mjs",
-    "test:social-import-selection": "node --test social-import-eval/app-selection.test.mjs"
+    "test:social-import-selection": "node --test social-import-eval/app-selection.test.mjs",
+    "analytics:permissions": "node posthog-permissions-dashboard.mjs --apply",
+    "analytics:test-permissions": "node posthog-permissions-fixture.mjs",
+    "analytics:test-notification-states": "node posthog-notification-states-fixture.mjs"
   },
   "dependencies": {
     "pg": "8.22.0"

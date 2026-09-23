@@ -41,8 +41,9 @@ Before enabling recording and distributing a build:
 | Section | Question | Definition |
 |---|---|---|
 | Acquisition | Which channels reach the app? | Unique devices recording `app_first_opened` plus sanitized UTM properties on `acquisition_link_opened`. `direct_or_unknown` is an honest bucket. |
-| Activation | Where does onboarding lose people? | Ordered funnel: first open → sign-up start/completion → onboarding start → identity → location → contacts → friends → notifications → completion. |
-| Activation | Did a new user create value? | `onboarding_completed` → `core_action_performed` within 14 days. A Wanna or check-in qualifies; following is optional. Local completion is separate from server sync. |
+| Activation | Where does onboarding lose people? | Ordered funnel: First app open → Started sign-up → Started profile setup → Profile details saved → Location step completed → Contacts step completed → Follow suggestions completed → Notifications step completed → Onboarding completed. |
+| Activation | Did a new user create value? | Completed onboarding AND (`follow_created(outcome=succeeded)` OR `core_action_performed`) within 14 days, in either order so follows during onboarding count. Each person converts once. A follow, Wanna, or check-in qualifies; automatic default follows do not. Local saves are separate from server sync. |
+| Activation | Do new users follow people on their first day? | Daily cohorts anchored to first observed `onboarding_started`. Two daily-cohort charts show first-24h follow rate and follows per user. The denominator table retains total follow actions, eligible/pending users, and averages. Only fully observed users enter counts/rates; zero-follow users remain in the denominator. |
 | Engagement | Which human need is the app serving? | Unique users and action volume for `engagement_action_performed`, broken down by `need` and `action`. |
 | Retention | Do people return and repeat the core behavior? | Separate weekly cohorts: onboarding → session return, and first observed core action → repeat core action. D1/D7/D14/D30 use elapsed-day windows and a distinct fully matured denominator at each horizon. |
 | Referrals | Are users inviting others? | Invite sheet open → delivery start → successful Messages/share-sheet handoff. |
@@ -77,9 +78,27 @@ Status was the blank area in the original card. These are deliberately product-n
 
 Every event receives `analytics_schema_version`, `app_version`, `build_number`, `platform`, and `analytics_environment` from `ContextualAnalyticsClient`. Callers cannot override this context. Debug and simulator events are `development`; Release device builds are `production` (including TestFlight). Authenticated simulator fixtures and native review galleries use a Noop client. The SDK's opaque identify/reset behavior stays unchanged.
 
-Behavioral dashboard queries require schema 3, production, exclusion from the existing Internal / Test users cohort 481950, and absence of a true `$internal_or_test_user` person marker. Native queries also retain the project test-account filter. SQL explicitly excludes the same cohort; update both if the project rule changes. The cohort had zero members on September 19: release staff/review accounts still need classification. Do not infer or assign internal status to unknown users. Existing schema-2 traffic remains available in Data Quality; it is not silently counted as verified launch traffic.
+Behavioral dashboard queries require schema 3, production, exclusion from the existing Internal / Test users cohort 481950, and absence of a true `$internal_or_test_user` person marker. Native queries also retain the project test-account filter. SQL explicitly excludes the same cohort; update both if the project rule changes. Joe and Ryan were explicitly classified as internal on September 21. Every managed person-level query additionally resolves their verified account IDs to merged `person_id` values and excludes those people, including historical anonymous events. This explicit exclusion also applies to Data Quality inventory and remote notification opens; it does not depend on cohort refresh. New/test accounts still require explicit classification; the project-wide new-insight default is a separate setting. For existing unmanaged native insights, `node scripts/posthog-product-dashboard.mjs --exclude-staff-from-existing` adds only the explicit Joe/Ryan and auto-follow exclusions, preserves existing filters, and refreshes each result. It never enables the broader project default and reports unsupported query types for review. Do not infer or assign internal status to unknown users. Existing schema-2 traffic remains available in Data Quality; it is not silently counted as verified launch traffic.
 
 SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashboard date selectors do not alter those SQL literals. Native trends/funnels support normal dashboard filtering. Retention uses merged `person_id`, not raw `distinct_id`. Exact D1 is `[start+24h, start+48h)`; users enter its denominator only at `start+48h`. D7/D14/D30 follow the same rule, return null without eligible users, and show both eligible and returned counts. Cohort weeks use the project's UTC time basis. First observed core action after rollout can belong to an existing user and is not a new-signup claim.
+
+### Notification recipient exclusions
+
+The worker omits Joe/Ryan recipients from analytics only, after normal send/settlement. The service-role-only `notification_operations_snapshot` RPC excludes them from the eligible-recipient set before computing counts, averages, percentiles, and histogram buckets. Notification delivery is unchanged. Events carry `analytics_audience=external_recipients_v1`; old/mixed or unknown snapshots are not emitted as filtered data.
+
+Managed notification tiles require that audience marker. Historical aggregate delivery events lack recipient IDs, so they cannot be retrospectively separated. Delivery trends start at the filtered reporting rollout; open-rate windows start at the first filtered acceptance within the last 30 days. Frequency snapshots can recompute the complete trailing 30 days from Supabase. Other users receiving notifications from staff still count as external recipients. No recipient or actor IDs are exported.
+
+### First-day follow metrics
+
+The activation comparison uses SQL to keep its denominator at completed onboarding users; PostHog's native unordered funnel would instead count anyone who did either step. It compares first onboarding completion with a qualifying action within 14 days before or after it. Its fixed 90-day cohort range and conversion percentage are explicit; recent cohorts may still convert.
+
+The follow charts use `[first onboarding start, start+24h)`, including follows made in the friends step before onboarding completes. First start is selected across all schema-3 production history for each merged `person_id` before applying the 90-day cohort range; resumes do not reset the clock. These are first-observed-onboarding cohorts, not an authoritative account-creation date. Users who abandon onboarding remain in the denominator.
+
+Only `follow_created(outcome=succeeded)` qualifies. Queued/local-only attempts and failed follows do not count. Server-created `signup_default` edges emit no client follow event or social-engagement event and are excluded. Shared native/SQL client filters also explicitly reject `source=signup_default` as a safeguard. This applies to follow rate, follows per user, activation, and engagement. A user explicitly re-following someone after unfollowing is a deliberate action and still counts. Each successful follow event counts as one action; following someone again after unfollowing counts again. The analytics intentionally do not collect followed-person identity, so these charts measure follow actions, not unique targets, current following balance, or net follows.
+
+At `start+24h`, a user enters both numerator and denominator. Follow rate is users with at least one qualifying action / eligible users; total is all qualifying actions by those users; average is total / eligible users, including zero-follow users. Cohorts with no fully observed users have null rate/count/average, not zero. The main follow-count chart plots **total qualifying first-day actions / eligible cohort users**, not the cohort total. The duplicate average tile is detached from this dashboard without deleting its insight elsewhere. The accompanying table retains totals, eligible users, and pending users. The x-axis is the onboarding cohort's UTC date, not the follow's date; SQL charts use a fixed 90-day view. Core-action volume and retention still measure Wanna/check-in behavior separately.
+
+Run `npm --prefix scripts run analytics:test-follows` with scoped Astir PostHog credentials to execute the boundary and denominator fixture against the hosted SQL engine. It creates an unsaved temporary insight and soft-deletes it in `finally`; it never ingests synthetic events.
 
 | Event | When it fires | Allowed product properties |
 |---|---|---|
@@ -98,6 +117,8 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | `app_surface_viewed` | A native tab becomes selected, after yielding to its first render | coarse `surface`: `map`, `discover` (Feed), `events`, `lists`, or `profile`; Events remains a coming-soon teaser |
 | `app_first_opened` | First launch after the install-local marker is introduced | `acquisition_source` |
 | `app_session_started` | Cold launch or foreground return after the app refresh grace period | `session_source` |
+| `app_entry_started` | First scene activation and every actual background-to-active return; repeated active callbacks and inactive interruptions do not create entries | Random per-entry `entry_id`; `entry_kind` (`cold_launch`, `foreground_return`) |
+| `app_entry_source_observed` | Routable system notification default tap or recognized incoming link, before activation or within two seconds of it | Same `entry_id`; `entry_source` (`notification`, `link`); allowlisted notification type/channel for system taps only |
 | `acquisition_link_opened` | Universal/custom link enters the app | sanitized `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`; coarse `route`; `has_campaign` |
 | `onboarding_started` | Onboarding flow first appears | `initial_step`, `is_resumed` |
 | `onboarding_step_viewed` | Each onboarding step appears | `step` |
@@ -187,10 +208,15 @@ Apple Calendar analytics is aggregate-only. It must never include calendar event
 identifiers, titles, notes, attendees, URLs, addresses, place names, provider
 place IDs, reservation IDs, timestamps, or time zones.
 
-Notification operations are stricter: never export recipient IDs, event IDs,
-actor IDs, APNs IDs, device tokens, notification title/body, deep links, or
-notification `data` from the server. Keep per-recipient frequency computation
-inside Supabase and export only the aggregate summary and fixed histogram.
+Aggregate notification operations continue to export only counts. On September 21,
+Joe explicitly requested a username-searchable delivery dashboard. The separate
+`notification_recipient_snapshot` path may export the opaque account ID as
+`distinct_id`, public username, notification preference booleans, active production
+token count, and 30 UTC days of counts. That snapshot never exports notification/event IDs, actor IDs, APNs IDs, device
+tokens, titles/bodies, deep links, or notification `data`. The separately authorized
+September 23 audit path below includes notification text and diagnostic references.
+This exception is limited to the authenticated PostHog diagnostics dashboard;
+client event sanitization remains unchanged.
 
 ## Provision the dashboard
 
@@ -251,3 +277,136 @@ For every analytics change:
   by sending recipient IDs or per-recipient rows to PostHog.
 
 Place invitation opens from Notifications use `notification_type=place_plan_invitation`, `delivery_channel=in_app`, and `route=place_plan`. Emit only after the recipient resolver succeeds. Reopening is a new open; refreshes and failed/unavailable requests emit nothing. No invitation ID, token, sender, place, date, message, or artwork URL is sent. These in-app opens are excluded from the existing remote push-delivery funnel.
+
+### Engagement: notification clicks and app entry source
+
+The Notification Operations open-rate card always shows the actual last-30-day remote open count. Its separate comparable-window count and directional rate require at least one delivery reported with the staff-excluded audience policy. Until then these fields are null with an explicit awaiting-data status. Missing delivery coverage must never suppress real opens to zero. The frequency snapshot displays its timestamp; its historical total across currently eligible recipients is a different population/window and must not be used as the open-rate denominator.
+
+The Engagement section includes daily notification clicks by type, a type/channel table with clicks and unique people, and the existing cold-launch/foreground-session split. Opens represent accepted routing, not guaranteed destination rendering. Only place-plan invitations currently instrument in-app inbox opens; this is not coverage of every in-app notification row.
+
+New app-entry charts use `app_entry_started` joined to `app_entry_source_observed` by a random, ephemeral per-entry UUID. Source callbacks are grouped before joining, so repeated callbacks cannot multiply entries. A notification source takes precedence over a link when both are observed; unmatched entries remain `direct_or_unknown`. Notification type/channel and cold/foreground kind are separate dimensions. No notification, recipient, actor, link URL, or content identifiers are added.
+
+Attribution is a bounded association, not proof of causality: a callback before activation, or within two seconds on either side of activation when actor scheduling reverses callback order, can attach to that entry. Later taps in an active app do not change its entry source. System taps are observed before auth-gated routing; in-app clicks, dismissals, and background notification actions do not supply entry source. A tap may therefore identify the source even when authenticated destination routing later fails. Known links supply `link`; other entry paths remain unknown. Every background return is an entry, while the older session metric retains its refresh/grace semantics.
+
+These two new events require a new app release. Historical session and click events cannot establish entry source retrospectively and are never presented as direct opens. All five Engagement additions apply the same production, staff, test-account, and automatic-follow exclusions as existing behavioral charts.
+
+Lightweight attribution validation (does not replace a native build): compile `Wander/Services/AnalyticsEvent.swift` and `scripts/app-entry-analytics-fixture.swift` together with `swiftc -swift-version 6 -parse-as-library`, then run the resulting executable. Dashboard contracts run with `npm --prefix scripts run analytics:check`. With scoped Astir PostHog credentials, `npm --prefix scripts run analytics:test-entry` validates the actual aggregation using temporary unsaved SQL insights (duplicates, orphan callbacks, source precedence, and unknowns); it never ingests product events and soft-deletes the fixtures.
+
+
+### Permissions and username delivery diagnostics
+
+`permission_status_observed` records seven system authorization states on an
+identified user's foreground activation: notifications, location, contacts,
+camera, microphone, Calendar full access, and photo-library add-only access.
+It reads authorization only and never prompts or accesses personal content.
+Unknown and not-yet-asked are separate. Limited contacts and provisional/ephemeral
+notifications count as enabled with a separate limited-access count. Calendar
+write-only cannot enable reservation import. The system photo picker requires no
+full-library permission and is not represented as denied library access.
+
+The latest status is per user/permission, not per device; with several devices it
+means the most recently observed device. The population overview covers identified
+production users active in the last 30 days, shows missing observation coverage,
+and divides enabled by all known statuses including not-yet-asked. Daily rates use
+the latest observation per person/permission/day. Historical onboarding results are
+separate: false can mean skipping as well as denying. New system observations need
+an app release; historical decisions are never promoted to current settings.
+
+`scripts/posthog-permissions-dashboard.mjs --apply` manages a separate Permissions
+& Notification Delivery dashboard. Use its `username` event-property filter with
+an exact username. The directory shows matching accounts; individual details appear
+only when exactly one account matches. Population permission charts remain global.
+
+The service-only `notification_recipient_analytics_snapshot(30)` recomputes the
+last 30 calendar days from the delivery ledger, including zero-send users and zero
+days. Accepted notifications use the earliest successful production-token result,
+once per notification even on multiple devices. Sandbox-only acceptance is excluded.
+Failed/skipped events use their outcome date; currently pending/claimed events use
+creation date. These are server intent outcomes and include missing-token skips.
+Opens are separate production client taps by tap date, not per-message receipts.
+APNs acceptance is not proof of display or reading.
+
+A separate reporting invocation of the existing worker runs every 15 minutes and
+never claims or sends notifications. It exports a complete generation marker after
+all recipient batches succeed; queries additionally require the expected number of
+unique recipients to have arrived. They choose the latest complete generation and
+refuse snapshots older than two days. Snapshot timestamps remain visible. A failed
+refresh therefore leaves the last complete snapshot visible with its original time,
+never a fabricated zero. Joe and Ryan are excluded in SQL, the worker, and dashboard
+queries. Existing test-person/cohort exclusions remain in the dashboard.
+
+
+### Notification permission filters and delivery audit (September 23)
+
+The Permissions & Notification Delivery dashboard has a `Notification permission`
+list variable (`notification_permission`) with `all`, `on`, `off`, `not_prompted`,
+and `unknown`. Its checked-in UUID belongs only to Astir PostHog project 557259.
+It filters the new user directory and both audit tables using the latest observed
+notification OS status per person in the last 30 days. Enabled/limited map to on,
+denied/restricted to off, and not_determined to not_prompted. Missing observations
+remain unknown. The in-app master push preference is a separate column; it cannot
+prove OS permission or whether the prompt appeared. Existing one-user daily charts
+continue to use the username filter. The new native status collector still requires
+an app release; old onboarding false/skipped results cannot backfill OS status.
+
+Joe explicitly requested recipient and notification text columns on September 23.
+The separate `notification_delivery_audit` export now allows public username, opaque
+recipient identity, notification title/body, a non-actionable hashed notification
+reference and an audit record UUID. It also exports type, timestamps, status,
+attempt count, production/sandbox environment, machine failure code, HTTP status,
+and history source. Device tokens, APNs IDs, actor IDs, deep links, arbitrary payload
+JSON, and raw network exception text remain excluded. These diagnostic fields do
+not alter the existing aggregate/client analytics contracts.
+
+The service-only audit outbox is append-only for event transitions and device
+attempts, apart from an export acknowledgement. The worker exports bounded batches
+on the existing report-only cron and acknowledges only accepted batches; retries
+are deduplicated by audit UUID in dashboard SQL. A failed attempt remains visible
+when a later retry succeeds. Each device attempt is a separate row; notification
+state rows are not additional device deliveries. `sent`/`accepted` mean server/APNs
+acceptance, not confirmed device display. Both production and sandbox attempts are
+shown with their environment; queued/skipped state records have no device environment.
+
+Initial backfill records the latest retained notification/device state from the
+last 30 days as `historical_snapshot`; overwritten historical retries cannot be
+reconstructed. New rows are `live_transition`. Audit tables show the last 30 days,
+newest first, up to 10,000 rows; narrow by username, audit_status or notification_type
+when needed. Global event-property filters also affect other event-backed tables;
+clear audit-specific filters when browsing the user directory. All new queries and
+export paths exclude Joe/Ryan. No actual push is sent by the reporting/test routes.
+
+### Daily notification user states
+
+`Notifications — users by delivery state each day` shows All users plus five
+exclusive states. Each point uses the last complete recipient snapshot from that
+UTC day and only permission observations available at that snapshot, up to 30 days
+old. It covers all undeleted accounts in the snapshot, including users with no
+activity or sends, with the existing staff/test exclusions. It ignores the
+dashboard's individual-user and audit filters so the population lines remain
+comparable. The states sum to All users:
+
+- **Notifications off:** the known app master toggle is off, or iOS is denied/restricted.
+- **Permission unconfirmed:** app preference or iOS permission is unknown, or the
+  system prompt has not been answered. The directory's permission filter still
+  distinguishes unknown from not prompted.
+- **Enabled, delivery issue:** app push is on and observed iOS permission is
+  enabled/limited, but no active production token exists or at least one
+  notification failed that UTC day. This state takes precedence over acceptance.
+- **Enabled + APNs accepted:** the same confirmed enablement, an active production
+  token, at least one accepted production notification that UTC day and no failed
+  notifications that day. This is not proof of device display or every delivery.
+- **Enabled, delivery unverified:** confirmed enablement and an active production
+  token, but no accepted or failed notification that day. A token never tested
+  against APNs is not presumed valid.
+
+Daily acceptance/failure counts come from the ledger captured in that day's
+snapshot. Device-token rejection deactivates the token in the existing worker;
+an untried bad token cannot be detected from token registration alone. Pending
+retries are not terminal notification failures. Multiple devices and category
+preferences can differ from this account-level master/readiness state.
+
+History starts with the snapshot collector; today's settings are never backfilled
+into prior dates. Incomplete generations are ignored, complete empty generations
+produce zeroes, and days without a complete snapshot remain null. Today is partial
+and refreshes on the existing 15-minute schedule. Actual native permission data
+still requires release; APNs acceptance alone cannot fill that missing permission.

@@ -207,6 +207,15 @@ final class AppAnalyticsLifecycleTracker {
     private let analytics: AnalyticsClient
     private let defaults: UserDefaults
     private var didRecordLaunch = false
+    private var entryID: String?
+    private var entryIsActive = false
+    private var hasEnteredApp = false
+    private var entryActivatedAt: TimeInterval?
+
+    // iOS can deliver the response just before or after scene activation.
+    // Keep an explicit, bounded association; never infer a source from a tap
+    // much later in an already active app.
+    static let entryAttributionGrace: TimeInterval = 2
 
     init(analytics: AnalyticsClient, defaults: UserDefaults = .standard) {
         self.analytics = analytics
@@ -233,6 +242,51 @@ final class AppAnalyticsLifecycleTracker {
     func recordForegroundSession() {
         guard didRecordLaunch else { return }
         recordSession(source: "foreground_return")
+    }
+
+    func recordEntryActivation(atUptime uptime: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        guard !entryIsActive else { return }
+        entryIsActive = true
+        entryActivatedAt = uptime
+        let id = entryID ?? UUID().uuidString
+        entryID = id
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.appEntryStarted, properties: [
+            "entry_id": id,
+            "entry_kind": hasEnteredApp ? "foreground_return" : "cold_launch"
+        ]))
+        hasEnteredApp = true
+    }
+
+    func recordEntryBackground() {
+        guard entryIsActive else { return }
+        entryIsActive = false
+        entryID = nil
+        entryActivatedAt = nil
+    }
+
+    enum EntrySource: String { case notification, link }
+
+    /// The random per-entry ID joins source callbacks to one activation, even
+    /// when callbacks precede activation. It contains no user/payload identity.
+    /// A callback while active only qualifies inside the documented grace.
+    func recordEntrySource(
+        _ source: EntrySource,
+        notificationType: String? = nil,
+        deliveryChannel: String? = nil,
+        atUptime uptime: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) {
+        if entryIsActive {
+            guard let entryActivatedAt,
+                  abs(uptime - entryActivatedAt) <= Self.entryAttributionGrace else { return }
+        }
+        let id = entryID ?? UUID().uuidString
+        entryID = id
+        var properties = ["entry_id": id, "entry_source": source.rawValue]
+        if source == .notification {
+            properties["notification_type"] = notificationType ?? "unknown"
+            properties["delivery_channel"] = deliveryChannel ?? "unknown"
+        }
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.appEntrySourceObserved, properties: properties))
     }
 
     private func recordSession(source: String) {
@@ -307,6 +361,8 @@ enum WanderAnalyticsEvents {
     static let feedbackSubmitted = "feedback_submitted"
     static let appFirstOpened = "app_first_opened"
     static let appSessionStarted = "app_session_started"
+    static let appEntryStarted = "app_entry_started"
+    static let appEntrySourceObserved = "app_entry_source_observed"
     static let acquisitionLinkOpened = "acquisition_link_opened"
     static let onboardingStarted = "onboarding_started"
     static let onboardingStepViewed = "onboarding_step_viewed"

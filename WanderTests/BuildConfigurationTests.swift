@@ -544,6 +544,54 @@ final class BuildConfigurationTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testEntryAttributionKeepsColdNotificationAndDirectReturnSeparate() throws {
+        let suiteName = "BuildConfigurationTests.entries.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+        let tracker = AppAnalyticsLifecycleTracker(analytics: recording, defaults: defaults)
+        tracker.recordEntrySource(.notification, notificationType: "followed_you", deliveryChannel: "remote", atUptime: 9)
+        tracker.recordEntryActivation(atUptime: 10)
+        tracker.recordEntryActivation(atUptime: 10.1)
+        tracker.recordEntryBackground()
+        tracker.recordEntryActivation(atUptime: 11)
+        let entries = recording.events.filter { $0.name == WanderAnalyticsEvents.appEntryStarted }
+        let sources = recording.events.filter { $0.name == WanderAnalyticsEvents.appEntrySourceObserved }
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(sources.count, 1)
+        XCTAssertEqual(entries.map { $0.properties["entry_kind"] }, ["cold_launch", "foreground_return"])
+        XCTAssertEqual(sources[0].properties["entry_id"], entries[0].properties["entry_id"])
+        XCTAssertNotEqual(entries[0].properties["entry_id"], entries[1].properties["entry_id"])
+        XCTAssertNotNil(UUID(uuidString: try XCTUnwrap(entries[0].properties["entry_id"])))
+    }
+
+    @MainActor
+    func testEntryAttributionBoundsDelayedCallbacksAndIgnoresActiveSessionTaps() throws {
+        let suiteName = "BuildConfigurationTests.entryBoundary.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+        let tracker = AppAnalyticsLifecycleTracker(analytics: recording, defaults: defaults)
+        tracker.recordEntryActivation(atUptime: 10)
+        for time in [7.999, 8, 12, 12.001, 60] {
+            tracker.recordEntrySource(.link, atUptime: time)
+        }
+        XCTAssertEqual(recording.events.filter { $0.name == WanderAnalyticsEvents.appEntrySourceObserved }.count, 2)
+    }
+
+    @MainActor
+    func testNotificationEntryMetadataDoesNotExposeUnknownPayloadValues() {
+        let payload: [AnyHashable: Any] = ["recme": [
+            "event_id": "10000000-0000-4000-8000-000000000001",
+            "notification_type": "private-unrecognized-value",
+            "actor_user_id": "private-actor"
+        ]]
+        XCTAssertEqual(PushNotificationManager.analyticsNotificationType(from: payload), "unknown")
+        XCTAssertEqual(PushNotificationManager.analyticsDeliveryChannel(from: payload), "remote")
+        XCTAssertEqual(PushNotificationManager.analyticsDeliveryChannel(from: [:]), "unknown")
+    }
+
     func testAcquisitionAttributionAllowListsAndSanitizesCampaignProperties() throws {
         let url = try XCTUnwrap(
             URL(string: "https://astirmovement.com/import/google?utm_source=tiktok&utm_campaign=summer%20launch&utm_term=private&utm_content=a%2Fb")

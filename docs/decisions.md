@@ -410,6 +410,18 @@ Snapshots are deliberate shared copies: later edits do not change them, and
 public image copies/third-party link caches cannot be recalled. List-invitation
 resolution also respects invitation expiry, acceptance, and revocation.
 
+
+## 2026-09-21 — Username-scoped notification diagnostics (REC-581)
+
+Joe requested a permissions enablement dashboard and lookup by username of daily
+notification delivery. Permit the server's separate diagnostic snapshot to export
+public usernames and opaque account identity with preference booleans and daily
+counts to the existing authenticated Astir PostHog project. Continue excluding
+Joe/Ryan and keep notification content, device tokens, event IDs and actor identity
+out of this path. This is a specific exception to the former aggregate-only server
+analytics rule. Existing aggregate events and client sanitizer rules remain intact.
+Label successful sends as APNs acceptance, never confirmed device delivery.
+
 ## Your Map includes Check-in and Wanna places (REC-573 / REC-574)
 
 Your Map's preview, total and Places/Cities/Countries breakdowns include both
@@ -480,3 +492,16 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+
+## 2026-09-23 — Recipient and message columns in the notification audit (REC-581)
+
+Joe requested filters for notifications on/off/not prompted and a notification
+trail including failures, who receives each notification, and what it says.
+Permit the dedicated service-only audit export to include recipient username,
+notification title/body, and diagnostic references in the existing authenticated
+Astir PostHog project. This narrowly expands the September 21 counts-only
+exception; tokens, raw transport errors, APNs IDs and arbitrary notification
+payloads remain excluded. Keep immutable future attempt history and distinguish
+backfilled latest-state records from actual recorded transitions. Missing OS
+permission observations remain unknown, never presumed unprompted.

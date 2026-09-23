@@ -1,4 +1,6 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
+import { exportNotificationAudit } from "./audit-analytics.ts";
+import { recipientAnalyticsEvents, type RecipientSnapshot } from "./recipient-analytics.ts";
 
 export type PushToken = {
   id: string;
@@ -54,6 +56,7 @@ type DeliverySettlement = {
 };
 
 export type NotificationOperationsSnapshot = {
+  analytics_audience?: string;
   window_days: number;
   eligible_recipient_count: number;
   accepted_notification_count: number;
@@ -110,6 +113,22 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 
   const body = await readBody(req);
+  if (body.analytics_snapshot === true) {
+    // A read-only reporting invocation must never claim or send notifications.
+    if (!postHogProjectToken()) return Response.json({ error: "analytics_not_configured" }, { status: 503 });
+    const snapshot = await serviceRpc<RecipientSnapshot>("notification_recipient_analytics_snapshot", { input_window_days: 30 });
+    const { rows, completion } = recipientAnalyticsEvents(snapshot, INTERNAL_ANALYTICS_USER_IDS);
+    for (let offset = 0; offset < rows.length; offset += 100) {
+      if (!await capturePostHogEvents(rows.slice(offset, offset + 100))) {
+        return Response.json({ error: "snapshot_capture_failed" }, { status: 502 });
+      }
+    }
+    // Queries only expose a complete generation, never a partially exported directory.
+    if (!await capturePostHogEvents([completion])) return Response.json({ error: "snapshot_capture_failed" }, { status: 502 });
+    const audit = await exportNotificationAudit(serviceRpc, capturePostHogEvents, INTERNAL_ANALYTICS_USER_IDS);
+    if (!audit.ok) return Response.json({ error: "audit_capture_failed" }, { status: 502 });
+    return Response.json({ snapshot_at: snapshot.snapshot_at, recipients: rows.length, audit_exported: audit.exported });
+  }
   const limit = Math.min(Math.max(Number(body.limit ?? 10) || 10, 1), 20);
   const events = await serviceRpc<PushEvent[]>(
     "claim_pending_push_notifications",
@@ -154,9 +173,8 @@ async function processEvent(
       input_results: results,
     },
   );
-  await capturePostHogEvents([
-    notificationDeliveryAnalyticsEvent(event, settlement),
-  ]);
+  const analyticsEvent = notificationDeliveryAnalyticsEvent(event, settlement);
+  if (analyticsEvent) await capturePostHogEvents([analyticsEvent]);
   const acceptedCount =
     results.filter((result) => result.status === "accepted").length;
   const permanentTokenFailureCount = results.filter(
@@ -184,10 +202,20 @@ async function processEvent(
   };
 }
 
+// Analytics exclusion only: sending and settling notifications still runs for
+// every recipient. Aggregate events remain anonymous; the separate, requested
+// recipient snapshot uses account identity only for username-searchable support diagnostics.
+export const INTERNAL_ANALYTICS_USER_IDS = new Set([
+  "user_3EhATWssjvHxwGiUaoWR5VTgeoy", // Joe
+  "user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc", // Ryan
+]);
+export const NOTIFICATION_ANALYTICS_AUDIENCE = "external_recipients_v1";
+
 export function notificationDeliveryAnalyticsEvent(
   event: PushEvent,
   settlement: DeliverySettlement,
-): PostHogCaptureEvent {
+): PostHogCaptureEvent | null {
+  if (INTERNAL_ANALYTICS_USER_IDS.has(event.recipient_user_id)) return null;
   const deliveryOutcome = settlement.status === "pending"
     ? "retrying"
     : settlement.status === "stale_claim"
@@ -216,6 +244,7 @@ export function notificationDeliveryAnalyticsEvent(
     properties: {
       distinct_id: "notification_operations",
       analytics_schema_version: "2",
+      analytics_audience: NOTIFICATION_ANALYTICS_AUDIENCE,
       platform: "server",
       source: "push_notification_worker",
       notification_type: normalizedNotificationType(event.notification_type),
@@ -236,9 +265,14 @@ export function notificationDeliveryAnalyticsEvent(
 export function notificationFrequencyAnalyticsEvents(
   snapshot: NotificationOperationsSnapshot,
 ): PostHogCaptureEvent[] {
+  // Refuse old/mixed snapshots during an out-of-order deployment.
+  if (snapshot.analytics_audience !== NOTIFICATION_ANALYTICS_AUDIENCE) {
+    return [];
+  }
   const common = {
     distinct_id: "notification_operations",
     analytics_schema_version: "2",
+    analytics_audience: NOTIFICATION_ANALYTICS_AUDIENCE,
     platform: "server",
     source: "push_notification_worker",
     window_days: snapshot.window_days,

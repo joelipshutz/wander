@@ -174,6 +174,7 @@ struct AppEntryView: View {
         }
         .task {
             analyticsLifecycle.recordLaunch()
+            if scenePhase == .active { analyticsLifecycle.recordEntryActivation() }
             productUpsells.bind(to: auth.state.session?.userID)
             pushNotifications.bindNotificationPreferences(to: auth.state.session?.userID)
             #if DEBUG
@@ -193,13 +194,22 @@ struct AppEntryView: View {
         .onChange(of: notificationGateState, initial: true) { _, state in
             state.synchronize()
         }
-        .onChange(of: scenePhase) { _, phase in
+        .task(id: permissionObservationKey) {
+            guard let expectedUserID = permissionObservationKey else { return }
+            let events = await PermissionAnalytics.currentEvents()
+            // Async system reads must not attribute a former account's state to a new identity.
+            guard !Task.isCancelled, permissionObservationKey == expectedUserID else { return }
+            for event in events { analytics.track(event) }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .background:
+                analyticsLifecycle.recordEntryBackground()
                 foregroundRefreshPolicy.didEnterBackground(
                     atUptime: ProcessInfo.processInfo.systemUptime
                 )
             case .active:
+                analyticsLifecycle.recordEntryActivation()
                 guard didFinishInitialResolution else { return }
                 // Returning from Mail or an identity provider must preserve the
                 // inline form and its pending verification attempt. Its auth
@@ -251,12 +261,25 @@ struct AppEntryView: View {
         )
     }
 
+    private var permissionObservationKey: String? {
+        guard scenePhase == .active, auth.isSessionValidated else { return nil }
+        switch coordinator.state {
+        case .onboarding(let session, _), .ready(let session, _):
+            return auth.state.session?.userID == session.userID ? session.userID : nil
+        default:
+            return nil
+        }
+    }
+
     private func receiveIncomingURL(_ url: URL) {
         #if canImport(TikTokOpenSDKCore)
         if TikTokURLHandler.handleOpenURL(url) {
             return
         }
         #endif
+        if WanderDeepLinkRoute.parse(url) != nil {
+            analyticsLifecycle.recordEntrySource(.link)
+        }
         if let attribution = AcquisitionAttribution(url: url) {
             analytics.track(
                 AnalyticsEvent(
