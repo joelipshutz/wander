@@ -8,15 +8,15 @@ The score adds independent signals rather than throwing away location or social 
 | --- | ---: |
 | Existing administrator-curated priority | priority × 10 |
 | Verified, opted-in match from currently allowed contacts | 120 |
-| Each distinct public, visible contact or person you follow who follows the candidate | 12, capped at 60 total |
+| Each distinct public, visible contact or person you follow who follows the candidate | 12 per person, with no score cap |
 | Candidate already follows you | 35 |
 | Same chosen home area | 30 |
 | Nonempty bio | 5 |
 | Profile photo | 5 |
 
-Rachel Leung (@nenesinla) already has curated priority 100, so her 1,000-point boost keeps her first when eligible. This branch preserves that existing configuration rather than adding a name-based special case. Contacts with local/social relevance outrank contacts with no other signals. Social proximity and a shared area combine; profile completeness is a small fallback, not a substitute for those connections. Ties resolve by the total distinct supporting-person count, account creation date, handle and canonical ID for stable results. Counts above five still break equal-score ties, but do not add more points.
+Rachel Leung (@nenesinla) already has curated priority 100, giving her a 1,000-point boost when eligible. This remains a score contribution: someone followed by 100 of your matched contacts gets 1,200 social points and can rank above her. This branch preserves the existing configuration without adding a name-based special case. Contacts with local/social relevance outrank contacts with no other signals. Social proximity and a shared area combine; profile completeness is a small fallback. Ties resolve by the total distinct supporting-person count, account creation date, handle and canonical ID for stable results.
 
-Contact graph support works before you follow the matched contact: one supporting contact adds 12 points, three add 36, and five or more add 60. A person who is both a contact and someone you follow counts once in that shared social boost. Private, deleted, hidden, blocked and self intermediaries add no signal. The label says “Followed by N contacts” when contact support contributes; direct matches still say “In your contacts.” The count reflects distinct people, not duplicate address-book entries. Overall follower popularity is not a signal.
+Contact graph support works before you follow the matched contact: one supporting contact adds 12 points, three add 36, five add 60, six add 72, and 100 add 1,200. Every additional supporting person adds 12 points. A person who is both a contact and someone you follow counts once in that shared social boost. Private, deleted, hidden, blocked and self intermediaries add no signal. The label says “Followed by N contacts” when contact support contributes; direct matches still say “In your contacts.” The count reflects distinct people following that candidate, not the total address-book size or duplicate entries. Overall follower popularity is not a signal. The existing contact-discovery payload limit remains 100 matched profile IDs per ranking request; this change removes the five-person score cap.
 
 Location means the home area chosen in onboarding/profile settings, with whitespace/case normalized. Empty areas never match. There is no background GPS lookup, fuzzy same-city assumption, inferred demographic signal or access to private saves. A reason label explains the strongest relevant personal signal; all applicable points still contribute.
 

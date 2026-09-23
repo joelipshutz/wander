@@ -85,7 +85,7 @@ reset role;
 insert into public.follows(follower_user_id,followed_user_id,source) values
  ('user_rank_viewer','user_rank_peer_1','signup_default'),
  ('user_rank_viewer','user_rank_peer_2','signup_default');
--- Graph now has only follows-you + same area = 65, above capped social support 60.
+-- Graph now has only follows-you + same area = 65, below six connections (72).
 delete from public.follows where follower_user_id='user_rank_mutual' and followed_user_id='user_rank_graph';
 set local role authenticated;
 select pg_temp.require((select contact_follow_count=2 and shared_follow_count=2 from public.ranked_people_recommendations(pg_temp.rank_contacts(),50)
@@ -93,7 +93,7 @@ select pg_temp.require((select contact_follow_count=2 and shared_follow_count=2 
 select pg_temp.require((select array_agg(id order by result_rank) from public.ranked_people_recommendations(pg_temp.rank_contacts(),50)
  where id in ('user_rank_two','user_rank_local'))=array['user_rank_local','user_rank_two'],'contact plus actual follow is scored once per person, not twice');
 select pg_temp.require((select array_agg(id order by result_rank) from public.ranked_people_recommendations(pg_temp.rank_contacts(),50)
- where id in ('user_rank_six','user_rank_graph'))=array['user_rank_graph','user_rank_six'],'social boost caps at 60 so six contacts do not overwhelm other signals');
+ where id in ('user_rank_six','user_rank_graph'))=array['user_rank_six','user_rank_graph'],'six supporting people contribute 72 points instead of stopping at 60');
 select pg_temp.require((select contact_follow_count=0 and shared_follow_count=2 and reason_kind='shared_follows'
  from public.ranked_people_recommendations('{}',50) where id='user_rank_two'),'without contact access, actual follows still provide social support');
 reset role;
@@ -104,6 +104,49 @@ select pg_temp.require(not exists(select 1 from public.ranked_people_recommendat
 reset role;
 rollback to savepoint contact_graph;
 release savepoint contact_graph;
+savepoint uncapped_contact_graph;
+-- Boundary fixtures bracket N * 12 with independently configured curated scores.
+-- Contacts remain unfollowed, so their graph must work during fresh onboarding.
+insert into public.profiles(id,handle,display_name,created_at)
+ select 'user_rank_peer_'||n,'rankpeer'||n,'Contact '||n,'2026-01-01'::timestamptz from generate_series(1,100) n;
+insert into public.profiles(id,handle,display_name,bio,created_at)
+ select 'user_rank_count_'||n||'_'||kind,'rankcount'||n||kind,'Count boundary',
+   case when points%10=5 then 'A complete bio' end,'2026-01-01'::timestamptz
+ from unnest(array[1,3,5,6,10,100]) n
+ cross join lateral (values ('candidate',0),('below',((n*12-1)/5)*5),('above',(n*12/5+1)*5)) boundary(kind,points);
+insert into app.profile_discovery_settings(profile_id,suggestion_priority)
+ select 'user_rank_count_'||n||'_'||kind,points/10
+ from unnest(array[1,3,5,6,10,100]) n
+ cross join lateral (values ('below',((n*12-1)/5)*5),('above',(n*12/5+1)*5)) boundary(kind,points);
+insert into public.follows(follower_user_id,followed_user_id,source)
+ select 'user_rank_peer_'||peer,'user_rank_count_'||n||'_candidate','signup_default'
+ from unnest(array[1,3,5,6,10,100]) n cross join lateral generate_series(1,n) peer;
+set local role authenticated;
+do $linear_contact_scores$
+declare n integer; contact_ids text[]; expected_id text;
+begin
+  foreach n in array array[1,3,5,6,10,100] loop
+    contact_ids := array(select 'user_rank_peer_'||peer from generate_series(1,n) peer);
+    expected_id := 'user_rank_count_'||n||'_candidate';
+    perform pg_temp.require((select array_agg(id order by result_rank)
+      from public.ranked_people_recommendations(contact_ids,50)
+      where id in (expected_id,'user_rank_count_'||n||'_above','user_rank_count_'||n||'_below'))=
+      array['user_rank_count_'||n||'_above',expected_id,'user_rank_count_'||n||'_below'],
+      n||' supporting contacts rank between the scores immediately above and below '||(n*12));
+    perform pg_temp.require((select contact_follow_count=n and shared_follow_count=0 and reason_kind='contact_follows'
+      from public.ranked_people_recommendations(contact_ids,50) where id=expected_id),
+      n||' contacts are counted before the viewer follows any of them');
+  end loop;
+  perform pg_temp.require((select array_agg(id order by result_rank)
+    from public.ranked_people_recommendations(contact_ids,50)
+    where id in ('user_rank_count_100_candidate','user_rank_curated'))=
+    array['user_rank_count_100_candidate','user_rank_curated'],
+    '100 supporting contacts add 1200 and can outrank a 1000-point curated suggestion');
+end;
+$linear_contact_scores$;
+reset role;
+rollback to savepoint uncapped_contact_graph;
+release savepoint uncapped_contact_graph;
 update public.profiles set is_private_profile=true where id='user_rank_curated';
 insert into public.blocks(blocker_user_id,blocked_user_id) values('user_rank_contact','user_rank_viewer');
 insert into app.profile_discovery_settings(profile_id,hidden_from_suggestions) values('user_rank_localcontact',true);

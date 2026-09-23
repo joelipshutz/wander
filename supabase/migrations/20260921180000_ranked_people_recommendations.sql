@@ -54,7 +54,7 @@ language sql stable security invoker set search_path = pg_catalog, public, app a
   ), scored as (
     select c.*,
       curated_priority * 10 + case when is_contact then 120 else 0 end
-      + least(connection_follow_count,5)*12 + case when follows_viewer then 35 else 0 end
+      + connection_follow_count*12 + case when follows_viewer then 35 else 0 end
       + case when same_area then 30 else 0 end
       + case when nullif(trim(bio),'') is not null then 5 else 0 end
       + case when nullif(trim(avatar_url),'') is not null then 5 else 0 end as score
