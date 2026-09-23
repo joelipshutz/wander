@@ -134,26 +134,19 @@ struct DiscoverScreen: View {
 
     private var ambiguousOwnerCandidates: [ProfileShell] {
         guard isPlacesSearchActive,
-              selectedOwnerCandidateID == nil,
-              let ownerQuery = store.lastDiscoverFilters.ownerQuery?
-                .lowercased()
-                .replacingOccurrences(of: "@", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !ownerQuery.isEmpty
+              selectedOwnerCandidateID == nil
         else {
             return []
         }
 
-        let candidates = friendProfiles.filter { profile in
-            profile.handle.lowercased() == ownerQuery
-                || profile.displayName.lowercased() == ownerQuery
-        }
+        let candidates = store.discoverOwnerCandidates(for: placeResults.filters)
         return candidates.count > 1 ? candidates : []
     }
 
     private var selectedOwnerCandidate: ProfileShell? {
         guard let selectedOwnerCandidateID else { return nil }
-        return friendProfiles.first { $0.id == selectedOwnerCandidateID }
+        return store.discoverOwnerCandidates(for: placeResults.filters)
+            .first { $0.id == selectedOwnerCandidateID }
     }
 
     private func resultExplanation(resultCount count: Int, selectedOwner: ProfileShell?) -> String {
@@ -1085,14 +1078,6 @@ struct DiscoverScreen: View {
             placeSearchInterpretation
             placeResultsSection
         } else {
-            if placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                NavigationLink {
-                    ContactDiscoverySettingsScreen()
-                } label: {
-                    Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
-                        .font(AstirTypography.control).frame(minHeight: 44)
-                }.accessibilityIdentifier("discover.contactDiscovery")
-            }
             suggestedSearchesSection
         }
     }
@@ -1510,12 +1495,6 @@ struct DiscoverScreen: View {
             memberSearchResultsSection
         } else {
             peopleValueNote
-            NavigationLink {
-                ContactDiscoverySettingsScreen()
-            } label: {
-                Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
-                    .font(AstirTypography.control).frame(minHeight: 44)
-            }.accessibilityIdentifier("discover.contactDiscovery")
             peopleRecommendationsSection
         }
 

@@ -60,14 +60,19 @@ import XCTest
         return app
     }
     private func openContactSettings(_ app: XCUIApplication) {
-        app.buttons["feed.searchLauncher"].tap()
-        let link = app.buttons["discover.contactDiscovery"]
-        XCTAssertTrue(link.waitForExistence(timeout: 15)); link.tap()
+        app.tabBars.buttons["Profile"].tap()
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
+        let link = app.buttons["settings.contactDiscovery"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        for _ in 0..<8 where !link.isHittable { app.swipeUp() }
+        XCTAssertTrue(link.isHittable); link.tap()
     }
     private func backToFeed(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.buttons["discover.searchBack"].waitForExistence(timeout: 10))
-        app.buttons["discover.searchBack"].tap()
+        let back = app.buttons["settings.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10)); back.tap()
+        app.tabBars.buttons["Feed"].tap()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
     }
     func testFollowingScreenEnableDisableAndExistingFollowSurvives() {

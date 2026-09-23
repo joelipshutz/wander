@@ -45,19 +45,21 @@ struct FollowNotification: Identifiable, Decodable, Equatable {
     }
 
     func refresh(userID: String, repository: (any FollowNotificationRepository)?) async {
+        guard !Task.isCancelled else { return }
         reset(for: userID)
         let request = UUID()
         generation = request
         isLoading = true
-        failed = false
         defer { if generation == request { isLoading = false } }
         do {
             guard let repository else { throw WanderRemoteError.notConfigured }
             let rows = try await repository.receivedFollows()
             guard self.userID == userID, generation == request, !Task.isCancelled else { return }
             notifications = rows
+            failed = false
         } catch {
             guard self.userID == userID, generation == request, !Task.isCancelled else { return }
+            guard !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }
             notifications = []
             failed = true
         }

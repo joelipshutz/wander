@@ -35,6 +35,13 @@ begin
   perform app.ensure_notification_preferences(recipient);
   update public.notification_preferences set push_enabled = false, social_graph_enabled = false
     where user_id = recipient;
+  -- Launch defaults are not deliberate follows; keep their existing alert suppression.
+  insert into public.follows(follower_user_id, followed_user_id, source)
+    values(actor, recipient, 'signup_default') returning id into first_id;
+  if exists (select 1 from public.follow_notification_receipts where id = first_id)
+    or exists (select 1 from public.notification_events where recipient_user_id = recipient)
+  then raise exception 'signup default follow must not create an inbox or push alert'; end if;
+  delete from public.follows where id = first_id;
   insert into public.follows(follower_user_id, followed_user_id, source)
     values(actor, recipient, 'username') returning id into first_id;
   if not exists (select 1 from public.follow_notification_receipts where id = first_id and not is_mutual)

@@ -31,10 +31,15 @@ import XCTest
         search.tap()
         let field = app.textFields["discover.placesSearchField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["discover.contactDiscovery"].exists)
         field.tap()
         field.typeText("Ryan")
         let ryan = app.buttons["discover.person.user_ryan"]
         XCTAssertTrue(ryan.waitForExistence(timeout: 5))
+        let following = app.buttons["discover.person.user_ryan.follow"]
+        XCTAssertEqual(following.label, "Following Ryan")
+        XCTAssertFalse(following.isEnabled)
+        XCTAssertGreaterThanOrEqual(following.frame.height, 44)
         capture("REC-597 people in combined search")
         ryan.tap()
         let back = app.buttons["profile.back"]
@@ -55,6 +60,8 @@ import XCTest
         waitForExpectations(timeout: 10)
         bell.tap()
         XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Couldn’t refresh notifications"].exists)
+        XCTAssertFalse(app.buttons["Find friends from contacts"].exists)
         capture("REC-597 shared follower inbox")
         app.buttons["notifications.follow.user_ryan"].tap()
         XCTAssertTrue(app.buttons["profile.back"].waitForExistence(timeout: 5))

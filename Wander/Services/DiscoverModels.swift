@@ -127,6 +127,12 @@ enum DiscoverSemanticNormalizer {
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
 
+        if let owner = DiscoverOwnerQueryPolicy.mention(in: query) {
+            // An explicit person in the query must survive model omissions or
+            // substitutions when the immediate results are refined.
+            filters.ownerQuery = owner.ownerQuery
+        }
+
         let requestsFavorite = contains(
             normalizedQuery,
             pattern: #"\b(favou?rite|best|loved|highly\s+rated|worth\s+crossing\s+town\s+for)\b"#
@@ -185,6 +191,116 @@ enum DiscoverSemanticNormalizer {
         .price: ["cheap", "price", "$"],
         .recency: ["recent", "lately", "this week", "last week"]
     ]
+}
+
+enum DiscoverOwnerQueryPolicy {
+    struct Mention {
+        let ownerQuery: String
+        let consumedPhrase: String
+        let isHandle: Bool
+    }
+
+    static func mention(in query: String) -> Mention? {
+        let normalized = folded(query)
+        if let match = firstCapture(in: normalized, pattern: #"@([a-z0-9_][a-z0-9_.-]{1,30})"#) {
+            return Mention(ownerQuery: match.value, consumedPhrase: match.value, isHandle: true)
+        }
+
+        if let match = firstCapture(
+            in: normalized,
+            pattern: #"\b([\p{L}][\p{L}\p{N}_.’'-]*)['’]s\b"#,
+            ignoring: ignoredOwnerWords
+        ) {
+            let name = fullName(endingWith: match.value, before: normalized[..<match.range.lowerBound])
+            return Mention(ownerQuery: name, consumedPhrase: name, isHandle: false)
+        }
+
+        if let match = firstCapture(
+            in: normalized,
+            pattern: #"\b([\p{L}][\p{L}\p{N}_.’'-]*s)['’](?=\s|$)"#,
+            ignoring: ignoredOwnerWords
+        ) {
+            let name = fullName(endingWith: match.value, before: normalized[..<match.range.lowerBound])
+            return Mention(ownerQuery: name, consumedPhrase: name + "'", isHandle: false)
+        }
+
+        if let match = firstCapture(
+            in: normalized,
+            pattern: #"\b([\p{L}][\p{L}\p{N}_.-]*)s\s+(?:favou?rite|best|loved|highly\s+rated)\b"#,
+            ignoring: ignoredOwnerWords
+        ) {
+            let name = fullName(endingWith: match.value, before: normalized[..<match.range.lowerBound])
+            return Mention(ownerQuery: name, consumedPhrase: name + "s", isHandle: false)
+        }
+
+        return nil
+    }
+
+    static func matches(
+        _ ownerQuery: String,
+        handle: String,
+        displayName: String,
+        query: String
+    ) -> Bool {
+        let normalizedOwner = folded(ownerQuery).trimmingCharacters(in: .whitespacesAndNewlines)
+        let handleQuery = normalizedOwner.replacingOccurrences(of: "@", with: "")
+        if folded(handle) == handleQuery { return true }
+        if normalizedOwner.hasPrefix("@") || (query.contains("@") && mention(in: query)?.isHandle == true) { return false }
+
+        let ownerWords = nameWords(normalizedOwner)
+        let displayWords = nameWords(displayName)
+        guard !ownerWords.isEmpty, ownerWords.count <= displayWords.count else { return false }
+        // Whole name components permit Joe → Joe Lipshutz without Ry → Ryan.
+        return (0...(displayWords.count - ownerWords.count)).contains { start in
+            Array(displayWords[start..<(start + ownerWords.count)]) == ownerWords
+        }
+    }
+
+    private static func fullName(endingWith word: String, before prefix: Substring) -> String {
+        var words = [word]
+        for preceding in prefix.split(whereSeparator: \.isWhitespace).reversed().prefix(3) {
+            let value = String(preceding)
+            guard !nameBoundaries.contains(value),
+                  !value.hasSuffix("'s"), !value.hasSuffix("’s"),
+                  value.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) || "'’.-".unicodeScalars.contains($0) })
+            else { break }
+            words.insert(value, at: 0)
+        }
+        return words.joined(separator: " ")
+    }
+
+    private static func nameWords(_ value: String) -> [String] {
+        folded(value).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+    }
+
+    private static func folded(_ value: String) -> String {
+        value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+    }
+
+    private static func firstCapture(
+        in value: String,
+        pattern: String,
+        ignoring ignoredWords: Set<String> = []
+    ) -> (value: String, range: Range<String.Index>)? {
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        for match in expression.matches(in: value, range: NSRange(value.startIndex..<value.endIndex, in: value)) {
+            guard let range = Range(match.range(at: 1), in: value) else { continue }
+            let capture = String(value[range])
+            if !ignoredWords.contains(capture) { return (capture, range) }
+        }
+        return nil
+    }
+
+    private static let ignoredOwnerWords: Set<String> = [
+        "friend", "friends", "people", "rec", "recme", "wander",
+        "what", "who", "it", "that", "there", "here", "let", "he", "she"
+    ]
+
+    private static let nameBoundaries: Set<String> = ignoredOwnerWords.union([
+        "a", "an", "and", "are", "at", "by", "check", "coffee", "find", "for", "from",
+        "give", "in", "is", "like", "me", "my", "of", "on", "or", "places", "please",
+        "search", "see", "show", "some", "spots", "tell", "the", "to", "want", "what", "with"
+    ])
 }
 
 struct DiscoverFilterSchema: Codable, Equatable {
@@ -1111,9 +1227,7 @@ struct DeterministicFilterParser: LLMFilterParser {
             filters.relationship = .follower
         }
 
-        filters.ownerQuery = Self.ownerQuery(from: normalized)
-
-        if normalized.contains("la") || normalized.contains("los angeles") {
+        if normalized.range(of: #"\b(?:la|los angeles)\b"#, options: .regularExpression) != nil {
             filters.area = "LA"
         }
 
@@ -1143,46 +1257,6 @@ struct DeterministicFilterParser: LLMFilterParser {
         .recency: ["recent", "lately", "this week", "last week"]
     ]
 
-    private static func ownerQuery(from normalized: String) -> String? {
-        if let handle = firstCapture(in: normalized, pattern: #"@([a-z0-9_][a-z0-9_.-]{1,30})"#) {
-            return handle
-        }
-
-        if let possessive = firstCapture(in: normalized, pattern: #"\b([a-z][a-z0-9_.-]{1,30})['’]s\b"#),
-           !ignoredOwnerWords.contains(possessive) {
-            return possessive
-        }
-
-        if let possessiveWithoutApostrophe = firstCapture(
-            in: normalized,
-            pattern: #"\b([a-z][a-z0-9_.-]{1,29})s\s+(?:favou?rite|best|loved|highly\s+rated)\b"#
-        ), !ignoredOwnerWords.contains(possessiveWithoutApostrophe) {
-            return possessiveWithoutApostrophe
-        }
-
-        return nil
-    }
-
-    private static func firstCapture(in value: String, pattern: String) -> String? {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let range = NSRange(value.startIndex..<value.endIndex, in: value)
-        guard let match = expression.firstMatch(in: value, range: range),
-              match.numberOfRanges > 1,
-              let captureRange = Range(match.range(at: 1), in: value)
-        else {
-            return nil
-        }
-        return String(value[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static let ignoredOwnerWords: Set<String> = [
-        "friend",
-        "friends",
-        "people",
-        "rec",
-        "recme",
-        "wander"
-    ]
 }
 
 private extension ViewerRelationship {

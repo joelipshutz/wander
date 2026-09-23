@@ -20,6 +20,7 @@ struct NotificationInboxHost: ViewModifier {
                 refreshRevision += 1
             }
             .task(id: "\(auth.isSignedIn)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "")|\(scenePhase == .active)|\(refreshRevision)") {
+                guard !Task.isCancelled else { return }
                 let userID = auth.isSignedIn ? store.currentUser.id : nil
                 if plans.userID != userID { badge.close() }
                 plans.reset(for: userID)
@@ -45,6 +46,25 @@ struct NotificationInboxHost: ViewModifier {
 
     @MainActor private func refreshFollows(userID: String) async {
         await follows.refresh(userID: userID, repository: backend.followNotificationRepository)
+    }
+}
+
+/// Both foreground polling and an open inbox update these same source states.
+/// Derive the message live so an unchanged successful response still clears it.
+enum NotificationInboxRefreshStatus {
+    @MainActor static func errorMessage(
+        userID: String,
+        plans: PlacePlanInvitationInbox,
+        follows: FollowNotificationInbox,
+        checkInFailureUserID: String?
+    ) -> String? {
+        var sources: [String] = []
+        if follows.userID == userID, follows.failed { sources.append("follower notifications") }
+        if plans.userID == userID, plans.failed { sources.append("plan invitations") }
+        if checkInFailureUserID == userID { sources.append("check-in invitations") }
+        guard !sources.isEmpty else { return nil }
+        if sources.count == 3 { return "Couldn’t refresh notifications" }
+        return "Couldn’t refresh \(sources.joined(separator: " and "))"
     }
 }
 

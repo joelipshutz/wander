@@ -478,7 +478,6 @@ struct SharedVisitInvitationInboxScreen: View {
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
     @State private var isRefreshing = false
-    @State private var refreshError: String?
     @State private var decliningParticipantID: String?
     @State private var declineErrors: [String: String] = [:]
 
@@ -489,6 +488,15 @@ struct SharedVisitInvitationInboxScreen: View {
     private var follows: [FollowNotification] {
         guard followInbox.userID == store.currentUser.id else { return [] }
         return followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) }
+    }
+
+    private var refreshError: String? {
+        NotificationInboxRefreshStatus.errorMessage(
+            userID: store.currentUser.id,
+            plans: planInbox,
+            follows: followInbox,
+            checkInFailureUserID: store.sharedVisitInboxFailureUserID
+        )
     }
 
     private var badgeSnapshot: NotificationBadgeSnapshot {
@@ -617,8 +625,8 @@ struct SharedVisitInvitationInboxScreen: View {
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
-            if refreshError != nil || planInbox.failed || followInbox.failed {
-                Text("Couldn’t refresh notifications").font(AstirTypography.bodySmall)
+            if let refreshError {
+                Text(refreshError).font(AstirTypography.bodySmall)
                 Button("Try again") { Task { await refresh() } }
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
@@ -650,13 +658,15 @@ struct SharedVisitInvitationInboxScreen: View {
 
     @MainActor
     private func refresh() async {
-        guard !isRefreshing else { return }
+        guard !isRefreshing, !Task.isCancelled else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        let didRefresh = await store.refreshSharedVisitInbox(backend: backend)
-        await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository)
-        await followInbox.refresh(userID: store.currentUser.id, repository: backend.followNotificationRepository)
-        refreshError = (didRefresh || !backend.canUseSharedVisits) && !planInbox.failed && !followInbox.failed ? nil : "Couldn’t refresh notifications"
+        let userID = store.currentUser.id
+        await store.refreshSharedVisitInbox(backend: backend)
+        guard store.currentUser.id == userID, !Task.isCancelled else { return }
+        await planInbox.refresh(userID: userID, repository: backend.placePlanInvitationRepository)
+        guard store.currentUser.id == userID, !Task.isCancelled else { return }
+        await followInbox.refresh(userID: userID, repository: backend.followNotificationRepository)
     }
 
     @MainActor

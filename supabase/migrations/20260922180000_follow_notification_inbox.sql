@@ -35,7 +35,8 @@ end;
 $$;
 revoke all on function app.record_follow_notification_receipt() from public, anon, authenticated;
 create trigger follows_record_inbox_receipt after insert on public.follows
-  for each row execute function app.record_follow_notification_receipt();
+  for each row when (new.source <> 'signup_default')
+  execute function app.record_follow_notification_receipt();
 
 -- No recipient parameter: callers can enumerate only their own notifications.
 -- Recheck actor visibility at read time, including blocks after delivery.

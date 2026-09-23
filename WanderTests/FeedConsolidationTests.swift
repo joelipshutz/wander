@@ -2,6 +2,88 @@ import XCTest
 @testable import Wander
 
 @MainActor final class FeedConsolidationTests: XCTestCase {
+    func testPossessivePlaceSearchResolvesFirstNameAndFullNameInBothStages() async {
+        let fixtures = ownerSearchFixtures()
+        let store = WanderStore(fixtures: fixtures)
+        for query in ["joe's favorite coffee", "Joe’s favorite coffee", "Joes favorite coffee", "show me Joe Lipshutz's favorite coffee"] {
+            let immediate = store.searchTrustedPlaces(query: query)
+            let refined = await store.discover(query: query, includeProfiles: false)
+            for results in [immediate, refined] {
+                XCTAssertEqual(Set(results.places.map(\.userPlace.id)), ["up_joe_woodcat", "up_joe_circuit_coffee"], query)
+                XCTAssertTrue(results.places.allSatisfy { $0.owner.id == fixtures.currentUser.id }, query)
+                XCTAssertTrue(results.places.allSatisfy { $0.userPlace.status == .been && ($0.userPlace.ratingScore ?? 0) >= 4 }, query)
+                XCTAssertTrue(results.evidenceByUserPlaceID.values.allSatisfy { $0.ownerID == fixtures.currentUser.id }, query)
+            }
+        }
+    }
+
+    func testRefinementCannotOmitOrSubstituteAnExplicitOwner() async {
+        for remoteOwner in [nil, "maya"] as [String?] {
+            let parser = RemoteDiscoverFilterParser(repository: OwnerSearchFilterRepository(ownerQuery: remoteOwner))
+            let store = WanderStore(fixtures: ownerSearchFixtures(), parser: parser)
+            let query = "Joe's favorite coffee"
+            let immediate = store.searchTrustedPlaces(query: query)
+            let refined = await store.discover(query: query, includeProfiles: false)
+            XCTAssertEqual(refined.parseSource, .remote)
+            XCTAssertEqual(refined.filters.ownerQuery, "joe")
+            XCTAssertEqual(Set(refined.places.map(\.userPlace.id)), Set(immediate.places.map(\.userPlace.id)))
+            XCTAssertFalse(refined.places.isEmpty)
+            XCTAssertTrue(refined.places.allSatisfy { $0.owner.id == "user_joe" })
+        }
+    }
+
+    func testFailedRefinementRetainsDeterministicOwnerAndFavoriteFilters() async {
+        let store = WanderStore(fixtures: ownerSearchFixtures(), parser: FailingOwnerSearchParser())
+        let results = await store.discover(query: "Joe's favorite coffee", includeProfiles: false)
+        XCTAssertEqual(results.parseSource, .deterministicFallback)
+        XCTAssertEqual(results.filters.ownerQuery, "joe")
+        XCTAssertEqual(results.filters.opinion, .favorite)
+        XCTAssertEqual(Set(results.places.map(\.userPlace.id)), ["up_joe_woodcat", "up_joe_circuit_coffee"])
+    }
+
+    func testOwnerFavoriteSearchCannotBorrowAnotherPersonsRatingOrWannaGoSave() async {
+        let fixtures = ownerSearchFixtures()
+        fixtures.userPlaces.first { $0.id == "up_joe_woodcat" }?.ratingScore = 2
+        fixtures.userPlaces.first { $0.id == "up_joe_circuit_coffee" }?.status = .wannaGo
+        let store = WanderStore(fixtures: fixtures)
+        XCTAssertTrue(store.searchTrustedPlaces(query: "Joe's favorite coffee").places.isEmpty)
+        let refined = await store.discover(query: "Joe's favorite coffee", includeProfiles: false)
+        XCTAssertTrue(refined.places.isEmpty)
+    }
+
+    func testOwnerAmbiguityIncludesSelfAndUsesTheSameNameMatchingAsResults() throws {
+        let fixtures = ownerSearchFixtures()
+        let otherJoe = try XCTUnwrap(fixtures.profiles.first { $0.id == "user_ryan" })
+        otherJoe.displayName = "Joe Ramirez"
+        let store = WanderStore(fixtures: fixtures)
+        let results = store.searchTrustedPlaces(query: "Joe's favorite coffee")
+        let candidates = store.discoverOwnerCandidates(for: results.filters)
+        XCTAssertEqual(Set(candidates.map(\.id)), ["user_joe", "user_ryan"])
+        XCTAssertEqual(Set(results.places.map(\.owner.id)), Set(candidates.map(\.id)))
+
+        let exactHandle = store.searchTrustedPlaces(query: "@ryan's favorite coffee")
+        XCTAssertEqual(store.discoverOwnerCandidates(for: exactHandle.filters).map(\.id), ["user_ryan"])
+        XCTAssertEqual(Set(exactHandle.places.map(\.owner.id)), ["user_ryan"])
+        XCTAssertTrue(store.searchTrustedPlaces(query: "@joe favorite coffee").places.isEmpty)
+        XCTAssertTrue(store.searchTrustedPlaces(query: "Joey's favorite coffee").places.isEmpty)
+    }
+
+    func testPossessiveSearchDoesNotFallThroughToUnscopedProviders() async {
+        let store = WanderStore(fixtures: ownerSearchFixtures())
+        let query = "Joe's favorite coffee"
+        let results = store.searchTrustedPlaces(query: query)
+        let communityRequest = await store.recmePlaceSearchRequest(query: query)
+        XCTAssertNil(communityRequest)
+        XCTAssertNil(DiscoverExternalPlaceSearchPlanner.input(query: query, filters: results.filters))
+    }
+
+    private func ownerSearchFixtures() -> WanderFixtures {
+        let fixtures = WanderFixtures.seed()
+        fixtures.currentUser.displayName = "Joe Lipshutz"
+        fixtures.currentUser.handle = "joelipshutz"
+        return fixtures
+    }
+
     private func person(_ name: String) -> ProfileShell {
         ProfileShell(id: name.lowercased(), handle: name.lowercased(), displayName: name,
                      avatarURL: nil, bio: nil, relationship: .nonFollower)
@@ -93,6 +175,20 @@ import XCTest
         await inbox.refresh(userID: "first", repository: repository)
         XCTAssertFalse(inbox.failed)
         XCTAssertEqual(inbox.notifications.count, 1)
+    }
+}
+
+private struct OwnerSearchFilterRepository: DiscoverFilterParsingRepository {
+    let ownerQuery: String?
+
+    func parseFilters(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        DiscoverFilters(query: query, categories: [WanderPlaceCategory.coffeeTeaSweets], ownerQuery: ownerQuery)
+    }
+}
+
+private struct FailingOwnerSearchParser: LLMFilterParser {
+    func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        throw URLError(.notConnectedToInternet)
     }
 }
 

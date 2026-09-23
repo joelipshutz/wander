@@ -30,11 +30,22 @@ struct DiscoverPersonSearchRow: View {
                     if isLoading { ProgressView() }
                     else { Text(isFollowing ? "Following" : failed ? "Retry" : "Follow") }
                 }
-                .font(AstirTypography.control)
-                .frame(minWidth: 80, minHeight: 44)
+                .font(AstirTypography.label)
+                .foregroundStyle(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
+                .tint(isFollowing ? brandMode.primaryText : brandMode.accentForeground)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minWidth: 80, minHeight: WanderTheme.tapMinimum)
+                .background(isFollowing ? brandMode.recessedBackground : brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                        .stroke(isFollowing ? brandMode.border : brandMode.accent)
+                )
             }
+            .buttonStyle(.plain)
             .disabled(isFollowing || isLoading)
             .accessibilityLabel("\(isFollowing ? "Following" : "Follow") \(profile.displayName)")
+            .accessibilityIdentifier("discover.person.\(profile.id).follow")
         }
         .foregroundStyle(brandMode.primaryText)
         .padding(.vertical, WanderTheme.spacing2)
