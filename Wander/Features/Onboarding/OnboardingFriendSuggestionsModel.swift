@@ -2,11 +2,19 @@ import Foundation
 
 @MainActor
 final class OnboardingFriendSuggestionsModel: ObservableObject {
+    // Canonical Joe/Ryan targets from the existing signup-default migration.
+    // This is onboarding presentation only; membership comes from the real graph.
+    static let defaultFollowProfileIDs = [
+        "user_3EhATWssjvHxwGiUaoWR5VTgeoy", // Joe
+        "user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc" // Ryan
+    ]
+
     enum LoadingState: Equatable {
         case idle, loading, loaded, failed
     }
 
     @Published private(set) var recommendations: [DiscoverPeopleRecommendation] = []
+    @Published private(set) var defaultFollowProfiles: [ProfileShell] = []
     @Published var query = ""
     @Published private(set) var searchResults: [ProfileShell] = []
     @Published private(set) var loadingState: LoadingState = .idle
@@ -52,7 +60,9 @@ final class OnboardingFriendSuggestionsModel: ObservableObject {
 
     var isSearching: Bool { !normalizedQuery.isEmpty }
     var visibleProfiles: [ProfileShell] {
-        isSearching ? searchResults : recommendations.map(\.profile)
+        guard !isSearching else { return searchResults }
+        let pinnedIDs = Set(defaultFollowProfiles.map(\.id))
+        return defaultFollowProfiles + recommendations.map(\.profile).filter { !pinnedIDs.contains($0.id) }
     }
     var isFollowing: Bool { !pendingIDs.isEmpty }
 
@@ -69,14 +79,21 @@ final class OnboardingFriendSuggestionsModel: ObservableObject {
         guard force || loadingState == .idle || loadingState == .failed else { return }
         loadGeneration += 1
         let generation = loadGeneration
+        let followedAtStart = followedIDs
         loadingState = .loading
         do {
             // Search RPCs omit relationship data. Load the viewer's real graph
             // before offering follow actions, including resumed onboarding.
             let following = try await fetchFollowing()
-            followedIDs.formUnion(following.map(\.id))
+            guard generation == loadGeneration, !Task.isCancelled else { return }
             let loaded = try await fetchRecommendations()
             guard generation == loadGeneration, !Task.isCancelled else { return }
+            // Respect an external unfollow on refresh while retaining any explicit
+            // follow that completed while this snapshot was being fetched.
+            followedIDs = Set(following.map(\.id)).union(followedIDs.subtracting(followedAtStart))
+            defaultFollowProfiles = Self.defaultFollowProfileIDs.compactMap { id in
+                following.first { $0.id == id }
+            }
             recommendations = loaded
             loadingState = .loaded
         } catch {

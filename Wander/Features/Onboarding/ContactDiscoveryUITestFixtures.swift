@@ -11,6 +11,10 @@ import UIKit
     private var followAttempts = 0
     private let friend = ProfileShell(id: "user_contact_friend", handle: "contactfriend", displayName: "Contact Friend", avatarURL: nil, bio: nil, relationship: .nonFollower)
     private let general = ProfileShell(id: "user_general_friend", handle: "generalfriend", displayName: "General Friend", avatarURL: nil, bio: nil, relationship: .nonFollower)
+    private let defaultFollows = [
+        ProfileShell(id: "user_3EhATWssjvHxwGiUaoWR5VTgeoy", handle: "joefixture", displayName: "Joe", avatarURL: nil, bio: nil, relationship: .follower),
+        ProfileShell(id: "user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc", handle: "ryanfixture", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .follower)
+    ]
     func currentProfile() async throws -> LocalProfile? { LocalProfile(localID: "user_joe", handle: "joe", displayName: "Joe") }
     func profile(id: String) async throws -> ProfileViewState { throw ContactDiscoveryError.unavailable }
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] { [friend, general].filter { $0.displayName.lowercased().contains(handleQuery.lowercased()) } }
@@ -40,7 +44,10 @@ import UIKit
     }
     func unfollow(userID: String) async throws { followed.remove(userID) }
     func followers(userID: String) async throws -> [ProfileShell] { [] }
-    func following(userID: String) async throws -> [ProfileShell] { [friend, general].filter { followed.contains($0.id) } }
+    func following(userID: String) async throws -> [ProfileShell] {
+        let defaults = ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryDefaultFollows") ? defaultFollows : []
+        return defaults + [friend, general].filter { followed.contains($0.id) }
+    }
     func relationship(to userID: String) async throws -> ViewerRelationship { followed.contains(userID) ? .follower : .nonFollower }
     func isEnabled() async throws -> Bool { enabled }
     func setEnabled(_ enabled: Bool) async throws { self.enabled = enabled }

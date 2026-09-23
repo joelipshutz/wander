@@ -8,6 +8,154 @@ final class OnboardingConnectionTests: XCTestCase {
         ProfileShell(id: id, handle: id, displayName: id.capitalized, avatarURL: nil, bio: nil, relationship: .nonFollower)
     }
 
+    func testConfirmedSignupFollowsLeadOnboardingWithoutChangingRecommendationsOrWriting() async {
+        let joe = person("user_3EhATWssjvHxwGiUaoWR5VTgeoy")
+        let ryan = person("user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc")
+        let rachel = person("rachel")
+        let contact = person("contact")
+        let rows: [DiscoverPeopleRecommendation] = [
+            .init(profile: rachel, reason: .suggested, rank: 1),
+            .init(profile: contact, reason: .contacts, rank: 2),
+            .init(profile: ryan, reason: .suggested, rank: 3),
+            .init(profile: joe, reason: .suggested, rank: 4)
+        ]
+        var writes = 0
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: { rows }, search: { _ in [] },
+            following: { [contact, ryan, joe] }, follow: { _ in writes += 1 }
+        )
+        await model.load()
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [joe.id, ryan.id, rachel.id, contact.id])
+        XCTAssertEqual(model.recommendations.map(\.id), rows.map(\.id), "The shared ranking stays intact")
+        XCTAssertTrue(model.isFollowed(joe))
+        XCTAssertTrue(model.isFollowed(ryan))
+        let changed = await model.follow(joe)
+        XCTAssertFalse(changed)
+        XCTAssertEqual(writes, 0)
+        XCTAssertEqual(model.completedFollowCount, 0, "Default follows are not manual onboarding actions")
+
+        model.clearContactRecommendations()
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [joe.id, ryan.id, rachel.id])
+    }
+
+    func testOnlyConfirmedCanonicalDefaultFollowsArePinnedEvenWithNoSuggestions() async {
+        let joe = person("user_3EhATWssjvHxwGiUaoWR5VTgeoy")
+        let ryan = person("user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc")
+        let sameName = person("joe")
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: { [] }, search: { _ in [] },
+            following: { [sameName, ryan] }, follow: { _ in XCTFail("Loading must not create follows") }
+        )
+        await model.load()
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [ryan.id])
+        XCTAssertTrue(model.isFollowed(ryan))
+        XCTAssertFalse(model.isFollowed(joe), "Missing, blocked, deleted or unfollowed accounts must not be invented")
+    }
+
+    func testSearchDoesNotPrependUnrelatedDefaultFollows() async {
+        let joe = person("user_3EhATWssjvHxwGiUaoWR5VTgeoy")
+        let contact = person("contact")
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: { [] }, search: { _ in [contact] },
+            following: { [joe] }, follow: { _ in }
+        )
+        await model.load()
+        model.query = "contact"
+        await model.search(debounce: .zero)
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [contact.id])
+        model.query = ""
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [joe.id])
+    }
+
+    func testRefreshRespectsAFounderUnfollowWithoutRecreatingIt() async {
+        let joe = person("user_3EhATWssjvHxwGiUaoWR5VTgeoy")
+        let ryan = person("user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc")
+        var following = [joe, ryan]
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: { [.init(profile: joe, reason: .suggested, rank: 1)] },
+            search: { _ in [] }, following: { following },
+            follow: { _ in XCTFail("Refresh must not recreate a removed follow") }
+        )
+        await model.load()
+        following = [ryan]
+        await model.load(force: true)
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [ryan.id, joe.id])
+        XCTAssertFalse(model.isFollowed(joe))
+        XCTAssertTrue(model.isFollowed(ryan))
+        XCTAssertEqual(model.completedFollowCount, 0)
+    }
+
+    func testLateFollowingResponseCannotRestoreAnOutdatedPinnedAccount() async throws {
+        let joe = person("user_3EhATWssjvHxwGiUaoWR5VTgeoy")
+        let ryan = person("user_3EsQ6OZGVoIBhjfDUUfDhpa0PLc")
+        let started = expectation(description: "Original following fetch is suspended")
+        var continuation: CheckedContinuation<[ProfileShell], Never>?
+        var loads = 0
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: { [] }, search: { _ in [] },
+            following: {
+                loads += 1
+                if loads == 1 {
+                    return await withCheckedContinuation {
+                        continuation = $0
+                        started.fulfill()
+                    }
+                }
+                return [ryan]
+            }, follow: { _ in }
+        )
+        let original = Task { await model.load() }
+        await fulfillment(of: [started], timeout: 5)
+        let completion = try XCTUnwrap(continuation)
+        await model.load(force: true)
+        completion.resume(returning: [joe])
+        await original.value
+        XCTAssertEqual(model.visibleProfiles.map(\.id), [ryan.id])
+        XCTAssertEqual(model.followedIDs, [ryan.id])
+        XCTAssertEqual(model.loadingState, .loaded)
+    }
+
+    func testRefreshRetainsAnExplicitFollowCompletedDuringItsSnapshot() async throws {
+        let contact = person("contact")
+        let followStarted = expectation(description: "Explicit follow is suspended")
+        let refreshStarted = expectation(description: "Refresh suggestions are suspended")
+        var followContinuation: CheckedContinuation<Void, Never>?
+        var refreshContinuation: CheckedContinuation<[DiscoverPeopleRecommendation], Never>?
+        var loads = 0
+        let model = OnboardingFriendSuggestionsModel(
+            recommendations: {
+                loads += 1
+                if loads == 2 {
+                    return await withCheckedContinuation {
+                        refreshContinuation = $0
+                        refreshStarted.fulfill()
+                    }
+                }
+                return []
+            }, search: { _ in [] }, following: { [] },
+            follow: { _ in
+                await withCheckedContinuation {
+                    followContinuation = $0
+                    followStarted.fulfill()
+                }
+            }
+        )
+        await model.load()
+        let follow = Task { await model.follow(contact) }
+        await fulfillment(of: [followStarted], timeout: 5)
+        let followCompletion = try XCTUnwrap(followContinuation)
+        let refresh = Task { await model.load(force: true) }
+        await fulfillment(of: [refreshStarted], timeout: 5)
+        let refreshCompletion = try XCTUnwrap(refreshContinuation)
+        followCompletion.resume()
+        let succeeded = await follow.value
+        XCTAssertTrue(succeeded)
+        refreshCompletion.resume(returning: [])
+        await refresh.value
+        XCTAssertTrue(model.isFollowed(contact))
+        XCTAssertEqual(model.completedFollowCount, 1)
+    }
+
     func testLoadingSuggestionsNeverFollowsAndPreservesExistingFollowing() async {
         let ryan = person("ryan")
         var writes = 0
