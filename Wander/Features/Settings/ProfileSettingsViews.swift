@@ -208,6 +208,13 @@ struct ProfileSettingsHome: View {
     private var privacySection: some View {
         Section("Privacy and safety") {
             NavigationLink {
+                ContactDiscoverySettingsScreen()
+            } label: {
+                Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
+            }
+            .accessibilityIdentifier("settings.contactDiscovery")
+
+            NavigationLink {
                 ProfilePrivacyTrustScreen()
             } label: {
                 Label("Privacy and trust", systemImage: "shield.lefthalf.filled")
@@ -752,11 +759,11 @@ private struct SettingsResourcesScreen: View {
 }
 
 private enum RecmeSettingsWebDestination {
-    static let support = URL(string: "https://getrec.me/support")!
-    static let privacy = URL(string: "https://getrec.me/privacy")!
-    static let terms = URL(string: "https://getrec.me/terms")!
-    static let community = URL(string: "https://getrec.me/community")!
-    static let privacyChoices = URL(string: "https://getrec.me/privacy-choices")!
+    static let support = URL(string: "https://astirmovement.com/support")!
+    static let privacy = URL(string: "https://astirmovement.com/privacy")!
+    static let terms = URL(string: "https://astirmovement.com/terms")!
+    static let community = URL(string: "https://astirmovement.com/community")!
+    static let privacyChoices = URL(string: "https://astirmovement.com/privacy-choices")!
 }
 
 private struct SettingsExternalLink: View {

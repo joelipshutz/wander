@@ -908,7 +908,7 @@ struct SettingsTrustSurface {
             id: "contacts",
             icon: "person.crop.rectangle.stack",
             title: "Contacts stay under your control",
-            body: "Astir asks for Contacts access only to help find people you know. You can change access anytime in iOS Settings."
+            body: "If you choose Find friends, Astir securely compares allowed contact phone numbers and emails with verified accounts without saving your address book. Turn matching off in Find friends settings, or manage Contacts access in iOS Settings."
         )
     ]
 }

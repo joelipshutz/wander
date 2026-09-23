@@ -1,5 +1,15 @@
 import Foundation
 
+/// New public links use Astir; previously shared rec.me links remain readable.
+enum WanderPublicWebsite {
+    static let host = "astirmovement.com"
+
+    static func acceptsUniversalLinkHost(_ value: String?) -> Bool {
+        guard let value = value?.lowercased() else { return false }
+        return value == host || value == "www.astirmovement.com" || value == "getrec.me"
+    }
+}
+
 struct WanderCalendarDate: Equatable, Hashable, Sendable {
     let year: Int
     let month: Int
@@ -133,7 +143,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             guard let host = components.host?.lowercased() else { return nil }
             return parseAppURL(host: host, components: components)
         case "https":
-            guard components.host?.lowercased() == "getrec.me" else { return nil }
+            guard WanderPublicWebsite.acceptsUniversalLinkHost(components.host) else { return nil }
             return parseUniversalLink(components: components)
         default:
             return nil
@@ -276,14 +286,28 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     private static func parseUniversalLink(
         components: URLComponents
     ) -> Self? {
-        let segments = pathSegments(from: components)
+        var segments = pathSegments(from: components)
+        var targetComponents = components
+        if segments.first == "cards" {
+            // The token selects the web preview only. Native navigation uses
+            // the same target and authorization as its query-free entity link.
+            let roots = ["profiles", "places", "activities", "lists", "invites"]
+            guard segments.count == 3, roots.contains(segments[1]),
+                  let items = components.queryItems, items.count == 1,
+                  items[0].name == "card", let token = items[0].value,
+                  token.utf8.count == 48,
+                  token.range(of: "^[a-f0-9]{48}$", options: .regularExpression) != nil
+            else { return nil }
+            segments.removeFirst()
+            targetComponents.percentEncodedQuery = nil
+        }
         guard segments.count == 2,
               let root = segments.first,
               let identifier = segments.last,
               isValidSharedIdentifier(
                 identifier,
                 root: root,
-                components: components
+                components: targetComponents
               )
         else {
             return nil
@@ -367,7 +391,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
 
         var components = URLComponents()
         components.scheme = "https"
-        components.host = "getrec.me"
+        components.host = WanderPublicWebsite.host
         components.percentEncodedPath = "/\(root)/\(encodedID)"
         return components.url
     }

@@ -174,6 +174,7 @@ struct MapPlaceListPickerSheet: View {
     var additionalTargets: [MapPlaceListTarget] = []
     var stagedListIDs: Set<String> = []
     var onStage: ((Set<String>) -> Void)?
+    var stagedSaveStatus: PlaceStatus?
     private var targets: [MapPlaceListTarget] { [target] + additionalTargets }
     var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
@@ -211,7 +212,12 @@ struct MapPlaceListPickerSheet: View {
                         }
                     }
 
-                    if presentation.needsCompanionWanna {
+                    if let stagedSaveStatus {
+                        Text("Lists are updated only when you save this \(stagedSaveStatus == .been ? "check-in" : "Wanna"). The place follows each list’s visibility; your save’s audience stays the same.")
+                            .font(AstirTypography.bodySmall)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if presentation.needsCompanionWanna {
                         companionSaveNotice
                     }
 
@@ -258,7 +264,11 @@ struct MapPlaceListPickerSheet: View {
         .onAppear {
             guard !didLoadMembership else { return }
             loadMembershipOnce()
-            for id in stagedListIDs { selection.togglePending(listID: id) }
+            for id in stagedListIDs {
+                // A staged selection may outlive a new list receiving its server ID.
+                let currentID = presentation.eligibleLists.first { $0.id == id || $0.localID == id }?.id ?? id
+                selection.togglePending(listID: currentID)
+            }
         }
         .onChange(of: store.presentationRevision) { _, _ in
             guard didLoadMembership, !isApplying else { return }
@@ -295,7 +305,7 @@ struct MapPlaceListPickerSheet: View {
                     Text("New list")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text(onStage == nil ? "Create it and add this place" : "Create it and select it for this import")
+                    Text(onStage == nil ? "Create it and add this place" : stagedSaveStatus != nil ? "Create it and select it for this save" : "Create it and select it for this import")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -440,10 +450,10 @@ struct MapPlaceListPickerSheet: View {
                 Image(systemName: PlaceListSymbol.systemImage)
                     .font(.system(size: 14, weight: .bold))
                     .frame(width: 36, height: 36)
-                    .foregroundStyle(list.ownerUserID == store.currentUser.id
+                    .foregroundStyle(!isExisting && list.ownerUserID == store.currentUser.id
                         ? brandMode.accent
                         : brandMode.secondaryText)
-                    .background(list.ownerUserID == store.currentUser.id
+                    .background(!isExisting && list.ownerUserID == store.currentUser.id
                         ? brandMode.accentWash
                         : brandMode.recessedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall, style: .continuous))
@@ -451,9 +461,9 @@ struct MapPlaceListPickerSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(list.name)
                         .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
+                        .foregroundStyle(isExisting ? brandMode.secondaryText : brandMode.primaryText)
                         .lineLimit(1)
-                    Text(listDetail(list))
+                    Text(isExisting ? "Already in list" : listDetail(list))
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)

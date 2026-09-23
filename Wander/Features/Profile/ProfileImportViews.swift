@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 enum ImportHelpDestination {
-    static let url = URL(string: "https://getrec.me/import-help")!
+    static let url = URL(string: "https://astirmovement.com/import-help")!
 }
 
 struct AddImportEntrySection: View {
@@ -1914,7 +1914,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
             let destination = ready.isEmpty && duplicates.isEmpty
                 ? nil
-                : destinationList(for: batch, itemCount: items.count)
+                : destinationList(for: batch)
             let remoteBackend = auth.isSignedIn ? backend : nil
             var entries: [PlaceImportReceiptEntry] = []
 
@@ -2007,9 +2007,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
         )
     }
 
-    private func destinationList(for batch: PlaceImportBatch, itemCount: Int) -> LocalPlaceList? {
+    private func destinationList(for batch: PlaceImportBatch) -> LocalPlaceList? {
         guard batch.source == .googleMaps,
-              batch.sourceName != nil || itemCount > 1
+              let sourceListName = batch.sourceListName
         else { return nil }
         if let listID = batch.destinationListID,
            let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
@@ -2020,7 +2020,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 .filter { $0.ownerUserID == store.currentUser.id }
                 .map(\.name)
         )
-        let name = PlaceImportDestinationListName.unique(batch.sourceName, existingNames: existingNames)
+        let name = PlaceImportDestinationListName.unique(sourceListName, existingNames: existingNames)
         guard let list = store.createPlaceList(
             name: name,
             description: "Imported from Google Maps",
@@ -2713,7 +2713,7 @@ struct PlaceImportInboxScreen: View {
             }
             guard !ready.isEmpty || !duplicates.isEmpty else { continue }
 
-            let destinationList = destinationList(for: batch, itemCount: placeItems.count)
+            let destinationList = destinationList(for: batch)
             let remoteBackend = auth.isSignedIn ? backend : nil
             var entries: [PlaceImportReceiptEntry] = []
 
@@ -2809,11 +2809,10 @@ struct PlaceImportInboxScreen: View {
     }
 
     private func destinationList(
-        for batch: PlaceImportBatch,
-        itemCount: Int
+        for batch: PlaceImportBatch
     ) -> LocalPlaceList? {
         guard batch.source == .googleMaps,
-              batch.sourceName != nil || itemCount > 1
+              let sourceListName = batch.sourceListName
         else { return nil }
         if let destinationListID = batch.destinationListID,
            let existing = store.visiblePlaceLists.first(where: { $0.id == destinationListID }) {
@@ -2825,7 +2824,7 @@ struct PlaceImportInboxScreen: View {
                 .map(\.name)
         )
         let name = PlaceImportDestinationListName.unique(
-            batch.sourceName,
+            sourceListName,
             existingNames: existingNames
         )
         guard let list = store.createPlaceList(

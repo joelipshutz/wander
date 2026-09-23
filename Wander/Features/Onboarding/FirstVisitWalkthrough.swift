@@ -1982,7 +1982,7 @@ extension View {
 }
 
 enum WalkthroughHelpDestination {
-    static let extensions = URL(string: "https://getrec.me/extensions")!
+    static let extensions = URL(string: "https://astirmovement.com/extensions")!
 }
 
 enum ImportWalkthroughContent {
@@ -2025,7 +2025,7 @@ private struct ImportWalkthroughOverlay: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Import help")
-                    .accessibilityHint("Opens import help on getrec.me")
+                    .accessibilityHint("Opens import help on astirmovement.com")
 
                 }
 
@@ -2166,7 +2166,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityHint("Opens getrec.me/extensions")
+                    .accessibilityHint("Opens astirmovement.com/extensions")
                     .accessibilityIdentifier("walkthrough.deviceFeatures.extensionsGuide")
 
                     Spacer(minLength: WanderTheme.spacing2)

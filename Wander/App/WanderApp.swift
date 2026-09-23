@@ -151,9 +151,14 @@ struct WanderApp: App {
             #endif
         }
         #if DEBUG && targetEnvironment(simulator)
+        let contactTestRepository = ContactDiscoveryUITestRepository.isActive ? ContactDiscoveryUITestRepository() : nil
+        let testProfileRepository: (any ProfileRepository)? = contactTestRepository != nil
+            ? contactTestRepository : (forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil)
         let backendStore = (usesSimulatorTestSession || usesNativeOnboardingReview)
             ? WanderBackend(
-                profileRepository: forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil,
+                profileRepository: testProfileRepository,
+                contactDiscovery: contactTestRepository?.service(auth: authStore),
+                followRepository: contactTestRepository,
                 notificationRepository: SimulatorNotificationRepository(),
                 placePlanInvitationRepository: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
                     ? SimulatorPlacePlanInvitationRepository() : nil,

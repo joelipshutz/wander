@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://getrec.me/schemas/testflight-manifest.schema.json",
+  "$id": "https://astirmovement.com/schemas/testflight-manifest.schema.json",
   "title": "rec.me TestFlight release manifest",
   "type": "object",
   "additionalProperties": false,
