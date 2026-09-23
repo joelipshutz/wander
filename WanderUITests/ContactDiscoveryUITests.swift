@@ -102,8 +102,15 @@ import XCTest
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
         backToFeed(app)
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
-        XCTAssertTrue(app.staticTexts["Contact Friend"].firstMatch.waitForExistence(timeout: 5))
-        capture("Following screen after contact matching disabled")
+        app.buttons["feed.searchLauncher"].tap()
+        let search = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
+        search.typeText("Contact Friend")
+        let retainedFollow = app.buttons["discover.person.user_contact_friend.follow"]
+        XCTAssertTrue(retainedFollow.waitForExistence(timeout: 5))
+        XCTAssertEqual(retainedFollow.label, "Following Contact Friend")
+        XCTAssertFalse(retainedFollow.isEnabled)
+        capture("Combined search preserves follow after contact matching disabled")
     }
     func testFollowingScreenRechecksRevokedAccessOnForeground() {
         let app = launchFeed(["-WanderContactDiscoveryRevokeOnForeground"])
