@@ -140,6 +140,7 @@ import XCTest
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
         app.activate()
+        completeNotificationPromptIfPresented(app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"].firstMatch)
         wait(for: [gone], timeout: 10)
