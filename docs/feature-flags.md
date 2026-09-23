@@ -111,3 +111,45 @@ indicate notifications are off. Normal presentation blockers apply. A previously
 denied iOS permission offers Open Settings and Not now; the app cannot force
 Apple's permission alert to appear again. Creating the dormant control does not
 authorize activating a live campaign.
+
+### Test one account, then roll out the same campaign
+
+After the supporting app and migration ship, keep the global value at 0 and
+set only the test account's override to a fresh campaign number (1 for the
+first campaign). The account must have notifications disabled and device test
+overrides reset to **Follow remote**. Reopen or foreground the app after
+onboarding; the new example-notification dialog appears once when presentation
+blockers clear. Use a higher campaign number for each additional test.
+
+Once that test is accepted, promote the same tested number globally and remove
+only that account's temporary override in one transaction. For a first campaign:
+
+```sql
+begin;
+update public.feature_flags set integer_value = 1
+where key = 'notification_reprompt_campaign' and user_id is null;
+
+delete from public.feature_flags
+where key = 'notification_reprompt_campaign' and user_id = 'user_target';
+commit;
+```
+
+Other eligible accounts see that campaign on their next open. The test account
+does not see it again on the same installation, because its last-seen version
+already matches. Removing the temporary override lets that account follow
+later global campaigns; preserve any other accounts' intentional overrides or
+exclusions. Set the global value back to 0 to stop new global requests, and
+clear any positive account overrides separately when stopping targeted tests.
+For another round, use a number higher than every previously issued test or
+global campaign. Turning 1 off and back on does not replay campaign 1.
+
+Each actual presentation records `product_upsell_shown` with campaign, trigger,
+and impression number; taps and outcomes share its `presentation_id`. The
+Notification Operations dashboard includes raw presentation counts and button
+conversion. Staff/test traffic is excluded from production rates, so inspect
+the test account's raw events when validating a release build. Counts and
+last-seen campaign versions persist per account/device and reset on reinstall.
+The same redesigned component replaces the former bell-style prompt in
+onboarding, return reminders, and remote campaigns; the former automatic
+save/follow prompts are no longer consumed, and reminders cannot stack during
+one app open.
