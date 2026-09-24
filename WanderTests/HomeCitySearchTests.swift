@@ -23,11 +23,13 @@ import CoreLocation
         let model = AccountContactDetailsModel(userID: "fallback", repository: repo, location: CityLocation(nil))
         XCTAssertEqual(model.cityText, "Los Angeles") // Before any await/network work.
         await model.load()
-        XCTAssertTrue(model.canSave)
+        XCTAssertFalse(model.canSave) // A confirmed city still requires the user's phone number.
         XCTAssertNil(HomeMetro.all.first { $0.name == kyoto.name })
         model.selectCity(kyoto)
         XCTAssertEqual(model.cityText, "Kyoto")
         XCTAssertEqual(model.phoneCountryCode, "JP")
+        model.editPhone("090 1234 5678")
+        XCTAssertTrue(model.canSave)
         let saved = await model.save()
         XCTAssertTrue(saved)
         XCTAssertEqual(repo.details?.homeCity, kyoto)
@@ -55,7 +57,9 @@ import CoreLocation
             location: CityLocation(.init(metroID: "other", countryCode: "JP", city: kyoto)))
         await model.load()
         XCTAssertEqual(model.homeCity, kyoto)
-        _ = await model.save()
+        model.editPhone("090 1234 5678")
+        let saved = await model.save()
+        XCTAssertTrue(saved)
         let traveling = AccountContactDetailsModel(userID: "nearest", repository: repo,
             location: CityLocation(.init(metroID: "los-angeles", countryCode: "US", city: .losAngeles)))
         await traveling.load()
@@ -80,6 +84,7 @@ import CoreLocation
         XCTAssertFalse(model.canSave)
         model.selectPhoneCountry("GB")
         model.selectCity(kyoto)
+        model.editPhone("020 7946 0123")
         XCTAssertTrue(model.canSave)
         XCTAssertEqual(model.phoneCountryCode, "GB")
         model.editCity("")
@@ -114,6 +119,7 @@ import CoreLocation
         await model.load()
         model.editCity("Kyo")
         model.selectCity(kyoto)
+        model.editPhone("090 1234 5678")
         model.editCity("Kyoto") // Native TextField's focus-loss commit.
         XCTAssertEqual(model.homeCity, kyoto)
         XCTAssertTrue(model.canSave)

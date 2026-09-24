@@ -55,6 +55,12 @@ import XCTest
             XCTAssertTrue(result.waitForExistence(timeout: 5))
             result.tap()
             let save = app.buttons["accountContactDetails.continue"]
+            if !save.isEnabled {
+                let phone = app.textFields["accountContactDetails.phone"]
+                XCTAssertTrue(phone.exists)
+                phone.tap()
+                phone.typeText("2025550123")
+            }
             let resolved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
             XCTAssertEqual(XCTWaiter.wait(for: [resolved], timeout: 5), .completed)
             app.buttons["accountContactDetails.continue"].tap()

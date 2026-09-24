@@ -2,10 +2,13 @@
 import Foundation
 import UIKit
 
-/// Fictional data injected only by an explicit authenticated UI test launch.
+/// Fictional data injected only by an explicit simulator UI-test or native review launch.
 @MainActor final class ContactDiscoveryUITestRepository: ProfileRepository, FollowRepository, ContactDiscoveryRepository {
     static let argument = "-WanderContactDiscoveryUITest"
-    static var isActive: Bool { ProcessInfo.processInfo.arguments.contains(argument) && SimulatorTestSessionPolicy.isActive() }
+    static var isActive: Bool {
+        ProcessInfo.processInfo.arguments.contains(argument)
+            && (SimulatorTestSessionPolicy.isActive() || NativeOnboardingReviewRoute.resolved() != nil)
+    }
     private var enabled = false
     private var followed = Set<String>()
     private var followAttempts = 0
@@ -49,11 +52,12 @@ import UIKit
         if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryFailure") { throw ContactDiscoveryError.unavailable }
         return enabled && !identifiers.isEmpty ? [friend] : []
     }
-    func service(auth: AuthSessionStore) -> ContactDiscoveryService {
+    func service(auth: AuthSessionStore, usesSystemProvider: Bool = false) -> ContactDiscoveryService {
         let suite = "AstirContactDiscoveryUITest"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        return ContactDiscoveryService(repository: self, provider: ContactDiscoveryUITestProvider(), defaults: defaults,
+        let provider: any ContactProvider = usesSystemProvider ? SystemContactProvider() : ContactDiscoveryUITestProvider()
+        return ContactDiscoveryService(repository: self, provider: provider, defaults: defaults,
             activeUserID: { [weak auth] in auth?.state.session?.userID })
     }
 }
