@@ -424,7 +424,9 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationDetails"]
         app.launch()
         XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 15))
-        let more = app.buttons["Hide more options"].firstMatch
+        let more = app.buttons.matching(NSPredicate(
+            format: "label IN %@", ["Show more options", "Hide more options"]
+        )).firstMatch
         // The center of this long form contains an interactive rating slider.
         // Scroll from the page margin so the gesture cannot adjust the rating
         // instead of revealing the fields below it.
@@ -691,7 +693,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Find the good stuff nearby"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Find places nearby"].waitForExistence(timeout: 8))
         let locationContinue = app.buttons["Continue"].firstMatch
         XCTAssertTrue(locationContinue.waitForExistence(timeout: 8))
         XCTAssertEqual(locationContinue.label, "Continue")
@@ -724,10 +726,10 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let contactsContinue = app.buttons["Continue"].firstMatch
+        let contactsContinue = app.buttons["onboarding.contacts.findFriends"]
         XCTAssertTrue(contactsContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(contactsContinue.isHittable)
-        XCTAssertFalse(app.buttons["Not now"].exists)
+        XCTAssertTrue(app.buttons["onboarding.contacts.skip"].exists)
 
         let contactsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         contactsScreenshot.name = "REC-396 actual onboarding contacts permission"
@@ -809,7 +811,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(alert.staticTexts.matching(
             NSPredicate(
                 format: "label == %@",
-                "Astir uses your contacts to help you connect with people you know."
+                "Astir reads the contacts you allow to find friends or choose invitations. If you choose Find friends, phone numbers and emails are securely compared with verified Astir accounts; your address book is not saved on our servers."
             )
         ).firstMatch.exists)
 
@@ -1421,19 +1423,12 @@ final class OnboardingUITests: XCTestCase {
 
         let placeSearch = app.buttons["feed.searchLauncher"]
         let addButton = app.buttons["feed.headerAdd"]
-        let placesButton = app.buttons["Places"]
-        let peopleButton = app.buttons["People"]
 
         XCTAssertTrue(placeSearch.waitForExistence(timeout: 6))
         XCTAssertTrue(addButton.isHittable)
-        XCTAssertTrue(placesButton.waitForExistence(timeout: 4))
-        XCTAssertTrue(peopleButton.exists)
-        XCTAssertTrue(placesButton.isSelected)
-        XCTAssertLessThan(placeSearch.frame.maxY, placesButton.frame.minY)
-        XCTAssertEqual(placesButton.frame.midY, addButton.frame.midY, accuracy: 2)
+        XCTAssertEqual(placeSearch.frame.midY, addButton.frame.midY, accuracy: 2)
 
         let initialSearchY = placeSearch.frame.minY
-        let initialControlsY = placesButton.frame.minY
         app.swipeUp()
 
         let hidden = XCTNSPredicateExpectation(
@@ -1452,17 +1447,12 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [revealed], timeout: 3), .completed)
         XCTAssertTrue(addButton.isHittable)
         XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
-        XCTAssertEqual(placesButton.frame.minY, initialControlsY, accuracy: 2)
 
-        peopleButton.tap()
-        let peopleSearch = app.textFields["Search people"]
-        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
-        XCTAssertTrue(peopleButton.isSelected)
-        XCTAssertLessThan(peopleSearch.frame.maxY, peopleButton.frame.minY)
-        XCTAssertTrue(addButton.isHittable)
+        placeSearch.tap()
+        XCTAssertTrue(app.textFields["discover.placesSearchField"].waitForExistence(timeout: 4))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-383 adaptive Feed header restored on People"
+        screenshot.name = "REC-383 adaptive Feed header restored"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -1758,7 +1748,7 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         note.tap()
         note.typeText("Sunset draft")
 
@@ -1770,8 +1760,6 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
         let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        let restoredNoteHeading = app.staticTexts["a note for future you"]
-        XCTAssertTrue(restoredNoteHeading.isHittable)
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
@@ -1815,7 +1803,7 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         note.tap()
         note.typeText("Wanna sunset draft")
 
@@ -1827,12 +1815,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
         let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        let restoredNoteHeading = app.staticTexts["a note for future you"]
-        XCTAssertTrue(restoredNoteHeading.isHittable)
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
-            "what you'll want to remember, who told you..."
+            "Who told you, what caught your eye, when you might go…"
         )
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1851,7 +1837,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
-            "what you'll want to remember, who told you..."
+            "The good bits, what you ordered, who you were with…"
         )
     }
 
@@ -2045,13 +2031,14 @@ final class OnboardingUITests: XCTestCase {
         let scroll = app.scrollViews["save.editorScroll"].firstMatch
         XCTAssertTrue(scroll.waitForExistence(timeout: 4))
         let compactTop = scroll.frame.minY
-        let heading = app.staticTexts["a note for future you"].firstMatch
-        let headingTop = heading.frame.minY
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.exists)
+        let noteTop = note.frame.minY
         let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.65))
         let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.35))
         start.press(forDuration: 0.05, thenDragTo: end)
         let scrolled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            heading.frame.minY < headingTop - 60 && abs(scroll.frame.minY - compactTop) < 30
+            note.frame.minY < noteTop - 60 && abs(scroll.frame.minY - compactTop) < 30
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [scrolled], timeout: 3), .completed,
                        "An ordinary upward content gesture must scroll the compact form without sheet snapback")
@@ -2715,7 +2702,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(finalCheckIn.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["continue to details"].exists)
         XCTAssertFalse(app.buttons["back"].exists)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
 
         let disclosure = app.buttons["save.checkInDateDisclosure"]
         XCTAssertTrue(disclosure.waitForExistence(timeout: 3))
@@ -2750,7 +2737,7 @@ final class OnboardingUITests: XCTestCase {
         wannaChoice.tap()
         XCTAssertTrue(app.buttons["Add a Wanna go date"].waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isSelected)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         let wannaNote = app.textFields["save.note"]
         XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")

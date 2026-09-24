@@ -27,8 +27,12 @@ If you are working in Joe's local workspace, the repo path is:
 Install Git LFS before cloning. In an existing checkout, run `git lfs install`
 and `git lfs pull --include="Wander/Resources/FoundersWelcome/founders-welcome.mp4"`
 before building. The founders welcome is bundled for offline playback. The full
-process archive under `docs/designs/onboarding-2026-09` also uses LFS; pull those
-paths when replaying the archived review studies.
+review archive is separate from app assets. Use
+`python3 scripts/review-media.py prepare` and
+`python3 scripts/review-media.py serve` to replay it from one
+shared directory outside worktrees. On a fresh clone, add `--download` to
+`prepare` to fetch missing historical objects once. Do not pull the historical
+review payload into every checkout. See [review evidence storage](review-media/README.md).
 
 ## Generate Project
 

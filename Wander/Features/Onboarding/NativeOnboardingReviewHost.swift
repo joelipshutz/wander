@@ -51,12 +51,6 @@ struct NativeOnboardingReviewHost: View {
         // onboarding and playback progress are untouched.
         UserDefaults.standard.removeObject(forKey: "astir.founders-welcome.v1.\(Self.session.userID)")
         let repository = NativeOnboardingReviewRepository(route: route)
-        let backend = WanderBackend(
-            profileRepository: repository,
-            profileAvatarRepository: repository,
-            followRepository: repository,
-            notificationRepository: SimulatorNotificationRepository()
-        )
         let auth = AuthSessionStore(
             provider: PreviewAuthSessionProvider(
                 state: route.initialStep == nil && route != .founders ? .signedOut : .signedIn(Self.session),
@@ -65,6 +59,19 @@ struct NativeOnboardingReviewHost: View {
                 emailVerificationSession: Self.session,
                 passwordAuthSession: Self.session
             )
+        )
+        let contactTestRepository = ContactDiscoveryUITestRepository.isActive
+            ? ContactDiscoveryUITestRepository()
+            : nil
+        let backend = WanderBackend(
+            profileRepository: repository,
+            contactDiscovery: contactTestRepository?.service(
+                auth: auth,
+                usesSystemProvider: ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoverySystemPermissionTest")
+            ),
+            profileAvatarRepository: repository,
+            followRepository: repository,
+            notificationRepository: SimulatorNotificationRepository()
         )
         _backend = StateObject(wrappedValue: backend)
         _auth = StateObject(wrappedValue: auth)
