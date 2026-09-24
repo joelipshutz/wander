@@ -328,6 +328,7 @@
 		C0F32903B770CE2556F487F7 /* ImportBrandAssets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9BBA2A856408B5D3ADC6F764 /* ImportBrandAssets.xcassets */; };
 		C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */; };
 		C23C35B8F98CEEEC4359F5D9 /* CommonGroundLiveMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04352535CF69E387D08F21EB /* CommonGroundLiveMedia.swift */; };
+		C32A5F22C3286A760C2DECAA /* ProtectedContentCachePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2824660BA5FE5A2E159067EA /* ProtectedContentCachePolicy.swift */; };
 		C3FAE1FFEACA2D3807DC3E61 /* EventsComingSoonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6772946B0D4A0BF264E2BCB4 /* EventsComingSoonTests.swift */; };
 		C500C85EDAC2AC11197F7CC8 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E382A2A47A6DC2EAEF12F23 /* ShareViewController.swift */; };
 		C59670B14A081B1E8CD6A303 /* CalendarReservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA0CB4F9DCF420A76B30B3 /* CalendarReservationTests.swift */; };
@@ -551,6 +552,7 @@
 		250A52345423E83FCB445CEE /* InviteFrameworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFrameworkTests.swift; sourceTree = "<group>"; };
 		260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverParserTests.swift; sourceTree = "<group>"; };
 		281405E7984055E84B81BCC2 /* CheckInPrivateAnswerDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInPrivateAnswerDeletionTests.swift; sourceTree = "<group>"; };
+		2824660BA5FE5A2E159067EA /* ProtectedContentCachePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectedContentCachePolicy.swift; sourceTree = "<group>"; };
 		282B94AF8B29C08A7B59F929 /* AstirBrandShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirBrandShellTests.swift; sourceTree = "<group>"; };
 		2AA16BF5C2E2E6C371692333 /* rec-271-instagram-post-direct-handoff-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-271-instagram-post-direct-handoff-pre.json"; sourceTree = "<group>"; };
 		2B18EB82A28CAB33F19FF520 /* ProfileHeaderMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHeaderMotion.swift; sourceTree = "<group>"; };
@@ -1624,6 +1626,7 @@
 				D1A3B6E88CE5E045D8FA3403 /* PostHogAnalyticsClient.swift */,
 				B4BC400F1B5E5081D1923888 /* ProductUpsellCoordinator.swift */,
 				3993D0CE7A907E02E0B1A590 /* ProfileAvatarStorage.swift */,
+				2824660BA5FE5A2E159067EA /* ProtectedContentCachePolicy.swift */,
 				3A8893E8CF16E21653DE03BA /* PushNotificationManager.swift */,
 				D83285AB8BC146DF7939BF28 /* RecmePlaceSearchFusion.swift */,
 				0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */,
@@ -2075,6 +2078,7 @@
 				C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */,
 				9B649999DC81D7A85B0A478F /* ProfileSettingsViews.swift in Sources */,
 				64E0C0CFA76A1B6E6B093734 /* ProfileSocialGraphScreen.swift in Sources */,
+				C32A5F22C3286A760C2DECAA /* ProtectedContentCachePolicy.swift in Sources */,
 				356FDFF2DB88012D0DB2AA7A /* PushNotificationManager.swift in Sources */,
 				D5890A6DC2951A2698AEA92A /* RecmePlaceSearchFusion.swift in Sources */,
 				A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */,

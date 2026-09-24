@@ -980,6 +980,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let host = UIHostingController(
             rootView: PlaceImportCandidateMockupRoot()
                 .environmentObject(backend)
+                .environment(\.scenePhase, .active)
         )
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
         window.rootViewController = host
@@ -1067,6 +1068,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let host = UIHostingController(
             rootView: FeedResolvedPlacePhoto(place: visiblePlace)
                 .environmentObject(backend)
+                .environment(\.scenePhase, .active)
         )
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 184, height: 88))
         window.rootViewController = host
@@ -1144,6 +1146,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 placeName: "Test Place"
             )
                 .environmentObject(backend)
+                .environment(\.scenePhase, .active)
         )
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
         window.rootViewController = host
@@ -1282,6 +1285,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let host = UIHostingController(
             rootView: PlacePhotoControlLayoutProbe(photo: photo, recorder: recorder)
                 .environmentObject(backend)
+                .environment(\.scenePhase, .active)
         )
         let phoneWidth: CGFloat = 393
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: phoneWidth, height: 268))
@@ -1999,6 +2003,7 @@ private final class CachingPlacePhotoRepository: PlacePhotoRepository {
 
 @MainActor
 private final class FeedPlacePhotoFallbackRepository: PlacePhotoRepository {
+    func validateAccess(to photo: PlacePhoto) async throws {}
     let googlePhoto = PlacePhoto(
         provider: "google_places",
         providerPlaceID: "broken-google-photo",

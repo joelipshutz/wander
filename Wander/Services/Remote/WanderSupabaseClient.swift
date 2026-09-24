@@ -977,6 +977,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
         request.setValue("image/*", forHTTPHeaderField: "Accept")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         requestContext.headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }

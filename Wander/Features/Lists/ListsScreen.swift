@@ -4091,6 +4091,7 @@ private struct ListMapCompactMedia: View {
 
 private struct ListPlacePhotoMedia: View {
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
     @Environment(\.listPhotoAuthorizationScopeKey) private var photoAuthorizationScopeKey
     let place: ListPlaceMock
@@ -4138,6 +4139,7 @@ private struct ListPlacePhotoMedia: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
+                guard scenePhase == .active else { return }
                 if let cachedPhoto {
                     resolvedPhoto = cachedPhoto
                     resolvedPhotoKey = resolutionKey
@@ -4161,6 +4163,10 @@ private struct ListPlacePhotoMedia: View {
             }
         }
         .clipped()
+        .onDisappear {
+            resolvedPhotoKey = nil
+            resolvedPhoto = nil
+        }
     }
 
     private var photoResolutionKey: String {
@@ -4168,7 +4174,9 @@ private struct ListPlacePhotoMedia: View {
             place.canonicalProfilePlace.photoLookupKey,
             place.preferredUserPhoto?.cacheKey ?? "no-preloaded-user-photo",
             eligibleUserIDs?.sorted().joined(separator: ",") ?? "all-visible-users",
-            photoAuthorizationScopeKey
+            photoAuthorizationScopeKey,
+            backend.photoViewerID ?? "signed-out",
+            "session:\(backend.photoSessionRevision):\(backend.photoAccessRevision):\(scenePhase)"
         ]
             .joined(separator: "|")
     }
@@ -6001,15 +6009,24 @@ struct SnapshotListEditorScreen: View {
 }
 
 private struct ListSnapshotCover: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     let data: Data?
     let path: String?
     @State private var downloadedData: Data?
+    @State private var loadedKey: String?
+    @State private var loadedScopeKey: String?
+
+    private var scopeKey: String { "\(store.currentUser.id):\(path ?? "local")" }
+    private var accessKey: String { "\(scopeKey):\(scenePhase)" }
+    private var imageData: Data? {
+        path == nil ? data : (loadedKey == accessKey ? downloadedData : nil)
+    }
 
     var body: some View {
         Group {
-            if let imageData = data ?? downloadedData, let image = UIImage(data: imageData) {
+            if let imageData, let image = UIImage(data: imageData) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -6022,13 +6039,23 @@ private struct ListSnapshotCover: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WanderTheme.surfaceSand.color)
-        .task(id: "\(store.currentUser.id):\(path ?? "local")") {
-            downloadedData = nil
-            guard data == nil, let path else { return }
-            let result = try? await backend.listSnapshotCoverData(path: path)
-            guard !Task.isCancelled else { return }
-            downloadedData = result
+        .task(id: accessKey) {
+            guard scenePhase == .active, let path else { return }
+            let key = accessKey, scope = scopeKey
+            do {
+                let result = try await backend.listSnapshotCoverData(path: path)
+                guard !Task.isCancelled, accessKey == key else { return }
+                downloadedData = result
+                loadedScopeKey = scope
+            } catch {
+                guard !Task.isCancelled, accessKey == key else { return }
+                if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) || loadedScopeKey != scope {
+                    downloadedData = nil
+                }
+            }
+            loadedKey = key
         }
+        .onDisappear { loadedKey = nil }
     }
 }
 

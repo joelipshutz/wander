@@ -45,10 +45,14 @@ struct FeedMediaPreview: Identifiable, Equatable, Sendable {
     let id: String
     let urlString: String?
     let accessibilityLabel: String
+    let storageBucket: String?
+    let storagePath: String?
 
-    init(id: String, urlString: String? = nil, accessibilityLabel: String) {
+    init(id: String, urlString: String? = nil, storageBucket: String? = nil, storagePath: String? = nil, accessibilityLabel: String) {
         self.id = id
         self.urlString = urlString
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
         self.accessibilityLabel = accessibilityLabel
     }
 }

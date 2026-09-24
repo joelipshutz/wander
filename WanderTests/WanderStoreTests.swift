@@ -607,7 +607,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.placeVisits.first { $0.id == "visit_friend" }?.visitedAt, visitedAt)
         let hydratedPhoto = try XCTUnwrap(store.photos(for: "visit_friend").first)
         XCTAssertEqual(hydratedPhoto.id, "photo_friend")
-        XCTAssertEqual(hydratedPhoto.remoteURLString, "https://example.com/signed/photo_friend.jpg")
+        XCTAssertNil(hydratedPhoto.remoteURLString, "Private storage references must not retain legacy signed URLs")
     }
 
     func testCurrentUserCalendarRefreshHydratesOwnPlacesAndVisitsBeforePublishing() async throws {
@@ -2005,6 +2005,60 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testCachedForeignHistoryRequiresAccessAndCannotReturnAfterDenialOffline() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "viewer", displayName: "Viewer", handle: "viewer")))
+        let owner = LocalProfile(localID: "owner", serverID: "owner", handle: "owner", displayName: "Owner", syncState: .synced)
+        let place = makeRemoteCalendarVisiblePlace(owner: owner, userPlaceID: UUID().uuidString,
+            placeID: UUID().uuidString, name: "Fixture", status: .been, visibility: .followers, savedAt: .now)
+        let summaries = [PlaceSaveSummary(visiblePlace: place, attributes: [])]
+        let allowed = WanderBackend(userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [owner.id: [place]]))
+        let offline = WanderBackend(userPlaceRepository: FakeUserPlaceRepository(error: URLError(.notConnectedToInternet)))
+        let denied = WanderBackend(userPlaceRepository: FakeUserPlaceRepository())
+        let initial = await store.recheckCachedPlaceHistory(summaries, backend: allowed)
+        XCTAssertEqual(initial.map(\.id), [place.id])
+        let cached = await store.recheckCachedPlaceHistory(summaries, backend: offline)
+        XCTAssertEqual(cached.map(\.id), [place.id])
+        await store.refreshRemoteProfileVisiblePlaces(profileID: owner.id, backend: denied)
+        let deniedElsewhere = await store.recheckCachedPlaceHistory(summaries, backend: offline)
+        XCTAssertTrue(deniedElsewhere.isEmpty)
+        let allowedAgain = await store.recheckCachedPlaceHistory(summaries, backend: allowed)
+        XCTAssertEqual(allowedAgain.map(\.id), [place.id])
+        let hidden = await store.recheckCachedPlaceHistory(summaries, backend: denied)
+        XCTAssertTrue(hidden.isEmpty)
+        let reopened = await store.recheckCachedPlaceHistory(summaries, backend: offline)
+        XCTAssertTrue(reopened.isEmpty)
+    }
+
+    func testLateProfileAndHistoryResponsesCannotRestoreDeniedHistoryOffline() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "viewer", displayName: "Viewer", handle: "viewer")))
+        let owner = LocalProfile(localID: "owner", serverID: "owner", handle: "owner", displayName: "Owner", syncState: .synced)
+        let place = makeRemoteCalendarVisiblePlace(owner: owner, userPlaceID: UUID().uuidString,
+            placeID: UUID().uuidString, name: "Fixture", status: .been, visibility: .followers, savedAt: .now)
+        let summaries = [PlaceSaveSummary(visiblePlace: place, attributes: [])]
+        let deferred = DeferredCalendarUserPlaceRepository(result: [place])
+        let oldRequest = Task { @MainActor in
+            let result = await store.recheckCachedPlaceHistory(summaries,
+                backend: WanderBackend(userPlaceRepository: deferred))
+            return result.map(\.id)
+        }
+        for _ in 0..<20 where deferred.userPlaceRequests.isEmpty { await Task.yield() }
+        XCTAssertEqual(deferred.userPlaceRequests, [owner.id])
+        let denied = await store.recheckCachedPlaceHistory(summaries,
+            backend: WanderBackend(userPlaceRepository: FakeUserPlaceRepository()))
+        XCTAssertTrue(denied.isEmpty)
+        deferred.finish()
+        let stale = await oldRequest.value
+        XCTAssertTrue(stale.isEmpty)
+        // A separate profile surface can finish its older read later too.
+        await store.refreshRemoteProfileVisiblePlaces(profileID: owner.id,
+            backend: WanderBackend(userPlaceRepository: FakeUserPlaceRepository(userPlacesByUserID: [owner.id: [place]])))
+        let offline = await store.recheckCachedPlaceHistory(summaries,
+            backend: WanderBackend(userPlaceRepository: FakeUserPlaceRepository(error: URLError(.notConnectedToInternet))))
+        XCTAssertTrue(offline.isEmpty)
+    }
+
     private func makeRemoteCalendarVisiblePlace(
         owner: LocalProfile,
         userPlaceID: String,
@@ -2401,14 +2455,23 @@ final class WanderStoreTests: XCTestCase {
             "An authoritative empty history must not resurrect a deleted check-in as a summary")
     }
 
-    func testFailedPlaceHistoryRefreshPreservesExistingTiles() async {
+    func testOfflinePlaceHistoryRefreshPreservesExistingTiles() async {
         let store = WanderStore(fixtures: .empty())
         let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
         XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
         let result = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
-            visitRepository: FakeVisitRepository(error: TestError.expected)))
+            visitRepository: FakeVisitRepository(error: URLError(.notConnectedToInternet))))
         XCTAssertFalse(result)
         XCTAssertTrue(store.shouldShowLegacyCheckInSummary(for: parentID))
+    }
+
+    func testServerFailureCannotPreserveForeignHistorySummary() async {
+        let store = WanderStore(fixtures: .empty())
+        let parentID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
+        let result = await store.refreshRemotePlaceActivity(userPlaceIDs: [parentID], backend: WanderBackend(
+            visitRepository: FakeVisitRepository(error: TestError.expected)))
+        XCTAssertFalse(result)
+        XCTAssertFalse(store.shouldShowLegacyCheckInSummary(for: parentID))
     }
 
     func testAuthoritativeEmptyHistoryClearsCachedDetailsWhileFailedRefreshKeepsThem() async throws {
@@ -9355,7 +9418,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visitRepository.upsertedPhotoDrafts.map(\.uploadState), [.pendingUpload, .uploaded])
         XCTAssertEqual(visitRepository.uploads.first?.bucket, "visit-photos")
         XCTAssertTrue(visitRepository.uploads.first?.path.contains("/\(uploadedPhoto?.serverID ?? "")") == true)
-        XCTAssertEqual(uploadedPhoto?.remoteURLString?.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/"), true)
+        XCTAssertNil(uploadedPhoto?.remoteURLString)
+        XCTAssertNotNil(uploadedPhoto?.storagePath)
     }
 
     func testVisitPhotoBatchFlushesAllLocalReferencesBeforeReturning() throws {
@@ -12492,9 +12556,11 @@ final class WanderStoreTests: XCTestCase {
         let result = await store.addCandidate(candidate, to: list, backend: WanderBackend(userPlaceRepository: repository))
         XCTAssertEqual(result.outcome, .added)
         XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
+        XCTAssertEqual(repository.savedDrafts.map(\.isPrivateListCompanion), [true])
         let save = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.place.canonicalName == candidate.name })
         XCTAssertEqual(save.userPlace.visibility, .selfOnly)
         XCTAssertEqual(save.userPlace.status, .wannaGo)
+        XCTAssertTrue(WanderStoreSnapshot.UserPlaceRecord(save.userPlace).model().isPrivateListCompanion)
     }
 
     func testStealthListSocialCompanionAvoidsPublicSocialSaveRPC() async throws {
@@ -12507,6 +12573,7 @@ final class WanderStoreTests: XCTestCase {
         let result = await store.addVisiblePlace(source, to: list, backend: WanderBackend(userPlaceRepository: repository))
         XCTAssertTrue(result.createdWantSave)
         XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
+        XCTAssertEqual(repository.savedDrafts.map(\.isPrivateListCompanion), [true])
         let save = try XCTUnwrap(store.currentUserVisiblePlaces.first { VisiblePlaceGrouping.matches($0, source) })
         XCTAssertEqual(save.userPlace.visibility, .selfOnly)
         XCTAssertEqual(save.userPlace.syncState, .failed)
@@ -12531,6 +12598,7 @@ final class WanderStoreTests: XCTestCase {
             _ = await target.add(to: publicList, store: store,
                 backend: WanderBackend(userPlaceRepository: repository), keepNewCompanionPrivate: true)
             XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
+        XCTAssertEqual(repository.savedDrafts.map(\.isPrivateListCompanion), [true])
             let own = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.place.canonicalName == target.placeName })
             XCTAssertEqual(own.userPlace.visibility, .selfOnly)
         }
@@ -13168,13 +13236,12 @@ private final class FakeVisitRepository: VisitRepository {
         isPhotoMetadataSuspended = false
     }
 
-    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {
         photoEvents.append("upload")
         uploads.append(Upload(bucket: bucket, path: path, data: data, contentType: contentType))
         if let error {
             throw error
         }
-        return URL(string: "https://example.supabase.co/storage/v1/object/public/\(bucket)/\(path)?v=test")!
     }
 
     func deletePhoto(photoID: String, bucket: String, path: String) async throws {

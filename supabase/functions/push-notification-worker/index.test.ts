@@ -1,5 +1,6 @@
 import {
   classifyAPNsFailure,
+  processEvent,
   notificationDeliveryAnalyticsEvent,
   notificationFrequencyAnalyticsEvents,
   PushEvent,
@@ -251,4 +252,39 @@ Deno.test("frequency analytics exposes summary and complete aggregate histogram 
       "Frequency analytics must not contain recipient identifiers",
     );
   }
+});
+
+Deno.test("revoked sources and stale claims never reach APNs or settlement", async () => {
+  const event: PushEvent = {
+    event_id: "10000000-0000-0000-0000-000000000001",
+    claim_token: "20000000-0000-0000-0000-000000000001",
+    recipient_user_id: "fixture", notification_type: "shared_visit",
+    title: "Cached private title", body: "Cached private body", data: {},
+    tokens: [{ id: "token", device_token: "a".repeat(64), environment: "sandbox", app_bundle_id: "com.grayline.wander" }],
+  };
+  // This test has no network/environment permissions. Either side effect fails it.
+  for (const result of [null, { ...event, claim_token: "stale" }, { ...event, event_id: "other" }]) {
+    const processed = await processEvent(event,
+      { keyId: "fixture", teamId: "fixture", privateKeyPEM: "unused" }, "jwt",
+      async () => result);
+    assertEquals(processed.status, "skipped");
+    assertEquals(processed.reason, "source_unavailable_or_stale_claim");
+  }
+});
+
+Deno.test("delivery uses the reauthorized envelope instead of the earlier private claim", async () => {
+  const claimed: PushEvent = {
+    event_id: "10000000-0000-0000-0000-000000000001",
+    claim_token: "20000000-0000-0000-0000-000000000001",
+    recipient_user_id: "fixture", notification_type: "shared_visit",
+    title: "Old private title", body: "Old private body", data: { note: "private" }, tokens: [],
+  };
+  const fresh = { ...claimed, title: "New activity on Astir", body: "Open Astir to view.", data: {} };
+  let deliveries = 0;
+  await processEvent(claimed, null, null, async () => fresh, async (event) => {
+    deliveries += 1;
+    assertEquals(event, fresh);
+    return { event_id: event.event_id, status: "sent" };
+  });
+  assertEquals(deliveries, 1);
 });

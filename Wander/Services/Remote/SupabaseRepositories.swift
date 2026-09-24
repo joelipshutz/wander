@@ -1106,16 +1106,7 @@ struct SupabaseVisitRepository: VisitRepository {
                 URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
             ]
         )
-        var results: [VisitPhotoResult] = []
-        for row in rows {
-            let remoteURL = try await storage.signedObjectURL(
-                bucket: row.storageBucket,
-                path: row.storagePath,
-                expiresIn: 3600
-            )
-            results.append(row.result(remoteURLString: remoteURL.absoluteString))
-        }
-        return results
+        return rows.map { $0.result(remoteURLString: nil) }
     }
 
     func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult] {
@@ -1129,26 +1120,7 @@ struct SupabaseVisitRepository: VisitRepository {
                 URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
             ]
         )
-        var results: [VisitPhotoResult] = []
-        results.reserveCapacity(rows.count)
-        for row in rows {
-            do {
-                let remoteURL = try await storage.signedObjectURL(
-                    bucket: row.storageBucket,
-                    path: row.storagePath,
-                    expiresIn: 3600
-                )
-                results.append(row.result(remoteURLString: remoteURL.absoluteString))
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                // One missing object must not suppress the visit's other
-                // uploaded photos. The store preserves a cached URL when a
-                // fresh signature is temporarily unavailable.
-                results.append(row.result(remoteURLString: nil))
-            }
-        }
-        return results
+        return rows.map { $0.result(remoteURLString: nil) }
     }
 
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
@@ -1164,9 +1136,8 @@ struct SupabaseVisitRepository: VisitRepository {
         return row.result()
     }
 
-    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {
         try await storage.uploadObject(bucket: bucket, path: path, data: data, contentType: contentType, upsert: true)
-        return try await storage.signedObjectURL(bucket: bucket, path: path, expiresIn: 3600)
     }
 
     func deletePhoto(photoID: String, bucket: String, path: String) async throws {
@@ -2868,6 +2839,17 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         try await imageData(for: photo, variant: .fullscreen)
     }
 
+    func validateAccess(to photo: PlacePhoto) async throws {
+        guard photo.requiresAccessCheck else { return }
+        guard let rpc, let bucket = photo.storageBucket, let path = photo.storagePath else {
+            throw WanderRemoteError.notConfigured
+        }
+        let allowed: Bool = try await rpc.call("can_read_visit_photo", params: [
+            "input_bucket": bucket, "input_path": path
+        ])
+        guard allowed else { throw WanderRemoteError.invalidResponse("photo_not_visible") }
+    }
+
     func imageData(for photo: PlacePhoto, variant: PlacePhotoRenderVariant) async throws -> Data {
         if let storageBucket = photo.storageBucket,
            let storagePath = photo.storagePath,
@@ -2886,7 +2868,7 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
             }
         }
 
-        guard let photoURL = photo.photoURL else {
+        guard !photo.requiresAccessCheck, let photoURL = photo.photoURL else {
             throw WanderRemoteError.invalidResponse("Place photo has no readable source")
         }
 
@@ -4258,6 +4240,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let categoryOverrideConfidence: Double?
     let nearbyConfirmed: Bool
     let plannedDate: String?
+    let isPrivateListCompanion: Bool
     let sourceType: String
 
     init(draft: UserPlaceDraft, id: String? = nil) {
@@ -4274,6 +4257,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         self.nearbyConfirmed = draft.nearbyConfirmed
         self.plannedDate = draft.plannedDate.map { WannaGoDate.storageString(from: $0) }
         self.sourceType = draft.sourceType
+        self.isPrivateListCompanion = draft.isPrivateListCompanion
     }
 
     enum CodingKeys: String, CodingKey {
@@ -4290,6 +4274,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         case nearbyConfirmed = "nearby_confirmed"
         case plannedDate = "planned_date"
         case sourceType = "source_type"
+        case isPrivateListCompanion = "is_private_list_companion"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -4307,6 +4292,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         try container.encode(nearbyConfirmed, forKey: .nearbyConfirmed)
         try container.encode(plannedDate, forKey: .plannedDate)
         try container.encode(sourceType, forKey: .sourceType)
+        if isPrivateListCompanion { try container.encode(true, forKey: .isPrivateListCompanion) }
     }
 }
 

@@ -5,11 +5,28 @@ Start A with a public profile and the legacy Everyone default. Enable the settin
 that automatically saves places added to lists to Wanna. Use places neither
 account has saved unless a case explicitly asks for an existing save.
 
-The complete privacy rollout is not ready for acceptance. The branch adds the
-ratings display and stealth-list companion protection; follow requests, account
-and activity exclusions, media/share revocation, and notification enforcement
-still need implementation. Live rating assertions additionally require the
-reviewed ratings RPC to be installed and its SQL regression suite to pass.
+The complete privacy rollout is not ready for acceptance. Ratings, automatic
+private companions, cached activity/photo access checks, and source-aware server
+rules are implemented on the branch. Hosted migration/worker verification and
+two-account device acceptance are required before calling the gaps closed.
+Follow requests and account/activity exclusion controls remain separate unfinished
+parts of REC-590; use the existing audience/private/block controls for these tests.
+
+Deployment order: publish the generic-preview website reader, apply the reviewed
+`activity_source_privacy_and_ratings` and `generic_share_previews` migrations,
+deploy `push-notification-worker`, run the standard hosted smoke gate, then test
+the matching iOS branch. The source/privacy SQL regression runs inside a rollback.
+Do not describe an unapplied migration or an unexecuted smoke test as a pass.
+
+The storage cutover also requires a CDN purge through the Storage API and checks
+against previously issued public and signed URLs. A SQL bucket update alone does
+not prove edge-cache invalidation. Purge `share-card-previews` after making it
+private; invalidate legacy visit-photo URLs and verify old URLs cannot fetch bytes
+before accepting photo revocation. An unexpired signed token can repopulate a cache,
+so a purge alone is insufficient for those tokens. Keep this rollout gate open
+until legacy URLs have been retired or their expiry plus cache invalidation is
+verified. See [Supabase's CDN behavior](https://supabase.com/docs/guides/storage/cdn/smart-cdn)
+and [purge API](https://supabase.com/docs/guides/storage/cdn/purge-cdn-cache).
 
 ## Automatic Wannas
 
@@ -36,8 +53,11 @@ reviewed ratings RPC to be installed and its SQL regression suite to pass.
 
 A failed save must not be presented as successfully synced. Verify activity
 links as B in addition to checking whether a row happens to be absent from Feed.
-Older public Wannas linked to stealth lists are not automatically rewritten:
-membership alone cannot identify whether the original audience was intentional.
+Automatically hide historical Wannas only when the server has authoritative
+companion provenance and no later explicit audience override. Ambiguous historical
+saves stay unchanged. In a rollback fixture, verify one proven companion is
+repaired, an ambiguous public save is untouched, and a later deliberate audience
+choice is preserved.
 
 ## Ratings
 
@@ -65,19 +85,50 @@ Per-activity Hide this time and Always hide from cases wait for those controls
 and their server enforcement. The empty-ratings simulator regression uses the
 explicit demo fixture and does not prove the live aggregate RPC works.
 
-## Remaining revocation acceptance
+## Cached activity and photos
 
-After source authorization and delivery enforcement are implemented, repeat the
-same denial through activity detail, profile, Feed, map, search, list previews,
-shared visits, comments, photo URLs, share previews, notification inbox, queued
-pushes, and notification taps. A visible canonical place or an independently
-authored save must never grant access to another person's denied activity.
+1. As B, open A's check-in, comments, and photos while connected. Reopen the same
+   activity and the place-profile history while offline. Previously cached content
+   should remain available; an uncached photo should not be fabricated.
+2. Reconnect B. As A, make that source self-only, delete it, or block B. On B,
+   reopen the activity and place profile and return from the background. The
+   denied header, note, rating, comments, and photos must disappear.
+3. After B has observed that denial, go offline again, reopen, and restart the
+   app. The old photo/activity must not return. Check a second account on the same
+   device cannot inherit B's cache.
+4. Simulate an expired session or server error. Show unavailable/retry rather than
+   using the offline exception. Repeat with a slow request completing after an
+   account change or denial.
+5. Create an owner photo offline, then reconnect. Interrupt the final metadata
+   write after the bytes upload and retry. It must finish without uploading the
+   bytes again or relying on a signed URL.
 
-Verify a cached photo and open activity after a privacy change, after foreground
-refresh, after account switching, and after a late request completes. The offline
-behavior for other people's activity remains a product choice; the owner's own
-saves and offline capture stay available. Public previews of protected activity
-must use generic artwork and text. Previously exported copies cannot be recalled.
+## Shared visits, notifications, and links
+
+1. Invite B to A's shared visit, then hide/delete the source before B accepts.
+   Its inbox snapshot, notification, and deep link must no longer reveal it.
+2. Accept a shared visit with a copied source photo. Add B's own note, rating, and
+   separate photo. Revoke B's source access. The copied photo disappears while
+   B's independent content remains. Retrying the old acceptance operation must
+   not return the revoked photo path.
+3. Queue a social notification, revoke source access, then claim it. Repeat by
+   revoking after claim but before delivery. Neither should send. A stale claim
+   token must not send or settle another claim. Authorized social push copy is
+   generic; tapping still checks access in Astir.
+4. Share a protected activity or stealth list in Messages and open its web link
+   signed out. Show generic Astir artwork/text and the exact Open in Astir action.
+   Inspect Open Graph metadata too: no source note, title, photo, or contributor.
+   An old public artwork URL must stop downloading after the bucket cutover and
+   CDN invalidation; test the existing URL, not only a newly generated one.
+5. Recheck list membership after collaborator removal/blocking even when B still
+   owns an independent save of the same canonical place. Canonical-place access
+   does not grant access to A's denied activity.
+
+Previously downloaded exports and browser-cached copies cannot be recalled by
+the client. Token expiry alone does not prove old signed URLs are inaccessible:
+CDN copies can outlive it. Legacy URL retirement is part of the rollout gate above.
+New visit-photo signing must be denied while authenticated downloads and owner
+upload/retry/delete continue to work.
 
 Small-sample inference from Astir's anonymous score/count is deferred to
 [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).

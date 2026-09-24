@@ -354,22 +354,12 @@ struct RemoteFeedMediaDTO: Codable, Equatable, Sendable {
 
     @MainActor
     func preview(storage: (any RemoteStorageCalling)?) async -> FeedMediaPreview {
-        var resolvedURLString = urlString
-        if resolvedURLString == nil,
-           let storage,
-           let storageBucket,
-           let storagePath {
-            if let signedURL = try? await storage.signedObjectURL(
-                bucket: storageBucket,
-                path: storagePath,
-                expiresIn: 3_600
-            ) {
-                resolvedURLString = signedURL.absoluteString
-            }
-        }
-        return FeedMediaPreview(
+        // Carry the protected object identity, never a bearer URL.
+        FeedMediaPreview(
             id: id,
-            urlString: resolvedURLString,
+            urlString: storageBucket == nil ? urlString : nil,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
             accessibilityLabel: accessibilityLabel
         )
     }

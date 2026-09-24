@@ -132,10 +132,22 @@ export async function handleRequest(req: Request): Promise<Response> {
   });
 }
 
-async function processEvent(
+export async function processEvent(
   event: PushEvent,
   config: APNsConfig | null,
   jwt: string | null,
+  authorize: (event: PushEvent) => Promise<PushEvent | null> = authorizeDelivery,
+  deliver: typeof deliverAuthorizedEvent = deliverAuthorizedEvent,
+): Promise<ProcessedEvent> {
+  const current = await authorize(event);
+  if (!current || current.event_id !== event.event_id || current.claim_token !== event.claim_token) {
+    return { event_id: event.event_id, status: "skipped", reason: "source_unavailable_or_stale_claim" };
+  }
+  return await deliver(current, config, jwt);
+}
+
+async function deliverAuthorizedEvent(
+  event: PushEvent, config: APNsConfig | null, jwt: string | null,
 ): Promise<ProcessedEvent> {
   const results = config && jwt
     ? await Promise.all(
@@ -182,6 +194,13 @@ async function processEvent(
       .filter(Boolean)
       .join("; ") || undefined,
   };
+}
+
+function authorizeDelivery(event: PushEvent): Promise<PushEvent | null> {
+  return serviceRpc("authorize_push_notification_delivery", {
+    input_event_id: event.event_id,
+    input_claim_token: event.claim_token,
+  });
 }
 
 export function notificationDeliveryAnalyticsEvent(

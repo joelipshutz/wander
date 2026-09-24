@@ -305,6 +305,13 @@ final class WanderStore: ObservableObject {
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
+    @Published private var activityAccessGenerations: [String: Int] = [:]
+    private struct HistoryAccessKey: Hashable {
+        let viewerID: String
+        let ownerID: String
+    }
+    private var historyAccessRequests: [HistoryAccessKey: UUID] = [:]
+    private var historyAuthorizedPlaces: [HistoryAccessKey: [VisiblePlace]] = [:]
     @Published private(set) var activityEngagementByID: [String: ActivityEngagementSummary] = [:]
     @Published private(set) var activityCommentsByID: [String: [ActivityComment]] = [:]
     @Published private(set) var placeActivityEngagementMatches: [PlaceActivityEngagementMatch] = []
@@ -851,6 +858,11 @@ final class WanderStore: ObservableObject {
             return true
         } catch {
             guard currentUser.id == requestUserID else { return false }
+            guard !Task.isCancelled else { return false }
+            if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                sharedVisitInvitations = []
+                persist()
+            }
             lastRemoteError = remoteErrorMessage(error)
             return false
         }
@@ -889,6 +901,11 @@ final class WanderStore: ObservableObject {
         } catch {
             guard currentUser.id == requestUserID else { return nil }
             lastRemoteError = remoteErrorMessage(error)
+            guard ProtectedContentCachePolicy.permitsOfflineRead(after: error) else {
+                sharedVisitInvitations.removeAll { $0.participantID == participantID }
+                persist()
+                return nil
+            }
             return sharedVisitInvitations.first {
                 $0.participantID == participantID && $0.invitationGeneration == generation
             }
@@ -954,6 +971,10 @@ final class WanderStore: ObservableObject {
             lastRemoteError = nil
         } catch {
             guard currentUser.id == requestUserID else { return }
+            guard !Task.isCancelled else { return }
+            if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                for visitID in remoteIDs { sharedVisitCompanionsByVisitID[visitID] = [] }
+            }
             lastRemoteError = remoteErrorMessage(error)
         }
     }
@@ -1140,7 +1161,7 @@ final class WanderStore: ObservableObject {
                     && $0.syncState != .serverDenied
                     && $0.syncState != .tombstoned
                     && (
-                        ($0.uploadState == .uploaded && $0.remoteURLString?.isEmpty == false)
+                        ($0.uploadState == .uploaded && $0.storagePath?.isEmpty == false)
                             || $0.localAssetRef?.isEmpty == false
                     )
                     && currentUserVisit(matching: $0.visitID) != nil
@@ -1151,7 +1172,7 @@ final class WanderStore: ObservableObject {
                 guard currentUser.id == uploadUserID, !Task.isCancelled else { break }
                 attemptedPhotoIDs.insert(photo.id)
                 let isAlreadyUploaded = photo.uploadState == .uploaded
-                    && photo.remoteURLString?.isEmpty == false
+                    && photo.storagePath?.isEmpty == false
                 let data = isAlreadyUploaded
                     ? nil
                     : VisitPhotoLocalFileStore.data(from: photo.localAssetRef)
@@ -1278,6 +1299,8 @@ final class WanderStore: ObservableObject {
             pendingActivityCommentLikeIDs = []
             activityCommentLikeRevisions = [:]
             activityCommentsGeneration = UUID()
+            historyAccessRequests.removeAll()
+            historyAuthorizedPlaces.removeAll()
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -1570,6 +1593,8 @@ final class WanderStore: ObservableObject {
         pendingActivityCommentLikeIDs = []
         activityCommentLikeRevisions = [:]
         activityCommentsGeneration = UUID()
+        historyAccessRequests.removeAll()
+        historyAuthorizedPlaces.removeAll()
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1859,6 +1884,7 @@ final class WanderStore: ObservableObject {
     @MainActor
     func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
         let requestUserID = currentUser.id
+        let accessGeneration = activityAccessGenerations[activityID, default: 0]
         let existing = followedFeedPage?.activity.first(where: {
             $0.id == activityID && canDisplayActivity($0)
         })
@@ -1876,7 +1902,8 @@ final class WanderStore: ObservableObject {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.activity(id: activityID)
             }
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  accessGeneration == activityAccessGenerations[activityID, default: 0] else { return nil }
             guard activity.id == activityID, canDisplayActivity(activity),
                   activity.activityEngagementContext != nil else {
                 discardCachedActivity(activityID)
@@ -1898,9 +1925,14 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = nil
             return activity
         } catch {
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
-            // Never turn an authorization failure into a successful cached
-            // read. Transient failures can be retried through the same route.
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  accessGeneration == activityAccessGenerations[activityID, default: 0] else { return nil }
+            if ProtectedContentCachePolicy.permitsOfflineRead(after: error),
+               let existing, canDisplayActivity(existing),
+               followedFeedPage?.activity.contains(where: { $0.id == activityID }) == true {
+                activityEngagementErrorByID[activityID] = nil
+                return existing
+            }
             discardCachedActivity(activityID)
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return nil
@@ -1913,6 +1945,11 @@ final class WanderStore: ObservableObject {
     func activity(checkIn target: ActivityCheckInTarget, backend: WanderBackend?) async -> FeedActivity? {
         let requestUserID = currentUser.id
         let errorID = target.visitID
+        func matchesTarget(_ match: PlaceActivityEngagementMatch) -> Bool {
+            match.userPlaceID.caseInsensitiveCompare(target.userPlaceID) == .orderedSame
+                && match.visitID?.caseInsensitiveCompare(target.visitID) == .orderedSame
+                && [.placeBeen, .placeSaved].contains(match.kind)
+        }
         guard let repository = backend?.activityEngagementRepository else {
             activityEngagementErrorByID[errorID] = "This activity is no longer available."
             return nil
@@ -1923,14 +1960,15 @@ final class WanderStore: ObservableObject {
                 return try await repository.placeActivitySummaries(userPlaceIDs: [target.userPlaceID])
             }
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
-            guard let match = matches.first(where: {
-                $0.userPlaceID.caseInsensitiveCompare(target.userPlaceID) == .orderedSame
-                    && $0.visitID?.caseInsensitiveCompare(target.visitID) == .orderedSame
-                    && [.placeBeen, .placeSaved].contains($0.kind)
-            }) else {
+            guard let match = matches.first(where: matchesTarget) else {
+                for cached in placeActivityEngagementMatches.filter(matchesTarget) {
+                    discardCachedActivity(cached.activityID)
+                }
                 activityEngagementErrorByID[errorID] = "This activity is no longer available."
                 return nil
             }
+            placeActivityEngagementMatches.removeAll(where: matchesTarget)
+            placeActivityEngagementMatches.append(match)
             let resolved = await activity(id: match.activityID, backend: backend)
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             activityEngagementErrorByID[errorID] = resolved == nil
@@ -1938,6 +1976,13 @@ final class WanderStore: ObservableObject {
             return resolved
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            if ProtectedContentCachePolicy.permitsOfflineRead(after: error),
+               let cached = placeActivityEngagementMatches.first(where: matchesTarget) {
+                return await activity(id: cached.activityID, backend: backend)
+            }
+            for cached in placeActivityEngagementMatches.filter(matchesTarget) {
+                discardCachedActivity(cached.activityID)
+            }
             activityEngagementErrorByID[errorID] = remoteErrorMessage(error)
             return nil
         }
@@ -1958,6 +2003,10 @@ final class WanderStore: ObservableObject {
             nextCursor: page.nextCursor,
             fetchedAt: page.fetchedAt
         )
+    }
+
+    func activityAccessGeneration(for activityID: String) -> Int {
+        activityAccessGenerations[activityID, default: 0]
     }
 
     private func discardCachedActivity(_ activityID: String) {
@@ -1982,6 +2031,7 @@ final class WanderStore: ObservableObject {
             )
         }
         for discardedID in discardedIDs {
+            activityAccessGenerations[discardedID, default: 0] += 1
             activityEngagementByID[discardedID] = nil
             activityCommentsByID[discardedID] = nil
             activityEngagementErrorByID[discardedID] = nil
@@ -2255,6 +2305,7 @@ final class WanderStore: ObservableObject {
     func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
         let requestUserID = currentUser.id
         let generation = activityCommentsGeneration
+        let accessGeneration = activityAccessGeneration(for: activityID)
         let likeRevisions = activityCommentLikeRevisions
         let pendingLikesAtRead = pendingActivityCommentLikeIDs
         guard UUID(uuidString: activityID) != nil,
@@ -2267,7 +2318,8 @@ final class WanderStore: ObservableObject {
                 return try await repository.comments(activityID: activityID, before: nil, limit: 50)
             }
             guard !Task.isCancelled, currentUser.id == requestUserID,
-                  generation == activityCommentsGeneration else { return false }
+                  generation == activityCommentsGeneration,
+                  accessGeneration == activityAccessGeneration(for: activityID) else { return false }
             let pendingDeletedComments = page.comments.filter {
                 pendingActivityCommentDeletionIDs.contains($0.id)
             }
@@ -2305,7 +2357,11 @@ final class WanderStore: ObservableObject {
             return true
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID,
-                  generation == activityCommentsGeneration else { return false }
+                  generation == activityCommentsGeneration,
+                  accessGeneration == activityAccessGeneration(for: activityID) else { return false }
+            if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                discardCachedActivity(activityID)
+            }
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
         }
@@ -3066,7 +3122,7 @@ final class WanderStore: ObservableObject {
                         confidence: place.confidence ?? 1
                     ),
                     status: .wannaGo, visibility: .selfOnly, note: nil,
-                    sourceType: .manual, backend: backend
+                    sourceType: .manual, isPrivateListCompanion: true, backend: backend
                 )
             } else {
                 result = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
@@ -3272,6 +3328,7 @@ final class WanderStore: ObservableObject {
             visibility: list.visibility == .stealth || keepNewCompanionPrivate ? .selfOnly : effectiveDefaultVisibility,
             note: nil,
             sourceType: .manual,
+            isPrivateListCompanion: list.visibility == .stealth || keepNewCompanionPrivate,
             backend: backend
         )
 
@@ -5308,6 +5365,7 @@ final class WanderStore: ObservableObject {
             $0.serverID == copy.destinationPhotoID || $0.localID == copy.destinationPhotoID
         }) {
             existing.visitID = visitID
+            existing.sourcePhotoID = copy.sourcePhotoID
             existing.localAssetRef = localAssetRef
             existing.storageBucket = copy.destinationBucket
             existing.storagePath = copy.destinationPath
@@ -5327,6 +5385,7 @@ final class WanderStore: ObservableObject {
                     localID: "local_photo_shared_\(copy.destinationPhotoID)",
                     serverID: copy.destinationPhotoID,
                     visitID: visitID,
+                    sourcePhotoID: copy.sourcePhotoID,
                     storageBucket: copy.destinationBucket,
                     storagePath: copy.destinationPath,
                     localAssetRef: localAssetRef,
@@ -6725,7 +6784,8 @@ final class WanderStore: ObservableObject {
         visitedAt: Date = .now,
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
-        requestsProductUpsell: Bool = true
+        requestsProductUpsell: Bool = true,
+        isPrivateListCompanion: Bool = false
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
         if status == .wannaGo,
@@ -6841,6 +6901,7 @@ final class WanderStore: ObservableObject {
             sourceType: sourceType.rawValue,
             syncState: .pendingCreate
         )
+        userPlace.isPrivateListCompanion = isPrivateListCompanion
         userPlaces.append(userPlace)
         let attributeDrafts = attributes ?? []
         if let attributes {
@@ -7199,7 +7260,13 @@ final class WanderStore: ObservableObject {
                     && !($0.isHistoricalOriginal == true && pendingHistoricalParents.contains($0.userPlaceID))
             })
             persist()
-        } catch { /* Preserve the durable local snapshot on read failure. */ }
+        } catch {
+            guard !Task.isCancelled, currentUser.id == viewerID else { return }
+            if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                placeWannaSaves.removeAll { requested.contains($0.userPlaceID) && $0.ownerID != viewerID }
+                persist()
+            }
+        }
     }
 
     /// Import is idempotent. A repeated import may enrich a Wanna with its
@@ -7343,6 +7410,7 @@ final class WanderStore: ObservableObject {
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         requestsProductUpsell: Bool = true,
+        isPrivateListCompanion: Bool = false,
         backend: WanderBackend?
     ) async -> SaveResult {
         #if DEBUG
@@ -7358,7 +7426,8 @@ final class WanderStore: ObservableObject {
             visitedAt: visitedAt,
             plannedDate: plannedDate,
             attributes: attributes,
-            requestsProductUpsell: requestsProductUpsell
+            requestsProductUpsell: requestsProductUpsell,
+            isPrivateListCompanion: isPrivateListCompanion
         )
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
@@ -7887,7 +7956,7 @@ final class WanderStore: ObservableObject {
         let contentType = photo.contentType ?? "image/jpeg"
         let storagePath = "\(currentUser.id)/\(remoteVisitID)/\(remotePhotoID).\(fileExtension(forContentType: contentType))"
         let alreadyUploaded = photo.uploadState == .uploaded
-            && photo.remoteURLString?.isEmpty == false
+            && photo.storagePath?.isEmpty == false
         markVisitPhoto(
             localOrServerID: photo.id,
             serverID: remotePhotoID,
@@ -7934,7 +8003,7 @@ final class WanderStore: ObservableObject {
             }
             _ = try await backend.upsertVisitPhotoMetadata(pendingDraft)
             markVisitPhoto(localOrServerID: photo.id, syncState: .pendingUpdate, uploadState: .uploading)
-            let remoteURL = try await backend.uploadVisitPhotoData(
+            try await backend.uploadVisitPhotoData(
                 bucket: pendingDraft.storageBucket,
                 path: pendingDraft.storagePath,
                 data: data,
@@ -7942,7 +8011,7 @@ final class WanderStore: ObservableObject {
             )
             markVisitPhoto(
                 localOrServerID: photo.id,
-                remoteURLString: remoteURL.absoluteString,
+                remoteURLString: nil,
                 syncState: .pendingUpdate,
                 uploadState: .uploaded
             )
@@ -7955,7 +8024,7 @@ final class WanderStore: ObservableObject {
             let message = remoteErrorMessage(error)
             let latestPhoto = currentUserPhoto(matching: photo.id)
             let uploadState: VisitPhotoUploadState = latestPhoto?.uploadState == .uploaded
-                && latestPhoto?.remoteURLString?.isEmpty == false
+                && latestPhoto?.storagePath?.isEmpty == false
                 ? .uploaded
                 : .failed
             markVisitPhoto(
@@ -8956,6 +9025,70 @@ final class WanderStore: ObservableObject {
         return firstRefreshError == nil
     }
 
+    /// Recheck the parent source before mounting cached foreign check-in history.
+    /// Owner drafts remain local; offline fallback is restricted to known cache.
+    func recheckCachedPlaceHistory(_ summaries: [PlaceSaveSummary], backend: WanderBackend?) async -> [PlaceSaveSummary] {
+        let viewerID = currentUser.id
+        let foreign = summaries.filter {
+            $0.visiblePlace.userPlace.userID != viewerID
+                && UUID(uuidString: $0.visiblePlace.userPlace.serverID ?? $0.id) != nil
+        }
+        guard let backend, backend.userPlaceRepository != nil else {
+            return summaries.filter { summary in !foreign.contains { $0.id == summary.id } }
+        }
+        var allowed: [String: VisiblePlace] = [:]
+        var requests: [HistoryAccessKey: UUID] = [:]
+        for ownerID in Set(foreign.map { $0.visiblePlace.userPlace.userID }).sorted() {
+            let accessKey = HistoryAccessKey(viewerID: viewerID, ownerID: ownerID)
+            let requestID = UUID()
+            historyAccessRequests[accessKey] = requestID
+            requests[accessKey] = requestID
+            do {
+                let places = try await backend.userPlaces(for: ownerID)
+                guard !Task.isCancelled, currentUser.id == viewerID,
+                      historyAccessRequests[accessKey] == requestID else { return [] }
+                historyAuthorizedPlaces[accessKey] = places
+                for place in places where canDisplayRemotePlace(place) {
+                    allowed[(place.userPlace.serverID ?? place.userPlace.id).lowercased()] = place
+                }
+                applyRemoteProfileVisiblePlaces(places, profileID: ownerID)
+            } catch {
+                guard !Task.isCancelled, currentUser.id == viewerID,
+                      historyAccessRequests[accessKey] == requestID else { return [] }
+                if ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                    // An earlier denial must not be undone by another surface's
+                    // older profile response arriving after this access check.
+                    let cached = historyAuthorizedPlaces[accessKey] ?? remoteVisiblePlaceCache
+                    for place in cached where place.userPlace.userID == ownerID && canDisplayRemotePlace(place) {
+                        allowed[(place.userPlace.serverID ?? place.userPlace.id).lowercased()] = place
+                    }
+                } else {
+                    historyAuthorizedPlaces[accessKey] = []
+                    applyRemoteProfileVisiblePlaces([], profileID: ownerID)
+                }
+            }
+        }
+        guard !Task.isCancelled, currentUser.id == viewerID,
+              requests.allSatisfy({ historyAccessRequests[$0.key] == $0.value }) else { return [] }
+        let denied = foreign.filter { allowed[($0.visiblePlace.userPlace.serverID ?? $0.id).lowercased()] == nil }
+        let deniedParentIDs = denied.reduce(into: Set<String>()) { $0.formUnion(matchingUserPlaceIDs($1.id)) }
+        let deniedVisitIDs = Set(placeVisits.filter { deniedParentIDs.contains($0.userPlaceID) }.flatMap { Self.referenceIDs(for: $0) })
+        placeVisits.removeAll { deniedParentIDs.contains($0.userPlaceID) }
+        visitPhotos.removeAll { deniedVisitIDs.contains($0.visitID) }
+        placeWannaSaves.removeAll { deniedParentIDs.contains($0.userPlaceID) && $0.ownerID != viewerID }
+        userPlaces.removeAll { deniedParentIDs.contains($0.id) && $0.userID != viewerID }
+        for activityID in followedFeedPage?.activity.filter({
+            $0.place.map { deniedParentIDs.contains($0.userPlace.id) } ?? false
+        }).map(\.id) ?? [] { discardCachedActivity(activityID) }
+        if !denied.isEmpty { persist() }
+        return summaries.compactMap { summary in
+            guard foreign.contains(where: { $0.id == summary.id }) else { return summary }
+            guard let place = allowed[(summary.visiblePlace.userPlace.serverID ?? summary.id).lowercased()] else { return nil }
+            return PlaceSaveSummary(visiblePlace: place, attributes: place.attributes,
+                                    viewerFollowsOwner: summary.viewerFollowsOwner)
+        }
+    }
+
     func refreshRemoteProfileVisiblePlaces(profileID: String, backend: WanderBackend?) async {
         guard let backend else {
             return
@@ -9375,7 +9508,8 @@ final class WanderStore: ObservableObject {
                             userPlaceID: userPlaceID,
                             visits: [],
                             errorMessage: self.remoteErrorMessage(error),
-                            wasCancelled: false
+                            wasCancelled: false,
+                            permitsCachedData: ProtectedContentCachePolicy.permitsOfflineRead(after: error)
                         )
                     }
                 }
@@ -9393,6 +9527,11 @@ final class WanderStore: ObservableObject {
                     refreshedUserPlaceIDs.insert(outcome.userPlaceID)
                     hydratedVisits.append(contentsOf: outcome.visits)
                 } else {
+                    if !outcome.permitsCachedData,
+                       !self.userPlaces.contains(where: { $0.userID == requestUserID && Self.referenceIDs(for: $0).contains(outcome.userPlaceID) }),
+                       !self.remoteVisiblePlaceCache.contains(where: { $0.userPlace.userID == requestUserID && Self.referenceIDs(for: $0.userPlace).contains(outcome.userPlaceID) }) {
+                        refreshedUserPlaceIDs.insert(outcome.userPlaceID)
+                    }
                     firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
                 }
             }
@@ -9425,7 +9564,8 @@ final class WanderStore: ObservableObject {
                             visitID: visitID,
                             photos: [],
                             errorMessage: self.remoteErrorMessage(error),
-                            wasCancelled: false
+                            wasCancelled: false,
+                            permitsCachedData: ProtectedContentCachePolicy.permitsOfflineRead(after: error)
                         )
                     }
                 }
@@ -9443,6 +9583,7 @@ final class WanderStore: ObservableObject {
                     refreshedPhotoVisitIDs.insert(outcome.visitID)
                     hydratedPhotos.append(contentsOf: outcome.photos)
                 } else {
+                    if !outcome.permitsCachedData { refreshedPhotoVisitIDs.insert(outcome.visitID) }
                     firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
                 }
             }
@@ -9525,7 +9666,7 @@ final class WanderStore: ObservableObject {
                         visitID: result.visitID,
                         storageBucket: result.storageBucket,
                         storagePath: result.storagePath,
-                        remoteURLString: result.remoteURLString,
+                        remoteURLString: result.storageBucket == "visit-photos" ? nil : result.remoteURLString,
                         contentType: result.contentType,
                         byteSize: result.byteSize,
                         width: result.width,
@@ -9554,6 +9695,7 @@ final class WanderStore: ObservableObject {
         let visits: [PlaceVisitResult]
         let errorMessage: String?
         let wasCancelled: Bool
+        var permitsCachedData = false
     }
 
     private struct RemotePhotoFetchOutcome: Sendable {
@@ -9561,6 +9703,7 @@ final class WanderStore: ObservableObject {
         let photos: [VisitPhotoResult]
         let errorMessage: String?
         let wasCancelled: Bool
+        var permitsCachedData = false
     }
 
     private func applyRemotePhotoResult(_ result: VisitPhotoResult, to photo: LocalVisitPhoto) {
@@ -9569,9 +9712,7 @@ final class WanderStore: ObservableObject {
         photo.visitID = result.visitID
         photo.storageBucket = result.storageBucket
         photo.storagePath = result.storagePath
-        if let remoteURLString = result.remoteURLString {
-            photo.remoteURLString = remoteURLString
-        }
+        photo.remoteURLString = result.storageBucket == "visit-photos" ? nil : result.remoteURLString
         photo.contentType = result.contentType
         photo.byteSize = result.byteSize
         photo.width = result.width
@@ -10157,6 +10298,7 @@ final class WanderStore: ObservableObject {
             nearbyConfirmed: userPlace.nearbyConfirmed,
             plannedDate: userPlace.plannedDate,
             sourceType: userPlace.sourceType,
+            isPrivateListCompanion: userPlace.isPrivateListCompanion && userPlace.serverID == nil,
             attributes: attributeDrafts
         )
     }
@@ -11300,6 +11442,23 @@ final class WanderStore: ObservableObject {
     }
 
     private func applyRemoteProfileVisiblePlaces(_ visiblePlaces: [VisiblePlace], profileID: String) {
+        if profileID != currentUser.id {
+            let key = HistoryAccessKey(viewerID: currentUser.id, ownerID: profileID)
+            let incomingIDs = Set(visiblePlaces.map { ($0.userPlace.serverID ?? $0.userPlace.id).lowercased() })
+            let previous = historyAuthorizedPlaces[key] ?? remoteVisiblePlaceCache.filter { $0.owner.id == profileID }
+            if previous.contains(where: { !incomingIDs.contains(($0.userPlace.serverID ?? $0.userPlace.id).lowercased()) }) {
+                // An authoritative profile refresh can revoke history too. Reject
+                // any older history read that was already in flight.
+                historyAccessRequests[key] = UUID()
+            }
+            if let checked = historyAuthorizedPlaces[key] {
+                historyAuthorizedPlaces[key] = checked.filter {
+                    incomingIDs.contains(($0.userPlace.serverID ?? $0.userPlace.id).lowercased())
+                }
+            } else {
+                historyAuthorizedPlaces[key] = visiblePlaces
+            }
+        }
         remoteVisiblePlaceCache.removeAll { $0.owner.id == profileID }
         remoteVisiblePlaceCache.append(contentsOf: visiblePlaces)
         hydrateRemoteVisiblePlaceMetadata(visiblePlaces)

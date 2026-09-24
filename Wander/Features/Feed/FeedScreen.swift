@@ -1882,6 +1882,8 @@ private extension FeedMediaPreview {
         ActivityEngagementMedia(
             id: id,
             urlString: urlString,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
             accessibilityLabel: accessibilityLabel
         )
     }

@@ -1,19 +1,13 @@
 # Open Questions
 
-Last updated: 2026-09-22
+Last updated: 2026-09-23
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
 
 ## Activity privacy rollout (REC-590)
 
-Offline access to other people's cached activity needs a product decision.
-Requiring a fresh access check when opening it prevents reopening content after
-an unseen revocation, but means showing a connection prompt while offline.
-The owner's own saves and offline capture remain available in either case.
-
-Historical stealth-list companion saves need a cleanup rule. A nonprivate save
-linked to a stealth list may have been deliberately public before the list add;
-membership alone is insufficient evidence for a bulk audience rewrite.
+Offline cache behavior and evidence-only companion cleanup were decided on
+September 23; see `docs/decisions.md`. These are no longer pending product choices.
 
 Small-sample and before/after inference from Astir rating is explicitly deferred
 to [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).
