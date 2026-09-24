@@ -97,9 +97,11 @@ stacking another dialog. Blocked requests are reconciled from the current flag
 after the competing UI clears; disabling a campaign leaves no obsolete queued
 prompt. On each main-app visit, remote presentation waits for that account’s feature-flag refresh to finish so a cached campaign cannot outrun a newly fetched off value. Automatic reminders do not wait for remote campaign loading. Remote impressions use a separate campaign counter and do not consume
 or depend on the three automatic return reminders or the onboarding allowance.
-Automatic reminders now appear on subsequent main-app opens, normally opens
-2, 3, and 4, replacing the save/follow triggers. Initial use is skipped; blocked
-opens defer the opportunity without consuming a reminder. Both cold launches
+Automatic reminders appear on the first three eligible main-app visits,
+including an existing user’s first visit after updating, replacing the save/follow
+triggers. Completing the onboarding prompt satisfies that visit, so a second
+prompt does not stack immediately afterward. Blocked opens defer the opportunity
+without consuming a reminder. Both cold launches
 and returns from the background count, while permission-alert interruptions do
 not. The sequence starts on first use of the supporting build and persists per
 account/device. A primer already shown in the current open prevents another
