@@ -104,6 +104,12 @@ async function main() {
           : "hosted schema";
         console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
+        await client.query("savepoint ranked_people_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/ranked_people_recommendations.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint ranked_people_smoke");
+        await client.query("release savepoint ranked_people_smoke");
+        console.log("ok - shared people ranking combines contact, location, curated and social signals");
         await client.query("savepoint contact_discovery_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback"));
@@ -122,6 +128,12 @@ async function main() {
         await client.query("rollback to savepoint comment_likes_smoke");
         await client.query("release savepoint comment_likes_smoke");
         console.log("ok - comment likes preserve identity, visibility, idempotency, and deletion contracts");
+        await client.query("savepoint follow_inbox_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/follow_notification_inbox.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint follow_inbox_smoke");
+        await client.query("release savepoint follow_inbox_smoke");
+        console.log("ok - follow inbox survives disabled push and enforces recipient and actor privacy");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -139,6 +151,16 @@ async function main() {
         await client.query(readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8"));
         await client.query("rollback to savepoint events_interest_smoke");
         await client.query("release savepoint events_interest_smoke");
+        await client.query("savepoint account_details_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/account_contact_details.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint account_details_smoke");
+        await client.query("release savepoint account_details_smoke");
+        await client.query("savepoint events_home_gate_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/events_home_metro_gate.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint events_home_gate_smoke");
+        await client.query("release savepoint events_home_gate_smoke");
         console.log("ok - Events interest persists once per authenticated account and keeps its roster private");
         await client.query("savepoint profile_feedback_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
@@ -239,6 +261,20 @@ async function main() {
           new URL("../supabase/tests/feed_activity_only.sql", import.meta.url),
         ), "rollback"));
         console.log("ok - activity-only Feed privacy, pagination, and legacy compatibility");
+      } finally {
+        await client.query("rollback");
+      }
+    }
+    if (!options.migrationTest) {
+      await client.query("begin");
+      try {
+        for (const migrationPreview of migrationPreviews) {
+          await client.query(loadMigrationPreview(migrationPreview));
+        }
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/feed_audience.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - Feed audience ownership, mutual follows, privacy, and pagination");
       } finally {
         await client.query("rollback");
       }
@@ -1308,6 +1344,8 @@ function runLinkedSmokeChecks(
   );
   // Each isolated suite needs the preview because the preceding suite rolls it back.
   const discoverPreviewSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(discoverSmokeSQL, "rollback")}\nrollback;`;
+  const rankedPeopleSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
+    new URL("../supabase/tests/ranked_people_recommendations.sql", import.meta.url)), "rollback")}\nrollback;`;
   const contactDiscoverySmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
   const launchProfileSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
@@ -1331,6 +1369,10 @@ function runLinkedSmokeChecks(
     ),
     "rollback",
   )}\nrollback;`;
+  const feedAudienceSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(new URL("../supabase/tests/feed_audience.sql", import.meta.url)),
+    "rollback",
+  )}\nrollback;`;
   const questionSnapshotSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
     loadStrictPgTapSQL(
       new URL("../supabase/tests/question_snapshot_privacy.sql", import.meta.url),
@@ -1346,7 +1388,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
@@ -2657,6 +2699,10 @@ savepoint comment_likes_smoke;
 ${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/activity_comment_likes.sql", import.meta.url)), "rollback")}
 rollback to savepoint comment_likes_smoke;
 release savepoint comment_likes_smoke;
+savepoint follow_inbox_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/follow_notification_inbox.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint follow_inbox_smoke;
+release savepoint follow_inbox_smoke;
 savepoint repeat_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;
@@ -2684,6 +2730,14 @@ savepoint events_interest_smoke;
 ${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
 rollback to savepoint events_interest_smoke;
 release savepoint events_interest_smoke;
+savepoint account_details_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/account_contact_details.sql", import.meta.url)), "rollback")}
+rollback to savepoint account_details_smoke;
+release savepoint account_details_smoke;
+savepoint events_home_gate_smoke;
+${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/events_home_metro_gate.sql", import.meta.url)), "rollback")}
+rollback to savepoint events_home_gate_smoke;
+release savepoint events_home_gate_smoke;
 savepoint profile_feedback_smoke;
 ${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/profile_feedback.sql", import.meta.url)), "rollback")}
 rollback to savepoint profile_feedback_smoke;

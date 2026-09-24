@@ -314,6 +314,7 @@ protocol AuthSessionProviding: AnyObject {
     func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws
     func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome
     func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome
+    func sendPasswordVerificationCode() async throws
     func resetPendingEmailVerification()
     func signOut() async throws
     func deleteAccount() async throws
@@ -336,6 +337,10 @@ extension AuthSessionProviding {
 
     func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome {
         throw AuthSessionError.notConfigured
+    }
+
+    func sendPasswordVerificationCode() async throws {
+        throw AuthSessionError.emailVerificationUnavailable
     }
 
     func resetPendingEmailVerification() {}

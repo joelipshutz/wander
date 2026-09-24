@@ -67,6 +67,52 @@ final class ClipStoreTests: XCTestCase {
         XCTAssertEqual(store.success, "Saved to your Wanna map")
     }
 
+    func testDeviceTrustCodeMustCompleteBeforePendingSave() async {
+        let auth = ClipTestAuth(); let service = ClipTestService()
+        let store = ClipStore(auth: auth, service: service)
+        store.open(url); await settle { !store.isLoading }
+        store.perform(.save(service.place))
+        store.signIn(email: "fixture@example.invalid", password: "synthetic-password")
+        await settle { !store.isWorking }
+        XCTAssertTrue(store.emailSent)
+        XCTAssertTrue(store.showAuth)
+        XCTAssertFalse(store.signedIn)
+        XCTAssertEqual(auth.deviceCodesSent, 1)
+        XCTAssertEqual(service.saves, 0)
+        store.verifyEmail("wrong")
+        await settle { !store.isWorking }
+        XCTAssertNotNil(store.error)
+        XCTAssertTrue(store.showAuth)
+        XCTAssertEqual(service.saves, 0)
+        store.verifyEmail("123456")
+        await settle { !store.isWorking }
+        XCTAssertTrue(store.signedIn)
+        XCTAssertFalse(store.showAuth)
+        XCTAssertEqual(service.saves, 0)
+        store.resumeAfterAuth()
+        await settle { !store.isWorking }
+        XCTAssertEqual(service.saves, 1)
+    }
+
+    func testCancelDeviceTrustClearsChallengeAndPendingJoin() async {
+        let auth = ClipTestAuth(); let service = ClipTestService()
+        let store = ClipStore(auth: auth, service: service)
+        store.open(URL(string: "https://astirmovement.com/invites/" + String(repeating: "a", count: 48))!)
+        await settle { !store.isLoading }
+        store.perform(.join)
+        store.signIn(email: "fixture@example.invalid", password: "synthetic-password")
+        await settle { !store.isWorking }
+        XCTAssertTrue(store.emailSent)
+        store.cancelAuth()
+        XCTAssertFalse(auth.deviceChallengePending)
+        XCTAssertFalse(store.emailSent)
+        store.verifyEmail("123456")
+        await settle { !store.isWorking }
+        store.resumeAfterAuth()
+        XCTAssertFalse(store.signedIn)
+        XCTAssertEqual(service.joins, 0)
+    }
+
     func testCancelDoesNotSave() async {
         let auth = ClipTestAuth(); let service = ClipTestService()
         let store = ClipStore(auth: auth, service: service)
@@ -215,6 +261,24 @@ final class ClipTestAuth: AuthSessionProviding {
     func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeSocialAuthResult {
         state = .signedIn(Self.account); return NativeSocialAuthResult(outcome: .completed)
     }
+    var deviceChallengePending = false
+    var deviceCodesSent = 0
+    func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome {
+        deviceChallengePending = true
+        return .requiresAdditionalVerification
+    }
+    func sendPasswordVerificationCode() async throws {
+        guard deviceChallengePending else { throw AuthSessionError.emailVerificationUnavailable }
+        deviceCodesSent += 1
+    }
+    func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome {
+        guard deviceChallengePending else { throw AuthSessionError.emailVerificationUnavailable }
+        guard code == "123456" else { throw AuthSessionError.invalidVerificationCode }
+        deviceChallengePending = false
+        state = .signedIn(Self.account)
+        return .completed
+    }
+    func resetPendingEmailVerification() { deviceChallengePending = false }
     func signOut() async throws { state = .signedOut }
     var onToken: (() -> Void)?
     func supabaseAccessToken() async throws -> String { onToken?(); return "synthetic-test-token" }

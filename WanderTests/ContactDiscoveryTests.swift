@@ -50,6 +50,34 @@ private actor DiscoveryContacts: ContactProvider {
     }
 }
 
+@MainActor private final class RankedDiscoveryRepository: ProfileRepository, FollowRepository {
+    var receivedContactIDs: [String] = []
+    var contactIDRequests: [[String]] = []
+    var receivedLimit: Int?
+    var ranked: [DiscoverPeopleRecommendation] = []
+    var general: [DiscoverPeopleRecommendation] = []
+    var rankedAction: (() async throws -> [DiscoverPeopleRecommendation])?
+    var generalReads = 0
+    var followWrites = 0
+    func currentProfile() async throws -> LocalProfile? { nil }
+    func profile(id: String) async throws -> ProfileViewState { throw ContactDiscoveryError.unavailable }
+    func searchProfiles(handleQuery: String) async throws -> [ProfileShell] { [] }
+    func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        receivedContactIDs = contactIDs; receivedLimit = limit
+        contactIDRequests.append(contactIDs)
+        if let rankedAction { return try await rankedAction() }
+        return ranked
+    }
+    func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        generalReads += 1; return general
+    }
+    func follow(userID: String) async throws { followWrites += 1 }
+    func unfollow(userID: String) async throws { followWrites += 1 }
+    func followers(userID: String) async throws -> [ProfileShell] { [] }
+    func following(userID: String) async throws -> [ProfileShell] { [] }
+    func relationship(to userID: String) async throws -> ViewerRelationship { .nonFollower }
+}
+
 @MainActor final class ContactDiscoveryTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suite: String!
@@ -235,5 +263,96 @@ private actor DiscoveryContacts: ContactProvider {
         XCTAssertEqual(result.map(\.id), ["friend", "general"])
         XCTAssertEqual(result.map(\.reason), [.contacts, .followsYou]); XCTAssertEqual(result.map(\.rank), [1, 2])
         XCTAssertEqual(PeopleRecommendationMerge.combine(contacts: [], general: result, limit: 1).count, 1)
+    }
+
+    func testBackendPreservesCombinedRankingAndPassesOnlyPermittedContactIDs() async throws {
+        let contacts = DiscoveryRepository(); contacts.results = [person("friend")]
+        let service = ContactDiscoveryService(repository: contacts, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let profiles = RankedDiscoveryRepository()
+        profiles.ranked = [.init(profile: person("curated"), reason: .suggested, rank: 1),
+            .init(profile: person("friend"), reason: .contacts, rank: 2),
+            .init(profile: person("local"), reason: .nearby, rank: 3)]
+        let backend = WanderBackend(profileRepository: profiles, contactDiscovery: service, followRepository: profiles)
+        let result = try await backend.peopleRecommendations(userID: "viewer", limit: 12)
+        XCTAssertEqual(result, profiles.ranked)
+        XCTAssertEqual(profiles.receivedContactIDs, ["friend"])
+        XCTAssertEqual(profiles.receivedLimit, 12)
+        XCTAssertEqual(profiles.generalReads, 0)
+        XCTAssertEqual(profiles.followWrites, 0)
+    }
+
+    func testBackendRankingFailureFallsBackToContactsAndGeneralWithoutFollowing() async throws {
+        let contacts = DiscoveryRepository(); contacts.results = [person("friend")]
+        let service = ContactDiscoveryService(repository: contacts, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let profiles = RankedDiscoveryRepository()
+        profiles.rankedAction = { throw ContactDiscoveryError.unavailable }
+        profiles.general = [.init(profile: person("general"), reason: .followsYou, rank: 1),
+            .init(profile: person("friend"), reason: .suggested, rank: 2)]
+        let backend = WanderBackend(profileRepository: profiles, contactDiscovery: service, followRepository: profiles)
+        let result = try await backend.peopleRecommendations(userID: "viewer")
+        XCTAssertEqual(result.map(\.id), ["friend", "general"])
+        XCTAssertEqual(result.map(\.reason), [.contacts, .followsYou])
+        XCTAssertEqual(profiles.generalReads, 1)
+        XCTAssertEqual(profiles.followWrites, 0)
+    }
+
+    func testBackendRevocationDuringRankingReplacesContactInfluencedOrder() async throws {
+        let contacts = DiscoveryRepository(); contacts.results = [person("friend")]
+        let provider = DiscoveryContacts()
+        let service = ContactDiscoveryService(repository: contacts, provider: provider, defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let profiles = RankedDiscoveryRepository()
+        let independent: [DiscoverPeopleRecommendation] = [
+            .init(profile: person("local"), reason: .nearby, rank: 1),
+            .init(profile: person("social"), reason: .suggested, rank: 2)]
+        let started = expectation(description: "ranking suspended")
+        var continuation: CheckedContinuation<[DiscoverPeopleRecommendation], Never>?
+        profiles.rankedAction = {
+            if profiles.receivedContactIDs.isEmpty { return independent }
+            return await withCheckedContinuation { continuation = $0; started.fulfill() }
+        }
+        let backend = WanderBackend(profileRepository: profiles, contactDiscovery: service, followRepository: profiles)
+        let task = Task { try await backend.peopleRecommendations(userID: "viewer") }
+        await fulfillment(of: [started], timeout: 3)
+        await provider.setStatus(.denied)
+        continuation?.resume(returning: [.init(profile: person("friend"), reason: .contacts, rank: 1),
+            .init(profile: person("social"), reason: .contactFollows(3), rank: 2),
+            .init(profile: person("local"), reason: .nearby, rank: 3)])
+        let result = try await task.value
+        XCTAssertEqual(result, independent)
+        XCTAssertEqual(profiles.contactIDRequests, [["friend"], []])
+        XCTAssertEqual(profiles.generalReads, 0)
+        XCTAssertEqual(profiles.followWrites, 0)
+    }
+
+    func testDisablingContactsDuringRankingFallsBackSafelyIfRerankingFails() async throws {
+        let contacts = DiscoveryRepository(); contacts.results = [person("friend")]
+        let service = ContactDiscoveryService(repository: contacts, provider: DiscoveryContacts(), defaults: defaults, activeUserID: { "viewer" })
+        try await service.enable(userID: "viewer")
+        let profiles = RankedDiscoveryRepository()
+        profiles.general = [.init(profile: person("general"), reason: .suggested, rank: 1)]
+        profiles.rankedAction = {
+            if profiles.receivedContactIDs.isEmpty { throw ContactDiscoveryError.unavailable }
+            try await service.disable(userID: "viewer")
+            return [.init(profile: self.person("social"), reason: .contactFollows(3), rank: 1)]
+        }
+        let result = try await WanderBackend(profileRepository: profiles, contactDiscovery: service).peopleRecommendations(userID: "viewer")
+        XCTAssertEqual(result, profiles.general)
+        XCTAssertEqual(profiles.contactIDRequests, [["friend"], []])
+        XCTAssertEqual(profiles.generalReads, 1)
+    }
+
+    func testNoContactConsentRanksWithoutContactIDsOrReadingAddressBook() async throws {
+        let provider = DiscoveryContacts()
+        let service = ContactDiscoveryService(repository: DiscoveryRepository(), provider: provider, defaults: defaults, activeUserID: { "viewer" })
+        let profiles = RankedDiscoveryRepository()
+        profiles.ranked = [.init(profile: person("social"), reason: .sharedFollows(2), rank: 1)]
+        let result = try await WanderBackend(profileRepository: profiles, contactDiscovery: service).peopleRecommendations(userID: "viewer")
+        XCTAssertEqual(result, profiles.ranked)
+        XCTAssertEqual(profiles.contactIDRequests, [[]])
+        let reads = await provider.readCount()
+        XCTAssertEqual(reads, 0)
     }
 }

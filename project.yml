@@ -10,13 +10,16 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: Y7TVK75RZ8
     MARKETING_VERSION: "1.0.02"
-    CURRENT_PROJECT_VERSION: "179"
+    CURRENT_PROJECT_VERSION: "180"
     WANDER_CLERK_FRONTEND_API: clerk.getrec.me
     WANDER_META_APP_ID: "1056841943950470"
     WANDER_SNAPCHAT_CLIENT_ID: 9ff6b79b-97ce-435c-bf7a-5176638246a0
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
     WANDER_TIKTOK_CLIENT_KEY: sbawa5efdmmcvrudh7
 packages:
+  PhoneNumberKit:
+    url: https://github.com/PhoneNumberKit/PhoneNumberKit
+    exactVersion: 5.0.8
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git
     from: 3.59.3
@@ -45,6 +48,56 @@ schemes:
         - AstirClipUITests
     archive:
       config: Release
+  City and Phone Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderHomeCityLiveSearch: true
+        "-WanderOnboardingUITestStep location": true
+        -WanderAccountContactDetailsUITest: true
+  Events LA Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderHomeCityLiveSearch: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        "-WanderHomeMetroUITest los-angeles": true
+        "-WanderInitialTab events": true
+  Events Outside LA Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderHomeCityLiveSearch: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        "-WanderHomeMetroUITest orange-county": true
+        "-WanderInitialTab discover": true
+  Events Unknown Home Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderHomeCityLiveSearch: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        "-WanderHomeMetroUITest unknown": true
+        "-WanderInitialTab discover": true
   ShareCardMock:
     build:
       targets:
@@ -294,6 +347,8 @@ targets:
       - target: AstirClip
         embed: true
         link: false
+      - package: PhoneNumberKit
+        product: PhoneNumberKit
       - target: WanderWidgets
         embed: true
         link: false

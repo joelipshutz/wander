@@ -153,9 +153,16 @@ final class ClipStore: ObservableObject {
 
     func signIn(email: String, password: String) {
         work {
-            guard try await self.auth.authenticateWithPassword(emailAddress: email, password: password) == .completed else { throw ClipError.verification }
+            let outcome = try await self.auth.authenticateWithPassword(
+                emailAddress: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
             try Task.checkCancellation()
-            self.authenticated()
+            if outcome == .completed {
+                self.authenticated()
+            } else {
+                try await self.auth.sendPasswordVerificationCode()
+                try Task.checkCancellation()
+                self.emailSent = true
+            }
         }
     }
 

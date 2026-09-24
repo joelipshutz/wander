@@ -18,9 +18,10 @@ shows up to 20 list places and 100 profile places, with the cap stated on screen
 
 Save and Join stay inside the Clip. Apple, Google, email-code and password paths
 reuse `ClerkAuthService`; a first-time account supplies name and handle without
-marking full-app onboarding complete. Additional verification/MFA is currently
-reported as a sign-in limitation; verify the enabled provider/account policies
-before release. Private profiles cannot join collaborative lists under the existing
+marking full-app onboarding complete. New-device password sign-in continues the
+same Clerk Device Trust attempt with its advertised email code. Unsupported
+verification methods fail closed; verify the enabled provider/account policies
+on a signed device before release. Private profiles cannot join collaborative lists under the existing
 server contract. The Clip explains that condition and does not change privacy.
 
 `save_app_clip_place` writes a new Wanna using the current caller's default
@@ -64,9 +65,31 @@ of deferred-link or account migration through a generic TestFlight invitation.
 
 ## Validation and rollout
 
+For local signed testing, open this branch's `Wander.xcodeproj`, select the
+`AstirClip` scheme and a connected, unlocked development iPhone. In Edit Scheme
+→ Run → Arguments, add an enabled `_XCAppClipURL` environment variable containing
+a fresh Astir share URL. Disable `-AstirClipDemo` for live-service checks. Running
+from Xcode opens the destination directly; it does not show a Messages footer.
+The new Save RPC must be deployed before testing a successful live Save.
+
+For the native launch card, use Settings → Developer → Local Experiences on the
+test phone, with `com.grayline.wander.Clip` and the invocation URL. Confirm whether
+the full app is already installed before changing device state; preserve its data.
+Local card testing and production Messages verification are separate checks.
+See [Apple's local testing procedure](https://developer.apple.com/documentation/appclip/testing-the-launch-experience-of-your-app-clip).
+
 1. Run `xcodegen generate`, then the `AstirClip` unit/UI scheme and the parent
    `Wander` suite. UI demos use `-AstirClipDemo` and optional
    `-AstirClipDemoInvite`; fixtures are Debug-only and use synthetic data.
+   After integrating `origin/main` at `94b402240`, all 27 Clip unit/contract tests,
+   both Clip Save/Join UI tests and all 2,552 parent unit tests passed on the
+   available iOS 26.5 simulator on 2026-09-23. Four home-city test fixtures now supply the phone
+   number required by the current onboarding contract. All five previously failing parent
+   invitation/conversation/follow UI cases also passed a focused rerun without
+   changing those UI flows before the main integration. Two later full-suite runs
+   were interrupted, the second after disk exhaustion. They exposed additional
+   check-in UI/keyboard failures and do not count as full-suite passes. Complete
+   the broader UI gate on a host with sufficient free disk before merge.
 2. Run the migration preview inside the existing rollback-only hosted smoke:
    `node scripts/supabase-smoke-test.mjs --linked --migration-preview supabase/migrations/20260923013423_app_clip_save.sql`.
    The smoke includes `supabase/tests/app_clip_save.sql`. Do not apply the migration
@@ -74,15 +97,34 @@ of deferred-link or account migration through a generic TestFlight invitation.
    identity, repeat-save behavior, deleted restoration, exact legacy place IDs,
    private visibility and anonymous denial. The focused hosted migration preview,
    share-card privacy suite and 28 web-link/invitation checks passed on 2026-09-22.
+   The complete rollback-only hosted smoke also passed on 2026-09-23 after
+   adopting the Events home-area fixture correction already on `origin/main`.
    A subsequent read confirmed the preview RPC and reserved fixture profiles did
-   not remain. The complete hosted smoke is not green: its unchanged Events
-   interest fixture lacks the Los Angeles home-area record now required by the
-   hosted `register_events_launch_interest` contract. Resolve that fixture/schema
-   drift before treating the full backend gate as passed.
-3. Register the Clip identifier, associated domains, Sign in with Apple grouping,
-   and dedicated App Group for both signed targets. Verify the correct Clerk
-   native application registration and callback behavior. Preserve the existing
-   parent identity and its authentication configuration.
+   not remain. The draft Clip RPC is not deployed for live Save operations.
+3. Apple identifier registration, associated domains, parent Sign in with Apple
+   association and dedicated App Group membership for both targets were verified
+   in the live dashboards on 2026-09-23. Both provisioning profiles were regenerated
+   and verified in the signed builds. Clerk production identity and the existing parent native
+   registration and Clip registration/callback are verified. Production Clerk has
+   Device Trust enabled; the Clip retains the exact password attempt, sends its
+   advertised email second-factor code and verifies it before adopting the created
+   session. Both current and legacy Device Trust statuses are covered. Wrong codes
+   remain retryable; cancellation discards the challenge and pending Save/Join.
+   The 27 Clip unit/contract tests pass. Xcode account setup and the signed
+   development Clip and parent Release builds now pass. Signature and entitlement
+   inspection confirms both profiles, matching versions/builds, the parent/Clip
+   association, App Group, Apple sign-in and all three domains.
+   Signed-device authentication remains required; do not disable Device Trust to
+   accommodate a failing client.
+
+   Live-auth simulator checks require a signed simulator build. An unsigned
+   `CODE_SIGNING_ALLOWED=NO` launch fails in Clerk configuration with Keychain
+   OSStatus `-34018` (missing entitlement), before any provider login. Synthetic
+   auth tests do not exercise this Keychain requirement. Keep this distinction
+   explicit when interpreting the full UI suite. The focused normal-launch and
+   login-entry UI test passed with `CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+   GENERATE_INFOPLIST_FILE=YES`. The last override supplies plists for the existing
+   parent test bundles. This validates startup, not a completed provider login.
 4. Test real native sign-in, profile creation, an existing Been/Wanna save, new
    save, revoked/blocked invitation, repeated acceptance and account change.
    Install the full app over the signed Clip and prove the same account and exact
@@ -90,7 +132,11 @@ of deferred-link or account migration through a generic TestFlight invitation.
 5. Verify explicit analytics against a controlled test account. Clip replay and
    automatic capture are disabled; no content, tokens or URLs are event fields.
    See `analytics.md`. Measure the signed, thinned release Clip size; an unsigned
-   build-directory size is only an early signal.
+   build-directory size is only an early signal. The signed local Release Clip
+   currently contains 15,973,956 unthinned bytes. Both signed targets resolve
+   Clerk and Supabase configuration, but their analytics token is absent. Populate
+   the approved Astir-specific ignored configuration before analytics validation
+   or upload; the local build is not a release candidate.
 6. Configure the default App Clip experience with the approved 1800×1200 header,
    subtitle and action. Upload/release only through the normal approved release
    workflow. Validate TestFlight invocation and then the published experience.
