@@ -541,3 +541,12 @@ Private aliases resolve old activity links and cached engagement requests throug
 the surviving event's normal visibility checks. The schema migration does not
 automatically rewrite user history; each repair requires independently verified
 scope and data preconditions.
+
+Client save/delete queues retain the exact local parent record through payload
+creation and acknowledgement. A server ID can be shared by a deleted local row
+and its replacement, so it is not a unique local queue identity. Re-saving a
+deleted place receives a fresh local ID; legacy duplicate IDs remain supported
+without treating a failed save as pending deletion. All local aliases included
+in a completed remote deletion must acknowledge it. Persisted relaunch tests
+cover failed retries, duplicate identities, and the absence of repeated work
+after successful acknowledgement.
