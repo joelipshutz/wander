@@ -526,3 +526,18 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+## 2026-09-23 — Historical visit Feed identity (REC-614)
+
+Restoring a saved Been place reuses its existing activity. If the historical
+parent has no event, its first event uses the persisted visit/save date. A first
+active Wanna-to-Been transition still represents new activity; explicit check-ins
+retain their existing per-visit event identities.
+
+Legacy duplicate cleanup is private maintenance scoped to one parent, an exact
+original visit date, and an expected event count. Keep the original event and
+merge engagement into it while preserving comment IDs and like timestamps.
+Private aliases resolve old activity links and cached engagement requests through
+the surviving event's normal visibility checks. The schema migration does not
+automatically rewrite user history; each repair requires independently verified
+scope and data preconditions.
