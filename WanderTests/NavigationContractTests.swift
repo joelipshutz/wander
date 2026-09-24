@@ -282,9 +282,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(feed.contains("ToolbarItem(placement: .topBarTrailing)"))
         XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
-        XCTAssertTrue(feed.contains("placeholders: tickerSuggestions"))
+        XCTAssertTrue(feed.contains("placeholders: [\"Search places and people\"]"))
         XCTAssertTrue(feed.contains("setSearchPresented(true)"))
-        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search trusted places\")"))
+        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search places and people\")"))
         XCTAssertTrue(feed.contains(".accessibilityIdentifier(\"feed.searchLauncher\")"))
         XCTAssertFalse(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
         XCTAssertFalse(feed.contains(".sheet(isPresented: $isShowingSearch)"))
@@ -347,22 +347,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(searchExit.contains("searchFieldFocused = false"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
-        XCTAssertTrue(feed.contains("enum FeedSurface"))
-        XCTAssertTrue(feed.contains("private struct FeedSurfaceTabs"))
-        XCTAssertTrue(feed.contains("case .people:"))
-        XCTAssertTrue(feed.contains("FeedPeopleSurface("))
-        XCTAssertTrue(feed.contains("memberQuery: $peopleQuery"))
-        XCTAssertTrue(feed.contains("dismissSearchFocus: { peopleSearchFieldFocused = false }"))
-        let surfaceChange = try sourceSection(
-            feed,
-            after: ".onChange(of: selectedSurface)",
-            before: ".onChange(of: walkthroughs.currentStep?.target"
-        )
-        XCTAssertTrue(surfaceChange.contains("if surface != .people"))
-        XCTAssertTrue(surfaceChange.contains("peopleQuery = \"\""))
+        XCTAssertFalse(feed.contains("private struct FeedSurfaceTabs"))
+        XCTAssertFalse(feed.contains("FeedPeopleSurface("))
+        XCTAssertTrue(feed.contains("FeedInviteSection()"))
         XCTAssertTrue(feed.contains("PeopleRecommendationShelf("))
-        XCTAssertTrue(feed.contains("store.discoverMembers(query: query, backend: backend)"))
-        XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
+        XCTAssertTrue(discover.contains("unifiedPeopleResults"))
+
     }
 
     func testActivityCommentsPhotoPreviewOpensSwipeableFullScreenViewer() throws {
@@ -513,8 +503,8 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(feed.contains("WanderGlassHeader("))
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
-        XCTAssertTrue(feed.contains("AstirEditorialSegmentedSwitch("))
-        XCTAssertTrue(feed.contains("-WanderFeedSurface"))
+        XCTAssertFalse(feed.contains("AstirEditorialSegmentedSwitch("))
+        XCTAssertFalse(feed.contains("-WanderFeedSurface"))
         XCTAssertTrue(feed.contains("ZStack(alignment: .top)"))
         let rootComposition = try sourceSection(
             feed,
@@ -534,20 +524,12 @@ final class NavigationContractTests: XCTestCase {
         let mastheadPosition = try XCTUnwrap(
             floatingHeader.range(of: "AstirMastheadLockup(presentation: .localizedBlur)")
         )
-        let searchPosition = try XCTUnwrap(floatingHeader.range(of: "switch selectedSurface"))
-        let controlsPosition = try XCTUnwrap(
-            floatingHeader.range(
-                of: "HStack(spacing: WanderTheme.spacing2) {",
-                range: searchPosition.upperBound..<floatingHeader.endIndex
-            )
-        )
-        XCTAssertLessThan(mastheadPosition.lowerBound, searchPosition.lowerBound)
-        XCTAssertLessThan(searchPosition.lowerBound, controlsPosition.lowerBound)
-        XCTAssertTrue(floatingHeader.contains("FeedSearchLauncher("))
-        XCTAssertTrue(floatingHeader.contains("FeedPeopleSearchField(text: $peopleQuery)"))
-        XCTAssertTrue(floatingHeader.contains("FeedSurfaceTabs(selectedSurface: $selectedSurface)"))
-        XCTAssertTrue(floatingHeader.contains("AstirIconActionButton("))
-        XCTAssertTrue(floatingHeader.contains(".focused($peopleSearchFieldFocused)"))
+        let bellPosition = try XCTUnwrap(floatingHeader.range(of: "NotificationBellButton("))
+        let searchPosition = try XCTUnwrap(floatingHeader.range(of: "FeedSearchLauncher("))
+        let addPosition = try XCTUnwrap(floatingHeader.range(of: "AstirIconActionButton("))
+        XCTAssertLessThan(mastheadPosition.lowerBound, bellPosition.lowerBound)
+        XCTAssertLessThan(bellPosition.lowerBound, searchPosition.lowerBound)
+        XCTAssertLessThan(searchPosition.lowerBound, addPosition.lowerBound)
         let placesSurface = try sourceSection(
             feed,
             after: "private var placesSurface: some View",
@@ -555,30 +537,12 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertFalse(placesSurface.contains("FeedSearchLauncher("))
         XCTAssertTrue(placesSurface.contains(".padding(.top, feedContentTopInset)"))
-        let peopleSurface = try sourceSection(
-            feed,
-            after: "private struct FeedPeopleSurface: View",
-            before: "private struct FeedPeopleSearchField: View"
-        )
-        XCTAssertTrue(peopleSurface.contains("@Binding var memberQuery: String"))
-        XCTAssertTrue(peopleSurface.contains("let contentTopInset: CGFloat"))
-        XCTAssertFalse(peopleSurface.contains("FeedPeopleSearchField("))
-        XCTAssertFalse(peopleSurface.contains("FeedPeopleValueNote("))
-        XCTAssertFalse(peopleSurface.contains("Follow people whose taste you trust"))
-        XCTAssertTrue(peopleSurface.contains(".padding(.top, contentTopInset)"))
         let feedSearch = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedSearchLauncher: View").last?
                 .components(separatedBy: "private struct FeedSectionHeading: View").first
         )
         XCTAssertTrue(feedSearch.contains(".astirOutlinedSurface(castsShadow: true, interactive: true)"))
         XCTAssertFalse(feedSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
-        let peopleSearch = try XCTUnwrap(
-            feed.components(separatedBy: "private struct FeedPeopleSearchField: View").last?
-                .components(separatedBy: "private struct FeedPeopleLoadingPanel: View").first
-        )
-        XCTAssertTrue(peopleSearch.contains(".astirOutlinedSurface(castsShadow: true, interactive: true)"))
-        XCTAssertFalse(peopleSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
-
         XCTAssertFalse(lists.contains("WanderGlassHeader("))
         XCTAssertTrue(lists.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertTrue(lists.contains("AstirFloatingHeaderSurface"))
@@ -973,7 +937,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
 
-        XCTAssertTrue(feed.contains(".task(id: auth.isSignedIn)"))
+        XCTAssertTrue(feed.contains(#".task(id: "\(auth.isSignedIn)-\(store.currentUser.id)-\(store.feedAudience.rawValue)")"#))
         XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
@@ -1573,8 +1537,8 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
-        XCTAssertTrue(feed.contains("placeholders: tickerSuggestions"))
-        XCTAssertTrue(feed.contains("AstirEditorialSegmentedSwitch("))
+        XCTAssertTrue(feed.contains("placeholders: [\"Search places and people\"]"))
+        XCTAssertFalse(feed.contains("AstirEditorialSegmentedSwitch("))
         XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 
         XCTAssertFalse(placeProfile.contains(".navigationTitle(\"\")"))
@@ -4507,7 +4471,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("Search visited instead"))
         XCTAssertTrue(source.contains(#"We checked \(successfulSearchSourceSummary)"#))
         XCTAssertTrue(source.contains("Search hit a snag"))
-        XCTAssertTrue(source.contains("Search places or vibes"))
+        XCTAssertTrue(source.contains("Search places and people"))
         XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
         XCTAssertTrue(feedSource.contains("onClose: closeDiscoverSearch"))
     }
@@ -5527,7 +5491,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains(".stroke(WanderTheme.categorySun.color"))
 
         XCTAssertEqual(
-            feed.components(separatedBy: "FeedSectionHeading(title: \"Recent\"").count - 1,
+            feed.components(separatedBy: "FeedSectionHeading(title: \"Activity\"").count - 1,
             4
         )
         XCTAssertEqual(
@@ -5554,10 +5518,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(resultsBack.contains("walkthroughs.perform(.feedSearchResultsBack)"))
         XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
         XCTAssertTrue(feed.contains("walkthroughs.consumeRequestedSurface(.feed)"))
-        XCTAssertTrue(feed.contains("selectedSurface = .people"))
         XCTAssertTrue(feed.contains("restoreFeedWalkthroughAfterDiscoverDismissal()"))
-        XCTAssertTrue(feed.contains("FeedSurface.walkthroughDestination("))
-        XCTAssertTrue(feed.contains("guard activeSurface == .feed else { return nil }"))
         XCTAssertTrue(resultsBack.contains("exitPlaceSearch()"))
         XCTAssertTrue(discover.contains("DiscoverWalkthroughTargetPolicy.searchBackTarget("))
         XCTAssertFalse(

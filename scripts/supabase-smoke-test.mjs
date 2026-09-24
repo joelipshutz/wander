@@ -128,6 +128,12 @@ async function main() {
         await client.query("rollback to savepoint comment_likes_smoke");
         await client.query("release savepoint comment_likes_smoke");
         console.log("ok - comment likes preserve identity, visibility, idempotency, and deletion contracts");
+        await client.query("savepoint follow_inbox_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/follow_notification_inbox.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint follow_inbox_smoke");
+        await client.query("release savepoint follow_inbox_smoke");
+        console.log("ok - follow inbox survives disabled push and enforces recipient and actor privacy");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -2686,6 +2692,10 @@ savepoint comment_likes_smoke;
 ${transactionBody(loadStrictPgTapSQL(new URL("../supabase/tests/activity_comment_likes.sql", import.meta.url)), "rollback")}
 rollback to savepoint comment_likes_smoke;
 release savepoint comment_likes_smoke;
+savepoint follow_inbox_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/follow_notification_inbox.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint follow_inbox_smoke;
+release savepoint follow_inbox_smoke;
 savepoint repeat_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;

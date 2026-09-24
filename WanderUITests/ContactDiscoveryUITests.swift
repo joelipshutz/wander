@@ -57,16 +57,13 @@ import XCTest
     private func launchFeed(_ extras: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
-            "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover",
-            "-WanderFeedSurface", "people"] + extras
+            "-WanderContactDiscoveryUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover"] + extras
         app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.ContactDiscovery.\(UUID().uuidString)"
         app.launch()
         completeNotificationPromptIfPresented(app)
         return app
     }
-    // A signed-in launch can show the first-visit notification primer before
-    // any follow. Finish it as a user would; waiting only for the underlying
-    // contact button to exist does not mean that button can receive touches.
+    // Finish the first-visit primer before touching the underlying Feed or tabs.
     private func completeNotificationPromptIfPresented(_ app: XCUIApplication) {
         let primary = app.buttons["productUpsell.primary"]
         guard primary.waitForExistence(timeout: 8) else { return }
@@ -84,17 +81,25 @@ import XCTest
         }
         XCTAssertTrue(primary.waitForNonExistence(timeout: 10))
     }
-
     private func openContactSettings(_ app: XCUIApplication) {
-        let link = app.buttons["feed.contactDiscovery"]
-        XCTAssertTrue(link.waitForExistence(timeout: 15))
-        let hittable = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: link)
-        wait(for: [hittable], timeout: 10)
-        link.tap()
+        app.tabBars.buttons["Profile"].tap()
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.tap()
+        let link = app.buttons["settings.contactDiscovery"]
+        // Settings uses a lazy List; scroll before requiring this lower row.
+        for _ in 0..<8 {
+            if link.exists && link.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        XCTAssertTrue(link.isHittable); link.tap()
     }
     private func backToFeed(_ app: XCUIApplication) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
+        let back = app.buttons["settings.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10)); back.tap()
+        app.tabBars.buttons["Feed"].tap()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
     }
     func testFollowingScreenEnableDisableAndExistingFollowSurvives() {
         let app = launchFeed()
@@ -103,7 +108,7 @@ import XCTest
         XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
         XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
         backToFeed(app)
-        let friend = app.scrollViews["feed.people.scroll"].buttons["people.recommendation.user_contact_friend.follow"]
+        let friend = app.scrollViews["feed.places.scroll"].buttons["people.recommendation.user_contact_friend.follow"]
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
         capture("Following screen contact suggestions")
@@ -115,8 +120,15 @@ import XCTest
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
         backToFeed(app)
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
-        XCTAssertTrue(app.staticTexts["Contact Friend"].firstMatch.waitForExistence(timeout: 5))
-        capture("Following screen after contact matching disabled")
+        app.buttons["feed.searchLauncher"].tap()
+        let search = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
+        search.typeText("Contact Friend")
+        let retainedFollow = app.buttons["discover.person.user_contact_friend.follow"]
+        XCTAssertTrue(retainedFollow.waitForExistence(timeout: 5))
+        XCTAssertEqual(retainedFollow.label, "Following Contact Friend")
+        XCTAssertFalse(retainedFollow.isEnabled)
+        capture("Combined search preserves follow after contact matching disabled")
     }
     func testFollowingScreenRechecksRevokedAccessOnForeground() {
         let app = launchFeed(["-WanderContactDiscoveryRevokeOnForeground"])
@@ -127,12 +139,9 @@ import XCTest
         backToFeed(app)
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
         app.activate()
-        // Denied notifications can show the return-open reminder independently
-        // of contact revocation. Finish it before inspecting the resumed feed.
         completeNotificationPromptIfPresented(app)
-        XCTAssertTrue(app.buttons["feed.contactDiscovery"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"].firstMatch)
         wait(for: [gone], timeout: 10)
         openContactSettings(app)

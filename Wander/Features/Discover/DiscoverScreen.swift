@@ -25,6 +25,8 @@ struct DiscoverScreen: View {
     @State private var activePlaceSearchSubmissionID: UUID?
     @State private var activeExternalSearchRequestID: UUID?
     @State private var didTrackPlaceSearchOpen = false
+    @StateObject private var peopleSearch = PeopleSearchModel()
+    @State private var peopleSearchRetry = 0
     @State private var memberQuery = ""
     @State private var placeResults = DiscoverResults(places: [], profiles: [])
     @State private var communityPlaceCandidates: [PlaceCandidate] = []
@@ -132,26 +134,19 @@ struct DiscoverScreen: View {
 
     private var ambiguousOwnerCandidates: [ProfileShell] {
         guard isPlacesSearchActive,
-              selectedOwnerCandidateID == nil,
-              let ownerQuery = store.lastDiscoverFilters.ownerQuery?
-                .lowercased()
-                .replacingOccurrences(of: "@", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !ownerQuery.isEmpty
+              selectedOwnerCandidateID == nil
         else {
             return []
         }
 
-        let candidates = friendProfiles.filter { profile in
-            profile.handle.lowercased() == ownerQuery
-                || profile.displayName.lowercased() == ownerQuery
-        }
+        let candidates = store.discoverOwnerCandidates(for: placeResults.filters)
         return candidates.count > 1 ? candidates : []
     }
 
     private var selectedOwnerCandidate: ProfileShell? {
         guard let selectedOwnerCandidateID else { return nil }
-        return friendProfiles.first { $0.id == selectedOwnerCandidateID }
+        return store.discoverOwnerCandidates(for: placeResults.filters)
+            .first { $0.id == selectedOwnerCandidateID }
     }
 
     private func resultExplanation(resultCount count: Int, selectedOwner: ProfileShell?) -> String {
@@ -364,6 +359,13 @@ struct DiscoverScreen: View {
                 }
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
+            }
+            .task(id: "\(store.currentUser.id)|\(auth.isSignedIn)|\(isPlaceSearchPresented)|\(placesQuery)|\(peopleSearchRetry)") {
+                await peopleSearch.search(
+                    query: isPlaceSearchPresented ? placesQuery : "",
+                    local: { store.searchProfiles(handleQuery: $0) },
+                    remote: { try await store.searchDiscoverMembers(query: $0, backend: backend) }
+                )
             }
             .task(id: memberQuery) {
                 await refreshMembers(query: memberQuery, debounce: true)
@@ -1017,9 +1019,9 @@ struct DiscoverScreen: View {
 
             DiscoverSearchField(
                 text: $placesQuery,
-                placeholders: ["Search places or vibes"],
+                placeholders: ["Search places and people"],
                 isTicker: false,
-                accessibilityLabel: "Search places or vibes",
+                accessibilityLabel: "Search places and people",
                 accessibilityIdentifier: "discover.placesSearchField",
                 onFocus: {},
                 onSubmit: submitPlaceSearch,
@@ -1058,6 +1060,7 @@ struct DiscoverScreen: View {
 
     @ViewBuilder
     private var activePlaceSearchContent: some View {
+        unifiedPeopleResults
         if isPlaceSearchLoading,
            rankedPlaceCandidates.isEmpty {
             DiscoverLoadingPanel(label: "Understanding your search")
@@ -1076,6 +1079,38 @@ struct DiscoverScreen: View {
             placeResultsSection
         } else {
             suggestedSearchesSection
+        }
+    }
+
+    @ViewBuilder
+    private var unifiedPeopleResults: some View {
+        let results = peopleSearch.profiles.map(latestProfileShell).filter {
+            $0.isPrivateProfile != true && !store.isProfilePrivate($0.id)
+                && !store.isBlockedBetweenCurrentUser(and: $0.id)
+        }
+        if !results.isEmpty || peopleSearch.isLoading || peopleSearch.failed {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                SectionTitle("People")
+                ForEach(results) { profile in
+                    DiscoverPersonSearchRow(
+                        profile: profile,
+                        isFollowing: store.hasAcknowledgedFollow(to: profile.id),
+                        isLoading: followInFlightProfileIDs.contains(profile.id),
+                        failed: followFailedProfileIDs.contains(profile.id),
+                        open: { selectedProfile = SelectedProfile(id: profile.id) },
+                        follow: {
+                            followRecommendation(DiscoverPeopleRecommendation(profile: profile, reason: .suggested, rank: 0))
+                        }
+                    )
+                }
+                if peopleSearch.isLoading { ProgressView("Finding people…").font(AstirTypography.caption) }
+                if peopleSearch.failed {
+                    HStack {
+                        Text("People search couldn't refresh.").font(AstirTypography.caption)
+                        Button("Retry") { peopleSearchRetry += 1 }
+                    }
+                }
+            }
         }
     }
 
@@ -1460,12 +1495,6 @@ struct DiscoverScreen: View {
             memberSearchResultsSection
         } else {
             peopleValueNote
-            NavigationLink {
-                ContactDiscoverySettingsScreen()
-            } label: {
-                Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
-                    .font(AstirTypography.control).frame(minHeight: 44)
-            }.accessibilityIdentifier("discover.contactDiscovery")
             peopleRecommendationsSection
         }
 

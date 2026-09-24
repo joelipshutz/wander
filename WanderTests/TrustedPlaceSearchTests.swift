@@ -607,6 +607,23 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertTrue(query.allowsConsumedOnlyMatches)
     }
 
+    func testPlannerConsumesOwnerSurfaceSpellingWithoutChangingOtherTokens() {
+        for text in ["Ryans favorite coffee", "James' favorite coffee", "Joe Lipshutz’s favorite coffee"] {
+            let filters = DeterministicFilterParser.filters(query: text, schema: DiscoverFilterSchema())
+            let query = TrustedPlaceSearchQuery(
+                text,
+                consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+            )
+            XCTAssertTrue(query.requiredTokens.isEmpty, text)
+            XCTAssertTrue(query.allowsConsumedOnlyMatches, text)
+        }
+
+        let text = "Ryans favorite coffee sunlit"
+        let filters = DeterministicFilterParser.filters(query: text, schema: DiscoverFilterSchema())
+        let query = TrustedPlaceSearchQuery(text, consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters))
+        XCTAssertEqual(query.requiredTokens, ["sunlit"])
+    }
+
     func testPlannerConsumesWorthCrossingTownForAsOneOpinionPhrase() {
         let filters = DeterministicFilterParser.filters(
             query: "coffee worth crossing town for",

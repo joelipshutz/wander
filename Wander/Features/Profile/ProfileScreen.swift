@@ -156,8 +156,9 @@ final class ProfilePresentationCache {
 
 struct ProfileScreen: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var planInbox = PlacePlanInvitationInbox()
-    @StateObject private var notificationBadge = NotificationBadgeStore()
+    @EnvironmentObject private var planInbox: PlacePlanInvitationInbox
+    @EnvironmentObject private var notificationBadge: NotificationBadgeStore
+    @EnvironmentObject private var followInbox: FollowNotificationInbox
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -372,15 +373,6 @@ struct ProfileScreen: View {
                     await store.refreshSharedVisitInbox(backend: backend)
                     handleNotificationRoute(pushNotifications.navigationRequest)
                 }
-                .task(id: auth.isSignedIn ? store.currentUser.id : nil) {
-                    guard auth.isSignedIn else { planInbox.reset(for: nil); return }
-                    await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository)
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active, auth.isSignedIn {
-                        Task { await planInbox.refresh(userID: store.currentUser.id, repository: backend.placePlanInvitationRepository) }
-                    }
-                }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
                     handleNotificationRoute(request)
                 }
@@ -425,7 +417,9 @@ struct ProfileScreen: View {
         return notificationBadge.count(for: NotificationBadgeSnapshot(
             userID: store.currentUser.id,
             plans: planInbox.userID == store.currentUser.id ? planInbox.invitations : [],
-            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : []
+            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : [],
+            follows: followInbox.userID == store.currentUser.id
+                ? followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) } : []
         ))
     }
 

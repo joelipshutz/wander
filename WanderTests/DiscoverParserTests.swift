@@ -182,6 +182,33 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(filters.statuses, [.been])
     }
 
+    func testPossessiveNamesPreserveFullNamesAndDoNotImplyAnArea() async throws {
+        for (query, owner) in [
+            ("Joe's favorite coffee", "joe"),
+            ("Joe’s favorite coffee", "joe"),
+            ("what's Joe's favorite coffee", "joe"),
+            ("List Joe’s favorite coffee", "joe"),
+            ("Tell me about Joe’s favorite coffee", "joe"),
+            ("show me Joe Lipshutz's favorite coffee", "joe lipshutz"),
+            ("José Núñez’s favorite coffee", "jose nunez"),
+            ("James' favorite coffee", "james"),
+            ("James's favorite coffee", "james"),
+            ("Clara's favorite coffee", "clara")
+        ] {
+            let filters = try await DeterministicFilterParser().parse(query: query, schema: DiscoverFilterSchema())
+            XCTAssertEqual(filters.ownerQuery, owner, query)
+            XCTAssertNil(filters.area, query)
+        }
+    }
+
+    func testOwnerMatchingUsesCompleteNameComponentsAndExactHandles() {
+        XCTAssertTrue(DiscoverOwnerQueryPolicy.matches("joe", handle: "joelipshutz", displayName: "Joe Lipshutz", query: "Joe's coffee"))
+        XCTAssertTrue(DiscoverOwnerQueryPolicy.matches("jose nunez", handle: "josen", displayName: "José Núñez", query: "José Núñez’s coffee"))
+        XCTAssertFalse(DiscoverOwnerQueryPolicy.matches("joe", handle: "joelipshutz", displayName: "Joe Lipshutz", query: "@joe coffee"))
+        XCTAssertFalse(DiscoverOwnerQueryPolicy.matches("ry", handle: "ryan", displayName: "Ryan Smith", query: "Ry's coffee"))
+        XCTAssertFalse(DiscoverOwnerQueryPolicy.matches("joe", handle: "joey", displayName: "Joey Smith", query: "Joe's coffee"))
+    }
+
     func testSchemaV2ClientDecodesPreviousEdgeResponse() throws {
         let data = Data(
             #"""
