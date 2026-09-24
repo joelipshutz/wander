@@ -16,15 +16,15 @@ export function signupDetails(user: any, job: SignupJob) {
   if (typeof user.created_at !== "number" || !Number.isFinite(user.created_at)
     || Math.abs(user.created_at - Date.parse(job.signed_up_at)) > 5 * 60_000
     || !Number.isFinite(Date.parse(job.signed_up_at))) throw new Error("creation_mismatch");
-  const name = [bounded(user.first_name, 100), bounded(user.last_name, 100)].filter(Boolean).join(" ")
-    || bounded(job.display_name, 200) || bounded(user.username, 200) || "Someone";
+  const name = bounded(job.display_name, 200)
+    || [bounded(user.first_name, 100), bounded(user.last_name, 100)].filter(Boolean).join(" ");
   const email = user.email_addresses?.find((item: any) => item.id === user.primary_email_address_id
     && item.verification?.status === "verified")?.email_address;
   return { name, email: bounded(email, 320) || "Not provided" };
 }
 
 export function slackPayload(details: { name: string; email: string }) {
-  const text = `${details.name} signed up\nEmail: ${details.email}`;
+  const text = `${details.name || "Someone"} signed up\nEmail: ${details.email}`;
   return {
     // Escape fallback text too: customer names must never mention a Slack user/channel.
     text: text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),

@@ -41,11 +41,11 @@ test('fails closed for wrong project/workspace, missing webhook, and development
 test('sends name and verified primary email, then acknowledges claim',async()=>{
   const r=await run();assert.deepEqual(r.result,{sent:1,retrying:0,skipped:0});
   const slack=r.calls.find(c=>c.url.startsWith('https://hooks.slack.com/'));
-  assert.equal(slack.body.blocks[0].text.text,'John Smith signed up\nEmail: john@example.test');
+  assert.equal(slack.body.blocks[0].text.text,'Test Person signed up\nEmail: john@example.test');
   assert.equal(r.calls.at(-1).body.p_claim,job.claim_token);assert.equal(r.calls.at(-1).body.p_outcome,'sent');
 });
 test('names cannot inject mentions/links, and long/unicode input stays bounded',()=>{
-  const d=signupDetails({...user,first_name:'<!everyone>\n🫶'.repeat(1000),last_name:null},job);
+  const d=signupDetails({...user,first_name:'<!everyone>\n🫶'.repeat(1000),last_name:null},{...job,display_name:''});
   const p=slackPayload(d);assert.ok(d.name.length<=200);assert.equal(p.blocks[0].text.type,'plain_text');
   assert.ok(!p.text.includes('<!everyone>'));assert.equal(p.mrkdwn,false);assert.equal(p.parse,'none');
 });
@@ -83,4 +83,14 @@ test('Slack 200 with non-ok body is retried',async()=>{
 test('empty queue produces no messages and settlement outage is not reported as success',async()=>{
   const r=await run({jobs:[]});assert.equal(r.calls.length,1);assert.equal(r.result.sent,0);
   assert.equal((await run({settlementFailure:true})).response.status,503);
+});
+
+test('app-chosen name wins over provider name and username',()=>{
+  assert.equal(signupDetails({...user,username:'john123'}, {...job,display_name:'Jo'}).name,'Jo');
+});
+test('missing app name uses provider name, never a generated username',()=>{
+  assert.equal(signupDetails(user,{...job,display_name:''}).name,'John Smith');
+  const details=signupDetails({...user,first_name:null,last_name:null,username:'john123'},{...job,display_name:''});
+  assert.equal(details.name,'');
+  assert.equal(slackPayload(details).blocks[0].text.text,'Someone signed up\nEmail: john@example.test');
 });

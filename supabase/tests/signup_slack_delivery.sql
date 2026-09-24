@@ -39,6 +39,7 @@ begin
   insert into public.clerk_identity_mappings(clerk_user_id,profile_id)
     values('user_codex_signup_production','user_codex_signup_test');
   update public.signup_slack_deliveries set next_attempt_at='1900-01-01' where profile_id='user_codex_signup_test';
+  update public.profiles set onboarding_completed_at=now() where id='user_codex_signup_test';
   select * into job from public.claim_signup_slack() where profile_id='user_codex_signup_test';
   if job.profile_id is null or not (job.clerk_user_ids ? 'user_codex_signup_production') then
     raise exception 'claim context missing';
