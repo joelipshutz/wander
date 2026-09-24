@@ -39,6 +39,27 @@ During work and at handoff:
 - If local-only work is incomplete, leave a Linear comment naming the worktree,
   branch, last verified commit, commands already run, and exact next action.
 
+## Review Evidence And Storage
+
+- Keep raw review recordings, complete sessions and intermediate exports once
+  outside individual worktrees. Put concise decisions, stable evidence links
+  and small final evidence in Git. Do not interpret "preserve evidence" as
+  "commit every recording, screenshot and successful rerun."
+- Reuse one issue-specific evidence directory across branches. At task close,
+  keep the final relevant result and capture, necessary before/after evidence,
+  reproducible inputs and unresolved failures. After verifying the final record,
+  remove only your own closed redundant intermediates. Preserve unique originals,
+  approved historical archives, release archives/dSYMs, credentials and user data.
+- Review evidence is limited to 1 MiB per repository file and 5 MiB per change.
+  Videos, result bundles, traces and session archives stay in shared storage.
+  Git LFS pointer size does not exempt the underlying media from this rule.
+  Required app assets remain under `Wander/Resources/`; do not hide review dumps
+  there. Keep the `Review storage` CI check passing before merge.
+- The historical onboarding review now uses `scripts/review-media.py` and one
+  shared archive. Do not restore its payload under `docs/` or run historical
+  whole-archive LFS pull instructions. Read `docs/review-media/README.md` for
+  recovery, final-evidence retention and exact validation commands.
+
 ## Agent Execution Efficiency
 
 Be conclusive and preserve human control, while keeping routine mechanics out
@@ -425,7 +446,11 @@ printing it. An analytics build with a blank resolved token must not be uploaded
 ## Testing Rules
 
 - Every milestone should land with matching tests.
-- Run the full `xcodebuild test` command above before committing implementation changes.
+- Run the full native test suite before committing app implementation changes.
+  Documentation and development-tooling-only changes require their relevant
+  checks and tooling tests, not a new Xcode build or simulator recording. On
+  Joe's Mac, native builds/tests must use the workspace `.tools/ios-work.py`
+  helper and its three-slot, shared-cache and device reservations.
 - In Codex, sandboxed `xcodebuild test` commonly fails before exercising app code because
   CoreSimulator services, `~/Library/Logs/CoreSimulator`, or SwiftPM dependency fetching are
   blocked. When that happens, rerun the same `xcodebuild test` command with escalated

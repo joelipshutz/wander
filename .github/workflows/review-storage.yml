@@ -1,0 +1,29 @@
+name: Review storage
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  review-storage:
+    runs-on: ubuntu-latest
+    env:
+      GIT_LFS_SKIP_SMUDGE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+          persist-credentials: false
+      - name: Test archive recovery and storage guardrails
+        run: python3 -m unittest discover -s scripts -p 'test_review_*.py'
+      - name: Check the integrated review payload
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/check-review-storage.py --base "$BASE_SHA" --head HEAD
