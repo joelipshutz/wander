@@ -199,6 +199,7 @@ corresponding `agent-skills/<skill-name>/SKILL.md` directly and follow it.
 
 Current shared skills:
 
+- `quote-to-mp4` - use with a quote and speaker or source to create a downloadable MP4 of the original speech, with verified attribution and the full clip transcript.
 - `recme-pr-review-merge-release` - use when asked to review, merge, land, ship, or release a rec.me/Wander PR.
 - `recme-testflight-feedback-bug-catcher` - use when checking or acting on rec.me/Wander Linear issues or TestFlight feedback.
 - `recme-linear-log-triage` - use when a rec.me/Wander Linear issue would benefit from PostHog/Supabase evidence, especially auth, save, sync, visibility, backend, data, or screenshot-with-timestamp bugs.
