@@ -97,7 +97,7 @@ struct AccountContactDetailsView: View {
                 }
                 .contactDetailsField()
                 if !model.phoneIsValid {
-                    Text(model.phoneCountryCode == "US" ? "Enter a valid 10-digit phone number." : "Check the number and country code.")
+                    Text(model.phoneValidationMessage)
                         .font(AstirTypography.caption)
                         .foregroundStyle(WanderTheme.stateError.color)
                         .accessibilityIdentifier("accountContactDetails.phoneError")

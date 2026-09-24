@@ -35,8 +35,14 @@ import Combine
     }
 
     var phoneIsValid: Bool {
-        phoneText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || OnboardingPhoneNumber.normalized(phoneText, country: phoneCountryCode) != nil
+        OnboardingPhoneNumber.normalized(phoneText, country: phoneCountryCode) != nil
+    }
+
+    var phoneValidationMessage: String {
+        if phoneText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your phone number to continue."
+        }
+        return phoneCountryCode == "US" ? "Enter a valid 10-digit phone number." : "Check the number and country code."
     }
 
     var canSave: Bool { didLoad && !isLoading && !isSaving && phoneIsValid && homeCity != nil }

@@ -83,6 +83,9 @@ import XCTest
         let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Paris"), object: city)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
         XCTAssertTrue(app.buttons["accountContactDetails.country"].label.contains("+33"))
+        let phone = app.textFields["accountContactDetails.phone"]
+        phone.tap()
+        phone.typeText("01 42 68 53 00")
         XCTAssertTrue(app.buttons["accountContactDetails.continue"].isEnabled)
         capture(app, name: "Typeahead 05 — Paris selected")
     }
@@ -108,15 +111,15 @@ import XCTest
         capture(app, name: "Typeahead 08 — Connection unavailable")
     }
 
-    func testContinueIsTheOnlyActionAndBlankPhoneCanAdvance() {
+    func testContinueIsTheOnlyActionAndBlankPhoneCannotAdvance() {
         let app = launch()
         XCTAssertFalse(app.buttons["accountContactDetails.skip"].exists)
         XCTAssertFalse(app.buttons["Not now"].exists)
         XCTAssertFalse(app.buttons["Done"].exists)
         let primary = app.buttons["accountContactDetails.continue"]
-        XCTAssertTrue(primary.isEnabled)
-        primary.tap()
-        XCTAssertTrue(app.staticTexts["Connect with your people"].waitForExistence(timeout: 5))
+        XCTAssertFalse(primary.isEnabled)
+        XCTAssertTrue(app.staticTexts["Enter your phone number to continue."].exists)
+        XCTAssertFalse(app.staticTexts["Connect with your people"].exists)
     }
 
     private func capture(_ app: XCUIApplication, name: String) {
