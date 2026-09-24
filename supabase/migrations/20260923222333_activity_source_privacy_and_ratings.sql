@@ -125,6 +125,17 @@ begin
     when 'activity_liked', 'activity_commented' then
       return app.can_read_activity_event(viewer, app.privacy_uuid(event.data->>'activity_id'));
     when 'followed_place_visit' then
+      -- REC-589 batches an import behind one notification without a visit_id.
+      -- Its existing helper recomputes currently readable, non-silent sources.
+      -- Keep compatibility when that optional feature has not been installed.
+      if event.data->>'sender_import_id' is not null then
+        if to_regprocedure('app.import_notification_content(text,text,text)') is null
+          or exists (select 1 from public.profiles where id=event.actor_user_id and is_private_profile) then
+          return false;
+        end if;
+        return app.import_notification_content(event.actor_user_id, viewer,
+          event.data->>'sender_import_id') is not null;
+      end if;
       return app.can_read_visit_source(viewer, app.privacy_uuid(event.data->>'visit_id'));
     when 'shared_visit' then
       return exists (
@@ -1158,6 +1169,7 @@ begin
   select * into operation_row
   from public.shared_visit_operations operation
   where operation.participant_id = input_participant_id
+    and operation.user_id = viewer_id
     and operation.invitation_generation = input_generation
     and operation.operation_type = 'accept'
   for update;
@@ -1267,6 +1279,7 @@ begin
   select * into operation_row
   from public.shared_visit_operations operation
   where operation.participant_id = participant_row.id
+    and operation.user_id = viewer_id
     and operation.invitation_generation = input_generation
     and operation.operation_type = 'accept'
   for update;

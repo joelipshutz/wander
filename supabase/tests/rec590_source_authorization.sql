@@ -34,8 +34,14 @@ declare
   companion_id uuid;
   intentional_id uuid;
   repaired_id uuid;
+  repaired_count integer;
   event_id uuid := gen_random_uuid();
   claim_id uuid := gen_random_uuid();
+  import_visit uuid := gen_random_uuid();
+  import_commit uuid := gen_random_uuid();
+  import_event uuid := gen_random_uuid();
+  import_claim uuid := gen_random_uuid();
+  import_key text := 'rec590-smoke-' || gen_random_uuid();
   fn regprocedure;
 begin
   foreach fn in array array[
@@ -67,8 +73,8 @@ begin
         (stranger_id, 'codex_privacy_stranger', 'Smoke stranger', 'followers', false);
   insert into public.follows(follower_user_id, followed_user_id, source)
   values(viewer_id, owner_id, 'profile'), (owner_id, viewer_id, 'profile');
-  insert into public.places(id, canonical_name, category, latitude, longitude)
-  values(venue_id, 'Privacy smoke venue', 'coffee_tea_sweets', 0, 0);
+  insert into public.places(id, canonical_name, category, latitude, longitude, source_provider)
+  values(venue_id, 'Privacy smoke venue', 'coffee_tea_sweets', 0, 0, 'codex_smoke');
   insert into public.user_places(id,user_id,place_id,status,visibility,source_type)
   values(source_save,owner_id,venue_id,'been','followers','manual');
   insert into public.place_visits(id,user_place_id,note,rating_score)
@@ -98,8 +104,15 @@ begin
     raise exception 'owner management policy permits signed URLs';
   end if;
   perform set_config('storage.operation','storage.object.delete',true);
-  delete from storage.objects where bucket_id='visit-photos' and name=pending_path;
-  if not found then raise exception 'owner cannot delete pending upload'; end if;
+  -- Storage rejects direct SQL deletion even for synthetic metadata. Leave the
+  -- row for transaction rollback; verify the owner-delete policy and its SELECT
+  -- prerequisite without bypassing the Storage service's deletion guard.
+  if not exists(select 1 from storage.objects where bucket_id='visit-photos' and name=pending_path)
+    or not exists(select 1 from pg_policies where schemaname='storage' and tablename='objects'
+      and policyname='visit photo objects owner delete' and cmd='DELETE'
+      and roles @> array['authenticated']::name[] and qual like '%owns_place_visit%') then
+    raise exception 'owner delete policy or metadata access is missing';
+  end if;
   perform public.create_shared_visit_invites(source_visit,array[viewer_id]);
   reset role;
   select p.id,p.invitation_generation,p.snapshot_revision
@@ -131,6 +144,17 @@ begin
   end if;
   reset role;
   update public.user_places set visibility='followers' where id=source_save;
+  -- Hiding cancels the invitation. The owner must explicitly invite again;
+  -- a cancelled generation must never become acceptable just by unhiding.
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',owner_id,true);
+  set local role authenticated;
+  perform public.create_shared_visit_invites(source_visit,array[viewer_id]);
+  reset role;
+  select p.invitation_generation,p.snapshot_revision into invitation_generation,snapshot_revision
+    from public.shared_visit_participants p where p.id=participant_id;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',viewer_id,true);
   set local role authenticated;
   accepted := public.accept_shared_visit(participant_id,invitation_generation,snapshot_revision,
     operation_id,copied_save,copied_visit,'{"visibility":"followers"}',
@@ -165,6 +189,19 @@ begin
     raise exception 'idempotent acceptance leaked a revoked copy manifest';
   end if;
   reset role;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',stranger_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',stranger_id,true);
+  set local role authenticated;
+  begin
+    perform public.accept_shared_visit(participant_id,invitation_generation,snapshot_revision,
+      operation_id,copied_save,copied_visit,'{}','{}','[]',array[source_photo]);
+    raise exception 'stranger replay exposed another recipient acceptance';
+  exception when raise_exception then
+    if sqlerrm <> 'shared_visit_invitation_not_found' then raise; end if;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',viewer_id,true);
 
   -- Pending/claimed envelopes and inbox rows must obey the current source.
   perform app.ensure_notification_preferences(viewer_id);
@@ -205,6 +242,33 @@ begin
   end if;
   reset role;
 
+  -- A deployed REC-589 import envelope has no visit_id. Keep valid groups
+  -- deliverable, but recheck their current source visibility before sending.
+  if to_regprocedure('app.import_notification_content(text,text,text)') is not null then
+    insert into public.place_visits(id,user_place_id,note,notification_silent,sender_import_id,sender_import_commit_id)
+      values(import_visit,source_save,'Import smoke',true,import_key,import_commit);
+    insert into app.import_notification_commits(owner_user_id,import_id,commit_id,silent,visit_ids,sealed_at)
+      values(owner_id,import_key,import_commit,false,array[import_visit],now());
+    insert into public.notification_events(id,recipient_user_id,actor_user_id,notification_type,
+      title,body,data,status,claim_token,claim_expires_at,expires_at,latest_at)
+      values(import_event,viewer_id,owner_id,'followed_place_visit','Import','Private venue',
+        jsonb_build_object('sender_import_id',import_key,'place_id',venue_id),
+        'claimed',import_claim,now()+interval '5 minutes',now()+interval '1 hour',now()+interval '1 hour');
+    set local role service_role;
+    payload := public.authorize_push_notification_delivery(import_event,import_claim);
+    if payload is null or payload->>'body' <> 'Open Astir to view.' then
+      raise exception 'authorized grouped import lost its delivery contract';
+    end if;
+    reset role;
+    update public.user_places set visibility='self' where id=source_save;
+    set local role service_role;
+    if public.authorize_push_notification_delivery(import_event,import_claim) is not null then
+      raise exception 'hidden grouped import remains deliverable';
+    end if;
+    reset role;
+    update public.user_places set visibility='followers' where id=source_save;
+  end if;
+
   -- A private account and either-direction block revoke inherited photo access.
   update public.profiles set is_private_profile=true where id=owner_id;
   set local role authenticated;
@@ -213,6 +277,9 @@ begin
   end if;
   reset role;
   update public.profiles set is_private_profile=false where id=owner_id;
+  -- Leaving private mode deliberately keeps previous saves self-only.
+  -- Explicitly restore this fixture's audience before testing block revocation.
+  update public.user_places set visibility='followers' where id=source_save;
   insert into public.blocks(blocker_user_id,blocked_user_id) values(owner_id,viewer_id);
   set local role authenticated;
   if public.can_read_visit_photo('visit-photos',source_path)
@@ -269,14 +336,15 @@ begin
   end if;
   reset role;
   -- Historical repair requires evidence; ambiguous public saves are not rewritten.
-  insert into public.places(id,canonical_name,category,latitude,longitude)
-    values(gen_random_uuid(),'Repair smoke','coffee_tea_sweets',0,0) returning id into venue_id;
+  insert into public.places(id,canonical_name,category,latitude,longitude,source_provider)
+    values(gen_random_uuid(),'Repair smoke','coffee_tea_sweets',0,0,'codex_smoke') returning id into venue_id;
   insert into public.user_places(user_id,place_id,status,visibility,source_type)
     values(owner_id,venue_id,'wanna_go','followers','manual') returning id into repaired_id;
   insert into public.user_places(user_id,place_id,status,visibility,source_type)
     values(stranger_id,venue_id,'wanna_go','followers','manual') returning id into intentional_id;
   insert into app.private_list_companion_origins(user_place_id) values(repaired_id);
-  if app.repair_private_list_companions() <> 1
+  repaired_count := app.repair_private_list_companions();
+  if repaired_count <> 1
     or not exists(select 1 from public.user_places where id=repaired_id and visibility='self')
     or not exists(select 1 from public.user_places where id=intentional_id and visibility='followers') then
     raise exception 'evidence-only repair widened its scope or missed proven data';

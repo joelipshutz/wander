@@ -130,5 +130,10 @@ CDN copies can outlive it. Legacy URL retirement is part of the rollout gate abo
 New visit-photo signing must be denied while authenticated downloads and owner
 upload/retry/delete continue to work.
 
+The worker reporting route must remain read-only and export aggregate counts only.
+Verify `analytics_snapshot` never claims notifications or requests recipient/audit
+rows containing identities or notification copy. Prior private PostHog audit
+exports require a retention cleanup before claiming that secondary copy is removed.
+
 Small-sample inference from Astir's anonymous score/count is deferred to
 [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).
