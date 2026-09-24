@@ -65,16 +65,20 @@ import XCTest
         XCTAssertEqual(repo.details?.phoneE164, "+442079460123")
     }
 
-    func testDeniedLocationAllowsManualEntryAndOptionalPhone() async {
+    func testDeniedLocationRequiresPhoneBeforeManualEntryCanSave() async {
         let repo = DetailsRepository()
         let location = DetailsLocation(nil)
         let model = AccountContactDetailsModel(userID: "denied", repository: repo, location: location, defaultCountry: "US")
         await model.load()
-        XCTAssertTrue(model.canSave)
+        XCTAssertFalse(model.canSave)
+        XCTAssertEqual(model.phoneValidationMessage, "Enter your phone number to continue.")
         model.selectMetro("los-angeles")
-        let saved = await model.save()
-        XCTAssertTrue(saved)
-        XCTAssertNil(repo.details?.phoneE164)
+        let emptySave = await model.save()
+        XCTAssertFalse(emptySave)
+        model.editPhone("2025550123")
+        let populatedSave = await model.save()
+        XCTAssertTrue(populatedSave)
+        XCTAssertEqual(repo.details?.phoneE164, "+12025550123")
         XCTAssertEqual(repo.details?.homeCountryCode, "US")
     }
 
@@ -89,6 +93,7 @@ import XCTest
         XCTAssertFalse(saved)
         XCTAssertEqual(repo.saves, 0)
         repo.fails = false
+        model.editPhone("2025550123")
         await model.load()
         XCTAssertTrue(model.canSave)
     }
