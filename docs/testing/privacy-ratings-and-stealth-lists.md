@@ -12,11 +12,13 @@ two-account device acceptance are required before calling the gaps closed.
 Follow requests and account/activity exclusion controls remain separate unfinished
 parts of REC-590; use the existing audience/private/block controls for these tests.
 
-Deployment order: publish the generic-preview website reader, apply the reviewed
-`activity_source_privacy_and_ratings` and `generic_share_previews` migrations,
-deploy `push-notification-worker`, run the standard hosted smoke gate, then test
-the matching iOS branch. The source/privacy SQL regression runs inside a rollback.
-Do not describe an unapplied migration or an unexecuted smoke test as a pass.
+Source-access deployment is independent of the website: apply the reviewed
+`activity_source_privacy_and_ratings` migration, deploy `push-notification-worker`,
+and run the source authorization regression against the hosted schema. Publish
+the generic-preview website reader before applying `generic_share_previews`.
+Then run the complete hosted smoke gate and test the matching iOS branch.
+Keep the exact deployment and validation state in REC-590 and its PR. SQL smoke
+fixtures roll back; a preview migration in that transaction is not a deployment.
 
 The storage cutover also requires a CDN purge through the Storage API and checks
 against previously issued public and signed URLs. A SQL bucket update alone does
@@ -134,6 +136,9 @@ The worker reporting route must remain read-only and export aggregate counts onl
 Verify `analytics_snapshot` never claims notifications or requests recipient/audit
 rows containing identities or notification copy. Prior private PostHog audit
 exports require a retention cleanup before claiming that secondary copy is removed.
+Resolve the historical diagnostic retention decision in
+[REC-620](https://linear.app/recme/issue/REC-620/resolve-retention-of-historical-notification-diagnostics-after-privacy)
+before claiming that those existing copies are removed.
 
 Small-sample inference from Astir's anonymous score/count is deferred to
 [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).

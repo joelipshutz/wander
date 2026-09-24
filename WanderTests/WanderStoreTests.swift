@@ -6021,7 +6021,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(repository.inviteeListRequests.isEmpty)
     }
 
-    func testSharedVisitInboxFailureRecoversWithIdenticalCachedRows() async {
+    func testSharedVisitInboxOfflineFailureRecoversWithIdenticalCachedRows() async {
         let store = WanderStore(fixtures: .empty())
         let repository = FakeSharedVisitRepository()
         repository.inboxInvitations = [makeSharedVisitInvitation()]
@@ -6030,7 +6030,7 @@ final class WanderStoreTests: XCTestCase {
         let originalRows = store.sharedVisitInvitations
         let revision = store.presentationRevision
 
-        repository.inboxError = TestError.expected
+        repository.inboxError = URLError(.notConnectedToInternet)
         let failed = await store.refreshSharedVisitInbox(backend: backend)
         XCTAssertFalse(failed)
         XCTAssertEqual(store.sharedVisitInboxFailureUserID, store.currentUser.id)
@@ -6042,6 +6042,31 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(store.sharedVisitInboxFailureUserID)
         XCTAssertEqual(store.sharedVisitInvitations, originalRows)
         XCTAssertEqual(store.presentationRevision, revision)
+    }
+
+    func testSharedVisitInboxServerFailureDiscardsCachedRowsUntilReauthorized() async {
+        let store = WanderStore(fixtures: .empty())
+        let repository = FakeSharedVisitRepository()
+        repository.inboxInvitations = [makeSharedVisitInvitation()]
+        let backend = WanderBackend(sharedVisitRepository: repository)
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertFalse(store.sharedVisitInvitations.isEmpty)
+
+        repository.inboxError = TestError.expected
+        let failed = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(store.sharedVisitInboxFailureUserID, store.currentUser.id)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+
+        repository.inboxError = URLError(.notConnectedToInternet)
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+
+        repository.inboxError = nil
+        let recovered = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertTrue(recovered)
+        XCTAssertNil(store.sharedVisitInboxFailureUserID)
+        XCTAssertEqual(store.sharedVisitInvitations, repository.inboxInvitations)
     }
 
     func testSharedVisitInboxLateFailureCannotOverwriteAccountAfterSwitchingBack() async {
