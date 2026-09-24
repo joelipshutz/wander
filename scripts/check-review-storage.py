@@ -35,6 +35,7 @@ def is_review(path):
     parts = PurePosixPath(path).parts
     return (parts[0] in {'docs', 'preview', 'evidence', 'recordings', 'review-media'}
             or any(part.endswith('-evidence') for part in parts)
+            or any(PurePosixPath(part).suffix.lower() in DUMPS for part in parts)
             or PurePosixPath(path).suffix.lower() in IMAGES | DUMPS)
 
 

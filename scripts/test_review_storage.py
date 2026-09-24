@@ -201,6 +201,13 @@ class GuardTests(RepositoryTest):
         self.write('evidence/run.xcresult/Data/1', b'result')
         self.assertTrue(any('shared evidence' in e for e in self.errors()))
 
+    def test_result_bundle_outside_evidence_directories_is_bounded(self):
+        self.write('artifacts/Test.xcresult/Data/1', b'x' * (6 * guard.FILE_LIMIT))
+        errors = self.errors()
+        self.assertTrue(any('shared evidence' in e for e in errors))
+        self.assertTrue(any('1 MiB' in e for e in errors))
+        self.assertTrue(any('5 MiB' in e for e in errors))
+
     def test_staged_check_reads_index_not_unstaged_files(self):
         self.write('docs/final.png', b'small')
         self.git('add', '.')
