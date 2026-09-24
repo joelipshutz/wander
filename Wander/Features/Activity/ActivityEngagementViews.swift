@@ -659,7 +659,7 @@ struct ActivityPostcardView: View {
                     .foregroundStyle(primaryText)
                     .lineLimit(2)
 
-                Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · someone you follow")
+                Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · \(actorRelationshipDetail)")
                     .font(visualStyle == .astir ? AstirTypography.metadata : .caption.weight(.medium))
                     .foregroundStyle(secondaryText)
                     .lineLimit(2)
@@ -673,7 +673,11 @@ struct ActivityPostcardView: View {
 
     private var actorAccessibilityLabel: String {
         "\(context.actor.displayName) \(context.attributionAction), "
-            + "\(FeedPresentation.timestampText(for: context.occurredAt)), someone you follow"
+            + "\(FeedPresentation.timestampText(for: context.occurredAt)), \(actorRelationshipDetail)"
+    }
+
+    private var actorRelationshipDetail: String {
+        context.actor.relationship == .owner ? "your activity" : "someone you follow"
     }
 
     private var primaryText: Color {

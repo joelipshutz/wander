@@ -732,6 +732,7 @@ struct ProfileBackButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Back")
+        .accessibilityIdentifier("profile.back")
     }
 }
 
@@ -770,7 +771,7 @@ private struct ProfileInvitationButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Notifications")
         .accessibilityValue(badgeState.accessibilityValue)
-        .accessibilityHint("Opens plans and check-in invitations")
+        .accessibilityHint("Opens followers, plans, and check-in invitations")
         .accessibilityIdentifier("profile.checkInInvitations")
         .anchorPreference(key: ProfileNotificationBellAnchorKey.self, value: .bounds) { $0 }
     }
@@ -1743,7 +1744,7 @@ private struct ProfileMapSection: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Map of \(ownerLabel) checked-in places")
+                .accessibilityLabel("Map of \(ownerLabel) Check-in and Wanna places")
 
             ProfileMapSummaryPicker(selection: $selectedSummary)
 
@@ -1765,7 +1766,7 @@ private struct ProfileMapSection: View {
                                 ProfileMapSummaryRow(item: item)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityHint("Shows matching checked-in places")
+                            .accessibilityHint("Shows matching Check-in and Wanna places")
 
                             ProfileMapSummaryShareButton(
                                 profile: profile,
@@ -1805,7 +1806,7 @@ private struct ProfileMapSection: View {
     private var mapCountSummary: String {
         let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
         let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
-        return "\(insights.mapCityCount) \(cityLabel)  •  \(insights.mapPlaceCount) checked-in \(placeLabel)"
+        return "\(insights.mapCityCount) \(cityLabel)  •  \(insights.mapPlaceCount) saved \(placeLabel)"
     }
 
     private var summaryItems: [ProfileSummaryItem] {
@@ -1818,9 +1819,9 @@ private struct ProfileMapSection: View {
 
     private var emptyCopy: String {
         switch selectedSummary {
-        case .places: "\(ownerLabel.capitalized) checked-in places will appear here."
-        case .cities: "Cities appear after \(ownerLabel) checked-in places have location details."
-        case .countries: "Countries appear after \(ownerLabel) checked-in places have location details."
+        case .places: "\(ownerLabel.capitalized) Check-in and Wanna places will appear here."
+        case .cities: "Cities appear after \(ownerLabel) saved places have location details."
+        case .countries: "Countries appear after \(ownerLabel) saved places have location details."
         }
     }
 }
@@ -1911,6 +1912,8 @@ struct ProfileMapSnapshotRequest {
     struct Coordinate: Hashable {
         let latitude: Double
         let longitude: Double
+        let status: PlaceStatus
+        let secondaryStatus: PlaceStatus?
 
         var mapCoordinate: CLLocationCoordinate2D {
             CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -1938,17 +1941,22 @@ struct ProfileMapSnapshotRequest {
         let coordinates = points.compactMap { point -> Coordinate? in
             let coordinate = CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
             guard CLLocationCoordinate2DIsValid(coordinate) else { return nil }
-            return Coordinate(latitude: point.latitude, longitude: point.longitude)
+            return Coordinate(
+                latitude: point.latitude, longitude: point.longitude,
+                status: point.status, secondaryStatus: point.secondaryStatus
+            )
         }
         .sorted { lhs, rhs in
             if lhs.latitude != rhs.latitude {
                 return lhs.latitude < rhs.latitude
             }
-            return lhs.longitude < rhs.longitude
+            if lhs.longitude != rhs.longitude { return lhs.longitude < rhs.longitude }
+            if lhs.status != rhs.status { return lhs.status.rawValue < rhs.status.rawValue }
+            return (lhs.secondaryStatus?.rawValue ?? "") < (rhs.secondaryStatus?.rawValue ?? "")
         }
         let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         let coordinateKey = coordinates.map { coordinate in
-            "\(coordinate.latitude.bitPattern):\(coordinate.longitude.bitPattern)"
+            "\(coordinate.latitude.bitPattern):\(coordinate.longitude.bitPattern):\(coordinate.status.rawValue):\(coordinate.secondaryStatus?.rawValue ?? "")"
         }
         .joined(separator: ",")
 
@@ -2018,22 +2026,37 @@ final class ProfileMapSnapshotCache {
         return UIGraphicsImageRenderer(size: request.size, format: format).image { context in
             snapshot.image.draw(in: CGRect(origin: .zero, size: request.size))
 
-            let fillColor = UIColor(AstirTheme.signal.color).cgColor
-            let strokeColor = UIColor(
+            let ringColor = UIColor(AstirTheme.signal.color).cgColor
+            let fillColor = UIColor(
                 request.userInterfaceStyle == .dark
                     ? AstirTheme.inkRaised.color
                     : AstirTheme.paperRaised.color
             ).cgColor
             context.cgContext.setFillColor(fillColor)
-            context.cgContext.setStrokeColor(strokeColor)
-            context.cgContext.setLineWidth(1)
+            context.cgContext.setStrokeColor(ringColor)
+            context.cgContext.setLineWidth(1.5)
+            context.cgContext.setLineCap(.round)
 
             for coordinate in request.coordinates {
                 let point = snapshot.point(for: coordinate.mapCoordinate)
-                let markerRect = CGRect(x: point.x - 3.5, y: point.y - 3.5, width: 7, height: 7)
+                let markerRect = CGRect(x: point.x - 4.5, y: point.y - 4.5, width: 9, height: 9)
                 guard markerRect.intersects(CGRect(origin: .zero, size: request.size)) else { continue }
                 context.cgContext.fillEllipse(in: markerRect)
-                context.cgContext.strokeEllipse(in: markerRect)
+                let outline = MapPinOutline(
+                    ownership: .currentUser, status: coordinate.status,
+                    secondaryStatus: coordinate.secondaryStatus
+                )
+                for arc in outline.arcs {
+                    context.cgContext.setLineDash(phase: 0, lengths: arc.dashPattern.map { $0 * 0.45 })
+                    let rotation = CGFloat(arc.rotationDegrees) * CGFloat.pi / 180
+                    context.cgContext.addArc(
+                        center: point, radius: 4.5,
+                        startAngle: arc.trimFrom * 2 * CGFloat.pi + rotation,
+                        endAngle: arc.trimTo * 2 * CGFloat.pi + rotation,
+                        clockwise: false
+                    )
+                    context.cgContext.strokePath()
+                }
             }
         }
     }
@@ -2173,7 +2196,7 @@ private struct ProfileMapSummaryShareButton: View {
         guard profile.serverID != nil else {
             return "Available after this profile finishes syncing"
         }
-        return "Shares a linked map of these \(item.count) checked-in \(item.count == 1 ? "place" : "places")"
+        return "Shares a linked map of these \(item.count) saved \(item.count == 1 ? "place" : "places")"
     }
 
     private func cancelSharePreparation() {

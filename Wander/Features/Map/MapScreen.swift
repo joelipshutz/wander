@@ -1249,6 +1249,7 @@ struct NativeMapCameraRequest {
     let region: MKCoordinateRegion
     let revision: UInt64
     let animated: Bool
+    var restoredCamera: MKMapCamera? = nil
 }
 
 enum NativeMapAnnotationKind: Equatable {
@@ -1270,8 +1271,14 @@ struct NativeMapAnnotationDescriptor: Equatable {
     let entranceDelay: TimeInterval
     let accessibilityLabel: String
     let bounceRevision: UInt64
+    var accessibilityIdentifierOverride: String? = nil
+    var keepsVisibleWhenColliding = false
+    var detail: MapPinDetail = .category
+
+    var resolvedDetail: MapPinDetail { isSelected ? .category : detail }
 
     var accessibilityIdentifier: String? {
+        if let accessibilityIdentifierOverride { return accessibilityIdentifierOverride }
         switch kind {
         case let .saved(groupKey):
             return isSelected ? "map.pin.active.saved.\(groupKey)" : nil
@@ -1288,6 +1295,7 @@ struct NativeMapAnnotationDescriptor: Equatable {
             outlines.map(\.id).joined(separator: ","),
             isSearchResult ? "search" : "saved",
             isSelected ? "selected" : "inactive",
+            resolvedDetail.rawValue,
             isSelected ? title : "",
             String(bounceRevision)
         ].joined(separator: "|")
@@ -1311,6 +1319,9 @@ struct NativeMapAnnotationDescriptor: Equatable {
             && lhs.entranceDelay == rhs.entranceDelay
             && lhs.accessibilityLabel == rhs.accessibilityLabel
             && lhs.bounceRevision == rhs.bounceRevision
+            && lhs.accessibilityIdentifierOverride == rhs.accessibilityIdentifierOverride
+            && lhs.keepsVisibleWhenColliding == rhs.keepsVisibleWhenColliding
+            && lhs.detail == rhs.detail
     }
 }
 
@@ -6686,7 +6697,7 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
 
 /// A native parent hides MapKit's own accessibility container as well as its
 /// descendants during preparation, without removing or dimming the renderer.
-private final class NativeMapContainerView: UIView {
+final class NativeMapContainerView: UIView {
     let mapView = MKMapView(frame: .zero)
 
     init() {
@@ -6709,7 +6720,7 @@ private final class NativeMapContainerView: UIView {
 /// A MapKit-owned annotation surface. MapKit virtualizes and reuses these views
 /// while the camera moves, so every place remains addressable without keeping a
 /// large animated SwiftUI view tree alive over the map renderer.
-private struct NativeMapView: UIViewRepresentable {
+struct NativeMapView: UIViewRepresentable {
     let attributionBottomClearance: CGFloat
     let isInteractionEnabled: Bool
     let annotations: [NativeMapAnnotationDescriptor]
@@ -6725,6 +6736,9 @@ private struct NativeMapView: UIViewRepresentable {
     let onUserInteraction: () -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
     let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
+    var allowsNativeFeatureSelection = true
+    var usesAdaptivePinDetail = false
+    var onCameraSnapshot: ((MKMapCamera) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -6744,7 +6758,7 @@ private struct NativeMapView: UIViewRepresentable {
         )
         configuration.pointOfInterestFilter = .includingAll
         mapView.preferredConfiguration = configuration
-        mapView.selectableMapFeatures = [.pointsOfInterest]
+        mapView.selectableMapFeatures = allowsNativeFeatureSelection ? [.pointsOfInterest] : []
         mapView.delegate = context.coordinator
         mapView.showsScale = false
         mapView.showsCompass = false
@@ -6780,6 +6794,8 @@ private struct NativeMapView: UIViewRepresentable {
         private var annotationViewportIndex = MapAnnotationViewportIndex()
         private var pinViewReferencesByID: [String: WeakNativeMapPinAnnotationView] = [:]
         private var renderedViewport: MapViewport?
+        private var adaptiveDetailPolicy = MapAdaptivePinDetailPolicy()
+        private var adaptiveDetailRefresh: DispatchWorkItem?
         private var annotationAccessibilityRefreshScheduled = false
         private var lastCameraRevision: UInt64?
         private var lastFeatureClearRevision: UInt64 = 0
@@ -6810,6 +6826,7 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            let detailModeChanged = parent.usesAdaptivePinDetail != self.parent.usesAdaptivePinDetail
             mapView.isUserInteractionEnabled = parent.isInteractionEnabled
             mapView.accessibilityElementsHidden = !parent.isInteractionEnabled
             if parent.attributionBottomClearance != self.parent.attributionBottomClearance {
@@ -6818,6 +6835,12 @@ private struct NativeMapView: UIViewRepresentable {
                 )
             }
             self.parent = parent
+            if detailModeChanged {
+                adaptiveDetailRefresh?.cancel()
+                adaptiveDetailRefresh = nil
+                adaptiveDetailPolicy = MapAdaptivePinDetailPolicy()
+                refreshVisibleAnnotationViews(in: mapView)
+            }
             mapView.showsUserLocation = parent.showsUserLocation
             let interfaceStyle: UIUserInterfaceStyle = parent.isDark ? .dark : .light
             if mapView.overrideUserInterfaceStyle != interfaceStyle {
@@ -6829,6 +6852,7 @@ private struct NativeMapView: UIViewRepresentable {
             applyNativeFeatureClearIfNeeded(to: mapView)
             applyCameraRequestIfNeeded(to: mapView)
             synchronizeAnnotations(in: mapView)
+            refreshAdaptivePinDetail(in: mapView)
         }
 
         func attachGestureObservers(to mapView: MKMapView) {
@@ -6837,6 +6861,8 @@ private struct NativeMapView: UIViewRepresentable {
         }
 
         func detachGestureObservers(from mapView: MKMapView) {
+            adaptiveDetailRefresh?.cancel()
+            adaptiveDetailRefresh = nil
             mapView.removeGestureRecognizer(tapRecognizer)
             mapView.removeGestureRecognizer(longPressRecognizer)
         }
@@ -6906,12 +6932,17 @@ private struct NativeMapView: UIViewRepresentable {
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             parent.onCameraChange(mapView.region)
+            scheduleAdaptivePinDetailRefresh(in: mapView)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             let isUserInitiated = !isProgrammaticCameraChangeInFlight
             isProgrammaticCameraChangeInFlight = false
             synchronizeAnnotations(in: mapView)
+            adaptiveDetailRefresh?.cancel()
+            adaptiveDetailRefresh = nil
+            refreshAdaptivePinDetail(in: mapView)
+            parent.onCameraSnapshot?(mapView.camera.copy() as! MKMapCamera)
             parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
         }
 
@@ -7019,6 +7050,11 @@ private struct NativeMapView: UIViewRepresentable {
             guard lastCameraRevision != parent.cameraRequest.revision else { return }
             let isInitialRequest = lastCameraRevision == nil
             lastCameraRevision = parent.cameraRequest.revision
+            if let camera = parent.cameraRequest.restoredCamera {
+                isProgrammaticCameraChangeInFlight = true
+                mapView.setCamera(camera, animated: false)
+                return
+            }
             isProgrammaticCameraChangeInFlight = MapSelectionGesturePolicy.classify(
                 from: mapView.region,
                 to: parent.cameraRequest.region
@@ -7046,6 +7082,41 @@ private struct NativeMapView: UIViewRepresentable {
                 guard let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView else {
                     continue
                 }
+                configure(view, for: annotation)
+            }
+        }
+
+        private func scheduleAdaptivePinDetailRefresh(in mapView: MKMapView) {
+            guard parent.usesAdaptivePinDetail, adaptiveDetailRefresh == nil else { return }
+            let work = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else { return }
+                self.adaptiveDetailRefresh = nil
+                self.refreshAdaptivePinDetail(in: mapView)
+            }
+            adaptiveDetailRefresh = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+        }
+
+        private func refreshAdaptivePinDetail(in mapView: MKMapView) {
+            guard parent.usesAdaptivePinDetail, mapView.bounds.width > 0 else { return }
+            let previous = adaptiveDetailPolicy.categoryIDs
+            let candidates = annotationsByID.values.map { annotation in
+                MapAdaptivePinDetailPolicy.Candidate(
+                    id: annotation.stableID,
+                    point: mapView.convert(annotation.coordinate, toPointTo: mapView),
+                    isSelected: annotation.descriptor.isSelected
+                )
+            }
+            let metersPerPoint = mapView.visibleMapRect.width
+                * MKMetersPerMapPointAtLatitude(mapView.centerCoordinate.latitude)
+                / Double(mapView.bounds.width)
+            let next = adaptiveDetailPolicy.resolve(
+                candidates, metersPerPoint: metersPerPoint, viewport: mapView.bounds
+            )
+            for id in previous.symmetricDifference(next) {
+                guard let annotation = annotationsByID[id],
+                      let view = mapView.view(for: annotation) as? NativeMapPinAnnotationView
+                else { continue }
                 configure(view, for: annotation)
             }
         }
@@ -7087,8 +7158,13 @@ private struct NativeMapView: UIViewRepresentable {
             _ view: NativeMapPinAnnotationView,
             for annotation: NativeMapAnnotation
         ) {
+            var descriptor = annotation.descriptor
+            if parent.usesAdaptivePinDetail {
+                descriptor.detail = adaptiveDetailPolicy.categoryIDs.contains(annotation.stableID)
+                    ? .category : .dot
+            }
             view.configure(
-                descriptor: annotation.descriptor,
+                descriptor: descriptor,
                 isDark: parent.isDark,
                 reduceMotion: parent.reduceMotion
             )
@@ -7208,7 +7284,7 @@ private final class NativeMapAnnotation: NSObject, MKAnnotation {
     }
 }
 
-private final class NativeMapPinAnnotationView: MKAnnotationView {
+final class NativeMapPinAnnotationView: MKAnnotationView {
     static let savedReuseIdentifier = "recme.map.pin.saved"
     static let searchReuseIdentifier = "recme.map.pin.search"
     static let reuseIdentifiers = [
@@ -7224,6 +7300,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
     private var renderSignature = ""
     private var bounceRevision: UInt64 = 0
     private var presentedAnnotationID: String?
+    private var presentedDetail: MapPinDetail = .category
 
     override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -7242,6 +7319,7 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         renderSignature = ""
         bounceRevision = 0
         presentedAnnotationID = nil
+        presentedDetail = .category
         onAccessibilityActivate = nil
         isAccessibilityElement = false
         alpha = 1
@@ -7274,17 +7352,31 @@ private final class NativeMapPinAnnotationView: MKAnnotationView {
         }
         presentedAnnotationID = descriptor.id
         if renderSignature != nextSignature {
-            image = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
+            let nextImage = NativeMapPinImageRenderer.image(for: descriptor, isDark: isDark)
+            if !isNewAnnotation, presentedDetail != descriptor.resolvedDetail, !reduceMotion {
+                UIView.transition(with: self, duration: 0.16,
+                                  options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState]) {
+                    self.image = nextImage
+                }
+            } else {
+                image = nextImage
+            }
             renderSignature = nextSignature
         }
+        presentedDetail = descriptor.resolvedDetail
 
         centerOffset = NativeMapPinImageRenderer.centerOffset(for: descriptor)
         accessibilityLabel = descriptor.accessibilityLabel
         accessibilityIdentifier = descriptor.accessibilityIdentifier
         accessibilityTraits = .button
+        accessibilityValue = descriptor.resolvedDetail == .dot ? "Map dot" : "Category pin"
         clusteringIdentifier = nil
-        displayPriority = descriptor.isSelected ? .required : .defaultHigh
+        // Your Map is a complete view of saved places, including dense areas.
+        // Required priority prevents MapKit from hiding overlapping markers.
+        displayPriority = descriptor.keepsVisibleWhenColliding || descriptor.isSelected
+            ? .required : .defaultHigh
         zPriority = descriptor.isSelected ? .max : .defaultUnselected
+        if descriptor.resolvedDetail == .dot { zPriority = .min }
         selectedZPriority = descriptor.isSelected ? .max : .defaultSelected
 
         if shouldAnimateEntrance {
@@ -7390,6 +7482,12 @@ private enum NativeMapPinImageRenderer {
             return cached
         }
 
+        if descriptor.resolvedDetail == .dot {
+            let image = dotImage(for: descriptor, isDark: isDark)
+            imageCache.setObject(image, forKey: cacheKey)
+            return image
+        }
+
         let metrics = canvasMetrics(for: descriptor)
         let format = UIGraphicsImageRendererFormat.preferred()
         format.opaque = false
@@ -7412,6 +7510,26 @@ private enum NativeMapPinImageRenderer {
         }
         imageCache.setObject(image, forKey: cacheKey)
         return image
+    }
+
+    private static func dotImage(for descriptor: NativeMapAnnotationDescriptor, isDark: Bool) -> UIImage {
+        let size = CGSize(width: 16, height: 16)
+        let gray = UIColor.systemGray.resolvedColor(with:
+            UITraitCollection(userInterfaceStyle: isDark ? .dark : .light))
+        let background = UIColor(isDark ? WanderMapAppearance.nightRaised.color : WanderTheme.surfaceRaised.color)
+        let hollow = !descriptor.outlines.isEmpty && descriptor.outlines.allSatisfy {
+            $0.status == .wannaGo && $0.secondaryStatus == nil
+        }
+        return UIGraphicsImageRenderer(size: size).image { renderer in
+            let context = renderer.cgContext
+            context.setFillColor(background.cgColor)
+            context.fillEllipse(in: CGRect(x: 3.5, y: 3.5, width: 9, height: 9))
+            context.setFillColor((hollow ? background : gray).cgColor)
+            context.setStrokeColor(gray.cgColor)
+            context.setLineWidth(1.5)
+            context.addEllipse(in: CGRect(x: 5, y: 5, width: 6, height: 6))
+            context.drawPath(using: .fillStroke)
+        }
     }
 
     private struct CanvasMetrics {
