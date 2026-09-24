@@ -80,7 +80,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         XCTAssertTrue(card.exists)
 
         dragAway(from: shareButton, onto: card)
-        XCTAssertFalse(app.otherElements["ActivityListView"].waitForExistence(timeout: 1))
+        XCTAssertFalse(app.segmentedControls["share.format"].waitForExistence(timeout: 1))
         XCTAssertTrue(card.exists)
         capture("rec-293-place-action-drag-cancelled")
 
@@ -97,10 +97,10 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [cardIsHittable], timeout: 5), .completed)
 
         app.buttons["map.selectedPlaceShare"].tap()
-        let activityList = app.otherElements["ActivityListView"]
-        XCTAssertTrue(activityList.waitForExistence(timeout: 5))
-        app.buttons["Close"].tap()
-        XCTAssertFalse(activityList.waitForExistence(timeout: 3))
+        let sharePreview = app.segmentedControls["share.format"]
+        XCTAssertTrue(sharePreview.waitForExistence(timeout: 5))
+        app.buttons["Close share preview"].tap()
+        XCTAssertFalse(sharePreview.waitForExistence(timeout: 3))
     }
 
     private func dragAway(from button: XCUIElement, onto card: XCUIElement) {

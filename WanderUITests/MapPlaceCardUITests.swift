@@ -445,10 +445,10 @@ final class MapPlaceCardUITests: XCTestCase {
         capture("rec-293-place-card-collapsed")
 
         shareButton.tap()
-        let activityList = app.otherElements["ActivityListView"]
-        XCTAssertTrue(activityList.waitForExistence(timeout: 5))
-        app.buttons["Close"].tap()
-        XCTAssertFalse(activityList.waitForExistence(timeout: 3))
+        let sharePreview = app.segmentedControls["share.format"]
+        XCTAssertTrue(sharePreview.waitForExistence(timeout: 5))
+        app.buttons["Close share preview"].tap()
+        XCTAssertFalse(sharePreview.waitForExistence(timeout: 3))
 
         card.press(forDuration: 0.8)
         XCTAssertTrue(card.exists)
