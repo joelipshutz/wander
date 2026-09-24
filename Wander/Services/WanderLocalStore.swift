@@ -176,6 +176,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var pendingSharedVisitInvites: [PendingSharedVisitInvite]
     @Published private(set) var sharedVisitCompanionsByVisitID: [String: [SharedVisitCompanion]] = [:]
     private(set) var sharedVisitInboxUserID: String?
+    @Published private(set) var sharedVisitInboxFailureUserID: String?
     @Published private(set) var follows: [LocalFollow]
     @Published private(set) var blocks: [LocalBlock]
     @Published private(set) var mutes: [LocalMute]
@@ -265,6 +266,7 @@ final class WanderStore: ObservableObject {
         userID: String,
         task: Task<[SharedVisitInvitation], Error>
     )?
+    private var sharedVisitInboxGeneration = UUID()
     private var currentUserCalendarRefreshTask: (
         id: UUID,
         userID: String,
@@ -814,7 +816,7 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func refreshSharedVisitInbox(backend: WanderBackend?) async -> Bool {
-        guard let backend, backend.canUseSharedVisits else { return false }
+        guard !Task.isCancelled, let backend, backend.canUseSharedVisits else { return false }
         let requestUserID = currentUser.id
 
         let taskID: UUID
@@ -825,6 +827,7 @@ final class WanderStore: ObservableObject {
         } else {
             sharedVisitInboxTask?.task.cancel()
             taskID = UUID()
+            sharedVisitInboxGeneration = taskID
             let createdTask = Task { @MainActor in
                 try await backend.sharedVisitInbox(limit: 50)
             }
@@ -840,7 +843,8 @@ final class WanderStore: ObservableObject {
 
         do {
             let invitations = try await task.value
-            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
+            guard currentUser.id == requestUserID, sharedVisitInboxGeneration == taskID,
+                  !Task.isCancelled else { return false }
             // All waiters share the fetch, and an identical response must not
             // invalidate Map/Profile projections or rewrite the local snapshot.
             if sharedVisitInboxUserID != requestUserID || sharedVisitInvitations != invitations {
@@ -848,10 +852,14 @@ final class WanderStore: ObservableObject {
                 sharedVisitInboxUserID = requestUserID
                 persist()
             }
+            if sharedVisitInboxFailureUserID != nil { sharedVisitInboxFailureUserID = nil }
             if lastRemoteError != nil { lastRemoteError = nil }
             return true
         } catch {
-            guard currentUser.id == requestUserID else { return false }
+            guard currentUser.id == requestUserID, sharedVisitInboxGeneration == taskID,
+                  !Task.isCancelled else { return false }
+            guard !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return false }
+            sharedVisitInboxFailureUserID = requestUserID
             lastRemoteError = remoteErrorMessage(error)
             return false
         }
@@ -6228,6 +6236,25 @@ final class WanderStore: ObservableObject {
             .map(shell(for:))
     }
 
+    /// Search owns its error state; another concurrent place lookup must not
+    /// overwrite it through lastRemoteError. Recheck identity before caching.
+    func searchDiscoverMembers(query: String, backend: WanderBackend) async throws -> [ProfileShell] {
+        let userID = currentUser.id
+        let normalized = normalizedHandleQuery(query)
+        let local = searchProfiles(handleQuery: normalized)
+        guard normalized.count >= 2, backend.profileRepository != nil else { return local }
+        let remote = try await backend.searchProfiles(handleQuery: normalized)
+        try Task.checkCancellation()
+        guard currentUser.id == userID else { throw CancellationError() }
+        let eligible = remote.filter {
+            $0.id != userID && $0.isPrivateProfile != true && !isBlockedBetweenCurrentUser(and: $0.id)
+        }
+        upsertRemoteProfileShells(eligible, preserveExistingProfileMetadataWhenMissing: true)
+        return mergeProfileShells(local + eligible).filter {
+            !isProfilePrivate($0.id) && !isBlockedBetweenCurrentUser(and: $0.id)
+        }
+    }
+
     func discoverMembers(query: String, backend: WanderBackend? = nil) async -> [ProfileShell] {
         var profiles = searchProfiles(handleQuery: query)
         let normalizedProfileQuery = normalizedHandleQuery(query)
@@ -6420,7 +6447,7 @@ final class WanderStore: ObservableObject {
         } catch is CancellationError {
             return DiscoverFilters(query: query)
         } catch {
-            let fallback = DiscoverFilters(query: query)
+            let fallback = DeterministicFilterParser.filters(query: query, schema: schema)
             if lastDiscoverFilters != fallback {
                 lastDiscoverFilters = fallback
             }
@@ -6444,6 +6471,23 @@ final class WanderStore: ObservableObject {
         default:
             "other"
         }
+    }
+
+    func discoverOwnerCandidates(for filters: DiscoverFilters) -> [ProfileShell] {
+        guard let ownerQuery = filters.ownerQuery,
+              !ownerQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return [] }
+        return ([currentUser] + following(of: currentUser.id))
+            .filter { profile in
+                !isBlockedBetweenCurrentUser(and: profile.id)
+                    && DiscoverOwnerQueryPolicy.matches(
+                        ownerQuery,
+                        handle: profile.handle,
+                        displayName: profile.displayName,
+                        query: filters.query
+                    )
+            }
+            .map(shell(for:))
     }
 
     func searchTrustedPlaces(
@@ -6473,7 +6517,7 @@ final class WanderStore: ObservableObject {
         let candidates = visiblePlaces(filters: placeFilters)
             .filter { visiblePlace in
                 matchesArea(filters.area, visiblePlace: visiblePlace)
-                    && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
+                    && matchesOwner(filters, visiblePlace: visiblePlace)
                     && matchesTags(filters.tags, visiblePlace: visiblePlace)
                     && matchesOpinion(filters.opinion, visiblePlace: visiblePlace)
             }
@@ -6560,7 +6604,7 @@ final class WanderStore: ObservableObject {
         let candidates = visiblePlaces(filters: placeFilters)
             .filter { visiblePlace in
                 matchesArea(filters.area, visiblePlace: visiblePlace)
-                    && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
+                    && matchesOwner(filters, visiblePlace: visiblePlace)
                     && matchesTags(filters.tags, visiblePlace: visiblePlace)
                     && matchesOpinion(filters.opinion, visiblePlace: visiblePlace)
             }
@@ -9785,7 +9829,8 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    private func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
+    /// Shared read-only visibility check for search, notification rows, and badges.
+    func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
         isBlockedBetween(currentUser.id, and: userID)
     }
 
@@ -9805,7 +9850,7 @@ final class WanderStore: ObservableObject {
             && !isBlockedBetween(graphOwnerID, and: profileID)
     }
 
-    private func isProfilePrivate(_ userID: String) -> Bool {
+    func isProfilePrivate(_ userID: String) -> Bool {
         profiles.first { $0.id == userID }?.isPrivateProfile == true
     }
 
@@ -10022,6 +10067,8 @@ final class WanderStore: ObservableObject {
     private func cancelSharedVisitInboxTask() {
         sharedVisitInboxTask?.task.cancel()
         sharedVisitInboxTask = nil
+        sharedVisitInboxGeneration = UUID()
+        sharedVisitInboxFailureUserID = nil
     }
 
     private func cancelVisitPhotoUploadTask() {
@@ -12356,29 +12403,16 @@ final class WanderStore: ObservableObject {
         return haystack.contains(area)
     }
 
-    private func matchesOwner(_ ownerQuery: String?, visiblePlace: VisiblePlace) -> Bool {
-        guard let ownerQuery = ownerQuery?
-            .lowercased()
-            .replacingOccurrences(of: "@", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines),
+    private func matchesOwner(_ filters: DiscoverFilters, visiblePlace: VisiblePlace) -> Bool {
+        guard let ownerQuery = filters.ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
               !ownerQuery.isEmpty
-        else {
-            return true
-        }
-
-        let normalizedOwnerQuery = normalizedDiscoverText(ownerQuery)
-        let normalizedHandle = normalizedDiscoverText(visiblePlace.owner.handle)
-        let normalizedName = normalizedDiscoverText(visiblePlace.owner.displayName)
-        if normalizedHandle == normalizedOwnerQuery || normalizedName == normalizedOwnerQuery {
-            return true
-        }
-
-        guard !ownerQuery.contains("@"),
-              !normalizedOwnerQuery.contains(" "),
-              normalizedOwnerQuery.hasSuffix("s")
-        else { return false }
-        let possessiveBase = String(normalizedOwnerQuery.dropLast())
-        return normalizedHandle == possessiveBase || normalizedName == possessiveBase
+        else { return true }
+        return DiscoverOwnerQueryPolicy.matches(
+            ownerQuery,
+            handle: visiblePlace.owner.handle,
+            displayName: visiblePlace.owner.displayName,
+            query: filters.query
+        )
     }
 
     private func matchesTags(_ tags: Set<String>, visiblePlace: VisiblePlace) -> Bool {

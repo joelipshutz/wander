@@ -24,11 +24,11 @@ import Foundation
     }
 
     func refresh(userID: String, repository: (any PlacePlanInvitationRepository)?) async {
+        guard !Task.isCancelled else { return }
         reset(for: userID)
         let request = UUID()
         requestID = request
         isLoading = true
-        failed = false
         defer {
             if self.userID == userID, requestID == request { isLoading = false }
         }
@@ -37,8 +37,10 @@ import Foundation
             let rows = try await repository.receivedInvitations()
             guard self.userID == userID, requestID == request, !Task.isCancelled else { return }
             invitations = rows
+            failed = false
         } catch {
             guard self.userID == userID, requestID == request, !Task.isCancelled else { return }
+            guard !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }
             // A failed refresh is not evidence that cached access remains valid.
             invitations = []
             failed = true

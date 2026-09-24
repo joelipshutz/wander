@@ -597,6 +597,7 @@ struct WanderRootView: View {
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
+        .modifier(NotificationInboxHost(store: store))
         .task(id: selectedTab) {
             // Let the native tab selection render before analytics work begins
             // on the main actor.

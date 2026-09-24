@@ -4,10 +4,15 @@ import Foundation
 /// Explicit UI-test fixture; never selected by ordinary Simulator/device runs.
 @MainActor final class SimulatorPlacePlanInvitationRepository: PlacePlanInvitationRepository {
     private var readAt: Date?
+    private let includesInvitations: Bool
+
+    init(includesInvitations: Bool = true) {
+        self.includesInvitations = includesInvitations
+    }
     static let invitationID = UUID(uuidString: "11111111-2222-4333-8444-555555555555")!
 
     func receivedInvitations() async throws -> [ReceivedPlacePlanInvitation] {
-        guard let invitation = try await invitation(token: String(repeating: "a", count: 48)) else { return [] }
+        guard includesInvitations, let invitation = try await invitation(token: String(repeating: "a", count: 48)) else { return [] }
         return [ReceivedPlacePlanInvitation(id: Self.invitationID, invitation: invitation, createdAt: .now, readAt: readAt)]
     }
 

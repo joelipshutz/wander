@@ -842,6 +842,10 @@ enum DiscoverTrustedPlaceSearchPlanner {
 
         if let ownerQuery = filters.ownerQuery {
             phrases.append(ownerQuery.replacingOccurrences(of: "@", with: ""))
+            if let mention = DiscoverOwnerQueryPolicy.mention(in: filters.query),
+               mention.ownerQuery == ownerQuery {
+                phrases.append(mention.consumedPhrase)
+            }
         }
 
         for status in filters.statuses {
