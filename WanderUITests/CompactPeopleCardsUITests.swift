@@ -84,7 +84,7 @@ final class CompactPeopleCardsUITests: XCTestCase {
         XCTAssertTrue(follow.isHittable)
         XCTAssertGreaterThanOrEqual(follow.frame.height, 44)
         XCTAssertLessThan(follow.frame.maxY - profile.frame.minY, 190)
-        XCTAssertTrue(app.staticTexts["Recent"].exists)
+        XCTAssertTrue(app.staticTexts["Activity"].exists)
         capture("compact-people-default")
         follow.tap()
         let failed = NSPredicate(format: "label CONTAINS %@", "Couldn't follow")

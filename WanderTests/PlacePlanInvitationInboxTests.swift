@@ -2,6 +2,101 @@ import XCTest
 @testable import Wander
 
 @MainActor final class PlacePlanInvitationInboxTests: XCTestCase {
+    func testNotificationErrorTracksBackgroundFailureAndRecoveryWithPopulatedPlans() async {
+        let plans = PlacePlanInvitationInbox()
+        let follows = FollowNotificationInbox()
+        let planRepository = PlanInboxTestRepository()
+        let followRepository = NotificationRefreshFollowRepository()
+        func message(for userID: String = "recipient") -> String? {
+            NotificationInboxRefreshStatus.errorMessage(
+                userID: userID, plans: plans, follows: follows, checkInFailureUserID: nil
+            )
+        }
+        await plans.refresh(userID: "recipient", repository: planRepository)
+        await follows.refresh(userID: "recipient", repository: followRepository)
+        let initialPlans = plans.invitations
+        let initialFollows = follows.notifications
+        XCTAssertNil(message())
+
+        // A host refresh can fail while the screen's other sections stay populated.
+        followRepository.shouldFail = true
+        await follows.refresh(userID: "recipient", repository: followRepository)
+        XCTAssertEqual(plans.invitations, initialPlans)
+        XCTAssertEqual(message(), "Couldn’t refresh follower notifications")
+        XCTAssertNil(message(for: "other-account"))
+
+        // Recovery need not change the original rows or trigger a screen refresh.
+        followRepository.shouldFail = false
+        await follows.refresh(userID: "recipient", repository: followRepository)
+        XCTAssertEqual(plans.invitations, initialPlans)
+        XCTAssertEqual(follows.notifications, initialFollows)
+        XCTAssertNil(message())
+        XCTAssertEqual(NotificationInboxRefreshStatus.errorMessage(
+            userID: "recipient", plans: plans, follows: follows, checkInFailureUserID: "recipient"
+        ), "Couldn’t refresh check-in invitations")
+    }
+
+    func testOverlappingFollowRefreshDiscardsEarlierFailure() async {
+        let follows = FollowNotificationInbox()
+        let repository = NotificationRefreshFollowRepository()
+        repository.suspend = true
+        let earlier = Task { await follows.refresh(userID: "recipient", repository: repository) }
+        for _ in 0..<1000 where repository.pending == nil { await Task.yield() }
+        XCTAssertNotNil(repository.pending)
+        repository.suspend = false
+        await follows.refresh(userID: "recipient", repository: repository)
+        repository.pending?.resume(throwing: URLError(.notConnectedToInternet))
+        await earlier.value
+        XCTAssertEqual(follows.notifications, [repository.row])
+        XCTAssertFalse(follows.failed)
+        XCTAssertFalse(follows.isLoading)
+    }
+
+    func testCancelledRetriesPreserveLastCompletedFailures() async {
+        let plans = PlacePlanInvitationInbox()
+        let follows = FollowNotificationInbox()
+        await plans.refresh(userID: "recipient", repository: nil)
+        await follows.refresh(userID: "recipient", repository: nil)
+        let planRepository = PlanInboxTestRepository()
+        let followRepository = NotificationRefreshFollowRepository()
+        planRepository.suspend = true
+        followRepository.suspend = true
+        let planRetry = Task { await plans.refresh(userID: "recipient", repository: planRepository) }
+        let followRetry = Task { await follows.refresh(userID: "recipient", repository: followRepository) }
+        for _ in 0..<1000 where planRepository.pending == nil || followRepository.pending == nil { await Task.yield() }
+        XCTAssertNotNil(planRepository.pending)
+        XCTAssertNotNil(followRepository.pending)
+        XCTAssertTrue(plans.failed)
+        XCTAssertTrue(follows.failed)
+        planRetry.cancel()
+        followRetry.cancel()
+        planRepository.pending?.resume(returning: [planRepository.row])
+        followRepository.pending?.resume(returning: [followRepository.row])
+        await planRetry.value
+        await followRetry.value
+        XCTAssertTrue(plans.failed)
+        XCTAssertTrue(follows.failed)
+        XCTAssertFalse(plans.isLoading)
+        XCTAssertFalse(follows.isLoading)
+    }
+
+    func testAlreadyCancelledRefreshCannotResetActiveAccount() async {
+        let plans = PlacePlanInvitationInbox()
+        let follows = FollowNotificationInbox()
+        plans.reset(for: "current")
+        follows.reset(for: "current")
+        let cancelled = Task {
+            await plans.refresh(userID: "previous", repository: nil)
+            await follows.refresh(userID: "previous", repository: nil)
+        }
+        cancelled.cancel()
+        await cancelled.value
+        XCTAssertEqual(plans.userID, "current")
+        XCTAssertEqual(follows.userID, "current")
+        XCTAssertFalse(plans.failed)
+        XCTAssertFalse(follows.failed)
+    }
+
     func testReadInvitationsRemainReopenableAndAnalyticsExcludeTheirContents() async {
         let repository = PlanInboxTestRepository()
         let inbox = PlacePlanInvitationInbox()
@@ -83,6 +178,20 @@ import XCTest
         XCTAssertTrue(inbox.invitations.isEmpty)
         XCTAssertFalse(inbox.isLoading)
         XCTAssertFalse(inbox.failed)
+    }
+}
+
+@MainActor private final class NotificationRefreshFollowRepository: FollowNotificationRepository {
+    let row = FollowNotification(id: UUID(), actorID: "actor", displayName: "Actor", handle: "actor",
+                                 avatarURL: nil, createdAt: .now, isMutual: false)
+    var shouldFail = false
+    var suspend = false
+    var pending: CheckedContinuation<[FollowNotification], Error>?
+
+    func receivedFollows() async throws -> [FollowNotification] {
+        if shouldFail { throw URLError(.notConnectedToInternet) }
+        if suspend { return try await withCheckedThrowingContinuation { pending = $0 } }
+        return [row]
     }
 }
 

@@ -6021,6 +6021,70 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(repository.inviteeListRequests.isEmpty)
     }
 
+    func testSharedVisitInboxFailureRecoversWithIdenticalCachedRows() async {
+        let store = WanderStore(fixtures: .empty())
+        let repository = FakeSharedVisitRepository()
+        repository.inboxInvitations = [makeSharedVisitInvitation()]
+        let backend = WanderBackend(sharedVisitRepository: repository)
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+        let originalRows = store.sharedVisitInvitations
+        let revision = store.presentationRevision
+
+        repository.inboxError = TestError.expected
+        let failed = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(store.sharedVisitInboxFailureUserID, store.currentUser.id)
+        XCTAssertEqual(store.sharedVisitInvitations, originalRows)
+
+        repository.inboxError = nil
+        let recovered = await store.refreshSharedVisitInbox(backend: backend)
+        XCTAssertTrue(recovered)
+        XCTAssertNil(store.sharedVisitInboxFailureUserID)
+        XCTAssertEqual(store.sharedVisitInvitations, originalRows)
+        XCTAssertEqual(store.presentationRevision, revision)
+    }
+
+    func testSharedVisitInboxLateFailureCannotOverwriteAccountAfterSwitchingBack() async {
+        let store = WanderStore(fixtures: .empty())
+        let originalSession = AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")
+        store.apply(authState: .signedIn(originalSession))
+        let oldRepository = FakeSharedVisitRepository()
+        oldRepository.shouldSuspendInbox = true
+        let earlier = Task { await store.refreshSharedVisitInbox(backend: WanderBackend(sharedVisitRepository: oldRepository)) }
+        for _ in 0..<1000 where !oldRepository.hasSuspendedInboxRequest { await Task.yield() }
+        XCTAssertTrue(oldRepository.hasSuspendedInboxRequest)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        store.apply(authState: .signedIn(originalSession))
+        let currentRepository = FakeSharedVisitRepository()
+        currentRepository.inboxInvitations = [makeSharedVisitInvitation()]
+        _ = await store.refreshSharedVisitInbox(backend: WanderBackend(sharedVisitRepository: currentRepository))
+        oldRepository.resumeInbox(throwing: TestError.expected)
+        let accepted = await earlier.value
+        XCTAssertFalse(accepted)
+        XCTAssertNil(store.sharedVisitInboxFailureUserID)
+        XCTAssertEqual(store.sharedVisitInvitations, currentRepository.inboxInvitations)
+    }
+
+    func testSharedVisitInboxCancelledWaiterDoesNotReportFailureForRemainingWaiter() async {
+        let store = WanderStore(fixtures: .empty())
+        let repository = FakeSharedVisitRepository()
+        repository.shouldSuspendInbox = true
+        let backend = WanderBackend(sharedVisitRepository: repository)
+        let first = Task { await store.refreshSharedVisitInbox(backend: backend) }
+        for _ in 0..<1000 where !repository.hasSuspendedInboxRequest { await Task.yield() }
+        XCTAssertTrue(repository.hasSuspendedInboxRequest)
+        let second = Task { await store.refreshSharedVisitInbox(backend: backend) }
+        for _ in 0..<100 { await Task.yield() }
+        first.cancel()
+        repository.resumeInbox()
+        let firstAccepted = await first.value
+        let secondAccepted = await second.value
+        XCTAssertFalse(firstAccepted)
+        XCTAssertTrue(secondAccepted)
+        XCTAssertEqual(repository.inboxRequestCount, 1)
+        XCTAssertNil(store.sharedVisitInboxFailureUserID)
+    }
+
     func testSharedVisitInboxDiscardsCompletionFromPreviousAccount() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
@@ -7518,9 +7582,11 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
 
         XCTAssertEqual(store.searchProfiles(handleQuery: "ry").map(\.handle), ["ryan"])
+        XCTAssertFalse(store.isBlockedBetweenCurrentUser(and: "user_ryan"))
 
         store.block(userID: "user_ryan")
 
+        XCTAssertTrue(store.isBlockedBetweenCurrentUser(and: "user_ryan"))
         XCTAssertTrue(store.searchProfiles(handleQuery: "ry").isEmpty)
         XCTAssertTrue(store.searchProfiles(handleQuery: "r").isEmpty)
     }
@@ -7530,9 +7596,11 @@ final class WanderStoreTests: XCTestCase {
         let maya = store.profiles.first { $0.id == "user_maya" }!
 
         XCTAssertEqual(store.searchProfiles(handleQuery: "ma").map(\.handle), ["maya"])
+        XCTAssertFalse(store.isProfilePrivate("user_maya"))
 
         maya.isPrivateProfile = true
 
+        XCTAssertTrue(store.isProfilePrivate("user_maya"))
         XCTAssertTrue(store.searchProfiles(handleQuery: "ma").isEmpty)
     }
 
@@ -7712,7 +7780,7 @@ final class WanderStoreTests: XCTestCase {
 
         let filters = await store.parseDiscover(query: "anything")
 
-        XCTAssertEqual(filters, DiscoverFilters(query: "anything"))
+        XCTAssertEqual(filters, DeterministicFilterParser.filters(query: "anything", schema: DiscoverFilterSchema()))
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
     }
 
@@ -8165,6 +8233,18 @@ final class WanderStoreTests: XCTestCase {
         oldRepo.suspendRecommendations = false
         await oldTask.value
         XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.map(\.id), [newProfile.id])
+    }
+
+    func testClearingContactsRemovesContactGraphSuggestionsFromPeopleShelf() async {
+        let store = makeStore()
+        let reasons: [DiscoverPeopleRecommendationReason] = [.contacts, .contactFollows(3), .nearby]
+        let recommendations = reasons.enumerated().map { index, reason in
+            DiscoverPeopleRecommendation(profile: ProfileShell(id: "user_contact_graph_\(index)", handle: "graph\(index)", displayName: "Person", avatarURL: nil, bio: nil, relationship: .nonFollower), reason: reason, rank: index + 1)
+        }
+        await store.refreshDiscoverPeopleRecommendations(backend: WanderBackend(profileRepository: FakeProfileRepository(recommendations: recommendations)))
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.count, 3)
+        store.clearContactRecommendations()
+        XCTAssertEqual(store.visibleDiscoverPeopleRecommendations.map(\.id), [recommendations[2].id])
     }
 
     func testDiscoverPeopleRecommendationsFailureAndIdentityChangeResetState() async {
@@ -13270,6 +13350,8 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
     private(set) var declineRequests: [DeclineRequest] = []
     var activeInviteeUserIDs: [String] = []
     var inboxInvitations: [SharedVisitInvitation] = []
+    var inboxError: Error?
+    private(set) var inboxRequestCount = 0
     var shouldSuspendInbox = false
     private var inboxContinuation: CheckedContinuation<[SharedVisitInvitation], Error>?
 
@@ -13306,6 +13388,8 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
     }
 
     func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
+        inboxRequestCount += 1
+        if let inboxError { throw inboxError }
         guard shouldSuspendInbox else { return inboxInvitations }
         return try await withCheckedThrowingContinuation { continuation in
             inboxContinuation = continuation
@@ -13314,6 +13398,10 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
 
     func resumeInbox() {
         inboxContinuation?.resume(returning: [])
+        inboxContinuation = nil
+    }
+    func resumeInbox(throwing error: Error) {
+        inboxContinuation?.resume(throwing: error)
         inboxContinuation = nil
     }
     func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation? { nil }

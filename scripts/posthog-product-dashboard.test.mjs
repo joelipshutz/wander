@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyDashboard,
+  applyNotificationPromptInsights,
   assertDefinition,
   insights,
   sections,
@@ -47,7 +48,7 @@ test("engagement and retention queries use canonical events", () => {
 
 test("notification operations includes delivery, opens, frequency, and aggregate histogram", () => {
   const section = sections.find(({ title }) => title === "Notification Operations");
-  assert.equal(section.insightKeys.length, 5);
+  assert.equal(section.insightKeys.length, 9);
 
   const volume = insights.find(({ key }) => key === "notifications-accepted-volume");
   assert.equal(volume.query.series[0].event, "notification_delivery_processed");
@@ -63,6 +64,49 @@ test("notification operations includes delivery, opens, frequency, and aggregate
   assert.equal(histogram.query.display, "ActionsBar");
   assert.match(histogram.query.source.query, /notification_frequency_bucket_snapshot/);
   assert.doesNotMatch(histogram.query.source.query, /distinct_id/);
+});
+
+test("prompt-only apply preserves existing dashboard metadata and unrelated insights", async () => {
+  for (const insight of insights.filter(({ key }) => key.startsWith("notification-prompts-"))) {
+    assert.ok(insight.description.length <= 400, "PostHog description limit");
+  }
+  const oldFetch = globalThis.fetch;
+  const oldProject = process.env.WANDER_POSTHOG_PROJECT_ID;
+  const oldKey = process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
+  process.env.WANDER_POSTHOG_PROJECT_ID = "557259";
+  process.env.WANDER_POSTHOG_PERSONAL_API_KEY = "test-only";
+  const writes = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    const method = options.method || "GET";
+    let result;
+    if (method === "GET" && path.endsWith("/dashboards/")) {
+      result = { results: [{ id: 1994904, tags: ["recme:iac:dashboard:product-funnel"] }] };
+    } else if (method === "GET" && path.endsWith("/insights/")) {
+      result = { results: [
+        { id: 1, tags: ["recme:iac:insight:newer-unrelated-metric"], dashboards: [1994904] },
+        { id: 2, tags: ["recme:iac:insight:notification-prompts-reach"], dashboards: [2120890] }
+      ] };
+    } else if ((method === "POST" && path.endsWith("/insights/")) || (method === "PATCH" && path.endsWith("/insights/2/"))) {
+      const body = JSON.parse(options.body);
+      assert.ok(body.tags.some(tag => tag.startsWith("recme:iac:insight:notification-prompts-")));
+      writes.push(body);
+      result = { id: writes.length + 1 };
+    } else throw new Error(`Unrelated write: ${method} ${path}`);
+    return { ok: true, json: async () => result };
+  };
+  try {
+    const result = await applyNotificationPromptInsights();
+    assert.equal(result.dashboardID, 1994904);
+    assert.equal(writes.length, 4);
+    assert.deepEqual(writes[0].dashboards, [2120890, 1994904]);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldProject === undefined) delete process.env.WANDER_POSTHOG_PROJECT_ID;
+    else process.env.WANDER_POSTHOG_PROJECT_ID = oldProject;
+    if (oldKey === undefined) delete process.env.WANDER_POSTHOG_PERSONAL_API_KEY;
+    else process.env.WANDER_POSTHOG_PERSONAL_API_KEY = oldKey;
+  }
 });
 
 test("apply provisions an ordered dashboard through supported tile endpoints", async () => {

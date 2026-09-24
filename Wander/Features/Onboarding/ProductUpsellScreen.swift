@@ -17,7 +17,7 @@ struct ProductUpsellScreen: View {
         Group {
             if presentation.isOnboarding {
                 OnboardingStepScaffold(step: .notifications) {
-                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking, showsOnboardingExamples: true)
+                    ProductUpsellContentView(content: presentation.content, isWorking: isWorking)
                 } footer: {
                     footer
                 }
@@ -32,7 +32,6 @@ struct ProductUpsellScreen: View {
                         .padding(.horizontal, WanderTheme.spacing4)
                         .padding(.top, WanderTheme.spacing2)
                         .padding(.bottom, WanderTheme.spacing2)
-                        .background(.ultraThinMaterial)
                 }
                 .background(brandMode.background.ignoresSafeArea())
                 .foregroundStyle(brandMode.primaryText)
@@ -61,6 +60,8 @@ struct ProductUpsellScreen: View {
 
             if allowsSecondaryAction {
                 Button("Not now") {
+                    guard isCurrentPresentation else { return }
+                    coordinator.recordButtonClick(.notNow, for: presentation.id)
                     trackOnboardingPermissionResult("skipped")
                     coordinator.complete(
                         presentationID: presentation.id,
@@ -96,6 +97,12 @@ struct ProductUpsellScreen: View {
     private func handlePrimaryAction() {
         guard isCurrentPresentation,
               coordinator.beginAction(for: presentation.id) else { return }
+        // Log the button the person actually saw, before refreshing permission or
+        // awaiting an outcome. A tap does not mean authorization succeeded.
+        let button: ProductUpsellButton = OnboardingNotificationPermissionPolicy.action(
+            for: pushNotifications.authorizationStatus
+        ) == .openSettings ? .openSettings : .continue
+        coordinator.recordButtonClick(button, for: presentation.id)
         Task { @MainActor in
             defer { coordinator.endAction(for: presentation.id) }
             await pushNotifications.refreshAuthorizationStatus()
@@ -108,7 +115,7 @@ struct ProductUpsellScreen: View {
             case .openSettings:
                 coordinator.recordAction(.openedSettings, for: presentation.id)
                 trackOnboardingPermissionResult("settings")
-                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
                 openURL(url)
             case .request, .enable:
                 let enabled = await pushNotifications.enableNotifications(
@@ -150,29 +157,12 @@ struct ProductUpsellScreen: View {
 struct ProductUpsellContentView: View {
     let content: ProductUpsellContent
     let isWorking: Bool
-    var showsOnboardingExamples = false
-    private var accent: Color { AstirTheme.signal.color }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: WanderTheme.spacing6) {
-                if showsOnboardingExamples {
-                    OnboardingNotificationExamples()
-                        .padding(.top, WanderTheme.spacing6)
-                } else {
-                Spacer(minLength: WanderTheme.spacing4)
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(0.18))
-                        .frame(width: 220, height: 220)
-                    Image(systemName: content.systemImage)
-                        .font(.system(size: 86, weight: .medium))
-                        .foregroundStyle(accent)
-                        .symbolEffect(.bounce, value: isWorking)
-                }
-                .accessibilityHidden(true)
-
-                }
+                OnboardingNotificationExamples()
+                    .padding(.top, WanderTheme.spacing6)
 
                 OnboardingHeadline(
                     eyebrow: content.eyebrow,
@@ -194,7 +184,7 @@ struct ProductUpsellContentView: View {
 }
 
 /// Illustrative examples of supported notification types, rendered natively in
-/// the signup notification primer. They are not live account activity.
+/// every notification primer. They are not live account activity.
 struct OnboardingNotificationExamples: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -203,7 +193,7 @@ struct OnboardingNotificationExamples: View {
 
     private let examples: [(icon: String, title: String, message: String)] = [
         ("mappin.and.ellipse", "Ryan checked in", "A new place to discover."),
-        ("square.and.arrow.down", "Your Instagram import is ready", "Your places are ready to review."),
+        ("bubble.left", "Joe commented on your check-in", "“This place looks gas”"),
         ("person.crop.circle.badge.checkmark", "Mina followed you", "Your circle is growing.")
     ]
 
@@ -240,7 +230,7 @@ struct OnboardingNotificationExamples: View {
         }
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Example Astir notifications: Ryan checked in. Your Instagram import is ready. Mina followed you.")
+        .accessibilityLabel("Example Astir notifications: Ryan checked in. Joe commented on your check-in. Mina followed you.")
         .accessibilityIdentifier("onboarding.notificationExamples")
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
