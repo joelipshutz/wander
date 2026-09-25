@@ -2,6 +2,7 @@ name: Wander
 options:
   bundleIdPrefix: com.grayline
   settingPresets: none
+  createIntermediateGroups: true
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -32,6 +33,21 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  AstirClip:
+    build:
+      targets:
+        AstirClip: all
+        AstirClipTests: [test]
+        AstirClipUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AstirClipTests
+        - AstirClipUITests
+    archive:
+      config: Release
   City and Phone Review:
     build:
       targets:
@@ -140,6 +156,108 @@ schemes:
     archive:
       config: Release
 targets:
+  AstirClip:
+    type: application.on-demand-install-capable
+    platform: iOS
+    sources:
+      - WanderAppClip
+      - WanderAppClipShared
+      - path: Wander/Services/Auth/AuthSessionCore.swift
+        group: Wander/Services/Auth
+      - path: Wander/Services/Auth/ClerkAuthService.swift
+        group: Wander/Services/Auth
+      - path: Wander/Services/WanderDebugLog.swift
+        group: Wander/Services
+      - path: Wander/Services/AnalyticsEvent.swift
+        group: Wander/Services
+      - path: Wander/Services/PostHogAnalyticsClient.swift
+        group: Wander/Services
+      - path: Wander/App/WanderBackendConfiguration.swift
+        group: Wander/App
+      - WanderWidgetShared/WanderWidgetConstants.swift
+      - WanderWidgetShared/WanderWidgetDeepLink.swift
+    dependencies:
+      - package: clerk-ios
+        product: ClerkKit
+      - package: posthog-ios
+        product: PostHog
+    configFiles:
+      Debug: Wander/Config/Auth.xcconfig
+      Release: Wander/Config/Auth.xcconfig
+    info:
+      path: WanderAppClip/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Astir
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WANDER_CLERK_PUBLISHABLE_KEY: $(WANDER_CLERK_PUBLISHABLE_KEY)
+        WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
+        WANDER_SUPABASE_PUBLISHABLE_KEY: $(WANDER_SUPABASE_PUBLISHABLE_KEY)
+        WANDER_POSTHOG_PROJECT_TOKEN: $(WANDER_POSTHOG_PROJECT_TOKEN)
+        WANDER_POSTHOG_HOST: $(WANDER_POSTHOG_HOST)
+        NSAppClip:
+          NSAppClipRequestEphemeralUserNotification: false
+          NSAppClipRequestLocationConfirmation: false
+        NSUserActivityTypes: [NSUserActivityTypeBrowsingWeb]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_NAME: AstirClip
+        PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.Clip
+        CODE_SIGN_ENTITLEMENTS: WanderAppClip/Resources/AstirClip.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SKIP_INSTALL: YES
+        ALWAYS_SEARCH_USER_PATHS: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+      configs:
+        Debug:
+          ENABLE_TESTABILITY: YES
+          ONLY_ACTIVE_ARCH: YES
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        Release:
+          SWIFT_COMPILATION_MODE: wholemodule
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+  AstirClipUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [WanderAppClipUITests]
+    dependencies:
+      - target: AstirClip
+    settings:
+      base:
+        PRODUCT_NAME: AstirClipUITests
+        PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.ClipUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: AstirClip
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"]
+      configs:
+        Debug:
+          ONLY_ACTIVE_ARCH: YES
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+  AstirClipTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [WanderAppClipTests]
+    dependencies:
+      - target: AstirClip
+    settings:
+      base:
+        PRODUCT_NAME: AstirClipTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.ClipTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: AstirClip
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/AstirClip.app/AstirClip"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+      configs:
+        Debug:
+          ONLY_ACTIVE_ARCH: YES
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
   Wander:
     type: application
     platform: iOS
@@ -148,6 +266,7 @@ targets:
       - WanderImportShared
       - WanderWidgetShared
       - WanderControlShared
+      - WanderAppClipShared
     configFiles:
       Debug: Wander/Config/Auth.xcconfig
       Release: Wander/Config/Auth.xcconfig
@@ -225,6 +344,9 @@ targets:
         product: Supabase
       - package: tiktok-opensdk-ios
         product: TikTokOpenShareSDK
+      - target: AstirClip
+        embed: true
+        link: false
       - package: PhoneNumberKit
         product: PhoneNumberKit
       - target: WanderWidgets

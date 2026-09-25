@@ -685,7 +685,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let nearbyWidgetGroups = try XCTUnwrap(
             nearbyWidgetEntitlements["com.apple.security.application-groups"] as? [String]
         )
-        XCTAssertEqual(appGroups, [WanderWidgetConstants.appGroupIdentifier])
+        XCTAssertEqual(Set(appGroups), [WanderWidgetConstants.appGroupIdentifier, AppClipHandoff.group])
         XCTAssertEqual(widgetGroups, [WanderWidgetConstants.appGroupIdentifier])
         XCTAssertEqual(nearbyWidgetGroups, [WanderWidgetConstants.appGroupIdentifier])
 
@@ -932,7 +932,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertNotNil(Int(configuredBuildNumber ?? ""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
-            4
+            5 // Parent, Clip, share extension and both widget extensions.
         )
     }
 

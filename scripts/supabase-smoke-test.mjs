@@ -192,6 +192,13 @@ async function main() {
         );
         await runCheckInSmokeChecks(client, smokeUserID, collaboratorUserID);
         await client.query("reset role");
+        await client.query("savepoint app_clip_smoke");
+        try {
+          await client.query(transactionBody(readFileSync(new URL("../supabase/tests/app_clip_save.sql", import.meta.url), "utf8"), "rollback"));
+        } finally {
+          await client.query("rollback to savepoint app_clip_smoke");
+          await client.query("release savepoint app_clip_smoke");
+        }
         await client.query("savepoint share_card_smoke");
         try {
           await client.query(transactionBody(readFileSync(new URL("../supabase/tests/share_card_previews.sql", import.meta.url), "utf8"), "rollback"));
@@ -2738,11 +2745,16 @@ rollback to savepoint repeat_wanna_smoke;
 release savepoint repeat_wanna_smoke;
 
 reset role;
-savepoint place_plan_smoke;
+savepoint app_clip_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/app_clip_save.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint app_clip_smoke;
+release savepoint app_clip_smoke;
+
 savepoint share_card_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/share_card_previews.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint share_card_smoke;
 release savepoint share_card_smoke;
+savepoint place_plan_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/place_plan_invitations.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint place_plan_smoke;
 release savepoint place_plan_smoke;

@@ -20,6 +20,32 @@ The product dashboard lives in PostHog because its funnels, trends, retention dr
 
 PostHog autocapture, automatic screen/lifecycle capture, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product metrics use explicit events. Session replay uses readable app content with credential/system-view masking (REC-626).
 
+## App Clip analytics
+
+REC-408 uses the same schema/context and project configuration with `surface=app_clip`.
+Replay, swizzling, automatic capture, surveys, error capture, person defaults and GeoIP
+are disabled in the Clip. Debug/simulator and synthetic demos use Noop analytics.
+Only a validated internal account ID is identified; sign-out resets identity.
+
+| Event | Completion | Properties |
+|---|---|---|
+| `app_clip_opened` | A supported invocation is accepted | `surface`, `link_kind` (profile/place/list/activity/invite) |
+| `app_clip_auth_completed` | Native sign-in completes | `surface` |
+| `place_saved` | Server reports a newly created/restored Wanna; existing saves/retries emit nothing | `surface`, `source_type=link`, `status=wanna_go`; visibility omitted because the server chooses it |
+| `place_list_invite_accepted` | The server accepts an invitation | `surface`; counts successful acceptance attempts, not unique new memberships |
+
+New saves also emit Expression / `place_saved` engagement and a derived
+`core_action_performed(action=wanna_saved, completion=server)`. Accepted invitations
+emit Connect / `list_joined`. No content, URL, invitation/card token, coordinates,
+place/list identifiers, raw server error, email or display name enters these events.
+Existing dashboard engagement/core-action queries include these explicit events;
+no new managed dashboard resource is created. App Clip opening/auth are separate
+from full-app first-open/onboarding and must not inflate those funnels.
+
+Before release, verify real test-account events in PostHog, including identity reset,
+server-success cardinality and the absence of private values. Simulator fixtures
+and configuration tests do not substitute for that live check.
+
 ## iOS session replay
 
 Joe approved readable app content and recognizable people on September 25, 2026 (REC-626), superseding REC-582's blanket masking.
@@ -70,7 +96,7 @@ engagement_action_performed
 
 | Human need | Current action values | Product behavior |
 |---|---|---|
-| Connect | `follow_created`, `activity_liked`, `activity_comment_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared` | Build and interact with a trusted people graph. |
+| Connect | `follow_created`, `activity_liked`, `activity_comment_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared`, `list_joined` | Build and interact with a trusted people graph. |
 | Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
@@ -87,7 +113,7 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | Event | When it fires | Allowed product properties |
 |---|---|---|
 | `feedback_submitted` | The server confirms the feedback and attachments are durably queued, once per composer | `surface=profile`, aggregate `photo_count`, `has_voice_note`; never feedback text, attachment names/data, or email |
-| `core_action_performed` | Derived once from `place_saved(status=wanna_go)` or `check_in_created`. A new Been save also emits raw `place_saved`; it does not produce a second core event. Edits/retries of an existing Wanna do not qualify. | `action`: `wanna_saved` or `check_in_created`; `completion=local` |
+| `core_action_performed` | Derived once from `place_saved(status=wanna_go)` or `check_in_created`. A new Been save also emits raw `place_saved`; it does not produce a second core event. Edits/retries of an existing Wanna do not qualify. | `action`: `wanna_saved` or `check_in_created`; `completion=local` (full app) or `server` (App Clip) |
 | `save_flow_opened` | Shared editor first appears once per mounted editor, including inline entry | coarse `mode` (`add`, `repeat_check_in`, `shared_visit`, `edit`); initial `status` |
 | `save_flow_submitted` | Validated editor submission enters the save operation | `mode`, submitted `status` |
 | `save_flow_completed` | Save callback returns in the same account | `mode`, submitted `status`; `outcome` (`synced`, `pending`, `failed`). Pending/local is not confirmed backend persistence. |

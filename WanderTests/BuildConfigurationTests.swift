@@ -34,14 +34,39 @@ final class BuildConfigurationTests: XCTestCase {
     }
 
     func testGeneratedProjectUsesAuthConfigForAppBuilds() throws {
-        let generatedProject = try String(contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj"))
-        let authConfigBuildSettings = generatedProject
-            .split(separator: "\n")
-            .filter { line in
-                line.contains("baseConfigurationReference =") && line.contains("/* Auth.xcconfig */")
+        let data = try Data(contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj"))
+        let project = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let objects = try XCTUnwrap(project["objects"] as? [String: [String: Any]])
+        for name in ["Wander", "AstirClip"] {
+            let target = try XCTUnwrap(objects.values.first { $0["isa"] as? String == "PBXNativeTarget" && $0["name"] as? String == name })
+            let listID = try XCTUnwrap(target["buildConfigurationList"] as? String)
+            let configIDs = try XCTUnwrap(objects[listID]?["buildConfigurations"] as? [String])
+            XCTAssertEqual(configIDs.count, 2, name)
+            for id in configIDs {
+                let reference = try XCTUnwrap(objects[id]?["baseConfigurationReference"] as? String)
+                XCTAssertEqual(objects[reference]?["path"] as? String, "Auth.xcconfig", name)
             }
+        }
+    }
 
-        XCTAssertEqual(authConfigBuildSettings.count, 2)
+    func testAppClipHasDedicatedHandoffGroupAndNoUnrequestedPermissions() throws {
+        func plist(_ path: String) throws -> [String: Any] {
+            try XCTUnwrap(PropertyListSerialization.propertyList(
+                from: Data(contentsOf: projectRoot.appendingPathComponent(path)), format: nil) as? [String: Any])
+        }
+        let clip = try plist("WanderAppClip/Resources/AstirClip.entitlements")
+        let parent = try plist("Wander/Resources/Wander.entitlements")
+        let info = try plist("WanderAppClip/Resources/Info.plist")
+        XCTAssertEqual(clip["com.apple.security.application-groups"] as? [String], [AppClipHandoff.group])
+        XCTAssertTrue((parent["com.apple.security.application-groups"] as? [String])?.contains(AppClipHandoff.group) == true)
+        XCTAssertEqual(clip["com.apple.developer.parent-application-identifiers"] as? [String], ["$(AppIdentifierPrefix)com.grayline.wander"])
+        XCTAssertEqual(parent["com.apple.developer.associated-appclip-app-identifiers"] as? [String], ["$(AppIdentifierPrefix)com.grayline.wander.Clip"])
+        XCTAssertEqual(info["CFBundleVersion"] as? String, "$(CURRENT_PROJECT_VERSION)")
+        XCTAssertEqual(info["NSAppClip"] as? [String: Bool], ["NSAppClipRequestEphemeralUserNotification": false, "NSAppClipRequestLocationConfirmation": false])
+        XCTAssertNil(info["UIBackgroundModes"])
+        XCTAssertNil(info["NSLocationWhenInUseUsageDescription"])
+        XCTAssertNil(info["NSContactsUsageDescription"])
+        XCTAssertNil(clip["aps-environment"])
     }
 
     func testInfoPlistDeclaresAuthConfigurationPlaceholders() throws {

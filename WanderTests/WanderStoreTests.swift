@@ -7267,7 +7267,12 @@ final class WanderStoreTests: XCTestCase {
         let task = Task { @MainActor in
             await store.refreshFeedSurface(backend: WanderBackend(profileRepository: profiles, feedRepository: feed))
         }
-        for _ in 0..<100 { await Task.yield() }
+        // Scheduler yields do not wait for the async contacts-authorization
+        // check. Observe the actual completion while the feed stays suspended.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while store.discoverPeopleRecommendationsState != .loaded([]), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
         XCTAssertEqual(feed.requestCount, 1)
         XCTAssertEqual(profiles.recommendationLimits, [20])
         XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))

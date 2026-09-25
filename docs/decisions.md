@@ -1,8 +1,31 @@
 # Decisions
 
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Shared-link App Clip (REC-408)
+
+The first Clip supports native sign-in, minimal profile setup, saving a shared
+place to Wanna, and accepting a list invitation inside the Clip. Shared profile
+maps, lists and activities use the existing account-authorized read contracts.
+Published preview artwork does not grant access to private account content.
+
+The Clip shares the parent's Clerk auth adapter and opaque account identity.
+A dedicated App Group retains only a validated destination and optional account
+ID for seven days; credentials remain in Keychain. The full app consumes this
+record only after account validation and normal onboarding. Explicit incoming
+links take precedence. Signed-device Keychain migration and account continuity
+are release gates, not assumed consequences of a simulator build.
+
+Saving is idempotent and preserves an existing live save's notes, status and
+visibility. A new Wanna uses the account's default visibility, with private
+profiles forced to Self. List acceptance preserves existing server eligibility,
+block and invitation rules; it never changes a private account to public.
+
+The website advertises the Clip only after explicit rollout. Messages controls
+its native icon/action footer; OG artwork must not draw a duplicate footer.
+Physical event QR attendance remains a separate REC-408 increment.
 
 ## Onboarding home city and phone (REC-584)
 
@@ -434,6 +457,9 @@ Named map snapshots use the saved list name. Lists use a place collage for two
 or more places, one cover for one place, and an empty state for zero. Missing
 photos keep their slots. View remains visible in the link card footer.
 
+The Link footer decision is superseded by REC-598 below; Story/Post artwork
+retains its approved presentation.
+
 Check-ins use their visit date. Wanna cards use the exact event’s planned date
 when present, otherwise “On <first name>’s radar”; their action is “Let’s Go”.
 List invitations omit a repeated list-name subtitle and use “Join”. Messages and system sharing use one published card link. Instagram and TikTok
@@ -568,3 +594,22 @@ the source-privacy migration and Feed fixes are deployed from separate branches.
 ## 2026-09-25: Readable session replay and named people (REC-626)
 
 Joe explicitly requested readable future recordings and easy identification by name/username. Remove blanket masking of ordinary app text, images, and maps; preserve password/sign-in-code masking and protection for system-owned views. Use the stable auth ID for identity, with mutable `name`, `display_name`, and `username` person properties for display and search. Keep event sanitization and disabled diagnostic capture. This supersedes REC-582's layout-only replay policy. Existing masked frames are irrecoverable; named/readable capture requires an updated client and release-candidate playback verification.
+## 2026-09-22 — Native Messages captions and manual social links (REC-598)
+
+Link images contain the visual only, without a baked-in title or action footer.
+The published title carries the name and essential context for Messages' native
+caption, including the list name for invitations. The website supplies the
+canonical Astir app icon as its favicon and apple-touch-icon. Apple controls
+caption layout, truncation and icon placement; Open Graph metadata cannot add a
+custom native View button. App Clip work remains separate under REC-408.
+Ryan chose metadata-only icon support for this change; do not add an image-corner
+logo. The native app icon and View footer belong to the later App Clip work.
+
+Every explicit social share copies the exact published link as both a URL and
+plain text, including when reusing a prepared link. Instagram Story and Snapchat
+image payloads retain these representations in the same clipboard item, without
+an expiration that could remove the link during composition. Opening the preview
+does not copy or publish anything. A copied URL does not make exported artwork
+tappable: creators paste it into a Link sticker or another placement supported by
+the destination app. Existing published images and Messages caches do not change;
+resharing creates a new preview with the corrected artwork.
