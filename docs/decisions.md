@@ -457,6 +457,9 @@ Named map snapshots use the saved list name. Lists use a place collage for two
 or more places, one cover for one place, and an empty state for zero. Missing
 photos keep their slots. View remains visible in the link card footer.
 
+The Link footer decision is superseded by REC-598 below; Story/Post artwork
+retains its approved presentation.
+
 Check-ins use their visit date. Wanna cards use the exact event’s planned date
 when present, otherwise “On <first name>’s radar”; their action is “Let’s Go”.
 List invitations omit a repeated list-name subtitle and use “Join”. Messages and system sharing use one published card link. Instagram and TikTok
@@ -555,3 +558,22 @@ production approval is separate from domain ownership verification.
 ## 2026-09-25: Readable session replay and named people (REC-626)
 
 Joe explicitly requested readable future recordings and easy identification by name/username. Remove blanket masking of ordinary app text, images, and maps; preserve password/sign-in-code masking and protection for system-owned views. Use the stable auth ID for identity, with mutable `name`, `display_name`, and `username` person properties for display and search. Keep event sanitization and disabled diagnostic capture. This supersedes REC-582's layout-only replay policy. Existing masked frames are irrecoverable; named/readable capture requires an updated client and release-candidate playback verification.
+## 2026-09-22 — Native Messages captions and manual social links (REC-598)
+
+Link images contain the visual only, without a baked-in title or action footer.
+The published title carries the name and essential context for Messages' native
+caption, including the list name for invitations. The website supplies the
+canonical Astir app icon as its favicon and apple-touch-icon. Apple controls
+caption layout, truncation and icon placement; Open Graph metadata cannot add a
+custom native View button. App Clip work remains separate under REC-408.
+Ryan chose metadata-only icon support for this change; do not add an image-corner
+logo. The native app icon and View footer belong to the later App Clip work.
+
+Every explicit social share copies the exact published link as both a URL and
+plain text, including when reusing a prepared link. Instagram Story and Snapchat
+image payloads retain these representations in the same clipboard item, without
+an expiration that could remove the link during composition. Opening the preview
+does not copy or publish anything. A copied URL does not make exported artwork
+tappable: creators paste it into a Link sticker or another placement supported by
+the destination app. Existing published images and Messages caches do not change;
+resharing creates a new preview with the corrected artwork.

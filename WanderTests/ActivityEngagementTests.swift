@@ -1,6 +1,7 @@
 import Combine
 import Photos
 import UIKit
+import UniformTypeIdentifiers
 import XCTest
 @testable import Wander
 
@@ -430,6 +431,61 @@ final class ActivityEngagementTests: XCTestCase {
             XCTAssertEqual(image.cgImage?.height, Int(format.size.height * 3))
             XCTAssertNotNil(image.pngData())
         }
+    }
+
+    func testNativeLinkTitleIncludesContextForEveryShareKind() {
+        let variants: [(ShareCardContent.Kind, String)] = [
+            (.profile, "Discover Ryan’s world"),
+            (.map, "Favorites · Ryan’s saved map · 4 places"),
+            (.list, "Favorites · 4 places · Curated by Ryan"),
+            (.place, "Favorites · French restaurant"),
+            (.checkIn, "Ryan checked in · Favorites"),
+            (.wanna, "Ryan wants to go · Favorites · On Ryan’s radar"),
+            (.invitation, "Build this list with Ryan · Favorites"),
+        ]
+        for (kind, expected) in variants {
+            let card = ShareCardContent(kind: kind, name: "Favorites", ownerName: "Ryan Lieblein",
+                                        detail: "French restaurant", count: 4)
+            XCTAssertEqual(card.linkTitle, expected, kind.rawValue)
+        }
+        XCTAssertEqual(ShareCardContent(kind: .place, name: "  Cafe  ", detail: " \n").linkTitle, "Cafe")
+        let long = ShareCardContent(kind: .place, name: String(repeating: "🌎", count: 501))
+        XCTAssertEqual(long.linkTitle.utf16.count, 500)
+    }
+
+    func testLinkArtworkHasNoBakedInTitleOrFooter() throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 390, height: 238)).image {
+            UIColor.systemBlue.setFill()
+            $0.fill(CGRect(x: 0, y: 0, width: 390, height: 238))
+        }
+        let images = ShareCardImages(photos: [photo])
+        let first = try XCTUnwrap(ShareCardRenderer.render(
+            ShareCardContent(kind: .place, name: "First place", detail: "Restaurant"), images: images))
+        let second = try XCTUnwrap(ShareCardRenderer.render(
+            ShareCardContent(kind: .place, name: "Different place", detail: "Cafe"), images: images))
+        XCTAssertEqual(first.cgImage?.width, 1170)
+        XCTAssertEqual(first.cgImage?.height, 714)
+        XCTAssertEqual(first.pngData(), second.pngData(), "Messages renders the text in its native caption")
+    }
+
+    func testSocialPasteboardPreservesManualLinkAlongsideProviderImage() throws {
+        let pasteboard = UIPasteboard.withUniqueName()
+        defer { UIPasteboard.remove(withName: pasteboard.name) }
+        let url = try XCTUnwrap(URL(string: "https://getrec.me/cards/places/sample?card=abc"))
+        for key in ["com.instagram.sharedSticker.backgroundImage", "com.snapchat.creativekit.backgroundImage"] {
+            let imageData = Data([1, 2, 3])
+            ActivitySharePasteboard.copyLink(url, providerPayload: [key: imageData], to: pasteboard)
+            XCTAssertEqual(pasteboard.url, url)
+            XCTAssertEqual(pasteboard.string, url.absoluteString)
+            XCTAssertEqual(pasteboard.items.count, 1)
+            XCTAssertEqual(pasteboard.data(forPasteboardType: key), imageData)
+        }
+        // A later share replaces the previous link and provider payload together.
+        let next = try XCTUnwrap(URL(string: "https://getrec.me/profiles/user_fixture"))
+        ActivitySharePasteboard.copyLink(next, to: pasteboard)
+        XCTAssertEqual(pasteboard.url, next)
+        XCTAssertEqual(pasteboard.string, next.absoluteString)
+        XCTAssertNil(pasteboard.data(forPasteboardType: "com.snapchat.creativekit.backgroundImage"))
     }
 
     func testListCollageUsesSecondPlaceOnlyWhenAtLeastTwoPlacesExist() throws {
