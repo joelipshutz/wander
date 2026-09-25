@@ -4,6 +4,42 @@ import XCTest
 final class FeedModelsTests: XCTestCase {
     private let groupingNow = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @MainActor
+    func testDecodedRepeatCheckInsKeepDistinctAndEmptyMetadata() async throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let place: [String: Any] = [
+            "user_place_id": "same-parent", "place_id": "same-place",
+            "owner_user_id": "owner", "owner_handle": "owner", "owner_display_name": "Owner",
+            "canonical_name": "Visit Fixture", "category": "coffee", "latitude": 0, "longitude": 0,
+            "status": "been", "visibility": "followers", "source_type": "manual", "attributes": [],
+            "saved_at": "2026-09-01T12:00:00Z", "created_at": "2026-09-01T12:00:00Z",
+            "updated_at": "2026-09-03T12:00:00Z", "note": "Parent summary", "rating_score": 5
+        ]
+        var activities: [FeedActivity] = []
+        for index in 1...3 {
+            let empty = index == 3
+            let payload: [String: Any] = [
+                "id": "visit-event-\(index)", "event_type": "place_been",
+                "occurred_at": "2026-09-0\(index)T12:00:00Z",
+                "actor": ["id": "owner", "handle": "owner", "display_name": "Owner"], "place": place,
+                "note": empty ? NSNull() : "Visit \(index)" as Any,
+                "rating": empty ? NSNull() : Double(index) as Any,
+                "media": empty ? [] : [["id": "photo-\(index)", "accessibility_label": "Visit photo"]]
+            ]
+            let dto = try decoder.decode(RemoteFeedActivityDTO.self, from: JSONSerialization.data(withJSONObject: payload))
+            activities.append(try await dto.activity())
+        }
+        let groups = FeedPresentation.groupedActivity(activities, relativeTo: groupingNow)
+        XCTAssertEqual(groups.count, 3)
+        XCTAssertEqual(groups.map(\.primaryActivity.id), ["visit-event-3", "visit-event-2", "visit-event-1"])
+        XCTAssertEqual(activities.map(\.note), ["Visit 1", "Visit 2", nil])
+        XCTAssertEqual(activities.map(\.rating), [1, 2, nil])
+        XCTAssertEqual(activities.map { $0.media.map(\.id) }, [["photo-1"], ["photo-2"], []])
+        XCTAssertEqual(Set(activities.map(\.occurredAt)).count, 3)
+        XCTAssertEqual(Set(activities.compactMap { $0.place?.userPlace.id }), ["same-parent"])
+    }
+
     func testCompactPeopleReasonsPreserveRelationshipMeaning() {
         XCTAssertEqual(DiscoverPeopleRecommendationReason.followsYou.compactDisplayText, "Follows you")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(1).compactDisplayText, "Followed by 1 person you follow")

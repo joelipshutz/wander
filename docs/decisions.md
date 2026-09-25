@@ -529,6 +529,42 @@ production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
 
+## 2026-09-23 — Historical visit Feed identity (REC-614)
+
+Restoring a saved Been place reuses its existing activity. If the historical
+parent has no event, its first event uses the persisted visit/save date. A first
+active Wanna-to-Been transition still represents new activity; explicit check-ins
+retain their existing per-visit event identities.
+
+Legacy duplicate cleanup is private maintenance scoped to one parent, an exact
+original visit date, and an expected event count. Keep the original event and
+merge engagement into it while preserving comment IDs and like timestamps.
+Private aliases resolve old activity links and cached engagement requests through
+the surviving event's normal visibility checks. The schema migration does not
+automatically rewrite user history; each repair requires independently verified
+scope and data preconditions.
+
+Client save/delete queues retain the exact local parent record through payload
+creation and acknowledgement. A server ID can be shared by a deleted local row
+and its replacement, so it is not a unique local queue identity. Re-saving a
+deleted place receives a fresh local ID; legacy duplicate IDs remain supported
+without treating a failed save as pending deletion. All local aliases included
+in a completed remote deletion must acknowledge it. Persisted relaunch tests
+cover failed retries, duplicate identities, and the absence of repeated work
+after successful acknowledgement.
+
+Explicit check-in Feed cards take their note, rating, status and visit timestamps
+from that visit, including an intentionally empty note or rating. Only events
+without a visit ID may use the parent save's summary. Feed and activity detail
+share this projection; photos and engagement keep their existing per-event and
+per-visit identities. Venue facts and viewer taxonomy remain place-level, and
+the existing private-answer/visibility boundaries remain authoritative. This
+projection correction does not rewrite stored check-ins.
+
+Activity media must compose historical-ID aliases with any installed source-photo
+privacy gate. Restating this RPC must preserve both contracts, including when
+the source-privacy migration and Feed fixes are deployed from separate branches.
+
 ## 2026-09-25: Readable session replay and named people (REC-626)
 
 Joe explicitly requested readable future recordings and easy identification by name/username. Remove blanket masking of ordinary app text, images, and maps; preserve password/sign-in-code masking and protection for system-owned views. Use the stable auth ID for identity, with mutable `name`, `display_name`, and `username` person properties for display and search. Keep event sanitization and disabled diagnostic capture. This supersedes REC-582's layout-only replay policy. Existing masked frames are irrecoverable; named/readable capture requires an updated client and release-candidate playback verification.
