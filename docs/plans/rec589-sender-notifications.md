@@ -127,6 +127,30 @@ including silent and zero-recipient outcomes. The worker wrapper recomputes grou
 copy and destination from current visibility on each claim/retry, or cancels a
 group with no accessible content.
 
+Queued names and counts are also protected on raw recipient reads. The additive
+`20260924035547_sender_import_notification_read_guard.sql` migration installs a
+claim-bound helper and a restrictive authenticated SELECT policy. The helper
+requires the stored body, place ID, count, and deep link to match the entire
+currently visible group. Partial revocation hides the stale snapshot immediately;
+the worker can refresh the remaining group at its next claim. A foreign event ID
+cannot be used to read another recipient's content.
+
+```text
+first Save -> captured intent + frozen successful visits -> sync -> finalizer
+                                                          | owner/import lock
+                                                          v
+                                      one recipient-filtered queue event
+                                                          |
+recipient SELECT -> recipient ownership -> current group == entire snapshot?
+                                           yes: readable / no: hidden
+worker claim ----> source eligibility -> recompute group -> refresh or skip
+```
+
+The restrictive policy composes with REC-590 source authorization. Its grouped
+import branch recognizes `sender_import_id`; it does not require a single
+`visit_id`. Neither guard broadens source access. Already delivered OS
+notifications cannot be recalled.
+
 No private notification payloads, import IDs, visit IDs, places, or recipients are
 added to analytics. Existing successful save events and aggregate server delivery
 metrics remain unchanged.
@@ -144,7 +168,11 @@ migration and test in one rolled-back transaction before deployment. The suite
 exercises all five authenticated wrappers, regular/silent saves, grouped counts,
 Feed preservation, source and list suppression, direct invitation preservation,
 private/default audience checks, forged ownership, metadata/grants, and worker
-visibility revalidation. No push is delivered by this suite.
+visibility revalidation, raw reads after partial/full revocation, block/unfollow/deletion,
+stranger event IDs, and restrictive-policy metadata. No push is delivered by this suite.
+The native review host and `SenderNotificationFlowUITests` exercise production
+SwiftUI controls through saved policies and the unchanged three-then-seven manifest.
+See [native review instructions](../designs/rec589-sender-controls/README.md).
 
 Deploy the reviewed database migration before distributing the iOS build. New
 silent operations fail closed if the server contract is missing. Do not change

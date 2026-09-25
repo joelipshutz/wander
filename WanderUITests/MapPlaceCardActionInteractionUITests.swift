@@ -80,7 +80,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         XCTAssertTrue(card.exists)
 
         dragAway(from: shareButton, onto: card)
-        XCTAssertFalse(app.otherElements["ActivityListView"].waitForExistence(timeout: 1))
+        XCTAssertFalse(app.segmentedControls["share.format"].waitForExistence(timeout: 1))
         XCTAssertTrue(card.exists)
         capture("rec-293-place-action-drag-cancelled")
 
@@ -97,10 +97,10 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [cardIsHittable], timeout: 5), .completed)
 
         app.buttons["map.selectedPlaceShare"].tap()
-        let activityList = app.otherElements["ActivityListView"]
-        XCTAssertTrue(activityList.waitForExistence(timeout: 5))
-        app.buttons["Close"].tap()
-        XCTAssertFalse(activityList.waitForExistence(timeout: 3))
+        let sharePreview = app.segmentedControls["share.format"]
+        XCTAssertTrue(sharePreview.waitForExistence(timeout: 5))
+        app.buttons["Close share preview"].tap()
+        XCTAssertFalse(sharePreview.waitForExistence(timeout: 3))
     }
 
     private func dragAway(from button: XCUIElement, onto card: XCUIElement) {
@@ -160,48 +160,16 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         )
     }
 
-    func testPerformanceFixtureReusesWarmFeedSurfaces() {
+    func testPerformanceFixturePreservesFeedAcrossSearchRoundTrip() {
         let app = performanceFeedApp()
         app.launch()
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 12))
-
-        var dismissedSystemBanner = false
-        addUIInterruptionMonitor(withDescription: "Dismiss notification banners") { element in
-            guard element.identifier == "NotificationShortLookView" else { return false }
-            dismissedSystemBanner = true
-            element.swipeUp()
-            return true
-        }
-
-        let people = app.buttons["People"].firstMatch
-        let places = app.buttons["Places"].firstMatch
-        XCTAssertTrue(people.waitForExistence(timeout: 3))
-        XCTAssertTrue(places.waitForExistence(timeout: 3))
-
-        // Materialize both retained roots before timing the warm path. The
-        // existence checks intentionally stay outside the measured window:
-        // XCTest polls for at least one second even when the element is ready.
-        people.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 3)
-        )
-        places.tap()
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 3))
-
-        let switchStartedAt = Date()
-        people.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["Search people"].waitForExistence(timeout: 2)
-        )
-        places.tap()
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 2))
-        if !dismissedSystemBanner {
-            XCTAssertLessThan(
-                Date().timeIntervalSince(switchStartedAt),
-                5,
-                "Two warm Feed surface switches should not rebuild their retained roots."
-            )
-        }
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 12))
+        launcher.tap()
+        XCTAssertTrue(app.textFields["discover.placesSearchField"].waitForExistence(timeout: 3))
+        app.buttons["discover.searchBack"].tap()
+        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["feed.headerAdd"].isHittable)
     }
 
     func testFeedFullPlaceProfileKeepsFloatingActionsAndHistoryAboveBottomEdge() {

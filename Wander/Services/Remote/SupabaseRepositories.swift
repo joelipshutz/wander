@@ -148,6 +148,13 @@ struct SupabaseProfileRepository: ProfileRepository {
         return rows.map { $0.recommendation() }
     }
 
+    func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        struct Params: Encodable { let input_contact_ids: [String]; let input_limit: Int }
+        let rows: [RemoteDiscoverPeopleRecommendationDTO] = try await rpc.call(
+            "ranked_people_recommendations", params: Params(input_contact_ids: contactIDs, input_limit: limit))
+        return rows.map { $0.recommendation() }
+    }
+
     func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
         let response: RemoteCurrentProfileDTO = try await rpc.call(
             "update_profile_privacy",
@@ -694,8 +701,22 @@ struct SupabaseFeedRepository: FeedRepository {
         limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
+        try await loadFeed(audience: nil, before: before, limit: limit, onContent: onContent)
+    }
+
+    func activityFeed(
+        audience: FeedAudience, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        try await loadFeed(audience: audience, before: before, limit: limit, onContent: onContent)
+    }
+
+    private func loadFeed(
+        audience: FeedAudience?, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
         let boundedLimit = min(max(limit, 1), 50)
-        let response = try await followedFeedResponse(before: before, limit: boundedLimit)
+        let response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
         // Reserve the artwork slot while the separate authorized-media read is
         // pending. A non-renderable marker prevents the card from starting a
         // provider-photo fallback that would be replaced by visit media later.
@@ -754,23 +775,33 @@ struct SupabaseFeedRepository: FeedRepository {
     }
 
     private func followedFeedResponse(
+        audience: FeedAudience?,
         before: String?,
         limit: Int
     ) async throws -> RemoteFollowedFeedPageDTO {
         do {
-            return try await followedFeedResponseAttempt(before: before, limit: limit)
+            return try await followedFeedResponseAttempt(audience: audience, before: before, limit: limit)
         } catch {
             guard Self.isTransientTransportFailure(error) else { throw error }
             try await Task.sleep(for: .milliseconds(150))
             try Task.checkCancellation()
-            return try await followedFeedResponseAttempt(before: before, limit: limit)
+            return try await followedFeedResponseAttempt(audience: audience, before: before, limit: limit)
         }
     }
 
     private func followedFeedResponseAttempt(
+        audience: FeedAudience?,
         before: String?,
         limit: Int
     ) async throws -> RemoteFollowedFeedPageDTO {
+        if let audience {
+            // Never silently fall back to the legacy followed-only page: it
+            // cannot represent Only Me or filter before its pagination limit.
+            return try await rpc.call(
+                "activity_feed",
+                params: ActivityFeedParams(audience: audience.rawValue, before: before, limit: limit)
+            )
+        }
         do {
             return try await rpc.call(
                 "followed_feed",
@@ -3744,6 +3775,18 @@ private struct ProfileVisiblePlacesParams: Encodable {
         case profileID = "profile_id"
         case statusFilter = "status_filter"
         case categoryFilter = "category_filter"
+    }
+}
+
+private struct ActivityFeedParams: Encodable {
+    let audience: String
+    let before: String?
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case audience = "input_audience"
+        case before = "input_before"
+        case limit = "input_limit"
     }
 }
 

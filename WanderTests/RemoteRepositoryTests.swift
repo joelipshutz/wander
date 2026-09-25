@@ -1239,6 +1239,32 @@ final class RemoteRepositoryTests: XCTestCase {
         throw URLError(.timedOut)
     }
 
+    func testActivityFeedSendsEachAudienceAndCursorWithoutLegacyFallback() async throws {
+        for audience in FeedAudience.allCases {
+            let rpc = RecordingRPC()
+            rpc.responses["activity_feed"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-09-17T12:00:00Z"}"#.utf8)
+            let repository = SupabaseFeedRepository(rpc: rpc)
+            _ = try await repository.activityFeed(audience: audience, before: "cursor", limit: 99, onContent: { _ in })
+            XCTAssertEqual(rpc.calls.map(\.name), ["activity_feed"])
+            let params = try XCTUnwrap(rpc.calls.first?.body)
+            XCTAssertEqual(params["input_audience"] as? String, audience.rawValue)
+            XCTAssertEqual(params["input_before"] as? String, "cursor")
+            XCTAssertEqual(params["input_limit"] as? Int, 50)
+        }
+    }
+
+    func testMissingAudienceRPCDoesNotShowFollowedPageAsOnlyMe() async {
+        let rpc = RecordingRPC()
+        rpc.errors = [WanderRemoteError.invalidResponse("RPC activity_feed failed: PGRST202")]
+        let repository = SupabaseFeedRepository(rpc: rpc)
+        do {
+            _ = try await repository.activityFeed(audience: .onlyMe, before: nil, limit: 25, onContent: { _ in })
+            XCTFail("Missing migration must remain an explicit load failure")
+        } catch {
+            XCTAssertEqual(rpc.calls.map(\.name), ["activity_feed"])
+        }
+    }
+
     func testFollowedFeedCallsExpectedRPCAndDecodesTheHostedEmptyEnvelope() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """
@@ -1736,6 +1762,20 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(recommendations.first?.profile.isPrivateProfile, false)
         XCTAssertEqual(rpc.calls.map(\.name), ["discover_profile_recommendations"])
         XCTAssertEqual(rpc.calls[0].body["input_limit"] as? Int, 12)
+    }
+
+    func testSharedRankingPassesOnlyContactProfileIDsAndPreservesServerOrder() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["ranked_people_recommendations"] = """
+        [{"id":"rachel","handle":"rachel","display_name":"Rachel","avatar_url":null,"bio":null,"home_area":"Los Angeles","created_at":"2026-07-01T12:00:00Z","relationship":"non_follower","reason_kind":"suggested","shared_follow_count":0,"result_rank":1},
+         {"id":"friend","handle":"friend","display_name":"Friend","avatar_url":null,"bio":null,"home_area":"Los Angeles","created_at":"2026-07-01T12:00:00Z","relationship":"non_follower","reason_kind":"contacts","shared_follow_count":2,"result_rank":2},
+         {"id":"local","handle":"local","display_name":"Local","avatar_url":null,"bio":null,"home_area":"Los Angeles","created_at":"2026-07-01T12:00:00Z","relationship":"non_follower","reason_kind":"contact_follows","shared_follow_count":0,"contact_follow_count":3,"result_rank":3}]
+        """.data(using: .utf8)
+        let result = try await SupabaseProfileRepository(rpc: rpc).rankedPeopleRecommendations(contactIDs: ["friend"], limit: 20)
+        XCTAssertEqual(result.map(\.id), ["rachel", "friend", "local"])
+        XCTAssertEqual(result.map(\.reason), [.suggested, .contacts, .contactFollows(3)])
+        XCTAssertEqual(rpc.calls[0].body["input_contact_ids"] as? [String], ["friend"])
+        XCTAssertEqual(Set(rpc.calls[0].body.keys), ["input_contact_ids", "input_limit"])
     }
 
     func testProfileSearchCallsExpectedRPCAndMapsShells() async throws {
@@ -4824,7 +4864,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 ),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant,profile_feedback_v1)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,social_import_apify_gemini_v1,place_profile_action_variant,profile_feedback_v1,notification_reprompt_campaign)"
                 )
             ]
         )
@@ -4862,6 +4902,30 @@ final class RemoteRepositoryTests: XCTestCase {
         let flags = try await repository.resolvedFlags(for: "user_test")
 
         XCTAssertTrue(flags.isEmpty)
+    }
+
+    func testNotificationRepromptCampaignResolvesAccountOverrideIncludingExplicitOff() async throws {
+        let table = RecordingTable()
+        table.responses["GET:feature_flags"] = Data(
+            #"[{"key":"notification_reprompt_campaign","user_id":null,"enabled":false,"value_type":"integer","integer_value":7},{"key":"notification_reprompt_campaign","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":0}]"#.utf8
+        )
+        let repository = SupabaseFeatureFlagRepository(table: table)
+        let flags = try await repository.resolvedFlags(for: "user_test")
+        XCTAssertEqual(flags[.notificationRepromptCampaign]?.integerValue, 0)
+        XCTAssertEqual(flags[.notificationRepromptCampaign]?.source, .accountOverride)
+    }
+
+    func testNotificationRepromptCampaignRejectsMalformedRemoteVersions() async throws {
+        for row in [
+            #"{"key":"notification_reprompt_campaign","user_id":null,"enabled":true,"value_type":"boolean","integer_value":null}"#,
+            #"{"key":"notification_reprompt_campaign","user_id":null,"enabled":false,"value_type":"integer","integer_value":-1}"#,
+            #"{"key":"notification_reprompt_campaign","user_id":null,"enabled":false,"value_type":"integer","integer_value":1000001}"#
+        ] {
+            let table = RecordingTable()
+            table.responses["GET:feature_flags"] = Data("[\(row)]".utf8)
+            let flags = try await SupabaseFeatureFlagRepository(table: table).resolvedFlags(for: "user_test")
+            XCTAssertNil(flags[.notificationRepromptCampaign])
+        }
     }
 
     func testDebugSettingsAccessPolicyAllowsEverySimulatorAndRequiresServerFlagOnDevice() {

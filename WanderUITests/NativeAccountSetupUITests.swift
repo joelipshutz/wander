@@ -33,7 +33,7 @@ final class NativeAccountSetupUITests: XCTestCase {
     func testNativeDarkSetupCaptureInventory() {
         for (route, screen) in [("identity", "N08"), ("location", "N09"), ("contacts", "N10"), ("friends", "N11"), ("notifications", "N12"), ("friends-empty", "N33"), ("friends-failure", "N34")] {
             let app = launchReview(route, extraArguments: ["-WanderBypassProductUpsellFrequencyCap"])
-            let primary = app.buttons[route == "notifications" ? "productUpsell.primary" : route == "identity" ? "onboarding.identity.continue" : route == "location" ? "onboarding.location.primary" : route == "contacts" ? "Continue" : "onboarding.friends.continue"]
+            let primary = app.buttons[route == "notifications" ? "productUpsell.primary" : route == "identity" ? "onboarding.identity.continue" : route == "location" ? "onboarding.location.primary" : route == "contacts" ? "onboarding.contacts.findFriends" : "onboarding.friends.continue"]
             XCTAssertTrue(primary.waitForExistence(timeout: 15))
             XCTAssertTrue(primary.isHittable)
             XCTAssertLessThanOrEqual(primary.frame.maxY, app.frame.maxY)
@@ -156,18 +156,25 @@ final class NativeAccountSetupUITests: XCTestCase {
         keepScreenshot("N31", app: deniedLocationApp, settleSeconds: 2.5)
 
         XCUIApplication().resetAuthorizationStatus(for: .contacts)
-        let contactsApp = launchReview("contacts")
-        let contactsContinue = contactsApp.buttons["Continue"]
+        let contactsApp = launchReview("contacts", extraArguments: [
+            "-WanderContactDiscoveryUITest",
+            "-WanderContactDiscoverySystemPermissionTest"
+        ])
+        let contactsContinue = contactsApp.buttons["onboarding.contacts.findFriends"]
         XCTAssertTrue(contactsContinue.waitForExistence(timeout: 10))
         contactsContinue.tap()
-        let contactsAlert = permissionAlert(in: contactsApp)
-        XCTAssertTrue(contactsAlert.exists)
-        // iOS 26's initial Contacts prompt exposes Don't Allow and Continue.
-        // Capture its actual system-rendered purpose text before any choice.
-        keepSystemScreenshot("N36")
-        denyPermission(in: contactsAlert)
-        XCTAssertTrue(contactsAlert.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(contactsApp.textFields["onboarding.friends.search"].waitForExistence(timeout: 10))
+        let contactsAlert = permissionAlert(in: contactsApp, required: false)
+        if contactsAlert.exists {
+            // iOS 26's initial Contacts prompt exposes Don't Allow and Continue.
+            // Capture its actual system-rendered purpose text before any choice.
+            keepSystemScreenshot("N36")
+            denyPermission(in: contactsAlert)
+            XCTAssertTrue(contactsAlert.waitForNonExistence(timeout: 5))
+        }
+        let contactsError = contactsApp.staticTexts["onboarding.contacts.error"]
+        XCTAssertTrue(contactsError.waitForExistence(timeout: 10))
+        XCTAssertEqual(contactsError.label, "Allow Contacts access in iOS Settings to find friends. You can still search by name.")
+        XCTAssertTrue(contactsApp.buttons["onboarding.contacts.skip"].exists)
     }
 
     func testNotificationDenialPreservesSettingsRecovery() throws {

@@ -19,6 +19,54 @@ seals an owner/import ledger even for silent or zero-recipient outcomes. Existin
 saved imports and background autosaves remain silent. See the
 [product specification and engineering plan](plans/rec589-sender-notifications.md).
 
+## Onboarding home city and phone (REC-584)
+
+Joe approved an editable home city prefilled from location and a phone input with
+the country dialing code selected from the detected country. These share the
+existing Location step after its permission primer. The onboarding step order,
+founders welcome, first-visit walkthrough and their landing behavior stay intact.
+The country code is separate from the national number; US numbers have ten
+national digits. Other countries use their numbering plan through PhoneNumberKit
+5.0.8. Phone remains optional; the label simply reads Phone number. This step
+uses the standard onboarding scaffold and one Continue action. It has no Not now
+skip action or separate keyboard Done toolbar; Continue saves the confirmed city
+and any entered phone before advancing to Contacts.
+
+The home field searches worldwide cities inline through MapKit, with region and
+country labels to distinguish same-name places. It immediately shows Los Angeles
+as a fallback, then uses an already-authorized recent location or a bounded
+three-second lookup to suggest the current locality. Search debounces 150 ms,
+cancels superseded work, ignores stale responses and caches at most 20 queries.
+Only a selected completion gets a detail lookup; incomplete text cannot be saved.
+Approximate location is a suggestion, never proof of residence, and phone area
+codes do not infer home. A saved city wins over travel location and can be edited
+in Settings → City & phone. Late hydration/geocoding cannot replace edits. The
+phone country follows city selection until the user edits the phone or country.
+Manual review schemes use the same worldwide provider as production; a limited
+city fixture list requires an explicit automated-test argument.
+
+Home city and optional unverified phone are private account data in separate
+owner-only RPCs, not public profile fields or verified contact-match identifiers.
+City name, country, region and county are stored without exact coordinates. Only
+the coarse Events eligibility metro key is cached locally per account. Phone is excluded from
+structured analytics, raw RPC errors and local defaults. REC-626 supersedes the
+whole-screen replay mask for account details and explicitly permits readable
+email/phone inputs in recordings. Hard and soft
+account deletion purge the private record. The public profile's freeform home
+area remains separate; Events uses the private confirmed metro.
+
+Events is visible only when the saved city belongs to Los Angeles County,
+including smaller cities such as Long Beach and Pasadena. Client and server
+derive eligibility from country, region and county. Orange County, Inland Empire,
+other cities and unknown homes have four tabs, preserving their order. Existing members can confirm their city in Settings → City & phone.
+A request for a hidden Events tab falls back to Feed. Eligible first-visit
+walkthroughs still land on Map and follow the existing Map → Feed sequence.
+The per-account cached home keeps eligibility stable while offline or traveling;
+launch and foreground refresh the server's saved choice without requesting GPS.
+Settings saves update visibility immediately. The server independently restricts
+Events interest reads and registration to the saved Los Angeles metro. Previous
+interest survives a home edit and is restored if the member changes back to LA.
+
 ## Lists within Wanna and check-in saves (REC-567)
 
 Wanna places **Add to lists** below the note and above the date, outside More
@@ -495,3 +543,7 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+## 2026-09-25: Readable session replay and named people (REC-626)
+
+Joe explicitly requested readable future recordings and easy identification by name/username. Remove blanket masking of ordinary app text, images, and maps; preserve password/sign-in-code masking and protection for system-owned views. Use the stable auth ID for identity, with mutable `name`, `display_name`, and `username` person properties for display and search. Keep event sanitization and disabled diagnostic capture. This supersedes REC-582's layout-only replay policy. Existing masked frames are irrecoverable; named/readable capture requires an updated client and release-candidate playback verification.

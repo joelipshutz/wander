@@ -69,7 +69,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
             XCTAssertTrue(back.waitForExistence(timeout: 3))
             print("PROFILE_SETTINGS round=\(round) entry_seconds=\(Date().timeIntervalSince(started))")
 
-            let notifications = app.buttons.matching(
+            let notifications = app.descendants(matching: .any)["settings.screen"].buttons.matching(
                 NSPredicate(format: "label BEGINSWITH %@", "Notifications")
             ).firstMatch
             notifications.tap()

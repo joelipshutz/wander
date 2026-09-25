@@ -125,10 +125,75 @@ $$;
 
 -- Prioritize the locked fixture. No external delivery occurs and all claims
 -- roll back. Never return queue payloads from this regression test.
+create function pg_temp.assert_import_read(expected boolean, checkpoint text) returns void
+language plpgsql security invoker as $$
+begin
+ if exists(select 1 from public.notification_events
+   where data->>'sender_import_id'='rec589-notify') <> expected then
+   raise exception 'group snapshot read failed at % (expected %)', checkpoint, expected;
+ end if;
+end;
+$$;
+do $$ begin
+ if not exists(select 1 from pg_policy where polrelid='public.notification_events'::regclass
+   and polname='import notification snapshots require current visibility' and not polpermissive) then
+   raise exception 'group read policy must be restrictive';
+ end if;
+ if not exists(select 1 from pg_proc where oid='app.can_read_own_import_notification(uuid)'::regprocedure
+   and prosecdef and provolatile='s' and 'search_path=pg_catalog, public, app'=any(proconfig))
+   or has_function_privilege('anon','app.can_read_own_import_notification(uuid)','execute') then
+   raise exception 'group read helper security posture changed';
+ end if;
+end; $$;
+insert into sender_results values ('event', (select jsonb_build_object('id',id) from public.notification_events where data->>'sender_import_id'='rec589-notify'));
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(true, 'fresh snapshot');
+select set_config('request.jwt.claim.sub', 'user_codex_sender_stranger', true);
+select pg_temp.assert_import_read(false, 'stranger');
+do $$ begin
+ if app.can_read_own_import_notification((select (value->>'id')::uuid from sender_results where key='event'))
+   or app.can_read_own_import_notification('58900000-0000-4000-8000-000000000099') then
+   raise exception 'group helper leaked a foreign or nonexistent event';
+ end if;
+end; $$;
+reset role;
+-- A block, unfollow, or deleted visit invalidates a cached group immediately,
+-- including a previously sent row. Restore only the reserved fixtures.
+savepoint before_block;
+insert into public.blocks(blocker_user_id,blocked_user_id)
+ values('user_codex_sender_follower','user_codex_sender_owner');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(false, 'block');
+reset role;
+rollback to savepoint before_block;
+savepoint before_unfollow;
+delete from public.follows where follower_user_id='user_codex_sender_follower' and followed_user_id='user_codex_sender_owner';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(false, 'unfollow');
+reset role;
+rollback to savepoint before_unfollow;
+savepoint before_delete;
+update public.place_visits set deleted_at=now()
+ where id=(select (value->>'visit_id')::uuid from sender_results where key='2');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(false, 'deleted visit');
+reset role;
+rollback to savepoint before_delete;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(true, 'restored visit');
+reset role;
 update public.notification_events set status='pending', delivered_at=null, not_before=now()-interval '100 years', priority=100
  where actor_user_id='user_codex_sender_owner' and notification_type='followed_place_visit';
 update public.user_places set visibility='self'
  where id=(select (value->>'user_place_id')::uuid from sender_results where key='1');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(false, 'partial revoke before claim');
 set local role service_role;
 insert into sender_results values ('claimed', public.claim_pending_push_notifications(1));
 reset role;
@@ -140,22 +205,48 @@ begin
  if e.body not like '% and 1 other place' or (e.data->>'place_count')::int <> 2 then
    raise exception 'claim did not remove newly private content';
  end if;
+end;
+$$;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(true, 'partial revoke after claim');
+reset role;
+do $$
+declare e public.notification_events;
+begin
+ select * into strict e from public.notification_events
+  where actor_user_id='user_codex_sender_owner' and notification_type='followed_place_visit';
  -- A second claim after all access is revoked must omit/cancel this event.
  update public.user_places set visibility='self' where user_id='user_codex_sender_owner';
  update public.notification_events set claim_expires_at=now()-interval '1 second' where id=e.id;
 end;
 $$;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(false, 'all revoked before claim');
 set local role service_role;
-do $$ begin perform public.claim_pending_push_notifications(1); end; $$;
+insert into sender_results values ('revoked_claim', public.claim_pending_push_notifications(1));
 reset role;
 do $$
 begin
  if not exists(select 1 from public.notification_events where actor_user_id='user_codex_sender_owner'
-   and notification_type='followed_place_visit' and status='skipped' and skip_reason='activity_unavailable') then
+   and notification_type='followed_place_visit' and status='skipped'
+   and skip_reason in ('activity_unavailable', 'source_not_visible')
+   and claim_token is null and claim_expires_at is null) then
    raise exception 'inaccessible grouped event was not cancelled';
+ end if;
+ -- REC-590 can reject the source before REC-589's group renderer runs.
+ -- Both paths must remove the claim and omit the event from worker output.
+ if exists(select 1 from jsonb_array_elements((select value from sender_results where key='revoked_claim')) item
+   where item->>'event_id'=(select value->>'id' from sender_results where key='event')) then
+   raise exception 'inaccessible grouped event escaped in worker output';
  end if;
 end;
 $$;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_sender_follower', true);
+select pg_temp.assert_import_read(false, 'all revoked after claim');
+reset role;
 -- Each shipping iOS wrapper is exercised as authenticated, including ordinary
 -- non-import saves and direct invitations that must not be silenced.
 set local role authenticated;

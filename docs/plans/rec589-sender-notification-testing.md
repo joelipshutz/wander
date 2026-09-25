@@ -38,7 +38,10 @@ produce a follower announcement.
 1. Install a signed build from this branch on the sender's iPhone. Applying the
    database migration alone does not add these controls to an older app build.
    The migration file is
-   `supabase/migrations/20260923193108_sender_notification_controls.sql`.
+   `supabase/migrations/20260923193108_sender_notification_controls.sql`, followed by
+   `supabase/migrations/20260924035547_sender_import_notification_read_guard.sql`.
+   Both are deployed; migration presence and the combined hosted regression were
+   verified September 25, 2026.
 2. Use test accounts: A sends; B follows A and belongs to the shared test list;
    C is outside the tested audience. For source-attribution tests, A saves a
    place from B's map. For acceptance tests, use a separate follower of the
@@ -97,6 +100,7 @@ Silent with private or profile-only.
 | Offline and relaunch | Go offline before saving a fresh Silent import. Close/reopen the app, reconnect, and wait for sync. Repeat with a fresh Notify import. | Choice survives. Silent stays silent. Notify syncs the original saved group at most once; restarting or retrying does not add another announcement. |
 | Interrupted first save | Using a controlled interrupted-save setup, stop after some first-attempt successes. Recover and save more items. | The announcement can contain only durable successes from the original attempt. Later items cannot enlarge it or create a second group. Use a controlled failure for this case rather than assuming a timed force-quit interrupted a write. |
 | Access changes before delivery | After a Notify import, remove visibility/block the receiver or delete a captured check-in before the worker claims the pending event. | Remaining visible distinct places determine the group, or the event is skipped when none remain. A notification already delivered cannot be recalled. |
+| Access changes after queue/read | Queue a Notify group, then revoke one captured place, block/unfollow the sender, or delete a captured visit. Inspect authenticated notification reads before the worker runs. | A stale name/count/deep link is withheld immediately, even if other group places remain visible. A later worker claim may refresh the remaining group. Already delivered OS pushes cannot be recalled. |
 | Account switching | Save offline as A, switch accounts before sync, then return to A. | Another account cannot send or acknowledge A's pending import. A's original policy and identity survive. |
 
 ## Highest-priority acceptance sequence
@@ -111,3 +115,13 @@ private-ledger access, source-content isolation, immutable first intent,
 replayed finalization, and send-time visibility without sending a real push.
 These automated checks complement the two-device manual tests; they do not
 replace a signed-device APNs delivery check.
+
+## In-app native review
+
+Open the branch's Xcode project, select **Sender Silent Review**, choose an iPhone
+Simulator, and Run. The gallery opens the actual production SwiftUI forms with
+isolated sample data. It does not send real notifications or use your account.
+The [scenario and placement guide](../designs/rec589-sender-controls/README.md)
+explains each entry and links the screenshot gallery. Shared-visit acceptance in
+this host checks the submitted policy; authenticated SQL covers its server write.
+Use the signed-device checks above for actual push delivery.

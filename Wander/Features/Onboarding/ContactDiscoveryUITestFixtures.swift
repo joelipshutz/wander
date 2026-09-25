@@ -2,12 +2,16 @@
 import Foundation
 import UIKit
 
-/// Fictional data injected only by an explicit authenticated UI test launch.
+/// Fictional data injected only by an explicit simulator UI-test or native review launch.
 @MainActor final class ContactDiscoveryUITestRepository: ProfileRepository, FollowRepository, ContactDiscoveryRepository {
     static let argument = "-WanderContactDiscoveryUITest"
-    static var isActive: Bool { ProcessInfo.processInfo.arguments.contains(argument) && SimulatorTestSessionPolicy.isActive() }
+    static var isActive: Bool {
+        ProcessInfo.processInfo.arguments.contains(argument)
+            && (SimulatorTestSessionPolicy.isActive() || NativeOnboardingReviewRoute.resolved() != nil)
+    }
     private var enabled = false
     private var followed = Set<String>()
+    private var followAttempts = 0
     private let friend = ProfileShell(id: "user_contact_friend", handle: "contactfriend", displayName: "Contact Friend", avatarURL: nil, bio: nil, relationship: .nonFollower)
     private let general = ProfileShell(id: "user_general_friend", handle: "generalfriend", displayName: "General Friend", avatarURL: nil, bio: nil, relationship: .nonFollower)
     func currentProfile() async throws -> LocalProfile? { LocalProfile(localID: "user_joe", handle: "joe", displayName: "Joe") }
@@ -16,7 +20,28 @@ import UIKit
     func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
         [.init(profile: general, reason: .suggested, rank: 1), .init(profile: friend, reason: .suggested, rank: 2)]
     }
-    func follow(userID: String) async throws { followed.insert(userID) }
+    func rankedPeopleRecommendations(contactIDs: [String], limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        let curated = ProfileShell(id: "user_curated_rachel", handle: "rachelfixture", displayName: "Rachel (preview)", avatarURL: nil, bio: nil, relationship: .nonFollower)
+        let local = ProfileShell(id: "user_local_friend", handle: "localfriend", displayName: "Local Friend", avatarURL: nil, bio: nil, homeArea: "Los Angeles", relationship: .nonFollower)
+        let contact = contactIDs.contains(friend.id) ? [DiscoverPeopleRecommendation(profile: friend, reason: .contacts, rank: 2)] : []
+        let generalReason: DiscoverPeopleRecommendationReason = contact.isEmpty ? .suggested : .contactFollows(3)
+        var rows = [.init(profile: curated, reason: .suggested, rank: 1)] + contact
+            + [.init(profile: general, reason: generalReason, rank: 3), .init(profile: local, reason: .nearby, rank: 4)]
+        if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryLongList") {
+            rows += (5...20).map { index in
+                .init(profile: ProfileShell(id: "user_extra_\(index)", handle: "fixture\(index)", displayName: "Preview Friend \(index)", avatarURL: nil, bio: nil, relationship: .nonFollower), reason: .suggested, rank: index)
+            }
+        }
+        return Array(rows.prefix(limit))
+    }
+    func follow(userID: String) async throws {
+        followAttempts += 1
+        if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryDelayedFollow") {
+            try await Task.sleep(for: .seconds(2))
+            if followAttempts == 1 { throw ContactDiscoveryError.unavailable }
+        }
+        followed.insert(userID)
+    }
     func unfollow(userID: String) async throws { followed.remove(userID) }
     func followers(userID: String) async throws -> [ProfileShell] { [] }
     func following(userID: String) async throws -> [ProfileShell] { [friend, general].filter { followed.contains($0.id) } }
@@ -27,11 +52,12 @@ import UIKit
         if ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoveryFailure") { throw ContactDiscoveryError.unavailable }
         return enabled && !identifiers.isEmpty ? [friend] : []
     }
-    func service(auth: AuthSessionStore) -> ContactDiscoveryService {
+    func service(auth: AuthSessionStore, usesSystemProvider: Bool = false) -> ContactDiscoveryService {
         let suite = "AstirContactDiscoveryUITest"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        return ContactDiscoveryService(repository: self, provider: ContactDiscoveryUITestProvider(), defaults: defaults,
+        let provider: any ContactProvider = usesSystemProvider ? SystemContactProvider() : ContactDiscoveryUITestProvider()
+        return ContactDiscoveryService(repository: self, provider: provider, defaults: defaults,
             activeUserID: { [weak auth] in auth?.state.session?.userID })
     }
 }

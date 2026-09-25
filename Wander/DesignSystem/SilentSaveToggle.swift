@@ -17,6 +17,7 @@ struct SilentSaveToggle: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("save.silentHelp")
         }
     }
 }

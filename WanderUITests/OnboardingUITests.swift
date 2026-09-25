@@ -424,7 +424,9 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationDetails"]
         app.launch()
         XCTAssertTrue(app.navigationBars["Import report"].waitForExistence(timeout: 15))
-        let more = app.buttons["Hide more options"].firstMatch
+        let more = app.buttons.matching(NSPredicate(
+            format: "label IN %@", ["Show more options", "Hide more options"]
+        )).firstMatch
         // The center of this long form contains an interactive rating slider.
         // Scroll from the page margin so the gesture cannot adjust the rating
         // instead of revealing the fields below it.
@@ -550,6 +552,47 @@ final class ImportFormRefinementUITests: XCTestCase {
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testNotificationRemindersAppearOnFirstThreeEligibleOpensThenStop() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
+            "-WanderNotificationAuthorizationDeniedFixture", "-WanderImportNoticeUITest"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
+
+        for appOpen in 1...5 {
+            if appOpen == 3 {
+                app.activate() // A quick background return must count even within the auth refresh grace period.
+            } else {
+                app.launch()
+            }
+            let primary = app.buttons["productUpsell.primary"]
+            if (1...3).contains(appOpen) {
+                XCTAssertTrue(primary.waitForExistence(timeout: 15), "Reminder missing on app open \(appOpen)")
+                XCTAssertEqual(primary.label, "Open Settings")
+                XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+                let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                capture.name = "Notification reminder on app open \(appOpen)"
+                capture.lifetime = .keepAlways
+                add(capture)
+                app.buttons["productUpsell.secondary"].tap()
+                XCTAssertTrue(primary.waitForNonExistence(timeout: 5))
+                XCTAssertFalse(primary.waitForExistence(timeout: 2), "No repeated reminder in the same open")
+            } else {
+                XCTAssertFalse(primary.waitForExistence(timeout: 8), "No reminder on app open \(appOpen)")
+            }
+            // The nonblocking banner persists across the reminder. It must not
+            // prevent eligible return prompts or disappear when they dismiss.
+            XCTAssertTrue(app.buttons["import.notice.dismiss"].waitForExistence(timeout: 5))
+            if appOpen == 2 {
+                XCUIDevice.shared.press(.home)
+                XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+            } else {
+                app.terminate()
+            }
+        }
+    }
+
     func testNotificationUpsellUsesTheCentralCampaignInOnboarding() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -562,7 +605,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         let notificationContinue = app.buttons["productUpsell.primary"]
         XCTAssertTrue(notificationContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(notificationContinue.isHittable)
@@ -575,6 +618,23 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-425 notification upsell in onboarding"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testUnansweredOnboardingNotificationPromptResumesAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep", "notifications",
+            "-WanderNotificationAuthorizationNotDeterminedFixture"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.\(UUID().uuidString)"
+        for _ in 1...2 {
+            app.launch()
+            XCTAssertTrue(app.buttons["productUpsell.primary"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["Onboarding step 5 of 5"].exists)
+            app.terminate()
+        }
     }
 
     func testContextualNotificationUpsellsUseConfiguredSaveAndFollowCopy() {
@@ -591,7 +651,7 @@ final class OnboardingUITests: XCTestCase {
             "place_saved"
         ]
         app.launch()
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["productUpsell.primary"].isHittable)
         XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["Onboarding step 5 of 5"].exists)
@@ -607,7 +667,7 @@ final class OnboardingUITests: XCTestCase {
             "follow_created"
         ]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Keep up with people you follow"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["productUpsell.primary"].isHittable)
         XCTAssertFalse(app.buttons["productUpsell.secondary"].exists)
 
@@ -633,7 +693,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Find the good stuff nearby"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Find places nearby"].waitForExistence(timeout: 8))
         let locationContinue = app.buttons["Continue"].firstMatch
         XCTAssertTrue(locationContinue.waitForExistence(timeout: 8))
         XCTAssertEqual(locationContinue.label, "Continue")
@@ -666,10 +726,10 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let contactsContinue = app.buttons["Continue"].firstMatch
+        let contactsContinue = app.buttons["onboarding.contacts.findFriends"]
         XCTAssertTrue(contactsContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(contactsContinue.isHittable)
-        XCTAssertFalse(app.buttons["Not now"].exists)
+        XCTAssertTrue(app.buttons["onboarding.contacts.skip"].exists)
 
         let contactsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         contactsScreenshot.name = "REC-396 actual onboarding contacts permission"
@@ -689,7 +749,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["See when your friends check in"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Keep up with your people"].waitForExistence(timeout: 8))
         let notificationContinue = app.buttons["productUpsell.primary"]
         XCTAssertTrue(notificationContinue.waitForExistence(timeout: 8))
         XCTAssertTrue(notificationContinue.isHittable)
@@ -725,9 +785,7 @@ final class OnboardingUITests: XCTestCase {
             "-WanderUseEphemeralEmptyFixtures",
             "-WanderDisableWalkthroughs",
             "-WanderInitialTab",
-            "discover",
-            "-WanderFeedSurface",
-            "people"
+            "discover"
         ]
         app.launch()
 
@@ -753,7 +811,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(alert.staticTexts.matching(
             NSPredicate(
                 format: "label == %@",
-                "Astir uses your contacts to help you connect with people you know."
+                "Astir reads the contacts you allow to find friends or choose invitations. If you choose Find friends, phone numbers and emails are securely compared with verified Astir accounts; your address book is not saved on our servers."
             )
         ).firstMatch.exists)
 
@@ -1051,11 +1109,11 @@ final class OnboardingUITests: XCTestCase {
         let circle = app.staticTexts["walkthrough.feed.feedActivity.circle"]
         let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
         XCTAssertTrue(circle.waitForExistence(timeout: 20))
-        let headingY = app.staticTexts["Recent"].frame.minY
+        let headingY = app.staticTexts["Activity"].frame.minY
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
-        XCTAssertLessThan(app.staticTexts["Recent"].frame.minY, headingY - 50,
+        XCTAssertLessThan(app.staticTexts["Activity"].frame.minY, headingY - 50,
                           "Only the latest card should be brought into view.")
         XCTAssertEqual(recent.label, "Keep up with their moments")
         XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
@@ -1365,19 +1423,12 @@ final class OnboardingUITests: XCTestCase {
 
         let placeSearch = app.buttons["feed.searchLauncher"]
         let addButton = app.buttons["feed.headerAdd"]
-        let placesButton = app.buttons["Places"]
-        let peopleButton = app.buttons["People"]
 
         XCTAssertTrue(placeSearch.waitForExistence(timeout: 6))
         XCTAssertTrue(addButton.isHittable)
-        XCTAssertTrue(placesButton.waitForExistence(timeout: 4))
-        XCTAssertTrue(peopleButton.exists)
-        XCTAssertTrue(placesButton.isSelected)
-        XCTAssertLessThan(placeSearch.frame.maxY, placesButton.frame.minY)
-        XCTAssertEqual(placesButton.frame.midY, addButton.frame.midY, accuracy: 2)
+        XCTAssertEqual(placeSearch.frame.midY, addButton.frame.midY, accuracy: 2)
 
         let initialSearchY = placeSearch.frame.minY
-        let initialControlsY = placesButton.frame.minY
         app.swipeUp()
 
         let hidden = XCTNSPredicateExpectation(
@@ -1396,17 +1447,12 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [revealed], timeout: 3), .completed)
         XCTAssertTrue(addButton.isHittable)
         XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
-        XCTAssertEqual(placesButton.frame.minY, initialControlsY, accuracy: 2)
 
-        peopleButton.tap()
-        let peopleSearch = app.textFields["Search people"]
-        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
-        XCTAssertTrue(peopleButton.isSelected)
-        XCTAssertLessThan(peopleSearch.frame.maxY, peopleButton.frame.minY)
-        XCTAssertTrue(addButton.isHittable)
+        placeSearch.tap()
+        XCTAssertTrue(app.textFields["discover.placesSearchField"].waitForExistence(timeout: 4))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-383 adaptive Feed header restored on People"
+        screenshot.name = "REC-383 adaptive Feed header restored"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -1702,7 +1748,7 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         note.tap()
         note.typeText("Sunset draft")
 
@@ -1714,8 +1760,6 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
         let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        let restoredNoteHeading = app.staticTexts["a note for future you"]
-        XCTAssertTrue(restoredNoteHeading.isHittable)
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
@@ -1759,7 +1803,7 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         note.tap()
         note.typeText("Wanna sunset draft")
 
@@ -1771,12 +1815,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
         let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        let restoredNoteHeading = app.staticTexts["a note for future you"]
-        XCTAssertTrue(restoredNoteHeading.isHittable)
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
-            "what you'll want to remember, who told you..."
+            "Who told you, what caught your eye, when you might go…"
         )
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1795,7 +1837,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
-            "what you'll want to remember, who told you..."
+            "The good bits, what you ordered, who you were with…"
         )
     }
 
@@ -1989,13 +2031,14 @@ final class OnboardingUITests: XCTestCase {
         let scroll = app.scrollViews["save.editorScroll"].firstMatch
         XCTAssertTrue(scroll.waitForExistence(timeout: 4))
         let compactTop = scroll.frame.minY
-        let heading = app.staticTexts["a note for future you"].firstMatch
-        let headingTop = heading.frame.minY
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.exists)
+        let noteTop = note.frame.minY
         let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.65))
         let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.35))
         start.press(forDuration: 0.05, thenDragTo: end)
         let scrolled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            heading.frame.minY < headingTop - 60 && abs(scroll.frame.minY - compactTop) < 30
+            note.frame.minY < noteTop - 60 && abs(scroll.frame.minY - compactTop) < 30
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [scrolled], timeout: 3), .completed,
                        "An ordinary upward content gesture must scroll the compact form without sheet snapback")
@@ -2286,7 +2329,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
     }
 
-    func testFeedPeopleAddDismissesKeyboardBeforePresentingAdd() {
+    func testFeedAddAfterPeopleSearchDismissesKeyboard() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2298,15 +2341,15 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let peopleTab = app.buttons["People"]
-        XCTAssertTrue(peopleTab.waitForExistence(timeout: 6))
-        peopleTab.tap()
-
-        let peopleSearch = app.textFields["Search name or @handle"]
-        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
-        peopleSearch.tap()
-        peopleSearch.typeText("ryan")
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 8))
+        launcher.tap()
+        let search = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(search.waitForExistence(timeout: 4))
+        search.tap()
+        search.typeText("ryan")
+        app.buttons["discover.searchBack"].tap()
+        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
 
         let addButton = app.buttons["feed.headerAdd"]
         XCTAssertTrue(addButton.isHittable)
@@ -2659,7 +2702,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(finalCheckIn.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["continue to details"].exists)
         XCTAssertFalse(app.buttons["back"].exists)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
 
         let disclosure = app.buttons["save.checkInDateDisclosure"]
         XCTAssertTrue(disclosure.waitForExistence(timeout: 3))
@@ -2694,7 +2737,7 @@ final class OnboardingUITests: XCTestCase {
         wannaChoice.tap()
         XCTAssertTrue(app.buttons["Add a Wanna go date"].waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isSelected)
-        XCTAssertTrue(app.buttons["Hide more options"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         let wannaNote = app.textFields["save.note"]
         XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")

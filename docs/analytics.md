@@ -18,23 +18,26 @@ Launch audit and rollout gates: [September 19 audit](reviews/2026-09-19-launch-a
 
 The product dashboard lives in PostHog because its funnels, trends, retention drill-down, and event inspector operate directly on the same explicit client events. A second dashboard inside rec.me would duplicate metric logic and require an analytics backend. The dashboard is still code-reviewed and reproducible: `scripts/posthog-product-dashboard.mjs` owns every managed insight and tile.
 
-PostHog autocapture, automatic screen/lifecycle capture, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product metrics use explicit events. Session replay is configured separately with on-device masking (REC-582).
+PostHog autocapture, automatic screen/lifecycle capture, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product metrics use explicit events. Session replay uses readable app content with credential/system-view masking (REC-626).
 
 ## iOS session replay
 
-`PostHogAnalyticsClient.sdkConfiguration` enables replay and the swizzling it requires. SwiftUI uses screenshot mode with text, images, and sandboxed system views masked before upload. Logs and network telemetry remain disabled. Screenshots are throttled to at most one per second; experimental background capture stays off. Existing identify/reset behavior associates recordings with the same opaque user IDs as analytics.
+Joe approved readable app content and recognizable people on September 25, 2026 (REC-626), superseding REC-582's blanket masking.
 
-MapKit tiles and pins can reveal locations even with text/image masking enabled. All SwiftUI maps use `sessionReplayMasked()`; the native main map and its container use PostHog's `ph-no-capture` accessibility identifier. Do not unmask private text, photos, maps, contacts, or authentication fields. Masked recordings are intended to show layout and interaction flow, not people's content. Simulator test sessions and native onboarding review fixtures retain their Noop analytics client.
+`PostHogAnalyticsClient.sdkConfiguration` enables SwiftUI screenshot replay with text/image blanket masking disabled. App-owned maps, profile content, lists, imports, and contact-detail screens no longer carry whole-view masks. Password and verification-code fields explicitly use `sessionReplayMasked()`; the SDK also masks secure and sensitive input types. Only individual email/phone inputs use `sessionReplayVisibleInput()` so non-credential content remains readable; never put that override on a credential or an auth container. System-owned views remain masked because their credential/content boundaries are outside our control. Logs, network telemetry, and experimental background capture remain disabled. Screenshots are throttled to at most one per second. Simulator fixtures retain Noop analytics.
 
-The [project recording switch](https://us.posthog.com/project/557259/settings/project-replay) must also be enabled. Local `sampleRate` remains unset so Mobile recording conditions control sampling remotely; disabling **Record user sessions** is the server-side kill switch. On September 20, 2026, browser inspection confirmed the switch was **off**, with log/network capture configured on behind that disabled switch. Activation is pending native privacy validation; turn log/network capture off when activating replay. This change cannot record sessions from older app builds or recover past sessions.
+The account's stable Clerk ID remains the PostHog distinct ID. A separate, explicit `AnalyticsPerson` allowlist supplies `name` (the label `Alex Smith (@alex)`), `display_name`, and `username`; no email, phone, bio, token, or other profile fields are added to person properties. The store identifies the authenticated account at sign-in/offline restore and refreshes labels after remote profile hydration or successful profile edits. Sign-out/account switching resets identity. Event-property sanitization remains independent and unchanged.
 
-Before enabling recording and distributing a build:
+PostHog project 557259's **Settings → Product analytics → Person display name** uses `name`, then `username`. In **Session replay**, select a recording and open its person details; use person-property filters for `username`, `display_name`, or `name` to find a member's recordings. Existing people gain labels when an updated app identifies them; there is no bulk backfill in this change. Before names are available, the stable account ID remains the fallback. Renaming a user does not split their history.
 
-1. Run `BuildConfigurationTests` and the full native test suite through the shared iOS build helper.
-2. With fictional data, verify replay on iOS 26 and an older supported OS. Inspect auth/onboarding, maps, profile, imports, lists, notes/comments, and system photo/contact pickers. Confirm text, images, map tiles/pins and location are concealed. The SDK cautions that manual SwiftUI masking can be inconsistent on iOS 26; configuration assertions alone do not prove visual masking.
-3. In project 557259, enable **Record user sessions**, disable console/network capture, and inspect **Mobile** sampling/conditions. Keep the current retention/billing plan. Use a controlled test build first and disable recording again if any masking check fails.
-4. Watch a synthetic session in [Session replay](https://us.posthog.com/project/557259/replay/home), verify interaction playback and identity reset on sign-out, and check scrolling/map responsiveness on a physical phone.
-5. Reconcile the privacy policy and App Store privacy disclosures with the verified recording behavior before distributing the next app build. Record native build/OS, replay evidence, masking and performance results in REC-582.
+The [project recording switch](https://us.posthog.com/project/557259/settings/project-replay) must remain enabled. `sampleRate` is unset so Mobile recording conditions control sampling remotely; **Record user sessions** remains the server-side kill switch. The user supplied a working TestFlight recording on September 25. New visibility and identity properties require an app update; this cannot unmask previously uploaded frames or change what an older binary captures.
+
+### Release verification
+
+1. Run `BuildConfigurationTests` and store identity/profile tests; verify the complete unit suite.
+2. With fictional data on the release candidate, inspect auth, text/images, MapKit, profile, imports, lists, and system pickers. Ordinary content should be readable, while passwords, verification codes, and system-owned views stay concealed. Secure-field masking is preserved without applying `postHogNoMask()` to an auth ancestor. The SDK cautions about manual SwiftUI masking on iOS 26; configuration assertions alone are not visual playback evidence.
+3. Watch a controlled session in [Session replay](https://us.posthog.com/project/557259/replay/home), verify its name/username and successful user lookup, change the profile name, and verify sign-out/account switching does not attribute the next account to the previous one.
+4. Reconcile privacy-policy and App Store disclosures with readable content and named analytics before distributing the next app build. See [the privacy inventory](app-store/2026-08-12-privacy-inventory.md). Record native OS/build and live playback evidence in REC-626; local unit tests do not prove production ingestion.
 
 ## Metric tree
 
@@ -75,7 +78,7 @@ Status was the blank area in the original card. These are deliberately product-n
 
 ## Event contract
 
-Every event receives `analytics_schema_version`, `app_version`, `build_number`, `platform`, and `analytics_environment` from `ContextualAnalyticsClient`. Callers cannot override this context. Debug and simulator events are `development`; Release device builds are `production` (including TestFlight). Authenticated simulator fixtures and native review galleries use a Noop client. The SDK's opaque identify/reset behavior stays unchanged.
+Every event receives `analytics_schema_version`, `app_version`, `build_number`, `platform`, and `analytics_environment` from `ContextualAnalyticsClient`. Callers cannot override this context. Debug and simulator events are `development`; Release device builds are `production` (including TestFlight). Authenticated simulator fixtures and native review galleries use a Noop client. The stable account ID remains unchanged; explicit person display properties make replay identities recognizable (REC-626).
 
 Behavioral dashboard queries require schema 3, production, exclusion from the existing Internal / Test users cohort 481950, and absence of a true `$internal_or_test_user` person marker. Native queries also retain the project test-account filter. SQL explicitly excludes the same cohort; update both if the project rule changes. The cohort had zero members on September 19: release staff/review accounts still need classification. Do not infer or assign internal status to unknown users. Existing schema-2 traffic remains available in Data Quality; it is not silently counted as verified launch traffic.
 
@@ -107,8 +110,9 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | `onboarding_identity_failed` | Identity or required-photo submission fails | coarse `reason`, including `photo_save_failed` |
 | `onboarding_friend_suggestions_completed` | User continues after explicit per-person actions | aggregate `selected_count`, `followed_count`; both count successful follows in this visit |
 | `native_social_auth_result` | A native Apple or Google auth attempt reaches a terminal client outcome | `provider`; `mode`; coarse `result`; `session_adoption`; optional coarse `failure_category` |
-| `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number` |
-| `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number` |
+| `product_upsell_shown` | A centrally configured upsell becomes visible after its frequency and eligibility gates pass | allowlisted `campaign`, `trigger`, account-scoped `impression_number`; return reminders use campaign `notification_app_open` and trigger `app_opened`; remote re-prompts use campaign `notification_reprompt` and trigger `remote_notification_reprompt` |
+| `product_upsell_button_clicked` | A visible prompt button is tapped, before permission work or navigation | `button`: `continue`, `open_settings`, or `not_now`; common prompt properties below |
+| `product_upsell_actioned` | The visible upsell is enabled, declined, dismissed, or sends the user to Settings | allowlisted `campaign`, `trigger`, `action`, account-scoped `impression_number`; common prompt properties below |
 | `follow_created` | Follow is created/queued/synced | `source`, `outcome`, optional aggregate `followed_count` |
 | `place_import_started` | A pasted import is durably enqueued and the app returns to Map | aggregate `batch_count`, `item_count`, `source_count` |
 | `place_import_matching_completed` | Every item in that pasted import finishes local matching | aggregate `batch_count`, `matched_count`, `needs_review_count` |
@@ -141,6 +145,54 @@ coarse properties are sent: `companion_save=none` when the owned place has a
 check-in, or `existing_wanna` for an already saved Wanna. Both existing-list selection and new-list creation emit
 `place_list_item_added` and the matching `list_place_added` engagement action.
 
+Notification return reminders replace the automatic save/follow triggers. The
+first authenticated main-app use is open 1 and is immediately eligible for
+existing users with notifications off. Launches and real background returns can
+show at most one reminder per open, for three actual appearances total (normally
+opens 1, 2, and 3). Completing the onboarding prompt satisfies that visit without
+consuming a later reminder. Inactive/active transitions from
+Apple permission alerts do not count as opens. Onboarding has its own allowance.
+An unanswered onboarding notification step resumes after process termination;
+only a terminal action resolves it. Each fresh presentation logs a show, but
+onboarding reopens never consume the three later reminders.
+Counts persist per account/device; existing installations begin this sequence
+on first use of the supporting build. Blocked or notification-enabled opens do
+not consume a reminder. A remote primer and a return reminder never stack in
+the same open. No account IDs, open IDs, or permission payloads are event properties.
+
+Existing accounts that previously declined permission or were never asked are
+eligible, as are accounts with iOS permission but Astir's notification toggle
+off. Permission plus the app toggle controls eligibility; a missing APNs token
+alone never causes a primer. Existing accounts skip their first main-app use of
+the supporting build, then can see three reminders. They do not repeat onboarding.
+The redesigned shared component replaces the old splash in onboarding and in
+contextual prompts; automatic save/follow triggers are removed.
+
+All three prompt events now include `prompt_analytics_version=1` and a random
+`presentation_id` that joins that one show, its taps, and its outcomes. This is
+not an account, app-open, or notification ID. Remounting or resuming the same
+presentation does not log another show. Every accepted tap is logged, including
+a repeated Settings tap, but dashboard conversion deduplicates per presentation
+and button. Button logging records the label visible at tap time; a Continue tap
+is not an Apple permission grant. Apple's Allow/Don't Allow are system outcomes,
+not additional Astir button-click events.
+
+The four Notification Operations prompt tiles use a fixed 30-day window:
+
+- Reach: distinct people shown the new prompt / distinct people with any
+  schema-3 production client event, plus raw distinct-user and presentation counts.
+- Continue, Open Settings, and Not now: presentations with at least one matching
+  click / all matching shown presentations, split by campaign, trigger, and
+  impression number. Each rate includes shows where that button was unavailable;
+  the tables are directly comparable. Repeated clicks count in tap volume, not
+  the numerator. A prompt can receive more than one button type, so rates need
+  not sum to 100%. Clicks without a matching show in the window are excluded.
+
+Older events without the correlation fields are not backfilled into these rates.
+Zero denominators are unavailable, not invented 0% conversion. Staff, internal
+and test people, and development traffic are excluded. Simulator fixtures use
+Noop transport, so their taps do not populate the live production tiles.
+
 The push worker also emits three server-side operational events. They use
 `platform=server`, `source=push_notification_worker`, and a constant
 `distinct_id=notification_operations`; the server analytics path never exports
@@ -151,6 +203,12 @@ a recipient identifier.
 | `notification_delivery_processed` | After the database safely settles one APNs worker pass | allowlisted `notification_type`; `delivery_outcome`; `is_terminal`; attempt number; aggregate accepted/retryable/permanent token counts; coarse `failure_category` |
 | `notification_frequency_snapshot` | After a batch with at least one claimed notification | 30-day eligible-recipient count, accepted count, average, p50, p90, and maximum |
 | `notification_frequency_bucket_snapshot` | Seven rows emitted with the frequency summary | allowlisted bucket (`0`, `1`, `2-3`, `4-7`, `8-14`, `15-29`, `30+`), bucket order, aggregate recipient count |
+
+The consolidated Feed keeps the historical `feed_people` invitation attribution
+so existing referral funnels remain comparable after removal of the People tab.
+Opening a follower row in the shared inbox emits `notification_opened` with
+`notification_type=followed_you` or `mutual_follow`, `delivery_channel=in_app`,
+and `route=profile`; no account names, handles, query text, or IDs are included.
 
 “Eligible recipient” means a profile that currently has push enabled and at
 least one active device token. The zero bucket is therefore meaningful. The
@@ -214,6 +272,13 @@ npm run analytics:test-retention
 Optional: set `WANDER_POSTHOG_API_HOST`; the management API defaults to `https://us.posthog.com`. The ingestion host in the iOS app remains `https://us.i.posthog.com`.
 
 The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes eight ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, blank Monetization, Data Quality, and bottom-of-dashboard Notification Operations. Managed updates preserve unrelated tiles and existing insight memberships in other dashboards.
+
+When applying only REC-593 prompt metrics, use `node scripts/posthog-product-dashboard.mjs
+--apply --notification-prompts-only` followed by `--verify --notification-prompts-only`
+with the same scoped credentials. This updates only the four prompt insights on
+the existing dashboard, preserving newer live metrics from other pending work.
+The full apply also includes these definitions. `posthog-notification-prompts.mjs`
+owns the queries; the product-dashboard script remains the provisioning entrypoint.
 
 ## Validation checklist
 

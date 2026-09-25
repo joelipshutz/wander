@@ -8,6 +8,8 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(DiscoverPeopleRecommendationReason.followsYou.compactDisplayText, "Follows you")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(1).compactDisplayText, "Followed by 1 person you follow")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(3).compactDisplayText, "Followed by 3 people you follow")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.contactFollows(1).compactDisplayText, "Followed by 1 contact")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.contactFollows(3).compactDisplayText, "Followed by 3 contacts")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.suggested.compactDisplayText, "")
     }
 

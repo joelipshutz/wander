@@ -7,12 +7,13 @@ struct NotificationBadgeSnapshot: Equatable {
     let userID: String
     let notificationIDs: Set<String>
 
-    init(userID: String, plans: [ReceivedPlacePlanInvitation], checkIns: [SharedVisitInvitation]) {
+    init(userID: String, plans: [ReceivedPlacePlanInvitation], checkIns: [SharedVisitInvitation], follows: [FollowNotification] = []) {
         self.userID = userID
         notificationIDs = Set(plans.filter(\.isUnread).map { "plan:\($0.id.uuidString)" })
             .union(checkIns.filter { $0.status == .pending }.map {
                 "check-in:\($0.participantID):\($0.invitationGeneration)"
             })
+            .union(follows.map { "follow:\($0.id.uuidString)" })
     }
 }
 

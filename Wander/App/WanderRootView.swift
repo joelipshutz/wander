@@ -369,13 +369,14 @@ struct WanderRootView: View {
     @State private var nativeTabItemControlsFrame: CGRect?
     @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
     @State private var didRequestForcedProductUpsell = false
-    @State private var productUpsellRequestTask: Task<Void, Never>?
-    @State private var pendingProductUpsellRequests = ProductUpsellTriggerBuffer()
+    @State private var notificationAuthorizationAppOpenID: UUID?
+    @StateObject private var notificationCampaignRefresh = NotificationRepromptRefreshGate()
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var activityNavigation = ActivityNavigationCoordinator()
+    @StateObject private var eventsAccess: EventsAccessModel
     #if DEBUG
     @State private var seededNotificationFixture = false
     #endif
@@ -424,7 +425,12 @@ struct WanderRootView: View {
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         let opensImportHub = launchArguments.contains("-WanderOpenImportHub")
-        _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
+        var initialMetro = initialSession.flatMap { HomeMetroSelectionStore().metroID(for: $0.userID) }
+        #if DEBUG && targetEnvironment(simulator)
+        if launchArguments.contains("-WanderAuthenticatedUITest") { initialMetro = EventsAccessPolicy.fixtureMetroID() }
+        #endif
+        _eventsAccess = StateObject(wrappedValue: EventsAccessModel(userID: initialSession?.userID, initialMetroID: initialMetro))
+        _selectedTab = State(initialValue: EventsAccessPolicy.resolvedTab(requestedTab == .add ? .map : requestedTab, metroID: initialMetro))
         _isPresentingAdd = State(
             initialValue: opensImportHub ? false : Self.resolvedInitialAddPresentation()
         )
@@ -518,6 +524,7 @@ struct WanderRootView: View {
                     .tag(WanderTab.map)
 
                 FeedScreen(
+                    isFeedTabActive: selectedTab == .discover,
                     presentationResetRequest: presentationResetRequest,
                     onPresentation: handleDeepLinkPresentation,
                     onWillDismiss: handleDeepLinkPresentationWillDismiss,
@@ -532,14 +539,16 @@ struct WanderRootView: View {
                     .tabItem { tabItemLabel(for: .discover) }
                     .tag(WanderTab.discover)
 
-                EventsComingSoonScreen(
-                    isSelected: selectedTab == .events && !isPresentingAdd,
-                    userID: auth.state.session?.userID,
-                    repository: backend.eventsInterestRepository,
-                    analytics: analytics
-                )
+                if eventsAreAvailable {
+                    EventsComingSoonScreen(
+                        isSelected: selectedTab == .events && !isPresentingAdd,
+                        userID: auth.state.session?.userID,
+                        repository: backend.eventsInterestRepository,
+                        analytics: analytics
+                    )
                     .tabItem { tabItemLabel(for: .events) }
                     .tag(WanderTab.events)
+                }
 
                 ListsScreen()
                     .tabItem { tabItemLabel(for: .lists) }
@@ -566,14 +575,14 @@ struct WanderRootView: View {
         }
         .tint(astirBrandMode.accent)
         .background {
-            WanderNativeTabAppearance(selection: selectedTab)
+            WanderNativeTabAppearance(selection: selectedTab, tabs: availableTabs)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
-                    tabs: WanderTab.primaryTabs,
+                    tabs: availableTabs,
                     onItemControlsFrameChange: { frame in
                         guard nativeTabItemControlsFrame != frame else { return }
                         nativeTabItemControlsFrame = frame
@@ -588,6 +597,7 @@ struct WanderRootView: View {
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
+        .modifier(NotificationInboxHost(store: store))
         .task(id: selectedTab) {
             // Let the native tab selection render before analytics work begins
             // on the main actor.
@@ -913,6 +923,7 @@ struct WanderRootView: View {
                 for: userID
             )
             configureWalkthroughsForCurrentUser()
+            presentDeferredProductUpsellIfPossible()
         }
         .task(id: isSessionValidated) {
             guard isSessionValidated else {
@@ -1005,11 +1016,21 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
             if previousState.session?.userID != nextUserID {
-                cancelPendingProductUpsellRequests()
                 if let previousUserID = previousState.session?.userID {
                     calendarReservations.clearAccountState(userID: previousUserID)
                 }
                 cancelInteractivePlaceImports(clearCompletionQueue: true)
+                #if DEBUG
+                // Startup authentication clears account-owned banners. Restore
+                // the explicit UI-test fixture for the newly authenticated user.
+                if nextUserID != nil,
+                   ProcessInfo.processInfo.arguments.contains("-WanderImportNoticeUITest") {
+                    activeImportCompletionNotice = PlaceImportCompletionNotice(
+                        batchIDs: ["notice-fixture"], foundCount: 13, matchedCount: 13,
+                        needsReviewCount: 0, sourceRetryCount: 0, sourceName: "Instagram"
+                    )
+                }
+                #endif
                 walkthroughFeatureFlagRefreshTask?.cancel()
                 walkthroughFeatureFlagRefreshTask = nil
                 placeProfileFloatingActionVariant = .productionDefault
@@ -1093,10 +1114,6 @@ struct WanderRootView: View {
         .onChange(of: store.isRefreshingCurrentUserCalendarData) {
             handleCalendarRefreshStateChange($0, $1)
         }
-        .onChange(of: store.productUpsellTriggerRequest) { _, request in
-            guard let request else { return }
-            scheduleProductUpsellRequest(request)
-        }
     }
 
     private var importObservedRoot: some View {
@@ -1149,10 +1166,15 @@ struct WanderRootView: View {
             store.clearContactRecommendations()
             needsContactRecommendationsRefresh = true
             if phase == .background {
+                notificationCampaignRefresh.invalidate()
                 placeSaveDraftStore.flush()
                 walkthroughs.recordSuspension()
             }
             guard phase == .active, isSessionValidated else { return }
+            presentDeferredProductUpsellIfPossible()
+            Task {
+                await eventsAccess.load(userID: eventsAccessLoadUserID, repository: backend.eventsAccessRepository)
+            }
             switch walkthroughs.restoreJourneyIfNeeded() {
             case .resumed(let surface):
                 if completeCommittedWalkthroughDraftIfNeeded() {
@@ -1216,7 +1238,7 @@ struct WanderRootView: View {
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
                 configureWalkthroughsForCurrentUser()
-                scheduleProductUpsellDrain()
+                presentDeferredProductUpsellIfPossible()
                 drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
@@ -1233,6 +1255,35 @@ struct WanderRootView: View {
 
     private var stateObservedRoot: some View {
         recoveryObservedRoot
+        .task(id: notificationCampaignRefreshContext) {
+            let context = notificationCampaignRefreshContext
+            await notificationCampaignRefresh.refresh(context: context, backend: backend)
+            guard !Task.isCancelled, context == notificationCampaignRefreshContext else { return }
+            presentDeferredProductUpsellIfPossible()
+        }
+        .task(id: productUpsells.appOpenID) {
+            let appOpenID = productUpsells.appOpenID
+            await pushNotifications.refreshAuthorizationStatus()
+            guard !Task.isCancelled, productUpsells.appOpenID == appOpenID else { return }
+            notificationAuthorizationAppOpenID = appOpenID
+            presentDeferredProductUpsellIfPossible()
+        }
+        .onChange(of: remoteNotificationRepromptCampaign, initial: true) { _, _ in
+            presentDeferredProductUpsellIfPossible()
+        }
+        .onChange(of: pushNotifications.notificationsAreEnabled) { _, _ in
+            presentDeferredProductUpsellIfPossible()
+        }
+        .task(id: eventsAccessLoadUserID) {
+            await eventsAccess.load(userID: eventsAccessLoadUserID, repository: backend.eventsAccessRepository)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: HomeMetroSelectionStore.didChange)) { notice in
+            guard let changedUserID = notice.object as? String, changedUserID == auth.state.session?.userID else { return }
+            eventsAccess.cachedSelectionDidChange(userID: changedUserID)
+        }
+        .onChange(of: eventsAreAvailable) { _, available in
+            if !available, selectedTab == .events { selectedTab = .discover }
+        }
         .onChange(of: blocksProductUpsellPresentation) { _, isBlocked in
             if isBlocked {
                 productUpsells.suspendActivePresentation()
@@ -1244,8 +1295,11 @@ struct WanderRootView: View {
             presentDeferredProductUpsellIfPossible()
         }
         .onChange(of: productUpsells.activePresentation?.id) { _, presentationID in
-            guard presentationID == nil else { return }
-            presentDeferredProductUpsellIfPossible()
+            if presentationID == nil {
+                presentDeferredProductUpsellIfPossible()
+            } else {
+                requestRemoteNotificationRepromptIfPossible()
+            }
         }
         .onChange(of: productUpsells.presentationBlockerCount) { _, blockerCount in
             if blockerCount > 0 {
@@ -1271,8 +1325,9 @@ struct WanderRootView: View {
 
     private var tabSelection: Binding<WanderTab> {
         Binding {
-            selectedTab
+            EventsAccessPolicy.resolvedTab(selectedTab, metroID: currentHomeMetro)
         } set: { newTab in
+            guard newTab != .events || eventsAreAvailable else { return }
             guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
                 presentAddSheet()
@@ -1289,6 +1344,11 @@ struct WanderRootView: View {
             }
         }
     }
+
+    private var currentHomeMetro: String? { eventsAccess.homeMetro(for: auth.state.session?.userID) }
+    private var eventsAreAvailable: Bool { EventsAccessPolicy.isEligible(metroID: currentHomeMetro) }
+    private var availableTabs: [WanderTab] { EventsAccessPolicy.availableTabs(metroID: currentHomeMetro) }
+    private var eventsAccessLoadUserID: String? { isSessionValidated ? auth.state.session?.userID : nil }
 
     private func presentAddSheet() {
         dismissKeyboard()
@@ -1941,7 +2001,6 @@ struct WanderRootView: View {
         sharedVisitBannerTask?.cancel()
         saveStreakCelebrationTask?.cancel()
         importCompletionBannerTask?.cancel()
-        cancelPendingProductUpsellRequests()
 
         guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
         placeSaveDraftStore.clear()
@@ -2154,9 +2213,8 @@ struct WanderRootView: View {
                 || presentedSaveStreakCelebration != nil,
             isPresentingAlert: sharedPlaceImportNotice != nil
                 || interruptedSaveRecoveryMessage != nil,
-            hasTransientBanner: activeImportCompletionNotice != nil
-                || sharedVisitBannerInvitation != nil
-                || productUpsells.presentationBlockerCount > 0
+            // Nonblocking import/invitation banners can remain behind the primer.
+            isPresentingChildModal: productUpsells.presentationBlockerCount > 0
         ).isBlocked
     }
 
@@ -2178,43 +2236,56 @@ struct WanderRootView: View {
         )
     }
 
-    private func scheduleProductUpsellRequest(_ request: ProductUpsellTriggerRequest) {
-        guard pendingProductUpsellRequests.enqueue(request) else { return }
-        scheduleProductUpsellDrain()
-    }
-
-    private func scheduleProductUpsellDrain() {
-        guard productUpsellRequestTask == nil,
-              !pendingProductUpsellRequests.requests.isEmpty else { return }
-        productUpsellRequestTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .milliseconds(220))
-            } catch {
-                return
-            }
-            productUpsellRequestTask = nil
-            guard !Task.isCancelled else { return }
-            let requests = pendingProductUpsellRequests.drain(
-                isSessionValidated: isSessionValidated
-            )
-            for request in requests {
-                requestProductUpsell(request.trigger)
-            }
-        }
-    }
-
-    private func cancelPendingProductUpsellRequests() {
-        productUpsellRequestTask?.cancel()
-        productUpsellRequestTask = nil
-        pendingProductUpsellRequests.removeAll()
-    }
-
     private func presentDeferredProductUpsellIfPossible() {
+        guard isSessionValidated, scenePhase == .active else { return }
         let userID = auth.state.session?.userID ?? store.currentUser.id
+        productUpsells.bind(to: userID)
+        productUpsells.recordAppOpen(for: userID)
         productUpsells.presentDeferredIfPossible(
             userID: userID,
             isEligible: !pushNotifications.notificationsAreEnabled,
             canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && pushNotifications.notificationPreferencesUserID == userID
+                && notificationAuthorizationAppOpenID == productUpsells.appOpenID
+                && !blocksProductUpsellPresentation
+        )
+        // Returning to the app replaces the old save/follow reminder triggers.
+        // Onboarding and explicit debug previews retain their existing paths.
+        productUpsells.requestAppOpenNotificationReminder(
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && pushNotifications.notificationPreferencesUserID == userID
+                && notificationAuthorizationAppOpenID == productUpsells.appOpenID
+                && ProductUpsellDebugPolicy.forcedTrigger() == nil
+                && !blocksProductUpsellPresentation
+        )
+        requestRemoteNotificationRepromptIfPossible()
+    }
+
+    private var remoteNotificationRepromptCampaign: Int {
+        guard isSessionValidated, let userID = auth.state.session?.userID else { return 0 }
+        return backend.integerFeatureFlag(.notificationRepromptCampaign, for: userID) ?? 0
+    }
+
+    private var notificationCampaignRefreshContext: NotificationRepromptRefreshGate.Context? {
+        guard isSessionValidated, scenePhase != .background,
+              let userID = auth.state.session?.userID else { return nil }
+        return .init(userID: userID, appOpenID: productUpsells.appOpenID)
+    }
+
+    private func requestRemoteNotificationRepromptIfPossible() {
+        guard isSessionValidated, scenePhase == .active,
+              let userID = auth.state.session?.userID,
+              pushNotifications.notificationPreferencesUserID == userID,
+              notificationCampaignRefresh.isCurrent(notificationCampaignRefreshContext) else { return }
+        productUpsells.bind(to: userID)
+        productUpsells.requestRemoteNotificationReprompt(
+            campaignVersion: remoteNotificationRepromptCampaign,
+            userID: userID,
+            isEligible: !pushNotifications.notificationsAreEnabled,
+            canPresent: pushNotifications.hasLoadedNotificationPreferences
+                && notificationAuthorizationAppOpenID == productUpsells.appOpenID
                 && !blocksProductUpsellPresentation
         )
     }
@@ -2418,6 +2489,7 @@ struct WanderRootView: View {
             )
             configureWalkthroughsForCurrentUser()
             walkthroughFeatureFlagRefreshTask = nil
+            presentDeferredProductUpsellIfPossible()
         }
     }
 
@@ -2472,6 +2544,14 @@ struct WanderRootView: View {
     }
 
     private func routeWalkthrough(to surface: WalkthroughSurface) {
+        if surface == .events, !eventsAreAvailable {
+            // Events has no active NUX steps. Retire an obsolete request rather
+            // than routing a restored/debug checkpoint to a hidden tab.
+            walkthroughs.consumeRequestedSurface(.events)
+            selectedTab = .discover
+            walkthroughs.activate(.feed)
+            return
+        }
         if surface == .add,
            placeSaveDraftStore.draft?.walkthroughContentVersion != nil {
             // A process can be killed after the NUX form is durable but before
@@ -3369,6 +3449,7 @@ enum WanderTabBarWalkthroughTargetGeometry {
 /// contrast modes when the selected content changes from paper to black film.
 private struct WanderNativeTabAppearance: UIViewRepresentable {
     let selection: WanderTab
+    let tabs: [WanderTab]
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -3385,6 +3466,7 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
     }
 
     func updateUIView(_ anchor: WanderTabFrameAnchorView, context: Context) {
+        context.coordinator.tabs = tabs
         context.coordinator.apply(from: anchor)
         context.coordinator.afterSelection(from: anchor)
     }
@@ -3395,6 +3477,7 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
     }
 
     @MainActor final class Coordinator {
+        var tabs: [WanderTab] = []
         private weak var bar: UITabBar?
         private let material = UIVisualEffectView()
         private var selectionUpdate: Task<Void, Never>?
@@ -3475,7 +3558,7 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
         private func syncGeometry() {
             guard let bar, let parent = bar.superview else { material.isHidden = true; return }
             guard #available(iOS 26.0, *),
-                  let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: WanderTab.primaryTabs),
+                  let controls = WanderNativeTabFrameReader.Coordinator.itemControls(in: bar, tabs: tabs),
                   let first = controls.first else { material.isHidden = true; return }
             let controlsFrame = controls.dropFirst().reduce(bar.convert(first.bounds, from: first)) {
                 $0.union(bar.convert($1.bounds, from: $1))
@@ -3653,6 +3736,39 @@ enum WanderInitialPresentation: String, Identifiable {
     case settings
 
     var id: String { rawValue }
+}
+
+/// Only remote primers wait for this refresh. Other flag consumers can keep
+/// their cached values, and automatic return reminders remain independent.
+@MainActor
+final class NotificationRepromptRefreshGate: ObservableObject {
+    struct Context: Equatable {
+        let userID: String
+        let appOpenID: UUID
+    }
+
+    @Published private var refreshedContext: Context?
+    private var refreshID = UUID()
+
+    func invalidate() {
+        refreshID = UUID()
+        refreshedContext = nil
+    }
+
+    func refresh(context: Context?, backend: WanderBackend) async {
+        invalidate()
+        guard let context else { return }
+        let requestID = refreshID
+        // Join the existing launch/foreground request when one is in flight.
+        await backend.refreshFeatureFlags(for: context.userID)
+        guard !Task.isCancelled, requestID == refreshID else { return }
+        refreshedContext = context
+    }
+
+    func isCurrent(_ context: Context?) -> Bool {
+        guard let context else { return false }
+        return refreshedContext == context
+    }
 }
 
 struct SharedProfileRoute: Equatable, Identifiable {

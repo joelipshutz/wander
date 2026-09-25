@@ -248,6 +248,8 @@ struct MapPlaceListPickerSheet: View {
                     }
                     applyButton
                 }
+                .padding(.top, onStage == nil ? WanderTheme.spacing2 : 0)
+                .background(brandMode.background)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

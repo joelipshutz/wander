@@ -19,15 +19,16 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
-    @State private var selectedSurface: FeedSurface
-    @State private var hasMountedPeopleSurface: Bool
-    @State private var peopleQuery = ""
+    @State private var showsNotifications = false
+    @EnvironmentObject private var planInbox: PlacePlanInvitationInbox
+    @EnvironmentObject private var notificationBadge: NotificationBadgeStore
+    @EnvironmentObject private var followInbox: FollowNotificationInbox
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
     @State private var isFloatingHeaderHidden = false
     @State private var lastFeedScrollOffset: CGFloat?
     @State private var accumulatedFeedScrollTravel: CGFloat = 0
-    @FocusState private var peopleSearchFieldFocused: Bool
     @Namespace private var searchTransitionNamespace
+    private let isFeedTabActive: Bool
     private let onAdd: () -> Void
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let onPresentation: (WanderDeepLinkPresentationToken) -> Void
@@ -35,59 +36,38 @@ struct FeedScreen: View {
     private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
 
     init(
+        isFeedTabActive: Bool = true,
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         onPresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         onAdd: @escaping () -> Void = {}
     ) {
+        self.isFeedTabActive = isFeedTabActive
         self.presentationResetRequest = presentationResetRequest
         self.onPresentation = onPresentation
         self.onWillDismiss = onWillDismiss
         self.onDidDismiss = onDidDismiss
         self.onAdd = onAdd
-        let initialSurface = FeedSurface.resolvedInitialSurface()
-        _selectedSurface = State(initialValue: initialSurface)
-        _hasMountedPeopleSurface = State(initialValue: initialSurface == .people)
+
     }
 
-    private let tickerSuggestions = [
-        "friends' favorite coffee shops",
-        "date night spots from people you follow",
-        "quiet work cafes with wifi",
-        "friends' sunset hikes"
-    ]
-
     private var page: FollowedFeedPage? { store.followedFeedPage }
+    private var visibleActivity: [FeedActivity] {
+        (page?.activity ?? []).filter {
+            store.feedAudience.includes(actorID: $0.actor.id, currentUserID: store.currentUser.id,
+                                        relationship: $0.actor.relationship)
+        }
+    }
+    private var audienceSelection: Binding<FeedAudience> {
+        Binding(get: { store.feedAudience }, set: { store.selectFeedAudience($0) })
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 ZStack(alignment: .top) {
                     placesSurface
-                        .opacity(selectedSurface == .places ? 1 : 0)
-                        .allowsHitTesting(selectedSurface == .places)
-                        .accessibilityHidden(selectedSurface != .places)
-                        .zIndex(selectedSurface == .places ? 1 : 0)
-
-                    if hasMountedPeopleSurface || selectedSurface == .people {
-                        FeedPeopleSurface(
-                            memberQuery: $peopleQuery,
-                            contentTopInset: feedContentTopInset,
-                            dismissSearchFocus: { peopleSearchFieldFocused = false },
-                            onScrollOffsetChange: { offset in
-                                updateFloatingHeaderVisibility(
-                                    scrollOffset: offset,
-                                    surface: .people
-                                )
-                            },
-                            openProfile: openProfile
-                        )
-                        .opacity(selectedSurface == .people ? 1 : 0)
-                        .allowsHitTesting(selectedSurface == .people)
-                        .accessibilityHidden(selectedSurface != .people)
-                        .zIndex(selectedSurface == .people ? 1 : 0)
-                    }
 
                     floatingHeader
                         .background {
@@ -136,7 +116,10 @@ struct FeedScreen: View {
                 guard height > 0 else { return }
                 floatingHeaderHeight = height
             }
-            .task(id: "\(auth.isSignedIn)-\(store.currentUser.id)") {
+            .onChange(of: isFeedTabActive) { _, isActive in
+                if isActive { store.selectFeedAudience(.everyone) }
+            }
+            .task(id: "\(auth.isSignedIn)-\(store.currentUser.id)-\(store.feedAudience.rawValue)") {
                 // Commit the selected tab's first frame before starting the
                 // remote refresh and its published state changes.
                 await Task.yield()
@@ -203,32 +186,18 @@ struct FeedScreen: View {
                     || selectedPlace != nil
                     || placeSaveFlow != nil
                     || savedMessage != nil
+                    || showsNotifications
             )
-            .onChange(of: selectedSurface) { _, surface in
-                if surface == .people {
-                    hasMountedPeopleSurface = true
-                }
-                peopleSearchFieldFocused = false
-                if surface != .people {
-                    peopleQuery = ""
-                }
-                walkthroughs.perform(.feedSurfaceSwitch)
-                resetFloatingHeaderScrollTracking(revealHeader: true)
-            }
-            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
-                if target == .feedDiscoverSearch || target == .feedActivity {
-                    selectedSurface = .places
-                } else if target == .feedPeopleSearch || target == .feedInvite {
-                    selectedSurface = .people
-                }
-                if target == .feedInvite {
-                    peopleSearchFieldFocused = false
+            .onChange(of: walkthroughs.currentStep?.target) { _, target in
+                if target == .feedDiscoverSearch || target == .feedPeopleSearch || target == .feedInvite {
+                    resetFloatingHeaderScrollTracking(revealHeader: true)
                 }
             }
-            .onChange(of: peopleSearchFieldFocused) { _, isFocused in
-                if isFocused {
-                    setFloatingHeaderHidden(false)
-                    walkthroughs.perform(.feedPeopleSearch)
+            .navigationDestination(isPresented: $showsNotifications) {
+                SharedVisitInvitationInboxScreen(planInbox: planInbox, notificationBadge: notificationBadge) { invitation in
+                    showsNotifications = false
+                    pushNotifications.openSharedVisit(participantID: invitation.participantID,
+                                                      generation: invitation.invitationGeneration)
                 }
             }
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, surface in
@@ -249,8 +218,7 @@ struct FeedScreen: View {
                 placeSaveFlow = nil
                 savedMessage = nil
                 isShowingSearch = false
-                selectedSurface = .places
-                peopleSearchFieldFocused = false
+                showsNotifications = false
                 resetFloatingHeaderScrollTracking(revealHeader: true)
             }
         }
@@ -264,54 +232,61 @@ struct FeedScreen: View {
         AstirFloatingHeaderSurface(mergeSpacing: WanderTheme.spacing2) {
             floatingHeaderContent
         }
+        // Render above the glass container so its material cannot cover the count.
+        .overlayPreferenceValue(NotificationBellAnchorKey.self) { anchor in
+            GeometryReader { geometry in
+                if let anchor {
+                    let bounds = geometry[anchor]
+                    NotificationCountBadge(count: notificationCount)
+                        .frame(width: bounds.width, height: bounds.height, alignment: .topTrailing)
+                        .offset(x: bounds.minX + 4, y: bounds.minY - 4)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     private var floatingHeaderContent: some View {
         VStack(spacing: WanderTheme.spacing2) {
             HStack(alignment: .center, spacing: WanderTheme.spacing2) {
                 AstirMastheadLockup(presentation: .localizedBlur)
-
-                Group {
-                    switch selectedSurface {
-                    case .places:
-                        FeedSearchLauncher(
-                            placeholders: tickerSuggestions,
-                            isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
-                            action: openDiscoverSearch
-                        )
-                        .feedSearchMatchedGeometry(
-                            in: searchTransitionNamespace,
-                            isSource: !isShowingSearch
-                        )
-                        .walkthroughTarget(.feedDiscoverSearch)
-                    case .people:
-                        FeedPeopleSearchField(text: $peopleQuery)
-                            .focused($peopleSearchFieldFocused)
-                            .walkthroughTarget(.feedPeopleSearch)
-                    }
-                }
-                .frame(maxWidth: .infinity)
+                Spacer()
+                NotificationBellButton(count: notificationCount) { showsNotifications = true }
             }
-
             HStack(spacing: WanderTheme.spacing2) {
-                FeedSurfaceTabs(selectedSurface: $selectedSurface)
-                    .walkthroughTarget(.feedSurfaceSwitch)
+                FeedSearchLauncher(
+                    placeholders: ["Search places and people"],
+                    isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
+                    action: openDiscoverSearch
+                )
+                .feedSearchMatchedGeometry(in: searchTransitionNamespace, isSource: !isShowingSearch)
+                .walkthroughTargets([.feedDiscoverSearch, .feedPeopleSearch])
+                .frame(maxWidth: .infinity)
 
                 AstirIconActionButton(
                     systemImage: "plus",
                     accessibilityLabel: "Add a place",
                     accessibilityIdentifier: "feed.headerAdd",
                     isAddAction: true,
-                    action: {
-                        peopleSearchFieldFocused = false
-                        onAdd()
-                    }
+                    action: onAdd
                 )
             }
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
         .padding(.bottom, WanderTheme.spacing2)
+    }
+
+    private var notificationCount: Int {
+        guard auth.isSignedIn else { return 0 }
+        return notificationBadge.count(for: NotificationBadgeSnapshot(
+            userID: store.currentUser.id,
+            plans: planInbox.userID == store.currentUser.id ? planInbox.invitations : [],
+            checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : [],
+            follows: followInbox.userID == store.currentUser.id
+                ? followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) } : []
+        ))
     }
 
     private var placesSurface: some View {
@@ -334,10 +309,7 @@ struct FeedScreen: View {
             .astirScrollTracking(
                 coordinateSpaceName: FeedScrollCoordinateSpace.places
             ) { offset in
-                updateFloatingHeaderVisibility(
-                    scrollOffset: offset,
-                    surface: .places
-                )
+                updateFloatingHeaderVisibility(scrollOffset: offset)
             }
             .accessibilityIdentifier("feed.places.scroll")
             .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
@@ -384,10 +356,9 @@ struct FeedScreen: View {
     }
 
     private func updateFloatingHeaderVisibility(
-        scrollOffset: CGFloat,
-        surface: FeedSurface
+        scrollOffset: CGFloat
     ) {
-        guard selectedSurface == surface, !isShowingSearch else { return }
+        guard !isShowingSearch else { return }
         if walkthroughs.feedIntroductionScrollTarget == .recent { return }
 
         if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
@@ -476,20 +447,17 @@ struct FeedScreen: View {
             walkthroughs.activate(.feed)
         }
 
-        guard let destination = FeedSurface.walkthroughDestination(
-            activeSurface: walkthroughs.activeSurface,
-            target: walkthroughs.currentStep?.target
-        ) else { return }
-        selectedSurface = destination
+        resetFloatingHeaderScrollTracking(revealHeader: true)
     }
 
     @ViewBuilder
     private var content: some View {
+        FeedInviteSection()
         if !FeedPresentation.showsFeaturedPlaces {
             peopleRail
         }
         if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
-            FeedLoadingState()
+            FeedLoadingState(audience: audienceSelection)
         } else if let page, !page.activity.isEmpty {
             if FeedPresentation.showsFeaturedPlaces, !page.featuredPlaces.isEmpty {
                 FeedSectionHeading(title: "Featured for you")
@@ -500,13 +468,17 @@ struct FeedScreen: View {
                 )
             }
 
-            FeedSectionHeading(title: "Recent", detail: freshnessDetail)
-            FeedActivityList(
-                activity: page.activity,
-                openProfile: openProfile,
-                openPlace: openPlace,
-                openList: openList
-            )
+            FeedSectionHeading(title: "Activity", detail: freshnessDetail, audience: audienceSelection)
+            if visibleActivity.isEmpty {
+                FeedAudienceEmptyState(audience: audienceSelection)
+            } else {
+                FeedActivityList(
+                    activity: visibleActivity,
+                    openProfile: openProfile,
+                    openPlace: openPlace,
+                    openList: openList
+                )
+            }
 
             if store.feedLoadState == .stale {
                 FeedRetryRow(
@@ -517,17 +489,20 @@ struct FeedScreen: View {
                 )
             }
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
-            FeedRefreshRecoveryState(retry: refresh)
+            FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)
         } else {
-            FeedSectionHeading(title: "Recent")
-            FeedEmptyState(
-                recommendations: FeedPresentation.showsFeaturedPlaces ? peopleRecommendations : [],
-                followingProfileIDs: followingProfileIDs,
-                openSearch: openDiscoverSearch,
-                openProfile: openProfile,
-                follow: follow
-            )
-
+            FeedSectionHeading(title: "Activity", audience: audienceSelection)
+            if store.feedAudience != .everyone {
+                FeedAudienceEmptyState(audience: audienceSelection)
+            } else {
+                FeedEmptyState(
+                    recommendations: FeedPresentation.showsFeaturedPlaces ? peopleRecommendations : [],
+                    followingProfileIDs: followingProfileIDs,
+                    openSearch: openDiscoverSearch,
+                    openProfile: openProfile,
+                    follow: follow
+                )
+            }
         }
     }
 
@@ -871,544 +846,6 @@ struct FeedScreen: View {
     }
 }
 
-enum FeedSurface: String, CaseIterable, Identifiable {
-    case places
-    case people
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .places: "Places"
-        case .people: "People"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .places: "mappin.and.ellipse"
-        case .people: "person.2"
-        }
-    }
-
-    static func resolvedInitialSurface(
-        from arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> FeedSurface {
-        guard let flagIndex = arguments.firstIndex(of: "-WanderFeedSurface") else {
-            return .places
-        }
-        let valueIndex = arguments.index(after: flagIndex)
-        guard arguments.indices.contains(valueIndex) else { return .places }
-        return FeedSurface(rawValue: arguments[valueIndex]) ?? .places
-    }
-
-    static func walkthroughDestination(
-        activeSurface: WalkthroughSurface?,
-        target: WalkthroughTargetID?
-    ) -> FeedSurface? {
-        guard activeSurface == .feed else { return nil }
-        switch target {
-        case .feedPeopleSearch, .feedInvite:
-            return .people
-        case .feedActivity, .feedDiscoverSearch:
-            return .places
-        default:
-            return nil
-        }
-    }
-}
-
-private struct FeedSurfaceTabs: View {
-    @Binding var selectedSurface: FeedSurface
-
-    var body: some View {
-        AstirEditorialSegmentedSwitch(
-            options: FeedSurface.allCases.map {
-                WanderSegmentOption(id: $0.rawValue, title: $0.title)
-            },
-            selection: Binding(
-                get: { selectedSurface.rawValue },
-                set: { selectedSurface = FeedSurface(rawValue: $0) ?? .places }
-            ),
-            interactive: true
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Feed section")
-        .accessibilityIdentifier("feed.surfaceSwitch")
-    }
-}
-
-private struct FeedPeopleSurface: View {
-    @EnvironmentObject private var store: WanderStore
-    @EnvironmentObject private var auth: AuthSessionStore
-    @EnvironmentObject private var backend: WanderBackend
-    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
-    @Binding var memberQuery: String
-    let contentTopInset: CGFloat
-    let dismissSearchFocus: () -> Void
-    let onScrollOffsetChange: (CGFloat) -> Void
-    let openProfile: (ProfileShell) -> Void
-
-    @State private var memberResults: [ProfileShell] = []
-    @State private var followInFlightProfileIDs: Set<String> = []
-    @State private var followFailedProfileIDs: Set<String> = []
-    @State private var isPresentingContactInvites = false
-
-    private var isMemberSearchActive: Bool {
-        !memberQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var followingProfiles: [ProfileShell] {
-        store.following(of: store.currentUser.id)
-            .map(store.shell(for:))
-    }
-
-    var body: some View {
-        ScrollView {
-            AstirScrollOffsetReader(
-                coordinateSpaceName: FeedScrollCoordinateSpace.people
-            )
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                InviteEntryPointButton(surface: .feedPeople) {
-                    dismissSearchFocus()
-                    walkthroughs.perform(.feedInvite)
-                    isPresentingContactInvites = true
-                }
-                .walkthroughTarget(.feedInvite)
-
-                NavigationLink {
-                    ContactDiscoverySettingsScreen()
-                } label: {
-                    Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
-                        .font(AstirTypography.control).frame(minHeight: 44)
-                }
-                .accessibilityIdentifier("feed.contactDiscovery")
-
-                if isMemberSearchActive {
-                    memberSearchResultsSection
-                } else {
-                    peopleRecommendationsSection
-                    peopleSection
-                }
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, contentTopInset)
-            .padding(.bottom, WanderTheme.spacing16)
-        }
-        .accessibilityIdentifier("feed.people.scroll")
-        .coordinateSpace(name: FeedScrollCoordinateSpace.people)
-        .astirScrollTracking(
-            coordinateSpaceName: FeedScrollCoordinateSpace.people,
-            onOffsetChange: onScrollOffsetChange
-        )
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await refreshRecommendations()
-        }
-        .task(id: auth.isSignedIn) {
-            await refreshRecommendations()
-        }
-        .task(id: memberQuery) {
-            walkthroughs.recordUserActivity()
-            await refreshMembers(query: memberQuery, debounce: true)
-        }
-        .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, isRequested in
-            guard isRequested else { return }
-            dismissSearchFocus()
-            isPresentingContactInvites = true
-        }
-        .sheet(isPresented: $isPresentingContactInvites, onDismiss: {
-            walkthroughs.completeContactInviteRequest()
-        }) {
-            ContactInviteSheet(
-                surface: .feedPeople,
-                contactProvider: store.contactProvider,
-                senderProfileID: store.currentUser.id,
-                canDismiss: !walkthroughs.isRequestingContactInvite,
-                walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
-                onPermissionDenied: walkthroughPermissionDeniedAction,
-                selectedContactIDs: walkthroughs.tutorialInvitedContactIDs,
-                onWalkthroughSelectionChange: walkthroughs.recordTutorialInvitedContactIDs,
-                analytics: store.productAnalytics
-            )
-            .interactiveDismissDisabled(walkthroughs.isRequestingContactInvite)
-        }
-    }
-
-    private var walkthroughPermissionDeniedAction: (() -> Void)? {
-        guard walkthroughs.isRequestingContactInvite else { return nil }
-        return {
-            isPresentingContactInvites = false
-        }
-    }
-
-    @ViewBuilder
-    private var peopleRecommendationsSection: some View {
-        switch store.discoverPeopleRecommendationsState {
-        case .idle where !auth.isSignedIn:
-            FeedPeopleActionPanel(
-                icon: "person.crop.circle.badge.plus",
-                title: "Find people you trust",
-                message: "Sign in to see people worth following.",
-                actionTitle: "Sign in"
-            ) {
-                auth.presentGate(for: .followPeople)
-            }
-        case .idle, .loading:
-            FeedPeopleLoadingPanel(label: "Finding people")
-        case .failed:
-            FeedPeopleActionPanel(
-                icon: "arrow.clockwise",
-                title: "Suggestions couldn't load",
-                message: "Search still works, or try these suggestions again.",
-                actionTitle: "Try again"
-            ) {
-                Task { await refreshRecommendations(force: true) }
-            }
-        case .loaded(let recommendations) where recommendations.isEmpty:
-            FeedPeopleEmptyPanel(
-                title: "No suggestions yet",
-                message: "Search a name or @handle above."
-            )
-        case .loaded(let recommendations):
-            PeopleRecommendationShelf(
-                recommendations: recommendations,
-                isFollowing: { store.hasAcknowledgedFollow(to: $0) },
-                isFollowInFlight: { followInFlightProfileIDs.contains($0) },
-                didFollowFail: { followFailedProfileIDs.contains($0) },
-                open: { openProfile($0.profile) },
-                follow: followRecommendation
-            )
-        }
-    }
-
-    private var memberSearchResultsSection: some View {
-        let profiles = memberResults.map(latestProfileShell)
-        let recommendationCounts = store.visiblePlaceCountsByOwnerID()
-        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            FeedSectionHeading(title: "People results")
-
-            if profiles.isEmpty {
-                FeedPeopleEmptyPanel(
-                    title: "No people found",
-                    message: "Try a handle or full first name."
-                )
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: WanderTheme.spacing3) {
-                        ForEach(profiles) { profile in
-                            FeedMemberResultTile(
-                                profile: profile,
-                                recCount: recommendationCounts[profile.id, default: 0]
-                            ) {
-                                openProfile(profile)
-                            }
-                        }
-                    }
-                    .padding(.vertical, WanderTheme.spacing1)
-                }
-            }
-        }
-    }
-
-    private var peopleSection: some View {
-        let recommendationCounts = store.visiblePlaceCountsByOwnerID()
-        let profiles = followingProfiles
-        return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                FeedSectionHeading(title: "People")
-                Spacer()
-                Text("\(profiles.count)")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-
-            if profiles.isEmpty {
-                FeedPeopleEmptyPanel(
-                    title: "No one followed yet",
-                    message: "Follow someone above or search by name."
-                )
-            } else {
-                ForEach(profiles) { profile in
-                    FeedFollowedPersonRow(
-                        profile: profile,
-                        recCount: recommendationCounts[profile.id, default: 0]
-                    ) {
-                        openProfile(profile)
-                    }
-                }
-            }
-        }
-    }
-
-    private func refreshRecommendations(force: Bool = false) async {
-        guard auth.isSignedIn else { return }
-        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)
-    }
-
-    private func refreshMembers(query: String, debounce: Bool) async {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else {
-            memberResults = []
-            return
-        }
-
-        let localResults = store.searchProfiles(handleQuery: query)
-        guard !Task.isCancelled, query == memberQuery else { return }
-        memberResults = localResults
-
-        if debounce {
-            do {
-                try await Task.sleep(for: .milliseconds(225))
-            } catch {
-                return
-            }
-        }
-
-        let results = await store.discoverMembers(query: query, backend: backend)
-        guard !Task.isCancelled, query == memberQuery else { return }
-        memberResults = results
-    }
-
-    private func followRecommendation(_ recommendation: DiscoverPeopleRecommendation) {
-        auth.requireSignIn(for: .followPeople) {
-            let profileID = recommendation.profile.id
-            guard !followInFlightProfileIDs.contains(profileID) else { return }
-            followInFlightProfileIDs.insert(profileID)
-            followFailedProfileIDs.remove(profileID)
-
-            Task { @MainActor in
-                await Task.yield()
-                let succeeded = await store.followRecommendation(
-                    userID: profileID,
-                    backend: backend
-                )
-                followInFlightProfileIDs.remove(profileID)
-                if succeeded {
-                    followFailedProfileIDs.remove(profileID)
-                } else {
-                    followFailedProfileIDs.insert(profileID)
-                }
-            }
-        }
-    }
-
-    private func latestProfileShell(for profile: ProfileShell) -> ProfileShell {
-        guard let localProfile = store.profiles.first(where: { $0.id == profile.id }) else {
-            return profile
-        }
-        return store.shell(for: localProfile)
-    }
-}
-
-private struct FeedPeopleSearchField: View {
-    @Environment(\.astirBrandMode) private var astirBrandMode
-    @Binding var text: String
-
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .black))
-                .foregroundStyle(astirBrandMode.secondaryText)
-
-            TextField("Search name or @handle", text: $text)
-                .font(AstirTypography.bodySmall)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .foregroundStyle(astirBrandMode.primaryText)
-
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(astirBrandMode.secondaryText)
-                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                }
-                .accessibilityLabel("Clear people search")
-            }
-        }
-        .padding(.leading, WanderTheme.spacing3)
-        .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
-        .frame(minHeight: WanderTheme.tapMinimum)
-        .contentShape(Rectangle())
-        .astirOutlinedSurface(castsShadow: true, interactive: true)
-        .accessibilityLabel("Search people")
-    }
-}
-
-private struct FeedPeopleLoadingPanel: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let label: String
-
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing3) {
-            ProgressView()
-                .tint(brandMode.accent)
-            Text(label)
-                .font(AstirTypography.bodySmall)
-                .foregroundStyle(brandMode.secondaryText)
-            Spacer()
-        }
-        .padding(WanderTheme.spacing4)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct FeedPeopleEmptyPanel: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let title: String
-    let message: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-            Text(title)
-                .font(AstirTypography.cardTitle)
-            Text(message)
-                .font(AstirTypography.bodySmall)
-                .foregroundStyle(brandMode.secondaryText)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(WanderTheme.spacing4)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
-    }
-}
-
-private struct FeedPeopleActionPanel: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let icon: String
-    let title: String
-    let message: String
-    let actionTitle: String
-    let action: () -> Void
-
-    var body: some View {
-        VStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: icon)
-                .font(.system(size: 19, weight: .black))
-                .foregroundStyle(brandMode.accentText)
-                .frame(width: 44, height: 44)
-                .background(brandMode.accentWash)
-                .clipShape(Circle())
-
-            Text(title)
-                .font(AstirTypography.sectionTitle)
-                .multilineTextAlignment(.center)
-            Text(message)
-                .font(AstirTypography.bodySmall)
-                .foregroundStyle(brandMode.secondaryText)
-                .multilineTextAlignment(.center)
-            Button(actionTitle, action: action)
-                .font(AstirTypography.control)
-                .foregroundStyle(brandMode.accentForeground)
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(brandMode.accent)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        }
-        .padding(WanderTheme.spacing4)
-        .background(brandMode.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                .stroke(brandMode.border, lineWidth: 1)
-        }
-    }
-}
-
-private struct FeedMemberResultTile: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let profile: ProfileShell
-    let recCount: Int
-    let open: () -> Void
-
-    var body: some View {
-        Button(action: open) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                WanderAvatar(
-                    initials: String(profile.displayName.prefix(1)),
-                    avatarURL: profile.avatarURL,
-                    size: 46,
-                    color: WanderTheme.pinSocial.color
-                )
-                Text(profile.displayName)
-                    .font(AstirTypography.cardTitle)
-                    .foregroundStyle(brandMode.primaryText)
-                    .lineLimit(1)
-                Text("@\(profile.handle)")
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(brandMode.secondaryText)
-                    .lineLimit(1)
-                Spacer()
-                Text("\(recCount) rec matches")
-                    .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.accentText)
-            }
-            .frame(width: 154, height: 142, alignment: .leading)
-            .padding(WanderTheme.spacing3)
-            .background(brandMode.raisedBackground)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct FeedFollowedPersonRow: View {
-    @Environment(\.astirBrandMode) private var brandMode
-    let profile: ProfileShell
-    let recCount: Int
-    let open: () -> Void
-
-    var body: some View {
-        Button(action: open) {
-            HStack(spacing: WanderTheme.spacing3) {
-                WanderAvatar(
-                    initials: String(profile.displayName.prefix(1)),
-                    avatarURL: profile.avatarURL,
-                    size: 42,
-                    color: WanderTheme.pinSocial.color
-                )
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(profile.displayName)
-                        .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                    Text("@\(profile.handle)")
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                }
-
-                Spacer()
-
-                Text("\(recCount) recs")
-                    .font(AstirTypography.metadata)
-                    .foregroundStyle(brandMode.secondaryText)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(brandMode.secondaryText)
-            }
-            .padding(.vertical, WanderTheme.spacing2)
-            .frame(minHeight: WanderTheme.tapMinimum)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open \(profile.displayName)'s profile")
-    }
-}
-
 private enum FeedFloatingHeaderMetrics {
     static let estimatedHeight = WanderTheme.spacing2
         + WanderTheme.tapMinimum
@@ -1418,7 +855,6 @@ private enum FeedFloatingHeaderMetrics {
 
 private enum FeedScrollCoordinateSpace {
     static let places = "feed.places.scroll-space"
-    static let people = "feed.people.scroll-space"
 }
 
 enum FeedSearchTransitionPolicy {
@@ -1485,7 +921,7 @@ private struct FeedSearchLauncher: View {
     @State private var isPulsing = false
 
     private var placeholder: String {
-        guard !placeholders.isEmpty else { return "Search trusted places" }
+        guard !placeholders.isEmpty else { return "Search places and people" }
         return placeholders[placeholderIndex % placeholders.count]
     }
 
@@ -1511,7 +947,7 @@ private struct FeedSearchLauncher: View {
             .astirOutlinedSurface(castsShadow: true, interactive: true)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Search trusted places")
+        .accessibilityLabel("Search places and people")
         .accessibilityIdentifier("feed.searchLauncher")
         .overlay {
             if isWalkthroughTarget {
@@ -1560,8 +996,28 @@ private struct FeedSectionHeading: View {
     @Environment(\.astirBrandMode) private var astirBrandMode
     let title: String
     var detail: String? = nil
+    var audience: Binding<FeedAudience>? = nil
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+                titleContent
+                if let audience {
+                    Spacer(minLength: WanderTheme.spacing2)
+                    FeedAudienceMenu(selection: audience)
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                titleContent
+                if let audience {
+                    FeedAudienceMenu(selection: audience)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var titleContent: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
                 .font(AstirTypography.sectionTitle)
@@ -1802,7 +1258,7 @@ private struct FeedActivityModule: View {
             actor: activity.actor,
             placeName: "Map activity",
             placeServerID: nil,
-            placeDetail: "From someone you follow",
+            placeDetail: activity.actor.relationship == .owner ? "Your activity" : "From someone you follow",
             ticketKind: activity.resolvedTicketKind,
             occurredAt: activity.occurredAt,
             note: activity.note,
@@ -1990,6 +1446,7 @@ struct FeedResolvedPlacePhoto: View {
 
 private struct FeedLoadingState: View {
     @Environment(\.astirBrandMode) private var brandMode
+    let audience: Binding<FeedAudience>
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             if FeedPresentation.showsFeaturedPlaces {
@@ -2002,7 +1459,8 @@ private struct FeedLoadingState: View {
                     }
                 }
             }
-            FeedSectionHeading(title: "Recent")
+            FeedSectionHeading(title: "Activity", audience: audience)
+                .unredacted()
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -2020,6 +1478,7 @@ private struct FeedLoadingState: View {
 /// follow-people empty state. The placeholders deliberately do not invent
 /// social activity that the app failed to retrieve.
 private struct FeedRefreshRecoveryState: View {
+    let audience: Binding<FeedAudience>
     let retry: () async -> Void
 
     var body: some View {
@@ -2029,7 +1488,7 @@ private struct FeedRefreshRecoveryState: View {
                 FeedRecoveryFeaturedRail()
             }
 
-            FeedSectionHeading(title: "Recent", detail: "Unavailable")
+            FeedSectionHeading(title: "Activity", detail: "Unavailable", audience: audience)
             FeedRecoveryActivityList()
 
             FeedRetryRow(
