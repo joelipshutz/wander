@@ -2004,7 +2004,6 @@ private struct ProfilePlaceCollectionMap: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .sessionReplayMasked()
             .onAppear {
                 let region = applyInitialCameraIfNeeded(viewportSize: proxy.size)
                 refreshClusters(in: region, viewportSize: proxy.size)

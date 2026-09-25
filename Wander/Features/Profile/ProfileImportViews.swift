@@ -3670,7 +3670,6 @@ private struct PlaceImportLocationMapSheet: View {
                     .tint(brandMode.accent)
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .sessionReplayMasked()
             .safeAreaInset(edge: .bottom) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(location.title)
@@ -3859,7 +3858,6 @@ private struct PlaceImportCandidatePicker: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .sessionReplayMasked()
             .frame(height: 250)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             .accessibilityLabel("Map of \(item.candidates.count) possible place matches")
@@ -4860,7 +4858,6 @@ struct PlaceImportRescueScreen: View {
             }
         }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-        .sessionReplayMasked()
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(

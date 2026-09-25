@@ -34,7 +34,9 @@ Home city and optional unverified phone are private account data in separate
 owner-only RPCs, not public profile fields or verified contact-match identifiers.
 City name, country, region and county are stored without exact coordinates. Only
 the coarse Events eligibility metro key is cached locally per account. Phone is excluded from
-analytics, session replay, raw RPC errors and local defaults. Hard and soft
+structured analytics, raw RPC errors and local defaults. REC-626 supersedes the
+whole-screen replay mask for account details and explicitly permits readable
+email/phone inputs in recordings. Hard and soft
 account deletion purge the private record. The public profile's freeform home
 area remains separate; Events uses the private confirmed metro.
 
@@ -562,3 +564,7 @@ projection correction does not rewrite stored check-ins.
 Activity media must compose historical-ID aliases with any installed source-photo
 privacy gate. Restating this RPC must preserve both contracts, including when
 the source-privacy migration and Feed fixes are deployed from separate branches.
+
+## 2026-09-25: Readable session replay and named people (REC-626)
+
+Joe explicitly requested readable future recordings and easy identification by name/username. Remove blanket masking of ordinary app text, images, and maps; preserve password/sign-in-code masking and protection for system-owned views. Use the stable auth ID for identity, with mutable `name`, `display_name`, and `username` person properties for display and search. Keep event sanitization and disabled diagnostic capture. This supersedes REC-582's layout-only replay policy. Existing masked frames are irrecoverable; named/readable capture requires an updated client and release-candidate playback verification.

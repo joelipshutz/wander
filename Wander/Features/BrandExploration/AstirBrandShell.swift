@@ -171,7 +171,6 @@ private struct AstirMapView: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .sessionReplayMasked()
             .ignoresSafeArea(edges: .top)
 
             VStack(spacing: 10) {
