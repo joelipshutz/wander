@@ -278,6 +278,34 @@ async function main() {
         await client.query("rollback");
       }
     }
+    if (!options.migrationTest) {
+      await client.query("begin");
+      try {
+        for (const migrationPreview of migrationPreviews) {
+          await client.query(loadMigrationPreview(migrationPreview));
+        }
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/historical_feed_identity.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - historical Feed identity, scoped repair, engagement and old-link privacy");
+      } finally {
+        await client.query("rollback");
+      }
+    }
+    if (!options.migrationTest) {
+      await client.query("begin");
+      try {
+        for (const migrationPreview of migrationPreviews) {
+          await client.query(loadMigrationPreview(migrationPreview));
+        }
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/feed_visit_metadata.sql", import.meta.url),
+        ), "rollback"));
+        console.log("ok - per-visit Feed metadata, empty repeats, media and privacy");
+      } finally {
+        await client.query("rollback");
+      }
+    }
   } catch (error) {
     throw sanitizeError(error, dbURL);
   } finally {
@@ -1372,6 +1400,14 @@ function runLinkedSmokeChecks(
     loadStrictPgTapSQL(new URL("../supabase/tests/feed_audience.sql", import.meta.url)),
     "rollback",
   )}\nrollback;`;
+  const historicalFeedSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(new URL("../supabase/tests/historical_feed_identity.sql", import.meta.url)),
+    "rollback",
+  )}\nrollback;`;
+  const visitFeedSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
+    loadStrictPgTapSQL(new URL("../supabase/tests/feed_visit_metadata.sql", import.meta.url)),
+    "rollback",
+  )}\nrollback;`;
   const questionSnapshotSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(
     loadStrictPgTapSQL(
       new URL("../supabase/tests/question_snapshot_privacy.sql", import.meta.url),
@@ -1387,7 +1423,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${historicalFeedSmokeSQL}\n${visitFeedSmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
