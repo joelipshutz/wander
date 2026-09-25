@@ -392,6 +392,7 @@ final class WanderStore: ObservableObject {
     private let parser: any LLMFilterParser
     private let placeResolver: PlaceCandidateResolving
     private let analytics: AnalyticsClient
+    private var analyticsUserID: String?
     var productAnalytics: AnalyticsClient { analytics }
     private let persistence: WanderStorePersistence?
     private var persistenceDeferralDepth = 0
@@ -1230,11 +1231,19 @@ final class WanderStore: ObservableObject {
                 discoverPeopleRecommendationsGeneration += 1
                 discoverPeopleRecommendationsState = .idle
             }
-            analytics.identify(userID: session.userID)
+            analyticsUserID = session.userID
+            if previousUserID == session.userID {
+                identifyCurrentAnalyticsPerson()
+            } else {
+                analytics.identify(userID: session.userID, person: AnalyticsPerson(
+                    displayName: session.displayName, username: session.handle
+                ))
+            }
             #if DEBUG
             WanderDebugLog.sync.debug("store auth identified user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
             #endif
         case .signedOut, .unavailable:
+            analyticsUserID = nil
             clearSessionScopedRemoteState()
             applySignedOutProfile()
             discoverPeopleRecommendationsGeneration += 1
@@ -1486,6 +1495,13 @@ final class WanderStore: ObservableObject {
         persist()
     }
 
+    private func identifyCurrentAnalyticsPerson() {
+        guard let analyticsUserID, analyticsUserID == currentUser.id else { return }
+        analytics.identify(userID: analyticsUserID, person: AnalyticsPerson(
+            displayName: currentUser.displayName, username: currentUser.handle
+        ))
+    }
+
     func updateCurrentUserProfile(
         displayName: String? = nil,
         handle: String? = nil,
@@ -1523,6 +1539,7 @@ final class WanderStore: ObservableObject {
             profile.localUpdatedAt = now
         }
 
+        identifyCurrentAnalyticsPerson()
         persist()
     }
 
@@ -1554,6 +1571,7 @@ final class WanderStore: ObservableObject {
     }
 
     func resetAfterAccountDeletion() {
+        analyticsUserID = nil
         placeListSyncTask?.task.cancel()
         individualPlaceListSyncTasks.values.forEach { $0.task.cancel() }
         placeListSyncTask = nil
@@ -11670,6 +11688,7 @@ final class WanderStore: ObservableObject {
             if becamePrivate {
                 makeCurrentUserContentPrivate()
             }
+            identifyCurrentAnalyticsPerson()
             persist()
         }
     }

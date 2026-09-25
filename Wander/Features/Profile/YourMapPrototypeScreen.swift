@@ -332,7 +332,6 @@ struct YourMapPrototypeScreen: View {
                 usesAdaptivePinDetail: true,
                 onCameraSnapshot: { interaction.recordCameraSnapshot($0) }
             )
-            .sessionReplayMasked()
             .overlay { MapSnapshotCaptureAnchor(capture: snapshotCapture).allowsHitTesting(false) }
             .ignoresSafeArea()
             .overlay {

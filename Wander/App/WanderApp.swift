@@ -165,7 +165,10 @@ struct WanderApp: App {
         let backendStore = (usesSimulatorTestSession || usesNativeOnboardingReview)
             ? WanderBackend(
                 profileRepository: testProfileRepository,
-                contactDiscovery: contactTestRepository?.service(auth: authStore),
+                contactDiscovery: contactTestRepository?.service(
+                    auth: authStore,
+                    usesSystemProvider: ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoverySystemPermissionTest")
+                ),
                 followRepository: contactTestRepository,
                 notificationRepository: SimulatorNotificationRepository(),
                 followNotificationRepository: SimulatorFollowNotificationRepository(

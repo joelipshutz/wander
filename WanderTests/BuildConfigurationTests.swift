@@ -467,7 +467,7 @@ final class BuildConfigurationTests: XCTestCase {
         #endif
     }
 
-    func testPostHogReplayMasksContentAndExcludesDiagnosticCapture() {
+    func testPostHogReplayShowsAppContentAndExcludesDiagnosticCapture() {
         #if canImport(PostHog)
         let configuration = PostHogAnalyticsClient.sdkConfiguration(
             projectToken: "phc_recme_project",
@@ -478,8 +478,8 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(configuration.sessionReplay)
         let replay = configuration.sessionReplayConfig
         XCTAssertTrue(replay.screenshotMode, "SwiftUI requires screenshot mode")
-        XCTAssertTrue(replay.maskAllTextInputs)
-        XCTAssertTrue(replay.maskAllImages)
+        XCTAssertFalse(replay.maskAllTextInputs)
+        XCTAssertFalse(replay.maskAllImages)
         XCTAssertTrue(replay.maskAllSandboxedViews)
         XCTAssertFalse(replay.captureLogs)
         XCTAssertFalse(replay.captureNetworkTelemetry)
@@ -487,6 +487,27 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(replay.throttleDelay, 1.0)
         XCTAssertNil(replay.sampleRate, "Respect remote sampling")
         #endif
+    }
+
+    func testReplayIdentityLabelFallbacksAndExplicitProperties() {
+        let named = AnalyticsPerson(displayName: "  Alex Smith  ", username: " @alex ")
+        XCTAssertEqual(named.properties(userID: "user_a"), [
+            "name": "Alex Smith (@alex)", "display_name": "Alex Smith", "username": "alex"
+        ])
+        XCTAssertEqual(AnalyticsPerson(displayName: nil, username: "alex").properties(userID: "user_a")["name"], "@alex")
+        XCTAssertEqual(AnalyticsPerson(displayName: "Alex", username: nil).properties(userID: "user_a")["name"], "Alex")
+        XCTAssertEqual(AnalyticsPerson(displayName: " ", username: " ").properties(userID: "user_a"), [
+            "name": "user_a", "display_name": "", "username": ""
+        ], "Missing values clear stale mutable labels without changing the account ID")
+    }
+
+    func testContextualAnalyticsForwardsReplayIdentityProperties() {
+        let recorder = ReplayIdentityRecorder()
+        let client = ContextualAnalyticsClient(client: recorder)
+        let person = AnalyticsPerson(displayName: "Alex", username: "alex")
+        client.identify(userID: "user_a", person: person)
+        XCTAssertEqual(recorder.userID, "user_a")
+        XCTAssertEqual(recorder.person, person)
     }
 
     func testAnalyticsPrivacySanitizerDropsPrivatePayloadsAndTruncatesValues() {
@@ -726,4 +747,16 @@ private final class BuildConfigurationRecordingAnalyticsClient: AnalyticsClient 
 
     func identify(userID: String) {}
     func resetIdentity() {}
+}
+
+private final class ReplayIdentityRecorder: AnalyticsClient {
+    var userID: String?
+    var person: AnalyticsPerson?
+    func track(_ event: AnalyticsEvent) {}
+    func identify(userID: String) { self.userID = userID }
+    func identify(userID: String, person: AnalyticsPerson) {
+        self.userID = userID
+        self.person = person
+    }
+    func resetIdentity() { userID = nil; person = nil }
 }
