@@ -109,6 +109,10 @@ device authentication, installation continuation or Messages rendering.
 1. Run `xcodegen generate`, then the `AstirClip` unit/UI scheme and the parent
    `Wander` suite. UI demos use `-AstirClipDemo` and optional
    `-AstirClipDemoInvite`; fixtures are Debug-only and use synthetic data.
+   Use dedicated Clip-only simulators for the Clip suite to avoid registration
+   conflicts with an existing full-app installation. Keep the parent suite on a
+   separate simulator. The Clip's existing compiled test bundle can be rerun with
+   `xcodebuild test-without-building` when only the simulator has changed.
    After integrating `origin/main` at `94b402240`, all 27 Clip unit/contract tests,
    both Clip Save/Join UI tests and all 2,552 parent unit tests passed on the
    available iOS 26.5 simulator on 2026-09-23. Four home-city test fixtures now supply the phone
