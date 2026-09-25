@@ -1,14 +1,15 @@
 # Dark-mode App Store screenshot candidates (REC-624)
 
 The September 25 refresh leads with **Keep up with your people**, followed by
-a friend’s moment, the social map, trusted search, place memories, and shared lists.
+a friend’s moment with comments, friends’ map recommendations, trusted search,
+place memories, and shared lists.
 All panels and native screens use dark mode. These are candidates for Joe's
 review; the previously uploaded set remains unchanged.
 
 ## Capture
 
 Use the exact source of the version the screenshots will accompany. This
-candidate uses build 180 source, commit `5f9b0f0`, plus capture-test changes only.
+candidate uses build 180 source, commit `5f9b0f0`, plus capture tests and debug-only fictional capture data.
 It is intended for the 1.0.02 update, not evidence of version 1.0's interface.
 
 From the source checkout:
@@ -28,7 +29,11 @@ separate unmanaged build or create temporary DerivedData directories.
 Tests use a process-scoped Dark appearance launch preference, apply the device
 appearance after launch, and restore its previous appearance at teardown. They exercise actual application views with fictional storefront
 fixtures and the existing compact-people test recommendations, waiting for
-populated people cards before capture. `-WanderDarkMap` also enables the real dark map preference. Walkthroughs
+populated people cards before capture. The map capture enables
+`-WanderStorefrontRichMap` for eighteen additional fictional saved places and opens
+Marigold Table. The conversation capture enables `-WanderStorefrontComments`
+for three fictional comments rendered by the existing native comment UI. These
+flags have no effect on normal app launches. `-WanderDarkMap` also enables the real dark map preference. Walkthroughs
 are disabled so the UI is unobscured. Eight native captures provide six selected
 panels plus alternate Add and scrolled Feed screens. The scrolled alternative
 is not selected because the current native Feed can show content beneath the
@@ -52,6 +57,7 @@ dark, content is fictional and readable, maps loaded, and no keyboard, alert,
 empty state, placeholder glyph or walkthrough obscures the intended content.
 Final 6.9-inch images must be opaque 1320 × 2868 PNGs. Check compact-phone
 behavior separately if capture changes affect application behavior; this refresh
-changes only capture tests and composition, not the application implementation.
+changes capture tests, composition and opt-in debug fixture data; it does not
+change production views or behavior.
 
 Do not upload regenerated panels until Joe approves the final storyboard.

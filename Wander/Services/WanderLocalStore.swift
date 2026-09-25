@@ -2296,6 +2296,27 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures"),
+           ProcessInfo.processInfo.arguments.contains("-WanderStorefrontComments"),
+           activityID == "fixture-feed-maya-been-bar-nido" {
+            let lines: [(String, String, String, String)] = [
+                ("user_ryan", "theo", "Theo", "Adding this to our Saturday plan."),
+                ("user_maya", "maya", "Maya Chen", "Get the patio table. Trust me."),
+                ("user_joe", "avery", "Avery", "I'm in. Saving this now.")
+            ]
+            activityCommentsByID[activityID] = lines.enumerated().map { index, line in
+                ActivityComment(id: "storefront_comment_\(index)", activityID: activityID,
+                    author: ProfileShell(id: line.0, handle: line.1, displayName: line.2,
+                                         avatarURL: nil, bio: nil, relationship: .mutual),
+                    body: line.3, createdAt: Date().addingTimeInterval(Double(index - 3) * 300),
+                    likeCount: index == 0 ? 2 : 1, viewerHasLiked: index == 0)
+            }
+            activityEngagementByID[activityID] = ActivityEngagementSummary(
+                activityID: activityID, likeCount: 5, commentCount: lines.count)
+            return true
+        }
+        #endif
         let requestUserID = currentUser.id
         let generation = activityCommentsGeneration
         let likeRevisions = activityCommentLikeRevisions

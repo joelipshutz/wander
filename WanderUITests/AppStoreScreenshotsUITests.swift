@@ -17,6 +17,8 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         let app = launch(arguments: [
             "-WanderInitialTab", "map",
             "-WanderMapCaptureMode", "friends",
+            "-WanderStorefrontRichMap",
+            "-WanderMapPlace", "Marigold Table",
         ])
 
         XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 6))
@@ -148,9 +150,14 @@ final class AppStoreScreenshotsUITests: XCTestCase {
     func test08PostShowsConversation() {
         let app = launch(arguments: [
             "-WanderInitialTab", "discover", "-WanderNotificationPostUITest",
+            "-WanderStorefrontComments",
         ])
         XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 20))
         settleForCapture()
+        XCTAssertTrue(app.staticTexts["Adding this to our Saturday plan."].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Get the patio table. Trust me."].exists)
+        XCTAssertTrue(app.staticTexts["I'm in. Saving this now."].exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
         capture("recme-store-08-conversation")
     }
 

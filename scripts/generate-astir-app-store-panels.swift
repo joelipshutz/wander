@@ -34,7 +34,7 @@ private enum AstirStorePanels {
               headline: "Be part of\nthe moment.", background: ink),
         Panel(filename: "03-your-people-their-places.png",
               sourceFilename: "recme-store-01-map-friends.png",
-              headline: "Your people.\nTheir places.", background: ink),
+              headline: "Find recommendations\nfrom your friends.", background: ink),
         Panel(filename: "04-find-your-kind-of-place.png",
               sourceFilename: "recme-store-03-trusted-search.png",
               headline: "Find your\nkind of place.", background: ink),
@@ -156,7 +156,7 @@ private enum AstirStorePanels {
         let headline = NSAttributedString(
             string: value,
             attributes: [
-                .font: editorialFont(size: 112, weight: .bold),
+                .font: editorialFont(size: value.hasPrefix("Find recommendations") ? 88 : 112, weight: .bold),
                 .foregroundColor: isDark ? bone : ink,
                 .paragraphStyle: paragraph,
             ]
