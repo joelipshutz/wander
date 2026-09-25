@@ -1,12 +1,21 @@
 import XCTest
 
-/// Captures the six approved App Store frames from deterministic, fictional
+/// Captures dark-mode App Store candidates from deterministic, fictional
 /// data. The attached PNGs are extracted and composited by
 /// `scripts/capture-app-store-screenshots.sh`.
 @MainActor
 final class AppStoreScreenshotsUITests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+        let previous = XCUIDevice.shared.appearance
+        addTeardownBlock { @MainActor in XCUIDevice.shared.appearance = previous }
+        XCUIDevice.shared.appearance = .dark
+    }
+
     func test01MapShowsPlacesFromFriends() {
         let app = launch(arguments: [
+            "-WanderInitialTab", "map",
             "-WanderMapCaptureMode", "friends",
         ])
 
@@ -22,7 +31,18 @@ final class AppStoreScreenshotsUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 6))
         settleForCapture()
+        XCTAssertTrue(app.staticTexts["Alex Rivera"].waitForExistence(timeout: 10))
         capture("recme-store-02-feed-places")
+        let activityHeading = app.staticTexts["Activity"].firstMatch
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+        let distance = max(0, activityHeading.frame.minY - 126)
+        start.press(forDuration: 0.1,
+                    thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)),
+                    withVelocity: .slow, thenHoldForDuration: 0.5)
+        settleForCapture()
+        XCTAssertGreaterThan(activityHeading.frame.minY, 65,
+                             "Keep the activity heading below the status bar.")
+        capture("recme-store-07-feed-moments")
     }
 
     func test03TrustedSearchShowsMultipleUsefulResults() {
@@ -51,6 +71,7 @@ final class AppStoreScreenshotsUITests: XCTestCase {
 
     func test04PlaceDetailShowsMemoryAndRatings() {
         let app = launch(arguments: [
+            "-WanderInitialTab", "map",
             "-WanderMapPlace", "Hearthline Coffee",
             "-WanderMapSheetExpanded",
         ])
@@ -63,6 +84,7 @@ final class AppStoreScreenshotsUITests: XCTestCase {
 
     func test05AddSheetUsesDeterministicNearbyPlaces() {
         let app = launch(arguments: [
+            "-WanderInitialTab", "map",
             "-WanderMapCaptureMode", "friends",
             "-WanderOpenAdd",
         ])
@@ -123,15 +145,32 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         capture("REC-446 returned compact production Add")
     }
 
+    func test08PostShowsConversation() {
+        let app = launch(arguments: [
+            "-WanderInitialTab", "discover", "-WanderNotificationPostUITest",
+        ])
+        XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 20))
+        settleForCapture()
+        capture("recme-store-08-conversation")
+    }
+
     private func launch(arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseStorefrontFixtures",
             "-WanderAuthenticatedUITest",
-            "-WanderResetWalkthroughs",
+            "-WanderDisableWalkthroughs",
+            "-WanderDarkMap",
+            "-WanderCompactPeopleUITest",
+            "-AppleInterfaceStyle", "Dark",
         ] + arguments
         app.launch()
+        // Apply after launch as well: older simulator runtimes may restore the
+        // application's cached appearance when the process starts.
+        XCUIDevice.shared.appearance = .light
+        XCUIDevice.shared.appearance = .dark
+        XCTAssertEqual(XCUIDevice.shared.appearance, .dark)
         return app
     }
 
