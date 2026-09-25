@@ -550,3 +550,15 @@ without treating a failed save as pending deletion. All local aliases included
 in a completed remote deletion must acknowledge it. Persisted relaunch tests
 cover failed retries, duplicate identities, and the absence of repeated work
 after successful acknowledgement.
+
+Explicit check-in Feed cards take their note, rating, status and visit timestamps
+from that visit, including an intentionally empty note or rating. Only events
+without a visit ID may use the parent save's summary. Feed and activity detail
+share this projection; photos and engagement keep their existing per-event and
+per-visit identities. Venue facts and viewer taxonomy remain place-level, and
+the existing private-answer/visibility boundaries remain authoritative. This
+projection correction does not rewrite stored check-ins.
+
+Activity media must compose historical-ID aliases with any installed source-photo
+privacy gate. Restating this RPC must preserve both contracts, including when
+the source-privacy migration and Feed fixes are deployed from separate branches.
