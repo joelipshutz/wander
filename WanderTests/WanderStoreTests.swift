@@ -9724,7 +9724,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
-    func testAuthStateIdentifiesAnalyticsWithInternalUserIDOnly() {
+    func testAuthStateIdentifiesAnalyticsWithStableIDAndReadableProfile() {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
 
@@ -9741,6 +9741,8 @@ final class WanderStoreTests: XCTestCase {
         store.apply(authState: .signedOut)
 
         XCTAssertEqual(analytics.identifiedUserIDs, ["user_live"])
+        XCTAssertEqual(analytics.identifiedPeople, [AnalyticsPerson(displayName: "Joe", username: "joe")])
+        XCTAssertEqual(analytics.identityOperations, ["reset", "identify:user_live", "reset"])
         XCTAssertEqual(analytics.resetCount, 2)
     }
 
@@ -9760,7 +9762,35 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(analytics.identifiedUserIDs, ["user_a", "user_b"])
+        XCTAssertEqual(analytics.identifiedPeople, [
+            AnalyticsPerson(displayName: "Account A", username: "account_a"),
+            AnalyticsPerson(displayName: "Account B", username: "account_b")
+        ])
+        XCTAssertEqual(analytics.identityOperations, ["reset", "identify:user_a", "reset", "identify:user_b"])
         XCTAssertEqual(analytics.resetCount, 2)
+    }
+
+    func testProfileRenameRefreshesReplayIdentityAndSignOutStopsProfileUpdates() {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_a", displayName: "Alex", handle: "alex")))
+        store.updateCurrentUserProfile(displayName: "Alex Smith", handle: "alexsmith")
+        XCTAssertEqual(analytics.identifiedUserIDs, ["user_a", "user_a"])
+        XCTAssertEqual(analytics.identifiedPeople.last?.properties(userID: "user_a")["name"], "Alex Smith (@alexsmith)")
+        store.apply(authState: .signedOut)
+        store.updateCurrentUserProfile(displayName: "Guest", handle: "guest")
+        XCTAssertEqual(analytics.identifiedPeople.count, 2)
+    }
+
+    func testRemoteProfileHydrationRefreshesReplayIdentity() async {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_a", displayName: nil, handle: nil)))
+        let remote = LocalProfile(localID: "local_profile_current", serverID: "user_a", handle: "alexsmith", displayName: "Alex Smith", syncState: .synced)
+        let backend = WanderBackend(profileRepository: FakeProfileRepository(currentProfile: remote))
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
+        XCTAssertEqual(analytics.identifiedUserIDs, ["user_a", "user_a"])
+        XCTAssertEqual(analytics.identifiedPeople.last, AnalyticsPerson(displayName: "Alex Smith", username: "alexsmith"))
     }
 
     func testRemoteOwnPlaceSaveFailureTracksNonPIISyncDiagnostics() async throws {
@@ -13574,6 +13604,8 @@ private final class FakeFilterParser: LLMFilterParser {
 private final class RecordingAnalyticsClient: AnalyticsClient {
     private(set) var events: [AnalyticsEvent] = []
     private(set) var identifiedUserIDs: [String] = []
+    private(set) var identifiedPeople: [AnalyticsPerson] = []
+    private(set) var identityOperations: [String] = []
     private(set) var resetCount = 0
 
     func track(_ event: AnalyticsEvent) {
@@ -13582,9 +13614,16 @@ private final class RecordingAnalyticsClient: AnalyticsClient {
 
     func identify(userID: String) {
         identifiedUserIDs.append(userID)
+        identityOperations.append("identify:\(userID)")
+    }
+
+    func identify(userID: String, person: AnalyticsPerson) {
+        identify(userID: userID)
+        identifiedPeople.append(person)
     }
 
     func resetIdentity() {
+        identityOperations.append("reset")
         resetCount += 1
     }
 }

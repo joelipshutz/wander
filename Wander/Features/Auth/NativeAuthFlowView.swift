@@ -124,6 +124,7 @@ struct NativeAuthFlowView: View {
                     .autocorrectionDisabled()
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
+                    .sessionReplayVisibleInput()
                     .submitLabel(.continue)
                     .focused($focusedField, equals: .email)
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -346,6 +347,7 @@ struct NativeAuthFlowView: View {
                     .autocorrectionDisabled()
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
+                    .sessionReplayVisibleInput()
                     .submitLabel(.next)
                     .focused($focusedField, equals: .email)
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -393,6 +395,7 @@ struct NativeAuthFlowView: View {
                         )
                     )
                     .accessibilityIdentifier("auth.password")
+                    .sessionReplayMasked()
                     .onSubmit(signInWithPassword)
 
                 Button(action: signInWithPassword) {
@@ -477,6 +480,7 @@ struct NativeAuthFlowView: View {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
                 )
                 .accessibilityIdentifier("auth.emailCode")
+                .sessionReplayMasked()
                 .onAppear { focusedField = .code }
 
             Button(action: verifyEmailCode) {
