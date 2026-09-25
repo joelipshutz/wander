@@ -57,7 +57,8 @@ Banner only when `ASTIR_APP_CLIP_ENABLED=true` and the preview is available.
 The default remains off. Apple's native icon and action footer are controlled by
 its App Clip experience, not custom OG footer markup. The action is configured
 in App Store Connect; individual OG cards still supply their artwork and title.
-REC-598 removes the duplicate painted footer separately.
+The testing branch also includes REC-598, which removes the duplicate painted
+footer and copies the exact share URL before every social-platform handoff.
 
 The existing website continues to offer the exact-item native deep link and
 TestFlight/App Store fallback. TestFlight is a distribution fallback, not proof
@@ -77,6 +78,33 @@ test phone, with `com.grayline.wander.Clip` and the invocation URL. Confirm whet
 the full app is already installed before changing device state; preserve its data.
 Local card testing and production Messages verification are separate checks.
 See [Apple's local testing procedure](https://developer.apple.com/documentation/appclip/testing-the-launch-experience-of-your-app-clip).
+
+### Branch testing setup
+
+- Native: `codex/rec-408-shared-app-clip`, [PR #728](https://github.com/joelipshutz/wander/pull/728).
+- Website: `codex/rec-408-app-clip`, [PR #24](https://github.com/joelipshutz/astir-site/pull/24).
+- [Website preview](https://astir-site-git-codex-rec-408-app-clip-hotchkiss-technologies.vercel.app):
+  `ASTIR_APP_CLIP_ENABLED=true` is scoped to this Vercel Preview branch only.
+  Its generated banner uses the canonical share URL; the Vercel hostname is not
+  an associated domain or an App Clip invocation host.
+
+Use fresh links for profile/map, place, list, activity and list invitation. On
+each installed social app, invoke sharing, return and paste into a local text
+field to verify the complete URL is available even if that platform does not
+attach a clickable link automatically. Messages link artwork should have no
+painted button/footer. Validate recipient visibility separately from public artwork.
+
+Website metadata can be checked on the preview before production deployment.
+Xcode invocation can test Clip routing, authentication, Save/Join and continuation
+before public release. TestFlight Clip experiences launch the Clip without the
+native launch card. Apple's website/Messages experience requires the associated
+website plus an approved, released app containing the Clip. Real Messages footer
+screenshots therefore belong to the published-experience gate, not a branch-only
+simulator run. See the Apple testing procedure above for each invocation method.
+
+Current validation results and any outstanding gates are recorded on REC-408 and
+the two PRs. A successful website deployment or signed build alone does not prove
+device authentication, installation continuation or Messages rendering.
 
 1. Run `xcodegen generate`, then the `AstirClip` unit/UI scheme and the parent
    `Wander` suite. UI demos use `-AstirClipDemo` and optional
@@ -146,7 +174,7 @@ See [Apple's local testing procedure](https://developer.apple.com/documentation/
    at that stage. Simulator Clip screenshots do not prove Messages rendering.
 
 Do not merge this draft until backend, signed-device identity and installation
-handoff gates are resolved. Do not enable the website banner or claim a live
+handoff gates are resolved. Do not enable the production website banner or claim a live
 Messages footer from simulator-only evidence.
 
 ## Platform references

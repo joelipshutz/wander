@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "scope": "Astir shared-link App Clip",
-  "checkedOn": "2026-09-23",
+  "checkedOn": "2026-09-25",
   "verificationComplete": false,
   "apple": {
     "teamID": "Y7TVK75RZ8",
@@ -92,7 +92,7 @@
     "pending": [
       "Verify the current Clerk third-party-auth issuer configuration against the production instance."
     ],
-    "rollbackSmokeVerifiedOn": "2026-09-23",
+    "rollbackSmokeVerifiedOn": "2026-09-25",
     "draftClipRPCDeployed": false
   },
   "sharing": {
@@ -105,7 +105,18 @@
     "websiteRepository": "joelipshutz/astir-site",
     "discoverySetting": "ASTIR_APP_CLIP_ENABLED",
     "defaultDiscoveryEnabled": false,
-    "verification": "Draft website and native configuration agree; deployed AASA and published Apple experience remain unverified."
+    "verification": "Website and native branches agree. The Hotchkiss preview deployment is ready with discovery enabled only for the testing branch. Live HTTP metadata, production AASA and the published Apple experience remain unverified.",
+    "websiteBranch": "codex/rec-408-app-clip",
+    "websitePullRequest": "https://github.com/joelipshutz/astir-site/pull/24",
+    "nativeBranch": "codex/rec-408-shared-app-clip",
+    "nativePullRequest": "https://github.com/joelipshutz/wander/pull/728",
+    "hosting": {
+      "provider": "Vercel",
+      "teamSlug": "hotchkiss-technologies",
+      "projectName": "astir-site",
+      "previewDiscoveryScope": "Preview environment, codex/rec-408-app-clip branch only",
+      "previewURL": "https://astir-site-git-codex-rec-408-app-clip-hotchkiss-technologies.vercel.app"
+    }
   },
   "analytics": {
     "provider": "PostHog",
