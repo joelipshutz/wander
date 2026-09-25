@@ -856,7 +856,6 @@ private struct CommonGroundProfileMockup: View {
                         center: CLLocationCoordinate2D(latitude: 34.02, longitude: -118.47),
                         span: MKCoordinateSpan(latitudeDelta: 0.065, longitudeDelta: 0.065)
                     )), interactionModes: [])
-                    .sessionReplayMasked()
                     .frame(height: 190).clipShape(RoundedRectangle(cornerRadius: 12))
                     .accessibilityLabel("Los Angeles map preview")
                 }

@@ -8,7 +8,7 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 
 ## Decisions
 
-- Keep PostHog with explicit allowlisted events and the internal auth user ID. REC-582 adds screenshot-based session replay with text, images, system views and maps masked on-device; replay requires swizzling. Element capture, automatic screen/lifecycle events, surveys, crash autocapture, automatic person properties, console logs and network telemetry remain disabled. Project recording is still off pending native masking/playback validation. See [the replay activation checklist](../analytics.md#ios-session-replay) before release.
+- Keep PostHog with explicit allowlisted events and the internal auth user ID. REC-626 supersedes REC-582: screenshot replay shows app content (including text, images and maps), with passwords/sign-in codes and system-owned views masked. Explicit person properties contain name and username; replay requires swizzling. Element capture, automatic screen/lifecycle events, surveys, crash autocapture, automatic person properties, console logs and network telemetry remain disabled. Recordings are arriving from TestFlight as of September 25; the new readable/named client still requires release-candidate playback validation. See [the replay activation checklist](../analytics.md#ios-session-replay) before release.
 - Add `$geoip_disable = true` to every PostHog event before it is queued. PostHog project `557259` was browser-verified on 2026-08-14 with **Discard client IP data** enabled. The rec.me personal API key still lacks `project:read`; the authenticated project setting is the current evidence source.
 - Declare no tracking and do not request App Tracking Transparency permission. rec.me does not combine its data with third-party data for targeted advertising, advertising measurement, or data-broker sharing.
 - Keep native Contacts. REC-560 adds a separate, optional Find friends consent: permitted phone numbers and email addresses are transmitted over TLS for an immediate authenticated match. Names, organizations, notes, addresses and contact photos are not part of matching. No uploaded address book, unmatched identifiers or contact edges are retained; a private HMAC index contains only opted-in members’ verified account identifiers. Contact values never enter analytics. The separate invitation flow remains local and passes only selected recipients to Messages. Existing iOS permission grants do not imply Find friends consent. See [contact discovery](../contact-discovery.md).
@@ -50,12 +50,14 @@ App Store privacy responses must include third-party behavior even when it belon
 |---|---:|---:|---|---|
 | User ID | Yes | No | Analytics | rec.me calls PostHog `identify` with the internal auth user ID |
 | Device ID | Yes | No | Analytics | PostHog creates an install-scoped device/anonymous ID and links it after identify |
-| Product interaction | Yes | No | Analytics | Explicit allowlisted product events; masked replay interactions when activated |
-| Other usage data | Yes | No | Analytics | Coarse counts, states, sources, and error categories; masked replay layout/timing when activated |
+| Product interaction | Yes | No | Analytics | Explicit allowlisted product events; replay interactions linked to the named account |
+| Other usage data | Yes | No | Analytics | Coarse counts, states, sources, and error categories; readable replay content/layout/timing |
 
 PostHog event properties must remain non-PII. Current policy forbids place names, notes, coordinates, emails, phone numbers, handles, raw searches, and imported content. Search analytics contains only length/result/latency buckets and fixed example IDs; the raw search is sent to the product parsing service, not PostHog.
 
-Replay snapshots use a separate SDK pipeline from event-property sanitization. Global masking and explicit map masks must be visually verified against the release candidate, especially on iOS 26. No recording has been verified for REC-582 yet. Reconcile the public privacy policy and App Store answers with observed replay data before distributing this behavior; the historic validation below does not validate replay.
+REC-626 adds an explicit exception for `name`, `display_name`, and `username` person properties. Replay snapshots use a separate SDK pipeline from event-property sanitization: ordinary visible app content, including photos, notes, searches and maps, can now be sent to PostHog and linked to a named person. Do not describe these recordings as anonymous or content-free. Passwords, verification codes, system views and other SDK-sensitive text inputs remain masked; individual email/phone inputs are explicitly readable under the user-approved replay policy.
+
+Before distribution, review Analytics purpose for Name, Photos/Videos, Other User Content, Search History, Contacts and any location/contact information visible in replay against actual release-candidate playback. The existing App Functionality declarations alone do not describe the expanded replay use. No App Store Connect responses or published privacy policy were changed by this code PR. Preserve the accurate current data linkage and do not infer a live disclosure update from this inventory.
 
 Clerk receives account identifiers and contact information for authentication. Supabase receives the app-owned product data listed above. The authenticated parsing service passes trusted-search text to the configured AI provider. Apple system frameworks receive selected message recipients and media only when the person explicitly invokes those system flows.
 
@@ -74,7 +76,7 @@ Mark these as collected and linked to the user, not used for tracking:
 
 Do not mark data as used for tracking. Do not declare advertising data, purchases, financial information, health/fitness, sensitive information, emails/text-message contents, audio, browsing history, environment scanning, hands, or head data.
 
-Do not declare precise or coarse device location unless the production archive or vendor configuration begins transmitting it. rec.me adds `$geoip_disable = true` to every PostHog event, and the project-level **Discard client IP data** setting was verified enabled on 2026-08-14.
+REC-626 removes map masks, so visible maps/pins may transmit location information in replay even without coordinate event properties. Reassess the location disclosure against the release candidate; do not rely on the previous no-location conclusion. rec.me adds `$geoip_disable = true` to every PostHog event, and the project-level **Discard client IP data** setting was verified enabled on 2026-08-14.
 
 ## Permission audit
 

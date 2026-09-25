@@ -56,7 +56,6 @@ struct AccountContactDetailsView: View {
                 revealPhoneSection(using: proxy)
             }
         }
-        .sessionReplayMasked()
     }
 
     private func revealPhoneSection(using proxy: ScrollViewProxy) {
@@ -92,6 +91,7 @@ struct AccountContactDetailsView: View {
                     TextField(model.phoneCountryCode == "US" ? "10-digit phone number" : "Phone number", text: Binding(get: { model.phoneText }, set: { model.editPhone($0) }))
                         .keyboardType(.phonePad)
                         .textContentType(.telephoneNumber)
+                        .sessionReplayVisibleInput()
                         .focused($phoneIsFocused)
                         .accessibilityIdentifier("accountContactDetails.phone")
                 }
@@ -107,7 +107,6 @@ struct AccountContactDetailsView: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
             .id("phoneSection")
-            .sessionReplayMasked()
             if let message = model.errorMessage {
                 Text(message)
                     .font(AstirTypography.bodySmall)
@@ -301,7 +300,6 @@ private struct ContactDetailsPicker: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
         .preferredColorScheme(.dark)
-        .sessionReplayMasked()
     }
 
     private var filtered: [Option] {
