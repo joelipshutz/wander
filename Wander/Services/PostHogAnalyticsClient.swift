@@ -55,11 +55,11 @@ final class PostHogAnalyticsClient: AnalyticsClient {
         // Replay needs swizzling even though event autocapture stays disabled.
         configuration.enableSwizzling = captureReplay
         configuration.sessionReplay = captureReplay
-        // SwiftUI requires screenshot mode. Mask on-device before upload;
-        // MapKit surfaces are additionally masked in the view layer.
+        // The parent retains its approved readable replay configuration.
+        // The App Clip disables replay entirely through captureReplay.
         configuration.sessionReplayConfig.screenshotMode = true
-        configuration.sessionReplayConfig.maskAllTextInputs = true
-        configuration.sessionReplayConfig.maskAllImages = true
+        configuration.sessionReplayConfig.maskAllTextInputs = false
+        configuration.sessionReplayConfig.maskAllImages = false
         configuration.sessionReplayConfig.maskAllSandboxedViews = true
         configuration.sessionReplayConfig.captureLogs = false
         configuration.sessionReplayConfig.captureNetworkTelemetry = false
@@ -87,6 +87,10 @@ final class PostHogAnalyticsClient: AnalyticsClient {
 
     func identify(userID: String) {
         sdk.identify(userID)
+    }
+
+    func identify(userID: String, person: AnalyticsPerson) {
+        sdk.identify(userID, userProperties: person.properties(userID: userID))
     }
 
     func resetIdentity() {

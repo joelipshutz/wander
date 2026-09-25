@@ -8,7 +8,46 @@ struct AnalyticsEvent: Equatable {
 protocol AnalyticsClient {
     func track(_ event: AnalyticsEvent)
     func identify(userID: String)
+    func identify(userID: String, person: AnalyticsPerson)
     func resetIdentity()
+}
+
+/// Explicitly approved profile fields for recognizable replay labels (REC-626).
+/// Keep the stable account ID separate from the mutable display label.
+struct AnalyticsPerson: Equatable {
+    let displayName: String?
+    let username: String?
+
+    init(displayName: String?, username: String?) {
+        func clean(_ value: String?) -> String? {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return nil }
+            return String(value.prefix(128))
+        }
+        self.displayName = clean(displayName)
+        self.username = clean(username)?.trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+    }
+
+    func properties(userID: String) -> [String: String] {
+        let handle = username.flatMap { $0.isEmpty ? nil : "@\($0)" }
+        let label: String
+        if let displayName, let handle {
+            label = "\(displayName) (\(handle))"
+        } else {
+            label = displayName ?? handle ?? userID
+        }
+        return [
+            "name": label.isEmpty ? userID : label,
+            "display_name": displayName ?? "",
+            "username": username ?? ""
+        ]
+    }
+}
+
+extension AnalyticsClient {
+    func identify(userID: String, person: AnalyticsPerson) {
+        identify(userID: userID)
+    }
 }
 
 struct NoopAnalyticsClient: AnalyticsClient {
@@ -100,6 +139,10 @@ struct ContextualAnalyticsClient: AnalyticsClient {
 
     func identify(userID: String) {
         client.identify(userID: userID)
+    }
+
+    func identify(userID: String, person: AnalyticsPerson) {
+        client.identify(userID: userID, person: person)
     }
 
     func resetIdentity() {

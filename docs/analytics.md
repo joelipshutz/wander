@@ -18,7 +18,7 @@ Launch audit and rollout gates: [September 19 audit](reviews/2026-09-19-launch-a
 
 The product dashboard lives in PostHog because its funnels, trends, retention drill-down, and event inspector operate directly on the same explicit client events. A second dashboard inside rec.me would duplicate metric logic and require an analytics backend. The dashboard is still code-reviewed and reproducible: `scripts/posthog-product-dashboard.mjs` owns every managed insight and tile.
 
-PostHog autocapture, automatic screen/lifecycle capture, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product metrics use explicit events. Session replay is configured separately with on-device masking (REC-582).
+PostHog autocapture, automatic screen/lifecycle capture, surveys, error autocapture, default person properties, and GeoIP enrichment remain disabled. Product metrics use explicit events. Session replay uses readable app content with credential/system-view masking (REC-626).
 
 ## App Clip analytics
 
@@ -48,19 +48,22 @@ and configuration tests do not substitute for that live check.
 
 ## iOS session replay
 
-`PostHogAnalyticsClient.sdkConfiguration` enables replay and the swizzling it requires. SwiftUI uses screenshot mode with text, images, and sandboxed system views masked before upload. Logs and network telemetry remain disabled. Screenshots are throttled to at most one per second; experimental background capture stays off. Existing identify/reset behavior associates recordings with the same opaque user IDs as analytics.
+Joe approved readable app content and recognizable people on September 25, 2026 (REC-626), superseding REC-582's blanket masking.
 
-MapKit tiles and pins can reveal locations even with text/image masking enabled. All SwiftUI maps use `sessionReplayMasked()`; the native main map and its container use PostHog's `ph-no-capture` accessibility identifier. Do not unmask private text, photos, maps, contacts, or authentication fields. Masked recordings are intended to show layout and interaction flow, not people's content. Simulator test sessions and native onboarding review fixtures retain their Noop analytics client.
+`PostHogAnalyticsClient.sdkConfiguration` enables SwiftUI screenshot replay with text/image blanket masking disabled. App-owned maps, profile content, lists, imports, and contact-detail screens no longer carry whole-view masks. Password and verification-code fields explicitly use `sessionReplayMasked()`; the SDK also masks secure and sensitive input types. Only individual email/phone inputs use `sessionReplayVisibleInput()` so non-credential content remains readable; never put that override on a credential or an auth container. System-owned views remain masked because their credential/content boundaries are outside our control. Logs, network telemetry, and experimental background capture remain disabled. Screenshots are throttled to at most one per second. Simulator fixtures retain Noop analytics.
 
-The [project recording switch](https://us.posthog.com/project/557259/settings/project-replay) must also be enabled. Local `sampleRate` remains unset so Mobile recording conditions control sampling remotely; disabling **Record user sessions** is the server-side kill switch. On September 20, 2026, browser inspection confirmed the switch was **off**, with log/network capture configured on behind that disabled switch. Activation is pending native privacy validation; turn log/network capture off when activating replay. This change cannot record sessions from older app builds or recover past sessions.
+The account's stable Clerk ID remains the PostHog distinct ID. A separate, explicit `AnalyticsPerson` allowlist supplies `name` (the label `Alex Smith (@alex)`), `display_name`, and `username`; no email, phone, bio, token, or other profile fields are added to person properties. The store identifies the authenticated account at sign-in/offline restore and refreshes labels after remote profile hydration or successful profile edits. Sign-out/account switching resets identity. Event-property sanitization remains independent and unchanged.
 
-Before enabling recording and distributing a build:
+PostHog project 557259's **Settings → Product analytics → Person display name** uses `name`, then `username`. In **Session replay**, select a recording and open its person details; use person-property filters for `username`, `display_name`, or `name` to find a member's recordings. Existing people gain labels when an updated app identifies them; there is no bulk backfill in this change. Before names are available, the stable account ID remains the fallback. Renaming a user does not split their history.
 
-1. Run `BuildConfigurationTests` and the full native test suite through the shared iOS build helper.
-2. With fictional data, verify replay on iOS 26 and an older supported OS. Inspect auth/onboarding, maps, profile, imports, lists, notes/comments, and system photo/contact pickers. Confirm text, images, map tiles/pins and location are concealed. The SDK cautions that manual SwiftUI masking can be inconsistent on iOS 26; configuration assertions alone do not prove visual masking.
-3. In project 557259, enable **Record user sessions**, disable console/network capture, and inspect **Mobile** sampling/conditions. Keep the current retention/billing plan. Use a controlled test build first and disable recording again if any masking check fails.
-4. Watch a synthetic session in [Session replay](https://us.posthog.com/project/557259/replay/home), verify interaction playback and identity reset on sign-out, and check scrolling/map responsiveness on a physical phone.
-5. Reconcile the privacy policy and App Store privacy disclosures with the verified recording behavior before distributing the next app build. Record native build/OS, replay evidence, masking and performance results in REC-582.
+The [project recording switch](https://us.posthog.com/project/557259/settings/project-replay) must remain enabled. `sampleRate` is unset so Mobile recording conditions control sampling remotely; **Record user sessions** remains the server-side kill switch. The user supplied a working TestFlight recording on September 25. New visibility and identity properties require an app update; this cannot unmask previously uploaded frames or change what an older binary captures.
+
+### Release verification
+
+1. Run `BuildConfigurationTests` and store identity/profile tests; verify the complete unit suite.
+2. With fictional data on the release candidate, inspect auth, text/images, MapKit, profile, imports, lists, and system pickers. Ordinary content should be readable, while passwords, verification codes, and system-owned views stay concealed. Secure-field masking is preserved without applying `postHogNoMask()` to an auth ancestor. The SDK cautions about manual SwiftUI masking on iOS 26; configuration assertions alone are not visual playback evidence.
+3. Watch a controlled session in [Session replay](https://us.posthog.com/project/557259/replay/home), verify its name/username and successful user lookup, change the profile name, and verify sign-out/account switching does not attribute the next account to the previous one.
+4. Reconcile privacy-policy and App Store disclosures with readable content and named analytics before distributing the next app build. See [the privacy inventory](app-store/2026-08-12-privacy-inventory.md). Record native OS/build and live playback evidence in REC-626; local unit tests do not prove production ingestion.
 
 ## Metric tree
 
@@ -101,7 +104,7 @@ Status was the blank area in the original card. These are deliberately product-n
 
 ## Event contract
 
-Every event receives `analytics_schema_version`, `app_version`, `build_number`, `platform`, and `analytics_environment` from `ContextualAnalyticsClient`. Callers cannot override this context. Debug and simulator events are `development`; Release device builds are `production` (including TestFlight). Authenticated simulator fixtures and native review galleries use a Noop client. The SDK's opaque identify/reset behavior stays unchanged.
+Every event receives `analytics_schema_version`, `app_version`, `build_number`, `platform`, and `analytics_environment` from `ContextualAnalyticsClient`. Callers cannot override this context. Debug and simulator events are `development`; Release device builds are `production` (including TestFlight). Authenticated simulator fixtures and native review galleries use a Noop client. The stable account ID remains unchanged; explicit person display properties make replay identities recognizable (REC-626).
 
 Behavioral dashboard queries require schema 3, production, exclusion from the existing Internal / Test users cohort 481950, and absence of a true `$internal_or_test_user` person marker. Native queries also retain the project test-account filter. SQL explicitly excludes the same cohort; update both if the project rule changes. The cohort had zero members on September 19: release staff/review accounts still need classification. Do not infer or assign internal status to unknown users. Existing schema-2 traffic remains available in Data Quality; it is not silently counted as verified launch traffic.
 

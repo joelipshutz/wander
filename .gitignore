@@ -11,3 +11,7 @@ xcuserdata/
 Wander/Config/LocalAuth.xcconfig
 .gstack/
 scripts/social-import-eval/runs/
+.review-media/
+/docs/designs/onboarding-2026-09/*
+!/docs/designs/onboarding-2026-09/README.md
+!/docs/designs/onboarding-2026-09/run.py
