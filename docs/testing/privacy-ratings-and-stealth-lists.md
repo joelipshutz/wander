@@ -5,30 +5,56 @@ Start A with a public profile and the legacy Everyone default. Enable the settin
 that automatically saves places added to lists to Wanna. Use places neither
 account has saved unless a case explicitly asks for an existing save.
 
-The complete privacy rollout is not ready for acceptance. Ratings, automatic
-private companions, cached activity/photo access checks, and source-aware server
-rules are implemented on the branch. Hosted migration/worker verification and
-two-account device acceptance are required before calling the gaps closed.
-Follow requests and account/activity exclusion controls remain separate unfinished
-parts of REC-590; use the existing audience/private/block controls for these tests.
+The current test slice covers the three rating displays, automatic private-list
+Wannas, cached activity/photo reauthorization, and source-aware shared content.
+Follow requests and account/activity exclusion controls remain unfinished parts
+of the larger REC-590 transcript; use the existing audience/private/block controls
+for the checks below.
 
-Source-access deployment is independent of the website: apply the reviewed
-`activity_source_privacy_and_ratings` migration, deploy `push-notification-worker`,
-and run the source authorization regression against the hosted schema. Publish
-the generic-preview website reader before applying `generic_share_previews`.
-Then run the complete hosted smoke gate and test the matching iOS branch.
-Keep the exact deployment and validation state in REC-590 and its PR. SQL smoke
-fixtures roll back; a preview migration in that transaction is not a deployment.
+Both privacy migrations and the source-aware notification worker are deployed.
+The generic-preview website reader is deployed to astirmovement.com. The full
+hosted rollback smoke and source-authorization regression pass against the live
+schema without preview migrations. Both photo buckets are private. No ambiguous
+historical Wanna was changed: the hosted audit found no authoritative companion
+origins eligible for repair; future origins are recorded.
 
-The storage cutover also requires a CDN purge through the Storage API and checks
-against previously issued public and signed URLs. A SQL bucket update alone does
-not prove edge-cache invalidation. Purge `share-card-previews` after making it
-private; invalidate legacy visit-photo URLs and verify old URLs cannot fetch bytes
-before accepting photo revocation. An unexpired signed token can repopulate a cache,
-so a purge alone is insufficient for those tokens. Keep this rollout gate open
-until legacy URLs have been retired or their expiry plus cache invalidation is
-verified. See [Supabase's CDN behavior](https://supabase.com/docs/guides/storage/cdn/smart-cdn)
-and [purge API](https://supabase.com/docs/guides/storage/cdn/purge-cdn-cache).
+Legacy signed-photo CDN retirement still requires verification before the full
+rollout is called closed. Manual CDN purge is unavailable on this project.
+All 12 recorded historical public artwork URLs now reject access. Their original
+images were moved to a private archive, preserving bytes, object identity,
+ownership, and custom metadata. The former paths contain only generic Astir
+artwork. A final public-link check rejected all 130 stored-object URLs: 106
+unchanged visit photos, 12 archived previews, and 12 generic replacements. A synthetic signed-photo
+URL was warmed to a CDN hit and rejected after expiry. That representative test
+and the elapsed maximum client token lifetime do not establish a global purge
+of every previously issued signed URL.
+See [Supabase's CDN behavior](https://supabase.com/docs/guides/storage/cdn/smart-cdn).
+
+New protected-image uploads request `no-store` for HTTP caches; the app retains
+its authorized, viewer-scoped offline cache. Public uploads use valid
+`max-age=3600` syntax.
+
+For local testing, open the privacy worktree's `Wander.xcodeproj`, confirm branch
+`codex/rec-590-privacy`, choose **Wander → iPhone 17 (iOS 26.5)**, and Run. Use
+normal sign-in for the two-account checks; demo fixture tests exercise layout
+only. The checked-in public Clerk/Supabase configuration targets the live alpha
+backend. This branch has not been uploaded to TestFlight.
+
+## Validation status
+
+The final iPhone 17 run executed all 2,594 unit tests plus both privacy layout
+checks. Both layout checks passed; the unit suite had two failures. The upload
+regression's incorrect automatic-retry assumption was corrected, and the focused
+rerun passed all 145 repository tests. Of 46 search tests, 45 passed; the unchanged
+1,000-memory benchmark still measured 55.92 ms against its 50 ms budget. Track
+that existing performance failure in
+[REC-627](https://linear.app/recme/issue/REC-627/investigate-trusted-memory-search-exceeding-the-50-ms-performance).
+Do not describe the full native suite as clean.
+
+The iPhone 13 mini normal-size rating check passed. Its accessibility-size run
+was interrupted by host sleep and must be repeated. Both iPhone 17 screenshots
+were inspected; a final manual navigation check still needs an unlocked desktop.
+The live two-account scenarios below remain tester acceptance steps.
 
 ## Automatic Wannas
 

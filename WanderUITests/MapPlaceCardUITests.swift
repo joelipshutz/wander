@@ -7,12 +7,10 @@ final class MapPlaceCardUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
-            "-WanderMapPlace", "Featured Coffee QA"
+            "-WanderMapPlace", "Featured Coffee QA", "-WanderMapSheetExpanded"
         ]
         app.launch()
-        let card = app.buttons["map.selectedPlaceCard"]
-        XCTAssertTrue(card.waitForExistence(timeout: 15))
-        card.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
         for (title, subtitle) in [
             ("Your rating", "No rating yet"),
@@ -33,13 +31,11 @@ final class MapPlaceCardUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
-            "-WanderMapPlace", "Featured Coffee QA",
+            "-WanderMapPlace", "Featured Coffee QA", "-WanderMapSheetExpanded",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
         ]
         app.launch()
-        let card = app.buttons["map.selectedPlaceCard"]
-        XCTAssertTrue(card.waitForExistence(timeout: 15))
-        card.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
         for (title, subtitle) in [
             ("Your rating", "No rating yet"),

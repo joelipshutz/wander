@@ -943,6 +943,47 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testProtectedUploadsDisableHTTPCachingAcrossRetries() async throws {
+        let bytes = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        FeedRPCURLProtocol.reset(responses:
+            [(401, Data())] + Array(repeating: (200, Data()), count: 6)
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: configuration)
+        )
+        do {
+            try await client.uploadObject(
+                bucket: "visit-photos", path: "fixture/photo.jpg", data: bytes,
+                contentType: "image/jpeg", upsert: true
+            )
+            XCTFail("An unauthorized upload must be reported to the caller")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+        // The store retries failed uploads explicitly. The rebuilt request must
+        // keep the cache policy, including after a failed first attempt.
+        for bucket in ["visit-photos", "share-card-previews", "list-snapshots",
+                       "feedback-attachments", "profile-avatars", "place-plan-previews"] {
+            try await client.uploadObject(
+                bucket: bucket, path: "fixture/photo.jpg", data: bytes,
+                contentType: "image/jpeg", upsert: true
+            )
+        }
+        XCTAssertEqual(FeedRPCURLProtocol.cacheControlHeaders,
+                       Array(repeating: "no-store", count: 5) + ["max-age=3600", "max-age=3600"])
+        XCTAssertEqual(FeedRPCURLProtocol.requestBodies, Array(repeating: bytes, count: 7))
+    }
+
     func testProtectedPhotoDownloadRefreshesTheClerkTokenOnceAfterUnauthorizedResponse() async throws {
         let expectedData = Data([0xFF, 0xD8, 0xFF, 0xD9])
         FeedRPCURLProtocol.reset(
@@ -5286,6 +5327,12 @@ private final class FeedRPCURLProtocol: URLProtocol {
         lock.lock()
         defer { lock.unlock() }
         return requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
+    }
+
+    static var cacheControlHeaders: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap { $0.value(forHTTPHeaderField: "Cache-Control") }
     }
 
     static var requestPaths: [String] {

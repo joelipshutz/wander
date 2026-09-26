@@ -876,7 +876,13 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("3600", forHTTPHeaderField: "cache-control")
+        // Protected images use app-managed, viewer-scoped caching. HTTP caches
+        // cannot recheck access when the source becomes private.
+        let protectedBuckets = ["visit-photos", "share-card-previews", "list-snapshots", "feedback-attachments"]
+        request.setValue(
+            protectedBuckets.contains(bucket) ? "no-store" : "max-age=3600",
+            forHTTPHeaderField: "cache-control"
+        )
         request.setValue(upsert ? "true" : "false", forHTTPHeaderField: "x-upsert")
         headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
