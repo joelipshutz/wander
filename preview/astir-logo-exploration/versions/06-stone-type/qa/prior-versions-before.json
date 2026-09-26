@@ -1,0 +1,1080 @@
+{
+  "createdAt": "2026-09-09T22:34:07.096349+00:00",
+  "algorithm": "SHA-256",
+  "root": "/Users/joelipshutz/Documents/ChatGPT/New project/astir-logo-exploration/versions",
+  "scope": [
+    "01-statue-roster",
+    "02-wordmarks",
+    "03-motion",
+    "04-decision",
+    "05-black-lockup"
+  ],
+  "fileCount": 213,
+  "files": [
+    {
+      "path": "01-statue-roster/ARCHIVE-MANIFEST.json",
+      "bytes": 13232,
+      "sha256": "7b82ebccd982a5882d51ba04e4fd81e4665c51c24a0a80e722b1296569bbb345"
+    },
+    {
+      "path": "01-statue-roster/ARCHIVE-VALIDATION.json",
+      "bytes": 5123,
+      "sha256": "88394ef0b5e70b28daba18d05a6531d0b9cadae692f4de6f1f14fd7d1ed24d8b"
+    },
+    {
+      "path": "01-statue-roster/ASTIR-transparent-concepts.zip",
+      "bytes": 26788760,
+      "sha256": "f9bd1c18884e4f7fe911852b7bb88014c407b6970b638cfb1e61272052e9dc5b"
+    },
+    {
+      "path": "01-statue-roster/ONENESS-source-cutout.psd",
+      "bytes": 19162189,
+      "sha256": "8b3ec5efcf7cab03dc67b233a655e1fc16efc06ae60be7d5d9d65652380a4009"
+    },
+    {
+      "path": "01-statue-roster/START-HERE.txt",
+      "bytes": 687,
+      "sha256": "4c60f8735a3f144dc6237a7af4cbdf7cd0e0f5aaf68f196d4dee1e0deee9439a"
+    },
+    {
+      "path": "01-statue-roster/assets/01-original-statue-final.png",
+      "bytes": 1416499,
+      "sha256": "a1cf95aed6632ced836c2eab836fb84e2336767d2c846e129d419d13df6a0104"
+    },
+    {
+      "path": "01-statue-roster/assets/01-original-statue.png",
+      "bytes": 1416499,
+      "sha256": "f39a806baaf6ae003b04be69bdb5c447623386c3f3b900465ef800c36555aa7b"
+    },
+    {
+      "path": "01-statue-roster/assets/02-family-only.png",
+      "bytes": 1526482,
+      "sha256": "217b2d21ed739d1f83f11ca026b7e58be23be655f97eff04f400037e103b31c4"
+    },
+    {
+      "path": "01-statue-roster/assets/03-red-foundation.png",
+      "bytes": 1680667,
+      "sha256": "1aa402e497827e4fcf532578caeed671c7ef71e62dadd468193f481b8aa8e533"
+    },
+    {
+      "path": "01-statue-roster/assets/04-warm-stone.png",
+      "bytes": 1681556,
+      "sha256": "0cef6b9ff771cd454e0001b16095f0080e3daceaa284b5179aa4860cbe3b536a"
+    },
+    {
+      "path": "01-statue-roster/assets/05-rounded-embrace.png",
+      "bytes": 1356635,
+      "sha256": "686c9770ab22ff349c9657790a036f85eecf709ea6e087e05c18f1f29fcb685b"
+    },
+    {
+      "path": "01-statue-roster/assets/06-floating-family.png",
+      "bytes": 1344689,
+      "sha256": "e8c0c36d00265946c4b9ccfe4369a293842378b6ceb2feacfb058b89445c8e10"
+    },
+    {
+      "path": "01-statue-roster/assets/07-ink-and-stone.png",
+      "bytes": 1648681,
+      "sha256": "71c6a3d3ee7d636f365d56408c9549052c78fd66d7592f6497af6f2c6b961fc2"
+    },
+    {
+      "path": "01-statue-roster/assets/08-sunlit-a.png",
+      "bytes": 1545008,
+      "sha256": "ad60e83261d2627d2aeb0190f269f4904ee53e9dc4faf824e8f6a6829ca9f7f0"
+    },
+    {
+      "path": "01-statue-roster/assets/09-carved-contrast.png",
+      "bytes": 1562066,
+      "sha256": "f38eea2e4078a37607ebbf4374d6ec7cbefa95df542b5add016a311d6e849c55"
+    },
+    {
+      "path": "01-statue-roster/assets/10-embrace-silhouette.png",
+      "bytes": 816825,
+      "sha256": "90bfa3cc53c2e7072af7724b82e2cefb01952b0f9edb98856d65a7b5d9688077"
+    },
+    {
+      "path": "01-statue-roster/assets/11-primary-marble.png",
+      "bytes": 1304564,
+      "sha256": "e1db3c8d17e480f4a5dc919a259bff70e5756a00a96ec526c515b4ff6bc0554c"
+    },
+    {
+      "path": "01-statue-roster/assets/12-oneness-vermilion.png",
+      "bytes": 1746990,
+      "sha256": "c268b1b84afe1ea369adbbff8802daf3ab743140bdbb6ec40bfafd4e615cf8df"
+    },
+    {
+      "path": "01-statue-roster/assets/13-scarlet-embrace.png",
+      "bytes": 1537655,
+      "sha256": "0309010d5f7c97083ca2a14862fa165b9c912586891d885000864d7084d9e9f2"
+    },
+    {
+      "path": "01-statue-roster/assets/14-golden-unity.png",
+      "bytes": 1487431,
+      "sha256": "8228d234debe8efd534717e98e6d1445312f52f9efd1c7cb721160ab688461ff"
+    },
+    {
+      "path": "01-statue-roster/assets/15-floating-cream.png",
+      "bytes": 1224247,
+      "sha256": "726377d5b9cd44d2ae89a71b376abf3e73eaa7022a77264f9a6ee168bb622e8e"
+    },
+    {
+      "path": "01-statue-roster/assets/16-red-crossbar.png",
+      "bytes": 1708682,
+      "sha256": "0c237154eb0969822fcaf4e79df9b4d55d1e9df02416f17fdb8048301cabd969"
+    },
+    {
+      "path": "01-statue-roster/assets/17-faceted-ultramarine.png",
+      "bytes": 1770149,
+      "sha256": "efb1f802b709237e9ea0ebae602fb5f1df6bd6297eb970d2dc098dcfd38565cd"
+    },
+    {
+      "path": "01-statue-roster/assets/18-black-family-monogram.png",
+      "bytes": 906619,
+      "sha256": "4dd87c4ca3b61852911af38990a81b3d658b40be680fc154cda207fcf07ba0e4"
+    },
+    {
+      "path": "01-statue-roster/assets/19-sloping-pale-marble.png",
+      "bytes": 1474397,
+      "sha256": "e30eb2fb01787700895a81a911672875b1564f5d3d0c2e0df91e94dd9f81c7c2"
+    },
+    {
+      "path": "01-statue-roster/assets/20-yellow-clay-red-child.png",
+      "bytes": 1530865,
+      "sha256": "31761df2f96df09b0828be82aab2157175e611733b42ffaea513f9a601936fb9"
+    },
+    {
+      "path": "01-statue-roster/assets/21-floating-family-plinth.png",
+      "bytes": 1392724,
+      "sha256": "40d38b23e7ac2aaa17453ae48a0ac3f966cd7862911df96272a845d83f211e12"
+    },
+    {
+      "path": "01-statue-roster/assets/22-fine-engraved-family.png",
+      "bytes": 1195591,
+      "sha256": "411a23d1a7800a170e50556e57a9e6f94f5c98951b45907f74199edd2ee7233d"
+    },
+    {
+      "path": "01-statue-roster/assets/23-three-stone-slices.png",
+      "bytes": 1367399,
+      "sha256": "7da7a72906b6eae2f9f7df8287e4bd932e90795cf464f6703d2e7de0e1f17ffe"
+    },
+    {
+      "path": "01-statue-roster/assets/24-vermilion-gold-embrace.png",
+      "bytes": 1458794,
+      "sha256": "84d53ec6dcd3459e31bbde0ad452aa23ff51e251ed41b19b21bcb0723a584a43"
+    },
+    {
+      "path": "01-statue-roster/assets/source-DSCF2954.jpg",
+      "bytes": 761969,
+      "sha256": "a44b3174029daf3a670a5ec02588063258faaf1b7e80736255f6bfbc7beef183"
+    },
+    {
+      "path": "01-statue-roster/concepts-data.js",
+      "bytes": 5966,
+      "sha256": "b7c1ece809780ff4b692ad4065fdae5451420180d0c60a6926c8e2d7800ab375"
+    },
+    {
+      "path": "01-statue-roster/concepts.json",
+      "bytes": 6855,
+      "sha256": "0dea174977cad0a87643e787bef4250bc0df3d8281e4a96def5a5aa216769779"
+    },
+    {
+      "path": "01-statue-roster/gallery-preview.js",
+      "bytes": 4724,
+      "sha256": "3b613b6a9e277ec1f4afd79fab7559c282c0d5d77ca036486e0f77ec66ffafb8"
+    },
+    {
+      "path": "01-statue-roster/gallery.js",
+      "bytes": 4755,
+      "sha256": "666b3f9dbf3baf4d57025ab04f0dfc77688234089c4e1a330c0b0fba79692c45"
+    },
+    {
+      "path": "01-statue-roster/index.html",
+      "bytes": 3783,
+      "sha256": "f3b9a90880b7718da374b466253dacd2ff67c07d38cebf22b3fe9fe59c41a45d"
+    },
+    {
+      "path": "01-statue-roster/lookbook.html",
+      "bytes": 8364,
+      "sha256": "4509dd5273dfeb12bd5b2d3e465baa6b8ba8c87cc66b95f8bf2f60c53352b212"
+    },
+    {
+      "path": "01-statue-roster/preview.html",
+      "bytes": 3737,
+      "sha256": "bd48296386ac58dc31916bddbfea720fcf8cc84027d99ac66293340f8f6fe3b5"
+    },
+    {
+      "path": "01-statue-roster/prompts/PROMPTS.md",
+      "bytes": 34663,
+      "sha256": "7f6730619f4ff3b76d994b597ed73678a35ea018fcd218c2f775cb121cd099b3"
+    },
+    {
+      "path": "01-statue-roster/prompts/astir-logo-generated-09-16.json",
+      "bytes": 17088,
+      "sha256": "b1e21e64797cc58ef319931d58ee54113d1ac15dc26d0d0302da3863d184169b"
+    },
+    {
+      "path": "01-statue-roster/prompts/astir-logo-generated-17-24.json",
+      "bytes": 21427,
+      "sha256": "63d57842316dec16a21dd79ef177f4e869adb9484b0cd5607078cf22c83c9d1e"
+    },
+    {
+      "path": "01-statue-roster/prompts/root-manifest.json",
+      "bytes": 10652,
+      "sha256": "26312a5160e77928a95a86dc8da998fc116c35d7cd4b152b9694eb1bbcdc5f2d"
+    },
+    {
+      "path": "01-statue-roster/references/sources.json",
+      "bytes": 6314,
+      "sha256": "63711d3c631d2508224a289313690e6087d5efb2cbede70a5ad1d882a9a9e504"
+    },
+    {
+      "path": "01-statue-roster/shortlist.json",
+      "bytes": 443,
+      "sha256": "ee67f6e487de4fedc1bfbdd84e6eead9f6d2750ba38487b2662b74c34c38bb51"
+    },
+    {
+      "path": "01-statue-roster/styles.css",
+      "bytes": 7378,
+      "sha256": "ea0b478338b0ce7d943f754c2d5e134a278dc760fd6c6fd9504b9896e4392e13"
+    },
+    {
+      "path": "01-statue-roster/transparent/02-family-only.png",
+      "bytes": 1215665,
+      "sha256": "eeafa6a55398db4305ca562ba37536fe0535a6c0cd572f714112821cbff2e0ef"
+    },
+    {
+      "path": "01-statue-roster/transparent/03-red-foundation.png",
+      "bytes": 1261127,
+      "sha256": "97c73278f8fc3c4a6f4e57a176fd765ed58f28556e3493a126faaad1289c752f"
+    },
+    {
+      "path": "01-statue-roster/transparent/04-warm-stone.png",
+      "bytes": 1318029,
+      "sha256": "4bc38a87d0d58fe3223bc798e96612fa7f6f8b95d2391010c393cda42294538e"
+    },
+    {
+      "path": "01-statue-roster/transparent/05-rounded-embrace.png",
+      "bytes": 954262,
+      "sha256": "8e2fce7c75dd308f862b82fb1d5e087bc95d50826870910817a62691a06695ca"
+    },
+    {
+      "path": "01-statue-roster/transparent/06-floating-family.png",
+      "bytes": 889030,
+      "sha256": "5bea0319f6cbdad8e32ef346221e23ee48e0e063ce50f55a2f0e7faccb2c188d"
+    },
+    {
+      "path": "01-statue-roster/transparent/07-ink-and-stone.png",
+      "bytes": 1255660,
+      "sha256": "3120e59fa38ea8525fe7b0e99811196dcf20faef6f2259968ab12f46234e8004"
+    },
+    {
+      "path": "01-statue-roster/transparent/08-sunlit-a.png",
+      "bytes": 1246550,
+      "sha256": "63a724c35dbdf9cb1c9f9724b1fbc415bfca3a3eb6211f17d3fbe3fd8781e623"
+    },
+    {
+      "path": "01-statue-roster/transparent/09-carved-contrast.png",
+      "bytes": 1273812,
+      "sha256": "5af3895f3967a550c1ea283ca1e4d8287ed0765db31f5564d99703a8af11b961"
+    },
+    {
+      "path": "01-statue-roster/transparent/10-embrace-silhouette.png",
+      "bytes": 368462,
+      "sha256": "42854b5da1d1b2a11560835770dba3a1bacfab20752f6cd517a1100d107d5ac2"
+    },
+    {
+      "path": "01-statue-roster/transparent/11-primary-marble.png",
+      "bytes": 992380,
+      "sha256": "e33ec3f5478e55968cab317446a3a23f23eccd1d57388806d8a00c088e25a21e"
+    },
+    {
+      "path": "01-statue-roster/transparent/12-oneness-vermilion.png",
+      "bytes": 1417773,
+      "sha256": "c677e8d9ed928633cba29f67282f938e72ecf9a58ef8a9a481dfceffd6efffbe"
+    },
+    {
+      "path": "01-statue-roster/transparent/13-scarlet-embrace.png",
+      "bytes": 1362469,
+      "sha256": "1b3afe5f687c3bbc33b379cf125acf76eb1df1235d3ad73833460fedfafd0ee3"
+    },
+    {
+      "path": "01-statue-roster/transparent/14-golden-unity.png",
+      "bytes": 1327325,
+      "sha256": "8d8f960bee48be05d7b7af11cc6661f27c2c0c9ba2ca0ffc64ece0653a1d067a"
+    },
+    {
+      "path": "01-statue-roster/transparent/15-floating-cream.png",
+      "bytes": 960343,
+      "sha256": "f7dfe6ebef26a0aaf5c9d9be3968b11f8d9bd996b70c7c50ae43a89d4898aa5b"
+    },
+    {
+      "path": "01-statue-roster/transparent/16-red-crossbar.png",
+      "bytes": 1438032,
+      "sha256": "d4e48feb4769b791817a7c2cebcaf5c05e78715ebd0e1e2c8d86cb9a6b473981"
+    },
+    {
+      "path": "01-statue-roster/transparent/17-faceted-ultramarine.png",
+      "bytes": 1456835,
+      "sha256": "76ca9d91d54913b2fe2f52a0507593e4e9efd1201e5497eeb4508b7b22ffde20"
+    },
+    {
+      "path": "01-statue-roster/transparent/18-black-family-monogram.png",
+      "bytes": 491782,
+      "sha256": "7acc66cd954c04efe81e98532ab74394a2e65a0cda3416766fb7bcfebfd12be3"
+    },
+    {
+      "path": "01-statue-roster/transparent/19-sloping-pale-marble.png",
+      "bytes": 1187151,
+      "sha256": "4fa0406da0576f8d949365e631154859f31289d99a91727bbd680f62ab1071cb"
+    },
+    {
+      "path": "01-statue-roster/transparent/20-yellow-clay-red-child.png",
+      "bytes": 1258224,
+      "sha256": "cd3580a277439fad5ff07d905ee55878c1251f516821d345a607bf4120518103"
+    },
+    {
+      "path": "01-statue-roster/transparent/21-floating-family-plinth.png",
+      "bytes": 965967,
+      "sha256": "10f6058fde197d4c84152c516556cae61ef9259c3801424d1c871be58bab27d4"
+    },
+    {
+      "path": "01-statue-roster/transparent/22-fine-engraved-family.png",
+      "bytes": 823171,
+      "sha256": "218cf7af83626fc521a9a450a13c4674be67818358e62ba31fb7070e08cccd9f"
+    },
+    {
+      "path": "01-statue-roster/transparent/23-three-stone-slices.png",
+      "bytes": 925358,
+      "sha256": "d263b737f3cb2b6ed93a8f26ff6ab65ccb2e8a0dbf4346bd3e40884890fa992f"
+    },
+    {
+      "path": "01-statue-roster/transparent/24-vermilion-gold-embrace.png",
+      "bytes": 1172139,
+      "sha256": "35d7b2751a55759f5a9345320c44bf815b7abe161064bfbf65bc4797a0f3c490"
+    },
+    {
+      "path": "02-wordmarks/ARCHIVE-MANIFEST.json",
+      "bytes": 6668,
+      "sha256": "85ad949772a52fb423ff625f8be40e41965ca603197ed87e0a9c698b9608e9a7"
+    },
+    {
+      "path": "02-wordmarks/assets/25-fresh-coral.png",
+      "bytes": 1717174,
+      "sha256": "f11e3ba316bf9bb5372cdd1c55187f98856c31658d17b655c3b7e7acb5c4ad71"
+    },
+    {
+      "path": "02-wordmarks/assets/25-wordmark.svg",
+      "bytes": 1661598,
+      "sha256": "f933678aba017c6b41aefd86054fcae599cbba78149405d963c7f4badbcd0f90"
+    },
+    {
+      "path": "02-wordmarks/assets/26-solar-vermilion.png",
+      "bytes": 1810782,
+      "sha256": "e5452032285d5f3302727ab1c3666ce66b02bccfd8e2b5df25b38fabf56bc6a9"
+    },
+    {
+      "path": "02-wordmarks/assets/26-wordmark.svg",
+      "bytes": 1670196,
+      "sha256": "3eb17cdc6405cd818250340d47556ee3671c0aa4009d0ba85aa12c56024cbbf6"
+    },
+    {
+      "path": "02-wordmarks/assets/27-light-scarlet.png",
+      "bytes": 1728777,
+      "sha256": "a22725e4517c919930ba960f821aecc104796ee272462d76e8086c630170fc2a"
+    },
+    {
+      "path": "02-wordmarks/assets/27-wordmark.svg",
+      "bytes": 1693196,
+      "sha256": "40b69f0e5293b8b8b462d06130feeeb140a95b5627f8925635b61dc3b7cb2e5c"
+    },
+    {
+      "path": "02-wordmarks/assets/28-wordmark.svg",
+      "bytes": 1761505,
+      "sha256": "ee7dbaf011a588d25852473259c9603302df6b5ef08b897ce778254e67ba2df1"
+    },
+    {
+      "path": "02-wordmarks/assets/29-wordmark.svg",
+      "bytes": 1757803,
+      "sha256": "70b16ca52fc55b1de691daabc9193f6a3dc2f629e05346417f4850d3d528e478"
+    },
+    {
+      "path": "02-wordmarks/assets/30-wordmark.svg",
+      "bytes": 1678352,
+      "sha256": "a94e5091f3334af4017da2417c350513a39890dceb67141dbd4c47b112310a85"
+    },
+    {
+      "path": "02-wordmarks/assets/31-wordmark.svg",
+      "bytes": 1674650,
+      "sha256": "fa921c7ce345ffe702aad7fd8caa580e2dd271ef638d707b69b070d7effeff4b"
+    },
+    {
+      "path": "02-wordmarks/assets/32-carved-sans.png",
+      "bytes": 1468330,
+      "sha256": "ff5b4007608cc4b6d787cc8ec7365bceda55accce11b62e6c277a0dc92d351e7"
+    },
+    {
+      "path": "02-wordmarks/assets/33-stone-serif.png",
+      "bytes": 1564510,
+      "sha256": "52eb65bdc3ffe02abe825c9869a6fa8aee0e2c8922150b994560be5f871afe16"
+    },
+    {
+      "path": "02-wordmarks/assets/34-floating-white-foundation.png",
+      "bytes": 1897124,
+      "sha256": "07db47880b82e7145112852912aed20eb176574d9920f7a943f3c10dd256e4b0"
+    },
+    {
+      "path": "02-wordmarks/assets/35-coral-stone-foundation.png",
+      "bytes": 1735377,
+      "sha256": "64e0122547774efa4e8d58f84ad7df195e132f852f76e53dae319b5c828ccf06"
+    },
+    {
+      "path": "02-wordmarks/assets/36-monochrome-monument.png",
+      "bytes": 1572644,
+      "sha256": "d9ace8e8deda38a3d1023ac240ea5a9f14537b02d43772c581f8c7ff526a9b83"
+    },
+    {
+      "path": "02-wordmarks/assets/37-terracotta-current-serif.png",
+      "bytes": 566853,
+      "sha256": "f4c2a9ee87d3715fa5cbef4d19751410f3b1112f4a079900b4d69954b80ff15c"
+    },
+    {
+      "path": "02-wordmarks/assets/37-terracotta-current-serif.svg",
+      "bytes": 3988223,
+      "sha256": "07a96396bfb1e1e9ea680c7cdd2248bd879bc4c515c680bedc8afbecdf08607b"
+    },
+    {
+      "path": "02-wordmarks/index.html",
+      "bytes": 8853,
+      "sha256": "b54394e27d188718dd9681c0d51681a13a5d6aadf14c291464227d3f741daf54"
+    },
+    {
+      "path": "02-wordmarks/prompts/25-27.json",
+      "bytes": 4576,
+      "sha256": "08a4875b3e37f9e4f4c3d3c7e27c5b8c71918d0c22a59e11f609688ef3409bc7"
+    },
+    {
+      "path": "02-wordmarks/prompts/PROMPTS.md",
+      "bytes": 19299,
+      "sha256": "c4caba89465c112a12c6a8d964f1e962ea6b3042ede14208a1c70f328a2d79d4"
+    },
+    {
+      "path": "02-wordmarks/prompts/drafts-32-36/34-floating-white-foundation.png",
+      "bytes": 1950751,
+      "sha256": "b67b258b6e594e79690f0af5524804c00aed58967c813c6277d2dd4d53c58188"
+    },
+    {
+      "path": "02-wordmarks/prompts/drafts-32-36/35-coral-stone-foundation.png",
+      "bytes": 1568922,
+      "sha256": "71e53fca788d390afe1a3adf610cfa7b3d32ff8be5e674230d4492f2af3ee79b"
+    },
+    {
+      "path": "02-wordmarks/prompts/drafts-32-36/36-monochrome-monument.png",
+      "bytes": 1579216,
+      "sha256": "77f7c54a2bdbc4732713c99b9cd2a9bc6a125a8f3d7687ec1b4cca73c17bb820"
+    },
+    {
+      "path": "02-wordmarks/prompts/manifest-32-36.json",
+      "bytes": 20769,
+      "sha256": "0c65ba1af1997b8a807384d2292243e9c5aef30703929518f4f1045ff2b05425"
+    },
+    {
+      "path": "02-wordmarks/styles.css",
+      "bytes": 7431,
+      "sha256": "e9e148bf4e619cf5c3d6484bae78088b5ed3d6156f3c29dfc13d0eb882fab020"
+    },
+    {
+      "path": "02-wordmarks/transparent/04-warm-stone.png",
+      "bytes": 1318029,
+      "sha256": "4bc38a87d0d58fe3223bc798e96612fa7f6f8b95d2391010c393cda42294538e"
+    },
+    {
+      "path": "02-wordmarks/transparent/07-ink-and-stone.png",
+      "bytes": 1255660,
+      "sha256": "3120e59fa38ea8525fe7b0e99811196dcf20faef6f2259968ab12f46234e8004"
+    },
+    {
+      "path": "02-wordmarks/transparent/25-fresh-coral.png",
+      "bytes": 1243096,
+      "sha256": "557a0863d1198dc9d0787a4fdf6617811bfd64a87789b616b137395a7828ec57"
+    },
+    {
+      "path": "02-wordmarks/transparent/26-solar-vermilion.png",
+      "bytes": 1252319,
+      "sha256": "b23f1581cd633e52eac5d4564f399c4762d7ac4d9dfe651052a736f8c0b85cc6"
+    },
+    {
+      "path": "02-wordmarks/transparent/27-light-scarlet.png",
+      "bytes": 1266800,
+      "sha256": "2a8d68d60cff4f6a675c8676eaa591164c96aa2cbffc15a3e236f824bcd2baa1"
+    },
+    {
+      "path": "02-wordmarks/transparent/32-carved-sans.png",
+      "bytes": 1164654,
+      "sha256": "913c55cf2e60b0ebfe4378cdc31daa78e9235536049dc372c66578307bdc80b2"
+    },
+    {
+      "path": "02-wordmarks/transparent/33-stone-serif.png",
+      "bytes": 1026412,
+      "sha256": "f46519e2cabe20f70308c190b305f0d787aaa0b03e02f7f0a15f1ef5b4f0435c"
+    },
+    {
+      "path": "02-wordmarks/transparent/34-floating-white-foundation.png",
+      "bytes": 1683764,
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de"
+    },
+    {
+      "path": "02-wordmarks/transparent/35-coral-stone-foundation.png",
+      "bytes": 1623392,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "path": "02-wordmarks/transparent/36-monochrome-monument.png",
+      "bytes": 1548321,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    },
+    {
+      "path": "02-wordmarks/transparent/alpha-validation-32-36.json",
+      "bytes": 4320,
+      "sha256": "f7b8c96df3e84dd808e8ee7ffc2c1cdc71a433a1aeec381370e0a6413f8c71b2"
+    },
+    {
+      "path": "02-wordmarks/transparent/alpha-validation.json",
+      "bytes": 1492,
+      "sha256": "c1a14903b7f0e18c151841ab11cd3298151eccbcfa73d4d6b34f97994c35af68"
+    },
+    {
+      "path": "02-wordmarks/wordmarks-data.js",
+      "bytes": 3005,
+      "sha256": "2e7dae3b7a6c19174ba39558bbfeb853497def1c0054e27aca018926a0d25de5"
+    },
+    {
+      "path": "02-wordmarks/wordmarks.json",
+      "bytes": 3379,
+      "sha256": "bb5dbaeea62de1703ea8b71a09245c8802e382745bf9717d4a8ec82bf708d76b"
+    },
+    {
+      "path": "03-motion/ARCHIVE-MANIFEST.json",
+      "bytes": 1936,
+      "sha256": "2f8c2a18b793d62cc282fcefc989a4beb281724e73ab9e832074d906f737a52c"
+    },
+    {
+      "path": "03-motion/README.md",
+      "bytes": 3514,
+      "sha256": "8d7795e79d25d06af7642abe00c4f490e9350d119ddac64edb262acef97d175d"
+    },
+    {
+      "path": "03-motion/alpha-check.jpg",
+      "bytes": 117017,
+      "sha256": "f4a509bce0df9b1b5062ad32072eb4a4f7eec55dd8a1aecfcfe4a47e8c3e352a"
+    },
+    {
+      "path": "03-motion/build.py",
+      "bytes": 1091,
+      "sha256": "a3cfb2653186726be8234fad670b5b43f93bbd2ff0d0fad8d6ff4ae6a0d97086"
+    },
+    {
+      "path": "03-motion/index.html",
+      "bytes": 10575,
+      "sha256": "c6010148a062ca0fbc31585d2fe150d6cce3d4c0ffa1cab230e81318b692f1de"
+    },
+    {
+      "path": "03-motion/motion.js",
+      "bytes": 7487,
+      "sha256": "d504a9bf5af9e86cc100ff62f8b954aca801948fa86559ee7158b80957576823"
+    },
+    {
+      "path": "03-motion/qa-explosion.png",
+      "bytes": 164208,
+      "sha256": "e1bdd8fcfe3f5735420a2419b6343c697553e1e5dffb423cf02588ccb459f41b"
+    },
+    {
+      "path": "03-motion/qa-mobile.png",
+      "bytes": 142307,
+      "sha256": "45d8a4b2cd3d10e6515699025eb3e3f1059cb099c2d2d9b51a2b8d8e7bae9849"
+    },
+    {
+      "path": "03-motion/qa-rest.png",
+      "bytes": 178602,
+      "sha256": "0d192015e6d201053421a1f644a03fe64b7ec08ab257f590f62350a249357a0e"
+    },
+    {
+      "path": "03-motion/qa-tornado.png",
+      "bytes": 162042,
+      "sha256": "17b35f329a7478c05149d45872ce77c66330565aa71c0942a7633f76b30cd266"
+    },
+    {
+      "path": "03-motion/qa.cjs",
+      "bytes": 2176,
+      "sha256": "8cc3e1b939a7636b54eff5b8db6e06bba74f4b5dccf876984220a41579873918"
+    },
+    {
+      "path": "03-motion/source-data.js",
+      "bytes": 1389417,
+      "sha256": "1bf9388b84eb1cfad99efdfb8fff6060b87dec3e18ee36c703225209653402fe"
+    },
+    {
+      "path": "03-motion/statue.png",
+      "bytes": 1011134,
+      "sha256": "f8e13fdbd5094a9eed62bc0b8fc07174bb1e8bd0206df9bf213dbf06ba4acb76"
+    },
+    {
+      "path": "04-decision/APP-ICON-CANDIDATES.zip",
+      "bytes": 7498202,
+      "sha256": "5e923f6e9e23d5b6fe5341c7f4fb24fc5621d9c1335eb000a81c61196f29375d"
+    },
+    {
+      "path": "04-decision/ARCHIVE-MANIFEST.json",
+      "bytes": 8842,
+      "sha256": "92942877c69478681c401e6d5aef42d5a924a492c654d586c48dff23faae6e74"
+    },
+    {
+      "path": "04-decision/DECISION-REPORT.md",
+      "bytes": 3050,
+      "sha256": "5c99ef5f6c5aaf2a3b12f95b40326b1d755e50ebb77f8ead08e327e751058fcf"
+    },
+    {
+      "path": "04-decision/assets/37-terracotta-current-serif.png",
+      "bytes": 566853,
+      "sha256": "f4c2a9ee87d3715fa5cbef4d19751410f3b1112f4a079900b4d69954b80ff15c"
+    },
+    {
+      "path": "04-decision/assets/37-terracotta-current-serif.svg",
+      "bytes": 3988223,
+      "sha256": "07a96396bfb1e1e9ea680c7cdd2248bd879bc4c515c680bedc8afbecdf08607b"
+    },
+    {
+      "path": "04-decision/assets/a-current-dark.svg",
+      "bytes": 1673889,
+      "sha256": "b02538aaf3992b1aa90f2f0792207d0f7bfbf6a012a59b78350ca7063c389a02"
+    },
+    {
+      "path": "04-decision/assets/a-current.svg",
+      "bytes": 1673889,
+      "sha256": "b87a447de444590881f922ad7f9483a631493ac7b0ffbc09fa2f0f1657c34785"
+    },
+    {
+      "path": "04-decision/assets/a-sans-dark.svg",
+      "bytes": 1670196,
+      "sha256": "4d5fe1e45d4cb0693514f3c505ec615f241cee833d412299209d377c688fa59d"
+    },
+    {
+      "path": "04-decision/assets/a-sans.svg",
+      "bytes": 1670196,
+      "sha256": "3eb17cdc6405cd818250340d47556ee3671c0aa4009d0ba85aa12c56024cbbf6"
+    },
+    {
+      "path": "04-decision/assets/a-stone.png",
+      "bytes": 1164654,
+      "sha256": "913c55cf2e60b0ebfe4378cdc31daa78e9235536049dc372c66578307bdc80b2"
+    },
+    {
+      "path": "04-decision/assets/b-current-dark.svg",
+      "bytes": 1761505,
+      "sha256": "afcca755c391f892275606a087c7a6a2d64b4e8dfd2bfc136e41a0a0b7583afe"
+    },
+    {
+      "path": "04-decision/assets/b-current.svg",
+      "bytes": 1761505,
+      "sha256": "ee7dbaf011a588d25852473259c9603302df6b5ef08b897ce778254e67ba2df1"
+    },
+    {
+      "path": "04-decision/assets/b-sans-dark.svg",
+      "bytes": 1757803,
+      "sha256": "064505499357a7772c136937decc62027f9182f440f33c5899083d8d2b23fc84"
+    },
+    {
+      "path": "04-decision/assets/b-sans.svg",
+      "bytes": 1757803,
+      "sha256": "70b16ca52fc55b1de691daabc9193f6a3dc2f629e05346417f4850d3d528e478"
+    },
+    {
+      "path": "04-decision/assets/b-stone.png",
+      "bytes": 1026412,
+      "sha256": "f46519e2cabe20f70308c190b305f0d787aaa0b03e02f7f0a15f1ef5b4f0435c"
+    },
+    {
+      "path": "04-decision/assets/c-current-dark.svg",
+      "bytes": 3988223,
+      "sha256": "ff4e4197c2f70fe846badb634c6ef3c5948f8cb04f9d52c759d377bf6460a4fc"
+    },
+    {
+      "path": "04-decision/assets/c-current.png",
+      "bytes": 566853,
+      "sha256": "f4c2a9ee87d3715fa5cbef4d19751410f3b1112f4a079900b4d69954b80ff15c"
+    },
+    {
+      "path": "04-decision/assets/c-current.svg",
+      "bytes": 3988223,
+      "sha256": "07a96396bfb1e1e9ea680c7cdd2248bd879bc4c515c680bedc8afbecdf08607b"
+    },
+    {
+      "path": "04-decision/assets/c-sans-dark.svg",
+      "bytes": 3987025,
+      "sha256": "68a9bf862a88944f8708983aa65be50e5bae1d82193631082c6bacb5d676ff14"
+    },
+    {
+      "path": "04-decision/assets/c-sans.png",
+      "bytes": 564959,
+      "sha256": "c3fcff15a5809ca0e20b350406a423d97984c42c1985a0adf0121d11af910ac8"
+    },
+    {
+      "path": "04-decision/assets/c-sans.svg",
+      "bytes": 3987025,
+      "sha256": "b345e14c6262239491d31f72e229d9e626a3add87fa79cd79416a05c5d6c6f22"
+    },
+    {
+      "path": "04-decision/assets/c-stone.png",
+      "bytes": 1623392,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "path": "04-decision/assets/d-current-dark.svg",
+      "bytes": 1678352,
+      "sha256": "a7557c15e0ac94764b9946a2677e0846aefa6d2477b7b52e54494496d9ba9497"
+    },
+    {
+      "path": "04-decision/assets/d-current.svg",
+      "bytes": 1678352,
+      "sha256": "a94e5091f3334af4017da2417c350513a39890dceb67141dbd4c47b112310a85"
+    },
+    {
+      "path": "04-decision/assets/d-sans-dark.svg",
+      "bytes": 1674650,
+      "sha256": "e2936f64abd78295a97974408d81ed06c97a5de0c6958e45b8e96e0dafe43102"
+    },
+    {
+      "path": "04-decision/assets/d-sans.svg",
+      "bytes": 1674650,
+      "sha256": "fa921c7ce345ffe702aad7fd8caa580e2dd271ef638d707b69b070d7effeff4b"
+    },
+    {
+      "path": "04-decision/assets/d-stone.png",
+      "bytes": 1548321,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    },
+    {
+      "path": "04-decision/assets/icon-a.png",
+      "bytes": 544365,
+      "sha256": "40809882fa76d6c7f0c891d2cd73e64fc1b91c4c621c3ee9c94d0fa79570ec33"
+    },
+    {
+      "path": "04-decision/assets/icon-a.svg",
+      "bytes": 1670211,
+      "sha256": "34407566dbbb74022feb69d9930fefc44809d4bb3b676ed52b5c06b068238b19"
+    },
+    {
+      "path": "04-decision/assets/icon-b.png",
+      "bytes": 620480,
+      "sha256": "c3c511d25873c8e083f64247dcc5de99f5f0fe09ee4bc580d787c5af62f8f806"
+    },
+    {
+      "path": "04-decision/assets/icon-b.svg",
+      "bytes": 1757835,
+      "sha256": "e3de87960143ef22ba2f577a2486a62acde3a0f6103ef4ffee9da55869ecd3ea"
+    },
+    {
+      "path": "04-decision/assets/icon-c.png",
+      "bytes": 627415,
+      "sha256": "4e99e74c2ba8da20b52d16ace2bd660e24207065b783acc106a76c354b92c7fb"
+    },
+    {
+      "path": "04-decision/assets/icon-c.svg",
+      "bytes": 1670224,
+      "sha256": "f45c981626be26c8fc693964daca79722eb38ff5853c8d8b91934f01ee5faf35"
+    },
+    {
+      "path": "04-decision/assets/icon-d.png",
+      "bytes": 622448,
+      "sha256": "0c0b62d5c9bb2655d836fe62a0922df3836ac70b9727c973aa645560564e8588"
+    },
+    {
+      "path": "04-decision/assets/icon-d.svg",
+      "bytes": 1674679,
+      "sha256": "e40faa63e75e9754cedc78db102294924803ef25f906a4fd24e97a234dc808ac"
+    },
+    {
+      "path": "04-decision/assets/icon-manifest.json",
+      "bytes": 2406,
+      "sha256": "9f467bbc68f4c07661330cc5613c0dfbd967eff93c3b7a39ebdc5c3edf41ce09"
+    },
+    {
+      "path": "04-decision/assets/place-photography.png",
+      "bytes": 2998799,
+      "sha256": "9101d6953abf6145fbdab5c8ab0384b4ebf08c550f6dea36b8c9808ba299ad3d"
+    },
+    {
+      "path": "04-decision/decision.js",
+      "bytes": 4621,
+      "sha256": "d711dd67a1b6dd82c93aa27588b09826dde3904f4dd884ff6c574ac2be237117"
+    },
+    {
+      "path": "04-decision/index.html",
+      "bytes": 5887,
+      "sha256": "4f7487076a1845b768f91c9983225c37d8463825748fa249957788e29ad659fa"
+    },
+    {
+      "path": "04-decision/qa/asset-notes.md",
+      "bytes": 1551,
+      "sha256": "3844177071b68c19b4acc22ac51eb6a4775d1d527b7defb6bf46efbedbedcdf2"
+    },
+    {
+      "path": "04-decision/qa/browser-validation.json",
+      "bytes": 430,
+      "sha256": "50531f6e0e94fe463249357fa913abbb432965402ca0eff8f15de2c3d9b2ea7d"
+    },
+    {
+      "path": "04-decision/qa/build-assets.py",
+      "bytes": 2883,
+      "sha256": "8c7c9fd1c70d752202c4f2816ef3c73a972531f431fcc31210ca919f71d382f5"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/37-terracotta-current-serif-before-base-trim.png",
+      "bytes": 569340,
+      "sha256": "ba780fffb0cf8f2f180faa1e8f8fd5c97c4df02a204084209f67bccfc3aa0c84"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/37-terracotta-current-serif-before-base-trim.svg",
+      "bytes": 3988223,
+      "sha256": "7af7231d593e5746e2eef9163bb2a7b04ed7284b5894d7d4cb26c58f704e36cd"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/37-with-paper.svg",
+      "bytes": 3988271,
+      "sha256": "d53bb561c4d4e2fe4f27a80ede70b2c05659c5eec9dd610b7bd73b0b6b854bcd"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/c-sans-before-base-trim.png",
+      "bytes": 566679,
+      "sha256": "5a8ecab3b254f11c64a50df003a78be6751cb714df0ca2e9398b1ee1e53627a5"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/c-sans-before-base-trim.svg",
+      "bytes": 3987025,
+      "sha256": "866f0ef8fac5b139ec33145c3cb42437bf850543d2c8f0cbfcdd031afcb6c759"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/icon-c-before-base-trim.png",
+      "bytes": 633861,
+      "sha256": "133f26a0069183be74d3d4bcdfe6ecf2572761d4251475782f4404055b227729"
+    },
+    {
+      "path": "04-decision/qa/first-drafts/icon-c-before-base-trim.svg",
+      "bytes": 1670224,
+      "sha256": "b594ea221be35ee7f5106e6368259ffbb00297091596b15c43a80dd3da41cc56"
+    },
+    {
+      "path": "04-decision/qa/icon-small-sizes.png",
+      "bytes": 30756,
+      "sha256": "427203a8b50ee3f0f3efe204e0f58bb819ac3f6c6050b4feec5ee1b84fb2a1dc"
+    },
+    {
+      "path": "04-decision/qa/render-assets.cjs",
+      "bytes": 2416,
+      "sha256": "c086cfdccf923b07b1ffdee21ae91c565f76107cb8fb6a5d1d01bf837a42120d"
+    },
+    {
+      "path": "04-decision/qa/sans-path.json",
+      "bytes": 2811,
+      "sha256": "b0daa166e493ce5e02d3cc0b7b7ee52ac0f2b89093f57927297a483e1201c140"
+    },
+    {
+      "path": "04-decision/qa/serif-path.json",
+      "bytes": 4021,
+      "sha256": "e4878e7b7c22e94033fcbe89485f3443bb6e1909e25491f95b8e7967476db7db"
+    },
+    {
+      "path": "04-decision/qa/serif-path.swift",
+      "bytes": 1485,
+      "sha256": "e3cf2ba3880b684a69a3644c38fc80a928146fb30aa58c9ec358993e39092e7a"
+    },
+    {
+      "path": "04-decision/styles.css",
+      "bytes": 12180,
+      "sha256": "64d0641e21ed986e96a697cf40e3010cf9441b623954a19e29967851f7a1f077"
+    },
+    {
+      "path": "05-black-lockup/ARCHIVE-MANIFEST.json",
+      "bytes": 5829,
+      "sha256": "563e733ec0dbdf4a1e98506147db66ac4b4ece2f776b803fbe53cfcb773ed3bf"
+    },
+    {
+      "path": "05-black-lockup/README.md",
+      "bytes": 1115,
+      "sha256": "41a9d3a5841fbe621d575aeff5f63b948b0d27027089fa8dc92ae9b05716fe3b"
+    },
+    {
+      "path": "05-black-lockup/assets/38-red-current.png",
+      "bytes": 429505,
+      "sha256": "43c1f59e9ae194621aabb6ed186754cbd009d68209bacd0a39f08382005d13bf"
+    },
+    {
+      "path": "05-black-lockup/assets/38-red-current.svg",
+      "bytes": 4225183,
+      "sha256": "ce0db0f2fb5a943641ff61da2de4e079bedb395a80c18c19be2c85d3f64c490b"
+    },
+    {
+      "path": "05-black-lockup/assets/39-red-bold.png",
+      "bytes": 428768,
+      "sha256": "e785ef6e51f54e7192771898fe889b8328da30cf9b5a76ca5264ed4920fd5142"
+    },
+    {
+      "path": "05-black-lockup/assets/39-red-bold.svg",
+      "bytes": 4225197,
+      "sha256": "ae731c4e05b682155cff36a0ba28a83417bfff927052848b004c361eabed5c21"
+    },
+    {
+      "path": "05-black-lockup/assets/40-terra-current.png",
+      "bytes": 441004,
+      "sha256": "aed7700f7276c8642552bbb5519447edd8ea43fe64f24467db6fe3167a8ca8dd"
+    },
+    {
+      "path": "05-black-lockup/assets/40-terra-current.svg",
+      "bytes": 4225184,
+      "sha256": "578836ee98cae085cbe6c82892980612ed0330a5b6b84315cdcf961c1fd8303c"
+    },
+    {
+      "path": "05-black-lockup/assets/41-terra-bold.png",
+      "bytes": 440014,
+      "sha256": "fb386b4a51bc5b331e65afb89abd80558a0c3d05996cc20341a5c1e00f57d8a6"
+    },
+    {
+      "path": "05-black-lockup/assets/41-terra-bold.svg",
+      "bytes": 4225198,
+      "sha256": "bbbc656502f299f9c82a9e9c5a9d1e197d2861bcbf4ae418c76cc7ca4aa4d175"
+    },
+    {
+      "path": "05-black-lockup/assets/icon-red.png",
+      "bytes": 455583,
+      "sha256": "9fccea0ce79e1c5b44ec61139110d3c4f49dadeb5550bd926dd16b3eeefd4ca2"
+    },
+    {
+      "path": "05-black-lockup/assets/icon-red.svg",
+      "bytes": 4211263,
+      "sha256": "8d55c9051a1609f46998e53226af1f69bc97f6258b93d132847cb69e60373e42"
+    },
+    {
+      "path": "05-black-lockup/assets/icon-terra.png",
+      "bytes": 458693,
+      "sha256": "bbfe0ce88476099cec8981d7286688e13eaaa7c36ac7698c748affd3c31f429c"
+    },
+    {
+      "path": "05-black-lockup/assets/icon-terra.svg",
+      "bytes": 4211264,
+      "sha256": "260898b08ae89aa23224d5f5f37dd2e8339de902b056e9c7901d797b7fb6aca6"
+    },
+    {
+      "path": "05-black-lockup/assets/red-bold.png",
+      "bytes": 428768,
+      "sha256": "e785ef6e51f54e7192771898fe889b8328da30cf9b5a76ca5264ed4920fd5142"
+    },
+    {
+      "path": "05-black-lockup/assets/red-bold.svg",
+      "bytes": 4225197,
+      "sha256": "ae731c4e05b682155cff36a0ba28a83417bfff927052848b004c361eabed5c21"
+    },
+    {
+      "path": "05-black-lockup/assets/red-current.png",
+      "bytes": 429505,
+      "sha256": "43c1f59e9ae194621aabb6ed186754cbd009d68209bacd0a39f08382005d13bf"
+    },
+    {
+      "path": "05-black-lockup/assets/red-current.svg",
+      "bytes": 4225183,
+      "sha256": "ce0db0f2fb5a943641ff61da2de4e079bedb395a80c18c19be2c85d3f64c490b"
+    },
+    {
+      "path": "05-black-lockup/assets/terra-bold.png",
+      "bytes": 440014,
+      "sha256": "fb386b4a51bc5b331e65afb89abd80558a0c3d05996cc20341a5c1e00f57d8a6"
+    },
+    {
+      "path": "05-black-lockup/assets/terra-bold.svg",
+      "bytes": 4225198,
+      "sha256": "bbbc656502f299f9c82a9e9c5a9d1e197d2861bcbf4ae418c76cc7ca4aa4d175"
+    },
+    {
+      "path": "05-black-lockup/assets/terra-current.png",
+      "bytes": 441004,
+      "sha256": "aed7700f7276c8642552bbb5519447edd8ea43fe64f24467db6fe3167a8ca8dd"
+    },
+    {
+      "path": "05-black-lockup/assets/terra-current.svg",
+      "bytes": 4225184,
+      "sha256": "578836ee98cae085cbe6c82892980612ed0330a5b6b84315cdcf961c1fd8303c"
+    },
+    {
+      "path": "05-black-lockup/index.html",
+      "bytes": 3811,
+      "sha256": "aecfde75ddded465155b3ed159f3971f94b69a29c6efb290196d881234249f1a"
+    },
+    {
+      "path": "05-black-lockup/manifest.json",
+      "bytes": 3051,
+      "sha256": "dd89194825c5e97118fad30fee71855c3eb408af7edd12cde1173385f7af6b6e"
+    },
+    {
+      "path": "05-black-lockup/qa/build.py",
+      "bytes": 3428,
+      "sha256": "e0f945c4ae9dc41565f7e0390363f33ea614bf8136541a7da94f58babb8f471d"
+    },
+    {
+      "path": "05-black-lockup/qa/checks.json",
+      "bytes": 735,
+      "sha256": "7393ef94597352748d610106923b6f20e551a3dee1a2569c64070ff652ee5138"
+    },
+    {
+      "path": "05-black-lockup/qa/initial-icons/icon-red.png",
+      "bytes": 435308,
+      "sha256": "1e259cb6e02d2240d2b718b34caa250ea03579554daf6e1e3301539ffb3aa6d6"
+    },
+    {
+      "path": "05-black-lockup/qa/initial-icons/icon-red.svg",
+      "bytes": 4211236,
+      "sha256": "3268cc21aa63db4cf52a7b58a1e058580c0a5275d61363443951d76cd61cbe00"
+    },
+    {
+      "path": "05-black-lockup/qa/initial-icons/icon-terra.png",
+      "bytes": 437287,
+      "sha256": "68441631b3dac7ce6e5f8024e174eb50c34beae058025e0e220ad117440f53d5"
+    },
+    {
+      "path": "05-black-lockup/qa/initial-icons/icon-terra.svg",
+      "bytes": 4211237,
+      "sha256": "2134f88a01643b34798f1d273227efd24bddbd64aabfd28e3bca92ea31c46ad5"
+    },
+    {
+      "path": "05-black-lockup/qa/render.cjs",
+      "bytes": 2076,
+      "sha256": "7e897d9a13efe89604e735f0617fbc86cdb2acb23e272ab5c5ef75ac9053fd49"
+    },
+    {
+      "path": "05-black-lockup/qa/review-desktop.png",
+      "bytes": 404868,
+      "sha256": "a14b00f41dcb4a3620d16e68ecd1a0ee726af33db4f6805f2d26183f06d4d47d"
+    },
+    {
+      "path": "05-black-lockup/qa/review-mobile.png",
+      "bytes": 174780,
+      "sha256": "7e7a5a3874bafe06958ab66eb4422a43f6fc56055bf3ddefd1d79218269fa464"
+    },
+    {
+      "path": "05-black-lockup/qa/type-paths.json",
+      "bytes": 43106,
+      "sha256": "b5ddb2c8326570683769a414a6ffe2c7bd1778db0a3da9acace936d28442763b"
+    },
+    {
+      "path": "05-black-lockup/qa/type-paths.swift",
+      "bytes": 1540,
+      "sha256": "5139002656f45eb215d38b413d004c7e65dcaf2164974d9165dc629167b1c6ee"
+    },
+    {
+      "path": "05-black-lockup/review.js",
+      "bytes": 1797,
+      "sha256": "e8aa292d273974524fadd94d62b31306b3d637f53fa392020224b2e0d4d29439"
+    },
+    {
+      "path": "05-black-lockup/styles.css",
+      "bytes": 6168,
+      "sha256": "598cba65ce58c15a01dc26ede582ac318df58fc9f8e07f2a00439875fd9e3e3f"
+    }
+  ]
+}

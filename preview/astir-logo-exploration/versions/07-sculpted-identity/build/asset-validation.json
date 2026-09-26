@@ -1,0 +1,2528 @@
+{
+  "createdAt": "2026-09-10T05:10:20.293Z",
+  "sourceCopies": [
+    {
+      "source": 34,
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de",
+      "byteIdentical": true
+    },
+    {
+      "source": 35,
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded",
+      "byteIdentical": true
+    },
+    {
+      "source": 36,
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0",
+      "byteIdentical": true
+    }
+  ],
+  "wordmarks": [
+    {
+      "file": "46-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "46-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "47-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "48-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "49-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "50-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "51-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "52-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-equal-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-equal-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-equal-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-equal-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-equal-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-equal-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-tall-signal-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-tall-mono.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-tall-mono-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "53-tall-oxide-light.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "pass": true
+    }
+  ],
+  "icons": [
+    {
+      "file": "icon-34-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "social-34-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon-34-mono.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "social-34-mono.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon-34-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "social-34-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon-36-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "social-36-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon-36-mono.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "social-36-mono.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon-36-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    },
+    {
+      "file": "social-36-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "pass": true
+    }
+  ],
+  "svgReferences": [
+    {
+      "svg": "46-equal-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-signal-light.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-mono.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-mono-light.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-oxide-light.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-signal-light.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-mono.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-mono-light.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-oxide-light.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "47-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-signal.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-signal-light.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-mono.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-mono-light.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-oxide.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-oxide-light.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-signal.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-signal-light.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-mono.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-mono-light.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-oxide.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-oxide-light.svg",
+      "reference": "48-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "48-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-signal.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-signal-light.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-mono.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-mono-light.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-oxide.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-oxide-light.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-signal.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-signal-light.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-mono.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-mono-light.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-oxide.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-oxide-light.svg",
+      "reference": "49-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "49-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "50-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "51-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-signal.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-signal-light.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-mono.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-mono-light.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-oxide.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-oxide-light.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-signal.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-signal-light.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-mono.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-mono-light.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-oxide.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-oxide-light.svg",
+      "reference": "52-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "52-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-signal.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-signal-light.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-mono.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-mono-light.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-oxide.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-oxide-light.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-equal-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-signal.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-signal-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-signal-light.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-signal-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-mono.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-mono.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-mono.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-mono-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-mono-light.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-mono-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-oxide.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-oxide-light.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-oxide-light.svg",
+      "reference": "53-letters.png",
+      "exists": true
+    },
+    {
+      "svg": "53-tall-oxide-light.svg",
+      "reference": "source35.png",
+      "exists": true
+    }
+  ],
+  "limitations": [
+    "Interactive review-page desktop/mobile browser QA is separate from these native asset checks.",
+    "Editable SVGs reference adjacent local source PNGs; standalone SVGs require the provided embedding helper."
+  ],
+  "directionCount": 8,
+  "complete": true
+}

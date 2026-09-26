@@ -1,0 +1,154 @@
+[
+  {
+    "id": 42,
+    "title": "34 family \u00b7 current stone serif",
+    "source": 34,
+    "type": "current",
+    "font": ".NewYork-Medium",
+    "wordmark": "42-wordmark.svg",
+    "wordmarkPng": "42-wordmark.png",
+    "icon": "icon42.svg",
+    "iconPng": "icon42.png",
+    "sourceFile": "source34.png",
+    "sourceCrop": [
+      185,
+      150,
+      385,
+      571
+    ],
+    "baseColor": "#F05A3C",
+    "iconBackground": "#F2E9DB",
+    "baseSource": "02-wordmarks/transparent/35-coral-stone-foundation.png",
+    "letterTextureSource": "source34.png \u2014 original stone base face",
+    "letterTextureRect": [
+      160,
+      770,
+      700,
+      62
+    ],
+    "wordmarkSize": [
+      2200,
+      1050
+    ],
+    "iconSize": [
+      1024,
+      1024
+    ],
+    "transparent": true,
+    "description": "Pixel-faithful family A from 34, current New York stone letters, signal foundation, right-aligned engraved ONENESS."
+  },
+  {
+    "id": 43,
+    "title": "36 family \u00b7 current stone serif",
+    "source": 36,
+    "type": "current",
+    "font": ".NewYork-Medium",
+    "wordmark": "43-wordmark.svg",
+    "wordmarkPng": "43-wordmark.png",
+    "icon": "icon43.svg",
+    "iconPng": "icon43.png",
+    "sourceFile": "source36.png",
+    "sourceCrop": [
+      107,
+      78,
+      409,
+      563
+    ],
+    "baseColor": "#F05A3C",
+    "iconBackground": "#141714",
+    "baseSource": "02-wordmarks/transparent/35-coral-stone-foundation.png",
+    "letterTextureSource": "source36.png \u2014 original stone base face",
+    "letterTextureRect": [
+      180,
+      740,
+      700,
+      49
+    ],
+    "wordmarkSize": [
+      2200,
+      1050
+    ],
+    "iconSize": [
+      1024,
+      1024
+    ],
+    "transparent": true,
+    "description": "Pixel-faithful family A from 36, current New York stone letters, signal foundation, right-aligned engraved ONENESS."
+  },
+  {
+    "id": 44,
+    "title": "34 family \u00b7 bold stone serif",
+    "source": 34,
+    "type": "bold",
+    "font": ".NewYork-Bold",
+    "wordmark": "44-wordmark.svg",
+    "wordmarkPng": "44-wordmark.png",
+    "icon": "icon44.svg",
+    "iconPng": "icon44.png",
+    "sourceFile": "source34.png",
+    "sourceCrop": [
+      185,
+      150,
+      385,
+      571
+    ],
+    "baseColor": "#F05A3C",
+    "iconBackground": "#F05A3C",
+    "baseSource": "02-wordmarks/transparent/35-coral-stone-foundation.png",
+    "letterTextureSource": "source34.png \u2014 original stone base face",
+    "letterTextureRect": [
+      160,
+      770,
+      700,
+      62
+    ],
+    "wordmarkSize": [
+      2200,
+      1050
+    ],
+    "iconSize": [
+      1024,
+      1024
+    ],
+    "transparent": true,
+    "description": "Pixel-faithful family A from 34, bold New York stone letters, signal foundation, right-aligned engraved ONENESS."
+  },
+  {
+    "id": 45,
+    "title": "36 family \u00b7 bold stone serif",
+    "source": 36,
+    "type": "bold",
+    "font": ".NewYork-Bold",
+    "wordmark": "45-wordmark.svg",
+    "wordmarkPng": "45-wordmark.png",
+    "icon": "icon45.svg",
+    "iconPng": "icon45.png",
+    "sourceFile": "source36.png",
+    "sourceCrop": [
+      107,
+      78,
+      409,
+      563
+    ],
+    "baseColor": "#F05A3C",
+    "iconBackground": "#141714",
+    "baseSource": "02-wordmarks/transparent/35-coral-stone-foundation.png",
+    "letterTextureSource": "source36.png \u2014 original stone base face",
+    "letterTextureRect": [
+      180,
+      740,
+      700,
+      49
+    ],
+    "wordmarkSize": [
+      2200,
+      1050
+    ],
+    "iconSize": [
+      1024,
+      1024
+    ],
+    "transparent": true,
+    "description": "Pixel-faithful family A from 36, bold New York stone letters, signal foundation, right-aligned engraved ONENESS."
+  }
+]

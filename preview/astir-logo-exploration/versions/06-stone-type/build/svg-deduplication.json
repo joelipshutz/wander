@@ -1,0 +1,66 @@
+[
+  {
+    "file": "42-wordmark.svg",
+    "before_bytes": 8936979,
+    "after_bytes": 4447043,
+    "saved_bytes": 4489936,
+    "instances_preserved": true,
+    "embedded_payloads": 2
+  },
+  {
+    "file": "43-wordmark.svg",
+    "before_bytes": 8395203,
+    "after_bytes": 4266451,
+    "saved_bytes": 4128752,
+    "instances_preserved": true,
+    "embedded_payloads": 2
+  },
+  {
+    "file": "44-wordmark.svg",
+    "before_bytes": 8937035,
+    "after_bytes": 4447099,
+    "saved_bytes": 4489936,
+    "instances_preserved": true,
+    "embedded_payloads": 2
+  },
+  {
+    "file": "45-wordmark.svg",
+    "before_bytes": 8395259,
+    "after_bytes": 4266507,
+    "saved_bytes": 4128752,
+    "instances_preserved": true,
+    "embedded_payloads": 2
+  },
+  {
+    "file": "icon42.svg",
+    "before_bytes": 8917362,
+    "after_bytes": 4427407,
+    "saved_bytes": 4489955,
+    "instances_preserved": true,
+    "embedded_payloads": 2
+  },
+  {
+    "file": "icon43.svg",
+    "before_bytes": 6195135,
+    "after_bytes": 2066295,
+    "saved_bytes": 4128840,
+    "instances_preserved": true,
+    "embedded_payloads": 1
+  },
+  {
+    "file": "icon44.svg",
+    "before_bytes": 6736911,
+    "after_bytes": 2246887,
+    "saved_bytes": 4490024,
+    "instances_preserved": true,
+    "embedded_payloads": 1
+  },
+  {
+    "file": "icon45.svg",
+    "before_bytes": 8375587,
+    "after_bytes": 4246816,
+    "saved_bytes": 4128771,
+    "instances_preserved": true,
+    "embedded_payloads": 2
+  }
+]

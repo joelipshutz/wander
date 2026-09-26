@@ -1,0 +1,50 @@
+[
+  {
+    "source": 34,
+    "source_copy_identical": true
+  },
+  {
+    "source": 36,
+    "source_copy_identical": true
+  },
+  {
+    "svg": "42-wordmark.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "43-wordmark.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "44-wordmark.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "45-wordmark.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "icon42.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "icon43.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "icon44.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  },
+  {
+    "svg": "icon45.svg",
+    "valid_xml": true,
+    "all_images_embedded": true
+  }
+]
