@@ -24,8 +24,8 @@ All 12 recorded historical public artwork URLs now reject access. Their original
 images were moved to a private archive, preserving bytes, object identity,
 ownership, and custom metadata. The former paths contain only generic Astir
 artwork. A final public-link check rejected all 130 stored-object URLs: 106
-unchanged visit photos, 12 archived previews, and 12 generic replacements. A synthetic signed-photo
-URL was warmed to a CDN hit and rejected after expiry. That representative test
+unchanged visit photos, 12 archived previews, and 12 generic replacements. A
+synthetic signed-photo URL was warmed to a CDN hit and rejected after expiry. That representative test
 and the elapsed maximum client token lifetime do not establish a global purge
 of every previously issued signed URL.
 See [Supabase's CDN behavior](https://supabase.com/docs/guides/storage/cdn/smart-cdn).
@@ -51,10 +51,13 @@ that existing performance failure in
 [REC-627](https://linear.app/recme/issue/REC-627/investigate-trusted-memory-search-exceeding-the-50-ms-performance).
 Do not describe the full native suite as clean.
 
-The iPhone 13 mini normal-size rating check passed. Its accessibility-size run
-was interrupted by host sleep and must be repeated. Both iPhone 17 screenshots
-were inspected; a final manual navigation check still needs an unlocked desktop.
-The live two-account scenarios below remain tester acceptance steps.
+The iPhone 13 mini normal-size rating check passed. Host sleep interrupted its
+accessibility run; a fresh layout-only retry then failed because the test runner
+was killed before establishing a connection. Neither attempt establishes an
+accessibility pass on the smaller phone. The iPhone 17 normal and accessibility
+screenshots were inspected. Repeat the compact-phone layout tests and finish
+manual navigation once the desktop is available. The live two-account scenarios
+below remain tester acceptance steps.
 
 ## Automatic Wannas
 
