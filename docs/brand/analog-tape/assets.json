@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-20",
+  "branch": "codex/splash-vhs-preview",
+  "reviewPR": "https://github.com/joelipshutz/wander/pull/686",
+  "status": "proposed splash/account adaptation; Events 03C is the approved source",
+  "pathsRelativeTo": "repository root",
+  "generation": {
+    "model": "Seedance 2.5",
+    "date": "2026-09-17 America/Los_Angeles",
+    "durationSeconds": 8,
+    "aspectRatio": "9:16",
+    "resolutionPreset": "1080p",
+    "audio": false,
+    "referenceMedia": false,
+    "originalCredits": 72,
+    "newGenerationForThisRevision": false,
+    "promptPath": "docs/brand/analog-tape/source/texture-generation-prompt.txt"
+  },
+  "preview": {
+    "raster": [
+      720,
+      1560
+    ],
+    "quietMaterialSourceSeconds": 0.4,
+    "requestedCaptureFPS": 24,
+    "recording": "Real-time browser canvas recording; measured nominal rates below are not frame-exact 24 fps.",
+    "accountLayout": "Illustrative; not a functioning or pixel-exact native login.",
+    "revision": 4,
+    "primaryTear": {
+      "elapsedStartSeconds": 0.5,
+      "elapsedEndSeconds": 0.7,
+      "durationSeconds": 0.2,
+      "originalWaveformSpeedMultiplier": 1,
+      "originalWaveformStartSeconds": 1.68
+    },
+    "flicker": false,
+    "material": "Frozen texture at source 0.40 seconds and fixed noise seeds; only geometry and registration move",
+    "artOpacity": 0.94,
+    "clock": "Elapsed seconds since first rendered splash frame; independent of original Events movie",
+    "startElapsedSeconds": 0,
+    "tearStillElapsedSeconds": 0.6,
+    "reviewCyclesSeconds": [
+      1.2,
+      0.8,
+      0.35,
+      8
+    ],
+    "nativeTimingRecord": "docs/brand/analog-tape/SPLASH-TIMING.md",
+    "nativeTimingBaseline": {
+      "installedBuild": 177,
+      "environment": "iPhone 16e simulator, iOS 26.3",
+      "samplesSeconds": [
+        3.375,
+        2.7916666667,
+        2.9816666667
+      ],
+      "notFreshLatestMainBuild": true
+    },
+    "sourceReferenceAutoplays": false
+  },
+  "assets": [
+    {
+      "role": "approved_events_film",
+      "path": "Wander/Resources/Events/events-coming-soon.mp4",
+      "bytes": 2253389,
+      "sha256": "03ad72d7c94b9abc4f0ba822137a1175d5af74e973063e8905c244a9946201e3",
+      "width": 720,
+      "height": 1560,
+      "duration": 8,
+      "fps": 24,
+      "audioTracks": 0
+    },
+    {
+      "role": "events_poster",
+      "path": "Wander/Resources/Events/events-coming-soon.jpg",
+      "bytes": 368436,
+      "sha256": "33bef9297d6d99c049829f873ece4c371ddc1230aedc71a3e72ba600b54e83ce"
+    },
+    {
+      "role": "unlettered_texture",
+      "path": "Wander/Resources/OnboardingFilm/onboarding-film-texture.mp4",
+      "bytes": 5510614,
+      "sha256": "f7907a22ea3c26d48285c36df46e189fca5a72daab641fd3ee3c01929018cb28"
+    },
+    {
+      "role": "texture_poster",
+      "path": "Wander/Resources/OnboardingFilm/onboarding-film-texture.png",
+      "bytes": 7660803,
+      "sha256": "6408709c122ad0558dad63854bf7f5246115e1dcf7bcb0db58d5a2e4b104de74",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "role": "immutable_logo",
+      "path": "Wander/Resources/Assets.xcassets/AstirLaunchWordmark.imageset/AstirLaunchWordmark.png",
+      "bytes": 275811,
+      "sha256": "ca42b250579fcd9571ba05520a4940ef8148a199e97aa6aeb16e918ec67e9ae8",
+      "width": 1600,
+      "height": 764
+    },
+    {
+      "role": "original_render_archive",
+      "path": "docs/designs/events-coming-soon/render-source.zip",
+      "bytes": 5508596,
+      "sha256": "d4f383b7207fa3aefb8f930601defe9a55e74174d556957f03df86c7c6558635"
+    },
+    {
+      "role": "original_source",
+      "path": "docs/brand/analog-tape/source/export-vhs.swift",
+      "bytes": 4534,
+      "sha256": "f2fffeb434a00b7724ac383edb71a43acbbddc0e45e033d60f589311edf813a4"
+    },
+    {
+      "role": "original_source",
+      "path": "docs/brand/analog-tape/source/study.js",
+      "bytes": 12591,
+      "sha256": "0b7b408787b41a590b7e22364caeda34a67f9f4bb0435588ac699be36d58052b"
+    },
+    {
+      "role": "original_source",
+      "path": "docs/brand/analog-tape/source/tape-shader.js",
+      "bytes": 5153,
+      "sha256": "643599e746f1fc5bedc9d129d7968f750f33688f54168de0de78e804ce5ddc91"
+    },
+    {
+      "role": "original_source",
+      "path": "docs/brand/analog-tape/source/texture-generation-prompt.txt",
+      "bytes": 1173,
+      "sha256": "a4ab156dfc0f5370c17108f8f279b79f60664ac7997686c9a8f2e0c9c93131a5"
+    },
+    {
+      "role": "review_artifact",
+      "path": "preview/splash-vhs/media/account-static.png",
+      "bytes": 1761293,
+      "sha256": "cc56a6566e08161d4ac492e2f49604e30ee9d01a5890ac07e243cbfe0098486f",
+      "width": 720,
+      "height": 1560
+    },
+    {
+      "role": "review_artifact",
+      "path": "preview/splash-vhs/media/account-v2.mp4",
+      "bytes": 3454074,
+      "sha256": "67d4ae2ad8ecb29833e68ce5da2f7e8981d75e392e96cc4553f36642ce486134",
+      "audioTracks": 0,
+      "duration": 8.249,
+      "fps": 22.062210083007812,
+      "height": 1560,
+      "width": 720
+    },
+    {
+      "role": "review_artifact",
+      "path": "preview/splash-vhs/media/logo-static.png",
+      "bytes": 821464,
+      "sha256": "69f307dc1247c98e90bfcb068fd15837c4a8ebb479cfba17b3002df74620c91b",
+      "width": 1000,
+      "height": 478
+    },
+    {
+      "role": "review_artifact",
+      "path": "preview/splash-vhs/media/logo-tear.png",
+      "bytes": 792706,
+      "sha256": "a3b15a6e8dc2a5a9ba7f11a0754d1082847f855807c358bb62ef27c6fdcd74de",
+      "width": 1000,
+      "height": 478
+    },
+    {
+      "role": "review_artifact",
+      "path": "preview/splash-vhs/media/splash-static.png",
+      "bytes": 2189484,
+      "sha256": "a5234f50952c701230f976fca48951475d6e7ac56b6965c11f7ede99b707fa09",
+      "width": 720,
+      "height": 1560
+    },
+    {
+      "role": "review_artifact",
+      "path": "preview/splash-vhs/media/splash-v2.mp4",
+      "bytes": 3446862,
+      "sha256": "3164b9ea062b985b53a070e92c32004189fc6b7750804f25de945d05e253a5a5",
+      "audioTracks": 0,
+      "duration": 8.249,
+      "fps": 22.062477111816406,
+      "height": 1560,
+      "width": 720
+    }
+  ]
+}
