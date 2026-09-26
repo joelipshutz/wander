@@ -493,7 +493,7 @@ enum ListPlacePhotoResolver {
             backend: backend
         )
         let selectedPhoto = selectionCache.photo(for: key) ?? preferredUserPhoto
-        guard let selectedPhoto,
+        guard let selectedPhoto, !selectedPhoto.requiresAccessCheck,
               let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
                   canonicalPlaceKey: request.canonicalPhotoCacheKey,
                   photoKey: selectedPhoto.cacheKey,
@@ -598,7 +598,7 @@ enum ListPlacePhotoResolver {
     ) async -> ListPlaceResolvedPhoto? {
         guard attemptedPhotoKeys.insert(photo.cacheKey).inserted else { return nil }
 
-        if let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
+        if !photo.requiresAccessCheck, let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
             canonicalPlaceKey: canonicalPlaceKey,
             photoKey: photo.cacheKey,
             targetPixelSize: targetPixelSize
@@ -608,7 +608,7 @@ enum ListPlacePhotoResolver {
 
         do {
             let data: Data
-            if let localAssetRef = photo.localAssetRef {
+            if !photo.requiresAccessCheck, let localAssetRef = photo.localAssetRef {
                 if let localData = await Task.detached(priority: .utility, operation: {
                     VisitPhotoLocalFileStore.data(from: localAssetRef)
                 }).value {

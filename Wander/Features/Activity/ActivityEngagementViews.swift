@@ -771,89 +771,12 @@ private struct ActivityPostcardArtwork: View {
     }
 }
 
-/// The original visit image can be much larger than its 154-point Feed slot.
-/// Match the decode to the display and retain the existing local-first fallback.
-struct ActivityPostcardImageRequest: Hashable, Sendable {
-    let mediaID: String
-    let sources: [WanderAvatarImageRequest]
-
-    init?(media: ActivityEngagementMedia, size: CGSize, displayScale: CGFloat) {
-        let pixels = max(size.width, size.height) * displayScale
-        guard size.width > 0, size.height > 0, displayScale > 0,
-              size.width.isFinite, size.height.isFinite, pixels.isFinite else { return nil }
-        // Quantization avoids new decodes for fractional layout changes.
-        let target = max(64, Int(ceil(min(pixels, 2_048) / 64)) * 64)
-        var urls = [URL]()
-        if let localURL = VisitPhotoLocalFileStore.fileURL(from: media.localAssetRef) {
-            urls.append(localURL)
-        }
-        if let remoteURL = media.urlString.flatMap(URL.init(string:)), !urls.contains(remoteURL) {
-            urls.append(remoteURL)
-        }
-        let sources = urls.compactMap {
-            WanderAvatarImageRequest(avatarURL: $0.absoluteString, targetPixelSize: target)
-        }
-        guard !sources.isEmpty else { return nil }
-        mediaID = media.id
-        self.sources = sources
-    }
-}
-
-enum ActivityPostcardImages {
-    // Reuse the proven background decoder and request coalescing. Larger visit
-    // thumbnails have their own bounded cache so they cannot evict avatars.
-    static let sharedPipeline = WanderAvatarImagePipeline(
-        countLimit: 24, totalCostLimit: 48 * 1_024 * 1_024
-    )
-
-    static func image(
-        for request: ActivityPostcardImageRequest,
-        using pipeline: WanderAvatarImagePipeline = sharedPipeline
-    ) async -> WanderAvatarDecodedImage? {
-        for source in request.sources {
-            guard !Task.isCancelled else { return nil }
-            if let image = await pipeline.image(for: source) {
-                return image
-            }
-        }
-        return nil
-    }
-}
-
 private struct ActivityPostcardMediaImage: View {
     let media: ActivityEngagementMedia
-    @Environment(\.displayScale) private var displayScale
-    @State private var loaded: LoadedImage?
-
-    private struct LoadedImage {
-        let request: ActivityPostcardImageRequest
-        let image: UIImage
-    }
 
     var body: some View {
-        GeometryReader { proxy in
-            let request = ActivityPostcardImageRequest(
-                media: media, size: proxy.size, displayScale: displayScale
-            )
-            ZStack {
-                Color.clear
-                if let loaded, loaded.request == request {
-                    Image(uiImage: loaded.image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                        .clipped()
-                        .accessibilityLabel(media.accessibilityLabel)
-                }
-            }
-            .task(id: request) {
-                guard let request else { loaded = nil; return }
-                let image = await ActivityPostcardImages.image(for: request)
-                guard !Task.isCancelled else { return }
-                loaded = image.map { LoadedImage(request: request, image: $0.image) }
-            }
-        }
-        .clipped()
+        PlaceProfilePhotoImage(photo: media.placePhoto, canonicalPlaceKey: "activity-photo:\(media.id)",
+                               placeName: media.accessibilityLabel, variant: .card)
     }
 }
 
@@ -886,7 +809,85 @@ extension EnvironmentValues {
     }
 }
 
+/// Every entry point, including an already resolved navigation route, checks
+/// the immutable source again before mounting its cached header or photo sheet.
 struct ActivityCommentsScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let context: ActivityEngagementContext
+    let visiblePlace: VisiblePlace?
+    let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
+    let openList: (String) -> Void
+    @State private var retryID = 0
+    @State private var checkedKey: String?
+    @State private var checkedGeneration = 0
+    @State private var checkedContext: ActivityEngagementContext?
+    @State private var checkedPlace: VisiblePlace?
+
+    private var accessKey: String {
+        "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase):\(retryID)"
+    }
+
+    var body: some View {
+        Group {
+            if checkedKey == accessKey, checkedGeneration == store.activityAccessGeneration(for: context.activityID), let checkedContext {
+                AuthorizedActivityCommentsScreen(context: checkedContext, visiblePlace: checkedPlace,
+                    openProfile: openProfile, openPlace: openPlace, openList: openList, recheckAccess: recheckAccess)
+            } else if checkedKey == accessKey {
+                ContentUnavailableView("Activity unavailable", systemImage: "lock",
+                    description: Text("This activity is no longer available, or couldn’t be checked. Try again when connected."))
+                    .safeAreaInset(edge: .bottom) {
+                        Button("Try again") { retryID += 1 }.padding()
+                    }
+            } else {
+                ProgressView("Opening activity…")
+            }
+        }
+        .task(id: accessKey) {
+            guard scenePhase == .active else { return }
+            let key = accessKey
+            checkedKey = nil
+            if UUID(uuidString: context.activityID) == nil {
+                checkedContext = context
+                checkedPlace = visiblePlace
+            } else {
+                guard auth.isSignedIn else {
+                    checkedContext = nil
+                    checkedPlace = nil
+                    checkedKey = key
+                    return
+                }
+                let activity = await store.activity(id: context.activityID, backend: backend)
+                guard !Task.isCancelled, key == accessKey else { return }
+                checkedContext = activity?.activityEngagementContext
+                checkedPlace = activity?.place
+            }
+            checkedGeneration = store.activityAccessGeneration(for: context.activityID)
+            checkedKey = key
+        }
+        .onDisappear {
+            checkedKey = nil
+            checkedContext = nil
+            checkedPlace = nil
+        }
+    }
+
+    private func recheckAccess() async -> Bool {
+        guard UUID(uuidString: context.activityID) != nil else { return true }
+        let key = accessKey
+        let activity = auth.isSignedIn ? await store.activity(id: context.activityID, backend: backend) : nil
+        guard !Task.isCancelled, key == accessKey else { return false }
+        checkedContext = activity?.activityEngagementContext
+        checkedPlace = activity?.place
+        checkedGeneration = store.activityAccessGeneration(for: context.activityID)
+        return checkedContext != nil
+    }
+}
+
+private struct AuthorizedActivityCommentsScreen: View {
     @Environment(\.activityPresentationHandoff) private var handoff
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.astirBrandMode) private var brandMode
@@ -898,6 +899,7 @@ struct ActivityCommentsScreen: View {
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (String) -> Void
+    let recheckAccess: () async -> Bool
     @State private var draft = ""
     @State private var isLoading = true
     @State private var isPosting = false
@@ -1025,6 +1027,7 @@ struct ActivityCommentsScreen: View {
     private func refreshComments() async {
         isLoading = true
         commentError = nil
+        guard await recheckAccess() else { isLoading = false; return }
         let didRefresh = await store.refreshActivityComments(
             activityID: context.activityID,
             backend: auth.isSignedIn ? backend : nil
@@ -1397,42 +1400,9 @@ private struct ActivityCommentsFullScreenImage: View {
     let media: ActivityEngagementMedia
 
     var body: some View {
-        if let localImage = VisitPhotoLocalFileStore.image(from: media.localAssetRef) {
-            Image(uiImage: localImage)
-                .resizable()
-                .scaledToFit()
-                .accessibilityLabel(media.accessibilityLabel)
-        } else if let remoteURL = media.urlString.flatMap(URL.init(string:)) {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .accessibilityLabel(media.accessibilityLabel)
-                case .failure:
-                    placeholder(systemImage: "exclamationmark.triangle.fill", title: "Photo unavailable")
-                case .empty:
-                    placeholder(systemImage: "arrow.triangle.2.circlepath", title: "Loading photo")
-                @unknown default:
-                    placeholder(systemImage: "photo", title: "Photo")
-                }
-            }
-        } else {
-            placeholder(systemImage: "photo", title: "Photo unavailable")
-        }
-    }
-
-    private func placeholder(systemImage: String, title: String) -> some View {
-        VStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .black))
-            Text(title)
-                .font(AstirTypography.control)
-        }
-        .foregroundStyle(.white.opacity(0.76))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityLabel(title)
+        PlaceProfilePhotoImage(photo: media.placePhoto, canonicalPlaceKey: "activity-photo:\(media.id)",
+                               placeName: media.accessibilityLabel,
+                               variant: .profile, contentMode: .fit)
     }
 }
 

@@ -10,7 +10,7 @@ enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
     }
 
     var message: String {
-        "Friends rating averages ratings from people you follow who checked in here. If none have rated it, Astir rating shows the broader community average. Unrated Featured places show a temporary 5 until the first Astir rating. That value never counts toward an average or Fit score. Fit score is personalized from your ratings, categories, tags, and people you follow."
+        "Your rating averages your rated check-ins here. Friends rating averages each followed person's visible ratings; activity hidden from you does not count. Astir rating averages all rated check-ins, including private activity, without showing who contributed. A dash means there are no ratings yet."
     }
 
     var accessibilityLabel: String {
@@ -20,33 +20,67 @@ enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
 
 struct PlaceProfileRatingsRail: View {
     let presentation: PlaceProfilePresentation
+    let place: PlaceSheetPlace
     var compact = false
+
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var state: PlaceRatingsState = .loading
+    @State private var loadedKey: RequestKey?
+    @State private var retryGeneration = 0
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.placeProfileVisualStyle) private var visualStyle
     @Environment(\.astirBrandMode) private var astirBrandMode
 
-    private var metrics: [Metric] {
-        [
-            Metric(
-                title: "Your rating",
-                value: presentation.ownRating?.displayScore ?? "—",
-                suffix: presentation.ownRating == nil ? nil : "/5",
-                subtitle: presentation.ownRating?.subtitle ?? "No rating yet"
-            ),
-            Metric(
-                title: presentation.overallRating?.title ?? (presentation.isUnratedFeatured ? "Featured" : "Astir rating"),
-                value: presentation.overallRating?.displayScore ?? (presentation.isUnratedFeatured ? "5" : "—"),
-                suffix: presentation.overallRating != nil || presentation.isUnratedFeatured ? "/5" : nil,
-                subtitle: presentation.overallRating?.subtitle ?? (presentation.isUnratedFeatured ? "Not yet rated" : "No ratings yet")
-            ),
-            Metric(
-                title: "Fit score",
-                value: presentation.fitRating?.displayScore ?? "—",
-                suffix: presentation.fitRating == nil ? nil : "/5",
-                subtitle: presentation.fitRating == nil ? "Keep saving to unlock" : "Based on your taste"
-            )
-        ]
+    private struct RequestKey: Equatable, Hashable {
+        let viewerID: String
+        let placeID: String
+        let lookup: PlaceRatingLookup
+        let revision: UInt64
+        let active: Bool
+        let retry: Int
+    }
+
+    private var requestKey: RequestKey {
+        RequestKey(viewerID: store.currentUser.id, placeID: place.id,
+                   lookup: PlaceRatingLookup(candidate: place.saveCandidate, knownPlaces: store.places),
+                   revision: store.presentationRevision, active: scenePhase == .active, retry: retryGeneration)
+    }
+
+    private var currentState: PlaceRatingsState {
+        loadedKey == requestKey ? state : .loading
+    }
+
+    private var metrics: [PlaceRatingMetric] {
+        currentState.metrics
+    }
+
+    @MainActor
+    private func refreshRatings() async {
+        let key = requestKey
+        state = .loading
+        loadedKey = key
+        guard key.active else { return }
+        do {
+            let summaries: PlaceRatingSummaries
+            if !key.lookup.canQuery {
+                // No stable server/provider identity exists yet. Keep the
+                // unsynced owner's rating, never fabricate a global aggregate.
+                let own = try PlaceRatingAggregate(score: presentation.ownRating?.score,
+                                                   count: presentation.ownRating?.count ?? 0)
+                summaries = PlaceRatingSummaries(own: own, friends: .empty, astir: .empty)
+            } else {
+                summaries = try await backend.placeRatingSummaries(for: key.lookup)
+            }
+            try Task.checkCancellation()
+            guard requestKey == key else { return }
+            state = .loaded(summaries)
+        } catch {
+            guard !Task.isCancelled, requestKey == key else { return }
+            state = .unavailable
+        }
     }
 
     var body: some View {
@@ -74,8 +108,15 @@ struct PlaceProfileRatingsRail: View {
             } else {
                 horizontalMetrics
             }
+
+            if currentState == .unavailable {
+                Button("Retry ratings") { retryGeneration += 1 }
+                    .font(AstirTypography.label)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+            }
         }
         .accessibilityElement(children: .contain)
+        .task(id: requestKey) { await refreshRatings() }
     }
 
     private var horizontalMetrics: some View {
@@ -145,7 +186,7 @@ struct PlaceProfileRatingsRail: View {
         )
     }
 
-    private func metricCell(_ metric: Metric) -> some View {
+    private func metricCell(_ metric: PlaceRatingMetric) -> some View {
         VStack(spacing: WanderTheme.spacing1) {
             metricValue(metric)
 
@@ -174,10 +215,10 @@ struct PlaceProfileRatingsRail: View {
         .padding(.horizontal, compact ? WanderTheme.spacing1 : WanderTheme.spacing2)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(metric.title), \(metric.value)\(metric.suffix ?? ""), \(metric.subtitle)")
+        .accessibilityLabel("\(metric.title), \(metric.value)\(metric.suffix), \(metric.subtitle)")
     }
 
-    private func metricValue(_ metric: Metric) -> some View {
+    private func metricValue(_ metric: PlaceRatingMetric) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 2) {
             Text(metric.value)
                 .font(
@@ -189,15 +230,13 @@ struct PlaceProfileRatingsRail: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.76)
 
-            if let suffix = metric.suffix {
-                Text(suffix)
-                    .font(
-                        visualStyle == .astir
-                            ? AstirTypography.metricSuffix
-                            : WanderTypography.editorialRatingSuffix
-                    )
-                    .foregroundStyle(secondaryText)
-            }
+            Text(metric.suffix)
+                .font(
+                    visualStyle == .astir
+                        ? AstirTypography.metricSuffix
+                        : WanderTypography.editorialRatingSuffix
+                )
+                .foregroundStyle(secondaryText)
         }
     }
 
@@ -213,12 +252,6 @@ struct PlaceProfileRatingsRail: View {
         visualStyle == .astir ? astirBrandMode.border : WanderTheme.borderHairline.color
     }
 
-    private struct Metric {
-        let title: String
-        let value: String
-        let suffix: String?
-        let subtitle: String
-    }
 }
 
 struct PlaceRatingInfoButton: View {

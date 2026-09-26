@@ -3,6 +3,38 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testSearchRatingsSendPublicProviderIdentityWithoutViewerOrActivityContent() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["place_rating_summaries"] = Data("""
+        {"own":{"score":null,"count":0},"friends":{"score":null,"count":0},"astir":{"score":4,"count":1}}
+        """.utf8)
+        let result = try await SupabasePlaceRepository(rpc: rpc).ratingSummaries(for: .init(
+            placeID: nil, sourceProvider: "mapkit", sourceProviderPlaceID: "provider-coffee"
+        ))
+        XCTAssertEqual(result.astir.count, 1)
+        let body = try XCTUnwrap(rpc.rawBodies.first)
+        XCTAssertEqual(Set(body.keys), ["input_source_provider", "input_source_provider_place_id"])
+        XCTAssertEqual(body["input_source_provider_place_id"] as? String, "provider-coffee")
+    }
+
+    func testPlaceRatingsUseIndependentServerAggregatesAndOnlySendPlaceID() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["place_rating_summaries"] = Data("""
+        {"own":{"score":null,"count":0},"friends":{"score":null,"count":0},"astir":{"score":4.5,"count":3}}
+        """.utf8)
+        let repository = SupabasePlaceRepository(rpc: rpc)
+        let result = try await repository.ratingSummaries(for: .init(placeID: "11111111-1111-4111-8111-111111111111"))
+        XCTAssertEqual(result.friends.count, 0)
+        XCTAssertEqual(result.astir.count, 3)
+        XCTAssertEqual(rpc.calls.map(\.name), ["place_rating_summaries"])
+        XCTAssertEqual(Set(try XCTUnwrap(rpc.rawBodies.first).keys), ["input_place_id"])
+        rpc.responses["place_rating_summaries"] = Data("{\"friends\":{\"score\":4,\"count\":1}}".utf8)
+        do {
+            _ = try await repository.ratingSummaries(for: .init(placeID: "11111111-1111-4111-8111-111111111111"))
+            XCTFail("Missing global data must not fall back to Friends")
+        } catch { }
+    }
+
     func testRepeatWannaUsesOwnerRPCAndDecodesHistorySnapshots() async throws {
         let rpc = RecordingRPC()
         let response = """
@@ -911,6 +943,47 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testProtectedUploadsDisableHTTPCachingAcrossRetries() async throws {
+        let bytes = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        FeedRPCURLProtocol.reset(responses:
+            [(401, Data())] + Array(repeating: (200, Data()), count: 6)
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: configuration)
+        )
+        do {
+            try await client.uploadObject(
+                bucket: "visit-photos", path: "fixture/photo.jpg", data: bytes,
+                contentType: "image/jpeg", upsert: true
+            )
+            XCTFail("An unauthorized upload must be reported to the caller")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+        // The store retries failed uploads explicitly. The rebuilt request must
+        // keep the cache policy, including after a failed first attempt.
+        for bucket in ["visit-photos", "share-card-previews", "list-snapshots",
+                       "feedback-attachments", "profile-avatars", "place-plan-previews"] {
+            try await client.uploadObject(
+                bucket: bucket, path: "fixture/photo.jpg", data: bytes,
+                contentType: "image/jpeg", upsert: true
+            )
+        }
+        XCTAssertEqual(FeedRPCURLProtocol.cacheControlHeaders,
+                       Array(repeating: "no-store", count: 5) + ["max-age=3600", "max-age=3600"])
+        XCTAssertEqual(FeedRPCURLProtocol.requestBodies, Array(repeating: bytes, count: 7))
+    }
+
     func testProtectedPhotoDownloadRefreshesTheClerkTokenOnceAfterUnauthorizedResponse() async throws {
         let expectedData = Data([0xFF, 0xD8, 0xFF, 0xD9])
         FeedRPCURLProtocol.reset(
@@ -1365,7 +1438,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 50)
     }
 
-    func testFollowedFeedHydratesAndSignsActivityMedia() async throws {
+    func testFollowedFeedHydratesProtectedObjectReferencesWithoutSigning() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
         let activityID = "40000000-0000-0000-0000-000000000386"
@@ -1412,10 +1485,9 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
         XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
         XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
-        XCTAssertEqual(
-            storage.signedURLs,
-            [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
-        )
+        XCTAssertTrue(storage.signedURLs.isEmpty)
+        XCTAssertEqual(page.activity.first?.media.first?.storagePath, "user_ryan/visit_dudley/photo.jpg")
+        XCTAssertNil(page.activity.first?.media.first?.urlString)
     }
 
     func testPerformanceFeedFirstContentPrecedesSlowMedia() async throws {
@@ -1485,10 +1557,9 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
         XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
         XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
-        XCTAssertEqual(
-            storage.signedURLs,
-            [.init(bucket: "visit-photos", path: "user_ryan/visit_dudley/photo.jpg")]
-        )
+        XCTAssertTrue(storage.signedURLs.isEmpty)
+        XCTAssertEqual(page.activity.first?.media.first?.storagePath, "user_ryan/visit_dudley/photo.jpg")
+        XCTAssertNil(page.activity.first?.media.first?.urlString)
     }
 
     func testFeedKeepsNeutralArtworkWhenMediaLookupFails() async throws {
@@ -1528,7 +1599,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(page.activity[0].media[0].urlString)
     }
 
-    func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
+    func testActivityDetailCarriesPrivateActivityMediaPathsWithoutSigning() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
         rpc.responses["activity_detail"] = """
@@ -1571,10 +1642,9 @@ final class RemoteRepositoryTests: XCTestCase {
         let activity = try await repository.activity(id: "event_with_photo")
 
         XCTAssertEqual(activity.media.first?.id, "photo_1")
-        XCTAssertEqual(
-            storage.signedURLs,
-            [.init(bucket: "visit-photos", path: "user_joe/visit_1/photo_1.jpg")]
-        )
+        XCTAssertTrue(storage.signedURLs.isEmpty)
+        XCTAssertEqual(activity.media.first?.storagePath, "user_joe/visit_1/photo_1.jpg")
+        XCTAssertNil(activity.media.first?.urlString)
     }
 
     func testCommentLikeUsesSeparateRPCWithDesiredStateAndNoActorParameter() async throws {
@@ -2220,7 +2290,7 @@ final class RemoteRepositoryTests: XCTestCase {
         let repository = SupabaseVisitRepository(table: table, storage: storage, rpc: RecordingRPC())
         let data = Data([0x01, 0x02, 0x03])
 
-        let url = try await repository.uploadPhotoData(
+        try await repository.uploadPhotoData(
             bucket: "visit-photos",
             path: "user_123/visit_123/photo_123.jpg",
             data: data,
@@ -2232,10 +2302,6 @@ final class RemoteRepositoryTests: XCTestCase {
             path: "user_123/visit_123/photo_123.jpg"
         )
 
-        XCTAssertEqual(
-            url.absoluteString,
-            "https://example.supabase.co/storage/v1/object/sign/visit-photos/user_123/visit_123/photo_123.jpg?token=test"
-        )
         XCTAssertEqual(
             storage.uploads,
             [
@@ -2253,7 +2319,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(table.calls[0].queryItems, [URLQueryItem(name: "id", value: "eq.photo_123")])
     }
 
-    func testVisitRepositoryLoadsOnlyVisibleUploadedPhotosAndIsolatesSigningFailures() async throws {
+    func testVisitRepositoryLoadsOnlyVisibleUploadedPhotoReferencesWithoutSigning() async throws {
         let table = RecordingTable()
         let storage = RecordingStorage()
         storage.signedURLFailurePaths = ["user_ryan/visit_386/missing.jpg"]
@@ -2292,7 +2358,9 @@ final class RemoteRepositoryTests: XCTestCase {
         let photos = try await repository.visibleUploadedPhotos(for: "visit_386")
 
         XCTAssertEqual(photos.map(\.photoID), ["photo_visible", "photo_missing"])
-        XCTAssertNotNil(photos[0].remoteURLString)
+        XCTAssertNil(photos[0].remoteURLString)
+        XCTAssertTrue(storage.signedURLs.isEmpty)
+        XCTAssertEqual(photos[0].storagePath, "user_ryan/visit_386/visible.jpg")
         XCTAssertNil(photos[1].remoteURLString)
         XCTAssertEqual(
             table.calls[0].queryItems.first { $0.name == "upload_state" }?.value,
@@ -5259,6 +5327,12 @@ private final class FeedRPCURLProtocol: URLProtocol {
         lock.lock()
         defer { lock.unlock() }
         return requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
+    }
+
+    static var cacheControlHeaders: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap { $0.value(forHTTPHeaderField: "Cache-Control") }
     }
 
     static var requestPaths: [String] {

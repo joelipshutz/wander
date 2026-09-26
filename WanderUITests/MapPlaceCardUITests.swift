@@ -2,6 +2,57 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
+            "-WanderMapPlace", "Featured Coffee QA", "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
+        for (title, subtitle) in [
+            ("Your rating", "No rating yet"),
+            ("Friends rating", "No visible ratings yet"),
+            ("Astir rating", "No ratings yet")
+        ] {
+            let metric = app.descendants(matching: .any).matching(
+                NSPredicate(format: "label == %@", title + ", —/5, " + subtitle)
+            ).firstMatch
+            XCTAssertTrue(metric.waitForExistence(timeout: 5), "Missing empty \(title)")
+        }
+        XCTAssertFalse(app.staticTexts["Fit score"].exists)
+        capture("REC590 unrated place keeps Your Friends Astir")
+    }
+
+    func testPrivacyRatingsRemainReadableAtAccessibilityTextSize() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
+            "-WanderMapPlace", "Featured Coffee QA", "-WanderMapSheetExpanded",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
+        for (title, subtitle) in [
+            ("Your rating", "No rating yet"),
+            ("Friends rating", "No visible ratings yet"),
+            ("Astir rating", "No ratings yet")
+        ] {
+            let label = app.staticTexts[title].firstMatch
+            let detail = app.staticTexts[subtitle].firstMatch
+            XCTAssertTrue(label.waitForExistence(timeout: 5))
+            for _ in 0..<5 where !label.isHittable || !detail.isHittable { app.swipeUp() }
+            XCTAssertTrue(label.isHittable, "Cannot reach \(title) at accessibility text size")
+            XCTAssertTrue(detail.isHittable, "Cannot read \(subtitle) at accessibility text size")
+            capture("REC590 accessibility \(title)")
+        }
+        XCTAssertFalse(app.staticTexts["Fit score"].exists)
+    }
+
     func testFeaturedRingAndTemporaryRatingPresentation() {
         for rated in [false, true] {
             let app = XCUIApplication()

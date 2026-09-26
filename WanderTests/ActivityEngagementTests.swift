@@ -6,72 +6,19 @@ import XCTest
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
-    func testPostcardPhotoIsDecodedToDisplaySizeAndReused() async throws {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let data = try XCTUnwrap(UIGraphicsImageRenderer(
-            size: CGSize(width: 4032, height: 3024), format: format
-        ).image { context in
-            UIColor.systemTeal.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 4032, height: 3024))
-        }.jpegData(compressionQuality: 0.9))
-        let localRef = try XCTUnwrap(VisitPhotoLocalFileStore.save(
-            data: data, id: UUID(), contentType: "image/jpeg"
-        ))
-        let url = try XCTUnwrap(VisitPhotoLocalFileStore.fileURL(from: localRef))
-        defer { try? FileManager.default.removeItem(at: url) }
-        let media = ActivityEngagementMedia(id: "large-local-photo", localAssetRef: localRef, accessibilityLabel: "Test photo")
-        let request = try XCTUnwrap(ActivityPostcardImageRequest(
-            media: media, size: CGSize(width: 370, height: 154), displayScale: 3
-        ))
-        let pipeline = WanderAvatarImagePipeline()
-        let firstResult = await ActivityPostcardImages.image(for: request, using: pipeline)
-        let first = try XCTUnwrap(firstResult)
-        let secondResult = await ActivityPostcardImages.image(for: request, using: pipeline)
-        let second = try XCTUnwrap(secondResult)
-        XCTAssertEqual(first.pixelSize, CGSize(width: 1152, height: 864))
-        XCTAssertLessThan(first.estimatedByteCost, 4 * 1_024 * 1_024)
-        XCTAssertTrue(first === second, "Reappearing cards must reuse their decoded image")
-        let original = try XCTUnwrap(VisitPhotoLocalFileStore.image(from: localRef)?.cgImage)
-        XCTAssertLessThan(first.estimatedByteCost, original.bytesPerRow * original.height / 8)
+    func testPostcardUploadedMediaUsesProtectedStorageIdentityEvenWithLegacyURL() {
+        let media = ActivityEngagementMedia(id: "photo", urlString: "https://example.com/old-signed.jpg",
+            localAssetRef: "local_file:old.jpg", storageBucket: "visit-photos",
+            storagePath: "owner/place/visit/photo.jpg", accessibilityLabel: "Photo")
+        XCTAssertTrue(media.placePhoto.requiresAccessCheck)
+        XCTAssertEqual(media.placePhoto.storagePath, "owner/place/visit/photo.jpg")
     }
 
-    func testPostcardRemotePhotoLoadsOffMainAndFallsBackFromMissingLocalFile() async throws {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let data = try XCTUnwrap(UIGraphicsImageRenderer(
-            size: CGSize(width: 64, height: 64), format: format
-        ).image { context in
-            UIColor.systemBlue.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
-        }.jpegData(compressionQuality: 0.9))
-        let remoteURL = URL(string: "https://example.com/authorized-activity-photo.jpg")!
-        let pipeline = WanderAvatarImagePipeline(dataLoader: { url in
-            XCTAssertFalse(Thread.isMainThread, "Image bytes and decoding must stay off the UI thread")
-            XCTAssertEqual(url, remoteURL)
-            return data
-        })
-        let request = try XCTUnwrap(ActivityPostcardImageRequest(
-            media: ActivityEngagementMedia(id: "fallback", urlString: remoteURL.absoluteString,
-                localAssetRef: "local_file:missing-\(UUID()).jpg", accessibilityLabel: "Test photo"),
-            size: CGSize(width: 370, height: 154), displayScale: 3
-        ))
-        let result = await ActivityPostcardImages.image(for: request, using: pipeline)
-        XCTAssertNotNil(result)
-    }
-
-    func testPostcardImageRequestPreservesSourceChangesAndBoundsDecodeSize() throws {
-        let media = ActivityEngagementMedia(id: "photo", urlString: "https://example.com/first.jpg", accessibilityLabel: "Photo")
-        let request = try XCTUnwrap(ActivityPostcardImageRequest(media: media, size: CGSize(width: 370, height: 154), displayScale: 3))
-        XCTAssertEqual(request.sources.first?.targetPixelSize, 1152)
-        XCTAssertEqual(request, ActivityPostcardImageRequest(media: media, size: CGSize(width: 370.1, height: 154), displayScale: 3))
-        let huge = try XCTUnwrap(ActivityPostcardImageRequest(media: media, size: CGSize(width: 10_000, height: 154), displayScale: 3))
-        XCTAssertEqual(huge.sources.first?.targetPixelSize, 2048)
-        let changed = ActivityEngagementMedia(id: "photo", urlString: "https://example.com/replaced.jpg", accessibilityLabel: "Photo")
-        XCTAssertNotEqual(request, ActivityPostcardImageRequest(media: changed, size: CGSize(width: 370, height: 154), displayScale: 3))
-        XCTAssertNil(ActivityPostcardImageRequest(media: media, size: .zero, displayScale: 3))
-        XCTAssertNil(ActivityPostcardImageRequest(media: media, size: CGSize(width: CGFloat.infinity, height: 154), displayScale: 3))
-        XCTAssertNil(ActivityPostcardImageRequest(media: ActivityEngagementMedia(id: "pending", accessibilityLabel: "Loading"), size: CGSize(width: 370, height: 154), displayScale: 3))
+    func testPostcardPendingOwnerCaptureRemainsAvailableOffline() {
+        let media = ActivityEngagementMedia(id: "photo", localAssetRef: "local_file:pending.jpg",
+            storageBucket: "visit-photos", storagePath: "owner/visit/pending.jpg",
+            isPendingLocalCapture: true, accessibilityLabel: "Photo")
+        XCTAssertFalse(media.placePhoto.requiresAccessCheck)
     }
 
     func testPostcardArtworkWaitsForVerifiedActivityMedia() {
@@ -1129,6 +1076,50 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [own.id])
     }
 
+    func testExactActivityAllowsOfflineCacheButNeverResurrectsAfterDenial() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [
+            .success(activity), .failure(URLError(.notConnectedToInternet)),
+            .failure(WanderRemoteError.invalidResponse("activity_not_visible")),
+            .failure(URLError(.notConnectedToInternet))
+        ])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let initial = await store.activity(id: activity.id, backend: backend)
+        XCTAssertNotNil(initial)
+        let offline = await store.activity(id: activity.id, backend: backend)
+        XCTAssertEqual(offline?.id, activity.id)
+        let denied = await store.activity(id: activity.id, backend: backend)
+        XCTAssertNil(denied)
+        let offlineAfterDenial = await store.activity(id: activity.id, backend: backend)
+        XCTAssertNil(offlineAfterDenial)
+    }
+
+    func testCachedCheckInLinkUsesOnlyItsPreviouslyResolvedVisitWhileOffline() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        let parent = UUID().uuidString, visit = UUID().uuidString
+        let repository = ActivityEngagementRepositoryStub(placeMatches: [
+            PlaceActivityEngagementMatch(activityID: activity.id, userPlaceID: parent, visitID: visit,
+                kind: .placeBeen, occurredAt: .now, engagement: .empty(activityID: activity.id))
+        ], activityResponses: [.success(activity), .failure(URLError(.notConnectedToInternet))])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let target = ActivityCheckInTarget(userPlaceID: parent, visitID: visit)
+        let initial = await store.activity(checkIn: target, backend: backend)
+        XCTAssertEqual(initial?.id, activity.id)
+        repository.placeError = URLError(.notConnectedToInternet)
+        let offline = await store.activity(checkIn: target, backend: backend)
+        XCTAssertEqual(offline?.id, activity.id)
+        let otherVisit = await store.activity(checkIn: .init(userPlaceID: parent, visitID: UUID().uuidString), backend: backend)
+        XCTAssertNil(otherVisit)
+        repository.placeError = WanderRemoteError.notAuthenticated
+        let denied = await store.activity(checkIn: target, backend: backend)
+        XCTAssertNil(denied)
+        repository.placeError = URLError(.notConnectedToInternet)
+        let reopened = await store.activity(checkIn: target, backend: backend)
+        XCTAssertNil(reopened)
+    }
+
     func testExactActivityFailureEvictsPreviouslyVisibleTicketAndAllowsRetry() async {
         let store = WanderStore(fixtures: .empty())
         let activity = privacyActivity(ownerID: "friend", visibility: .followers)
@@ -1663,6 +1654,7 @@ private enum ActivityEngagementTestError: Error {
 @MainActor
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
+    var placeError: Error?
     var placeFailuresRemaining = 0
     var suspendPlaceRequests = false
     private(set) var placeRequests: [[String]] = []
@@ -1742,6 +1734,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
         placeRequests.append(userPlaceIDs)
         while suspendPlaceRequests { await Task.yield() }
+        if let placeError { throw placeError }
         if placeFailuresRemaining > 0 {
             placeFailuresRemaining -= 1
             throw ActivityEngagementTestError.expected

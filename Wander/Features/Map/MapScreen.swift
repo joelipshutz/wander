@@ -17822,9 +17822,7 @@ struct PlaceSheet: View {
                 actionButton(size: 46, iconSize: 21)
             }
 
-            if hasRatings {
-                PlaceProfileRatingStrip(presentation: presentation, compact: true)
-            }
+            PlaceProfileRatingStrip(presentation: presentation, place: place, compact: true)
 
             if !presentation.commonTags.isEmpty {
                 PlaceCommonTagScroller(tags: presentation.commonTags)
@@ -17839,9 +17837,7 @@ struct PlaceSheet: View {
     private var expandedContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             expandedHeader
-            if hasRatings {
-                PlaceProfileRatingStrip(presentation: presentation, compact: false)
-            }
+            PlaceProfileRatingStrip(presentation: presentation, place: place, compact: false)
             if !presentation.commonTags.isEmpty {
                 PlaceCommonTagScroller(tags: presentation.commonTags)
             }
@@ -17973,10 +17969,6 @@ struct PlaceSheet: View {
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
         )
-    }
-
-    private var hasRatings: Bool {
-        !saves.isEmpty || presentation.fitRating != nil || presentation.overallRating != nil || presentation.ownRating != nil
     }
 
     private var whyItFitsSection: some View {
@@ -18176,11 +18168,13 @@ private struct PlaceFact: Identifiable {
 
 private struct PlaceProfileRatingStrip: View {
     let presentation: PlaceProfilePresentation
+    let place: PlaceSheetPlace
     let compact: Bool
 
     var body: some View {
         PlaceProfileRatingsRail(
             presentation: presentation,
+            place: place,
             compact: compact
         )
     }
@@ -18372,8 +18366,6 @@ struct PlaceActivityPhoto: Identifiable {
     let entryID: String
 
     var id: String { metadata.id }
-    var localImage: UIImage? { VisitPhotoLocalFileStore.image(from: metadata.localAssetRef) }
-    var remoteURL: URL? { metadata.remoteURLString.flatMap { URL(string: $0) } }
     var uploadState: VisitPhotoUploadState { metadata.uploadState }
 }
 
@@ -18403,6 +18395,7 @@ extension EnvironmentValues {
 }
 
 struct PlaceActivitySection: View {
+    @Environment(\.scenePhase) private var historyScenePhase
     @Environment(\.presentPlaceActivityEdit) private var presentPlaceActivityEdit
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -18412,6 +18405,8 @@ struct PlaceActivitySection: View {
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     var refreshesRemoteHistory = true
+    @State private var checkedHistoryKey: String?
+    @State private var checkedHistorySummaries: [PlaceSaveSummary] = []
     @State private var filter: PlaceActivityFilter = .all
     @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
     @State private var editFlow: MapPlaceSaveContext?
@@ -18484,12 +18479,22 @@ struct PlaceActivitySection: View {
             guard auth.isSignedIn else { return }
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
-        .task(id: remoteActivityUserPlaceIDs) {
-            guard refreshesRemoteHistory, auth.isSignedIn else { return }
-            await store.refreshRemotePlaceActivity(
-                userPlaceIDs: remoteActivityUserPlaceIDs,
-                backend: backend
-            )
+        .task(id: historyAccessKey) {
+            guard historyScenePhase == .active else { return }
+            let key = historyAccessKey
+            checkedHistoryKey = nil
+            let checked = await store.recheckCachedPlaceHistory(saves, backend: auth.isSignedIn ? backend : nil)
+            guard !Task.isCancelled, key == historyAccessKey else { return }
+            if refreshesRemoteHistory, auth.isSignedIn {
+                await store.refreshRemotePlaceActivity(userPlaceIDs: checked.map { $0.visiblePlace.userPlace.serverID ?? $0.id }, backend: backend)
+            }
+            guard !Task.isCancelled, key == historyAccessKey else { return }
+            checkedHistorySummaries = checked
+            checkedHistoryKey = key
+        }
+        .onDisappear {
+            checkedHistoryKey = nil
+            checkedHistorySummaries = []
         }
         .task(id: engagementUserPlaceIDs) {
             guard auth.isSignedIn else { return }
@@ -18500,8 +18505,19 @@ struct PlaceActivitySection: View {
         }
     }
 
+    private var historyAccessKey: String {
+        "\(store.currentUser.id):\(auth.isSignedIn):\(historyScenePhase):\(remoteActivityUserPlaceIDs.joined(separator: ","))"
+    }
+
+    private var readableSummaries: [PlaceSaveSummary] {
+        let local = saves.filter { $0.visiblePlace.userPlace.userID == store.currentUser.id
+            || UUID(uuidString: $0.visiblePlace.userPlace.serverID ?? $0.id) == nil }
+        guard checkedHistoryKey == historyAccessKey else { return local }
+        return local + checkedHistorySummaries.filter { checked in !local.contains { $0.id == checked.id } }
+    }
+
     private var entries: [PlaceActivityEntry] {
-        saves
+        readableSummaries
             .filter { !$0.visiblePlace.isCommunityAggregate }
             .flatMap { summary -> [PlaceActivityEntry] in
                 let userPlace = summary.visiblePlace.userPlace
@@ -18510,6 +18526,10 @@ struct PlaceActivitySection: View {
                     PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant,
                                        currentUserID: currentUserID, wanna: $0)
                 }
+
+                if userPlace.userID != currentUserID,
+                   UUID(uuidString: userPlace.serverID ?? userPlace.id) != nil,
+                   visits.isEmpty, wannaEntries.isEmpty { return [] }
 
                 if userPlace.status == .been {
                     var entries = visits.map { visit in
@@ -18994,6 +19014,9 @@ private struct PlaceActivityCard: View {
                     id: $0.id,
                     urlString: $0.metadata.remoteURLString,
                     localAssetRef: $0.metadata.localAssetRef,
+                    storageBucket: $0.metadata.storageBucket,
+                    storagePath: $0.metadata.storagePath,
+                    isPendingLocalCapture: !PlacePhoto(localVisitPhoto: $0.metadata).requiresAccessCheck,
                     accessibilityLabel: "Photo from \(entry.displayName)'s activity at \(visiblePlace.place.canonicalName)"
                 )
             }
@@ -19236,28 +19259,10 @@ private struct VisitPhotoThumbnail: View {
 
     var body: some View {
         ZStack {
-            if let image = photo.localImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if let remoteURL = photo.remoteURL {
-                AsyncImage(url: remoteURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholder(systemImage: "exclamationmark.triangle.fill")
-                    case .empty:
-                        placeholder(systemImage: "arrow.triangle.2.circlepath")
-                    @unknown default:
-                        placeholder(systemImage: "photo")
-                    }
-                }
-            } else {
-                placeholder(systemImage: photo.uploadState == .failed ? "exclamationmark.triangle.fill" : "photo")
-            }
+            PlaceProfilePhotoImage(
+                photo: PlacePhoto(localVisitPhoto: photo.metadata),
+                canonicalPlaceKey: "visit-photo:\(photo.id)", placeName: "Visit photo", variant: .listThumbnail
+            )
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
@@ -19419,42 +19424,11 @@ private struct VisitPhotoFullScreenImage: View {
     let photo: PlaceActivityPhoto
 
     var body: some View {
-        if let image = photo.localImage {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-        } else if let remoteURL = photo.remoteURL {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure:
-                    fullScreenPlaceholder(systemImage: "exclamationmark.triangle.fill", title: "Photo unavailable")
-                case .empty:
-                    fullScreenPlaceholder(systemImage: "arrow.triangle.2.circlepath", title: "Loading photo")
-                @unknown default:
-                    fullScreenPlaceholder(systemImage: "photo", title: "Photo")
-                }
-            }
-        } else {
-            fullScreenPlaceholder(
-                systemImage: photo.uploadState == .failed ? "exclamationmark.triangle.fill" : "photo",
-                title: photo.uploadState == .failed ? "Upload failed" : "Waiting to upload"
-            )
-        }
-    }
-
-    private func fullScreenPlaceholder(systemImage: String, title: String) -> some View {
-        VStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: systemImage)
-                .font(.system(size: 34, weight: .black))
-            Text(title)
-                .font(AstirTypography.control)
-        }
-        .foregroundStyle(.white.opacity(0.76))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        PlaceProfilePhotoImage(
+            photo: PlacePhoto(localVisitPhoto: photo.metadata),
+            canonicalPlaceKey: "visit-photo:\(photo.id)", placeName: "Visit photo",
+            variant: .fullscreen, contentMode: .fit
+        )
     }
 }
 

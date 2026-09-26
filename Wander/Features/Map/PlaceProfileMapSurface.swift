@@ -806,6 +806,7 @@ private struct PlaceProfilePreviewCard: View {
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
     let onReady: () -> Void
+    @Environment(\.scenePhase) private var previewScenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @State private var photo: PlacePhoto? = nil
@@ -1282,11 +1283,14 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var photoResolutionKey: String {
-        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
+        "\(place.photoLookupKey)|\(localPhoto?.cacheKey ?? "none")|\(currentUserID)|\(previewScenePhase)"
     }
 
     private func resolvePhoto() async {
         let resolutionKey = photoResolutionKey
+        preparedImage = nil
+        preparedImageKey = nil
+        guard previewScenePhase == .active else { return }
         let localPhoto = localPhoto
         guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
 
@@ -1378,7 +1382,7 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private func preparedImage(for photo: PlacePhoto) async -> UIImage? {
-        if let cached = PlacePhotoImagePipeline.shared.cachedImage(
+        if !photo.requiresAccessCheck, let cached = PlacePhotoImagePipeline.shared.cachedImage(
             canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
             photoKey: photo.cacheKey,
             targetPixelSize: targetPixelSize
@@ -1387,7 +1391,7 @@ private struct PlaceProfilePreviewCard: View {
         }
 
         let data: Data?
-        if let localAssetRef = photo.localAssetRef,
+        if !photo.requiresAccessCheck, let localAssetRef = photo.localAssetRef,
            let localData = await Task.detached(priority: .utility, operation: {
                VisitPhotoLocalFileStore.data(from: localAssetRef)
            }).value {
@@ -1417,7 +1421,7 @@ private struct PlaceProfilePreviewCard: View {
         let candidate = place.isDroppedPin
             ? localPhoto
             : backend.cachedPlacePhoto(for: place.photoRequest.rendering(.card))
-        guard let candidate,
+        guard let candidate, !candidate.requiresAccessCheck,
               let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
                   canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                   photoKey: candidate.cacheKey,
@@ -2078,15 +2082,8 @@ private struct PlaceProfileFullView: View {
         }
     }
 
-    @ViewBuilder
     private var ratingSection: some View {
-        if hasRatingSection {
-            PlaceProfileRatingsRail(presentation: presentation)
-        } else {
-            PlaceProfileSubtleCard(
-                text: "Add your rating and tags when this place belongs on your map."
-            )
-        }
+        PlaceProfileRatingsRail(presentation: presentation, place: place)
     }
 
     @ViewBuilder
@@ -2202,10 +2199,6 @@ private struct PlaceProfileFullView: View {
 
     private var displayTags: [String] {
         PlaceProfileCopy.displayTags(presentation: presentation)
-    }
-
-    private var hasRatingSection: Bool {
-        !saves.isEmpty || presentation.fitRating != nil || displayRating != nil
     }
 
     private var actionItems: [PlaceExternalAction] {
@@ -3267,6 +3260,7 @@ struct PlaceProfilePhotoImage: View {
     var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.scenePhase) private var photoScenePhase
     @State private var loadedImage: PlaceProfileLoadedImage?
 
     var body: some View {
@@ -3277,11 +3271,11 @@ struct PlaceProfilePhotoImage: View {
             )
             let currentRenderKey = renderKey(targetPixelSize: targetPixelSize)
             let stateImage = loadedImage?.key == currentRenderKey ? loadedImage?.image : nil
-            let displayedImage = stateImage ?? PlacePhotoImagePipeline.shared.cachedImage(
+            let displayedImage = stateImage ?? (photo.requiresAccessCheck ? nil : PlacePhotoImagePipeline.shared.cachedImage(
                 canonicalPlaceKey: canonicalPlaceKey,
                 photoKey: photo.cacheKey,
                 targetPixelSize: targetPixelSize
-            )?.image
+            )?.image)
             ZStack {
                 Color.clear
 
@@ -3303,10 +3297,13 @@ struct PlaceProfilePhotoImage: View {
             }
         }
         .clipped()
+        .onDisappear {
+            if photo.requiresAccessCheck { loadedImage = nil }
+        }
     }
 
     private func loadImage(targetPixelSize: Int, renderKey: String) async {
-        if let cachedImage = PlacePhotoImagePipeline.shared.cachedImage(
+        if !photo.requiresAccessCheck, let cachedImage = PlacePhotoImagePipeline.shared.cachedImage(
             canonicalPlaceKey: canonicalPlaceKey,
             photoKey: photo.cacheKey,
             targetPixelSize: targetPixelSize
@@ -3316,6 +3313,7 @@ struct PlaceProfilePhotoImage: View {
         }
 
         loadedImage = nil
+        guard !photo.requiresAccessCheck || photoScenePhase == .active else { return }
         let deliveryPhoto: PlacePhoto
         if photo.isGooglePlacesPhoto, let photoRequest {
             deliveryPhoto = (try? await backend.placePhoto(
@@ -3326,7 +3324,7 @@ struct PlaceProfilePhotoImage: View {
         }
 
         let data: Data?
-        if let localAssetRef = deliveryPhoto.localAssetRef,
+        if !deliveryPhoto.requiresAccessCheck, let localAssetRef = deliveryPhoto.localAssetRef,
            let localData = await Task.detached(priority: .utility, operation: {
                VisitPhotoLocalFileStore.data(from: localAssetRef)
            }).value {
@@ -3361,7 +3359,7 @@ struct PlaceProfilePhotoImage: View {
     }
 
     private func renderKey(targetPixelSize: Int) -> String {
-        "\(canonicalPlaceKey)|\(photo.cacheKey)|\(variant.rawValue)|target-px:\(targetPixelSize)"
+        "\(canonicalPlaceKey)|\(photo.cacheKey)|\(variant.rawValue)|target-px:\(targetPixelSize)|\(backend.photoViewerID ?? "local")|\(backend.photoSessionRevision):\(backend.photoAccessRevision)|\(photoScenePhase)"
     }
 
 }

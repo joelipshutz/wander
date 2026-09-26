@@ -17,6 +17,9 @@ declare
   result jsonb;
   i integer;
 begin
+  if (select public from storage.buckets where id = 'share-card-previews') then
+    raise exception 'legacy share artwork remains publicly downloadable';
+  end if;
   if not (select relrowsecurity from pg_class where oid = 'public.share_card_previews'::regclass)
     or has_table_privilege('authenticated', 'public.share_card_previews', 'select')
     or has_table_privilege('anon', 'public.share_card_previews', 'select') then
@@ -51,6 +54,7 @@ begin
   for i in 1..5 loop
     image_path := owner_id || '/' || gen_random_uuid()::text || '/preview.png';
     set local role authenticated;
+    -- Old clients may still upload; private artwork must never reach the preview.
     insert into storage.objects(bucket_id,name) values('share-card-previews',image_path);
     card_token := public.create_share_card_preview(kinds[i],identifiers[i],image_path,'Approved smoke card')->>'token';
     if card_token !~ '^[a-f0-9]{48}$' then raise exception 'invalid card token'; end if;
@@ -60,8 +64,7 @@ begin
     perform set_config('request.jwt.claims','{"role":"anon"}',true);
     set local role anon;
     result := public.share_card_preview(card_token,kinds[i],identifiers[i]);
-    if result->>'image_path' is distinct from image_path or result->>'title' is distinct from 'Approved smoke card'
-      or (select count(*) from jsonb_object_keys(result)) <> 2
+    if result is distinct from '{"preview_mode":"generic"}'::jsonb
       or result::text like '%NEVER PUBLISH%' then raise exception 'card payload leaked or changed'; end if;
     if public.share_card_preview(card_token,kinds[i],'wrong-route') is not null
       or public.share_card_preview(card_token,'other-kind',identifiers[i]) is not null
@@ -92,12 +95,9 @@ begin
     insert into storage.objects(bucket_id,name) values('share-card-previews',owner_id || '/' || gen_random_uuid()::text || '/preview.png');
     raise exception 'foreign folder accepted';
   exception when insufficient_privilege then null; end;
-  begin
-    perform public.create_share_card_preview('profile',stranger_id,image_path,'Forbidden');
-    raise exception 'foreign artwork accepted';
-  exception when raise_exception then
-    if sqlerrm <> 'share_artwork_unavailable' then raise; end if;
-  end;
+  -- Legacy callers may send artwork/title, but neither is retained or returned.
+  result := public.create_share_card_preview('profile',stranger_id,image_path,'PRIVATE TITLE');
+  if result->>'token' is null then raise exception 'legacy publisher compatibility failed'; end if;
   reset role;
   update public.place_list_invites set revoked_at = now() where token_hash = encode(extensions.digest(invite_token,'sha256'),'hex');
   set local role anon;

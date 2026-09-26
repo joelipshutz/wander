@@ -1,5 +1,7 @@
 import {
   classifyAPNsFailure,
+  INTERNAL_ANALYTICS_USER_IDS,
+  NOTIFICATION_ANALYTICS_AUDIENCE,
   notificationDeliveryAnalyticsEvent,
   notificationFrequencyAnalyticsEvents,
   PushEvent,
@@ -145,14 +147,14 @@ Deno.test("delivery analytics exports coarse outcomes without recipient or notif
     },
   );
 
-  assertEquals(analyticsEvent.event, "notification_delivery_processed");
+  assertEquals(analyticsEvent!.event, "notification_delivery_processed");
   assertEquals(
-    analyticsEvent.properties.distinct_id,
+    analyticsEvent!.properties.distinct_id,
     "notification_operations",
   );
-  assertEquals(analyticsEvent.properties.delivery_outcome, "sent");
-  assertEquals(analyticsEvent.properties.failure_category, "permanent_token");
-  assertEquals(analyticsEvent.properties.accepted_token_count, 1);
+  assertEquals(analyticsEvent!.properties.delivery_outcome, "sent");
+  assertEquals(analyticsEvent!.properties.failure_category, "permanent_token");
+  assertEquals(analyticsEvent!.properties.accepted_token_count, 1);
   const serialized = JSON.stringify(analyticsEvent);
   for (
     const privateValue of [
@@ -186,7 +188,7 @@ Deno.test("delivery analytics replaces unexpected notification types", () => {
     { status: "failed", permanent_event_failure_count: 1 },
   );
 
-  assertEquals(analyticsEvent.properties.notification_type, "unknown");
+  assertEquals(analyticsEvent!.properties.notification_type, "unknown");
 });
 
 Deno.test("delivery analytics allowlists every reservation and client reminder type", () => {
@@ -214,7 +216,7 @@ Deno.test("delivery analytics allowlists every reservation and client reminder t
     );
 
     assertEquals(
-      analyticsEvent.properties.notification_type,
+      analyticsEvent!.properties.notification_type,
       notificationType,
     );
   }
@@ -222,6 +224,7 @@ Deno.test("delivery analytics allowlists every reservation and client reminder t
 
 Deno.test("frequency analytics exposes summary and complete aggregate histogram only", () => {
   const events = notificationFrequencyAnalyticsEvents({
+    analytics_audience: NOTIFICATION_ANALYTICS_AUDIENCE,
     window_days: 30,
     eligible_recipient_count: 2,
     accepted_notification_count: 4,
@@ -251,4 +254,65 @@ Deno.test("frequency analytics exposes summary and complete aggregate histogram 
       "Frequency analytics must not contain recipient identifiers",
     );
   }
+});
+
+Deno.test("Joe and Ryan produce no recipient analytics; external recipients still count", () => {
+  const base: PushEvent = {
+    event_id: "fixture-event",
+    claim_token: "fixture-claim",
+    recipient_user_id: "external_fixture",
+    notification_type: "shared_visit",
+    title: "private",
+    body: "private",
+    data: {},
+    tokens: [],
+  };
+  for (const recipient_user_id of INTERNAL_ANALYTICS_USER_IDS) {
+    for (
+      const status of [
+        "sent",
+        "failed",
+        "pending",
+        "skipped",
+        "stale_claim",
+      ] as const
+    ) {
+      assertEquals(
+        notificationDeliveryAnalyticsEvent({ ...base, recipient_user_id }, {
+          status,
+        }),
+        null,
+      );
+    }
+  }
+  const external = notificationDeliveryAnalyticsEvent(base, {
+    status: "sent",
+    accepted_count: 1,
+  });
+  assertEquals(
+    external?.properties.analytics_audience,
+    NOTIFICATION_ANALYTICS_AUDIENCE,
+  );
+  assertEquals(external?.properties.accepted_token_count, 1);
+});
+
+Deno.test("old or unknown snapshot audiences cannot be mislabeled as staff-excluded", () => {
+  const snapshot = {
+    window_days: 30,
+    eligible_recipient_count: 2,
+    accepted_notification_count: 0,
+    average_per_recipient: 0,
+    p50_per_recipient: 0,
+    p90_per_recipient: 0,
+    max_per_recipient: 0,
+    histogram: [],
+  };
+  assertEquals(notificationFrequencyAnalyticsEvents(snapshot), []);
+  assertEquals(
+    notificationFrequencyAnalyticsEvents({
+      ...snapshot,
+      analytics_audience: "unknown",
+    }),
+    [],
+  );
 });
