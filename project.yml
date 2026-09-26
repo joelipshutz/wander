@@ -32,6 +32,17 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  Sender Silent Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderDisableWalkthroughs: true
+      environmentVariables:
+        WANDER_SENDER_REVIEW: gallery
   City and Phone Review:
     build:
       targets:

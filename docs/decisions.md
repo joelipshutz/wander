@@ -1,8 +1,29 @@
 # Decisions
 
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Sender silence and import announcements (REC-589)
+
+Silent controls automatic save announcements independently of audience and Feed
+visibility. Explicit invitations remain intentional communications. Imports
+default to Silent and ask for a native final-Save choice; one import has one
+lifetime announcement opportunity. A first three-place check-in can announce
+once as a group, and later selections never announce. Counts and names include
+only places each recipient may see, rechecked immediately before delivery.
+
+The first save attempt closes a durable visit manifest, including partial success
+or crash recovery. Later actions cannot expand it. Server finalization locks and
+seals an owner/import ledger even for silent or zero-recipient outcomes. Existing
+saved imports and background autosaves remain silent. See the
+[product specification and engineering plan](plans/rec589-sender-notifications.md).
+
+Grouped notification snapshots are not continuing visibility grants. Authenticated
+raw reads must match the entire currently visible group (names, count, place and
+deep link) through a recipient-bound restrictive policy. Partial or full access
+revocation hides stale snapshots immediately; delivery can refresh a remaining
+group. Already delivered operating-system notifications cannot be recalled.
 
 ## Onboarding home city and phone (REC-584)
 

@@ -40,6 +40,8 @@ struct DiscoverScreen: View {
     @State private var selectedPlace: SelectedDiscoverPlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
+    @State private var quickWannaPlace: VisiblePlace?
+    @State private var showsQuickWannaChoice = false
     @State private var listSelectionPlace: VisiblePlace?
     @State private var listPickerResult: MapPlaceListPickerResult?
     @State private var listMessage: String?
@@ -422,6 +424,13 @@ struct DiscoverScreen: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+            }
+            .confirmationDialog("Add to Wanna Go", isPresented: $showsQuickWannaChoice, titleVisibility: .visible) {
+                Button("Add to Wanna Go") { commitQuickWanna(silent: false) }
+                Button("Add silently") { commitQuickWanna(silent: true) }
+                Button("Cancel", role: .cancel) { quickWannaPlace = nil }
+            } message: {
+                Text("A silent save sends no notifications. People can still see it based on your visibility setting.")
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -1632,11 +1641,21 @@ struct DiscoverScreen: View {
 
     private func addDiscoverPlaceToWanna(_ visiblePlace: VisiblePlace) {
         auth.requireSignIn(for: .socialSave) {
+            quickWannaPlace = visiblePlace
+            showsQuickWannaChoice = true
+        }
+    }
+
+    private func commitQuickWanna(silent: Bool) {
+        guard let visiblePlace = quickWannaPlace else { return }
+        quickWannaPlace = nil
+        auth.requireSignIn(for: .socialSave) {
             Task { @MainActor in
                 guard currentUserSave(matching: visiblePlace) == nil else { return }
                 let result = await store.saveVisiblePlace(
                     visiblePlace,
                     status: .wannaGo,
+                    senderNotificationPolicy: SenderNotificationPolicy(silent: silent),
                     backend: auth.isSignedIn ? backend : nil
                 )
                 await refreshPlaces(query: placesQuery)

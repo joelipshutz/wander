@@ -88,7 +88,7 @@ async function main() {
       }
       if (options.migrationTest) {
         const testSQL = transactionBody(
-          loadStrictPgTapSQL(new URL(resolve(options.migrationTest), "file:")),
+          loadMigrationTestSQL(new URL(resolve(options.migrationTest), "file:")),
           "rollback",
         );
         const results = await client.query(testSQL);
@@ -211,6 +211,13 @@ async function main() {
         }
         console.log("ok - shared and one-sided place plans preserve visibility, blocks, and recipient-only inbox access");
         await client.query("reset role");
+        await client.query("savepoint sender_notifications_smoke");
+        try {
+          await client.query(transactionBody(readFileSync(new URL("../supabase/tests/sender_notification_controls.sql", import.meta.url), "utf8"), "rollback"));
+        } finally {
+          await client.query("rollback to savepoint sender_notifications_smoke");
+          await client.query("release savepoint sender_notifications_smoke");
+        }
         await client.query("savepoint repeat_wanna_smoke");
         try {
           await client.query(transactionBody(
@@ -1346,7 +1353,7 @@ function runLinkedSmokeChecks(
     .join("\n\n");
   const migrationPreviewTestSQL = migrationTestPath || migrationPreviewPaths.length > 0
     ? transactionBody(
-      loadStrictPgTapSQL(
+      loadMigrationTestSQL(
         migrationTestPath
           ? new URL(resolve(migrationTestPath), "file:")
           : new URL("../supabase/tests/wanna_go_reminders.sql", import.meta.url),
@@ -1464,6 +1471,14 @@ function runLinkedSmokeChecks(
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+function loadMigrationTestSQL(fileURL) {
+  // This suite raises SQL exceptions directly and does not require pgTAP.
+  if (fileURL.pathname.endsWith("/sender_notification_controls.sql")) {
+    return readFileSync(fileURL, "utf8");
+  }
+  return loadStrictPgTapSQL(fileURL);
 }
 
 function loadStrictPgTapSQL(fileURL) {
@@ -2733,6 +2748,10 @@ ${transactionBody(readFileSync(new URL("../supabase/tests/follow_notification_in
 rollback to savepoint follow_inbox_smoke;
 release savepoint follow_inbox_smoke;
 savepoint repeat_wanna_smoke;
+savepoint sender_notifications_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/sender_notification_controls.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint sender_notifications_smoke;
+release savepoint sender_notifications_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/repeat_wanna_saves.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint repeat_wanna_smoke;
 release savepoint repeat_wanna_smoke;

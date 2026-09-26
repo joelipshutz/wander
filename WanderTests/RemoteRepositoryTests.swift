@@ -2711,15 +2711,44 @@ final class RemoteRepositoryTests: XCTestCase {
 
     func testSocialSaveCallsExpectedRPC() async throws {
         let rpc = RecordingRPC()
-        rpc.responses["save_visible_place"] = #"{"user_place_id":"up_saved"}"#.data(using: .utf8)
+        rpc.responses["save_visible_place_with_sender_policy"] = #"{"user_place_id":"up_saved"}"#.data(using: .utf8)
         let repository = SupabaseUserPlaceRepository(rpc: rpc)
-
         let result = try await repository.saveVisiblePlace(placeID: "place_1", sourceUserPlaceID: "up_source")
-
         XCTAssertEqual(result, SaveResult(userPlaceID: "up_saved", syncState: .synced))
-        XCTAssertEqual(rpc.calls.map(\.name), ["save_visible_place"])
-        XCTAssertEqual(rpc.calls[0].body["input_place_id"] as? String, "place_1")
-        XCTAssertEqual(rpc.calls[0].body["input_source_user_place_id"] as? String, "up_source")
+        XCTAssertEqual(rpc.calls.map(\.name), ["save_visible_place_with_sender_policy"])
+        let payload = try XCTUnwrap(rpc.rawBodies[0]["input_payload"] as? [String: Any])
+        XCTAssertEqual(payload["input_place_id"] as? String, "place_1")
+        XCTAssertEqual(payload["input_source_user_place_id"] as? String, "up_source")
+        let policy = try XCTUnwrap(rpc.rawBodies[0]["input_policy"] as? [String: Any])
+        XCTAssertEqual(policy["silent"] as? Bool, false)
+    }
+
+    func testSilentSocialSaveNeverFallsBackAfterFailure() async throws {
+        let rpc = RecordingRPC()
+        rpc.errors = [URLError(.timedOut)]
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        do {
+            _ = try await repository.saveVisiblePlace(placeID: "place_1", sourceUserPlaceID: "up_source",
+                                                     senderNotificationPolicy: .silent)
+            XCTFail("Expected failure")
+        } catch { }
+        XCTAssertEqual(rpc.calls.map(\.name), ["save_visible_place_with_sender_policy"])
+        let policy = try XCTUnwrap(rpc.rawBodies[0]["input_policy"] as? [String: Any])
+        XCTAssertEqual(policy["silent"] as? Bool, true)
+    }
+
+    func testImportFinalizationSendsFrozenIdentityAndOnlySelectedVisitIDs() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["finalize_import_notification"] = Data("true".utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let commit = ImportNotificationCommit(id: "commit", ownerID: "owner", importID: "import", silent: true)
+        try await repository.finalizeImportNotification(commit, visitIDs: ["first", "second"])
+        XCTAssertEqual(rpc.calls.map(\.name), ["finalize_import_notification"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_import_id"] as? String, "import")
+        XCTAssertEqual(rpc.rawBodies[0]["input_commit_id"] as? String, "commit")
+        XCTAssertEqual(rpc.rawBodies[0]["input_silent"] as? Bool, true)
+        XCTAssertEqual(rpc.rawBodies[0]["input_visit_ids"] as? [String], ["first", "second"])
+        XCTAssertNil(rpc.rawBodies[0]["ownerID"])
     }
 
     func testOwnPlaceSaveCallsExpectedRPCWithPlaceAndAttributes() async throws {

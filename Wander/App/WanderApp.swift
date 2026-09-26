@@ -88,14 +88,14 @@ struct WanderApp: App {
     init() {
         let configuration = WanderBackendConfiguration.current()
         #if DEBUG
-        let usesNativeOnboardingReview = NativeOnboardingReviewRoute.resolved() != nil
+        let usesNativeReview = NativeOnboardingReviewRoute.resolved() != nil || SenderNotificationReviewRoute.resolved() != nil
         #else
-        let usesNativeOnboardingReview = false
+        let usesNativeReview = false
         #endif
         let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
         let forcedOnboardingStep = SimulatorTestSessionPolicy.forcedOnboardingStep()
         let analyticsClient: AnalyticsClient
-        if !usesNativeOnboardingReview, !usesSimulatorTestSession,
+        if !usesNativeReview, !usesSimulatorTestSession,
            let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
         } else {
@@ -117,7 +117,7 @@ struct WanderApp: App {
             wrappedValue: CalendarReservationManager(analytics: contextualAnalytics)
         )
         let authStore: AuthSessionStore
-        if usesNativeOnboardingReview {
+        if usesNativeReview {
             authStore = AuthSessionStore(
                 provider: PreviewAuthSessionProvider(state: .signedOut, canPresentNativeAuth: true),
                 analytics: contextualAnalytics
@@ -156,13 +156,13 @@ struct WanderApp: App {
         let simulatorContactDetails = SimulatorAccountContactDetailsRepository(details: fixtureMetro.map {
             AccountContactDetails(metroID: $0, homeCountryCode: HomeMetro.find($0)?.country, phoneCountryCode: "US", phoneE164: nil)
         })
-        if usesSimulatorTestSession || usesNativeOnboardingReview, let userID = authStore.state.session?.userID {
+        if usesSimulatorTestSession || usesNativeReview, let userID = authStore.state.session?.userID {
             HomeMetroSelectionStore().remember(fixtureMetro, for: userID)
         }
         let contactTestRepository = ContactDiscoveryUITestRepository.isActive ? ContactDiscoveryUITestRepository() : nil
         let testProfileRepository: (any ProfileRepository)? = contactTestRepository != nil
             ? contactTestRepository : (forcedOnboardingStep == .identity ? SimulatorOnboardingProfileRepository() : nil)
-        let backendStore = (usesSimulatorTestSession || usesNativeOnboardingReview)
+        let backendStore = (usesSimulatorTestSession || usesNativeReview)
             ? WanderBackend(
                 profileRepository: testProfileRepository,
                 contactDiscovery: contactTestRepository?.service(
@@ -185,7 +185,7 @@ struct WanderApp: App {
         #else
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         #endif
-        discoverParser = usesSimulatorTestSession
+        discoverParser = (usesSimulatorTestSession || usesNativeReview)
             ? DeterministicFilterParser()
             : Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
         _auth = StateObject(wrappedValue: authStore)
@@ -210,6 +210,8 @@ struct WanderApp: App {
             if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
                 ShareCardDesignMockupRoot()
                     .environmentObject(mapCaptureBackend)
+            } else if let senderReviewRoute = SenderNotificationReviewRoute.resolved() {
+                SenderNotificationReviewHost(route: senderReviewRoute)
             } else if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {
                 NativeOnboardingReviewHost(route: nativeReviewRoute)
             } else if let motion = ProfileHeaderMotionVariant.resolved() {

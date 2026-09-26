@@ -593,6 +593,52 @@ final class CheckInQuestionUITests: XCTestCase {
         capture("REC-485 dietary multi-select")
     }
 
+    func testSilentControlDefaultsOffAndCanBeEnabled() {
+        let app = launchPlace()
+        openCheckIn(in: app)
+        let silent = app.switches["save.silent"]
+        reveal(silent, in: app)
+        XCTAssertTrue(silent.isHittable)
+        XCTAssertTrue(silent.isEnabled)
+        XCTAssertEqual(silent.value as? String, "0")
+        capture("REC-589 before Silent activation")
+        // Allow the native switch's press recognizer to activate after scrolling.
+        silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).press(forDuration: 0.2)
+        let enabled = NSPredicate(format: "value == %@", "1")
+        wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: silent)], timeout: 5)
+        XCTAssertTrue(app.staticTexts["Skip notifications for this save. Visibility stays the same."].exists)
+        let more = app.buttons["save.moreOptions"]
+        reveal(more, in: app)
+        more.tap()
+        reveal(silent, in: app)
+        XCTAssertEqual(silent.value as? String, "1", "Optional details must preserve the sender's choice.")
+        capture("REC-589 Silent control enabled")
+    }
+
+    func testImportSaveOffersNativeSilentChoiceAndCancelDoesNotSave() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderImportImplementationReview", "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let wanna = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "import.wanna.")).firstMatch
+        XCTAssertTrue(wanna.waitForExistence(timeout: 10))
+        wanna.tap()
+        let save = app.buttons["import.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        let alert = app.alerts["Silence notifications for this import?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.buttons["Yes, save silently"].exists)
+        XCTAssertTrue(alert.buttons["No, notify followers"].exists)
+        capture("REC-589 native import silent choice")
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Yes, save silently"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+    }
+
     private func launchPlace(placeName: String = "Griffith Observatory Trail", accessibilityText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -675,7 +721,7 @@ final class CheckInQuestionUITests: XCTestCase {
             let frame = exists ? element.frame : .zero
             let id = exists ? element.identifier : ""
             let composerTarget = id == "save.close" || id == "save.questions.customize" || id == "save.questions.alsoNoted"
-                || id == "save.moreOptions" || id == "save.lists" || id == "save.note"
+                || id == "save.moreOptions" || id == "save.lists" || id == "save.note" || id == "save.silent"
                 || id.hasPrefix("save.question.") || id.hasPrefix("save.placeType.")
             let editor = app.scrollViews["save.editorScroll"]
             let composerVisible = editor.exists && editor.isHittable && !app.buttons["save.questions.done"].exists

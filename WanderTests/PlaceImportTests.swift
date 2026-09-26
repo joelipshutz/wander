@@ -1436,6 +1436,11 @@ final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.addedCount, 2)
         XCTAssertTrue(store.visiblePlaceLists.isEmpty)
         XCTAssertNil(importStore.batches.first?.destinationListID)
+        XCTAssertTrue(try XCTUnwrap(store.importNotificationCommits.first).silent)
+        XCTAssertTrue(try XCTUnwrap(store.importNotificationCommits.first).locallyComplete)
+        var receiptLost = try XCTUnwrap(importStore.batches.first)
+        receiptLost.receipt = nil
+        XCTAssertFalse(store.importNeedsNotificationChoice(receiptLost))
     }
 
     func testSinglePlaceFromAnExplicitGoogleListFileKeepsItsList() async throws {
@@ -3708,6 +3713,8 @@ final class PlaceImportStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(batchIDs.count, 4)
+        XCTAssertEqual(Set(store.batches.map(\.notificationImportID)).count, 1,
+                       "One mixed-source paste has one notification opportunity.")
         XCTAssertEqual(store.batches.map(\.source), [.googleMaps, .tiktok, .instagram, .textNotes])
         XCTAssertEqual(store.items.map(\.source), [.googleMaps, .tiktok, .instagram, .textNotes])
     }

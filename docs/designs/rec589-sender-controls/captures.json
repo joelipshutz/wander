@@ -1,0 +1,338 @@
+[
+  {
+    "scenario": "checkIn-initial",
+    "size": "large",
+    "image": "large/checkIn-initial.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "checkIn-initial",
+    "size": "compact",
+    "image": "compact/checkIn-initial.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "checkIn-silent",
+    "size": "large",
+    "image": "large/checkIn-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "checkIn-silent",
+    "size": "compact",
+    "image": "compact/checkIn-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "repeatCheckIn-silent",
+    "size": "large",
+    "image": "large/repeatCheckIn-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "repeatCheckIn-silent",
+    "size": "compact",
+    "image": "compact/repeatCheckIn-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "historical-silent",
+    "size": "large",
+    "image": "large/historical-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "historical-silent",
+    "size": "compact",
+    "image": "compact/historical-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "wanna-silent",
+    "size": "large",
+    "image": "large/wanna-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "wanna-silent",
+    "size": "compact",
+    "image": "compact/wanna-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "repeatWanna-silent",
+    "size": "large",
+    "image": "large/repeatWanna-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "repeatWanna-silent",
+    "size": "compact",
+    "image": "compact/repeatWanna-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "sourceSave-silent",
+    "size": "large",
+    "image": "large/sourceSave-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "sourceSave-silent",
+    "size": "compact",
+    "image": "compact/sourceSave-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNativeFormChoicesReachSavedVisitsAndWannas()"
+  },
+  {
+    "scenario": "discover-quick-wanna-dialog",
+    "size": "large",
+    "image": "large/discover-quick-wanna-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testDiscoverQuickWannaDialogPersistsSilentChoice()"
+  },
+  {
+    "scenario": "discover-quick-wanna-dialog",
+    "size": "compact",
+    "image": "compact/discover-quick-wanna-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testDiscoverQuickWannaDialogPersistsSilentChoice()"
+  },
+  {
+    "scenario": "listPicker-silent",
+    "size": "large",
+    "image": "large/listPicker-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStandaloneListPickerPersistsOneChoiceForEveryPlaceAndList()"
+  },
+  {
+    "scenario": "listPicker-silent",
+    "size": "compact",
+    "image": "compact/listPicker-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStandaloneListPickerPersistsOneChoiceForEveryPlaceAndList()"
+  },
+  {
+    "scenario": "multiListPicker-silent",
+    "size": "large",
+    "image": "large/multiListPicker-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStandaloneListPickerPersistsOneChoiceForEveryPlaceAndList()"
+  },
+  {
+    "scenario": "multiListPicker-silent",
+    "size": "compact",
+    "image": "compact/multiListPicker-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStandaloneListPickerPersistsOneChoiceForEveryPlaceAndList()"
+  },
+  {
+    "scenario": "new-list-inherits-silent",
+    "size": "large",
+    "image": "large/new-list-inherits-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNewListInheritsStandalonePickerChoice()"
+  },
+  {
+    "scenario": "new-list-inherits-silent",
+    "size": "compact",
+    "image": "compact/new-list-inherits-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testNewListInheritsStandalonePickerChoice()"
+  },
+  {
+    "scenario": "list-direct-dialog",
+    "size": "large",
+    "image": "large/list-direct-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testListSuggestionAndSearchDialogsPersistSilentChoice()"
+  },
+  {
+    "scenario": "list-direct-dialog",
+    "size": "compact",
+    "image": "compact/list-direct-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testListSuggestionAndSearchDialogsPersistSilentChoice()"
+  },
+  {
+    "scenario": "list-addPlaces-dialog",
+    "size": "large",
+    "image": "large/list-addPlaces-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testListSuggestionAndSearchDialogsPersistSilentChoice()"
+  },
+  {
+    "scenario": "list-addPlaces-dialog",
+    "size": "compact",
+    "image": "compact/list-addPlaces-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testListSuggestionAndSearchDialogsPersistSilentChoice()"
+  },
+  {
+    "scenario": "list-search-dialog",
+    "size": "large",
+    "image": "large/list-search-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testListSuggestionAndSearchDialogsPersistSilentChoice()"
+  },
+  {
+    "scenario": "list-search-dialog",
+    "size": "compact",
+    "image": "compact/list-search-dialog.jpg",
+    "test": "SenderNotificationFlowUITests/testListSuggestionAndSearchDialogsPersistSilentChoice()"
+  },
+  {
+    "scenario": "checkIn-staged-list-picker",
+    "size": "large",
+    "image": "large/checkIn-staged-list-picker.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "checkIn-staged-list-picker",
+    "size": "compact",
+    "image": "compact/checkIn-staged-list-picker.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "checkIn-parent-silent",
+    "size": "large",
+    "image": "large/checkIn-parent-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "checkIn-parent-silent",
+    "size": "compact",
+    "image": "compact/checkIn-parent-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "edit-existing-no-silent-control",
+    "size": "large",
+    "image": "large/edit-existing-no-silent-control.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "edit-existing-no-silent-control",
+    "size": "compact",
+    "image": "compact/edit-existing-no-silent-control.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "editWithLists-staged-list-picker",
+    "size": "large",
+    "image": "large/editWithLists-staged-list-picker.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "editWithLists-staged-list-picker",
+    "size": "compact",
+    "image": "compact/editWithLists-staged-list-picker.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "editWithLists-parent-silent",
+    "size": "large",
+    "image": "large/editWithLists-parent-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "editWithLists-parent-silent",
+    "size": "compact",
+    "image": "compact/editWithLists-parent-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testStagedListsInheritTheParentSilentChoiceAndEditOnlyHasNoControl()"
+  },
+  {
+    "scenario": "sharedVisit-silent",
+    "size": "large",
+    "image": "large/sharedVisit-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testSharedAcceptanceAndExplicitInvitationCopyUseRealComposer()"
+  },
+  {
+    "scenario": "sharedVisit-silent",
+    "size": "compact",
+    "image": "compact/sharedVisit-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testSharedAcceptanceAndExplicitInvitationCopyUseRealComposer()"
+  },
+  {
+    "scenario": "friends-silent",
+    "size": "large",
+    "image": "large/friends-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testSharedAcceptanceAndExplicitInvitationCopyUseRealComposer()"
+  },
+  {
+    "scenario": "friends-silent",
+    "size": "compact",
+    "image": "compact/friends-silent.jpg",
+    "test": "SenderNotificationFlowUITests/testSharedAcceptanceAndExplicitInvitationCopyUseRealComposer()"
+  },
+  {
+    "scenario": "import-one-native-choice",
+    "size": "large",
+    "image": "large/import-one-native-choice.jpg",
+    "test": "SenderNotificationFlowUITests/testImportSilentAndCancelPersistNoAccidentalNotificationIntent()"
+  },
+  {
+    "scenario": "import-one-native-choice",
+    "size": "compact",
+    "image": "compact/import-one-native-choice.jpg",
+    "test": "SenderNotificationFlowUITests/testImportSilentAndCancelPersistNoAccidentalNotificationIntent()"
+  },
+  {
+    "scenario": "import-ten-first-three",
+    "size": "large",
+    "image": "large/import-ten-first-three.jpg",
+    "test": "SenderNotificationFlowUITests/testImportNotifyThreeNowSevenLaterKeepsFirstManifest()"
+  },
+  {
+    "scenario": "import-ten-first-three",
+    "size": "compact",
+    "image": "compact/import-ten-first-three.jpg",
+    "test": "SenderNotificationFlowUITests/testImportNotifyThreeNowSevenLaterKeepsFirstManifest()"
+  },
+  {
+    "scenario": "import-ten-native-choice",
+    "size": "large",
+    "image": "large/import-ten-native-choice.jpg",
+    "test": "SenderNotificationFlowUITests/testImportNotifyThreeNowSevenLaterKeepsFirstManifest()"
+  },
+  {
+    "scenario": "import-ten-native-choice",
+    "size": "compact",
+    "image": "compact/import-ten-native-choice.jpg",
+    "test": "SenderNotificationFlowUITests/testImportNotifyThreeNowSevenLaterKeepsFirstManifest()"
+  },
+  {
+    "scenario": "import-ten-later-seven",
+    "size": "large",
+    "image": "large/import-ten-later-seven.jpg",
+    "test": "SenderNotificationFlowUITests/testImportNotifyThreeNowSevenLaterKeepsFirstManifest()"
+  },
+  {
+    "scenario": "import-ten-later-seven",
+    "size": "compact",
+    "image": "compact/import-ten-later-seven.jpg",
+    "test": "SenderNotificationFlowUITests/testImportNotifyThreeNowSevenLaterKeepsFirstManifest()"
+  },
+  {
+    "scenario": "import-consumed-no-new-prompt",
+    "size": "large",
+    "image": "large/import-consumed-no-new-prompt.jpg",
+    "test": "SenderNotificationFlowUITests/testWannaOnlyFirstImportAndPreviouslyConsumedImportCannotAnnounceLater()"
+  },
+  {
+    "scenario": "import-consumed-no-new-prompt",
+    "size": "compact",
+    "image": "compact/import-consumed-no-new-prompt.jpg",
+    "test": "SenderNotificationFlowUITests/testWannaOnlyFirstImportAndPreviouslyConsumedImportCannotAnnounceLater()"
+  },
+  {
+    "scenario": "import-inline-details",
+    "size": "large",
+    "image": "large/import-inline-details.jpg",
+    "test": "SenderNotificationFlowUITests/testInlineImportDetailsHaveNoCompetingSilentToggle()"
+  },
+  {
+    "scenario": "import-inline-details",
+    "size": "compact",
+    "image": "compact/import-inline-details.jpg",
+    "test": "SenderNotificationFlowUITests/testInlineImportDetailsHaveNoCompetingSilentToggle()"
+  },
+  {
+    "scenario": "checkIn-dark-accessibility-text",
+    "size": "large",
+    "image": "large/checkIn-dark-accessibility-text.jpg",
+    "test": "SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()"
+  },
+  {
+    "scenario": "checkIn-dark-accessibility-text",
+    "size": "compact",
+    "image": "compact/checkIn-dark-accessibility-text.jpg",
+    "test": "SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()"
+  }
+]
