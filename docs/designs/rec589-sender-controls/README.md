@@ -45,7 +45,14 @@ save nor a ledger. Wanna-only first saves and consumed imports cannot announce
 later. Other scenarios assert saved visit/source/list policy, parent inheritance,
 and native submission at shared acceptance.
 
-Visual coverage includes a large and compact phone, plus dark appearance and
-accessibility text. Screenshots document layout; they do not prove APNs delivery.
+Existing-memory fixtures also show the app's safe unavailable-companion state:
+this isolated host has no shared-friend repository, so it preserves existing
+invitations instead of assuming they are empty. The edit and list-save assertions
+still use the production composer and store.
+
+Visual coverage includes 28 states on each of iPhone 16 Plus and iPhone SE
+(3rd generation), including dark appearance and accessibility text. All 14
+distinct native sender tests pass on both devices across the complete and
+focused runs on iOS 26.5. Screenshots document layout; they do not prove APNs delivery.
 See the [manual device tests](../../plans/rec589-sender-notification-testing.md)
 and [engineering review](../../reviews/2026-09-23-rec589-engineering-review.md).

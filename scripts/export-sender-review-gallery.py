@@ -80,7 +80,8 @@ def main():
             subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "65",
                             "--resampleWidth", "480", str(source), "--out", str(target)],
                            check=True, stdout=subprocess.DEVNULL)
-            images.append(f'<figure><a href="{relative}"><img loading="lazy" src="{relative}" alt="{html.escape(title)} — {size}"></a><figcaption>{size.capitalize()} iPhone · iOS 26.5</figcaption></figure>')
+            device = "iPhone 16 Plus" if size == "large" else "iPhone SE (3rd generation)"
+            images.append(f'<figure><a href="{relative}"><img loading="lazy" src="{relative}" alt="{html.escape(title)} — {size}"></a><figcaption>{device} · iOS 26.5</figcaption></figure>')
             evidence.append({"scenario": key, "size": size, "image": relative, "test": test})
         cards.append(f'<section id="{key}"><h2>{html.escape(title)}</h2><div class="pair">{"".join(images)}</div></section>')
     style = "body{font:16px system-ui;background:#f3f1ed;color:#222;margin:0;padding:32px;max-width:1160px;margin:auto}h1{font-size:32px}p{line-height:1.6;max-width:800px}nav{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0}nav a{color:#333;background:white;padding:8px 12px;border-radius:8px}.pair{display:flex;align-items:flex-start;gap:24px}section{padding:16px 0 32px;border-top:1px solid #ccc;scroll-margin:20px}figure{margin:0;flex:1;max-width:420px}img{width:100%;border-radius:14px;border:1px solid #ddd}figcaption{margin:8px 0;font-size:14px}a{color:#9c3428}@media(max-width:600px){body{padding:16px}.pair{gap:12px}h2{font-size:20px}}"

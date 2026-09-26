@@ -179,3 +179,23 @@ silent operations fail closed if the server contract is missing. Do not change
 receiver preferences or privacy settings as part of rollout. Migration deployment,
 merge, and TestFlight distribution remain separate release steps. The PR records
 actual validation evidence and any unavailable OS/device coverage.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+| --- | --- | --- | --- | --- | --- |
+| Engineering | `/plan-eng-review` | Full branch, spec, architecture, tests and performance | 1 | Complete | 1A raw-read guard and 2A native integration coverage implemented and verified |
+| Independent adversarial | Engineering review | Ledger and notification failure modes | 1 | Complete | No additional verified blocker |
+| Native visual | Sender-control placement review | Real production SwiftUI scenarios | 1 | Complete | 28 states on each of two phone sizes; 14 distinct native cases pass on both |
+
+The final integration passes 2,576 unit tests and the hosted sender regression.
+Both sender migrations are deployed. The broader UI suite is not fully green:
+live-authentication launch and custom-question editing still fail in focused
+reruns. Actual APNs delivery needs the signed-device acceptance checklist.
+See the [engineering review](../reviews/2026-09-23-rec589-engineering-review.md)
+for exact evidence and limits, and the [native gallery](../designs/rec589-sender-controls/index.html)
+for the 56 simulator captures.
+
+VERDICT: Engineering review complete; ready for branch review with the recorded validation limits.
+
+NO UNRESOLVED DECISIONS

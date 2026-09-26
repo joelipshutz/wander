@@ -3,7 +3,7 @@
 Reviewed implementation: `d7515d3a8bcad57511c65009e5326ae41febe723` against
 `1fccbede1190a64a1a17416a2eb58fc726904e35`. Full branch, product spec, and every
 sender-control SwiftUI scenario. Accepted changes 1A and 2A are implemented.
-The September 25 integration includes origin/main `df90758a7`; final validation
+The September 25 integration includes origin/main `ebd07f847`; final validation
 and native evidence are recorded below.
 
 ## Scope challenge
@@ -137,7 +137,7 @@ Cancel/no ledger, Silent and Notify choices, consumed/Wanna-only imports,
 full-form policies, direct-action dialogs, and staged/standalone/new-list paths.
 Shared acceptance asserts the native submission; SQL verifies its server write.
 
-The fresh integration run passes all **2,572 unit tests**. Final UI results are
+The final integration run passes all **2,576 unit tests**. Final UI results are
 recorded in the validation section. The original pre-review run passed 2,475
 unit tests and 207/233 UI tests; 21 UI failures reproduced on its base and five
 passed focused reruns. Those historical results do not substitute for current
@@ -215,11 +215,11 @@ accepted findings are requirements in this branch and privacy work has an issue.
 - [Native placement guide and gallery](../designs/rec589-sender-controls/README.md).
 - [Action coverage and signed-device checklist](../plans/rec589-sender-notification-testing.md).
 
-| Check | September 25 result |
+| Check | Latest result (September 25–26) |
 | --- | --- |
-| Full unit suite | 2,572 passed, zero failures |
-| Native sender UI | In progress |
-| Full UI suite | In progress |
+| Full unit suite | 2,576 passed, zero failures on integrated main `ebd07f847` |
+| Native sender UI | All 14 distinct cases pass on both phone sizes across the complete and focused runs; 56 captures covering 28 states |
+| Broader UI attempt | Interrupted after 20 UI passes, three failures and one canceled case. Final three-case rerun: dietary selection passes; live-auth launch and customization still fail |
 | Sender hosted regression | Passed with REC-589 + REC-590 deployed guards |
 | Core hosted smoke | Branch fixture fails at the superseded share-card response; composition check passes using REC-590's corresponding share-card test |
 | Hosted migration history | Both REC-589 migrations present |
@@ -234,6 +234,31 @@ verification SQL with REC-590's checked-in regression lets the generated core ro
 smoke pass. No privacy migration, production data, or other worktree was changed.
 A clean branch-only core smoke requires integrating that privacy test contract.
 
+The broader run completed all 2,572 units and 23 UI cases before cancellation.
+Failures were live-authentication launch, custom-question privacy toggle, and
+inline dietary-answer deselection. Cancellation interrupted the next customization
+case. No current-baseline classification or full-suite pass is claimed.
+On the final integration rerun, all 2,576 unit tests pass and dietary-answer
+selection passes. Live authentication instead crashes with an external-symbol
+report, and customization fails in `openCustomize`. These are unresolved broader
+UI failures, not classified as baseline defects. The complete UI suite is not
+claimed green.
+
+All 14 distinct sender UI cases pass on iPhone 16 Plus and iPhone SE (3rd
+generation). The compact complete run passed ten of the original 13 cases;
+three focused reruns pass after correcting test switch gestures. The large
+complete run passes all original 13. Final focused runs on both sizes pass the
+new gallery return test and the strengthened inline-editor visibility test.
+Store-policy and frozen-manifest assertions remain intact. The screenshot gallery
+contains 28 real native states per device, with the inline editor actually in view.
+
+Raw Xcode result bundles and full-resolution captures remain in the local
+`outputs/rec589-review` evidence directory, outside this branch's tracked files.
+The final unit/broader rerun is `integrated-regression.xcresult`; sender evidence
+is in `compact-native-retry`, `compact-focused-final`, `large-native-final`,
+`compact-gallery-check`, and `large-gallery-check` result bundles. No further
+source edits were made after these tests except documentation and gallery output.
+
 Validation uses installed iOS 26.5; the repository's iOS 18.6 runtime is absent.
 Real APNs delivery, actual network interruption on a signed device, and production
 fanout load are not proven by these simulator/SQL checks. Follow the manual
@@ -245,8 +270,8 @@ positive-control and sender/receiver checklist before distribution.
 | --- | --- | --- | --- | --- |
 | Engineering | Full branch + spec + native scenarios | 1 | Accepted fixes implemented | 1A raw-read guard; 2A native integration coverage |
 | Independent adversarial | Notification/ledger architecture | 1 | Complete | No additional verified blocker |
-| Native visual | All sender placements | 1 | Validation in progress | Two-size captures and final gallery |
+| Native visual | All sender placements | 1 | Complete | 28 states on each phone; dark and accessibility text included |
 
-VERDICT: Implementation complete; final native validation in progress.
+VERDICT: Engineering review complete and both accepted fixes verified. Ready for branch review; signed-device APNs checks and broader UI failures remain release limitations.
 
 NO UNRESOLVED DECISIONS

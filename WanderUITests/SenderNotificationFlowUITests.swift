@@ -5,6 +5,20 @@ import UIKit
 final class SenderNotificationFlowUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testGalleryCanOpenAndReturnFromNativeScenario() {
+        let app = launch("gallery")
+        let first = app.buttons["First check-in"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        press(first)
+        let close = app.buttons["save.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        press(close)
+        let back = app.buttons["sender-review.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        press(back)
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+    }
+
     func testImportNotifyThreeNowSevenLaterKeepsFirstManifest() {
         let app = launch("importTen")
         for index in 0..<3 { tapImport(index, app: app) }
@@ -158,6 +172,9 @@ final class SenderNotificationFlowUITests: XCTestCase {
     func testInlineImportDetailsHaveNoCompetingSilentToggle() {
         let app = launch("importDetails")
         XCTAssertTrue(app.buttons["import.save"].waitForExistence(timeout: 10))
+        let details = app.buttons["save.moreOptions"]
+        reveal(details, app: app)
+        XCTAssertTrue(details.isHittable, "The inline editor must actually be visible.")
         XCTAssertFalse(app.switches["save.silent"].exists)
         capture("import-inline-details")
     }
@@ -255,7 +272,13 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let editor = app.scrollViews["save.editorScroll"]
             let usesEditor = editor.exists && editor.isHittable && element.identifier.hasPrefix("save.")
             let surface = usesEditor ? editor : (app.scrollViews.allElementsBoundByIndex.max { $0.frame.height < $1.frame.height } ?? app.scrollViews.firstMatch)
-            var viewport = (surface.exists ? surface.frame : app.frame).intersection(app.frame)
+            let surfaceFrame = surface.exists ? surface.frame : .null
+            // SwiftUI can expose an empty/infinite scroll-container frame even
+            // while its controls are visible. Bound gestures to the screen then.
+            let validFrame = !surfaceFrame.isEmpty && !surfaceFrame.isNull
+                && surfaceFrame.minX.isFinite && surfaceFrame.minY.isFinite
+                && surfaceFrame.width.isFinite && surfaceFrame.height.isFinite
+            var viewport = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
             if !usesEditor { viewport = viewport.intersection(app.frame.insetBy(dx: 0, dy: 100)) }
             for identifier in ["save.submit", "import.save", "map-list-picker.apply"] {
                 let submit = app.buttons[identifier]

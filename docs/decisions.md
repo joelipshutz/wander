@@ -19,6 +19,12 @@ seals an owner/import ledger even for silent or zero-recipient outcomes. Existin
 saved imports and background autosaves remain silent. See the
 [product specification and engineering plan](plans/rec589-sender-notifications.md).
 
+Grouped notification snapshots are not continuing visibility grants. Authenticated
+raw reads must match the entire currently visible group (names, count, place and
+deep link) through a recipient-bound restrictive policy. Partial or full access
+revocation hides stale snapshots immediately; delivery can refresh a remaining
+group. Already delivered operating-system notifications cannot be recalled.
+
 ## Onboarding home city and phone (REC-584)
 
 Joe approved an editable home city prefilled from location and a phone input with
