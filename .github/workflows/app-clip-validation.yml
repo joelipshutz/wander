@@ -1,0 +1,87 @@
+name: App Clip parent regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'WanderAppClip/**'
+      - 'WanderAppClipTests/**'
+      - 'WanderAppClipUITests/**'
+      - '.github/workflows/app-clip-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-clip-parent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parent:
+    name: Parent ${{ matrix.suite }} suite
+    runs-on: macos-26
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            target: WanderTests
+          - suite: ui
+            target: WanderUITests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Generate project and select simulator
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -version
+          git rev-parse HEAD
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                     for runtime, rows in devices.items() if 'iOS' in runtime
+                     for d in rows if d['name'] == 'iPhone 17 Pro']
+          assert choices, 'No existing iPhone 17 Pro simulator'
+          runtime, device = max(choices, key=lambda item: item[0])
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('TEST_DEVICE_ID=' + device['udid'] + '\n')
+          print('Testing on', device['name'], 'runtime', runtime)
+          PY
+      # Ad-hoc signing is required for Clerk's Keychain initialization in the
+      # real startup path; this uses no Apple distribution identity or secrets.
+      - name: Run complete parent suite
+        env:
+          TEST_TARGET: ${{ matrix.target }}
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:"$TEST_TARGET"
+          -test-timeouts-enabled YES
+          -default-test-execution-time-allowance 120
+          -maximum-test-execution-time-allowance 240
+          -resultBundlePath "$RUNNER_TEMP/Parent.xcresult"
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Summarize test result
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/Parent.xcresult/Info.plist" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Parent.xcresult" --format json > "$RUNNER_TEMP/parent-summary.json"
+          fi
+      - name: Retain regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-clip-parent-${{ matrix.suite }}
+          path: |
+            ${{ runner.temp }}/Parent.xcresult
+            ${{ runner.temp }}/parent-summary.json
+          retention-days: 14
