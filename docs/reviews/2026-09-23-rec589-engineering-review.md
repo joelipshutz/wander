@@ -264,6 +264,36 @@ Real APNs delivery, actual network interruption on a signed device, and producti
 fanout load are not proven by these simulator/SQL checks. Follow the manual
 positive-control and sender/receiver checklist before distribution.
 
+## September 28 validation follow-up
+
+The sender implementation and native gallery remain unchanged. Follow-up work
+adds generated Info.plists to both test targets so Xcode can sign Simulator test
+bundles; the previous signed build stopped because those files were absent.
+XcodeGen regeneration and whitespace checks pass. A new signed build clears that
+configuration error, but its UI runner is killed before establishing a test
+connection. This supplies no new behavioral result.
+
+The prior authentication crash is in Clerk.configure before the login UI. Missing
+Simulator signing/Keychain access is a hypothesis, not a confirmed root cause.
+The customization recording shows a 50 ms tap at the visible button with no
+navigation. Two 200 ms press changes in the UI test are an unverified experiment;
+all behavior assertions remain intact. This follow-up is a draft checkpoint.
+
+The first fresh run stalled inside CoreSimulator app installation. Restarting the
+dedicated REC-589 simulator preserved its data. A subsequent signed/generated-plist
+run ended with an early runner exit before either requested test executed. Do not
+count either attempt as a regression pass or replace the September 26 results.
+Other tasks have active local builds/simulators; interrupting them requires
+coordination before retrying under reduced load.
+
+Restart with `xcodebuild test` using the existing REC-589 DerivedData and compact
+simulator, `-jobs 1`, `CODE_SIGNING_ALLOWED=YES`, `CODE_SIGN_IDENTITY=-`, and only
+`AccountContactDetailsUITests/testNormalAppLaunchReachesLiveAuthentication` plus
+`CheckInQuestionUITests/testCustomizeReordersRemovesAddsAndPersistsWhenReopened`.
+The target configuration now supplies Info.plists without a global override.
+Inspect actual test execution, verify or discard the press experiment, and run
+affected regression coverage before marking this follow-up ready.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Scope | Runs | Status | Findings |
@@ -272,6 +302,6 @@ positive-control and sender/receiver checklist before distribution.
 | Independent adversarial | Notification/ledger architecture | 1 | Complete | No additional verified blocker |
 | Native visual | All sender placements | 1 | Complete | 28 states on each phone; dark and accessibility text included |
 
-VERDICT: Engineering review complete and both accepted fixes verified. Ready for branch review; signed-device APNs checks and broader UI failures remain release limitations.
+VERDICT: Engineering review and sender implementation complete. September 28 validation follow-up is a draft pending actual test execution; signed-device APNs remains a manual release check.
 
 NO UNRESOLVED DECISIONS

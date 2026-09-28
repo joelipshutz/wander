@@ -309,7 +309,7 @@ final class CheckInQuestionUITests: XCTestCase {
         let customID = try XCTUnwrap(recurringIDs(in: app).first { $0.hasPrefix("custom_question_") })
         let customEye = app.buttons["save.questions.stealth.\(customID)"]
         XCTAssertEqual(customEye.value as? String, "On, only you")
-        customEye.tap()
+        customEye.press(forDuration: 0.2)
         XCTAssertEqual(customEye.value as? String, "Off, check-in audience")
         let expectedIDs = recurringIDs(in: app)
         capture("REC-485 customized recurring questions")
@@ -664,7 +664,9 @@ final class CheckInQuestionUITests: XCTestCase {
         let customize = app.buttons["save.questions.customize"]
         reveal(customize, in: app)
         XCTAssertTrue(customize.isHittable)
-        customize.tap()
+        // Keep the press down long enough for the enclosing native scroll view
+        // to recognize it after the customization page has been dismissed.
+        customize.press(forDuration: 0.2)
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 4))
     }
 
