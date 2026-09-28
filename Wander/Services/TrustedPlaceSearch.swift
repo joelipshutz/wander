@@ -22,7 +22,6 @@ struct TrustedPlaceSearchQuery: Equatable {
     let scoringTokens: [String]
     let requiredTokens: [String]
     let consumedTokens: [String]
-    fileprivate let scoringPhrase: String
     fileprivate let requiredTokenIndexes: [Int]
 
     var hasMeaningfulTokens: Bool {
@@ -58,7 +57,6 @@ struct TrustedPlaceSearchQuery: Equatable {
         scoringTokens = scoring
         requiredTokens = required
         consumedTokens = consumed
-        scoringPhrase = scoring.joined(separator: " ")
         requiredTokenIndexes = required.compactMap { scoring.firstIndex(of: $0) }
     }
 }
@@ -133,7 +131,7 @@ enum TrustedPlaceSearch {
         }
 
         var score = tokenMatches.reduce(0) { $0 + ($1?.score ?? 0) }
-        score += document.phraseBonus(for: query.scoringPhrase)
+        score += document.phraseBonus(for: query.scoringTokens)
 
         var evidenceByField: [TrustedPlaceSearchField: (displayValue: String, tokens: [String])] = [:]
         for match in tokenMatches.compactMap({ $0 }) {
@@ -967,7 +965,6 @@ private struct TrustedPlaceSearchDocument {
         let field: TrustedPlaceSearchField
         let displayValue: String
         let normalizedTokens: [String]
-        let normalizedPhrase: String
         let weight: Int
 
     }
@@ -1043,7 +1040,6 @@ private struct TrustedPlaceSearchDocument {
                         field: .attribute,
                         displayValue: displayValue,
                         normalizedTokens: tokens,
-                        normalizedPhrase: tokens.joined(separator: " "),
                         weight: 14
                     )
                 )
@@ -1127,19 +1123,24 @@ private struct TrustedPlaceSearchDocument {
             || (candidate.score == current.score && candidate.field.rawValue < current.field.rawValue)
     }
 
-    func phraseBonus(for phrase: String) -> Int {
-        guard !phrase.isEmpty else { return 0 }
+    func phraseBonus(for tokens: [String]) -> Int {
+        guard !tokens.isEmpty else { return 0 }
         var best = 0
 
-        for field in fields {
-            let fieldPhrase = field.normalizedPhrase
+        // The normalized phrase is these tokens joined with spaces. Comparing
+        // whole tokens preserves its word boundaries without rebuilding and
+        // scanning phrase strings for every field in every cached document.
+        for field in fields where field.normalizedTokens.count >= tokens.count {
+            let fieldTokens = field.normalizedTokens
             let multiplier: Int
-            if fieldPhrase == phrase {
+            if fieldTokens == tokens {
                 multiplier = 5
-            } else if fieldPhrase.hasPrefix(phrase + " ") {
+            } else if fieldTokens.starts(with: tokens) {
                 multiplier = 4
-            } else if fieldPhrase.contains(" " + phrase + " ")
-                        || fieldPhrase.hasSuffix(" " + phrase) {
+            } else if fieldTokens.count > tokens.count,
+                      (1...(fieldTokens.count - tokens.count)).contains(where: { start in
+                          fieldTokens[start..<(start + tokens.count)].elementsEqual(tokens)
+                      }) {
                 multiplier = 3
             } else {
                 continue
@@ -1172,7 +1173,6 @@ private struct TrustedPlaceSearchDocument {
                     field: field,
                     displayValue: value,
                     normalizedTokens: tokens,
-                    normalizedPhrase: tokens.joined(separator: " "),
                     weight: weight
                 )
             )
