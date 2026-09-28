@@ -19,7 +19,9 @@ historical Wanna was changed: the hosted audit found no authoritative companion
 origins eligible for repair; future origins are recorded.
 
 Legacy signed-photo CDN retirement still requires verification before the full
-rollout is called closed. Manual CDN purge is unavailable on this project.
+rollout is called closed. The project is on the Free plan; manual CDN purge requires Pro or provider assistance.
+The scoped Supabase support request is approved; submission awaits support-portal
+sign-in. No billing changes or visit-photo rewrites have been made.
 All 12 recorded historical public artwork URLs now reject access. Their original
 images were moved to a private archive, preserving bytes, object identity,
 ownership, and custom metadata. The former paths contain only generic Astir
@@ -38,7 +40,8 @@ For local testing, open the privacy worktree's `Wander.xcodeproj`, confirm branc
 `codex/rec-590-privacy`, choose **Wander → iPhone 17 (iOS 26.5)**, and Run. Use
 normal sign-in for the two-account checks; demo fixture tests exercise layout
 only. The checked-in public Clerk/Supabase configuration targets the live alpha
-backend. This branch has not been uploaded to TestFlight.
+backend. Xcode's Branch Chooser was verified on this worktree on September 28.
+This branch has not been uploaded to TestFlight.
 
 ## Validation status
 
@@ -51,13 +54,28 @@ that existing performance failure in
 [REC-627](https://linear.app/recme/issue/REC-627/investigate-trusted-memory-search-exceeding-the-50-ms-performance).
 Do not describe the full native suite as clean.
 
-The iPhone 13 mini normal-size rating check passed. Host sleep interrupted its
-accessibility run; a fresh layout-only retry then failed because the test runner
-was killed before establishing a connection. Neither attempt establishes an
-accessibility pass on the smaller phone. The iPhone 17 normal and accessibility
-screenshots were inspected. Repeat the compact-phone layout tests and finish
-manual navigation once the desktop is available. The live two-account scenarios
-below remain tester acceptance steps.
+The September 28 follow-up replaces repeated phrase-string scans in cached
+search documents with equivalent whole-token comparisons. A regression covers
+exact, prefix, middle, suffix, repeated-token, separated-token, and partial-token
+ranking. Swift syntax validation passed. Earlier native reruns were interrupted
+without completing tests. The latest run compiled the new search test but never
+executed tests: it stalled installing the app on the simulator and was stopped.
+The 50 ms budget remains unchanged. Do not treat a synthetic phrase microbenchmark
+as a passing end-to-end search measurement.
+
+The iPhone 13 mini normal-size rating check previously passed. Manual checks on
+September 28 verified card → place profile → explanation → dismiss → back at
+normal size, plus card → profile → back at the largest accessibility size. The
+largest-size Your rating label, value, and empty state are readable. Lower rows
+still require the native scrolling check.
+
+Manual inspection found that the ratings explanation clips inside its popover
+at the largest text size. The follow-up uses a scrollable native sheet with a
+Done button at accessibility sizes, while retaining the normal-size popover.
+The UI regression now checks the first and last explanation paragraphs and
+return navigation. This fix still needs a completed native build and visual
+verification. The earlier iPhone 17 normal and accessibility screenshots were
+inspected. The live two-account scenarios below remain tester acceptance steps.
 
 ## Automatic Wannas
 
@@ -165,7 +183,14 @@ The worker reporting route must remain read-only and export aggregate counts onl
 Verify `analytics_snapshot` never claims notifications or requests recipient/audit
 rows containing identities or notification copy. Prior private PostHog audit
 exports require a retention cleanup before claiming that secondary copy is removed.
-Resolve the historical diagnostic retention decision in
+An aggregate-only September 28 audit found 7,954 historical rows: 7,354 recipient
+snapshots, 215 snapshot-completed events, and 385 delivery-audit events, spanning
+September 21–24 UTC. Scoped removal was approved and submitted as
+[PostHog support ticket #75809](https://us.posthog.com/project/557259/my-tickets?ticket=01a0ea42-9675-0000-44b2-49b7c1d197ef).
+The request covers only those event names from September 21 at 23:01:56 UTC
+through September 24 before 04:16:00 UTC. No deletion is confirmed yet; deleting
+whole PostHog people could erase unrelated analytics.
+Provider completion and a zero-count recheck are required. Resolve the scoped cleanup in
 [REC-620](https://linear.app/recme/issue/REC-620/resolve-retention-of-historical-notification-diagnostics-after-privacy)
 before claiming that those existing copies are removed.
 

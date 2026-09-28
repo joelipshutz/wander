@@ -51,6 +51,21 @@ final class MapPlaceCardUITests: XCTestCase {
             capture("REC590 accessibility \(title)")
         }
         XCTAssertFalse(app.staticTexts["Fit score"].exists)
+
+        let explanationButton = app.buttons["ratings.explanation.open"]
+        for _ in 0..<6 where !explanationButton.isHittable { app.swipeDown() }
+        XCTAssertTrue(explanationButton.isHittable)
+        explanationButton.tap()
+        let explanation = app.scrollViews["ratings.explanation.scroll"]
+        XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Your rating averages your rated check-ins here."].isHittable)
+        capture("REC590 accessibility rating explanation start")
+        let finalParagraph = app.staticTexts["A dash means there are no ratings yet."]
+        for _ in 0..<6 where !finalParagraph.isHittable { explanation.swipeUp() }
+        XCTAssertTrue(finalParagraph.isHittable, "Cannot reach the end of the ratings explanation")
+        capture("REC590 accessibility rating explanation end")
+        app.buttons["ratings.explanation.done"].tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].isHittable)
     }
 
     func testFeaturedRingAndTemporaryRatingPresentation() {

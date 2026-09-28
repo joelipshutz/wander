@@ -10,7 +10,16 @@ enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
     }
 
     var message: String {
-        "Your rating averages your rated check-ins here. Friends rating averages each followed person's visible ratings; activity hidden from you does not count. Astir rating averages all rated check-ins, including private activity, without showing who contributed. A dash means there are no ratings yet."
+        paragraphs.joined(separator: " ")
+    }
+
+    var paragraphs: [String] {
+        [
+            "Your rating averages your rated check-ins here.",
+            "Friends rating averages each followed person's visible ratings; activity hidden from you does not count.",
+            "Astir rating averages all rated check-ins, including private activity, without showing who contributed.",
+            "A dash means there are no ratings yet."
+        ]
     }
 
     var accessibilityLabel: String {
@@ -259,11 +268,17 @@ struct PlaceRatingInfoButton: View {
     let tint: Color
 
     @Environment(\.astirBrandMode) private var astirBrandMode
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isPresented = false
+    @State private var isAccessibleExplanationPresented = false
 
     var body: some View {
         Button {
-            isPresented = true
+            if dynamicTypeSize.isAccessibilitySize {
+                isAccessibleExplanationPresented = true
+            } else {
+                isPresented = true
+            }
         } label: {
             Image(systemName: "info.circle.fill")
                 .font(.system(size: 13, weight: .bold))
@@ -274,6 +289,7 @@ struct PlaceRatingInfoButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(explanation.accessibilityLabel)
+        .accessibilityIdentifier("ratings.explanation.open")
         .accessibilityHint("Shows how this score is calculated")
         .popover(
             isPresented: $isPresented,
@@ -300,6 +316,33 @@ struct PlaceRatingInfoButton: View {
             .frame(idealWidth: 270, maxWidth: 290, alignment: .leading)
             .background(astirBrandMode.raisedBackground)
             .presentationCompactAdaptation(.popover)
+        }
+        .sheet(isPresented: $isAccessibleExplanationPresented) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        ForEach(explanation.paragraphs, id: \.self) { paragraph in
+                            Text(paragraph)
+                                .font(AstirTypography.bodySmall)
+                                .foregroundStyle(astirBrandMode.primaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(WanderTheme.spacing4)
+                }
+                .accessibilityIdentifier("ratings.explanation.scroll")
+                .background(astirBrandMode.raisedBackground)
+                .navigationTitle(explanation.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { isAccessibleExplanationPresented = false }
+                            .accessibilityIdentifier("ratings.explanation.done")
+                    }
+                }
+            }
+            .presentationDetents([.large])
         }
     }
 }
