@@ -71,7 +71,7 @@ For local signed testing, open this branch's `Wander.xcodeproj`, select the
 → Run → Arguments, add an enabled `_XCAppClipURL` environment variable containing
 a fresh Astir share URL. Disable `-AstirClipDemo` for live-service checks. Running
 from Xcode opens the destination directly; it does not show a Messages footer.
-The new Save RPC must be deployed before testing a successful live Save.
+The Save RPC is deployed; live Save testing still requires a real authenticated session.
 
 For the native launch card, use Settings → Developer → Local Experiences on the
 test phone, with `com.grayline.wander.Clip` and the invocation URL. Confirm whether
@@ -122,17 +122,19 @@ device authentication, installation continuation or Messages rendering.
    were interrupted, the second after disk exhaustion. They exposed additional
    check-in UI/keyboard failures and do not count as full-suite passes. Complete
    the broader UI gate on a host with sufficient free disk before merge.
-2. Run the migration preview inside the existing rollback-only hosted smoke:
-   `node scripts/supabase-smoke-test.mjs --linked --migration-preview supabase/migrations/20260923013423_app_clip_save.sql`.
-   The smoke includes `supabase/tests/app_clip_save.sql`. Do not apply the migration
-   to production merely to validate the draft. Confirm security metadata, caller
-   identity, repeat-save behavior, deleted restoration, exact legacy place IDs,
-   private visibility and anonymous denial. The focused hosted migration preview,
-   share-card privacy suite and 28 web-link/invitation checks passed on 2026-09-22.
-   The complete rollback-only hosted smoke also passed on 2026-09-23 after
-   adopting the Events home-area fixture correction already on `origin/main`.
-   A subsequent read confirmed the preview RPC and reserved fixture profiles did
-   not remain. The draft Clip RPC is not deployed for live Save operations.
+2. The reviewed Save RPC is deployed as migration
+   `20260928231919_app_clip_save.sql` on the verified Astir Supabase project.
+   Run `node scripts/supabase-smoke-test.mjs --linked` against the deployed
+   schema, without a migration preview. The smoke includes
+   `supabase/tests/app_clip_save.sql`: security metadata, caller identity,
+   repeat-save behavior, deleted restoration, exact legacy place IDs, private
+   visibility and anonymous denial. The focused hosted test passed on
+   2026-09-28 after deployment, and its reserved profiles were rolled back.
+   Share-card assertions follow the generic protected-preview contract already
+   deployed by REC-590 / PR #716; they reject public legacy artwork and private
+   title/image disclosure. The complete hosted rollback suite also passed against
+   the deployed schema on 2026-09-28. Earlier pre-deployment rollback tests are historical validation,
+   not evidence of a completed live-device Save.
 3. Apple identifier registration, associated domains, parent Sign in with Apple
    association and dedicated App Group membership for both targets were verified
    in the live dashboards on 2026-09-23. Both provisioning profiles were regenerated

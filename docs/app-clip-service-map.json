@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "scope": "Astir shared-link App Clip",
-  "checkedOn": "2026-09-25",
+  "checkedOn": "2026-09-28",
   "verificationComplete": false,
   "apple": {
     "teamID": "Y7TVK75RZ8",
@@ -13,13 +13,14 @@
       "project.yml",
       "scripts/testflight-release.mjs",
       "WanderAppClip/Resources/AstirClip.entitlements",
-      "App Store Connect app information and Apple Developer identifiers dashboard, 2026-09-23"
+      "App Store Connect app information and Apple Developer identifiers dashboard, 2026-09-23",
+      "App Store Connect approved version 1.0.02 build 180 metadata, 2026-09-28"
     ],
     "verification": "Verified app and Developer team directly. Registered Clip and dedicated continuation App Group; saved and reopened both identifiers to verify group membership. Clip Sign in with Apple identifies the parent app. Existing parent shared group retained.",
     "pending": [
       "Verify exported/thinned size and release analytics configuration before an approved upload.",
       "Validate signed-device authentication and Clip-to-parent handoff.",
-      "Upload an approved build containing the Clip and configure the default App Clip experience; current pending-release build 175 has no Clip."
+      "Upload an approved build containing the Clip and configure the default App Clip experience; approved version 1.0.02 build 180 has no embedded Clip."
     ],
     "organizationName": "Grayline Studio, LLC",
     "appStoreName": "ASTIR Movement",
@@ -86,14 +87,18 @@
     "status": "ACTIVE_HEALTHY",
     "evidence": [
       "Supabase project and organization read APIs, 2026-09-23",
-      "project.yml"
+      "project.yml",
+      "Hosted migration history, function security metadata and rollback-only App Clip Save regression, 2026-09-28"
     ],
     "verification": "Project identity, organization, region and health confirmed directly. Organization name does not independently establish an individual member's role.",
     "pending": [
       "Verify the current Clerk third-party-auth issuer configuration against the production instance."
     ],
-    "rollbackSmokeVerifiedOn": "2026-09-25",
-    "draftClipRPCDeployed": false
+    "rollbackSmokeVerifiedOn": "2026-09-28",
+    "clipRPCDeployed": true,
+    "clipRPCMigrationVersion": "20260928231919",
+    "clipRPCDeployedOn": "2026-09-28",
+    "clipRPCFocusedSmokeVerifiedOn": "2026-09-28"
   },
   "sharing": {
     "canonicalHost": "astirmovement.com",
@@ -105,7 +110,7 @@
     "websiteRepository": "joelipshutz/astir-site",
     "discoverySetting": "ASTIR_APP_CLIP_ENABLED",
     "defaultDiscoveryEnabled": false,
-    "verification": "Website and native branches agree. The Hotchkiss preview deployment is ready with discovery enabled only for the testing branch. Live HTTP metadata, production AASA and the published Apple experience remain unverified.",
+    "verification": "Authenticated branch preview verified with a live public place and an unavailable link: contextual title, icon, exact native link, conditional Clip discovery and App Store fallback. Local website build, lint and 20 contract/HTTP tests pass. All three production hosts return AASA without the Clip; production discovery remains off. Direct preview AASA and the published Apple experience remain unverified.",
     "websiteBranch": "codex/rec-408-app-clip",
     "websitePullRequest": "https://github.com/joelipshutz/astir-site/pull/24",
     "nativeBranch": "codex/rec-408-shared-app-clip",
