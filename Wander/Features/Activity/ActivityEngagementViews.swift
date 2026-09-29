@@ -979,6 +979,7 @@ struct ActivityCommentsScreen: View {
             await refreshComments()
         }
         .refreshable { await refreshComments() }
+        .blocksProductUpsells(while: !draft.isEmpty || isPosting, preservesForegroundEntry: true)
         .fullScreenCover(item: $photoViewerRoute, onDismiss: { handoff.onDidDismiss(.activityPhoto) }) { route in
             WanderRootPresentationLifecycle(
                 surface: .activityPhoto, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss

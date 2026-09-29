@@ -165,6 +165,10 @@ import UIKit
         let artwork = app.descendants(matching: .any)["events.comingSoon"].firstMatch
         XCTAssertTrue(artwork.waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: tabs.buttons["Map"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
         for label in ["Map", "Feed", "Events", "Lists", "Profile"] {
             XCTAssertTrue(tabs.buttons[label].isHittable)
         }
@@ -183,8 +187,11 @@ import UIKit
         }
         XCUIDevice.shared.press(.home)
         app.activate()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
+        XCTAssertTrue(tabs.buttons["Feed"].isSelected)
+        tabs.buttons["Events"].tap()
         XCTAssertTrue(artwork.waitForExistence(timeout: 5))
-        capture("Events — after switching and foreground return")
+        capture("Events — revisited after Feed foreground entry")
     }
 
     func testTabBarHidesAndReturnsWithProfileNavigation() {
