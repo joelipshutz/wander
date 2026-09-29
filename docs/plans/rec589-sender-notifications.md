@@ -127,6 +127,14 @@ including silent and zero-recipient outcomes. The worker wrapper recomputes grou
 copy and destination from current visibility on each claim/retry, or cancels a
 group with no accessible content.
 
+**September 28 product correction, pending in REC-590:** preserve personalized
+already-issued notifications after later Stealth/audience changes, while checking
+current access when opening their source activity. The deployed raw-read behavior
+below describes the original 1A implementation; its post-issuance hiding must be
+revised by the privacy follow-up. Unsent pushes still require current access.
+This does not change Silent, initial recipient eligibility, or the frozen import
+manifest. See [the decision](../decisions.md#sender-silence-and-import-announcements-rec-589).
+
 Queued names and counts are also protected on raw recipient reads. The additive
 `20260924035547_sender_import_notification_read_guard.sql` migration installs a
 claim-bound helper and a restrictive authenticated SELECT policy. The helper

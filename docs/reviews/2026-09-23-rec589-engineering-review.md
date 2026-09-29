@@ -264,35 +264,63 @@ Real APNs delivery, actual network interruption on a signed device, and producti
 fanout load are not proven by these simulator/SQL checks. Follow the manual
 positive-control and sender/receiver checklist before distribution.
 
-## September 28 validation follow-up
+## September 28–29 validation follow-up
 
-The sender implementation and native gallery remain unchanged. Follow-up work
-adds generated Info.plists to both test targets so Xcode can sign Simulator test
-bundles; the previous signed build stopped because those files were absent.
-XcodeGen regeneration and whitespace checks pass. A new signed build clears that
-configuration error, but its UI runner is killed before establishing a test
-connection. This supplies no new behavioral result.
+The sender implementation and native gallery remain unchanged. Both test targets
+now generate Info.plists, and the signed app/test bundles pass codesign verification.
+On a fresh dedicated iPhone 16 Plus / iOS 26.5 simulator, normal live-authentication
+launch passes, including the second launch and native login entry. The earlier
+unsigned Clerk crash is not reproduced in this signed run; its precise original
+cause is not claimed proven.
 
-The prior authentication crash is in Clerk.configure before the login UI. Missing
-Simulator signing/Keychain access is a hypothesis, not a confirmed root cause.
-The customization recording shows a 50 ms tap at the visible button with no
-navigation. Two 200 ms press changes in the UI test are an unverified experiment;
-all behavior assertions remain intact. This follow-up is a draft checkpoint.
+The full unit suite passes again: **2,576 passed, zero failures**. The initial
+four-case UI regression run passes accessibility and fails three customization
+interactions. Recorded 50 ms presses sometimes did not register on visible controls.
+The affected flows now use the sender suite's existing single 200 ms press pattern,
+without retries or relaxed assertions. The final focused run passes **3 of 4**:
+accessibility, restore/cancel with reopening, and hide/undo/re-add with persistence.
 
-The first fresh run stalled inside CoreSimulator app installation. Restarting the
-dedicated REC-589 simulator preserved its data. A subsequent signed/generated-plist
-run ended with an early runner exit before either requested test executed. Do not
-count either attempt as a regression pass or replace the September 26 results.
-Other tasks have active local builds/simulators; interrupting them requires
-coordination before retrying under reduced load.
+One failure remains in
+`testCustomizeReordersRemovesAddsAndPersistsWhenReopened`: the custom question's
+Yes answer does not report selected after a 200 ms press. The recording and touch
+trace put the press at (113.5, 529), directly on the visible Yes button. This is
+not resolved by increasing press duration; no further timing workaround is justified.
+The custom-answer display/binding and live hit testing need inspection. The current
+main-baseline attribution is still unverified. Do not describe the UI suite or this
+follow-up as green.
 
-Restart with `xcodebuild test` using the existing REC-589 DerivedData and compact
-simulator, `-jobs 1`, `CODE_SIGNING_ALLOWED=YES`, `CODE_SIGN_IDENTITY=-`, and only
-`AccountContactDetailsUITests/testNormalAppLaunchReachesLiveAuthentication` plus
-`CheckInQuestionUITests/testCustomizeReordersRemovesAddsAndPersistsWhenReopened`.
-The target configuration now supplies Info.plists without a global override.
-Inspect actual test execution, verify or discard the press experiment, and run
-affected regression coverage before marking this follow-up ready.
+Evidence under the local `outputs/rec589-review` directory:
+
+| Result bundle | Result |
+| --- | --- |
+| `fresh-simulator-current-signed.xcresult` | Authentication passes; customization fails at a later privacy tap |
+| `final-signed-regressions.xcresult` | 2,576 units and accessibility pass; three UI cases fail |
+| `final-native-press-regressions.xcresult` | Three affected UI cases pass; custom Yes selection still fails |
+
+The fresh simulator is `F867F011-7235-44A9-927D-B996D0364C03`. A clean compilation
+into `DerivedData-FreshFinal` was stopped after prolonged dependency rebuilding;
+it supplies no validation pass. The fresh-device run used verified current signed
+bundles, and subsequent runs rebuilt the changed test source using the existing
+REC-589 DerivedData cache. No other task's build or simulator was interrupted.
+No REC-589 test command remains running.
+
+Next: inspect the custom Yes interaction and answer binding on the dedicated
+simulator before another code change, then rerun the single failing test and any
+coverage affected by a confirmed fix. The desktop review handoff also remains
+pending: the Xcode Branch Chooser was last verified September 26 and has not been
+rechecked in this follow-up. Keep the PR draft until the remaining validation is
+resolved or explicitly classified.
+
+### Notification-history decision correction
+
+The September 28 product decision preserves original personalized notifications
+and inbox receipts after later Stealth/audience changes. Opening their source
+activity must still enforce current access. This supersedes post-issuance hiding
+in the earlier 1A design. REC-590's separate correction must reconcile its source
+policy, generic push envelope, and REC-589's restrictive grouped read guard.
+Unsent pushes still require authorization, and Silent plus the frozen import
+manifest stay unchanged. This branch records the revised contract but does not
+claim the privacy correction implemented or deployed.
 
 ## GSTACK REVIEW REPORT
 
@@ -302,6 +330,6 @@ affected regression coverage before marking this follow-up ready.
 | Independent adversarial | Notification/ledger architecture | 1 | Complete | No additional verified blocker |
 | Native visual | All sender placements | 1 | Complete | 28 states on each phone; dark and accessibility text included |
 
-VERDICT: Engineering review and sender implementation complete. September 28 validation follow-up is a draft pending actual test execution; signed-device APNs remains a manual release check.
+VERDICT: Engineering review and sender implementation complete. Signed validation passes all 2,576 units, authentication, and three affected UI flows; the custom-answer UI failure remains unresolved, so the follow-up stays draft. The REC-590 notification-history correction and signed-device APNs are separate remaining rollout checks.
 
 NO UNRESOLVED DECISIONS

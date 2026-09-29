@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-09-22
+Last updated: 2026-09-28
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -19,11 +19,20 @@ seals an owner/import ledger even for silent or zero-recipient outcomes. Existin
 saved imports and background autosaves remain silent. See the
 [product specification and engineering plan](plans/rec589-sender-notifications.md).
 
-Grouped notification snapshots are not continuing visibility grants. Authenticated
-raw reads must match the entire currently visible group (names, count, place and
-deep link) through a recipient-bound restrictive policy. Partial or full access
-revocation hides stale snapshots immediately; delivery can refresh a remaining
-group. Already delivered operating-system notifications cannot be recalled.
+**September 28 correction:** an already-issued notification is a historical
+receipt. Later Stealth/audience changes must preserve its original personalized
+copy in the recipient's inbox and delivered push. Opening it rechecks current
+source access and must not reveal newly private activity or cached source content.
+An unsent push still requires authorization before delivery. Silent and the frozen
+once-per-import manifest are unchanged. Block and deletion rules remain separate.
+
+The deployed REC-589 restrictive read guard currently hides stale grouped
+snapshots after partial or full access revocation, including issued notifications.
+That post-issuance behavior is superseded by the decision above. The separate
+REC-590 correction must reconcile both its source guard and this restrictive
+policy with historical receipts; the sender branch does not claim that follow-up
+implemented or verified. Recipient ownership and source authorization remain
+required, and notification history never grants activity access.
 
 ## Onboarding home city and phone (REC-584)
 

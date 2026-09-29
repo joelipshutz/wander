@@ -33,6 +33,17 @@ Silent off. A historical import can announce its first selected check-ins as a
 group when the sender explicitly chooses Notify. Plain Wanna alone does not
 produce a follower announcement.
 
+## Notification-history correction pending in REC-590
+
+The September 28 decision preserves an already-issued notification and its
+personalized text after later Stealth/audience changes. Opening that receipt must
+deny newly private source activity. The deployed REC-590 worker currently sends
+generic social push text, and the two deployed read guards can hide historical
+receipts. The separate privacy correction must fix both before personalized-copy
+and retained-history acceptance can pass. Earlier sender/SQL results validate the
+original contract; they do not prove this new behavior. Silent and the first-three,
+later-seven rule remain unchanged.
+
 ## Test setup
 
 1. Install a signed build from this branch on the sender's iPhone. Applying the
@@ -100,7 +111,8 @@ Silent with private or profile-only.
 | Offline and relaunch | Go offline before saving a fresh Silent import. Close/reopen the app, reconnect, and wait for sync. Repeat with a fresh Notify import. | Choice survives. Silent stays silent. Notify syncs the original saved group at most once; restarting or retrying does not add another announcement. |
 | Interrupted first save | Using a controlled interrupted-save setup, stop after some first-attempt successes. Recover and save more items. | The announcement can contain only durable successes from the original attempt. Later items cannot enlarge it or create a second group. Use a controlled failure for this case rather than assuming a timed force-quit interrupted a write. |
 | Access changes before delivery | After a Notify import, remove visibility/block the receiver or delete a captured check-in before the worker claims the pending event. | Remaining visible distinct places determine the group, or the event is skipped when none remain. A notification already delivered cannot be recalled. |
-| Access changes after queue/read | Queue a Notify group, then revoke one captured place, block/unfollow the sender, or delete a captured visit. Inspect authenticated notification reads before the worker runs. | A stale name/count/deep link is withheld immediately, even if other group places remain visible. A later worker claim may refresh the remaining group. Already delivered OS pushes cannot be recalled. |
+| Original deployed raw-read guard (superseded for issued history) | Queue a Notify group, then revoke one captured place, block/unfollow the sender, or delete a captured visit. Inspect authenticated notification reads before the worker runs. | A stale name/count/deep link is withheld immediately, even if other group places remain visible. A later worker claim may refresh the remaining group. Already delivered OS pushes cannot be recalled. |
+| Later Stealth after issuance — REC-590 follow-up | Issue an ordinary or grouped personalized notification, then make one or all source activities Stealth. Reopen the recipient inbox and tap the notification, including from a cached screen. | The original receipt remains visible with unchanged copy/count. Current source authorization denies newly private content. No new announcement is created. Repeat with an inbox-only recipient without a push token. This acceptance is pending the privacy correction. |
 | Account switching | Save offline as A, switch accounts before sync, then return to A. | Another account cannot send or acknowledge A's pending import. A's original policy and identity survive. |
 
 ## Highest-priority acceptance sequence
