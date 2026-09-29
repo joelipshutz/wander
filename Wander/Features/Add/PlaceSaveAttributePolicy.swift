@@ -62,7 +62,7 @@ enum PlaceSaveAttributePolicy {
         }
 
         // Wanna edits retain old observations verbatim, but never create new
-        // firsthand answers. Fresh Check-ins start with an empty answer map.
+        // firsthand answers. Repeat Check-ins receive editable prior answers.
         if status == .wannaGo {
             result += original.filter { PlaceCheckInQuestionCatalog.isDetailQuestion($0.questionKey) }
         } else {
