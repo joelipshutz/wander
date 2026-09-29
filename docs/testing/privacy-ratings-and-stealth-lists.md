@@ -178,9 +178,18 @@ September 21–24 UTC. Scoped removal was approved and submitted as
 The request covers only those event names from September 21 at 23:01:56 UTC
 through September 24 before 04:16:00 UTC. No deletion is confirmed yet; deleting
 whole PostHog people could erase unrelated analytics.
-Provider completion and a zero-count recheck are required. Resolve the scoped cleanup in
+Historical analytics cleanup is optional follow-up in
 [REC-620](https://linear.app/recme/issue/REC-620/resolve-retention-of-historical-notification-diagnostics-after-privacy)
-before claiming that those existing copies are removed.
+and does not block acceptance testing or rollout. The submitted support request
+has not been withdrawn, and deletion remains unconfirmed. Provider confirmation
+and a zero-count recheck would be needed only before claiming those copies were
+removed. Future reporting remains aggregate-only.
+
+No historical user-facing activity needs editing or deletion for this testing
+slice based on the completed audit. Existing check-ins, ratings, lists, original
+photos, and Wannas are preserved. Report the affected scope before any future
+historical-record cleanup. Legacy link invalidation preserves stored photos and
+remains separate from deleting app data.
 
 Small-sample inference from Astir's anonymous score/count is deferred to
 [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).

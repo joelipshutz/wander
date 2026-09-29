@@ -4,6 +4,21 @@ Last updated: 2026-09-21
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Historical data and testing scope (REC-590, September 29)
+
+Historical PostHog diagnostic cleanup is optional follow-up and does not block
+privacy acceptance testing or rollout. The previously approved support request
+remains submitted; removing it as a gate does not assert deletion or withdrawal.
+Future notification reporting remains aggregate-only.
+
+No historical check-ins, ratings, lists, photos, or Wanna records need deletion
+for the current testing slice. The completed audit found no proven historical
+private-list companions eligible for an audience repair. Before any future
+cleanup that changes user-facing historical records, report the affected scope.
+Keep the scoped legacy photo/share-preview link invalidation request: it revokes
+old access while preserving stored photos and database records. Its completion
+remains a separate rollout verification, without blocking branch testing.
+
 ## Cached activity and source revocation (REC-590, September 23)
 
 Opening another person's cached activity, check-in history, or protected photo
