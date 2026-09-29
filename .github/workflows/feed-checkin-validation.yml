@@ -64,9 +64,19 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
+      # SDK replay capture owns process-wide observers; validate in a fresh test host.
+      - name: Verify replay masking in an isolated process
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/ReplayMaskingTests
+          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Stop large simulator
         if: always()
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
@@ -79,6 +89,7 @@ jobs:
           -only-testing:WanderUITests/FeedPaginationUITests
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Generic Simulator build
+        if: success() || failure()
         run: >-
           xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
           -destination 'generic/platform=iOS Simulator'
@@ -87,7 +98,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small; do
+          for size in large small replay; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -101,4 +112,5 @@ jobs:
             ${{ runner.temp }}/evidence
             ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
+            ${{ runner.temp }}/replay.xcresult
           retention-days: 14
