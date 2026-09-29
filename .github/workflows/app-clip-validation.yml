@@ -8,6 +8,7 @@ on:
       - 'WanderAppClipTests/**'
       - 'WanderAppClipUITests/**'
       - '.github/workflows/app-clip-validation.yml'
+      - 'scripts/run-parent-regression.py'
   workflow_dispatch:
 
 permissions:
@@ -19,21 +20,33 @@ concurrency:
 
 jobs:
   parent:
-    name: Parent ${{ matrix.suite }} suite
+    name: Parent ${{ matrix.name }}
     runs-on: macos-26
     timeout-minutes: 110
     strategy:
       fail-fast: false
       matrix:
         include:
-          - suite: unit
-            target: WanderTests
-          - suite: ui
-            target: WanderUITests
+          - name: unit suite
+            suite: unit
+            shard: 0
+          - name: UI shard 1
+            suite: ui
+            shard: 0
+          - name: UI shard 2
+            suite: ui
+            shard: 1
+          - name: UI shard 3
+            suite: ui
+            shard: 2
+          - name: UI shard 4
+            suite: ui
+            shard: 3
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          lfs: true
           persist-credentials: false
       - name: Generate project and select simulator
         run: |
@@ -59,17 +72,14 @@ jobs:
       # real startup path; this uses no Apple distribution identity or secrets.
       - name: Run complete parent suite
         env:
-          TEST_TARGET: ${{ matrix.target }}
+          TEST_SUITE: ${{ matrix.suite }}
+          TEST_SHARD: ${{ matrix.shard }}
         run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:"$TEST_TARGET"
-          -test-timeouts-enabled YES
-          -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 240
-          -resultBundlePath "$RUNNER_TEMP/Parent.xcresult"
-          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          python3 scripts/run-parent-regression.py --suite "$TEST_SUITE"
+          --shard "$TEST_SHARD" --shard-count 4
+          --destination "$TEST_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData"
+          --result-bundle "$RUNNER_TEMP/Parent.xcresult"
+          --selection-file "$RUNNER_TEMP/test-selection.json"
       - name: Summarize test result
         if: always()
         run: |
@@ -80,8 +90,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-clip-parent-${{ matrix.suite }}
+          name: app-clip-parent-${{ matrix.suite }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/Parent.xcresult
             ${{ runner.temp }}/parent-summary.json
+            ${{ runner.temp }}/test-selection.json
           retention-days: 14

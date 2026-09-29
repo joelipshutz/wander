@@ -88,12 +88,14 @@
     "evidence": [
       "Supabase project and organization read APIs, 2026-09-23",
       "project.yml",
-      "Hosted migration history, function security metadata and rollback-only App Clip Save regression, 2026-09-28"
+      "Hosted migration history, function security metadata and rollback-only App Clip Save regression, 2026-09-28",
+      "Supabase authentication dashboard, enabled production Clerk issuer, 2026-09-28"
     ],
     "verification": "Project identity, organization, region and health confirmed directly. Organization name does not independently establish an individual member's role.",
-    "pending": [
-      "Verify the current Clerk third-party-auth issuer configuration against the production instance."
-    ],
+    "pending": [],
+    "clerkIssuer": "https://clerk.getrec.me",
+    "clerkIssuerEnabled": true,
+    "clerkIssuerVerifiedOn": "2026-09-28",
     "rollbackSmokeVerifiedOn": "2026-09-28",
     "clipRPCDeployed": true,
     "clipRPCMigrationVersion": "20260928231919",
