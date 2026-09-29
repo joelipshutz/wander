@@ -17,6 +17,15 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
         XCTAssertEqual(persistence.load(), draft)
     }
 
+    func testExplicitSilentChoiceRoundTripsInDraft() throws {
+        var draft = makeDraft(status: .been)
+        draft.form.silentNotifications = false
+        let restored = try JSONDecoder().decode(PlaceSaveDraft.self, from: JSONEncoder().encode(draft))
+        XCTAssertEqual(restored.form.silentNotifications, false)
+        draft.form.silentNotifications = true
+        XCTAssertEqual(try JSONDecoder().decode(PlaceSaveDraft.self, from: JSONEncoder().encode(draft)).form.silentNotifications, true)
+    }
+
     func testDraftWithoutListSelectionStillDecodes() throws {
         let data = try JSONEncoder().encode(makeDraft(status: .been))
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

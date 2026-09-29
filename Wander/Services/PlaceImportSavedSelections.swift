@@ -57,7 +57,8 @@ extension WanderStore {
     /// new action; unrelated visits and list memberships are never converted.
     func createImportedSelection(
         entry: PlaceImportReceiptEntry, item: PlaceImportItem, status: PlaceStatus,
-        submission: MapPlaceSaveSubmission? = nil
+        submission: MapPlaceSaveSubmission? = nil,
+        senderNotificationPolicy: SenderNotificationPolicy = .silent
     ) async -> (SaveResult, PlaceImportSavedSelection)? {
         guard submission.map({ validatesPrivateCheckInDraft($0, store: self) }) ?? true,
               let candidate = importCandidate(for: entry, item: item),
@@ -75,11 +76,11 @@ extension WanderStore {
             let operationID = (submission?.wannaOperationID ?? UUID()).uuidString.lowercased()
             if visible == nil {
                 _ = saveCandidate(candidate, status: .wannaGo, visibility: visibility,
-                    note: nil, sourceType: item.source.canonicalAddSourceType, attributes: [])
+                    note: nil, sourceType: item.source.canonicalAddSourceType, attributes: [], senderNotificationPolicy: senderNotificationPolicy)
             }
             result = await saveNewWanna(candidate, operationID: operationID, visibility: visibility,
                 note: submission?.note, plannedDate: submission?.plannedDate,
-                attributes: submission?.attributes ?? [], sourceType: item.source.canonicalAddSourceType, backend: nil)
+                attributes: submission?.attributes ?? [], sourceType: item.source.canonicalAddSourceType, senderNotificationPolicy: senderNotificationPolicy, backend: nil)
             guard result.syncState != .failed else { return nil }
             selection.wannaIsOriginal = false
             selection.wannaID = operationID
@@ -100,7 +101,7 @@ extension WanderStore {
                 visitedAt: submission?.visitedAt ?? .now, note: submission?.note,
                 ratingScore: submission?.ratingScore, attributes: submission?.attributes ?? [],
                 visibility: visibility,
-                preservesPriorWanna: !replacesSummaryWanna) else { return nil }
+                preservesPriorWanna: !replacesSummaryWanna, senderNotificationPolicy: senderNotificationPolicy) else { return nil }
             visit = newVisit
             result = SaveResult(userPlaceID: newVisit.userPlaceID, syncState: newVisit.syncState)
             selection.visitID = newVisit.id
@@ -109,7 +110,7 @@ extension WanderStore {
             result = saveImportedCandidate(candidate, status: .been, visibility: visibility,
                 note: submission?.note, sourceType: item.source.canonicalAddSourceType,
                 ratingScore: submission?.ratingScore, visitedAt: submission?.visitedAt ?? .now,
-                attributes: submission?.attributes ?? [])
+                attributes: submission?.attributes ?? [], senderNotificationPolicy: senderNotificationPolicy)
             visit = visits(for: result.userPlaceID).first
             selection.visitID = visit?.id
             selection.wannaID = nil

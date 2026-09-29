@@ -245,6 +245,10 @@ final class LocalPlace {
 
 @Model
 final class LocalUserPlace {
+    var senderNotificationJSON: String? = nil
+    var senderNotificationPolicy: SenderNotificationPolicy {
+        SenderNotificationPolicy.restored(from: senderNotificationJSON)
+    }
     @Attribute(.unique) var localID: String
     var serverID: String?
     var userID: String
@@ -283,7 +287,8 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, viewerPrimaryCategory: String? = nil, viewerSubcategory: String? = nil, viewerFoodType: String? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, viewerPrimaryCategory: String? = nil, viewerSubcategory: String? = nil, viewerFoodType: String? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil, senderNotificationJSON: String? = nil) {
+        self.senderNotificationJSON = senderNotificationJSON
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -385,6 +390,10 @@ final class LocalPlaceAttribute {
 
 @Model
 final class LocalPlaceVisit {
+    var senderNotificationJSON: String? = nil
+    var senderNotificationPolicy: SenderNotificationPolicy {
+        SenderNotificationPolicy.restored(from: senderNotificationJSON)
+    }
     @Attribute(.unique) var localID: String
     var serverID: String?
     var userPlaceID: String
@@ -420,8 +429,8 @@ final class LocalPlaceVisit {
         createdAt: Date = .now,
         updatedAt: Date = .now,
         deletedAt: Date? = nil,
-        attributeAnswersAreComplete: Bool = true
-    ) {
+        attributeAnswersAreComplete: Bool = true, senderNotificationJSON: String? = nil) {
+        self.senderNotificationJSON = senderNotificationJSON
         self.localID = localID
         self.serverID = serverID
         self.userPlaceID = userPlaceID

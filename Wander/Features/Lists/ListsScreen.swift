@@ -1079,6 +1079,8 @@ private struct ListDetailScreen: View {
     @State private var suggestionBatch = ListSuggestionBatch()
     @State private var isLoadingSuggestions = false
     @State private var hasLoadedSuggestions = false
+    @State private var pendingSuggestion: ListPlaceSuggestion?
+    @State private var showsSuggestionNotificationChoice = false
     @State private var saveToast: ListSaveToastPresentation?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var autoSaveToastTask: Task<Void, Never>?
@@ -1235,6 +1237,13 @@ private struct ListDetailScreen: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
+        .confirmationDialog("Add to list", isPresented: $showsSuggestionNotificationChoice, titleVisibility: .visible) {
+            Button("Add to list") { confirmSuggestion(silent: false) }
+            Button("Add silently") { confirmSuggestion(silent: true) }
+            Button("Cancel", role: .cancel) { pendingSuggestion = nil }
+        } message: {
+            Text("A silent addition skips list and companion-save notifications. Visibility stays the same.")
+        }
         .alert("Leave List?", isPresented: $isShowingLeaveConfirmation) {
             Button("Leave List", role: .destructive) {
                 Task {
@@ -1457,9 +1466,8 @@ private struct ListDetailScreen: View {
                     suggestionBatch.isAdding(suggestionID: suggestion.id)
                 },
                 onAdd: { suggestion in
-                    Task {
-                        await addSuggestion(suggestion)
-                    }
+                    pendingSuggestion = suggestion
+                    showsSuggestionNotificationChoice = true
                 },
                 onOpen: { suggestion in
                     selectedPlace = ListPlaceMock(
@@ -1583,12 +1591,20 @@ private struct ListDetailScreen: View {
     }
 
     @MainActor
-    private func addSuggestion(_ suggestion: ListPlaceSuggestion) async {
+    private func confirmSuggestion(silent: Bool) {
+        guard let suggestion = pendingSuggestion else { return }
+        pendingSuggestion = nil
+        Task { await addSuggestion(suggestion, policy: SenderNotificationPolicy(silent: silent)) }
+    }
+
+    @MainActor
+    private func addSuggestion(_ suggestion: ListPlaceSuggestion, policy: SenderNotificationPolicy) async {
         guard let sourceList,
               suggestionBatch.beginAdding(suggestionID: suggestion.id)
         else { return }
 
-        let result = await store.addVisiblePlace(suggestion.visiblePlace, to: sourceList, backend: backend)
+        let result = await store.addVisiblePlace(suggestion.visiblePlace, to: sourceList, backend: backend,
+            senderNotificationPolicy: policy)
         let didExhaustBatch = suggestionBatch.finishAdding(
             suggestionID: suggestion.id,
             outcome: result.outcome
@@ -1762,6 +1778,8 @@ private struct ListAddPlacesScreen: View {
     @State private var isSearching = false
     @State private var selectedPlace: ListPlaceMock?
     @State private var pendingSearchCandidateIDs = Set<String>()
+    @State private var pendingAddition: MapPlaceListTarget?
+    @State private var showsAdditionNotificationChoice = false
     @State private var saveToast: ListSaveToastPresentation?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var autoSaveToastTask: Task<Void, Never>?
@@ -1852,6 +1870,13 @@ private struct ListAddPlacesScreen: View {
             suggestionBatch.cancelPendingAdditions()
             pendingSearchCandidateIDs.removeAll()
         }
+        .confirmationDialog("Add to list", isPresented: $showsAdditionNotificationChoice, titleVisibility: .visible) {
+            Button("Add to list") { confirmAddition(silent: false) }
+            Button("Add silently") { confirmAddition(silent: true) }
+            Button("Cancel", role: .cancel) { pendingAddition = nil }
+        } message: {
+            Text("A silent addition skips list and companion-save notifications. Visibility stays the same.")
+        }
     }
 
     @ViewBuilder
@@ -1898,9 +1923,8 @@ private struct ListAddPlacesScreen: View {
                                 )
                             },
                             onAdd: {
-                                Task {
-                                    await add(suggestion.visiblePlace)
-                                }
+                                pendingAddition = .visiblePlace(suggestion.visiblePlace)
+                                showsAdditionNotificationChoice = true
                             }
                         )
                     }
@@ -1938,9 +1962,8 @@ private struct ListAddPlacesScreen: View {
                             supportingText: searchSupportingText(for: candidate),
                             isAdding: pendingSearchCandidateIDs.contains(candidate.id),
                             onAdd: {
-                                Task {
-                                    await add(candidate)
-                                }
+                                pendingAddition = .candidate(candidate)
+                                showsAdditionNotificationChoice = true
                             }
                         )
                     }
@@ -2024,10 +2047,24 @@ private struct ListAddPlacesScreen: View {
     }
 
     @MainActor
-    private func add(_ visiblePlace: VisiblePlace) async {
+    private func confirmAddition(silent: Bool) {
+        guard let target = pendingAddition else { return }
+        pendingAddition = nil
+        let policy = SenderNotificationPolicy(silent: silent)
+        Task {
+            switch target {
+            case .visiblePlace(let place): await add(place, policy: policy)
+            case .candidate(let candidate): await add(candidate, policy: policy)
+            }
+        }
+    }
+
+    @MainActor
+    private func add(_ visiblePlace: VisiblePlace, policy: SenderNotificationPolicy) async {
         guard suggestionBatch.beginAdding(suggestionID: visiblePlace.id) else { return }
 
-        let result = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        let result = await store.addVisiblePlace(visiblePlace, to: list, backend: backend,
+            senderNotificationPolicy: policy)
         let didExhaustBatch = suggestionBatch.finishAdding(
             suggestionID: visiblePlace.id,
             outcome: result.outcome
@@ -2071,10 +2108,11 @@ private struct ListAddPlacesScreen: View {
     }
 
     @MainActor
-    private func add(_ candidate: PlaceCandidate) async {
+    private func add(_ candidate: PlaceCandidate, policy: SenderNotificationPolicy) async {
         guard pendingSearchCandidateIDs.insert(candidate.id).inserted else { return }
 
-        let result = await store.addCandidate(candidate, to: list, backend: backend)
+        let result = await store.addCandidate(candidate, to: list, backend: backend,
+            senderNotificationPolicy: policy)
         pendingSearchCandidateIDs.remove(candidate.id)
         if result.outcome == .added || result.outcome == .alreadyInList {
             searchCandidates.removeAll { $0.id == candidate.id }

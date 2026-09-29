@@ -182,6 +182,9 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
+    // Native scroll/list transitions can drop XCTest's 50 ms synthesized taps.
+    // These regression flows use one 200 ms press per action, as the sender UI
+    // suite does, while preserving every state and persistence assertion.
     func testRestoreCancellationKeepsCustomizationOpen() {
         let app = launchPlace()
         openCheckIn(in: app)
@@ -189,11 +192,11 @@ final class CheckInQuestionUITests: XCTestCase {
         let previous = recurringIDs(in: app)
         let restore = app.buttons["save.questions.restore"]
         reveal(restore, in: app)
-        restore.tap()
+        restore.press(forDuration: 0.2)
         let cancel = app.buttons["No, cancel"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
         capture("REC-485 native restore confirmation")
-        cancel.tap()
+        cancel.press(forDuration: 0.2)
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 5))
         XCTAssertEqual(recurringIDs(in: app), previous)
         let footer = app.staticTexts["Drag to reorder."]
@@ -204,15 +207,15 @@ final class CheckInQuestionUITests: XCTestCase {
         capture("REC-485 restore cancellation preserves customization")
 
         // Closing and reopening the editor must preserve the saved question order.
-        app.buttons["save.questions.done"].tap()
+        app.buttons["save.questions.done"].press(forDuration: 0.2)
         let close = app.buttons["save.close"]
         reveal(close, in: app, upwards: false)
-        close.tap()
+        close.press(forDuration: 0.2)
         XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForNonExistence(timeout: 5))
         openCheckIn(in: app)
         openCustomize(in: app)
         XCTAssertEqual(recurringIDs(in: app), previous)
-        app.buttons["save.questions.done"].tap()
+        app.buttons["save.questions.done"].press(forDuration: 0.2)
     }
 
     func testFreshCheckInStartsBlankAndTappingSelectedAnswerClearsIt() {
@@ -268,9 +271,9 @@ final class CheckInQuestionUITests: XCTestCase {
 
         // The native edit control shares its row's accessibility identifier;
         // target the leading minus, not the row's privacy-navigation button.
-        recurringCell(lastID, in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
+        recurringCell(lastID, in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).press(forDuration: 0.2)
         let confirmDelete = app.buttons["Delete"].firstMatch
-        if confirmDelete.waitForExistence(timeout: 2) { confirmDelete.tap() }
+        if confirmDelete.waitForExistence(timeout: 2) { confirmDelete.press(forDuration: 0.2) }
         XCTAssertTrue(app.buttons["save.questions.done"].exists)
         XCTAssertTrue(recurringElement(lastID, in: app).waitForNonExistence(timeout: 3))
         XCTAssertEqual(recurringIDs(in: app).count, 2)
@@ -278,50 +281,50 @@ final class CheckInQuestionUITests: XCTestCase {
         let addCatalog = app.buttons["save.questions.addCatalog"]
         reveal(addCatalog, in: app)
         XCTAssertTrue(addCatalog.isEnabled, "Adding a question stays available while native reorder controls are shown.")
-        addCatalog.tap()
+        addCatalog.press(forDuration: 0.2)
         XCTAssertFalse(app.descendants(matching: .any)["save.questions.catalogStealth"].firstMatch.exists)
         capture("REC-485 question library without Stealth section")
         let search = app.textFields["save.questions.catalogSearch"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
-        search.tap()
+        search.press(forDuration: 0.2)
         search.typeText("outlet\n")
         let outlets = app.buttons["save.questions.catalog.place_detail_outlets"]
         XCTAssertTrue(outlets.waitForExistence(timeout: 3))
-        outlets.tap()
+        outlets.press(forDuration: 0.2)
         XCTAssertTrue(recurringElement("place_detail_outlets", in: app).waitForExistence(timeout: 3))
         let outletsEye = app.buttons["save.questions.stealth.place_detail_outlets"]
         XCTAssertEqual(outletsEye.value as? String, "Off, check-in audience")
-        outletsEye.tap()
+        outletsEye.press(forDuration: 0.2)
         XCTAssertEqual(outletsEye.value as? String, "On, only you")
 
         let createCustom = app.buttons["save.questions.createCustom"]
         reveal(createCustom, in: app)
         XCTAssertTrue(createCustom.isEnabled, "Creating a question stays available while native reorder controls are shown.")
-        createCustom.tap()
+        createCustom.press(forDuration: 0.2)
         XCTAssertFalse(app.descendants(matching: .any)["save.questions.customStealth"].firstMatch.exists)
         let prompt = app.descendants(matching: .any)["save.questions.customPrompt"].firstMatch
         XCTAssertTrue(prompt.waitForExistence(timeout: 3))
         reveal(prompt, in: app, upwards: false)
-        prompt.tap()
+        prompt.press(forDuration: 0.2)
         prompt.typeText("Lots of plants indoors?")
-        app.buttons["save.questions.customAdd"].tap()
+        app.buttons["save.questions.customAdd"].press(forDuration: 0.2)
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 3))
         let customID = try XCTUnwrap(recurringIDs(in: app).first { $0.hasPrefix("custom_question_") })
         let customEye = app.buttons["save.questions.stealth.\(customID)"]
         XCTAssertEqual(customEye.value as? String, "On, only you")
-        customEye.tap()
+        customEye.press(forDuration: 0.2)
         XCTAssertEqual(customEye.value as? String, "Off, check-in audience")
         let expectedIDs = recurringIDs(in: app)
         capture("REC-485 customized recurring questions")
-        app.buttons["save.questions.done"].tap()
+        app.buttons["save.questions.done"].press(forDuration: 0.2)
 
         let customYes = app.buttons["save.question.\(customID).Yes"]
         reveal(customYes, in: app)
         XCTAssertTrue(customYes.isHittable)
         XCTAssertFalse(customYes.isSelected)
-        customYes.tap()
+        customYes.press(forDuration: 0.2)
         XCTAssertTrue(customYes.isSelected)
-        customYes.tap()
+        customYes.press(forDuration: 0.2)
         XCTAssertFalse(customYes.isSelected)
 
         openCustomize(in: app)
@@ -329,9 +332,11 @@ final class CheckInQuestionUITests: XCTestCase {
         let selectedStealth = app.buttons["save.questions.stealth.\(customID)"]
         XCTAssertTrue(selectedStealth.waitForExistence(timeout: 3))
         XCTAssertEqual(selectedStealth.value as? String, "Off, check-in audience")
-        selectedStealth.tap()
+        // Match the earlier custom-question press: the native editable List
+        // can discard XCTest's 50 ms tap while settling after navigation.
+        selectedStealth.press(forDuration: 0.2)
         XCTAssertEqual(selectedStealth.value as? String, "On, only you")
-        app.buttons["save.questions.done"].tap()
+        app.buttons["save.questions.done"].press(forDuration: 0.2)
         let badge = app.descendants(matching: .any)["save.question.stealth.\(customID)"].firstMatch
         reveal(badge, in: app)
         let questionText = app.staticTexts["save.question.row.\(customID)"]
@@ -515,7 +520,7 @@ final class CheckInQuestionUITests: XCTestCase {
         restoreSuggestions(in: app)
         let yes = app.buttons["save.question.place_detail_arrival_parking.Yes"]
         reveal(yes, in: app)
-        yes.tap()
+        yes.press(forDuration: 0.2)
         let usefulness = app.buttons["save.question.useful.place_detail_arrival_parking"]
         reveal(usefulness, in: app)
         // Native sheet scaling changes screen-space frames (44 logical points
@@ -524,25 +529,25 @@ final class CheckInQuestionUITests: XCTestCase {
             usefulness.frame.height,
             app.buttons["save.questions.customize"].frame.height - 0.5
         )
-        usefulness.tap()
+        usefulness.press(forDuration: 0.2)
         XCTAssertEqual(usefulness.value as? String, "Hidden from future prompts")
         XCTAssertFalse(yes.isEnabled)
         XCTAssertTrue(yes.isSelected, "Hiding must preserve an answer already entered.")
         capture("REC-485 dismissed question with Undo")
-        usefulness.tap()
+        usefulness.press(forDuration: 0.2)
         XCTAssertTrue(yes.isEnabled)
         XCTAssertTrue(yes.isSelected)
-        usefulness.tap()
+        usefulness.press(forDuration: 0.2)
         // Reopening customization removes the transient gray row but must not
         // resurface its existing answer under Also noted.
         openCustomize(in: app)
         XCTAssertFalse(recurringElement("place_detail_arrival_parking", in: app).exists)
         let restore = app.buttons["save.questions.restore"]
         reveal(restore, in: app)
-        restore.tap()
-        app.buttons["No, cancel"].tap()
+        restore.press(forDuration: 0.2)
+        app.buttons["No, cancel"].press(forDuration: 0.2)
         XCTAssertFalse(recurringElement("place_detail_arrival_parking", in: app).exists)
-        app.buttons["save.questions.done"].tap()
+        app.buttons["save.questions.done"].press(forDuration: 0.2)
         app.terminate()
         app.launch()
         openCheckIn(in: app)
@@ -550,14 +555,14 @@ final class CheckInQuestionUITests: XCTestCase {
         openCustomize(in: app)
         let addCatalog = app.buttons["save.questions.addCatalog"]
         reveal(addCatalog, in: app)
-        addCatalog.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        addCatalog.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         let search = app.textFields["save.questions.catalogSearch"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
-        search.tap()
+        search.press(forDuration: 0.2)
         search.typeText("Easy to find parking\n")
-        app.buttons["save.questions.catalog.place_detail_arrival_parking"].tap()
+        app.buttons["save.questions.catalog.place_detail_arrival_parking"].press(forDuration: 0.2)
         XCTAssertTrue(recurringElement("place_detail_arrival_parking", in: app).exists)
-        app.buttons["save.questions.done"].tap()
+        app.buttons["save.questions.done"].press(forDuration: 0.2)
         reveal(yes, in: app)
         XCTAssertTrue(yes.isEnabled)
         restoreSuggestions(in: app)
@@ -593,6 +598,52 @@ final class CheckInQuestionUITests: XCTestCase {
         capture("REC-485 dietary multi-select")
     }
 
+    func testSilentControlDefaultsOffAndCanBeEnabled() {
+        let app = launchPlace()
+        openCheckIn(in: app)
+        let silent = app.switches["save.silent"]
+        reveal(silent, in: app)
+        XCTAssertTrue(silent.isHittable)
+        XCTAssertTrue(silent.isEnabled)
+        XCTAssertEqual(silent.value as? String, "0")
+        capture("REC-589 before Silent activation")
+        // Allow the native switch's press recognizer to activate after scrolling.
+        silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).press(forDuration: 0.2)
+        let enabled = NSPredicate(format: "value == %@", "1")
+        wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: silent)], timeout: 5)
+        XCTAssertTrue(app.staticTexts["Skip notifications for this save. Visibility stays the same."].exists)
+        let more = app.buttons["save.moreOptions"]
+        reveal(more, in: app)
+        more.tap()
+        reveal(silent, in: app)
+        XCTAssertEqual(silent.value as? String, "1", "Optional details must preserve the sender's choice.")
+        capture("REC-589 Silent control enabled")
+    }
+
+    func testImportSaveOffersNativeSilentChoiceAndCancelDoesNotSave() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderImportImplementationReview", "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let wanna = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "import.wanna.")).firstMatch
+        XCTAssertTrue(wanna.waitForExistence(timeout: 10))
+        wanna.tap()
+        let save = app.buttons["import.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        let alert = app.alerts["Silence notifications for this import?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.buttons["Yes, save silently"].exists)
+        XCTAssertTrue(alert.buttons["No, notify followers"].exists)
+        capture("REC-589 native import silent choice")
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Yes, save silently"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+    }
+
     private func launchPlace(placeName: String = "Griffith Observatory Trail", accessibilityText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -618,7 +669,9 @@ final class CheckInQuestionUITests: XCTestCase {
         let customize = app.buttons["save.questions.customize"]
         reveal(customize, in: app)
         XCTAssertTrue(customize.isHittable)
-        customize.tap()
+        // Keep the press down long enough for the enclosing native scroll view
+        // to recognize it after the customization page has been dismissed.
+        customize.press(forDuration: 0.2)
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 4))
     }
 
@@ -626,7 +679,7 @@ final class CheckInQuestionUITests: XCTestCase {
         openCustomize(in: app)
         let restore = app.buttons["save.questions.restore"]
         reveal(restore, in: app)
-        restore.tap()
+        restore.press(forDuration: 0.2)
         confirmRestore(in: app)
         let done = app.buttons["save.questions.done"]
         done.tap()
@@ -675,7 +728,7 @@ final class CheckInQuestionUITests: XCTestCase {
             let frame = exists ? element.frame : .zero
             let id = exists ? element.identifier : ""
             let composerTarget = id == "save.close" || id == "save.questions.customize" || id == "save.questions.alsoNoted"
-                || id == "save.moreOptions" || id == "save.lists" || id == "save.note"
+                || id == "save.moreOptions" || id == "save.lists" || id == "save.note" || id == "save.silent"
                 || id.hasPrefix("save.question.") || id.hasPrefix("save.placeType.")
             let editor = app.scrollViews["save.editorScroll"]
             let composerVisible = editor.exists && editor.isHittable && !app.buttons["save.questions.done"].exists
