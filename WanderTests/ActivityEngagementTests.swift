@@ -1113,7 +1113,8 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertTrue(refreshed)
         XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [own.id, shared.id])
         XCTAssertTrue(store.followedFeedPage?.featuredPlaces.isEmpty == true)
-        XCTAssertEqual(store.followedFeedPage?.nextCursor, "next")
+        XCTAssertNil(store.followedFeedPage?.nextCursor)
+        XCTAssertEqual(repository.requestCount, 2)
     }
 
     func testExactStealthActivityIsVisibleOnlyToOwner() async {
@@ -1661,7 +1662,7 @@ private enum ActivityEngagementTestError: Error {
 }
 
 @MainActor
-private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
+final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     var placeFailuresRemaining = 0
     var suspendPlaceRequests = false
@@ -1677,6 +1678,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     let deleteError: Error?
     private(set) var activityRequestCount = 0
     private(set) var summariesRequestCount = 0
+    private(set) var summariesRequests: [[String]] = []
     private(set) var commentsRequestCount = 0
     private var commentsResponses: [Result<ActivityCommentsPage, Error>]
     private var areCommentsSuspended: Bool
@@ -1731,6 +1733,8 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
         summariesRequestCount += 1
+        summariesRequests.append(activityIDs)
+        guard activityIDs.count <= 100 else { throw ActivityEngagementTestError.expected }
         while areSummariesSuspended { await Task.yield() }
         return summariesResult ?? activityIDs.map(ActivityEngagementSummary.empty(activityID:))
     }
@@ -1831,6 +1835,9 @@ private final class SuspendedActivityFeedRepository: FeedRepository {
         requestCount += 1
         while isSuspended {
             await Task.yield()
+        }
+        if before != nil {
+            return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
         }
         return page
     }

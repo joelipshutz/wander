@@ -11595,6 +11595,12 @@ struct MapPlaceSaveContext: Identifiable {
         return nil
     }
 
+    /// A repeat visit borrows answers only; it never becomes an edit of its source.
+    var questionAnswerSourceVisit: LocalPlaceVisit? {
+        if case .addVisit = mode { return existingLatestVisit }
+        return editedVisit
+    }
+
     var sharedVisitInvitation: SharedVisitInvitation? {
         if case .sharedVisit(let invitation) = mode {
             return invitation
@@ -11802,12 +11808,13 @@ struct MapPlaceSaveContext: Identifiable {
             initialRatingScore: latestVisit?.ratingScore,
             initialNote: "",
             initialPlannedDate: nil,
-            initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
-            initialPersonalLabels: [],
+            initialAnswers: initialAnswers(from: defaultAttributes),
+            initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
             initialCuisine: initialCuisine(from: defaultAttributes),
             initialPhotoAttachments: initialPhotoAttachments,
             existingCurrentUserSave: visiblePlace,
-            existingLatestVisit: latestVisit
+            existingLatestVisit: latestVisit,
+            originalAttributes: defaultAttributes
         )
     }
 
@@ -11921,7 +11928,8 @@ struct MapPlaceSaveContext: Identifiable {
             existingCurrentUserSave: existingCurrentUserSave,
             existingLatestVisit: existingLatestVisit,
             initialVisitedAt: min(visitedAt, .now),
-            calendarReservationID: id
+            calendarReservationID: id,
+            originalAttributes: originalAttributes
         )
     }
 
@@ -12711,6 +12719,26 @@ func validatesPrivateCheckInDraft(_ submission: MapPlaceSaveSubmission, store: W
     } catch {
         return false
     }
+}
+
+/// Load defaults from the owner’s source visit without changing its answers.
+@MainActor
+func loadPrivateQuestionAnswerDefaults(
+    context: MapPlaceSaveContext,
+    ownerUserID: String,
+    preferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+) throws -> [String: String] {
+    guard let visit = context.questionAnswerSourceVisit else { return [:] }
+    guard context.saveOwnerUserID == ownerUserID else {
+        throw CheckInQuestionPersistenceError.invalidPrivateAnswer
+    }
+    return try loadAndMigratePrivateCheckInAnswers(
+        originalAttributes: context.originalAttributes,
+        ownerUserID: ownerUserID,
+        userPlaceID: context.sourceVisiblePlace?.userPlace.localID ?? visit.userPlaceID,
+        visitID: visit.serverID ?? visit.localID,
+        preferences: preferences
+    )
 }
 
 /// Recover only legacy answers whose question and value are understood. Write
@@ -14218,15 +14246,8 @@ struct MapPlaceSaveEditor: View {
                     categoryID: selectedAssignment.primaryCategory, subcategory: checkInQuestionSubtype
                 ).map(\.id)
             )
-            guard let visit = context.editedVisit else {
-                didLoadPrivateAnswers = true
-                return
-            }
-            let userPlaceID = context.sourceVisiblePlace?.userPlace.localID ?? visit.userPlaceID
-            customQuestionAnswers = try loadAndMigratePrivateCheckInAnswers(
-                originalAttributes: context.originalAttributes,
-                ownerUserID: store.currentUser.id, userPlaceID: userPlaceID,
-                visitID: visit.serverID ?? visit.localID, preferences: preferences
+            customQuestionAnswers = try loadPrivateQuestionAnswerDefaults(
+                context: context, ownerUserID: store.currentUser.id, preferences: preferences
             )
             // Private persisted answers win over any stale public draft state.
             for id in customQuestionAnswers.keys { selectedAnswers[id] = [] }
