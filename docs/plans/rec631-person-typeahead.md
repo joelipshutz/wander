@@ -83,11 +83,13 @@ contract. Keep notification code untouched while the independent dependency is a
 
 ## Validation results
 
-The hosted migration preview and `person_typeahead_search.sql` regression pass
-inside a rolled-back transaction. The full hosted smoke suite stops at the
-existing share-card payload assertion; running `share_card_previews.sql` without
-this migration reproduces that failure. Deployment approval is pending; no hosted
-migration has been applied.
+The hosted migration `20260929044549_person_typeahead_search` is deployed.
+The `person_typeahead_search.sql` regression passes against that deployed function
+inside a rolled-back transaction, including first-character/surname matching,
+deduplication, visibility exclusions, and function security metadata. The migration
+changes the search function only; historical comments and notes are untouched.
+The full hosted smoke suite stops at the existing share-card payload assertion;
+running `share_card_previews.sql` without this migration reproduces that failure.
 
 The iPhone 16 Plus run passed 2,573 unit tests and all four typeahead UI cases
 (comments, Feed search, Map search, and both note modes). The native input now
@@ -102,3 +104,10 @@ runtime because the prescribed 18.6 runtime is unavailable. All four typeahead U
 keyboard Send and a geometry assertion keeping the note above the save button.
 Existing combined-search/profile navigation and note-draft preservation UI tests
 pass. Screenshots cover light and dark appearances across the two sizes.
+
+The physical-iPhone Debug build exposed an existing onboarding review reference
+to simulator-only contact fixtures. The reference is now simulator-guarded, with
+the normal contact service used on devices. Xcode's signed build for Ry's iPhone
+succeeds on the feature branch.
+The complete unit suite was rerun after this guard change: 2,573 passed with
+zero failures on iPhone SE (3rd generation), iOS 26.5.
