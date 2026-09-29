@@ -1,0 +1,117 @@
+name: Feed and check-in native validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Wander/Features/Feed/**'
+      - 'Wander/Features/Add/PlaceSaveAttributePolicy.swift'
+      - 'Wander/Features/Map/MapScreen.swift'
+      - 'Wander/Services/FeedModels.swift'
+      - 'Wander/Services/WanderLocalStore.swift'
+      - 'WanderTests/Feed*Tests.swift'
+      - 'WanderTests/ActivityEngagementTests.swift'
+      - 'WanderTests/CheckInQuestionPreferencesTests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderTests/WanderStoreTests.swift'
+      - 'WanderUITests/FeedPaginationUITests.swift'
+      - '.github/workflows/feed-checkin-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feed-checkin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate project and select existing simulators
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID'),
+                             (('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+              for name in names:
+                  choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                             for runtime, rows in devices.items() if 'iOS' in runtime
+                             for d in rows if d['name'] == name]
+                  if choices:
+                      device = sorted(choices, key=lambda item: item[0])[-1][1]
+                      break
+              else:
+                  raise RuntimeError(f'No supported simulator for {key}')
+              with open(os.environ['GITHUB_ENV'], 'a') as output:
+                  output.write(f'{key}={device["udid"]}\n')
+              print('Testing on', device['name'])
+          PY
+      # The search microbenchmark runs on its reference machine, not shared hosted runners.
+      - name: Unit suite and native Feed scrolling
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests
+          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/ReplayMaskingTests
+          -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/FeedAudienceUITests
+          -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
+      # SDK replay capture owns process-wide observers; validate in a fresh test host.
+      - name: Verify replay masking in an isolated process
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/ReplayMaskingTests
+          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Stop large simulator
+        if: always()
+        run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
+      - name: Verify scrolling on a compact phone
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/FeedPaginationUITests
+          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Generic Simulator build
+        if: success() || failure()
+        run: >-
+          xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=NO
+      - name: Export native evidence
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          for size in large small replay; do
+            if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
+              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
+              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feed-checkin-native-evidence
+          path: |
+            ${{ runner.temp }}/evidence
+            ${{ runner.temp }}/large.xcresult
+            ${{ runner.temp }}/small.xcresult
+            ${{ runner.temp }}/replay.xcresult
+          retention-days: 14
