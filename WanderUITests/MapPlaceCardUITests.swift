@@ -7,7 +7,8 @@ final class MapPlaceCardUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
             "-WanderDisableWalkthroughs", "-WanderFeaturedRatingFixture",
-            "-WanderMapPlace", "Featured Coffee QA", "-WanderMapSheetExpanded"
+            "-WanderMapPlace", "Featured Coffee QA", "-WanderMapSheetExpanded",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"
         ]
         app.launch()
         XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
