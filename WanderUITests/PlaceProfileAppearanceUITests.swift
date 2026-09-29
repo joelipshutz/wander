@@ -123,10 +123,14 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
     func testHistorySurvivesSettingsAppearanceChanges() throws {
         continueAfterFailure = false
         let previous = XCUIDevice.shared.appearance
-        defer { XCUIDevice.shared.appearance = previous }
         // Drive this path through the actual Settings UI, separately from
         // the direct XCUIDevice appearance coverage above.
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        defer {
+            // Close Settings before restoring appearance for later tests.
+            settings.terminate()
+            XCUIDevice.shared.appearance = previous
+        }
         settings.launch()
         #if targetEnvironment(simulator)
         // Simulator exposes the real system appearance switch under Developer;
