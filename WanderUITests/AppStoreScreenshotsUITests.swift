@@ -34,7 +34,7 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 6))
         launcher.tap()
 
-        let searchField = app.textFields["discover.placesSearchField"]
+        let searchField = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 4))
         searchField.tap()
         searchField.typeText("coffee")

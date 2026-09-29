@@ -22,7 +22,7 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertLessThan(lists.frame.minY, more.frame.minY)
         capture("REC-567 check-in lists below Friends and above More options")
 
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         reveal(note, in: app, upwards: false)
         note.tap()
         note.typeText("Keep this check-in draft")
@@ -240,7 +240,7 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(wanna.waitForExistence(timeout: 10))
         wanna.tap()
 
-        XCTAssertTrue(app.textFields["save.note"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textViews["save.note"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["What made you save this?"].exists)
         XCTAssertFalse(app.buttons["save.questions.customize"].exists)
         XCTAssertEqual(catalogAnswerButtons(in: app).count, 0)

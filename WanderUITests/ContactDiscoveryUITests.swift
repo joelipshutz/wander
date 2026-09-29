@@ -121,7 +121,7 @@ import XCTest
         backToFeed(app)
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
         app.buttons["feed.searchLauncher"].tap()
-        let search = app.textFields["discover.placesSearchField"]
+        let search = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
         search.typeText("Contact Friend")
         let retainedFollow = app.buttons["discover.person.user_contact_friend.follow"]

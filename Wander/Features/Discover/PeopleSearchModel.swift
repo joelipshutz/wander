@@ -18,8 +18,8 @@ import Foundation
         let normalized = query.replacingOccurrences(of: "@", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         failed = false
-        profiles = normalized.count >= 2 ? local(normalized) : []
-        isLoading = normalized.count >= 2
+        profiles = !normalized.isEmpty ? local(normalized) : []
+        isLoading = !normalized.isEmpty
         guard isLoading else { return }
         defer { if generation == request { isLoading = false } }
         do {

@@ -14,6 +14,8 @@ struct DiscoverScreen: View {
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var selectedMode: DiscoverMode = .places
     @State private var placesQuery: String
+    @State private var placesMentions: [PersonMention] = []
+    @State private var isShowingPersonSuggestions = false
     @State private var submittedPlacesQuery: String?
     @State private var isPlaceSearchPresented: Bool
     @State private var isPlaceSearchLoading = false
@@ -28,6 +30,7 @@ struct DiscoverScreen: View {
     @StateObject private var peopleSearch = PeopleSearchModel()
     @State private var peopleSearchRetry = 0
     @State private var memberQuery = ""
+    @State private var memberMentions: [PersonMention] = []
     @State private var placeResults = DiscoverResults(places: [], profiles: [])
     @State private var communityPlaceCandidates: [PlaceCandidate] = []
     @State private var externalPlaceCandidates: [PlaceCandidate] = []
@@ -49,7 +52,7 @@ struct DiscoverScreen: View {
     @State private var followFailedProfileIDs: Set<String> = []
     @State private var lastHandledAuthState: Bool?
     @State private var lastHandledVisiblePlaceRevision: UInt64?
-    @FocusState private var searchFieldFocused: Bool
+    @State private var searchFieldFocused = false
     @Binding private var requestedSection: DiscoverSection?
     private let embedsInHostNavigation: Bool
     private let searchTransitionNamespace: Namespace.ID?
@@ -349,10 +352,10 @@ struct DiscoverScreen: View {
                     return
                 }
                 if submittedPlacesQuery != nil {
-                    await refreshPlaces(query: placesQuery)
+                    await refreshPlaces(query: resolvedPlacesQuery)
                     if let submissionID = activePlaceSearchSubmissionID {
                         startCommunityPlaceSearch(
-                            query: placesQuery,
+                            query: resolvedPlacesQuery,
                             submissionID: submissionID
                         )
                     }
@@ -362,7 +365,7 @@ struct DiscoverScreen: View {
             }
             .task(id: "\(store.currentUser.id)|\(auth.isSignedIn)|\(isPlaceSearchPresented)|\(placesQuery)|\(peopleSearchRetry)") {
                 await peopleSearch.search(
-                    query: isPlaceSearchPresented ? placesQuery : "",
+                    query: isPlaceSearchPresented ? PersonMentionDraft(text: placesQuery, mentions: placesMentions).searchText : "",
                     local: { store.searchProfiles(handleQuery: $0) },
                     remote: { try await store.searchDiscoverMembers(query: $0, backend: backend) }
                 )
@@ -372,7 +375,7 @@ struct DiscoverScreen: View {
             }
             .onChange(of: placesQuery) { _, newValue in
                 guard let submittedPlacesQuery,
-                      normalizedSearchQuery(newValue) != normalizedSearchQuery(submittedPlacesQuery)
+                      normalizedSearchQuery(PersonMentionDraft(text: newValue, mentions: placesMentions).searchText) != normalizedSearchQuery(submittedPlacesQuery)
                 else { return }
                 cancelPlaceSearchWork()
                 self.submittedPlacesQuery = nil
@@ -407,7 +410,7 @@ struct DiscoverScreen: View {
                 guard previousRevision != revision else { return }
                 lastHandledVisiblePlaceRevision = revision
                 if submittedPlacesQuery != nil {
-                    await refreshPlaces(query: placesQuery)
+                    await refreshPlaces(query: resolvedPlacesQuery)
                 }
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
@@ -561,12 +564,16 @@ struct DiscoverScreen: View {
         }
     }
 
+    private var resolvedPlacesQuery: String {
+        PersonMentionDraft(text: placesQuery, mentions: placesMentions).searchText
+    }
+
     private func submitPlaceSearch() {
         submitPlaceSearch(source: "typed")
     }
 
     private func submitPlaceSearch(source: String) {
-        let query = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = resolvedPlacesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
         if walkthroughs.activeSurface == .feedSearch {
@@ -577,7 +584,6 @@ struct DiscoverScreen: View {
         cancelPlaceSearchWork()
         let submissionID = UUID()
         activePlaceSearchSubmissionID = submissionID
-        placesQuery = query
         submittedPlacesQuery = query
         selectedOwnerCandidateID = nil
         communityPlaceCandidates = []
@@ -636,7 +642,7 @@ struct DiscoverScreen: View {
                   isPlaceSearchPresented,
                   activePlaceSearchSubmissionID == submissionID,
                   submittedPlacesQuery == query,
-                  normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
+                  normalizedSearchQuery(resolvedPlacesQuery) == normalizedSearchQuery(query)
             else { return }
             placeResults = results
             placeSearchResultStage = "refined"
@@ -721,7 +727,7 @@ struct DiscoverScreen: View {
                       isPlaceSearchPresented,
                       activePlaceSearchSubmissionID == submissionID,
                       submittedPlacesQuery == query,
-                      normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
+                      normalizedSearchQuery(resolvedPlacesQuery) == normalizedSearchQuery(query)
                 else { return }
                 communityPlaceCandidates = outcome.candidates
                 communityPlaceSearchFailed = false
@@ -793,7 +799,7 @@ struct DiscoverScreen: View {
                       activeExternalSearchRequestID == requestID,
                       activePlaceSearchSubmissionID == submissionID,
                       submittedPlacesQuery == query,
-                      normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
+                      normalizedSearchQuery(resolvedPlacesQuery) == normalizedSearchQuery(query)
                 else { return }
                 externalPlaceCandidates = candidates
                 externalPlaceSearchFailed = false
@@ -978,6 +984,9 @@ struct DiscoverScreen: View {
     private var placesSearchField: some View {
         DiscoverSearchField(
             text: $placesQuery,
+            mentions: $placesMentions,
+            focus: $searchFieldFocused,
+            onPersonQueryChange: { isShowingPersonSuggestions = $0 },
             placeholders: tickerSuggestions,
             isTicker: true,
             accessibilityLabel: "Search places",
@@ -986,12 +995,13 @@ struct DiscoverScreen: View {
             onSubmit: submitPlaceSearch,
             onClear: { clearPlaceSearch() }
         )
-        .focused($searchFieldFocused)
     }
 
     private var membersSearchField: some View {
         DiscoverSearchField(
             text: $memberQuery,
+            mentions: $memberMentions,
+            focus: $searchFieldFocused,
             placeholders: ["Search name or @handle"],
             isTicker: false,
             accessibilityLabel: "Search people",
@@ -1000,11 +1010,10 @@ struct DiscoverScreen: View {
             onSubmit: {},
             onClear: {}
         )
-        .focused($searchFieldFocused)
     }
 
     private var activePlaceSearchHeader: some View {
-        HStack(spacing: WanderTheme.spacing2) {
+        HStack(alignment: .top, spacing: WanderTheme.spacing2) {
             if !hidesSearchBackDuringWalkthroughChoice {
                 Button(action: handlePlaceSearchBack) {
                     Image(systemName: "chevron.left")
@@ -1019,6 +1028,9 @@ struct DiscoverScreen: View {
 
             DiscoverSearchField(
                 text: $placesQuery,
+                mentions: $placesMentions,
+                focus: $searchFieldFocused,
+                onPersonQueryChange: { isShowingPersonSuggestions = $0 },
                 placeholders: ["Search places and people"],
                 isTicker: false,
                 accessibilityLabel: "Search places and people",
@@ -1027,7 +1039,6 @@ struct DiscoverScreen: View {
                 onSubmit: submitPlaceSearch,
                 onClear: { clearPlaceSearch() }
             )
-            .focused($searchFieldFocused)
             .feedSearchMatchedGeometry(
                 in: searchTransitionNamespace,
                 isSource: true
@@ -1088,7 +1099,7 @@ struct DiscoverScreen: View {
             $0.isPrivateProfile != true && !store.isProfilePrivate($0.id)
                 && !store.isBlockedBetweenCurrentUser(and: $0.id)
         }
-        if !results.isEmpty || peopleSearch.isLoading || peopleSearch.failed {
+        if !isShowingPersonSuggestions && (!results.isEmpty || peopleSearch.isLoading || peopleSearch.failed) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 SectionTitle("People")
                 ForEach(results) { profile in
@@ -1639,7 +1650,7 @@ struct DiscoverScreen: View {
                     status: .wannaGo,
                     backend: auth.isSignedIn ? backend : nil
                 )
-                await refreshPlaces(query: placesQuery)
+                await refreshPlaces(query: resolvedPlacesQuery)
                 await refreshMembers(query: memberQuery)
                 savedMessage = result.syncState == .synced
                     ? "Added to Wanna Go."
@@ -1692,7 +1703,7 @@ struct DiscoverScreen: View {
                 store: store,
                 backend: visitBackend
             ) else { return nil }
-            await refreshPlaces(query: placesQuery)
+            await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
             savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
             if !auth.isSignedIn {
@@ -1712,7 +1723,7 @@ struct DiscoverScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            await refreshPlaces(query: placesQuery)
+            await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
             savedMessage = scopedDiscoverMessage(for: submission.context, syncState: result.syncState)
             if !auth.isSignedIn {
@@ -1745,7 +1756,7 @@ struct DiscoverScreen: View {
             guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
                 return false
             }
-            await refreshPlaces(query: placesQuery)
+            await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
             savedMessage = "Check-in deleted."
             return true
@@ -1754,7 +1765,7 @@ struct DiscoverScreen: View {
                 return false
             }
 
-            await refreshPlaces(query: placesQuery)
+            await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
             selectedPlace = nil
             savedMessage = "Want removed."
@@ -1847,7 +1858,7 @@ struct DiscoverScreen: View {
         )
         guard !Task.isCancelled,
               submittedPlacesQuery == self.submittedPlacesQuery,
-              normalizedSearchQuery(query) == normalizedSearchQuery(placesQuery)
+              normalizedSearchQuery(query) == normalizedSearchQuery(resolvedPlacesQuery)
         else { return }
         placeResults = results
         placeSearchResultStage = "refined"
@@ -1883,12 +1894,13 @@ struct DiscoverScreen: View {
             return
         }
 
-        let localResults = store.searchProfiles(handleQuery: query)
+        let resolvedQuery = PersonMentionDraft(text: query, mentions: memberMentions).searchText
+        let localResults = store.searchProfiles(handleQuery: resolvedQuery)
         guard !Task.isCancelled, query == memberQuery else { return }
         memberResults = localResults
 
         guard await waitForSearchDebounceIfNeeded(debounce) else { return }
-        let results = await store.discoverMembers(query: query, backend: backend)
+        let results = await store.discoverMembers(query: resolvedQuery, backend: backend)
         guard !Task.isCancelled, query == memberQuery else { return }
         memberResults = results
     }
@@ -2319,6 +2331,9 @@ private struct DiscoverScrollToTopModifier: ViewModifier {
 private struct DiscoverSearchField: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Binding var text: String
+    @Binding var mentions: [PersonMention]
+    var focus: Binding<Bool>
+    var onPersonQueryChange: (Bool) -> Void
     let placeholders: [String]
     let isTicker: Bool
     let accessibilityLabel: String
@@ -2332,6 +2347,9 @@ private struct DiscoverSearchField: View {
 
     init(
         text: Binding<String>,
+        mentions: Binding<[PersonMention]>,
+        focus: Binding<Bool>,
+        onPersonQueryChange: @escaping (Bool) -> Void = { _ in },
         placeholders: [String],
         isTicker: Bool,
         accessibilityLabel: String,
@@ -2341,6 +2359,9 @@ private struct DiscoverSearchField: View {
         onClear: @escaping () -> Void
     ) {
         _text = text
+        _mentions = mentions
+        self.focus = focus
+        self.onPersonQueryChange = onPersonQueryChange
         self.placeholders = placeholders
         self.isTicker = isTicker
         self.accessibilityLabel = accessibilityLabel
@@ -2357,11 +2378,38 @@ private struct DiscoverSearchField: View {
     }
 
     var body: some View {
+        PersonMentionField(
+            text: $draftText, mentions: $mentions, focus: focus,
+            placeholder: "", accessibilityLabel: accessibilityLabel,
+            accessibilityIdentifier: accessibilityIdentifier,
+            placement: .below, maximumLines: 1, isSearch: true,
+            onSubmit: {
+                commitDraftText()
+                onSubmit()
+            }, onFocus: onFocus, onQueryChange: onPersonQueryChange,
+            decorateInput: { input in AnyView(searchChrome(input)) }
+        )
+        .task {
+            await runPlaceholderTicker()
+        }
+        .onChange(of: draftText) { _, value in
+            scheduleDraftTextCommit(value)
+        }
+        .onChange(of: text) { _, value in
+            guard value != draftText else { return }
+            textCommitTask?.cancel()
+            draftText = value
+        }
+        .onDisappear {
+            textCommitTask?.cancel()
+        }
+    }
+
+    private func searchChrome(_ input: AnyView) -> some View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .black))
                 .foregroundStyle(brandMode.secondaryText)
-
             ZStack(alignment: .leading) {
                 if draftText.isEmpty {
                     Text(placeholder)
@@ -2372,26 +2420,13 @@ private struct DiscoverSearchField: View {
                         .transition(isTicker ? .push(from: .bottom).combined(with: .opacity) : .opacity)
                         .allowsHitTesting(false)
                 }
-
-                TextField("", text: $draftText)
-                    .font(AstirTypography.bodySmall)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                    .foregroundStyle(brandMode.primaryText)
-                    .accessibilityLabel(accessibilityLabel)
-                    .accessibilityIdentifier(accessibilityIdentifier)
-                    .onTapGesture(perform: onFocus)
-                    .onSubmit {
-                        commitDraftText()
-                        onSubmit()
-                    }
+                input
             }
-
             if !draftText.isEmpty {
                 Button {
                     textCommitTask?.cancel()
                     draftText = ""
+                    mentions = []
                     text = ""
                     onClear()
                 } label: {
@@ -2408,20 +2443,6 @@ private struct DiscoverSearchField: View {
         .frame(minHeight: WanderTheme.tapMinimum)
         .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
         .astirOutlinedSurface(castsShadow: true)
-        .task {
-            await runPlaceholderTicker()
-        }
-        .onChange(of: draftText) { _, value in
-            scheduleDraftTextCommit(value)
-        }
-        .onChange(of: text) { _, value in
-            guard value != draftText else { return }
-            textCommitTask?.cancel()
-            draftText = value
-        }
-        .onDisappear {
-            textCommitTask?.cancel()
-        }
     }
 
     private func scheduleDraftTextCommit(_ value: String) {
