@@ -12,6 +12,7 @@ on:
       - 'WanderTests/Feed*Tests.swift'
       - 'WanderTests/ActivityEngagementTests.swift'
       - 'WanderTests/CheckInQuestionPreferencesTests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
