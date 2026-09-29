@@ -25,10 +25,13 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             tabs.buttons[name].tap()
             for appearance in [XCUIDevice.Appearance.light, .dark] {
                 XCUIDevice.shared.appearance = appearance
-                waitForAppearanceTransition()
+                waitForAppearanceTransition(to: appearance)
                 capture("\(name) live appearance \(appearance)")
                 XCTAssertTrue(tabs.buttons[name].isSelected)
                 XCTAssertTrue(tabs.buttons[name].isHittable)
+                // Events intentionally uses a black video background, which
+                // affects the native translucent tab bar in both appearances.
+                if name != "Events" { try assertAppearance(of: tabs, expected: appearance) }
             }
         }
 
@@ -39,7 +42,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 5))
         for appearance in [XCUIDevice.Appearance.light, .dark] {
             XCUIDevice.shared.appearance = appearance
-            waitForAppearanceTransition()
+            waitForAppearanceTransition(to: appearance)
             XCTAssertTrue(back.isHittable)
             capture("Settings live appearance \(appearance)")
         }
@@ -48,11 +51,14 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         let add = app.buttons["feed.headerAdd"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
+        let locationDenial = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            .buttons["Don’t Allow"]
+        if locationDenial.waitForExistence(timeout: 3) { locationDenial.tap() }
         let search = app.textFields["add.searchField"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         for appearance in [XCUIDevice.Appearance.light, .dark] {
             XCUIDevice.shared.appearance = appearance
-            waitForAppearanceTransition()
+            waitForAppearanceTransition(to: appearance)
             XCTAssertTrue(search.isHittable)
             capture("Add live appearance \(appearance)")
         }
@@ -89,7 +95,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             XCUIDevice.shared.appearance = appearance
             // Wait for the OS appearance animation before measuring the same
             // scroll position and recording the rendered history card.
-            waitForAppearanceTransition()
+            waitForAppearanceTransition(to: appearance)
             XCTAssertTrue(note.isHittable)
             XCTAssertEqual(note.frame.minY, originalY, accuracy: 4)
             XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
@@ -101,7 +107,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             XCUIDevice.shared.press(.home)
             XCUIDevice.shared.appearance = appearance
             app.activate()
-            waitForAppearanceTransition()
+            waitForAppearanceTransition(to: appearance)
             XCTAssertTrue(note.waitForExistence(timeout: 5))
             XCTAssertTrue(note.isHittable)
             XCTAssertEqual(note.frame.minY, originalY, accuracy: 4)
@@ -114,12 +120,90 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 5))
     }
 
-    /// The note's bounding box contains its actual card background. Measuring
-    /// rendered pixels catches stale glass even when text remains hittable.
-    private func assertAppearance(of note: XCUIElement, expected: XCUIDevice.Appearance,
+    func testHistorySurvivesSettingsAppearanceChanges() throws {
+        continueAfterFailure = false
+        let previous = XCUIDevice.shared.appearance
+        defer { XCUIDevice.shared.appearance = previous }
+        // Drive this path through the actual Settings UI, separately from
+        // the direct XCUIDevice appearance coverage above.
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.launch()
+        #if targetEnvironment(simulator)
+        // Simulator exposes the real system appearance switch under Developer;
+        // it does not include the device's Display & Brightness settings page.
+        let appearancePage = settings.buttons["Developer"]
+        #else
+        let appearancePage = settings.buttons["Display & Brightness"]
+        #endif
+        for _ in 0..<6 {
+            if appearancePage.isHittable { break }
+            settings.swipeUp()
+        }
+        XCTAssertTrue(appearancePage.isHittable)
+        appearancePage.tap()
+        try changeAppearanceInSettings(settings, to: .dark)
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderREC386PhotoFixture",
+            "-WanderMapPlace", "Dudley Market QA", "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        let scroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 15))
+        let note = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "QA proof: Ryan's uploaded check-in photo")
+        ).firstMatch
+        for _ in 0..<8 {
+            if note.isHittable { break }
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(note.isHittable)
+        let originalY = note.frame.minY
+        try assertAppearance(of: note, expected: .dark)
+
+        for appearance in [XCUIDevice.Appearance.light, .dark] {
+            settings.activate()
+            try changeAppearanceInSettings(settings, to: appearance)
+            capture("Settings changed appearance \(appearance)")
+            app.activate()
+            waitForAppearanceTransition(to: appearance)
+            XCTAssertTrue(note.isHittable)
+            XCTAssertEqual(note.frame.minY, originalY, accuracy: 4)
+            XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
+            capture("History after Settings \(appearance)")
+            try assertAppearance(of: note, expected: appearance)
+        }
+        app.activate()
+        XCTAssertTrue(app.buttons["place-profile.back"].isHittable)
+    }
+
+    private func changeAppearanceInSettings(_ settings: XCUIApplication,
+                                            to appearance: XCUIDevice.Appearance) throws {
+        #if targetEnvironment(simulator)
+        let choice = settings.switches["UIAppearanceSettings"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        let expectedValue = appearance == .dark ? "1" : "0"
+        if choice.value as? String != expectedValue {
+            // Hit the switch itself, rather than the combined cell label.
+            choice.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+        let switched = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", expectedValue), object: choice)
+        XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 5), .completed)
+        #else
+        let choice = settings.buttons[appearance == .light ? "Light" : "Dark"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        choice.tap()
+        #endif
+    }
+
+    /// Measure actual rendered card/tab backgrounds so a stale surface fails
+    /// even when its controls remain hittable.
+    private func assertAppearance(of element: XCUIElement, expected: XCUIDevice.Appearance,
                                   file: StaticString = #filePath, line: UInt = #line) throws {
         XCTAssertEqual(XCUIDevice.shared.appearance, expected, file: file, line: line)
-        let image = try XCTUnwrap(note.screenshot().image.cgImage)
+        let image = try XCTUnwrap(element.screenshot().image.cgImage)
         var pixels = [UInt8](repeating: 0, count: 64 * 8 * 4)
         try pixels.withUnsafeMutableBytes { buffer in
             let context = try XCTUnwrap(CGContext(
@@ -138,13 +222,17 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         }
         let luminance = total / 512.0
         if expected == .light {
-            XCTAssertGreaterThan(luminance, 0.6, "Light history retained a dark surface.", file: file, line: line)
+            XCTAssertGreaterThan(luminance, 0.6, "Light appearance retained a dark surface.", file: file, line: line)
         } else {
-            XCTAssertLessThan(luminance, 0.45, "Dark history retained a light surface.", file: file, line: line)
+            XCTAssertLessThan(luminance, 0.45, "Dark appearance retained a light surface.", file: file, line: line)
         }
     }
 
-    private func waitForAppearanceTransition() {
+    private func waitForAppearanceTransition(to appearance: XCUIDevice.Appearance) {
+        let switched = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in XCUIDevice.shared.appearance == appearance },
+            object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 5), .completed)
         let settled = expectation(description: "System appearance transition settled")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { settled.fulfill() }
         wait(for: [settled], timeout: 3)
