@@ -41,6 +41,12 @@ private enum OwnPlaceSyncOutcome {
     case skipped
 }
 
+enum PlaceActivityRefreshOutcome: Equatable {
+    case refreshed
+    case failed
+    case cancelled
+}
+
 struct RemoveSaveResult: Equatable {
     let userPlaceID: String
     let syncState: SyncState
@@ -8620,19 +8626,41 @@ final class WanderStore: ObservableObject {
         in viewport: MapViewport,
         backend: WanderBackend?
     ) async -> [VisiblePlace]? {
-        guard let backend, backend.placeRepository != nil else { return nil }
+        try? await fetchRemoteViewportPlacesResult(in: viewport, backend: backend).get()
+    }
+
+    /// Preserve cancellation separately from a failed read so a foreground
+    /// transition cannot turn an interrupted request into a retry banner.
+    func fetchRemoteViewportPlacesResult(
+        in viewport: MapViewport,
+        backend: WanderBackend?
+    ) async -> Result<[VisiblePlace], Error> {
+        guard let backend, backend.placeRepository != nil else {
+            return .failure(WanderRemoteError.notConfigured)
+        }
         let requestUserID = currentUser.id
 
         do {
             let visiblePlaces = try await backend.visiblePlaces(in: viewport)
-            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            guard currentUser.id == requestUserID, !Task.isCancelled else {
+                return .failure(CancellationError())
+            }
             lastRemoteError = nil
-            return visiblePlaces
+            return .success(visiblePlaces)
         } catch {
-            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            guard currentUser.id == requestUserID, !Task.isCancelled,
+                  !isRemoteReadCancellation(error) else {
+                return .failure(CancellationError())
+            }
             lastRemoteError = remoteErrorMessage(error)
-            return nil
+            return .failure(error)
         }
+    }
+
+    private func isRemoteReadCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return error is CancellationError
+            || (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled)
     }
 
     /// Fetches the server-bounded community candidate set used only by
@@ -9411,7 +9439,14 @@ final class WanderStore: ObservableObject {
         userPlaceIDs: [String],
         backend: WanderBackend?
     ) async -> Bool {
-        guard let backend, backend.visitRepository != nil else { return true }
+        await refreshRemotePlaceActivityOutcome(userPlaceIDs: userPlaceIDs, backend: backend) == .refreshed
+    }
+
+    func refreshRemotePlaceActivityOutcome(
+        userPlaceIDs: [String],
+        backend: WanderBackend?
+    ) async -> PlaceActivityRefreshOutcome {
+        guard let backend, backend.visitRepository != nil else { return .refreshed }
         let requestUserID = currentUser.id
 
         let requestedUserPlaceIDs = Array(
@@ -9421,7 +9456,7 @@ final class WanderStore: ObservableObject {
                     .filter { !$0.isEmpty }
             )
         ).sorted()
-        guard !requestedUserPlaceIDs.isEmpty else { return true }
+        guard !requestedUserPlaceIDs.isEmpty else { return .refreshed }
         await refreshWannaSaves(userPlaceIDs: requestedUserPlaceIDs, backend: backend)
 
         var hydratedVisits: [PlaceVisitResult] = []
@@ -9432,7 +9467,7 @@ final class WanderStore: ObservableObject {
         var wasCancelled = false
 
         for batchStart in stride(from: 0, to: requestedUserPlaceIDs.count, by: 6) {
-            guard !Task.isCancelled else { return false }
+            guard !Task.isCancelled else { return .cancelled }
             let batchEnd = min(batchStart + 6, requestedUserPlaceIDs.count)
             let batch = Array(requestedUserPlaceIDs[batchStart..<batchEnd])
             let tasks = batch.map { userPlaceID in
@@ -9444,7 +9479,7 @@ final class WanderStore: ObservableObject {
                             errorMessage: nil,
                             wasCancelled: false
                         )
-                    } catch is CancellationError {
+                    } catch where self.isRemoteReadCancellation(error) {
                         return RemoteVisitFetchOutcome(
                             userPlaceID: userPlaceID,
                             visits: [],
@@ -9464,7 +9499,7 @@ final class WanderStore: ObservableObject {
             for task in tasks {
                 guard !Task.isCancelled else {
                     tasks.forEach { $0.cancel() }
-                    return false
+                    return .cancelled
                 }
                 let outcome = await task.value
                 if outcome.wasCancelled {
@@ -9477,12 +9512,12 @@ final class WanderStore: ObservableObject {
                     firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
                 }
             }
-            guard !wasCancelled else { return false }
+            guard !wasCancelled else { return .cancelled }
         }
 
         let requestedVisitIDs = Array(Set(hydratedVisits.map(\.visitID))).sorted()
         for batchStart in stride(from: 0, to: requestedVisitIDs.count, by: 6) {
-            guard !Task.isCancelled else { return false }
+            guard !Task.isCancelled else { return .cancelled }
             let batchEnd = min(batchStart + 6, requestedVisitIDs.count)
             let batch = Array(requestedVisitIDs[batchStart..<batchEnd])
             let tasks = batch.map { visitID in
@@ -9494,7 +9529,7 @@ final class WanderStore: ObservableObject {
                             errorMessage: nil,
                             wasCancelled: false
                         )
-                    } catch is CancellationError {
+                    } catch where self.isRemoteReadCancellation(error) {
                         return RemotePhotoFetchOutcome(
                             visitID: visitID,
                             photos: [],
@@ -9514,7 +9549,7 @@ final class WanderStore: ObservableObject {
             for task in tasks {
                 guard !Task.isCancelled else {
                     tasks.forEach { $0.cancel() }
-                    return false
+                    return .cancelled
                 }
                 let outcome = await task.value
                 if outcome.wasCancelled {
@@ -9527,10 +9562,10 @@ final class WanderStore: ObservableObject {
                     firstErrorMessage = firstErrorMessage ?? outcome.errorMessage
                 }
             }
-            guard !wasCancelled else { return false }
+            guard !wasCancelled else { return .cancelled }
         }
 
-        guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+        guard !Task.isCancelled, currentUser.id == requestUserID else { return .cancelled }
         loadedRemotePlaceActivityIDs.formUnion(refreshedUserPlaceIDs.map { $0.lowercased() })
         let refreshedReferenceIDs = refreshedUserPlaceIDs.reduce(into: Set<String>()) {
             $0.formUnion(matchingUserPlaceIDs($1))
@@ -9624,10 +9659,10 @@ final class WanderStore: ObservableObject {
         persist()
         if let firstErrorMessage {
             lastRemoteError = firstErrorMessage
-            return false
+            return .failed
         }
         lastRemoteError = nil
-        return true
+        return .refreshed
     }
 
     private struct RemoteVisitFetchOutcome: Sendable {

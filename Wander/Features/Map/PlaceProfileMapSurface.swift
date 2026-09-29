@@ -361,22 +361,31 @@ struct PlaceProfileFullScreen: View {
                 maxLatitude: min(90, latitude + 0.002),
                 maxLongitude: min(180, longitude + 0.002)
             )
-            guard let fetched = await store.fetchRemoteViewportPlaces(in: viewport, backend: backend) else {
-                if !Task.isCancelled { historyRefreshFailed = true }
+            let result = await store.fetchRemoteViewportPlacesResult(in: viewport, backend: backend)
+            guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+            switch result {
+            case .success(let fetched):
+                remoteSnapshotStartedAt = requestStartedAt
+                remoteSaves = fetched
+            case .failure(is CancellationError):
+                return
+            case .failure:
+                historyRefreshFailed = true
                 return
             }
-            guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
-            remoteSnapshotStartedAt = requestStartedAt
-            remoteSaves = fetched
         }
         guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
         let userPlaceIDs = resolvedSaves.compactMap { summary -> String? in
             let id = summary.visiblePlace.userPlace.serverID ?? summary.visiblePlace.userPlace.id
             return UUID(uuidString: id) == nil ? nil : id
         }
-        let refreshed = await store.refreshRemotePlaceActivity(userPlaceIDs: userPlaceIDs, backend: backend)
+        let outcome = await store.refreshRemotePlaceActivityOutcome(userPlaceIDs: userPlaceIDs, backend: backend)
         guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
-        historyRefreshFailed = !refreshed
+        switch outcome {
+        case .refreshed: historyRefreshFailed = false
+        case .failed: historyRefreshFailed = true
+        case .cancelled: return
+        }
         await store.refreshPlaceActivityEngagement(userPlaceIDs: userPlaceIDs, backend: backend)
     }
 
