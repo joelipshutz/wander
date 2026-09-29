@@ -7,7 +7,16 @@ import PostHog
 final class ReplayMaskingTests: XCTestCase {
     @MainActor
     func testReadableContentAndCredentialMaskingInActualReplayImage() async throws {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        // Match the SDK's capture precondition; connected scenes can still be inactive at launch.
+        var foregroundScene: UIWindowScene?
+        for _ in 0..<100 {
+            foregroundScene = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+            if foregroundScene != nil { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let scene = try XCTUnwrap(foregroundScene, "Replay capture requires a foreground-active scene")
         let originalWindow = scene.keyWindow
         let window = UIWindow(windowScene: scene)
         window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture())
@@ -16,6 +25,8 @@ final class ReplayMaskingTests: XCTestCase {
             window.isHidden = true
             originalWindow?.makeKeyAndVisible()
         }
+        XCTAssertTrue(scene.keyWindow === window, "The SDK must capture the fixture's key window")
+        XCTAssertFalse(window.bounds.isEmpty)
 
         let frames = ReplayFrameCollector()
         let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
@@ -31,13 +42,11 @@ final class ReplayMaskingTests: XCTestCase {
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
 
-        // The pinned SDK observes UIView.layoutSublayers(of:). A hosting view's
-        // layoutIfNeeded can finish without another layer-layout notification
-        // once SwiftUI's initial layout has completed, so invalidate the window
-        // layer as well. This still exercises the SDK's actual capture path.
+        // Drive genuine layout notifications, which trigger the SDK screenshot recorder.
         for attempt in 0..<60 {
             window.rootViewController?.view.setNeedsLayout()
             window.rootViewController?.view.layoutIfNeeded()
+            // The pinned SDK observes UIView.layoutSublayers(of:).
             window.layer.setNeedsLayout()
             window.layer.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(100))
@@ -51,9 +60,8 @@ final class ReplayMaskingTests: XCTestCase {
         baselineAttachment.lifetime = .keepAlways
         add(baselineAttachment)
         XCTAssertTrue(sdk.isSessionReplayActive())
-        XCTAssertEqual(scene.activationState, .foregroundActive, "Replay captures only an active scene")
-        XCTAssertTrue(window.isKeyWindow, "The SDK must observe the fixture window")
-        let image = try XCTUnwrap(frames.image, "The SDK must produce an actual replay frame")
+        let image = try XCTUnwrap(frames.image,
+            "The SDK must produce an actual replay frame (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window))")
         let attachment = XCTAttachment(image: image)
         attachment.name = "Offline replay — readable content and masked credentials"
         attachment.lifetime = .keepAlways

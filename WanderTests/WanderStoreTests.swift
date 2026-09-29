@@ -11,6 +11,105 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testResavingDeletedPlaceAcknowledgesNewRowAndStopsRetryingAfterRelaunch() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let store = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+        let candidate = PlaceCandidate(id: "rec614-resave", name: "Retry Fixture", category: "coffee",
+                                       latitude: 0, longitude: 0, confidence: 1)
+        let remoteID = "a6140000-0000-0000-0000-000000000061"
+        let repository = FakeUserPlaceRepository(result: SaveResult(userPlaceID: remoteID,
+            syncState: .synced, placeID: "a6140000-0000-0000-0000-000000000062"))
+        let backend = WanderBackend(userPlaceRepository: repository)
+        _ = await store.saveCandidate(candidate, status: .wannaGo, visibility: .followers,
+                                     note: "Original", sourceType: .manual, backend: backend)
+        let original = try XCTUnwrap(store.userPlaces.first)
+        _ = await store.removeSave(userPlaceID: original.id, backend: backend)
+        XCTAssertEqual(original.syncState, .tombstoned)
+
+        let result = await store.saveCandidate(candidate, status: .wannaGo, visibility: .followers,
+                                              note: "New save", sourceType: .manual, backend: backend)
+        let active = try XCTUnwrap(store.userPlaces.first { $0.deletedAt == nil })
+        XCTAssertEqual(result.syncState, .synced)
+        XCTAssertNotEqual(active.localID, original.localID, "New saves must not reuse a deleted row's local identity")
+        XCTAssertEqual(repository.savedDrafts.last?.note, "New save", "The new row, not its tombstone, supplies the payload")
+        XCTAssertEqual(active.syncState, .synced, "The acknowledgement belongs to the new row")
+        XCTAssertEqual(original.syncState, .tombstoned, "A save acknowledgement must not revive old delete work")
+
+        let relaunched = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+        let replay = FakeUserPlaceRepository()
+        _ = await relaunched.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: replay))
+        XCTAssertTrue(replay.savedDrafts.isEmpty, "Acknowledged saves must not replay on startup")
+        XCTAssertTrue(replay.deletedUserPlaceIDs.isEmpty, "Completed deletion must not replay on startup")
+    }
+
+    func testDeleteRetryAcknowledgesEveryDuplicateLocalRowSharingServerID() async throws {
+        let empty = WanderFixtures.empty()
+        let first = LocalUserPlace(localID: "rec614-original", serverID: "a6140000-0000-0000-0000-000000000063",
+            userID: empty.currentUser.id, placeID: "rec614-place", status: .wannaGo, visibility: .followers,
+            sourceType: "manual", syncState: .pendingDelete, deletedAt: .now)
+        let duplicate = LocalUserPlace(localID: "rec614-duplicate", serverID: first.serverID,
+            userID: empty.currentUser.id, placeID: first.placeID, status: .wannaGo, visibility: .followers,
+            sourceType: "manual", syncState: .pendingDelete, deletedAt: first.deletedAt)
+        let store = WanderStore(fixtures: WanderFixtures(currentUser: empty.currentUser, profiles: empty.profiles,
+            places: [], userPlaces: [first, duplicate], placeAttributes: [], follows: [], blocks: [],
+            placeLists: [], placeListMembers: [], placeListItems: [], contactProvider: empty.contactProvider))
+        let repository = FakeUserPlaceRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        _ = await store.retryPendingUserPlaceDeletes(backend: backend)
+        XCTAssertEqual(first.syncState, .tombstoned)
+        XCTAssertEqual(duplicate.syncState, .tombstoned, "Server-ID aliases must each acknowledge the completed delete")
+        _ = await store.retryPendingUserPlaceDeletes(backend: backend)
+        XCTAssertEqual(repository.deletedUserPlaceIDs.count, 1, "A completed remote delete is not queued again")
+    }
+
+    func testLegacyDuplicateParentRetryDoesNotTurnSaveFailureIntoDeletion() async throws {
+        for sharesLocalID in [false, true] {
+            let fixture = makeTemporaryPersistence()
+            defer { try? FileManager.default.removeItem(at: fixture.directory) }
+            let empty = WanderFixtures.empty()
+            let remoteID = "a6140000-0000-0000-0000-000000000071"
+            let place = LocalPlace(localID: "rec614-legacy-place", serverID: "a6140000-0000-0000-0000-000000000072",
+                canonicalName: "Legacy Fixture", category: "coffee", latitude: 0, longitude: 0, syncState: .synced)
+            let visitedAt = Date(timeIntervalSince1970: 1_783_958_400)
+            let old = LocalUserPlace(localID: "rec614-legacy", serverID: remoteID, userID: empty.currentUser.id,
+                placeID: place.id, status: .been, visibility: .followers, note: "Deleted payload", savedAt: visitedAt,
+                sourceType: "manual", syncState: .tombstoned, deletedAt: visitedAt.addingTimeInterval(60))
+            let active = LocalUserPlace(localID: sharesLocalID ? old.localID : "rec614-active", serverID: remoteID,
+                userID: empty.currentUser.id, placeID: place.id, status: .been, visibility: .followers,
+                note: "Active payload", visitedAt: visitedAt, savedAt: visitedAt,
+                sourceType: "manual", syncState: .pendingUpdate)
+            let attribute = LocalPlaceAttribute(localID: "rec614-active-attribute", userPlaceID: active.localID,
+                questionKey: "coffee_tags", valueType: "multi_tag", valueJSON: "[\"quiet\"]", syncState: .pendingUpdate)
+            let store = WanderStore(fixtures: WanderFixtures(currentUser: empty.currentUser, profiles: empty.profiles,
+                places: [place], userPlaces: [old, active], placeAttributes: [attribute], follows: [], blocks: [],
+                placeLists: [], placeListMembers: [], placeListItems: [], contactProvider: empty.contactProvider),
+                persistence: fixture.persistence)
+            let failing = FakeUserPlaceRepository(error: TestError.expected)
+            _ = await store.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: failing))
+            XCTAssertEqual(old.syncState, .tombstoned, "Failed save must not create failed deletion intent on an alias")
+            XCTAssertEqual(active.syncState, .failed)
+            XCTAssertTrue(failing.savedDrafts.allSatisfy { $0.note == "Active payload" })
+            XCTAssertEqual(failing.savedDrafts.first?.attributes.first?.valueJSON, "[\"quiet\"]",
+                "Payload attributes must resolve from the active row's aliases")
+
+            let relaunched = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+            let recovered = FakeUserPlaceRepository(result: SaveResult(userPlaceID: remoteID, syncState: .synced, placeID: place.id))
+            _ = await relaunched.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: recovered))
+            XCTAssertTrue(recovered.deletedUserPlaceIDs.isEmpty, "Retrying a save must not issue a delete")
+            XCTAssertEqual(recovered.savedDrafts.count, 1)
+            XCTAssertEqual(recovered.savedDrafts.first?.note, "Active payload")
+            XCTAssertEqual(relaunched.userPlaces.first { $0.deletedAt == nil }?.syncState, .synced)
+            XCTAssertEqual(relaunched.visits(for: remoteID).first?.visitedAt, visitedAt)
+
+            let secondRelaunch = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+            let idle = FakeUserPlaceRepository()
+            _ = await secondRelaunch.syncUnsyncedOwnPlaces(backend: WanderBackend(userPlaceRepository: idle))
+            XCTAssertTrue(idle.savedDrafts.isEmpty)
+            XCTAssertTrue(idle.deletedUserPlaceIDs.isEmpty)
+        }
+    }
+
     func testForegroundUnchangedInboxDoesNotInvalidatePresentations() async {
         var saves = 0
         let store = WanderStore(fixtures: .empty(), persistence: WanderStorePersistence(load: { nil }, save: { _ in saves += 1 }))
@@ -5025,7 +5124,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredByKey[PlaceMemoryAttributeKeys.personalLabels]?.valueJSON, "[\"date night\"]")
     }
 
-    func testAddVisitContextCarriesVisitDetailsWithoutPrefillingTagsOrLabels() throws {
+    func testAddVisitContextCarriesOnlyRatingTagsAndAnswers() throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let result = store.saveCandidate(
@@ -5064,8 +5163,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(wantContext.hasPriorCheckIn)
         XCTAssertNil(wantContext.initialRatingScore)
         XCTAssertEqual(wantContext.initialNote, "")
-        XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
-        XCTAssertTrue(wantContext.initialPersonalLabels.isEmpty)
+        XCTAssertEqual(wantContext.initialAnswers["coffee_tags"], ["sunny"])
+        XCTAssertEqual(wantContext.initialPersonalLabels, ["weekend"])
 
         let reselectedWantContext = MapPlaceSaveContext.reselectCurrentUserSave(
             wantPlace,
@@ -5141,8 +5240,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(visitContext.hasPriorCheckIn)
         XCTAssertEqual(visitContext.initialRatingScore, 4.5)
         XCTAssertEqual(visitContext.initialNote, "")
-        XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
-        XCTAssertTrue(visitContext.initialPersonalLabels.isEmpty)
+        XCTAssertEqual(visitContext.initialAnswers["coffee_tags"], ["quiet"])
+        XCTAssertEqual(visitContext.initialPersonalLabels, ["return"])
 
         let reselectedBeenContext = MapPlaceSaveContext.addCandidate(
             visitContext.candidate,
@@ -6579,7 +6678,7 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertNil(socialSaveContext.initialAnswers["price"])
-        XCTAssertNil(addVisitContext.initialAnswers["price"])
+        XCTAssertEqual(addVisitContext.initialAnswers["price"], ["$$$"])
         XCTAssertEqual(editContext.initialAnswers["price"], Set(["$$$"]))
     }
 
@@ -6958,7 +7057,7 @@ final class WanderStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testPlusRepeatCheckInDraftKeepsRatingButStartsWithUnansweredDetails() throws {
+    func testPlusRepeatCheckInDraftKeepsRatingTagsAndAnswersWithFreshMetadata() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
         let candidate = PlaceCandidate(
@@ -6998,10 +7097,39 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(draft.form.selectedRatingScore, 4)
-        XCTAssertTrue(draft.form.selectedAnswers.isEmpty, "A new visit asks for firsthand answers instead of copying the previous visit")
-        XCTAssertTrue(draft.form.unifiedTags.isEmpty)
+        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
+        XCTAssertEqual(draft.form.unifiedTags, ["quiet"])
+        XCTAssertEqual(draft.form.note, "")
+        XCTAssertTrue(draft.form.photoAttachments.isEmpty)
+        XCTAssertTrue(draft.form.selectedInviteeUserIDs.isEmpty)
+        XCTAssertNil(draft.form.plannedDate)
+        XCTAssertGreaterThanOrEqual(draft.form.visitedAt, latestVisit.visitedAt)
         XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
         XCTAssertEqual(draft.baselineVisitLocalID, latestVisit.localID)
+
+        let context = sourceContext.resolvingExistingSave(selection: .been)
+        XCTAssertNil(context.editedVisit)
+        XCTAssertEqual(context.questionAnswerSourceVisit?.id, latestVisit.id)
+        let priorAnswers = latestVisit.attributeAnswersJSON
+        let submission = MapPlaceSaveSubmission(
+            context: context, candidate: candidate, status: .been, visibility: .followers,
+            ratingScore: 3.5, note: nil,
+            attributes: [PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["sunny"])],
+            photoAttachments: [], inviteeUserIDs: [], reconcilesSharedVisitInvitees: false,
+            visitedAt: draft.form.visitedAt
+        )
+        let saved = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil)
+        XCTAssertNotNil(saved)
+        let visits = store.visits(for: firstSave.userPlaceID)
+        let newVisit = try XCTUnwrap(visits.first { $0.id != latestVisit.id })
+        XCTAssertEqual(visits.count, 2)
+        XCTAssertNil(newVisit.note, "An intentional empty note must not borrow the previous visit's note")
+        XCTAssertEqual(newVisit.ratingScore, 3.5, "The prefilled rating stays editable")
+        XCTAssertEqual(newVisit.tags, ["sunny"])
+        XCTAssertEqual(newVisit.visitedAt, draft.form.visitedAt)
+        XCTAssertEqual(latestVisit.note, "first visit")
+        XCTAssertEqual(latestVisit.ratingScore, 4)
+        XCTAssertEqual(latestVisit.attributeAnswersJSON, priorAnswers)
     }
 
     @MainActor

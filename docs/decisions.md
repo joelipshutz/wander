@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-09-22
+Last updated: 2026-09-28
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -277,7 +277,7 @@ and a refresh recomputes it solely from currently visible events.
 ## Check-in details (REC-485, revised 2026-09-17)
 
 - Each selectable place subcategory has three deliberately curated, optional default questions. Cuisine alone does not change dining logistics: ordinary restaurants share parking, outdoor seating and dietary options; vegan/vegetarian, gluten-free, tabletop cooking, takeaway and fine dining get practical exceptions. Coffee, tea and sweets always include dogs. Synonymous gym, cafe, lodging and station types can share defaults, while genuine differences such as Pilates, CrossFit, beach courts and hostels remain distinct. Shared questions are reused when the practical need is the same; functional subtypes receive their own selection. The complete inventory is in [the question catalog](product/check-in-question-catalog.md).
-- A fresh Check-in starts with no answers. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
+- A first Check-in starts with no answers. For repeat Check-ins (REC-628), the latest visit supplies editable rating, tags/personal labels, and question answers, including account-scoped private answers. Note, visit identity, date, photos, and invited friends start fresh; submitting creates a distinct visit and leaves the prior visit unchanged. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
 - Wanna leads with one introduction/context note, with its optional date above categories. Check-in orders rating, note, date, categories, Useful details, then friends/photos. Optional tags stay at the bottom. Adding a visit retains the original Wanna note.
 - Customize belongs beside Useful details and in Settings → Check-in questions. A person can search subtypes, reorder, remove, restore, add catalog questions, or create recurring yes/no questions. Configuration is account-scoped on the current device. Removing a question retains its previous answers. Not useful persists a hidden ID for that account and subtype, including when editing an older save; the current row grays out with Undo. Explicit re-add or confirmed Restore brings a prompt back. Restoring suggestions requires a native confirmation; existing customizations do not silently adopt changed defaults.
 - Each recurring question has an inline eye button (signal open eye for shared, gray slashed eye for private), with no separate Stealth page. Each question has a Stealth setting: on keeps its answer owner-private on this device; off shares it only with that Check-in's audience. New custom questions default to Stealth on; catalog questions default off. Add/create screens omit privacy controls; the recurring-list eye is the single place to change them. The Check-in shows its gray Stealth badge beside the question. Changing a default in Settings never republishes historical answers. Only an explicit audience change in the visit editor moves its draft answer between channels.
@@ -286,6 +286,10 @@ and a refresh recomputes it solely from currently visible events.
 - Tag suggestions describe uses and occasions rather than repeating question facts. Each category offers a small curated set; exact duplicates and an explicit list of near-synonyms render as one chip. Existing personal labels remain stored unchanged unless the person explicitly removes their chip.
 - Synced owner visits hydrate complete answer JSON through `own_place_visit_details`, an authenticated owner-only read. Raw table-column grants remain restricted. Unknown remote answers cannot be edited or synchronized as an empty answer set. This endpoint exposes no other person's answer history.
 - Voice capture and semantic personal recall remain separate follow-up work (REC-490, REC-491, REC-492). This change preserves useful narrative context without introducing those features.
+
+## Feed pagination (REC-628)
+
+Feed shows 20 activity tiles initially. Only downward scrolling to the actual bottom loads the next 20 tiles and displays “Loading more...” while loading. Grouped events count as one tile, so server cursor pages may be combined and overflow buffered. Loading errors retain existing tiles with an explicit retry. Refreshing, changing audience, or switching accounts cancels pending pagination and resets to the first page. Opening an older linked activity reveals its tile explicitly.
 
 ## Release Decisions
 
@@ -554,6 +558,42 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+## 2026-09-23 — Historical visit Feed identity (REC-614)
+
+Restoring a saved Been place reuses its existing activity. If the historical
+parent has no event, its first event uses the persisted visit/save date. A first
+active Wanna-to-Been transition still represents new activity; explicit check-ins
+retain their existing per-visit event identities.
+
+Legacy duplicate cleanup is private maintenance scoped to one parent, an exact
+original visit date, and an expected event count. Keep the original event and
+merge engagement into it while preserving comment IDs and like timestamps.
+Private aliases resolve old activity links and cached engagement requests through
+the surviving event's normal visibility checks. The schema migration does not
+automatically rewrite user history; each repair requires independently verified
+scope and data preconditions.
+
+Client save/delete queues retain the exact local parent record through payload
+creation and acknowledgement. A server ID can be shared by a deleted local row
+and its replacement, so it is not a unique local queue identity. Re-saving a
+deleted place receives a fresh local ID; legacy duplicate IDs remain supported
+without treating a failed save as pending deletion. All local aliases included
+in a completed remote deletion must acknowledge it. Persisted relaunch tests
+cover failed retries, duplicate identities, and the absence of repeated work
+after successful acknowledgement.
+
+Explicit check-in Feed cards take their note, rating, status and visit timestamps
+from that visit, including an intentionally empty note or rating. Only events
+without a visit ID may use the parent save's summary. Feed and activity detail
+share this projection; photos and engagement keep their existing per-event and
+per-visit identities. Venue facts and viewer taxonomy remain place-level, and
+the existing private-answer/visibility boundaries remain authoritative. This
+projection correction does not rewrite stored check-ins.
+
+Activity media must compose historical-ID aliases with any installed source-photo
+privacy gate. Restating this RPC must preserve both contracts, including when
+the source-privacy migration and Feed fixes are deployed from separate branches.
 
 ## 2026-09-25: Readable session replay and named people (REC-626)
 

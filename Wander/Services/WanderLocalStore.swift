@@ -300,12 +300,19 @@ final class WanderStore: ObservableObject {
     private var feedRefreshTask: (
         id: UUID, userID: String, preservingActivityID: String?, revision: UInt64, task: Task<Bool, Never>
     )?
+    private var feedPageTask: (id: UUID, task: Task<Bool, Never>)?
+    @Published private(set) var feedVisibleTileLimit = FeedPagination.pageSize
+    @Published private(set) var isLoadingMoreFeed = false
+    @Published private(set) var feedPaginationFailed = false
+    private var groupedFeedActivity: [FeedActivityGroup] = []
     private var feedRefreshCompletedAt: Date?
     private var feedRefreshCompletedRevision: UInt64?
     @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
     private var syncingWannaIDs = Set<String>()
     @Published private(set) var feedAudience: FeedAudience = .everyone
-    @Published private(set) var followedFeedPage: FollowedFeedPage?
+    @Published private(set) var followedFeedPage: FollowedFeedPage? {
+        didSet { groupedFeedActivity = feedGroups(in: followedFeedPage) }
+    }
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
     @Published private(set) var activityEngagementByID: [String: ActivityEngagementSummary] = [:]
@@ -1280,6 +1287,7 @@ final class WanderStore: ObservableObject {
             placeAttributes.removeAll {
                 $0.localID.hasPrefix("remote_attr_")
             }
+            resetFeedPagination()
             feedRefreshTask?.task.cancel()
             feedRefreshTask = nil
             feedRefreshCompletedAt = nil
@@ -1582,6 +1590,7 @@ final class WanderStore: ObservableObject {
         remoteVisiblePlaceCache = []
         discoverPeopleRecommendationsGeneration += 1
         discoverPeopleRecommendationsState = .idle
+        resetFeedPagination()
         feedRefreshTask?.task.cancel()
         feedRefreshTask = nil
         feedRefreshCompletedAt = nil
@@ -1718,6 +1727,7 @@ final class WanderStore: ObservableObject {
     /// late content/media response cannot appear beneath a different label.
     func selectFeedAudience(_ audience: FeedAudience) {
         guard feedAudience != audience else { return }
+        resetFeedPagination()
         feedRefreshTask?.task.cancel()
         feedRefreshTask = nil
         feedRefreshCompletedAt = nil
@@ -1776,6 +1786,7 @@ final class WanderStore: ObservableObject {
            FeedRefreshPolicy.isFresh(completedAt: feedRefreshCompletedAt) {
             return true
         }
+        resetFeedPagination()
         let id = UUID()
         let task = Task { @MainActor [weak self] in
             guard let self else { return false }
@@ -2022,6 +2033,14 @@ final class WanderStore: ObservableObject {
     }
 
     private func discardCachedActivity(_ activityID: String) {
+        // An authoritative removal also invalidates any older page response
+        // already in flight, including unseen rows for the same revoked save.
+        if let pending = feedPageTask {
+            pending.task.cancel()
+            feedPageTask = nil
+            isLoadingMoreFeed = false
+            feedPaginationFailed = true
+        }
         var discardedIDs: Set<String> = [activityID]
         if let page = followedFeedPage {
             let source = page.activity.first { $0.id == activityID }?.place
@@ -2166,8 +2185,15 @@ final class WanderStore: ObservableObject {
         else { return }
 
         do {
-            let summaries = try await repository.summaries(activityIDs: remoteIDs)
-            guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            var summaries: [ActivityEngagementSummary] = []
+            // Grouped feed tiles can contain more events than the RPC's 100-ID cap.
+            for start in stride(from: 0, to: remoteIDs.count, by: 100) {
+                try Task.checkCancellation()
+                summaries += try await repository.summaries(
+                    activityIDs: Array(remoteIDs[start..<min(start + 100, remoteIDs.count)])
+                )
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return }
+            }
             var refreshedEngagement = activityEngagementByID
             var refreshedErrors = activityEngagementErrorByID
             for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
@@ -2565,20 +2591,141 @@ final class WanderStore: ObservableObject {
         return states
     }
 
-    /// Clerk may report a signed-in user slightly before its first usable
-    /// Supabase bearer token is available. Retry that narrow startup race once;
-    /// ordinary transport and server failures remain visible to the caller.
+    var visibleFeedActivityGroups: [FeedActivityGroup] {
+        Array(groupedFeedActivity.prefix(feedVisibleTileLimit))
+    }
+
+    var hasMoreFeed: Bool {
+        groupedFeedActivity.count > feedVisibleTileLimit || followedFeedPage?.nextCursor != nil
+    }
+
+    func revealFeedActivity(_ activityID: String) {
+        guard let index = groupedFeedActivity.firstIndex(where: {
+            $0.activities.contains { $0.id == activityID }
+        }) else { return }
+        feedVisibleTileLimit = max(feedVisibleTileLimit, index + 1)
+    }
+
+    private func feedGroups(in page: FollowedFeedPage?) -> [FeedActivityGroup] {
+        FeedPresentation.groupedActivity((page?.activity ?? []).filter {
+            feedAudience.includes(actorID: $0.actor.id, currentUserID: currentUser.id,
+                                  relationship: $0.actor.relationship)
+        })
+    }
+
+    private func resetFeedPagination() {
+        feedPageTask?.task.cancel()
+        feedPageTask = nil
+        isLoadingMoreFeed = false
+        feedPaginationFailed = false
+        feedVisibleTileLimit = FeedPagination.pageSize
+    }
+
+    @discardableResult
+    func loadMoreFeed(backend: WanderBackend?) async -> Bool {
+        guard !Task.isCancelled, feedRefreshTask == nil, hasMoreFeed,
+              let currentPage = followedFeedPage else { return false }
+        if let pending = feedPageTask { return await pending.task.value }
+        let requestID = UUID()
+        let userID = currentUser.id
+        let audience = feedAudience
+        let targetCount = feedVisibleTileLimit + FeedPagination.pageSize
+        isLoadingMoreFeed = true
+        feedPaginationFailed = false
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            do {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-WanderFeedPaginationUITest") {
+                    try await Task.sleep(for: .seconds(5))
+                }
+                #endif
+                var page = currentPage
+                if let repository = backend?.feedRepository {
+                    page = try await self.fillFeedPage(
+                        page, through: targetCount, from: repository, audience: audience
+                    )
+                }
+                try Task.checkCancellation()
+                guard self.currentUser.id == userID, self.feedAudience == audience,
+                      self.feedPageTask?.id == requestID else { return false }
+                // Keep edits/removals made while the request was suspended.
+                // Only previously unseen events come from this older snapshot.
+                let previousIDs = Set(currentPage.activity.map(\.id))
+                let appended = FollowedFeedPage(
+                    activity: page.activity.filter { !previousIDs.contains($0.id) },
+                    featuredPlaces: [], nextCursor: page.nextCursor, fetchedAt: page.fetchedAt
+                )
+                let latest = self.followedFeedPage ?? currentPage
+                self.followedFeedPage = self.displayableFeedPage(FeedPagination.appending(appended, to: latest))
+                self.feedVisibleTileLimit = targetCount
+                await self.refreshActivityEngagement(
+                    activityIDs: page.activity.map(\.id).filter { !previousIDs.contains($0) },
+                    backend: backend
+                )
+                return !Task.isCancelled && self.currentUser.id == userID
+                    && self.feedAudience == audience && self.feedPageTask?.id == requestID
+            } catch {
+                guard !Task.isCancelled, self.currentUser.id == userID,
+                      self.feedAudience == audience, self.feedPageTask?.id == requestID
+                else { return false }
+                self.feedPaginationFailed = true
+                return false
+            }
+        }
+        feedPageTask = (requestID, task)
+        let result = await task.value
+        if feedPageTask?.id == requestID {
+            feedPageTask = nil
+            isLoadingMoreFeed = false
+        }
+        return result
+    }
+
     private func loadFollowedFeed(
         from repository: any FeedRepository,
         audience: FeedAudience,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
+        let first = try await requestFeedPage(from: repository, audience: audience, before: nil,
+                                              onContent: onContent)
+        return try await fillFeedPage(first, through: FeedPagination.pageSize,
+                                      from: repository, audience: audience)
+    }
+
+    private func fillFeedPage(
+        _ initial: FollowedFeedPage, through tileCount: Int,
+        from repository: any FeedRepository, audience: FeedAudience
+    ) async throws -> FollowedFeedPage {
+        var page = initial
+        var cursors = Set<String>()
+        while feedGroups(in: displayableFeedPage(page)).count < tileCount,
+              let cursor = page.nextCursor {
+            try Task.checkCancellation()
+            // A broken/repeated cursor is retryable, never an unbounded request loop.
+            guard cursors.insert(cursor).inserted else { throw URLError(.badServerResponse) }
+            let next = try await requestFeedPage(from: repository, audience: audience, before: cursor)
+            try Task.checkCancellation()
+            page = FeedPagination.appending(next, to: page)
+        }
+        return page
+    }
+
+    /// Clerk may report a signed-in user slightly before its first usable
+    /// Supabase bearer token is available. Retry that narrow startup race once;
+    /// ordinary transport and server failures remain visible to the caller.
+    private func requestFeedPage(
+        from repository: any FeedRepository, audience: FeedAudience, before: String?,
+        onContent: @MainActor (FollowedFeedPage) -> Void = { _ in }
+    ) async throws -> FollowedFeedPage {
         do {
-            return try await repository.activityFeed(audience: audience, before: nil, limit: 25, onContent: onContent)
+            return try await repository.activityFeed(audience: audience, before: before,
+                                                     limit: FeedPagination.pageSize, onContent: onContent)
         } catch {
             guard Self.shouldRetryFollowedFeed(after: error) else { throw error }
             try await Task.sleep(for: .milliseconds(300))
-            return try await repository.activityFeed(audience: audience, before: nil, limit: 25, onContent: onContent)
+            return try await repository.activityFeed(audience: audience, before: before,
+                                                     limit: FeedPagination.pageSize, onContent: onContent)
         }
     }
 
@@ -2688,6 +2835,17 @@ final class WanderStore: ObservableObject {
 
         var displayActivity = activity
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderFeedPaginationUITest"),
+           let source = activity.first {
+            displayActivity = (0..<45).map { index in
+                FeedActivity(
+                    id: "fixture-feed-page-\(index)", kind: .placeBeen,
+                    actor: source.actor, place: source.place,
+                    occurredAt: now.addingTimeInterval(Double(-index * 3_600)),
+                    note: "Pagination visit \(index + 1)"
+                )
+            }
+        }
         if ProcessInfo.processInfo.arguments.contains("-WanderFeedAudienceUITest"),
            let ownPlace = currentUserVisiblePlaces.first {
             displayActivity.append(FeedActivity(
@@ -5506,8 +5664,9 @@ final class WanderStore: ObservableObject {
 
         guard let backend else { return true }
         for userPlaceID in ownUserPlaceIDs {
+            guard let userPlace = currentUserPlace(matching: userPlaceID) else { continue }
             _ = await retryOwnPlaceSync(
-                userPlaceID: userPlaceID,
+                userPlace: userPlace,
                 backend: backend,
                 trigger: .providerEnrichment
             )
@@ -6884,8 +7043,14 @@ final class WanderStore: ObservableObject {
 
         let savedAt = Date.now
         let streakSummaryBeforeSave = saveStreakSummary
+        let baseLocalID = "local_up_\(currentUser.handle)_\(slug(place.localID))"
+        // A re-save is a new local record. Reusing a tombstone's identity makes
+        // its old delete state and payload indistinguishable from the new save.
+        let localID = userPlaces.contains { $0.localID == baseLocalID }
+            ? "\(baseLocalID)_\(UUID().uuidString.lowercased())"
+            : baseLocalID
         let userPlace = LocalUserPlace(
-            localID: "local_up_\(currentUser.handle)_\(slug(place.localID))",
+            localID: localID,
             userID: currentUser.id,
             placeID: place.id,
             status: status,
@@ -7173,7 +7338,7 @@ final class WanderStore: ObservableObject {
             if !wanna.isSynced { _ = await syncWannaSave(id: wanna.id, backend: backend) }
         } else if let parent = currentUserPlace(matching: userPlaceID),
                   parent.deletedAt == nil, parent.syncState != .synced {
-            _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .directSave)
+            _ = await syncOwnPlaces([parent], backend: backend, trigger: .directSave)
         }
     }
 
@@ -7220,7 +7385,7 @@ final class WanderStore: ObservableObject {
             // the durable outbox until its remote identity is known.
             if parent.serverID == nil && snapshot.deletedAt != nil { return false }
             if parent.serverID == nil {
-                _ = await syncOwnPlaces(withIDs: [parent.id], backend: backend, trigger: .failedRetry)
+                _ = await syncOwnPlaces([parent], backend: backend, trigger: .failedRetry)
             }
             let parentID = parent.serverID ?? parent.id
             guard UUID(uuidString: parentID) != nil, currentUser.id == ownerID else { return false }
@@ -7470,7 +7635,8 @@ final class WanderStore: ObservableObject {
             )
         }
 
-        guard let draft = userPlaceDraft(for: localResult.userPlaceID) else {
+        guard let savingUserPlace = currentUserPlace(matching: localResult.userPlaceID),
+              let draft = userPlaceDraft(for: savingUserPlace) else {
             #if DEBUG
             WanderDebugLog.sync.debug("direct save skipped remote reason=missing_draft user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
             #endif
@@ -7495,7 +7661,7 @@ final class WanderStore: ObservableObject {
             if let placeID = remoteResult.placeID {
                 markPlace(localOrServerID: draft.place.localID, serverID: placeID, syncState: .synced)
             }
-            markUserPlace(localOrServerID: localResult.userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
+            markUserPlace(savingUserPlace, serverID: remoteResult.userPlaceID, syncState: .synced)
             lastRemoteError = nil
             trackOwnPlaceSyncEvent(
                 name: WanderAnalyticsEvents.ownPlaceSyncSucceeded,
@@ -7508,7 +7674,7 @@ final class WanderStore: ObservableObject {
             return remoteResult
         } catch {
             let message = remoteErrorMessage(error)
-            markUserPlace(localOrServerID: localResult.userPlaceID, syncState: .failed, error: message)
+            markUserPlace(savingUserPlace, syncState: .failed, error: message)
             lastRemoteError = message
             trackOwnPlaceSyncEvent(
                 name: WanderAnalyticsEvents.ownPlaceSyncFailed,
@@ -7547,12 +7713,16 @@ final class WanderStore: ObservableObject {
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: localChange.syncState)
         }
 
+        let removedRows = userPlaces.filter {
+            $0.userID == currentUser.id && $0.deletedAt != nil
+                && localChange.removedUserPlaceIDs.contains($0.id)
+        }
         do {
-            for remoteUserPlaceID in localChange.remoteUserPlaceIDs {
+            for remoteUserPlaceID in Set(localChange.remoteUserPlaceIDs).sorted() {
                 try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
             }
-            for removedUserPlaceID in localChange.removedUserPlaceIDs {
-                markUserPlace(localOrServerID: removedUserPlaceID, syncState: .tombstoned)
+            for row in removedRows {
+                markUserPlace(row, syncState: .tombstoned)
             }
             lastRemoteError = nil
             await refreshRemoteVisiblePlaces(backend: backend)
@@ -7560,8 +7730,8 @@ final class WanderStore: ObservableObject {
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
         } catch {
             let message = remoteErrorMessage(error)
-            for removedUserPlaceID in localChange.removedUserPlaceIDs {
-                markUserPlace(localOrServerID: removedUserPlaceID, syncState: .failed, error: message)
+            for row in removedRows {
+                markUserPlace(row, syncState: .failed, error: message)
             }
             lastRemoteError = message
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .failed)
@@ -7673,13 +7843,13 @@ final class WanderStore: ObservableObject {
         }
 
         let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
-        let retryableIDs = syncableOwnPlaceIDs { syncState in
+        let retryableRows = syncableOwnPlaces { syncState in
             syncState == .failed
         }
         #if DEBUG
-        WanderDebugLog.sync.debug("failed retry candidates count=\(retryableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
+        WanderDebugLog.sync.debug("failed retry candidates count=\(retryableRows.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
-        let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
+        let syncedCount = await syncOwnPlaces(retryableRows, backend: backend, trigger: .failedRetry)
         // Deliver replacement Wannas before deleting their former check-in;
         // the server can then retain the parent and restore the new action.
         var wannaCount = await syncPendingWannaSaves(backend: backend)
@@ -7703,16 +7873,16 @@ final class WanderStore: ObservableObject {
         }
 
         let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
-        let syncableIDs = syncableOwnPlaceIDs { syncState in
+        let syncableRows = syncableOwnPlaces { syncState in
             syncState != .synced
                 && syncState != .pendingDelete
                 && syncState != .serverDenied
                 && syncState != .tombstoned
         }
         #if DEBUG
-        WanderDebugLog.sync.debug("signed-in backfill candidates count=\(syncableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
+        WanderDebugLog.sync.debug("signed-in backfill candidates count=\(syncableRows.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
-        let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
+        let syncedCount = await syncOwnPlaces(syncableRows, backend: backend, trigger: .signedInBackfill)
         // Deliver replacement Wannas before deleting their former check-in;
         // the server can then retain the parent and restore the new action.
         var wannaCount = await syncPendingWannaSaves(backend: backend)
@@ -7745,7 +7915,7 @@ final class WanderStore: ObservableObject {
             do {
                 try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
                 for row in rows {
-                    markUserPlace(localOrServerID: row.id, syncState: .tombstoned)
+                    markUserPlace(row, syncState: .tombstoned)
                 }
                 lastRemoteError = nil
                 syncedCount += 1
@@ -7753,7 +7923,7 @@ final class WanderStore: ObservableObject {
                 let message = remoteErrorMessage(error)
                 for row in rows {
                     markUserPlace(
-                        localOrServerID: row.id,
+                        row,
                         syncState: .failed,
                         error: message
                     )
@@ -7825,7 +7995,7 @@ final class WanderStore: ObservableObject {
         if visit.backfilledFromUserPlace {
             if userPlace.serverID == nil || userPlace.syncState != .synced {
                 let parentOutcome = await retryOwnPlaceSync(
-                    userPlaceID: userPlace.id,
+                    userPlace: userPlace,
                     backend: backend,
                     trigger: .signedInBackfill
                 )
@@ -7867,7 +8037,7 @@ final class WanderStore: ObservableObject {
                 )
             }
             markUserPlace(
-                localOrServerID: userPlace.id,
+                userPlace,
                 serverID: result.saveResult.userPlaceID,
                 syncState: .synced
             )
@@ -7882,7 +8052,7 @@ final class WanderStore: ObservableObject {
         } catch {
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
-            markUserPlace(localOrServerID: userPlace.id, syncState: .failed, error: message)
+            markUserPlace(userPlace, syncState: .failed, error: message)
             lastRemoteError = message
             return false
         }
@@ -8092,7 +8262,7 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    private func syncOwnPlaces(withIDs userPlaceIDs: [String], backend: WanderBackend, trigger: OwnPlaceSyncTrigger) async -> Int {
+    private func syncOwnPlaces(_ rows: [LocalUserPlace], backend: WanderBackend, trigger: OwnPlaceSyncTrigger) async -> Int {
         var syncedCount = 0
         var failedCount = 0
         var skippedCount = 0
@@ -8101,16 +8271,16 @@ final class WanderStore: ObservableObject {
             name: WanderAnalyticsEvents.ownPlaceSyncBatchStarted,
             properties: [
                 "trigger": trigger.rawValue,
-                "candidate_count": "\(userPlaceIDs.count)"
+                "candidate_count": "\(rows.count)"
             ]
         )
         #if DEBUG
-        WanderDebugLog.sync.debug("sync batch started trigger=\(trigger.rawValue, privacy: .public) candidate_count=\(userPlaceIDs.count, privacy: .public)")
+        WanderDebugLog.sync.debug("sync batch started trigger=\(trigger.rawValue, privacy: .public) candidate_count=\(rows.count, privacy: .public)")
         #endif
 
-        for userPlaceID in userPlaceIDs {
+        for row in rows {
             switch await retryOwnPlaceSync(
-                userPlaceID: userPlaceID,
+                userPlace: row,
                 backend: backend,
                 trigger: trigger,
                 refreshVisiblePlacesAfterSuccess: false
@@ -8128,7 +8298,7 @@ final class WanderStore: ObservableObject {
             name: WanderAnalyticsEvents.ownPlaceSyncBatchCompleted,
             properties: [
                 "trigger": trigger.rawValue,
-                "candidate_count": "\(userPlaceIDs.count)",
+                "candidate_count": "\(rows.count)",
                 "synced_count": "\(syncedCount)",
                 "failed_count": "\(failedCount)",
                 "skipped_count": "\(skippedCount)"
@@ -8144,7 +8314,7 @@ final class WanderStore: ObservableObject {
         return syncedCount
     }
 
-    private func syncableOwnPlaceIDs(matching shouldSyncState: (SyncState) -> Bool) -> [String] {
+    private func syncableOwnPlaces(matching shouldSyncState: (SyncState) -> Bool) -> [LocalUserPlace] {
         userPlaces
             .filter { userPlace in
                 userPlace.userID == currentUser.id
@@ -8152,7 +8322,6 @@ final class WanderStore: ObservableObject {
                     && userPlace.sourceType != AddSourceType.socialSave.rawValue
                     && shouldSyncState(userPlace.syncState)
             }
-            .map(\.id)
     }
 
     func extractionJob(for draft: UnresolvedDraft) -> LocalExtractionJob? {
@@ -8326,7 +8495,8 @@ final class WanderStore: ObservableObject {
         guard let backend else {
             return localResult
         }
-        guard let remoteIDs = remoteSocialSaveIDs(for: visiblePlace) else {
+        guard let remoteIDs = remoteSocialSaveIDs(for: visiblePlace),
+              let savingUserPlace = currentUserPlace(matching: localResult.userPlaceID) else {
             return localResult
         }
 
@@ -8335,13 +8505,13 @@ final class WanderStore: ObservableObject {
                 placeID: remoteIDs.placeID,
                 sourceUserPlaceID: remoteIDs.sourceUserPlaceID
             )
-            markUserPlace(localOrServerID: localResult.userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
+            markUserPlace(savingUserPlace, serverID: remoteResult.userPlaceID, syncState: .synced)
             lastRemoteError = nil
             await refreshRemoteVisiblePlaces(backend: backend)
             return remoteResult
         } catch {
             let message = remoteErrorMessage(error)
-            markUserPlace(localOrServerID: localResult.userPlaceID, syncState: .failed, error: message)
+            markUserPlace(savingUserPlace, syncState: .failed, error: message)
             lastRemoteError = message
             return SaveResult(userPlaceID: localResult.userPlaceID, syncState: .failed)
         }
@@ -10163,8 +10333,8 @@ final class WanderStore: ObservableObject {
         return block
     }
 
-    private func userPlaceDraft(for userPlaceID: String) -> UserPlaceDraft? {
-        guard let userPlace = userPlaces.first(where: { $0.id == userPlaceID || $0.localID == userPlaceID || $0.serverID == userPlaceID }),
+    private func userPlaceDraft(for userPlace: LocalUserPlace) -> UserPlaceDraft? {
+        guard userPlace.userID == currentUser.id, userPlace.deletedAt == nil,
               let place = places.first(where: { $0.id == userPlace.placeID || $0.localID == userPlace.placeID || $0.serverID == userPlace.placeID })
         else {
             return nil
@@ -10195,10 +10365,13 @@ final class WanderStore: ObservableObject {
             actionLinksJSON: place.actionLinksJSON
         )
 
-        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+        let userPlaceIDs = Self.referenceIDs(for: userPlace)
+        let baseAttributes = placeAttributes
+            .filter { userPlaceIDs.contains($0.userPlaceID) }
+            .sorted { $0.questionKey < $1.questionKey }
         let effectiveAttributes = userPlace.status == .been
             ? PlaceCheckInObservationProjection.attributes(
-                base: attributes(for: userPlace.id),
+                base: baseAttributes,
                 visits: placeVisits.filter { userPlaceIDs.contains($0.userPlaceID) },
                 userPlaceID: userPlace.id,
                 status: userPlace.status,
@@ -10206,7 +10379,7 @@ final class WanderStore: ObservableObject {
                     loadedRemotePlaceActivityIDs.contains($0.lowercased())
                 }
             )
-            : attributes(for: userPlace.id)
+            : baseAttributes
         let attributeDrafts = effectiveAttributes.map { attribute in
             PlaceAttributeDraft(
                 questionKey: attribute.questionKey,
@@ -10237,7 +10410,7 @@ final class WanderStore: ObservableObject {
         for visitID: String,
         userPlace: LocalUserPlace
     ) -> CheckInSaveDraft? {
-        guard let parentDraft = userPlaceDraft(for: userPlace.id),
+        guard let parentDraft = userPlaceDraft(for: userPlace),
               let visitDraft = visitDraft(
                   for: visitID,
                   remoteUserPlaceID: userPlace.serverID ?? userPlace.id
@@ -10643,12 +10816,11 @@ final class WanderStore: ObservableObject {
         return ids
     }
 
-    private func markUserPlace(localOrServerID: String, serverID: String? = nil, syncState: SyncState, error: String? = nil) {
-        guard let userPlace = userPlaces.first(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }) else {
-            return
-        }
-
-        let previousIDs = matchingUserPlaceIDs(localOrServerID)
+    // Queue entries retain the exact object across awaits. Legacy snapshots can
+    // contain multiple rows with the same local or server ID; looking up that
+    // ID again would acknowledge the first alias and leave the sender pending.
+    private func markUserPlace(_ userPlace: LocalUserPlace, serverID: String? = nil, syncState: SyncState, error: String? = nil) {
+        let previousIDs = Self.referenceIDs(for: userPlace)
         if let serverID {
             userPlace.serverID = serverID
         }
@@ -11765,12 +11937,13 @@ final class WanderStore: ObservableObject {
     }
 
     private func retryOwnPlaceSync(
-        userPlaceID: String,
+        userPlace: LocalUserPlace,
         backend: WanderBackend,
         trigger: OwnPlaceSyncTrigger,
         refreshVisiblePlacesAfterSuccess: Bool = true
     ) async -> OwnPlaceSyncOutcome {
-        guard let draft = userPlaceDraft(for: userPlaceID) else {
+        let userPlaceID = userPlace.id
+        guard let draft = userPlaceDraft(for: userPlace) else {
             trackOwnPlaceSyncEvent(
                 name: WanderAnalyticsEvents.ownPlaceSyncSkipped,
                 properties: [
@@ -11793,12 +11966,13 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("own-place sync attempt trigger=\(trigger.rawValue, privacy: .public) user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) place_has_server_id=\((draft.place.serverID != nil), privacy: .public) attribute_count=\(draft.attributes.count, privacy: .public)")
         #endif
 
-        let syncingUserPlace = userPlaces.first {
-            $0.id == userPlaceID || $0.localID == userPlaceID || $0.serverID == userPlaceID
-        }
+        let userPlaceIDs = Self.referenceIDs(for: userPlace)
         let explicitVisit = draft.status == .been
-            ? visits(for: userPlaceID)
-                .filter { !$0.backfilledFromUserPlace && $0.syncState != .synced }
+            ? placeVisits
+                .filter {
+                    userPlaceIDs.contains($0.userPlaceID) && $0.deletedAt == nil
+                        && !$0.backfilledFromUserPlace && $0.syncState != .synced
+                }
                 .sorted {
                     if $0.createdAt != $1.createdAt {
                         return $0.createdAt < $1.createdAt
@@ -11808,13 +11982,12 @@ final class WanderStore: ObservableObject {
                 .first
             : nil
 
-        markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
+        markUserPlace(userPlace, syncState: .pendingUpdate, error: nil)
         do {
             let remoteResult: SaveResult
             var visitResult: PlaceVisitResult?
             if let explicitVisit,
-               let syncingUserPlace,
-               let atomicDraft = checkInDraft(for: explicitVisit.id, userPlace: syncingUserPlace) {
+               let atomicDraft = checkInDraft(for: explicitVisit.id, userPlace: userPlace) {
                 let checkInResult = try await backend.saveCheckIn(atomicDraft)
                 remoteResult = checkInResult.saveResult
                 visitResult = checkInResult.visitResult
@@ -11829,7 +12002,7 @@ final class WanderStore: ObservableObject {
                 if let placeID = remoteResult.placeID {
                     markPlace(localOrServerID: draft.place.localID, serverID: placeID, syncState: .synced)
                 }
-                markUserPlace(localOrServerID: userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
+                markUserPlace(userPlace, serverID: remoteResult.userPlaceID, syncState: .synced)
             }
             lastRemoteError = nil
             trackOwnPlaceSyncEvent(
@@ -11848,7 +12021,7 @@ final class WanderStore: ObservableObject {
             if let explicitVisit {
                 markPlaceVisit(localOrServerID: explicitVisit.id, syncState: .failed, error: message)
             }
-            markUserPlace(localOrServerID: userPlaceID, syncState: .failed, error: message)
+            markUserPlace(userPlace, syncState: .failed, error: message)
             lastRemoteError = message
             trackOwnPlaceSyncEvent(
                 name: WanderAnalyticsEvents.ownPlaceSyncFailed,
