@@ -56,18 +56,14 @@ jobs:
                   output.write(f'{key}={device["udid"]}\n')
               print('Testing on', device['name'])
           PY
-      - name: Unit regressions and native Feed scrolling
+      # The search microbenchmark runs on its reference machine, not shared hosted runners.
+      - name: Unit suite and native Feed scrolling
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/FeedPaginationTests
-          -only-testing:WanderTests/FeedModelsTests
-          -only-testing:WanderTests/FeedAudienceTests
-          -only-testing:WanderTests/FeedConsolidationTests
-          -only-testing:WanderTests/ActivityEngagementTests
-          -only-testing:WanderTests/CheckInQuestionPreferencesTests
-          -only-testing:WanderTests/WanderStoreTests
+          -only-testing:WanderTests
+          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
@@ -82,6 +78,11 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Generic Simulator build
+        run: >-
+          xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=NO
       - name: Export native evidence
         if: always()
         run: |
