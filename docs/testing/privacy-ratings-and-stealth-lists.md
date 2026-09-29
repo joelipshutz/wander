@@ -20,8 +20,8 @@ origins eligible for repair; future origins are recorded.
 
 Legacy signed-photo CDN retirement still requires verification before the full
 rollout is called closed. The project is on the Free plan; manual CDN purge requires Pro or provider assistance.
-The scoped Supabase support request is approved; submission awaits support-portal
-sign-in. No billing changes or visit-photo rewrites have been made.
+The scoped Supabase support request has been submitted and the dashboard
+confirmed receipt. Provider completion is pending. No billing changes or visit-photo rewrites have been made.
 All 12 recorded historical public artwork URLs now reject access. Their original
 images were moved to a private archive, preserving bytes, object identity,
 ownership, and custom metadata. The former paths contain only generic Astir
@@ -43,39 +43,27 @@ only. The checked-in public Clerk/Supabase configuration targets the live alpha
 backend. Xcode's Branch Chooser was verified on this worktree on September 28.
 This branch has not been uploaded to TestFlight.
 
-## Validation status
+## Validation and acceptance
 
-The final iPhone 17 run executed all 2,594 unit tests plus both privacy layout
-checks. Both layout checks passed; the unit suite had two failures. The upload
-regression's incorrect automatic-retry assumption was corrected, and the focused
-rerun passed all 145 repository tests. Of 46 search tests, 45 passed; the unchanged
-1,000-memory benchmark still measured 55.92 ms against its 50 ms budget. Track
-that existing performance failure in
-[REC-627](https://linear.app/recme/issue/REC-627/investigate-trusted-memory-search-exceeding-the-50-ms-performance).
-Do not describe the full native suite as clean.
+[PR #716](https://github.com/joelipshutz/wander/pull/716) and
+[REC-590](https://linear.app/recme/issue/REC-590/define-astir-activity-audiences-and-privacy-settings)
+record the latest verified commit, native results, provider cleanup status, and
+remaining gates. Check those records before treating this as a release-ready build.
 
-The September 28 follow-up replaces repeated phrase-string scans in cached
-search documents with equivalent whole-token comparisons. A regression covers
-exact, prefix, middle, suffix, repeated-token, separated-token, and partial-token
-ranking. Swift syntax validation passed. Earlier native reruns were interrupted
-without completing tests. The latest run compiled the new search test but never
-executed tests: it stalled installing the app on the simulator and was stopped.
-The 50 ms budget remains unchanged. Do not treat a synthetic phrase microbenchmark
-as a passing end-to-end search measurement.
+The `Privacy native validation` workflow runs all unit tests plus the two rating
+layout tests on iPhone 17, then repeats the layouts on compact iPhone 16e. Its
+artifacts include result bundles and screenshots for the three rating rows and
+the start/end of the largest-text explanation. The explanation uses a scrollable
+native sheet with a Done button at accessibility sizes and a popover at normal
+sizes. A passing layout fixture does not replace the live two-account checks below.
 
-The iPhone 13 mini normal-size rating check previously passed. Manual checks on
-September 28 verified card → place profile → explanation → dismiss → back at
-normal size, plus card → profile → back at the largest accessibility size. The
-largest-size Your rating label, value, and empty state are readable. Lower rows
-still require the native scrolling check.
+The search benchmark retains its 50 ms budget. Track its measured native result
+in [REC-627](https://linear.app/recme/issue/REC-627/investigate-trusted-memory-search-exceeding-the-50-ms-performance);
+a phrase microbenchmark does not prove end-to-end search performance.
 
-Manual inspection found that the ratings explanation clips inside its popover
-at the largest text size. The follow-up uses a scrollable native sheet with a
-Done button at accessibility sizes, while retaining the normal-size popover.
-The UI regression now checks the first and last explanation paragraphs and
-return navigation. This fix still needs a completed native build and visual
-verification. The earlier iPhone 17 normal and accessibility screenshots were
-inspected. The live two-account scenarios below remain tester acceptance steps.
+Run the following checks with fictional test-account content. Manual acceptance
+and provider cleanup are distinct: testing this branch does not prove historical
+CDN entries or old analytics records have been removed.
 
 ## Automatic Wannas
 
