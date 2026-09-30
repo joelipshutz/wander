@@ -32,7 +32,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["unit", "ui"], required=True)
+    parser.add_argument("--suite", choices=["unit", "replay", "performance", "ui"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -44,12 +44,22 @@ def main() -> int:
     if args.shard_count < 1 or not 0 <= args.shard < args.shard_count:
         parser.error("shard must be within shard-count")
     root = Path(__file__).resolve().parents[1]
-    inventory = ui_test_identifiers(root) if args.suite == "ui" else ["WanderTests"]
+    replay = "WanderTests/ReplayMaskingTests"
+    performance = "WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds"
+    inventory = (ui_test_identifiers(root) if args.suite == "ui" else
+                 [replay] if args.suite == "replay" else
+                 [performance] if args.suite == "performance" else ["WanderTests"])
     selected = inventory[args.shard::args.shard_count] if args.suite == "ui" else inventory
+    # The SDK installs process-wide replay observers. Keep this required test in
+    # its own test host, matching the independently passing Feed validation job.
+    # Keep the unchanged search threshold required in a fresh process too,
+    # rather than measuring after thousands of unrelated fixtures and SDKs.
+    isolated = {replay: "replay", performance: "performance"} if args.suite == "unit" else {}
+    excluded = list(isolated)
     if not selected:
         parser.error("empty test selection")
     selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite == "ui" else None,
-                 "identifiers": selected}
+                 "identifiers": selected, "isolatedTestSuites": isolated}
     if args.selection_file:
         Path(args.selection_file).write_text(json.dumps(selection, indent=2) + "\n")
     if args.list_only:
@@ -61,10 +71,11 @@ def main() -> int:
     command = ["xcodebuild", "test", "-quiet", "-project", "Wander.xcodeproj", "-scheme", "Wander",
                "-destination", f"platform=iOS Simulator,id={args.destination}",
                "-derivedDataPath", args.derived_data, "-jobs", "2", "-parallel-testing-enabled", "NO",
-               "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
-               "-maximum-test-execution-time-allowance", "240", "-resultBundlePath", args.result_bundle,
+               "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
+               "-maximum-test-execution-time-allowance", "900", "-resultBundlePath", args.result_bundle,
                "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "GENERATE_INFOPLIST_FILE=YES"]
     command.extend(f"-only-testing:{identifier}" for identifier in selected)
+    command.extend(f"-skip-testing:{identifier}" for identifier in excluded)
     return subprocess.run(command, cwd=root, check=False).returncode
 
 

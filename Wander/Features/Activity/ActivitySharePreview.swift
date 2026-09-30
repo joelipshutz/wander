@@ -1519,6 +1519,10 @@ private struct ActivityShareMessageComposer: UIViewControllerRepresentable {
 
 #if DEBUG
 struct ActivitySharePreviewMockupRoot: View {
+    @StateObject private var shareBackend = WanderBackend(
+        placePhotoRepository: MapCapturePlacePhotoRepository(),
+        shareCardPreviewRepository: ShareCardMockPreviewRepository(failsFirstAttempt: false)
+    )
     private let context = ActivityEngagementContext(
         activityID: "41000000-0000-0000-0000-000000000264",
         actor: ProfileShell(
@@ -1550,6 +1554,7 @@ struct ActivitySharePreviewMockupRoot: View {
                     "-WanderActivityShareInstagramPostMockup"
                 ) ? .instagramPost : .tikTok
             )
+                .environmentObject(shareBackend)
                 .onOpenURL(perform: handleTikTokCallback)
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     guard let url = activity.webpageURL else { return }

@@ -110,6 +110,12 @@ async function main() {
         await client.query("rollback to savepoint ranked_people_smoke");
         await client.query("release savepoint ranked_people_smoke");
         console.log("ok - shared people ranking combines contact, location, curated and social signals");
+        await client.query("savepoint person_typeahead_smoke");
+        await client.query(transactionBody(loadStrictPgTapSQL(
+          new URL("../supabase/tests/person_typeahead_search.sql", import.meta.url)), "rollback"));
+        await client.query("rollback to savepoint person_typeahead_smoke");
+        await client.query("release savepoint person_typeahead_smoke");
+        console.log("ok - person typeahead matches first letters and names without duplicate or hidden accounts");
         await client.query("savepoint contact_discovery_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback"));
@@ -1374,6 +1380,8 @@ function runLinkedSmokeChecks(
   const discoverPreviewSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(discoverSmokeSQL, "rollback")}\nrollback;`;
   const rankedPeopleSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/ranked_people_recommendations.sql", import.meta.url)), "rollback")}\nrollback;`;
+  const personTypeaheadSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
+    new URL("../supabase/tests/person_typeahead_search.sql", import.meta.url)), "rollback")}\nrollback;`;
   const contactDiscoverySmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
   const launchProfileSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
@@ -1424,7 +1432,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${historicalFeedSmokeSQL}\n${visitFeedSmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${personTypeaheadSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${historicalFeedSmokeSQL}\n${visitFeedSmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");

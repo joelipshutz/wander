@@ -23,7 +23,8 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
         app.launch()
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        dismissStartupNotificationPromptIfNeeded(in: app)
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
         for destination in ["Events", "Map", "Profile", "Events", "Feed", "Map", "Events"] {
             let source = tabs.buttons.matching(NSPredicate(format: "isSelected == true")).firstMatch
@@ -51,6 +52,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let button = app.buttons["events.keepMePosted"]
         XCTAssertTrue(button.waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
@@ -87,9 +89,10 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         // Accessibility can expose tabs while the launch image is still on
         // screen. Establish the initial rendered appearance before measuring
         // transitions; subsequent switches must pass without this wait.
@@ -162,6 +165,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let artwork = app.descendants(matching: .any)["events.comingSoon"].firstMatch
         XCTAssertTrue(artwork.waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
@@ -192,6 +196,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 20))
         preview.tap()
@@ -209,6 +214,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.descendants(matching: .any)["events.comingSoon"].firstMatch.waitForExistence(timeout: 20))
         let options = XCTMeasureOptions()
         options.iterationCount = 5

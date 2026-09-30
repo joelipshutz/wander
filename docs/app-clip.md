@@ -166,11 +166,11 @@ device authentication, installation continuation or Messages rendering.
 5. Verify explicit analytics against a controlled test account. Clip replay and
    automatic capture are disabled; no content, tokens or URLs are event fields.
    See `analytics.md`. Measure the signed, thinned release Clip size; an unsigned
-   build-directory size is only an early signal. The signed local Release Clip
-   currently contains 15,973,956 unthinned bytes. Both signed targets resolve
-   Clerk and Supabase configuration, but their analytics token is absent. Populate
-   the approved Astir-specific ignored configuration before analytics validation
-   or upload; the local build is not a release candidate.
+   build-directory size is only an early signal. Both signed targets must resolve
+   Clerk, Supabase and the approved Astir analytics configuration. Populate the
+   ignored local configuration and verify the built plists without printing tokens
+   before analytics validation or upload. Record current device and live-ingestion
+   evidence in REC-408; a successful local build alone is not a release candidate.
 6. Configure the default App Clip experience with the approved 1800×1200 header,
    subtitle and action. Upload/release only through the normal approved release
    workflow. Validate TestFlight invocation and then the published experience.

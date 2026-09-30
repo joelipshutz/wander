@@ -30,6 +30,12 @@ jobs:
           - name: unit suite
             suite: unit
             shard: 0
+          - name: replay privacy
+            suite: replay
+            shard: 0
+          - name: search performance
+            suite: performance
+            shard: 0
           - name: UI shard 1
             suite: ui
             shard: 0
