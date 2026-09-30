@@ -115,6 +115,11 @@ final class PersonTypeaheadUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         capture("space-completed-names")
+        field.typeText(" @")
+        XCTAssertTrue(caitlin.waitForExistence(timeout: 5))
+        field.typeText("nobody! still typing")
+        expectation(for: NSPredicate(format: "value == %@", "@Caitlin Cortez and @Camilo Flores tomorrow @nobody! still typing"), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
     }
 
     private func assertPickerAtKeyboard(_ app: XCUIApplication, identifier: String) {

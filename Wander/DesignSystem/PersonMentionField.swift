@@ -46,9 +46,7 @@ struct PersonMentionField: View {
     }
     private var suggestionHeight: CGFloat {
         guard query != nil else { return 0 }
-        let count = results.profiles.filter(store.isEligibleForPersonTypeahead).count
-        let rows = count == 0 ? 48 : min(CGFloat(count) * rowHeight, min(rowHeight * 3.5, 220))
-        return rows + (results.failed ? 44 : 0) + 12
+        return min(rowHeight * 3.5, 220) + 12
     }
 
     var body: some View {
@@ -152,7 +150,7 @@ struct PersonMentionField: View {
                 }
                 .scrollIndicators(.visible)
                 .scrollDismissesKeyboard(.never)
-                .frame(height: min(CGFloat(profiles.count) * rowHeight, min(rowHeight * 3.5, 220)))
+                .frame(height: min(CGFloat(profiles.count) * rowHeight, min(rowHeight * 3.5, 220) - (results.failed ? 44 : 0)))
             } else if results.isLoading {
                 ProgressView("Finding people…").font(AstirTypography.caption).padding(12)
             } else if !results.failed {
@@ -171,7 +169,9 @@ struct PersonMentionField: View {
         .foregroundStyle(brand.secondaryText)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: suggestionHeight, alignment: .bottom)
         .background(brand.raisedBackground)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("\(accessibilityIdentifier).suggestions")
     }
 }
@@ -207,7 +207,6 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         view.textContainer.lineFragmentPadding = 0
         view.delegate = context.coordinator
-        view.mentionAccessoryController = context.coordinator.accessoryController
         editor.view = view
         editor.coordinator = context.coordinator
         view.adjustsFontForContentSizeCategory = true
@@ -221,6 +220,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ view: MentionTextView, coordinator: Coordinator) {
+        coordinator.accessoryUpdateTask?.cancel()
         if coordinator.parent.editor.view === view {
             coordinator.parent.editor.view = nil
             coordinator.parent.editor.coordinator = nil
@@ -289,8 +289,6 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 
     final class MentionTextView: UITextView {
         let placeholder = UILabel()
-        var mentionAccessoryController: UIInputViewController?
-        override var inputAccessoryViewController: UIInputViewController? { mentionAccessoryController }
         override init(frame: CGRect, textContainer: NSTextContainer?) {
             super.init(frame: frame, textContainer: textContainer)
             placeholder.isUserInteractionEnabled = false
@@ -311,8 +309,8 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         var pendingText: String?
         var updating = false
         var focusUpdatePending = false
-        let accessoryController = MentionAccessoryController()
-        var accessory: MentionKeyboardAccessory { accessoryController.accessory }
+        var accessoryUpdateTask: Task<Void, Never>?
+        let accessory = MentionKeyboardAccessory()
         init(_ parent: PersonMentionNativeInput) {
             self.parent = parent
             lastText = parent.text
@@ -364,16 +362,31 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         func updateSuggestions(for view: UITextView) {
             accessory.host.rootView = parent.suggestionHeight > 0 ? parent.suggestions : AnyView(EmptyView())
             accessory.host.view.isHidden = parent.suggestionHeight == 0
-            // A persistent accessory controller resizes without rebuilding the
-            // keyboard's document context in the middle of a keystroke burst.
-            let height = max(1, parent.suggestionHeight)
-            guard accessory.contentHeight != height else { return }
-            accessory.contentHeight = height
-            accessory.heightConstraint.constant = height
-            accessory.frame.size.height = height
-            accessoryController.preferredContentSize = CGSize(width: view.bounds.width, height: height)
-            accessory.invalidateIntrinsicContentSize()
-            accessory.setNeedsLayout()
+            guard accessory.contentHeight != parent.suggestionHeight, accessoryUpdateTask == nil else { return }
+            accessoryUpdateTask = Task { [weak self, weak view] in
+                guard let self, let view else { return }
+                defer { self.accessoryUpdateTask = nil }
+                // Height transitions wait for the current input burst to
+                // settle, including punctuation that closes a query. A stable
+                // open height lets filtering update without keyboard reloads.
+                do { try await self.parent.editor.waitForTypingPause(for: .milliseconds(250)) }
+                catch { return }
+                guard !Task.isCancelled, view.isFirstResponder, view.markedTextRange == nil else { return }
+                let height = self.parent.suggestionHeight
+                guard self.accessory.contentHeight != height else { return }
+                self.accessory.contentHeight = height
+                self.accessory.heightConstraint.constant = height
+                self.accessory.frame.size.height = height
+                view.inputAccessoryView = height > 0 ? self.accessory : nil
+                self.accessory.invalidateIntrinsicContentSize()
+                self.accessory.setNeedsLayout()
+                let caret = view.selectedRange
+                let wasUpdating = self.updating
+                self.updating = true
+                defer { self.updating = wasUpdating }
+                view.reloadInputViews()
+                view.selectedRange = caret
+            }
         }
 
         // Becoming first responder can ask SwiftUI to resolve its responder
@@ -451,34 +464,24 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
     }
 
-    final class MentionAccessoryController: UIInputViewController {
-        let accessory = MentionKeyboardAccessory()
-
-        override func loadView() {
-            view = accessory
-            addChild(accessory.host)
-            accessory.addSubview(accessory.host.view)
-            accessory.host.didMove(toParent: self)
-        }
-    }
-
     /// UIKit positions this view at the keyboard edge for every input surface,
     /// independent of a search bar's position or a note's scroll offset.
     final class MentionKeyboardAccessory: UIInputView {
         let host = UIHostingController(rootView: AnyView(EmptyView()))
-        var contentHeight: CGFloat = 1
+        var contentHeight: CGFloat = 0
         private(set) var heightConstraint: NSLayoutConstraint!
 
         init() {
-            super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 1), inputViewStyle: .keyboard)
+            super.init(frame: .zero, inputViewStyle: .keyboard)
             allowsSelfSizing = true
             clipsToBounds = true
             autoresizingMask = [.flexibleWidth]
-            heightConstraint = heightAnchor.constraint(equalToConstant: 1)
+            heightConstraint = heightAnchor.constraint(equalToConstant: 0)
             heightConstraint.priority = .required
             heightConstraint.isActive = true
             host.view.backgroundColor = .clear
             host.safeAreaRegions = []
+            addSubview(host.view)
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
         override var intrinsicContentSize: CGSize {
@@ -501,13 +504,13 @@ final class PersonMentionInputController: ObservableObject {
 
     /// Let the keyboard finish a burst of keystrokes before replacing its
     /// document context and resizing the accessory around the new name.
-    func waitForTypingPause() async throws {
+    func waitForTypingPause(for delay: Duration = .milliseconds(150)) async throws {
         while true {
             try Task.checkCancellation()
             guard let view, view.isFirstResponder else { throw CancellationError() }
             let text = view.text
             let caret = view.selectedRange
-            try await Task.sleep(for: .milliseconds(150))
+            try await Task.sleep(for: delay)
             guard self.view === view, view.isFirstResponder else { throw CancellationError() }
             if view.text == text, view.selectedRange == caret, view.markedTextRange == nil { return }
         }
