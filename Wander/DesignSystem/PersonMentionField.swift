@@ -3,8 +3,6 @@ import UIKit
 
 /// Shared native input for comments, place notes, and person-aware search.
 struct PersonMentionField: View {
-    enum Placement { case above, below }
-
     @Environment(\.astirBrandMode) private var brand
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
@@ -15,7 +13,6 @@ struct PersonMentionField: View {
     var placeholder: String
     var accessibilityLabel: String
     var accessibilityIdentifier: String
-    var placement: Placement = .above
     var minimumLines = 1
     var maximumLines = 4
     var isSearch = false
@@ -30,7 +27,9 @@ struct PersonMentionField: View {
     @State private var internalFocus = false
     @State private var selection = NSRange(location: 0, length: 0)
     @State private var retry = 0
+    @State private var replacementID = UUID()
     @StateObject private var results = PersonTypeaheadModel()
+    @StateObject private var editor = PersonMentionInputController()
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 58
 
     private var mentionBinding: Binding<[PersonMention]> { mentions ?? $internalMentions }
@@ -42,21 +41,30 @@ struct PersonMentionField: View {
     private var requestID: String {
         "\(store.currentUser.id)|\(auth.isSignedIn)|\(query?.range.location ?? -1)|\(query?.text ?? "")|\(retry)"
     }
+    private var candidates: [ProfileShell] {
+        (store.personTypeaheadConnections + results.profiles).filter(store.isEligibleForPersonTypeahead)
+    }
+    private var suggestionHeight: CGFloat {
+        guard query != nil else { return 0 }
+        let count = results.profiles.filter(store.isEligibleForPersonTypeahead).count
+        let rows = count == 0 ? 48 : min(CGFloat(count) * rowHeight, min(rowHeight * 3.5, 220))
+        return rows + (results.failed ? 44 : 0) + 12
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if placement == .above, query != nil { suggestions }
-            decorateInput(AnyView(PersonMentionNativeInput(
+        decorateInput(AnyView(PersonMentionNativeInput(
                 text: $text, mentions: mentionBinding, selection: $selection, focus: focusBinding,
                 placeholder: placeholder, accessibilityLabel: accessibilityLabel,
                 accessibilityIdentifier: accessibilityIdentifier,
+                replacementID: replacementID,
+                editor: editor,
                 primaryColor: UIColor(brand.primaryText), accentColor: UIColor(brand.accentText),
                 placeholderColor: UIColor(brand.secondaryText),
                 minimumLines: minimumLines, maximumLines: maximumLines, isSearch: isSearch, submitOnReturn: submitOnReturn,
-                onSubmit: onSubmit, onFocus: onFocus
+                suggestions: AnyView(suggestions.environment(\.astirBrandMode, brand)),
+                suggestionHeight: suggestionHeight,
+                onSubmit: onSubmit, onFocus: onFocus, onCompletionRequest: complete
             )))
-            if placement == .below, query != nil { suggestions }
-        }
         .task(id: requestID) {
             let owner = store.currentUser.id
             await results.search(
@@ -74,6 +82,7 @@ struct PersonMentionField: View {
             )
         }
         .onChange(of: store.currentUser.id) { _, _ in
+            results.cancelCompletions()
             text = ""
             mentionBinding.wrappedValue = []
             focusBinding.wrappedValue = false
@@ -83,7 +92,21 @@ struct PersonMentionField: View {
             let valid = mentionBinding.wrappedValue.filter { $0.isValid(in: value) }
             if valid != mentionBinding.wrappedValue { mentionBinding.wrappedValue = valid }
         }
-        .onDisappear { onQueryChange(false) }
+        .onChange(of: auth.isSignedIn) { _, _ in results.cancelCompletions() }
+        .onDisappear { results.cancelCompletions(); onQueryChange(false) }
+    }
+
+    private func complete(_ request: PersonMentionCompletionRequest) {
+        let owner = store.currentUser.id
+        results.complete(request: request, local: candidates, remote: { query in
+            guard auth.isSignedIn, backend.profileRepository != nil else { return [] }
+            return try await backend.searchProfiles(handleQuery: query)
+        }, eligible: { store.currentUser.id == owner && store.isEligibleForPersonTypeahead($0) }) { request, person in
+            guard let person, store.currentUser.id == owner, focusBinding.wrappedValue else { return }
+            guard editor.complete(request, person: person) else { return }
+            results.rebaseCompletions(replacing: request.query.range, with: "@\(PersonMentionCandidates.name(for: person))")
+            onSelect(person)
+        }
     }
 
     private var suggestions: some View {
@@ -97,9 +120,11 @@ struct PersonMentionField: View {
                                 guard let query else { return }
                                 var draft = PersonMentionDraft(text: text, mentions: mentionBinding.wrappedValue)
                                 guard let caret = draft.select(profile, for: query) else { return }
+                                results.cancelCompletions()
                                 mentionBinding.wrappedValue = draft.mentions
                                 text = draft.text
                                 selection = caret
+                                replacementID = UUID()
                                 focusBinding.wrappedValue = true
                                 onSelect(profile)
                             } label: {
@@ -126,9 +151,6 @@ struct PersonMentionField: View {
                             .accessibilityLabel("\(PersonMentionCandidates.name(for: profile)), @\(profile.handle)")
                             .accessibilityHint("Insert this person")
                             .accessibilityIdentifier("\(accessibilityIdentifier).person.\(profile.id)")
-                            if profile.id != profiles.last?.id {
-                                Divider().overlay(brand.border).padding(.leading, 54)
-                            }
                         }
                     }
                 }
@@ -151,15 +173,14 @@ struct PersonMentionField: View {
             }
         }
         .foregroundStyle(brand.secondaryText)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(brand.raisedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(brand.border, lineWidth: 1))
         .accessibilityIdentifier("\(accessibilityIdentifier).suggestions")
     }
 }
 
-private struct PersonMentionNativeInput: UIViewRepresentable {
+struct PersonMentionNativeInput: UIViewRepresentable {
     @Binding var text: String
     @Binding var mentions: [PersonMention]
     @Binding var selection: NSRange
@@ -167,6 +188,8 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
     let placeholder: String
     let accessibilityLabel: String
     let accessibilityIdentifier: String
+    let replacementID: UUID
+    let editor: PersonMentionInputController
     let primaryColor: UIColor
     let accentColor: UIColor
     let placeholderColor: UIColor
@@ -174,8 +197,11 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
     let maximumLines: Int
     let isSearch: Bool
     let submitOnReturn: Bool
+    let suggestions: AnyView
+    let suggestionHeight: CGFloat
     let onSubmit: () -> Void
     let onFocus: () -> Void
+    let onCompletionRequest: (PersonMentionCompletionRequest) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -185,6 +211,8 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
         view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         view.textContainer.lineFragmentPadding = 0
         view.delegate = context.coordinator
+        editor.view = view
+        editor.coordinator = context.coordinator
         view.adjustsFontForContentSizeCategory = true
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.keyboardDismissMode = .interactive
@@ -195,13 +223,20 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
         return view
     }
 
+    static func dismantleUIView(_ view: MentionTextView, coordinator: Coordinator) {
+        if coordinator.parent.editor.view === view {
+            coordinator.parent.editor.view = nil
+            coordinator.parent.editor.coordinator = nil
+        }
+    }
+
     func updateUIView(_ view: MentionTextView, context: Context) {
         guard !context.coordinator.updating else { return }
         // Parent forms can render an earlier snapshot after UIKit has already
         // published newer keystrokes. Wait for that publication to be reflected
         // before accepting a replacement, otherwise the last character is lost.
         if let pending = context.coordinator.pendingText {
-            guard text == pending else { return }
+            guard text == pending || replacementID != context.coordinator.parent.replacementID else { return }
             context.coordinator.pendingText = nil
         }
         context.coordinator.parent = self
@@ -232,6 +267,7 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
         context.coordinator.synchronizeFocus(view)
         if replacesText { view.invalidateIntrinsicContentSize() }
         view.setNeedsLayout()
+        context.coordinator.updateSuggestions(for: view)
     }
 
     private var regularFont: UIFont { inputFont(bold: false) }
@@ -276,9 +312,46 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
         var pendingText: String?
         var updating = false
         var focusUpdatePending = false
+        let accessory = MentionKeyboardAccessory()
         init(_ parent: PersonMentionNativeInput) {
             self.parent = parent
             lastText = parent.text
+        }
+
+        /// Async completion must transform UIKit's current draft. A SwiftUI
+        /// snapshot can be a few keystrokes behind when the lookup returns.
+        func complete(_ request: PersonMentionCompletionRequest, person: ProfileShell, in view: UITextView) -> Bool {
+            guard !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
+            var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
+            draft.reconcile(view.text)
+            guard let caret = draft.complete(request, person: person, at: view.selectedRange) else { return false }
+            updating = true
+            defer { updating = false }
+            view.textStorage.replaceCharacters(in: request.query.range, with: "@\(PersonMentionCandidates.name(for: person))")
+            view.selectedRange = caret
+            lastText = draft.text
+            pendingText = draft.text
+            parent.mentions = draft.mentions
+            parent.text = draft.text
+            parent.selection = caret
+            style(view)
+            view.invalidateIntrinsicContentSize()
+            return true
+        }
+
+        func updateSuggestions(for view: UITextView) {
+            accessory.host.rootView = parent.suggestions
+            guard accessory.contentHeight != parent.suggestionHeight else { return }
+            accessory.contentHeight = parent.suggestionHeight
+            accessory.heightConstraint.constant = parent.suggestionHeight
+            accessory.frame.size.height = parent.suggestionHeight
+            view.inputAccessoryView = parent.suggestionHeight > 0 ? accessory : nil
+            accessory.invalidateIntrinsicContentSize()
+            accessory.setNeedsLayout()
+            DispatchQueue.main.async { [weak view] in
+                guard let view, view.isFirstResponder else { return }
+                view.reloadInputViews()
+            }
         }
 
         // Becoming first responder can ask SwiftUI to resolve its responder
@@ -308,6 +381,10 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
             parent.selection = textView.selectedRange
             if textView.markedTextRange == nil { style(textView) }
             textView.invalidateIntrinsicContentSize()
+            if textView.markedTextRange == nil,
+               let request = PersonMentionCompletionRequest(draft: draft, selection: textView.selectedRange) {
+                parent.onCompletionRequest(request)
+            }
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
@@ -344,11 +421,53 @@ private struct PersonMentionNativeInput: UIViewRepresentable {
             view.textStorage.setAttributes(normal, range: NSRange(location: 0, length: view.text.utf16.count))
             let bold = parent.inputFont(bold: true)
             for mention in parent.mentions where mention.isValid(in: view.text) {
-                view.textStorage.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.range)
+                view.textStorage.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.nameRange)
             }
             view.textStorage.endEditing()
             view.selectedRange = caret
             view.typingAttributes = normal
         }
+    }
+
+    /// UIKit positions this view at the keyboard edge for every input surface,
+    /// independent of a search bar's position or a note's scroll offset.
+    final class MentionKeyboardAccessory: UIInputView {
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        var contentHeight: CGFloat = 0
+        private(set) var heightConstraint: NSLayoutConstraint!
+
+        init() {
+            super.init(frame: .zero, inputViewStyle: .keyboard)
+            allowsSelfSizing = true
+            autoresizingMask = [.flexibleWidth]
+            heightConstraint = heightAnchor.constraint(equalToConstant: 0)
+            heightConstraint.priority = .required
+            heightConstraint.isActive = true
+            host.view.backgroundColor = .clear
+            host.safeAreaRegions = []
+            addSubview(host.view)
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override var intrinsicContentSize: CGSize {
+            CGSize(width: UIView.noIntrinsicMetric, height: contentHeight)
+        }
+        override func systemLayoutSizeFitting(_ targetSize: CGSize) -> CGSize {
+            CGSize(width: targetSize.width, height: contentHeight)
+        }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            host.view.frame = bounds
+        }
+    }
+}
+
+@MainActor
+final class PersonMentionInputController: ObservableObject {
+    weak var view: UITextView?
+    weak var coordinator: PersonMentionNativeInput.Coordinator?
+
+    func complete(_ request: PersonMentionCompletionRequest, person: ProfileShell) -> Bool {
+        guard let view, let coordinator else { return false }
+        return coordinator.complete(request, person: person, in: view)
     }
 }

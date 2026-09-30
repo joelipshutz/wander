@@ -363,14 +363,14 @@ struct DiscoverScreen: View {
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
             }
-            .task(id: "\(store.currentUser.id)|\(auth.isSignedIn)|\(isPlaceSearchPresented)|\(placesQuery)|\(peopleSearchRetry)") {
+            .task(id: "\(store.currentUser.id)|\(auth.isSignedIn)|\(isPlaceSearchPresented)|\(resolvedPlacesQuery)|\(peopleSearchRetry)") {
                 await peopleSearch.search(
                     query: isPlaceSearchPresented ? PersonMentionDraft(text: placesQuery, mentions: placesMentions).searchText : "",
                     local: { store.searchProfiles(handleQuery: $0) },
                     remote: { try await store.searchDiscoverMembers(query: $0, backend: backend) }
                 )
             }
-            .task(id: memberQuery) {
+            .task(id: PersonMentionDraft(text: memberQuery, mentions: memberMentions).searchText) {
                 await refreshMembers(query: memberQuery, debounce: true)
             }
             .onChange(of: placesQuery) { _, newValue in
@@ -2382,7 +2382,7 @@ private struct DiscoverSearchField: View {
             text: $draftText, mentions: $mentions, focus: focus,
             placeholder: "", accessibilityLabel: accessibilityLabel,
             accessibilityIdentifier: accessibilityIdentifier,
-            placement: .below, maximumLines: 1, isSearch: true,
+            maximumLines: 1, isSearch: true,
             onSubmit: {
                 commitDraftText()
                 onSubmit()

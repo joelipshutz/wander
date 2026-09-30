@@ -9464,7 +9464,7 @@ private struct SearchBar: View {
             text: $draftQuery, mentions: $personMentions,
             focus: isFocused,
             placeholder: "search your map or people...", accessibilityLabel: "Search your map or people",
-            accessibilityIdentifier: "map.searchField", placement: .above, maximumLines: 1, isSearch: true,
+            accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true,
             onSubmit: {
                 let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText
                 commitDraftQuery(draftQuery)
@@ -13764,9 +13764,16 @@ struct MapPlaceSaveEditor: View {
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("save.editorScroll")
                 .background(editorBackground)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
+                    guard noteFocused else { return }
+                    // The keyboard accessory changes the viewport without
+                    // changing the note's own height.
+                    walkthroughScrollProxy.scrollTo(WalkthroughTargetID.saveNote, anchor: .bottom)
+                }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if isReadyForDetails {
                         saveFooter
+                            .background { if noteFocused { editorBackground } }
                     }
                 }
                 .onChange(of: noteFieldHeight) { _, _ in

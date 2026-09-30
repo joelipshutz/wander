@@ -5,7 +5,7 @@
 The shared input supports activity comments, Map/Feed people search, and the
 common Check-in/Wanna note editor. An explicit `@` opens a compact list with
 avatars, full names, and secondary handles. Selecting a row inserts `@Full Name`
-in bold Signal text and retains the keyboard. Another `@` opens the picker again.
+with only the name in bold Signal text; the @ remains plain. The keyboard stays open. Another `@` opens the picker again.
 
 Reuse `WanderStore`'s mutual/follow graph and `WanderBackend.peopleRecommendations`
 (REC-587), preserving that service's contact consent checks and ranked order.
@@ -21,9 +21,8 @@ invitee, change an audience, or grant access to a saved place.
 ## Engineering review
 
 Use the native attributed text input APIs available on iOS 17. A small value
-model stores the text plus selected account spans in UTF-16 units. Typed `@text`
-never acquires an account identity without a selection. Changing a selected
-name invalidates that span; edits before it shift the offset. Search uses the
+model stores the text plus selected account spans in UTF-16 units. A selected row or a unique exact full name/handle followed by Space acquires an account identity. Space completion uses an independent lookup that includes remote matches before deciding a name is unique. Changing a selected
+name invalidates that span; edits before it shift the offset. Pending completions rebase when another completed mention changes the prefix length, and overlapping native text selections prevent delayed replacement. Search uses the
 selected account's handle while the field displays the full name.
 
 ```text
@@ -51,17 +50,16 @@ future persisted tag contract; it does not claim those spans are stored remotely
 ## Design review
 
 The supplied interaction is the visual reference. Use Astir's adaptive raised
-background, border, Avenir Next identity text, and contrast-safe Signal text token.
+background, Avenir Next identity text, and contrast-safe Signal text token.
 The result panel is capped at roughly three and a half rows with visible scrolling;
 each row has a minimum 44-point tap target. Full names wrap when needed. Selection
 is indicated by bold weight as well as color. VoiceOver announces the full name,
 handle, and insertion action. The editor keeps native selection, dictation,
-composition, paste, keyboard, and Dynamic Type behavior.
+composition, paste, keyboard, and Dynamic Type behavior. The note editor follows keyboard viewport changes so the focused note stays above its save action. Async completion replaces only the active name range in native text storage, preserving later keystrokes.
 
 Empty queries show ranked people; unmatched queries show “No people found.”
 Network errors keep available matches and offer Retry. The panel collapses when
-input loses focus or no valid `@` query remains. Notes and comments anchor the
-panel above input; top search fields place it below.
+input loses focus or no valid `@` query remains. Every input presents the same native keyboard accessory, so the panel stays immediately above the keyboard regardless of field position. Rows use spacing without divider rules.
 
 ## Validation
 
@@ -80,34 +78,3 @@ panel above input; top search fields place it below.
 
 Sequential implementation: the editor, query model, and integration share one
 contract. Keep notification code untouched while the independent dependency is active.
-
-## Validation results
-
-The hosted migration `20260929044549_person_typeahead_search` is deployed.
-The `person_typeahead_search.sql` regression passes against that deployed function
-inside a rolled-back transaction, including first-character/surname matching,
-deduplication, visibility exclusions, and function security metadata. The migration
-changes the search function only; historical comments and notes are untouched.
-The full hosted smoke suite stops at the existing share-card payload assertion;
-running `share_card_previews.sql` without this migration reproduces that failure.
-
-The iPhone 16 Plus run passed 2,573 unit tests and all four typeahead UI cases
-(comments, Feed search, Map search, and both note modes). The native input now
-defers autofocus until after SwiftUI updates and rejects stale parent text
-snapshots while typing. These fixes prevent a Feed responder graph cycle and
-lost characters in the note form. The save button reserves bottom space, and
-growing suggestions scroll the focused note into view on smaller phones.
-
-Xcode has opened this isolated worktree and its Branch Chooser shows
-`codex/rec-631-person-typeahead`. Native validation uses the installed iOS 26.5
-runtime because the prescribed 18.6 runtime is unavailable. All four typeahead UI cases also pass on iPhone SE (3rd generation), including
-keyboard Send and a geometry assertion keeping the note above the save button.
-Existing combined-search/profile navigation and note-draft preservation UI tests
-pass. Screenshots cover light and dark appearances across the two sizes.
-
-The physical-iPhone Debug build exposed an existing onboarding review reference
-to simulator-only contact fixtures. The reference is now simulator-guarded, with
-the normal contact service used on devices. Xcode's signed build for Ry's iPhone
-succeeds on the feature branch.
-The complete unit suite was rerun after this guard change: 2,573 passed with
-zero failures on iPhone SE (3rd generation), iOS 26.5.

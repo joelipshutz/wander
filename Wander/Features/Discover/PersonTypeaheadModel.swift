@@ -9,6 +9,49 @@ final class PersonTypeaheadModel: ObservableObject {
     private var generation = UUID()
     private var ownerID: String?
     private var recommendations: [ProfileShell]?
+    private var completions: [UUID: Task<Void, Never>] = [:]
+    private var completionRequests: [UUID: PersonMentionCompletionRequest] = [:]
+
+    /// Space lookups survive subsequent typing, independently of the picker query.
+    /// Always include remote matches before deciding a full name is unambiguous.
+    @discardableResult
+    func complete(request: PersonMentionCompletionRequest, local: [ProfileShell],
+                  remote: @escaping (String) async throws -> [ProfileShell],
+                  eligible: @escaping (ProfileShell) -> Bool,
+                  apply: @escaping (PersonMentionCompletionRequest, ProfileShell?) -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        completionRequests[id] = request
+        let task = Task { [weak self] in
+            defer { self?.completions[id] = nil; self?.completionRequests[id] = nil }
+            do {
+                let matches = try await remote(request.query.text)
+                guard !Task.isCancelled, let current = self?.completionRequests[id] else { return }
+                apply(current, PersonMentionCandidates.exactMatch((local + matches).filter(eligible), query: current.query.text))
+            } catch {
+                // A failed lookup cannot establish that a full name is unique.
+                if !Task.isCancelled, let current = self?.completionRequests[id] { apply(current, nil) }
+            }
+        }
+        completions[id] = task
+        return task
+    }
+
+    func rebaseCompletions(replacing range: NSRange, with replacement: String) {
+        for (id, var request) in completionRequests {
+            if request.rebase(replacing: range, with: replacement) {
+                completionRequests[id] = request
+            } else {
+                completions[id]?.cancel()
+                completionRequests[id] = nil
+            }
+        }
+    }
+
+    func cancelCompletions() {
+        completions.values.forEach { $0.cancel() }
+        completions.removeAll()
+        completionRequests.removeAll()
+    }
 
     func search(
         query: String?, ownerID: String,

@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import Wander
 
 final class PersonMentionTests: XCTestCase {
@@ -65,6 +66,67 @@ final class PersonMentionTests: XCTestCase {
         let draft = PersonMentionDraft(text: "@Caitlin Cortez")
         XCTAssertTrue(draft.mentions.isEmpty)
         XCTAssertEqual(draft.searchText, draft.text)
+    }
+
+    func testSpaceCompletesExactNameOrHandleAndPreservesCaret() throws {
+        for typed in ["@Caitlin Cortez ", "@cait123 ", "@CAIT123 "] {
+            var draft = PersonMentionDraft(text: "🍜 " + typed + "tomorrow")
+            let selection = NSRange(location: 3 + typed.utf16.count, length: 0)
+            let request = try XCTUnwrap(PersonMentionCompletionRequest(draft: draft, selection: selection))
+            let match = try XCTUnwrap(PersonMentionCandidates.exactMatch([person(), person()], query: request.query.text))
+            let caret = try XCTUnwrap(draft.complete(request, person: match, at: selection))
+            XCTAssertEqual(draft.text, "🍜 @Caitlin Cortez tomorrow")
+            XCTAssertEqual(draft.mentions.map(\.userID), ["caitlin"])
+            XCTAssertEqual(caret.location, "🍜 @Caitlin Cortez ".utf16.count)
+            XCTAssertEqual(draft.searchText, "🍜 @cait123 tomorrow")
+            XCTAssertEqual(draft.mentions.first?.nameRange, NSRange(location: 4, length: 14))
+        }
+    }
+
+    func testCompletionWaitsForSpaceAndNeverGuessesPartialOrDuplicateNames() {
+        for typed in ["@Caitlin Cortez", "a@cait123 ", "@ ", "@cait123  "] {
+            XCTAssertNil(PersonMentionCompletionRequest(draft: .init(text: typed), selection: NSRange(location: typed.utf16.count, length: 0)))
+        }
+        for name in ["Caitlin", "cait"] {
+            XCTAssertNil(PersonMentionCandidates.exactMatch([person()], query: name))
+        }
+        XCTAssertNil(PersonMentionCandidates.exactMatch([person(), person("another", handle: "another")], query: "Caitlin Cortez"))
+    }
+
+    func testDelayedCompletionPreservesWordsAndRejectsEditsAndSelections() throws {
+        let typed = "With @cait123 "
+        var draft = PersonMentionDraft(text: typed)
+        let request = try XCTUnwrap(PersonMentionCompletionRequest(draft: draft, selection: NSRange(location: typed.utf16.count, length: 0)))
+        draft.reconcile(typed + "tomorrow")
+        XCTAssertNil(draft.complete(request, person: person(), at: NSRange(location: 0, length: draft.text.utf16.count)))
+        XCTAssertTrue(draft.mentions.isEmpty)
+        let caret = try XCTUnwrap(draft.complete(request, person: person(), at: NSRange(location: draft.text.utf16.count, length: 0)))
+        XCTAssertEqual(draft.text, "With @Caitlin Cortez tomorrow")
+        XCTAssertEqual(caret.location, draft.text.utf16.count)
+        var edited = PersonMentionDraft(text: "With @someone ")
+        XCTAssertNil(edited.complete(request, person: person(), at: NSRange(location: edited.text.utf16.count, length: 0)))
+    }
+
+    @MainActor
+    func testNativeStylingLeavesAtSignPlainAndOnlyHighlightsTheName() throws {
+        var draft = PersonMentionDraft(text: "@c")
+        _ = draft.select(person(), for: try XCTUnwrap(draft.query(at: NSRange(location: 2, length: 0))))
+        let input = PersonMentionNativeInput(text: .constant(draft.text), mentions: .constant(draft.mentions),
+            selection: .constant(NSRange(location: 0, length: 0)), focus: .constant(false), placeholder: "",
+            accessibilityLabel: "", accessibilityIdentifier: "", replacementID: UUID(), editor: PersonMentionInputController(), primaryColor: .black, accentColor: .red,
+            placeholderColor: .gray, minimumLines: 1, maximumLines: 4, isSearch: false, submitOnReturn: false,
+            suggestions: AnyView(EmptyView()), suggestionHeight: 0, onSubmit: {}, onFocus: {}, onCompletionRequest: { _ in })
+        let view = UITextView()
+        view.text = draft.text
+        input.makeCoordinator().style(view)
+        let at = view.textStorage.attributes(at: 0, effectiveRange: nil)
+        let name = view.textStorage.attributes(at: 1, effectiveRange: nil)
+        let trailingSpace = view.textStorage.attributes(at: draft.text.utf16.count - 1, effectiveRange: nil)
+        XCTAssertEqual(at[.foregroundColor] as? UIColor, .black)
+        XCTAssertFalse(try XCTUnwrap(at[.font] as? UIFont).fontDescriptor.symbolicTraits.contains(.traitBold))
+        XCTAssertEqual(name[.foregroundColor] as? UIColor, .red)
+        XCTAssertTrue(try XCTUnwrap(name[.font] as? UIFont).fontDescriptor.symbolicTraits.contains(.traitBold))
+        XCTAssertEqual(trailingSpace[.foregroundColor] as? UIColor, .black)
     }
 
     func testInvalidatedSelectionCannotReplaceNewlyEditedText() throws {

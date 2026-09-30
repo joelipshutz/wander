@@ -25,6 +25,7 @@ final class PersonTypeaheadUITests: XCTestCase {
         field.typeText("@c")
         let person = app.buttons["discover.placesSearchField.person.fixture_caitlin"]
         XCTAssertTrue(person.waitForExistence(timeout: 5))
+        assertPickerAtKeyboard(app, identifier: "discover.placesSearchField")
         capture("feed-search-picker")
         person.tap()
         XCTAssertEqual(field.value as? String, "@Caitlin Cortez ")
@@ -41,6 +42,7 @@ final class PersonTypeaheadUITests: XCTestCase {
         field.typeText("@c")
         let person = app.buttons["map.searchField.person.fixture_caitlin"]
         XCTAssertTrue(person.waitForExistence(timeout: 5))
+        assertPickerAtKeyboard(app, identifier: "map.searchField")
         capture("map-search-picker")
         person.tap()
         XCTAssertEqual(field.value as? String, "@Caitlin Cortez ")
@@ -69,12 +71,13 @@ final class PersonTypeaheadUITests: XCTestCase {
         let caitlin = app.buttons["\(identifier).person.fixture_caitlin"]
         XCTAssertTrue(caitlin.waitForExistence(timeout: 5))
         XCTAssertGreaterThanOrEqual(caitlin.frame.height, 44)
+        assertPickerAtKeyboard(app, identifier: identifier)
+        capture("\(identifier)-ranked")
         if identifier == "save.note" {
             let submit = app.buttons["save.submit"]
             XCTAssertLessThanOrEqual(field.frame.maxY, submit.frame.minY,
                 "The note input must remain above the save button while suggestions are open.")
         }
-        capture("\(identifier)-ranked")
         let bottom = app.buttons["\(identifier).person.fixture_long"]
         let panel = app.descendants(matching: .any)["\(identifier).suggestions"].firstMatch
         panel.swipeUp()
@@ -96,6 +99,33 @@ final class PersonTypeaheadUITests: XCTestCase {
         camilo.tap()
         XCTAssertEqual(field.value as? String, prefix + "@Caitlin Cortez and @Camilo Flores ")
         XCTAssertFalse(camilo.exists)
+    }
+
+    func testSpaceCompletesTypedNameAndHandleWithoutTappingAResult() {
+        let app = launch(["-WanderNotificationPostUITest", "-WanderInitialTab", "map"])
+        let field = app.textViews["activity.comment.input"]
+        XCTAssertTrue(field.waitForExistence(timeout: 25))
+        field.tap()
+        field.typeText("@Caitlin Cortez ")
+        let caitlin = app.buttons["activity.comment.input.person.fixture_caitlin"]
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: caitlin)
+        waitForExpectations(timeout: 5)
+        field.typeText("and @camilo tomorrow")
+        expectation(for: NSPredicate(format: "value == %@", "@Caitlin Cortez and @Camilo Flores tomorrow"), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        capture("space-completed-names")
+    }
+
+    private func assertPickerAtKeyboard(_ app: XCUIApplication, identifier: String) {
+        let panel = app.descendants(matching: .any)["\(identifier).suggestions"].firstMatch
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(panel.exists)
+        XCTAssertTrue(keyboard.exists)
+        XCTAssertGreaterThan(panel.frame.height, 44)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, keyboard.frame.minY + 1)
+        XCTAssertLessThanOrEqual(keyboard.frame.minY - panel.frame.maxY, 60,
+            "Suggestions must sit at the keyboard, allowing for the native predictions bar.")
     }
 
     private func launch(_ arguments: [String], demo: Bool = false) -> XCUIApplication {
