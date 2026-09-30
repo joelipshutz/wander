@@ -118,13 +118,8 @@ struct PersonMentionField: View {
                         ForEach(profiles) { profile in
                             Button {
                                 guard let query else { return }
-                                var draft = PersonMentionDraft(text: text, mentions: mentionBinding.wrappedValue)
-                                guard let caret = draft.select(profile, for: query) else { return }
+                                guard editor.select(profile, query: query) else { return }
                                 results.cancelCompletions()
-                                mentionBinding.wrappedValue = draft.mentions
-                                text = draft.text
-                                selection = caret
-                                replacementID = UUID()
                                 focusBinding.wrappedValue = true
                                 onSelect(profile)
                             } label: {
@@ -312,6 +307,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         var pendingText: String?
         var updating = false
         var focusUpdatePending = false
+        var accessoryUpdatePending = false
         let accessory = MentionKeyboardAccessory()
         init(_ parent: PersonMentionNativeInput) {
             self.parent = parent
@@ -325,9 +321,28 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
             draft.reconcile(view.text)
             guard let caret = draft.complete(request, person: person, at: view.selectedRange) else { return false }
+            return apply(draft, replacing: request.query.range, caret: caret, in: view)
+        }
+
+        func select(_ person: ProfileShell, query: PersonMentionQuery, in view: UITextView) -> Bool {
+            guard !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
+            var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
+            draft.reconcile(view.text)
+            guard let caret = draft.select(person, for: query) else { return false }
+            return apply(draft, replacing: query.range, caret: caret, in: view)
+        }
+
+        private func apply(_ draft: PersonMentionDraft, replacing range: NSRange, caret: NSRange, in view: UITextView) -> Bool {
+            guard let start = view.position(from: view.beginningOfDocument, offset: range.location),
+                  let end = view.position(from: start, offset: range.length),
+                  let nativeRange = view.textRange(from: start, to: end),
+                  let replacementRange = Range(NSRange(location: range.location,
+                      length: draft.text.utf16.count - view.text.utf16.count + range.length), in: draft.text) else { return false }
             updating = true
             defer { updating = false }
-            view.textStorage.replaceCharacters(in: request.query.range, with: "@\(PersonMentionCandidates.name(for: person))")
+            // UITextInput replacement also updates the keyboard's document
+            // context; editing backing storage alone leaves its caret stale.
+            view.replace(nativeRange, withText: String(draft.text[replacementRange]))
             view.selectedRange = caret
             lastText = draft.text
             pendingText = draft.text
@@ -340,7 +355,8 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
 
         func updateSuggestions(for view: UITextView) {
-            accessory.host.rootView = parent.suggestions
+            accessory.host.rootView = parent.suggestionHeight > 0 ? parent.suggestions : AnyView(EmptyView())
+            accessory.host.view.isHidden = parent.suggestionHeight == 0
             guard accessory.contentHeight != parent.suggestionHeight else { return }
             accessory.contentHeight = parent.suggestionHeight
             accessory.heightConstraint.constant = parent.suggestionHeight
@@ -348,9 +364,18 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             view.inputAccessoryView = parent.suggestionHeight > 0 ? accessory : nil
             accessory.invalidateIntrinsicContentSize()
             accessory.setNeedsLayout()
-            DispatchQueue.main.async { [weak view] in
+            guard !accessoryUpdatePending else { return }
+            accessoryUpdatePending = true
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self else { return }
+                self.accessoryUpdatePending = false
                 guard let view, view.isFirstResponder else { return }
+                let caret = view.selectedRange
+                let wasUpdating = self.updating
+                self.updating = true
+                defer { self.updating = wasUpdating }
                 view.reloadInputViews()
+                view.selectedRange = caret
             }
         }
 
@@ -424,7 +449,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
                 view.textStorage.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.nameRange)
             }
             view.textStorage.endEditing()
-            view.selectedRange = caret
+            if view.selectedRange != caret { view.selectedRange = caret }
             view.typingAttributes = normal
         }
     }
@@ -439,6 +464,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         init() {
             super.init(frame: .zero, inputViewStyle: .keyboard)
             allowsSelfSizing = true
+            clipsToBounds = true
             autoresizingMask = [.flexibleWidth]
             heightConstraint = heightAnchor.constraint(equalToConstant: 0)
             heightConstraint.priority = .required
@@ -469,5 +495,10 @@ final class PersonMentionInputController: ObservableObject {
     func complete(_ request: PersonMentionCompletionRequest, person: ProfileShell) -> Bool {
         guard let view, let coordinator else { return false }
         return coordinator.complete(request, person: person, in: view)
+    }
+
+    func select(_ person: ProfileShell, query: PersonMentionQuery) -> Bool {
+        guard let view, let coordinator else { return false }
+        return coordinator.select(person, query: query, in: view)
     }
 }

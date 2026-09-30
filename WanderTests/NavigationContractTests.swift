@@ -4415,7 +4415,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(memberResults.contains("LazyHStack"))
         XCTAssertFalse(source.contains("store.visiblePlaces(for: profile.id).count"))
         XCTAssertFalse(source.contains(".task(id: placesQuery)"))
-        XCTAssertTrue(source.contains(".task(id: memberQuery)"))
+        XCTAssertTrue(source.contains(".task(id: PersonMentionDraft(text: memberQuery, mentions: memberMentions).searchText)"))
         XCTAssertTrue(source.contains(".onChange(of: placesQuery)"))
         XCTAssertTrue(source.contains("onSubmit: {"))
         XCTAssertTrue(source.contains("onSubmit()"))
