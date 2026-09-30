@@ -207,6 +207,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         view.textContainer.lineFragmentPadding = 0
         view.delegate = context.coordinator
+        view.mentionAccessoryController = context.coordinator.accessoryController
         editor.view = view
         editor.coordinator = context.coordinator
         view.adjustsFontForContentSizeCategory = true
@@ -288,6 +289,8 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 
     final class MentionTextView: UITextView {
         let placeholder = UILabel()
+        var mentionAccessoryController: UIInputViewController?
+        override var inputAccessoryViewController: UIInputViewController? { mentionAccessoryController }
         override init(frame: CGRect, textContainer: NSTextContainer?) {
             super.init(frame: frame, textContainer: textContainer)
             placeholder.isUserInteractionEnabled = false
@@ -308,9 +311,8 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         var pendingText: String?
         var updating = false
         var focusUpdatePending = false
-        var accessoryUpdatePending = false
-        var accessoryNeedsReload = false
-        let accessory = MentionKeyboardAccessory()
+        let accessoryController = MentionAccessoryController()
+        var accessory: MentionKeyboardAccessory { accessoryController.accessory }
         init(_ parent: PersonMentionNativeInput) {
             self.parent = parent
             lastText = parent.text
@@ -362,33 +364,16 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         func updateSuggestions(for view: UITextView) {
             accessory.host.rootView = parent.suggestionHeight > 0 ? parent.suggestions : AnyView(EmptyView())
             accessory.host.view.isHidden = parent.suggestionHeight == 0
-            if accessory.contentHeight != parent.suggestionHeight {
-                accessory.contentHeight = parent.suggestionHeight
-                accessory.heightConstraint.constant = parent.suggestionHeight
-                accessory.frame.size.height = parent.suggestionHeight
-                view.inputAccessoryView = parent.suggestionHeight > 0 ? accessory : nil
-                accessory.invalidateIntrinsicContentSize()
-                accessory.setNeedsLayout()
-                accessoryNeedsReload = true
-            }
-            scheduleAccessoryReload(for: view)
-        }
-
-        private func scheduleAccessoryReload(for view: UITextView) {
-            guard accessoryNeedsReload, !accessoryUpdatePending else { return }
-            accessoryUpdatePending = true
-            DispatchQueue.main.async { [weak self, weak view] in
-                guard let self else { return }
-                self.accessoryUpdatePending = false
-                guard let view, view.isFirstResponder, view.markedTextRange == nil else { return }
-                self.accessoryNeedsReload = false
-                let caret = view.selectedRange
-                let wasUpdating = self.updating
-                self.updating = true
-                defer { self.updating = wasUpdating }
-                view.reloadInputViews()
-                view.selectedRange = caret
-            }
+            // A persistent accessory controller resizes without rebuilding the
+            // keyboard's document context in the middle of a keystroke burst.
+            let height = max(1, parent.suggestionHeight)
+            guard accessory.contentHeight != height else { return }
+            accessory.contentHeight = height
+            accessory.heightConstraint.constant = height
+            accessory.frame.size.height = height
+            accessoryController.preferredContentSize = CGSize(width: view.bounds.width, height: height)
+            accessory.invalidateIntrinsicContentSize()
+            accessory.setNeedsLayout()
         }
 
         // Becoming first responder can ask SwiftUI to resolve its responder
@@ -417,7 +402,6 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             if parent.mentions != draft.mentions { parent.mentions = draft.mentions }
             parent.selection = textView.selectedRange
             if textView.markedTextRange == nil { style(textView) }
-            scheduleAccessoryReload(for: textView)
             textView.invalidateIntrinsicContentSize()
             if textView.markedTextRange == nil,
                let request = PersonMentionCompletionRequest(draft: draft, selection: textView.selectedRange) {
@@ -431,7 +415,6 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             guard !updating, textView.markedTextRange == nil,
                   textView.text == parent.text else { return }
             parent.selection = textView.selectedRange
-            scheduleAccessoryReload(for: textView)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
@@ -468,24 +451,34 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
     }
 
+    final class MentionAccessoryController: UIInputViewController {
+        let accessory = MentionKeyboardAccessory()
+
+        override func loadView() {
+            view = accessory
+            addChild(accessory.host)
+            accessory.addSubview(accessory.host.view)
+            accessory.host.didMove(toParent: self)
+        }
+    }
+
     /// UIKit positions this view at the keyboard edge for every input surface,
     /// independent of a search bar's position or a note's scroll offset.
     final class MentionKeyboardAccessory: UIInputView {
         let host = UIHostingController(rootView: AnyView(EmptyView()))
-        var contentHeight: CGFloat = 0
+        var contentHeight: CGFloat = 1
         private(set) var heightConstraint: NSLayoutConstraint!
 
         init() {
-            super.init(frame: .zero, inputViewStyle: .keyboard)
+            super.init(frame: CGRect(x: 0, y: 0, width: 0, height: 1), inputViewStyle: .keyboard)
             allowsSelfSizing = true
             clipsToBounds = true
             autoresizingMask = [.flexibleWidth]
-            heightConstraint = heightAnchor.constraint(equalToConstant: 0)
+            heightConstraint = heightAnchor.constraint(equalToConstant: 1)
             heightConstraint.priority = .required
             heightConstraint.isActive = true
             host.view.backgroundColor = .clear
             host.safeAreaRegions = []
-            addSubview(host.view)
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
         override var intrinsicContentSize: CGSize {
