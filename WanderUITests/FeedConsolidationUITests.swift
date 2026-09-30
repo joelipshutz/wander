@@ -29,7 +29,7 @@ import XCTest
         XCTAssertGreaterThan(people.frame.minY, invite.frame.maxY)
         capture("REC-597 consolidated Feed")
         search.tap()
-        let field = app.textFields["discover.placesSearchField"]
+        let field = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["discover.contactDiscovery"].exists)
         field.tap()

@@ -23,7 +23,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
         app.launch()
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
         for destination in ["Events", "Map", "Profile", "Events", "Feed", "Map", "Events"] {
             let source = tabs.buttons.matching(NSPredicate(format: "isSelected == true")).firstMatch
@@ -89,7 +89,7 @@ import UIKit
         app.launch()
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         // Accessibility can expose tabs while the launch image is still on
         // screen. Establish the initial rendered appearance before measuring
         // transitions; subsequent switches must pass without this wait.
