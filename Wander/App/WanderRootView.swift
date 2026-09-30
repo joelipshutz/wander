@@ -1488,7 +1488,9 @@ struct WanderRootView: View {
         pendingCommittedWalkthroughDraft = nil
         interruptedSaveRecoveryMessage = nil
         presentationResetRequest = WanderPresentationResetRequest()
-        resetRootPresentationsForDeepLink()
+        // A retired onboarding checkpoint owns the tutorial's presentations,
+        // not a profile or invitation opened by the current incoming link.
+        resetRootPresentationsForDeepLink(preservingSharedDestinations: true)
         selectedTab = .map
         return true
     }
@@ -2743,7 +2745,7 @@ struct WanderRootView: View {
         activateDeepLink(route)
     }
 
-    private func resetRootPresentationsForDeepLink() {
+    private func resetRootPresentationsForDeepLink(preservingSharedDestinations: Bool = false) {
         addLaunchRequest = nil
         mapSearchLaunchRequest = nil
         profileCalendarLaunchRequest = nil
@@ -2752,8 +2754,10 @@ struct WanderRootView: View {
         addSheetDetent = addSheetRestingDetent
         isPresentingAdd = false
         initialPresentation = nil
-        sharedProfile = nil
-        sharedPlan = nil
+        if !preservingSharedDestinations {
+            sharedProfile = nil
+            sharedPlan = nil
+        }
         auth.activeGate = nil
         auth.isPresentingNativeAuth = false
     }

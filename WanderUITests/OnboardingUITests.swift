@@ -1824,10 +1824,9 @@ final class OnboardingUITests: XCTestCase {
         let restoredNote = app.textViews["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         XCTAssertTrue(restoredNote.isHittable)
-        XCTAssertEqual(
-            restoredNote.value as? String,
-            "Who told you, what caught your eye, when you might go…"
-        )
+        // The native mention editor exposes its text, not its UILabel placeholder.
+        XCTAssertEqual(restoredNote.value as? String, "")
+        XCTAssertEqual(restoredNote.label, "What made you save this?")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "First Map Wanna attached editor"
@@ -1843,10 +1842,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         let preservedNote = app.textViews["save.note"]
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
-        XCTAssertEqual(
-            preservedNote.value as? String,
-            "The good bits, what you ordered, who you were with…"
-        )
+        XCTAssertEqual(preservedNote.value as? String, "")
+        XCTAssertEqual(preservedNote.label, "Check-in note")
     }
 
     func testMapWannaAndSaveRespondToSinglePhysicalTap() {
@@ -2441,9 +2438,9 @@ final class OnboardingUITests: XCTestCase {
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
-        // The opening takes 17.1 seconds, then both real benefit
-        // pages receive their reading time before the finite flow opens signup.
-        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
+        // Give XCTest enough time to inspect the real benefit pages between
+        // automatic transitions. The production timing is covered by unit tests.
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "12"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
         // Start the timed observation with the real Play control. Simulator
         // automation setup can take longer than the opening's reading interval.
@@ -2455,19 +2452,22 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.next"].exists)
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
         app.buttons["onboarding.pause"].tap()
-        let signupDeadline = Date().addingTimeInterval(39)
+        // The opening runs for 17.1 seconds. Accessibility snapshots can wait
+        // behind its continuous film/MapKit animation, so allow observation lag.
+        // Every page and the final signup are still required in this bounded run.
+        let signupDeadline = Date().addingTimeInterval(65)
         expectation(
             for: NSPredicate(format: "value == %@", "2"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 20)
+        waitForExpectations(timeout: 30)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         expectation(
             for: NSPredicate(format: "value == %@", "3"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 10)
+        waitForExpectations(timeout: 20)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         XCTAssertTrue(app.textFields["auth.email"].waitForExistence(

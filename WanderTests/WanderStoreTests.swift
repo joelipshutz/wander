@@ -12508,22 +12508,23 @@ final class WanderStoreTests: XCTestCase {
     func testSyncPendingPlaceListsResendsOwnerEditMadeInFlight() async {
         let store = makeStore()
         let remoteListID = "11111111-1111-4111-8111-111111111111"
-        let repository = FakePlaceListRepository(upsertResult: remoteListID, upsertDelayNanoseconds: 100_000_000)
+        let repository = FakePlaceListRepository(upsertResult: remoteListID)
         let backend = WanderBackend(placeListRepository: repository)
         let list = store.createPlaceList(name: "Original name", description: "before request", visibility: .followers)!
 
-        let sync = Task { await store.syncPendingPlaceLists(backend: backend) }
-        try? await Task.sleep(nanoseconds: 20_000_000)
-        XCTAssertTrue(
-            store.updatePlaceList(
+        // Change the owner draft only after the repository receives the first
+        // request. A sleep could fire before sync starts on a busy CI runner.
+        repository.onUpsert = { draft in
+            guard draft.name == "Original name" else { return }
+            XCTAssertTrue(store.updatePlaceList(
                 id: list.id,
                 name: "Updated name",
                 description: "changed in flight",
                 visibility: .followers,
                 collaboratorUserIDs: []
-            )
-        )
-        _ = await sync.value
+            ))
+        }
+        await store.syncPendingPlaceLists(backend: backend)
 
         XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["Original name", "Updated name"])
         XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.syncState, .synced)
@@ -13535,6 +13536,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     private let upsertResults: [String]
     private let itemResult: String
     private let upsertDelayNanoseconds: UInt64
+    var onUpsert: ((PlaceListUpsertDraft) -> Void)?
     private let leaveError: Error?
     private(set) var visibleListRequestCount = 0
     private(set) var detailListIDs: [String] = []
@@ -13582,6 +13584,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     }
 
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
+        onUpsert?(draft)
         if upsertDelayNanoseconds > 0 {
             try? await Task.sleep(nanoseconds: upsertDelayNanoseconds)
         }

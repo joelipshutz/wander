@@ -41,14 +41,20 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
+        // The SDK swizzles UIView.layoutSublayers(of:). SwiftUI's hosting view
+        // and UIWindow can override that path, so pulse an ordinary UIView
+        // instead of relying on unrelated app-host animations to trigger replay.
+        let layoutPulse = UIView(frame: CGRect(x: window.bounds.maxX - 2, y: window.bounds.maxY - 2, width: 1, height: 1))
+        layoutPulse.isUserInteractionEnabled = false
+        window.addSubview(layoutPulse)
 
-        // Drive genuine layout notifications, which trigger the SDK screenshot recorder.
+        // Drive genuine UIKit layout notifications and capture the real SDK image.
         for attempt in 0..<60 {
             window.rootViewController?.view.setNeedsLayout()
             window.rootViewController?.view.layoutIfNeeded()
             // The pinned SDK observes UIView.layoutSublayers(of:).
-            window.layer.setNeedsLayout()
-            window.layer.layoutIfNeeded()
+            layoutPulse.layer.setNeedsLayout()
+            layoutPulse.layer.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(100))
             if attempt >= 20, frames.image != nil { break }
         }
