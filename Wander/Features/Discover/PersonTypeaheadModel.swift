@@ -18,6 +18,7 @@ final class PersonTypeaheadModel: ObservableObject {
     func complete(request: PersonMentionCompletionRequest, local: [ProfileShell],
                   remote: @escaping (String) async throws -> [ProfileShell],
                   eligible: @escaping (ProfileShell) -> Bool,
+                  beforeApply: @escaping () async throws -> Void = {},
                   apply: @escaping (PersonMentionCompletionRequest, ProfileShell?) -> Void) -> Task<Void, Never> {
         let id = UUID()
         completionRequests[id] = request
@@ -25,6 +26,7 @@ final class PersonTypeaheadModel: ObservableObject {
             defer { self?.completions[id] = nil; self?.completionRequests[id] = nil }
             do {
                 let matches = try await remote(request.query.text)
+                try await beforeApply()
                 guard !Task.isCancelled, let current = self?.completionRequests[id] else { return }
                 apply(current, PersonMentionCandidates.exactMatch((local + matches).filter(eligible), query: current.query.text))
             } catch {

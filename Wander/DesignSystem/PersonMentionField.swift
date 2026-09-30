@@ -101,7 +101,8 @@ struct PersonMentionField: View {
         results.complete(request: request, local: candidates, remote: { query in
             guard auth.isSignedIn, backend.profileRepository != nil else { return [] }
             return try await backend.searchProfiles(handleQuery: query)
-        }, eligible: { store.currentUser.id == owner && store.isEligibleForPersonTypeahead($0) }) { request, person in
+        }, eligible: { store.currentUser.id == owner && store.isEligibleForPersonTypeahead($0) },
+           beforeApply: { try await editor.waitForTypingPause() }) { request, person in
             guard let person, store.currentUser.id == owner, focusBinding.wrappedValue else { return }
             guard editor.complete(request, person: person) else { return }
             results.rebaseCompletions(replacing: request.query.range, with: "@\(PersonMentionCandidates.name(for: person))")
@@ -308,6 +309,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         var updating = false
         var focusUpdatePending = false
         var accessoryUpdatePending = false
+        var accessoryNeedsReload = false
         let accessory = MentionKeyboardAccessory()
         init(_ parent: PersonMentionNativeInput) {
             self.parent = parent
@@ -328,8 +330,11 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             guard !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
             var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
             draft.reconcile(view.text)
-            guard let caret = draft.select(person, for: query) else { return false }
-            return apply(draft, replacing: query.range, caret: caret, in: view)
+            guard let current = draft.query(at: view.selectedRange),
+                  current.range.location == query.range.location,
+                  !PersonMentionCandidates.matching([person], query: current.text).isEmpty,
+                  let caret = draft.select(person, for: current) else { return false }
+            return apply(draft, replacing: current.range, caret: caret, in: view)
         }
 
         private func apply(_ draft: PersonMentionDraft, replacing range: NSRange, caret: NSRange, in view: UITextView) -> Bool {
@@ -357,19 +362,26 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         func updateSuggestions(for view: UITextView) {
             accessory.host.rootView = parent.suggestionHeight > 0 ? parent.suggestions : AnyView(EmptyView())
             accessory.host.view.isHidden = parent.suggestionHeight == 0
-            guard accessory.contentHeight != parent.suggestionHeight else { return }
-            accessory.contentHeight = parent.suggestionHeight
-            accessory.heightConstraint.constant = parent.suggestionHeight
-            accessory.frame.size.height = parent.suggestionHeight
-            view.inputAccessoryView = parent.suggestionHeight > 0 ? accessory : nil
-            accessory.invalidateIntrinsicContentSize()
-            accessory.setNeedsLayout()
-            guard !accessoryUpdatePending else { return }
+            if accessory.contentHeight != parent.suggestionHeight {
+                accessory.contentHeight = parent.suggestionHeight
+                accessory.heightConstraint.constant = parent.suggestionHeight
+                accessory.frame.size.height = parent.suggestionHeight
+                view.inputAccessoryView = parent.suggestionHeight > 0 ? accessory : nil
+                accessory.invalidateIntrinsicContentSize()
+                accessory.setNeedsLayout()
+                accessoryNeedsReload = true
+            }
+            scheduleAccessoryReload(for: view)
+        }
+
+        private func scheduleAccessoryReload(for view: UITextView) {
+            guard accessoryNeedsReload, !accessoryUpdatePending else { return }
             accessoryUpdatePending = true
             DispatchQueue.main.async { [weak self, weak view] in
                 guard let self else { return }
                 self.accessoryUpdatePending = false
-                guard let view, view.isFirstResponder else { return }
+                guard let view, view.isFirstResponder, view.markedTextRange == nil else { return }
+                self.accessoryNeedsReload = false
                 let caret = view.selectedRange
                 let wasUpdating = self.updating
                 self.updating = true
@@ -405,6 +417,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             if parent.mentions != draft.mentions { parent.mentions = draft.mentions }
             parent.selection = textView.selectedRange
             if textView.markedTextRange == nil { style(textView) }
+            scheduleAccessoryReload(for: textView)
             textView.invalidateIntrinsicContentSize()
             if textView.markedTextRange == nil,
                let request = PersonMentionCompletionRequest(draft: draft, selection: textView.selectedRange) {
@@ -418,6 +431,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             guard !updating, textView.markedTextRange == nil,
                   textView.text == parent.text else { return }
             parent.selection = textView.selectedRange
+            scheduleAccessoryReload(for: textView)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
@@ -491,6 +505,20 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 final class PersonMentionInputController: ObservableObject {
     weak var view: UITextView?
     weak var coordinator: PersonMentionNativeInput.Coordinator?
+
+    /// Let the keyboard finish a burst of keystrokes before replacing its
+    /// document context and resizing the accessory around the new name.
+    func waitForTypingPause() async throws {
+        while true {
+            try Task.checkCancellation()
+            guard let view, view.isFirstResponder else { throw CancellationError() }
+            let text = view.text
+            let caret = view.selectedRange
+            try await Task.sleep(for: .milliseconds(150))
+            guard self.view === view, view.isFirstResponder else { throw CancellationError() }
+            if view.text == text, view.selectedRange == caret, view.markedTextRange == nil { return }
+        }
+    }
 
     func complete(_ request: PersonMentionCompletionRequest, person: ProfileShell) -> Bool {
         guard let view, let coordinator else { return false }
