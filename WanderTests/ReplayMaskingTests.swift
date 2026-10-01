@@ -44,7 +44,7 @@ final class ReplayMaskingTests: XCTestCase {
         // The SDK swizzles UIView.layoutSublayers(of:). SwiftUI's hosting view
         // and UIWindow can override that path, so pulse an ordinary UIView
         // instead of relying on unrelated app-host animations to trigger replay.
-        let layoutPulse = UIView(frame: CGRect(x: window.bounds.maxX - 2, y: window.bounds.maxY - 2, width: 1, height: 1))
+        let layoutPulse = ReplayLayoutPulse(frame: CGRect(x: window.bounds.maxX - 2, y: window.bounds.maxY - 2, width: 1, height: 1))
         layoutPulse.isUserInteractionEnabled = false
         window.addSubview(layoutPulse)
 
@@ -67,7 +67,7 @@ final class ReplayMaskingTests: XCTestCase {
         add(baselineAttachment)
         XCTAssertTrue(sdk.isSessionReplayActive())
         let image = try XCTUnwrap(frames.image,
-            "The SDK must produce an actual replay frame (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window))")
+            "The SDK must produce an actual replay frame (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window), layouts: \(layoutPulse.layoutCount), \(frames.diagnostics))")
         let attachment = XCTAttachment(image: image)
         attachment.name = "Offline replay — readable content and masked credentials"
         attachment.lifetime = .keepAlways
@@ -97,6 +97,16 @@ final class ReplayMaskingTests: XCTestCase {
         let scale = CGFloat(cg.width) / image.size.width
         let index = (Int(CGFloat(y) * scale) * cg.width + Int(CGFloat(x) * scale)) * 4
         return (bytes[index], bytes[index + 1], bytes[index + 2])
+    }
+}
+
+@MainActor
+private final class ReplayLayoutPulse: UIView {
+    private(set) var layoutCount = 0
+
+    override func layoutSublayers(of layer: CALayer) {
+        layoutCount += 1
+        super.layoutSublayers(of: layer)
     }
 }
 
@@ -131,15 +141,25 @@ private struct ReplayPrivacyFixture: View {
 private final class ReplayFrameCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var latest: UIImage?
+    private var snapshotCount = 0
+    private var wireframeCount = 0
+    private var encodedImageCount = 0
     var image: UIImage? { lock.lock(); defer { lock.unlock() }; return latest }
+    var diagnostics: String {
+        lock.lock(); defer { lock.unlock() }
+        return "snapshots: \(snapshotCount), wireframes: \(wireframeCount), encoded images: \(encodedImageCount)"
+    }
 
     func receive(_ event: PostHogEvent) {
         guard event.event == "$snapshot", let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
+        lock.lock(); snapshotCount += 1; lock.unlock()
         for snapshot in snapshots {
             guard let data = snapshot["data"] as? [String: Any], let frames = data["wireframes"] as? [[String: Any]] else { continue }
             for frame in frames {
-                guard let raw = frame["base64"] as? String,
-                      let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
+                lock.lock(); wireframeCount += 1; lock.unlock()
+                guard let raw = frame["base64"] as? String else { continue }
+                lock.lock(); encodedImageCount += 1; lock.unlock()
+                guard let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
                       let image = UIImage(data: data) else { continue }
                 lock.lock(); latest = image; lock.unlock()
             }
