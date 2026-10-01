@@ -14,6 +14,7 @@ This repo contains the product spec, design system, research, planning-grade moc
 - `docs/open-questions.md` - unresolved questions, risks, and deferred decisions
 - `docs/setup.md` - local setup, build, test, and visual QA commands
 - `docs/specs/wander-ios-product-spec.md` - product spec and current decisions
+- [Astir Live product discussion — September 24, 2026](docs/product/2026-09-24-astir-live-discussion.md) - proposed Airbnb-style map/feed interactions and open questions
 - `docs/specs/search-featured-retrieval-platform.md` - canonical Search, Featured, personalization, privacy, monitoring, and rollout architecture
 - `docs/plans/2026-06-01-wander-ios-eng-plan.md` - implementation plan and sequencing
 - `docs/plans/2026-06-01-wander-m1-5-contract-lock.md` - schema/RLS/sync/UI contract lock

@@ -899,13 +899,14 @@ struct ActivityCommentsScreen: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (String) -> Void
     @State private var draft = ""
+    @State private var draftMentions: [PersonMention] = []
     @State private var isLoading = true
     @State private var isPosting = false
     @State private var commentError: String?
     @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
     @State private var reportSubject: CommunityReportSubject?
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -1188,21 +1189,21 @@ struct ActivityCommentsScreen: View {
                     color: brandMode.accentWash
                 )
 
-                TextField("Add a comment…", text: $draft, axis: .vertical)
-                    .accessibilityIdentifier("activity.comment.input")
-                    .font(AstirTypography.body)
-                    .lineLimit(1...4)
-                    .focused($composerFocused)
-                    .submitLabel(.send)
-                    .onSubmit(post)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.vertical, 10)
-                    .background(brandMode.raisedBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                            .stroke(brandMode.border, lineWidth: 1)
-                    )
+                PersonMentionField(
+                    text: $draft, mentions: $draftMentions,
+                    focus: $composerFocused,
+                    placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
+                    accessibilityIdentifier: "activity.comment.input", submitOnReturn: true, onSubmit: post,
+                    decorateInput: { input in
+                        AnyView(input
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, 10)
+                            .background(brandMode.raisedBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                            .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                                .stroke(brandMode.border, lineWidth: 1)))
+                    }
+                )
 
                 Button(action: post) {
                     Group {

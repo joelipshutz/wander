@@ -6391,26 +6391,11 @@ final class WanderStore: ObservableObject {
     }
 
     func searchProfiles(handleQuery: String) -> [ProfileShell] {
-        let normalized = handleQuery
-            .lowercased()
-            .replacingOccurrences(of: "@", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard normalized.count >= 2 else { return [] }
-
-        return profiles
-            .filter { profile in
-                let normalizedName = profile.displayName.lowercased()
-                return profile.id != currentUser.id
-                    && !profile.isPrivateProfile
-                    && !isBlockedBetweenCurrentUser(and: profile.id)
-                    && (
-                        profile.searchHandle == normalized
-                            || profile.searchHandle.hasPrefix(normalized)
-                            || normalizedName.hasPrefix(normalized)
-                    )
-            }
-            .map(shell(for:))
+        let normalized = normalizedHandleQuery(handleQuery)
+        guard !normalized.isEmpty else { return [] }
+        return PersonMentionCandidates.matching(
+            profiles.map(shell(for:)).filter(isEligibleForPersonTypeahead), query: normalized
+        )
     }
 
     /// Search owns its error state; another concurrent place lookup must not
@@ -6419,7 +6404,7 @@ final class WanderStore: ObservableObject {
         let userID = currentUser.id
         let normalized = normalizedHandleQuery(query)
         let local = searchProfiles(handleQuery: normalized)
-        guard normalized.count >= 2, backend.profileRepository != nil else { return local }
+        guard !normalized.isEmpty, backend.profileRepository != nil else { return local }
         let remote = try await backend.searchProfiles(handleQuery: normalized)
         try Task.checkCancellation()
         guard currentUser.id == userID else { throw CancellationError() }
@@ -6436,7 +6421,7 @@ final class WanderStore: ObservableObject {
         var profiles = searchProfiles(handleQuery: query)
         let normalizedProfileQuery = normalizedHandleQuery(query)
 
-        if normalizedProfileQuery.count >= 2, let backend {
+        if !normalizedProfileQuery.isEmpty, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
                 try Task.checkCancellation()
@@ -6839,7 +6824,7 @@ final class WanderStore: ObservableObject {
         var profiles = searchProfiles(handleQuery: query)
         let normalizedProfileQuery = normalizedHandleQuery(query)
 
-        if normalizedProfileQuery.count >= 2, let backend {
+        if !normalizedProfileQuery.isEmpty, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
                 try Task.checkCancellation()

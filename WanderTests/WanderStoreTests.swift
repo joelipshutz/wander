@@ -7647,6 +7647,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
 
         XCTAssertEqual(store.searchProfiles(handleQuery: "ry").map(\.handle), ["ryan"])
+        XCTAssertEqual(store.searchProfiles(handleQuery: "r").map(\.handle), ["ryan"])
         XCTAssertFalse(store.isBlockedBetweenCurrentUser(and: "user_ryan"))
 
         store.block(userID: "user_ryan")

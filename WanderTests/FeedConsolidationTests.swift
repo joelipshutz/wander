@@ -101,7 +101,7 @@ import XCTest
         XCTAssertFalse(search.isLoading)
         var called = false
         await search.search(query: "r", local: { _ in [] }, remote: { _ in called = true; return [] }, debounce: .zero)
-        XCTAssertFalse(called)
+        XCTAssertTrue(called, "People typeahead searches from the first character")
         XCTAssertTrue(search.profiles.isEmpty)
     }
 

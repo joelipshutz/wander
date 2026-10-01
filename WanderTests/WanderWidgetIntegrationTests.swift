@@ -610,7 +610,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(map.contains("requestAuthorizationContext: authorizationContext"))
         XCTAssertTrue(map.contains("currentAuthorizationContext: mapSearchAuthorizationContext"))
         XCTAssertFalse(map.contains("await runMapSearch()"))
-        XCTAssertTrue(map.contains(".focused(isFocused)"))
+        XCTAssertTrue(map.contains("focus: isFocused"))
         XCTAssertTrue(map.contains("clearNativeMapFeatureSelection()"))
         XCTAssertTrue(map.contains(".task(id: presentationResetRequest?.id)"))
         XCTAssertTrue(map.contains("handledPresentationResetRequestID != request.id"))
