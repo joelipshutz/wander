@@ -67,6 +67,13 @@ def main() -> int:
         return 0
     if not all([args.destination, args.derived_data, args.result_bundle]):
         parser.error("destination, derived-data and result-bundle are required to run tests")
+    if "WanderUITests/NativeOnboardingFlowUITests/testProfilePreviewUpdatesWithOptionalPhoto" in selected:
+        # The real PhotoKit picker needs an actual library item on a fresh CI
+        # simulator. Use the same public bundled artwork as the review fixture;
+        # do not depend on photos left behind by another test or recording run.
+        subprocess.run(["xcrun", "simctl", "bootstatus", args.destination, "-b"], check=True)
+        photo = root / "Wander/Resources/Assets.xcassets/PlaceCarouselAvatars.imageset/place-carousel-avatars.png"
+        subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
     command = ["xcodebuild", "test", "-quiet", "-project", "Wander.xcodeproj", "-scheme", "Wander",
                "-destination", f"platform=iOS Simulator,id={args.destination}",
