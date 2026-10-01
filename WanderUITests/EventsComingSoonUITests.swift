@@ -177,12 +177,18 @@ import UIKit
         capture("Events — native tab bar")
         for label in ["Map", "Feed", "Lists", "Profile", "Map", "Profile", "Feed", "Lists"] {
             tabs.buttons[label].tap()
-            XCTAssertTrue(tabs.buttons[label].isSelected)
+            let selectedTab = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"), object: tabs.buttons[label]
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [selectedTab], timeout: 10), .completed)
             if label == "Profile" {
                 capture("Events — unselected beside Profile")
             }
             tabs.buttons["Events"].tap()
-            XCTAssertTrue(tabs.buttons["Events"].isSelected)
+            let selectedEvents = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"), object: tabs.buttons["Events"]
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [selectedEvents], timeout: 10), .completed)
             XCTAssertTrue(artwork.waitForExistence(timeout: 2))
         }
         XCUIDevice.shared.press(.home)

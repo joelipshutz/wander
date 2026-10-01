@@ -12,7 +12,7 @@ final class ForegroundEntryUITests: XCTestCase {
         let tabs = app.tabBars.firstMatch
         for title in ["Map", "Lists", "Profile", "Feed"] {
             tabs.buttons[title].tap()
-            XCTAssertTrue(tabs.buttons[title].isSelected)
+            assertSelected(title, in: app)
             XCUIDevice.shared.press(.home)
             app.activate()
             assertSelected("Feed", in: app)
@@ -28,7 +28,7 @@ final class ForegroundEntryUITests: XCTestCase {
         let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
         if open.waitForExistence(timeout: 3) { open.tap() }
         assertSelected("Map", in: app)
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 5))
 
         XCUIDevice.shared.press(.home)
         app.activate()
