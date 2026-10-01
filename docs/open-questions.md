@@ -1,8 +1,17 @@
 # Open Questions
 
-Last updated: 2026-09-17
+Last updated: 2026-09-23
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## Activity privacy rollout (REC-590)
+
+Offline cache behavior and evidence-only companion cleanup were decided on
+September 23; see `docs/decisions.md`. These are no longer pending product choices.
+
+Small-sample and before/after inference from Astir rating is explicitly deferred
+to [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).
+Do not invent a minimum-count threshold in the current implementation.
 
 ## Onboarding copy and explorations (REC-529)
 
@@ -103,7 +112,7 @@ Reference: [Apple background transfers for extensions](https://developer.apple.c
 | Question | Recommendation | Notes |
 |---|---|---|
 | Share extension timing? | Later, after in-app add/map/social loop works. | Share extension can be a capture booster but should not block v0.1. |
-| Private profiles/follow requests? | Defer. | v0.1 follow graph is open one-way follows with visibility per place. |
+| Private profiles/follow requests? | Accepted for REC-590; implementation in progress. | Preserve legacy per-place audiences while adding account-based activity and accepted follow requests. |
 | Following users not on Wander yet? | Defer. | Needs invite/link/contact matching model. |
 | iPad layout? | Defer. | Later use map + side panel, not stretched iPhone UI. |
 

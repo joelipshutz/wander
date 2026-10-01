@@ -75,6 +75,7 @@ actor PlacePhotoDataDiskCache {
         let modifiedAt: Date
     }
 
+    private let revocationDirectoryURL: URL
     private let directoryURL: URL
     private let countLimit: Int
     private let totalCostLimit: Int
@@ -84,9 +85,12 @@ actor PlacePhotoDataDiskCache {
     private var diskHits = 0
     private var misses = 0
     private var networkLoads = 0
+    private var revocationRevisions: [String: Int] = [:]
+    private var revokedKeys: Set<String> = []
 
     init(
         directoryURL: URL? = nil,
+        revocationDirectoryURL: URL? = nil,
         countLimit: Int = 512,
         totalCostLimit: Int = 160 * 1_024 * 1_024,
         fileManager: FileManager = .default,
@@ -96,6 +100,11 @@ actor PlacePhotoDataDiskCache {
         self.isEnabled = isEnabled
         self.countLimit = max(1, countLimit)
         self.totalCostLimit = max(1, totalCostLimit)
+        let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        self.revocationDirectoryURL = revocationDirectoryURL
+            ?? directoryURL?.appendingPathComponent("access", isDirectory: true)
+            ?? applicationSupport.appendingPathComponent("recme-photo-access-v1", isDirectory: true)
         if let directoryURL {
             self.directoryURL = directoryURL
         } else {
@@ -184,11 +193,46 @@ actor PlacePhotoDataDiskCache {
 
     func removeAll() {
         guard isEnabled else { return }
-        try? fileManager.removeItem(at: directoryURL)
+        for entry in cacheEntries() { try? fileManager.removeItem(at: entry.url) }
         memoryHits = 0
         diskHits = 0
         misses = 0
         networkLoads = 0
+    }
+
+    func remove(canonicalPlaceKey: String, photoKey: String) {
+        guard isEnabled else { return }
+        for variant in PlacePhotoRenderVariant.allCases {
+            try? fileManager.removeItem(at: fileURL(
+                canonicalPlaceKey: canonicalPlaceKey, photoKey: photoKey, variant: variant
+            ))
+        }
+    }
+
+    func recordRevocation(_ key: String) {
+        revocationRevisions[key, default: 0] += 1
+        revokedKeys.insert(key)
+        guard isEnabled else { return }
+        try? fileManager.createDirectory(at: revocationDirectoryURL, withIntermediateDirectories: true)
+        try? Data().write(to: revocationURL(key), options: .atomic)
+    }
+
+    func hasRevocation(_ key: String) -> Bool {
+        revokedKeys.contains(key) || (isEnabled && fileManager.fileExists(atPath: revocationURL(key).path))
+    }
+
+    func revocationRevision(_ key: String) -> Int { revocationRevisions[key, default: 0] }
+
+    func clearRevocation(_ key: String, ifRevision revision: Int) -> Bool {
+        guard revision == revocationRevisions[key, default: 0] else { return false }
+        revokedKeys.remove(key)
+        if isEnabled { try? fileManager.removeItem(at: revocationURL(key)) }
+        return true
+    }
+
+    private func revocationURL(_ key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        return revocationDirectoryURL.appendingPathComponent("\(digest).denied")
     }
 
     private func fileURL(
@@ -221,6 +265,7 @@ actor PlacePhotoDataDiskCache {
         ) else { return [] }
 
         return urls.compactMap { url in
+            guard url.pathExtension == "image" else { return nil }
             guard let values = try? url.resourceValues(
                 forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
             ), values.isRegularFile == true else { return nil }
