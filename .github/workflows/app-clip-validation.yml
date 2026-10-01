@@ -16,7 +16,9 @@ permissions:
 
 concurrency:
   group: app-clip-parent-${{ github.ref }}
-  cancel-in-progress: true
+  # Preserve a complete result while fixes queue behind the active regression.
+  # Only the newest pending commit is retained by the concurrency group.
+  cancel-in-progress: false
 
 jobs:
   parent:
