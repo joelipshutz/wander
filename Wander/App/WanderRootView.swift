@@ -110,6 +110,10 @@ struct WanderDeepLinkHandoffCoordinator {
         pendingHandoff?.requestID
     }
 
+    var pendingRoute: WanderDeepLinkRoute? {
+        pendingHandoff?.route
+    }
+
     var awaitingDismissals: Set<WanderDeepLinkPresentationToken> {
         pendingHandoff?.awaitingDismissals ?? []
     }
@@ -330,6 +334,7 @@ struct WanderRootView: View {
     @State private var presentationResetRequest: WanderPresentationResetRequest?
     @State private var deepLinkHandoffTask: Task<Void, Never>?
     @State private var deepLinkHandoff = WanderDeepLinkHandoffCoordinator()
+    @State private var foregroundEntryPolicy = WanderForegroundEntryPolicy()
     @State private var deepLinkPresentations = WanderDeepLinkPresentationRegistry()
     @State private var handledDeepLinkLaunchRequestID: UUID?
     @State private var initialPresentation: WanderInitialPresentation?
@@ -550,7 +555,7 @@ struct WanderRootView: View {
                     .tag(WanderTab.events)
                 }
 
-                ListsScreen()
+                ListsScreen(presentationResetRequest: presentationResetRequest)
                     .tabItem { tabItemLabel(for: .lists) }
                     .tag(WanderTab.lists)
 
@@ -952,6 +957,7 @@ struct WanderRootView: View {
             }
             #endif
             drainPendingNotificationResponses()
+            routeOrdinaryForegroundEntryIfReady()
             if let userID = auth.state.session?.userID {
                 importStore.bind(to: userID)
             }
@@ -991,6 +997,7 @@ struct WanderRootView: View {
             pushNotifications.handleRegistrationFailure(error)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveNotificationResponse)) { notification in
+            preserveExplicitEntryDestination()
             #if DEBUG
             WanderDebugLog.remote.debug("root received notification response session_validated=\(isSessionValidated, privacy: .public)")
             #endif
@@ -1010,7 +1017,9 @@ struct WanderRootView: View {
             #if DEBUG
             WanderDebugLog.remote.debug("root observed notification navigation request destination=\(String(describing: request?.destination), privacy: .public) session_validated=\(isSessionValidated, privacy: .public)")
             #endif
-            guard isSessionValidated, let request else { return }
+            guard let request else { return }
+            preserveExplicitEntryDestination()
+            guard isSessionValidated else { return }
             routeNotification(request)
         }
         .onChange(of: auth.state) { previousState, state in
@@ -1166,11 +1175,16 @@ struct WanderRootView: View {
             store.clearContactRecommendations()
             needsContactRecommendationsRefresh = true
             if phase == .background {
+                foregroundEntryPolicy.didEnterBackground(
+                    preservingCurrentFlow: preservesForegroundEntryContext
+                )
                 notificationCampaignRefresh.invalidate()
                 placeSaveDraftStore.flush()
                 walkthroughs.recordSuspension()
             }
             guard phase == .active, isSessionValidated else { return }
+            drainPendingNotificationResponses()
+            routeOrdinaryForegroundEntryIfReady()
             presentDeferredProductUpsellIfPossible()
             Task {
                 await eventsAccess.load(userID: eventsAccessLoadUserID, repository: backend.eventsAccessRepository)
@@ -1191,7 +1205,6 @@ struct WanderRootView: View {
                 break
             }
             refreshWalkthroughFeatureFlagsAfterForeground()
-            drainPendingNotificationResponses()
             drainSharedPlaceImports()
             resumeAutomaticPlaceImports()
             resumeInteractivePlaceImports()
@@ -1328,6 +1341,7 @@ struct WanderRootView: View {
             EventsAccessPolicy.resolvedTab(selectedTab, metroID: currentHomeMetro)
         } set: { newTab in
             guard newTab != .events || eventsAreAvailable else { return }
+            preserveExplicitEntryDestination()
             guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
                 presentAddSheet()
@@ -1351,6 +1365,7 @@ struct WanderRootView: View {
     private var eventsAccessLoadUserID: String? { isSessionValidated ? auth.state.session?.userID : nil }
 
     private func presentAddSheet() {
+        preserveExplicitEntryDestination()
         dismissKeyboard()
         walkthroughs.finishOverviewForUserNavigation()
         walkthroughs.dismissCurrentContext()
@@ -2012,6 +2027,8 @@ struct WanderRootView: View {
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
+        foregroundEntryPolicy.recordNotificationNavigation(requestID: request.id)
+        preserveExplicitEntryDestination()
         if case .importReview(let batchIDs) = request.destination {
             pushNotifications.consumeNavigationRequest(id: request.id)
             presentSharedPlaceImportReview(batchIDs: batchIDs)
@@ -2103,6 +2120,7 @@ struct WanderRootView: View {
     private func handleDeepLinkLaunchRequestIfReady(
         _ request: WanderDeepLinkLaunchRequest?
     ) {
+        if request != nil { preserveExplicitEntryDestination() }
         guard isSessionValidated,
               let request,
               handledDeepLinkLaunchRequestID != request.id
@@ -2118,6 +2136,7 @@ struct WanderRootView: View {
     private func handleControlNavigationRequestIfReady(
         _ request: WanderControlNavigationRequest?
     ) {
+        if request != nil { preserveExplicitEntryDestination() }
         guard isSessionValidated, let request else { return }
 
         beginDeepLinkHandoff(to: request.route)
@@ -2125,6 +2144,7 @@ struct WanderRootView: View {
     }
 
     private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {
+        if route != .feed { preserveExplicitEntryDestination() }
         deepLinkHandoffTask?.cancel()
 
         let resetRequest = WanderPresentationResetRequest()
@@ -2216,6 +2236,53 @@ struct WanderRootView: View {
             // Nonblocking import/invitation banners can remain behind the primer.
             isPresentingChildModal: productUpsells.presentationBlockerCount > 0
         ).isBlocked
+    }
+
+    private var preservesForegroundEntryContext: Bool {
+        isPresentingAdd
+            || isPresentingImportHub
+            || store.isSaveFlowPresented
+            || auth.activeGate != nil
+            || auth.isPresentingNativeAuth
+            || productUpsells.foregroundEntryBlockerCount > 0
+            || deepLinkPresentations.presentedTokens.contains(where: { token in
+                switch token.surface {
+                case .profileSettings, .feedSave, .activityShare, .activityReport, .activitySave:
+                    true
+                default:
+                    false
+                }
+            })
+            || productUpsells.activePresentation != nil
+            || walkthroughs.isAwaitingEligibilityResolution
+            || walkthroughs.hasActivePrimaryJourney
+    }
+
+    private func routeOrdinaryForegroundEntryIfReady() {
+        guard foregroundEntryPolicy.consumeFeedEntry(
+            isActive: scenePhase == .active,
+            isSessionValidated: isSessionValidated,
+            hasExplicitDestination: deepLinkLaunchRequest != nil
+                || controlNavigationCenter.pendingRequest != nil
+                || foregroundEntryPolicy.hasUnroutedNotification(
+                    requestID: pushNotifications.navigationRequest?.id
+                )
+                || deepLinkHandoff.pendingRequestID != nil,
+            preservingCurrentFlow: preservesForegroundEntryContext
+        ) else { return }
+
+        beginDeepLinkHandoff(to: .feed)
+    }
+
+    private func preserveExplicitEntryDestination() {
+        foregroundEntryPolicy.recordExplicitNavigation()
+        // Notification routes and tab taps can select a tab without starting a
+        // new handoff. Cancel an older default so its dismissal callback cannot
+        // later replace that selection with Feed.
+        guard deepLinkHandoff.pendingRoute == .feed else { return }
+        deepLinkHandoffTask?.cancel()
+        deepLinkHandoffTask = nil
+        deepLinkHandoff.cancel()
     }
 
     private func requestProductUpsell(
@@ -2761,6 +2828,8 @@ struct WanderRootView: View {
     private func activateDeepLink(_ route: WanderDeepLinkRoute) {
         activityNavigation.reset()
         switch route {
+        case .feed:
+            selectedTab = .discover
         case .quickCapture:
             selectedTab = .map
             store.saveFlowDidPresent(.addSheet)

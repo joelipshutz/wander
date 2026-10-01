@@ -4,6 +4,22 @@ Last updated: 2026-09-28
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Feed on ordinary app entry (REC-629)
+
+Ordinary authenticated launches and returns from the background land on Feed.
+This extends REC-562's cold-launch default. Explicit destinations from links,
+notifications, widgets and shortcuts take priority, including lists, profiles,
+places, map/search, calendar, invitations and activity/comment views. A later
+ordinary entry can return to Feed; the earlier destination is not a permanent
+exception. Inactive-only interruptions do not count as a new entry.
+
+Onboarding and unfinished workflows retain their context, including
+capture/save/import, authentication, settings, list editors, feedback and comment
+drafts. Read-only profiles, places and lists do not suppress a later ordinary entry.
+An entry suppressed by one of these flows is consumed; closing the flow must
+not trigger a delayed jump to Feed. Foreground defaults use the existing root
+presentation handoff, and any newer explicit navigation cancels that default.
+
 ## Onboarding home city and phone (REC-584)
 
 Joe approved an editable home city prefilled from location and a phone input with

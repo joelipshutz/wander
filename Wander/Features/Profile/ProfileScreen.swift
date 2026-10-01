@@ -271,6 +271,7 @@ struct ProfileScreen: View {
                 .sheet(isPresented: $showsFeedback) {
                     FeedbackSheet(repository: feedbackRepository, analytics: store.productAnalytics)
                 }
+                .blocksProductUpsells(while: showsFeedback, preservesForegroundEntry: true)
                 .accessibilityHidden(showsSettings)
                 .allowsHitTesting(!showsSettings)
                 .overlay {

@@ -1,5 +1,47 @@
 import Foundation
 
+/// Only a real background return creates a default navigation request.
+/// Explicit navigation consumes it, even if authentication is still resolving.
+struct WanderForegroundEntryPolicy {
+    private var hasPendingEntry = false
+    private var handledNotificationRequestID: UUID?
+
+    mutating func didEnterBackground(preservingCurrentFlow: Bool) {
+        hasPendingEntry = !preservingCurrentFlow
+    }
+
+    mutating func recordExplicitNavigation() {
+        hasPendingEntry = false
+    }
+
+    mutating func recordNotificationNavigation(requestID: UUID) {
+        recordExplicitNavigation()
+        handledNotificationRequestID = requestID
+    }
+
+    func hasUnroutedNotification(requestID: UUID?) -> Bool {
+        guard let requestID else { return false }
+        return requestID != handledNotificationRequestID
+    }
+
+    mutating func consumeFeedEntry(
+        isActive: Bool,
+        isSessionValidated: Bool,
+        hasExplicitDestination: Bool,
+        preservingCurrentFlow: Bool
+    ) -> Bool {
+        guard hasPendingEntry, isActive else { return false }
+        if hasExplicitDestination || preservingCurrentFlow {
+            // Do not jump to Feed later when a destination or editor closes.
+            hasPendingEntry = false
+            return false
+        }
+        guard isSessionValidated else { return false }
+        hasPendingEntry = false
+        return true
+    }
+}
+
 struct WanderDeepLinkLaunchRequest: Equatable, Identifiable {
     let id: UUID
     let route: WanderDeepLinkRoute
