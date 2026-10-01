@@ -60,15 +60,20 @@ struct NativeOnboardingReviewHost: View {
                 passwordAuthSession: Self.session
             )
         )
+        #if targetEnvironment(simulator)
         let contactTestRepository = ContactDiscoveryUITestRepository.isActive
             ? ContactDiscoveryUITestRepository()
             : nil
+        let contactDiscovery = contactTestRepository?.service(
+            auth: auth,
+            usesSystemProvider: ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoverySystemPermissionTest")
+        )
+        #else
+        let contactDiscovery: ContactDiscoveryService? = nil
+        #endif
         let backend = WanderBackend(
             profileRepository: repository,
-            contactDiscovery: contactTestRepository?.service(
-                auth: auth,
-                usesSystemProvider: ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoverySystemPermissionTest")
-            ),
+            contactDiscovery: contactDiscovery,
             profileAvatarRepository: repository,
             followRepository: repository,
             notificationRepository: SimulatorNotificationRepository()
