@@ -113,26 +113,60 @@ final class PersonMentionTests: XCTestCase {
         var text = draft.text
         var mentions = draft.mentions
         var caret = NSRange(location: text.utf16.count - 1, length: 0)
-        let input = PersonMentionNativeInput(
-            text: Binding(get: { text }, set: { text = $0 }),
-            mentions: Binding(get: { mentions }, set: { mentions = $0 }),
-            selection: Binding(get: { caret }, set: { caret = $0 }), focus: .constant(true),
-            placeholder: "", accessibilityLabel: "", accessibilityIdentifier: "", replacementID: UUID(),
-            editor: PersonMentionInputController(), primaryColor: .black, accentColor: .red, placeholderColor: .gray,
-            minimumLines: 1, maximumLines: 4, isSearch: false, submitOnReturn: false,
-            suggestions: AnyView(EmptyView()), suggestionHeight: 0, onSubmit: {}, onFocus: {}, onCompletionRequest: { _ in })
+        let input = nativeInput(text: Binding(get: { text }, set: { text = $0 }),
+                                mentions: Binding(get: { mentions }, set: { mentions = $0 }),
+                                selection: Binding(get: { caret }, set: { caret = $0 }))
         let coordinator = input.makeCoordinator()
-        let view = UITextView()
+        let view = PersonMentionNativeInput.MentionTextView()
         view.text = text
         view.selectedRange = caret
         view.delegate = coordinator
-        XCTAssertFalse(coordinator.textView(view, shouldChangeTextIn: NSRange(location: caret.location - 1, length: 1), replacementText: ""))
+        view.expandedDeletionRange = { text, range in coordinator.deletionRange(in: text, for: range) }
+        view.deleteBackward()
         XCTAssertEqual(view.text, "With  ")
         XCTAssertEqual(text, view.text)
         XCTAssertTrue(mentions.isEmpty)
         XCTAssertEqual(caret, NSRange(location: 5, length: 0))
         XCTAssertEqual(view.selectedRange, caret)
-        XCTAssertTrue(coordinator.textView(view, shouldChangeTextIn: NSRange(location: 4, length: 1), replacementText: ""))
+        view.deleteBackward()
+        XCTAssertEqual(view.text, "With ")
+        XCTAssertEqual(text, view.text)
+    }
+
+    @MainActor
+    func testNativeDeletionKeepsTheSurvivingAccountWhenNamesAreIdentical() throws {
+        var draft = PersonMentionDraft(text: "@c")
+        _ = draft.select(person("first"), for: try XCTUnwrap(draft.query(at: NSRange(location: 2, length: 0))))
+        let firstLength = draft.text.utf16.count
+        draft.replace(NSRange(location: firstLength, length: 0), with: "@c")
+        _ = draft.select(person("second", handle: "second"),
+                         for: try XCTUnwrap(draft.query(at: NSRange(location: draft.text.utf16.count, length: 0))))
+        var text = draft.text
+        var mentions = draft.mentions
+        var caret = NSRange(location: 0, length: firstLength)
+        let input = nativeInput(text: Binding(get: { text }, set: { text = $0 }),
+                                mentions: Binding(get: { mentions }, set: { mentions = $0 }),
+                                selection: Binding(get: { caret }, set: { caret = $0 }))
+        let coordinator = input.makeCoordinator()
+        let view = PersonMentionNativeInput.MentionTextView()
+        view.text = text
+        view.selectedRange = caret
+        view.delegate = coordinator
+        view.expandedDeletionRange = { text, range in coordinator.deletionRange(in: text, for: range) }
+        view.deleteBackward()
+        XCTAssertEqual(text, "@Caitlin Cortez ")
+        XCTAssertEqual(mentions.map(\.userID), ["second"])
+        XCTAssertEqual(mentions.first?.location, 0)
+        XCTAssertEqual(PersonMentionDraft(text: text, mentions: mentions).searchText, "@second ")
+    }
+
+    @MainActor
+    private func nativeInput(text: Binding<String>, mentions: Binding<[PersonMention]>, selection: Binding<NSRange>) -> PersonMentionNativeInput {
+        PersonMentionNativeInput(text: text, mentions: mentions, selection: selection, focus: .constant(true),
+            placeholder: "", accessibilityLabel: "", accessibilityIdentifier: "", replacementID: UUID(),
+            editor: PersonMentionInputController(), primaryColor: .black, accentColor: .red, placeholderColor: .gray,
+            minimumLines: 1, maximumLines: 4, isSearch: false, submitOnReturn: false,
+            suggestions: AnyView(EmptyView()), suggestionHeight: 0, onSubmit: {}, onFocus: {}, onCompletionRequest: { _ in })
     }
 
     func testUnselectedTextIsNeverTurnedIntoAnAccountTag() {
