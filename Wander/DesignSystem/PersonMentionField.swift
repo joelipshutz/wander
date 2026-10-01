@@ -17,6 +17,7 @@ struct PersonMentionField: View {
     var maximumLines = 4
     var isSearch = false
     var submitOnReturn = false
+    var suggestionPlacement: SuggestionPlacement = .keyboard
     var onSubmit: () -> Void = {}
     var onSelect: (ProfileShell) -> Void = { _ in }
     var onFocus: () -> Void = {}
@@ -31,6 +32,12 @@ struct PersonMentionField: View {
     @StateObject private var results = PersonTypeaheadModel()
     @StateObject private var editor = PersonMentionInputController()
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 58
+
+    enum SuggestionPlacement {
+        case keyboard
+        /// For a bottom-pinned composer, show results above its entire chrome.
+        case aboveInput
+    }
 
     private var mentionBinding: Binding<[PersonMention]> { mentions ?? $internalMentions }
     private var focusBinding: Binding<Bool> { focus ?? $internalFocus }
@@ -50,7 +57,11 @@ struct PersonMentionField: View {
     }
 
     var body: some View {
-        decorateInput(AnyView(PersonMentionNativeInput(
+        VStack(spacing: 0) {
+            if suggestionPlacement == .aboveInput, suggestionHeight > 0 {
+                suggestions
+            }
+            decorateInput(AnyView(PersonMentionNativeInput(
                 text: $text, mentions: mentionBinding, selection: $selection, focus: focusBinding,
                 placeholder: placeholder, accessibilityLabel: accessibilityLabel,
                 accessibilityIdentifier: accessibilityIdentifier,
@@ -60,9 +71,10 @@ struct PersonMentionField: View {
                 placeholderColor: UIColor(brand.secondaryText),
                 minimumLines: minimumLines, maximumLines: maximumLines, isSearch: isSearch, submitOnReturn: submitOnReturn,
                 suggestions: AnyView(suggestions.environment(\.astirBrandMode, brand)),
-                suggestionHeight: suggestionHeight,
+                suggestionHeight: suggestionPlacement == .keyboard ? suggestionHeight : 0,
                 onSubmit: onSubmit, onFocus: onFocus, onCompletionRequest: complete
             )))
+        }
         .task(id: requestID) {
             let owner = store.currentUser.id
             await results.search(
@@ -438,9 +450,19 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         func textViewDidEndEditing(_ textView: UITextView) { parent.focus = false }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard !updating else { return true }
             if (parent.isSearch || parent.submitOnReturn), text == "\n" {
                 parent.onSubmit()
                 return false
+            }
+            if text.isEmpty, textView.markedTextRange == nil {
+                var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
+                draft.reconcile(textView.text)
+                if let deletion = draft.deletionRange(for: range), deletion != range {
+                    draft.replace(deletion, with: "")
+                    let caret = NSRange(location: deletion.location, length: 0)
+                    if apply(draft, replacing: deletion, caret: caret, in: textView) { return false }
+                }
             }
             return true
         }

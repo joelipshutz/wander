@@ -21,7 +21,7 @@ final class PersonTypeaheadUITests: XCTestCase {
         launcher.tap()
         let field = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
+        focus(field, in: app)
         field.typeText("@c")
         let person = app.buttons["discover.placesSearchField.person.fixture_caitlin"]
         XCTAssertTrue(person.waitForExistence(timeout: 5))
@@ -32,13 +32,14 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertFalse(person.exists)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         capture("feed-search-selected")
+        assertAtomicBackspace(field, remaining: "")
     }
 
     func testMapSearchPickerInsertsFullName() {
         let app = launch(["-WanderInitialTab", "map"])
         let field = app.textViews["map.searchField"]
         XCTAssertTrue(field.waitForExistence(timeout: 25))
-        field.tap()
+        focus(field, in: app)
         field.typeText("@c")
         let person = app.buttons["map.searchField.person.fixture_caitlin"]
         XCTAssertTrue(person.waitForExistence(timeout: 5))
@@ -48,6 +49,14 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, "@Caitlin Cortez ")
         XCTAssertFalse(person.exists)
         capture("map-search-selected")
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertEqual(field.value as? String, "@Caitlin Cortez")
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertEqual(field.value as? String, "")
+        field.typeText("@cait123 ")
+        expectation(for: NSPredicate(format: "value == %@", "@Caitlin Cortez "), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        assertAtomicBackspace(field, remaining: "")
     }
 
     func testCheckInAndWannaNotesUseTheSamePicker() {
@@ -60,18 +69,22 @@ final class PersonTypeaheadUITests: XCTestCase {
             XCTAssertTrue(field.waitForExistence(timeout: 10))
             for _ in 0..<4 where !field.isHittable { app.swipeUp() }
             exercisePicker(app, field: field, identifier: "save.note", prefix: "With ")
+            assertAtomicBackspace(field, remaining: "With @Caitlin Cortez and ")
             capture("\(mode)-note-selected")
             app.terminate()
         }
     }
 
     private func exercisePicker(_ app: XCUIApplication, field: XCUIElement, identifier: String, prefix: String) {
-        field.tap()
-        field.typeText(prefix + "@")
+        focus(field, in: app)
+        field.typeText(prefix)
+        let composerBottom = identifier == "activity.comment.input" ? commentComposer(app).frame.maxY : nil
+        field.typeText("@")
         let caitlin = app.buttons["\(identifier).person.fixture_caitlin"]
         XCTAssertTrue(caitlin.waitForExistence(timeout: 5))
         XCTAssertGreaterThanOrEqual(caitlin.frame.height, 44)
         assertPickerAtKeyboard(app, identifier: identifier)
+        if let composerBottom { XCTAssertEqual(commentComposer(app).frame.maxY, composerBottom, accuracy: 1) }
         capture("\(identifier)-ranked")
         if identifier == "save.note" {
             let submit = app.buttons["save.submit"]
@@ -92,6 +105,7 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, prefix + "@Caitlin Cortez ")
         XCTAssertFalse(caitlin.exists)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
+        if let composerBottom { XCTAssertEqual(commentComposer(app).frame.maxY, composerBottom, accuracy: 1) }
         capture("\(identifier)-selected")
         field.typeText("and @cam")
         let camilo = app.buttons["\(identifier).person.fixture_camilo"]
@@ -101,11 +115,57 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertFalse(camilo.exists)
     }
 
+    func testCommentComposerStaysAtKeyboardThroughMultilineMentionsAndDeletion() {
+        let app = launch(["-WanderNotificationPostUITest", "-WanderInitialTab", "map"])
+        let field = app.textViews["activity.comment.input"]
+        XCTAssertTrue(field.waitForExistence(timeout: 25))
+        focus(field, in: app)
+        field.typeText("A longer comment that wraps onto several lines while the keyboard stays open. With ")
+        let prefix = field.value as! String
+        let bottom = commentComposer(app).frame.maxY
+        field.typeText("@c")
+        let caitlin = app.buttons["activity.comment.input.person.fixture_caitlin"]
+        XCTAssertTrue(caitlin.waitForExistence(timeout: 5))
+        assertPickerAtKeyboard(app, identifier: "activity.comment.input")
+        XCTAssertEqual(commentComposer(app).frame.maxY, bottom, accuracy: 1)
+        capture("comment-composer-multiline-picker")
+        caitlin.tap()
+        assertAtomicBackspace(field, remaining: prefix)
+        XCTAssertEqual(commentComposer(app).frame.maxY, bottom, accuracy: 1)
+        field.typeText("@cait123 ")
+        expectation(for: NSPredicate(format: "value == %@", prefix + "@Caitlin Cortez "), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        assertAtomicBackspace(field, remaining: prefix)
+        field.typeText("still typing @")
+        XCTAssertTrue(caitlin.waitForExistence(timeout: 5))
+        assertPickerAtKeyboard(app, identifier: "activity.comment.input")
+        capture("comment-composer-reopened")
+    }
+
+    private func assertAtomicBackspace(_ field: XCUIElement, remaining: String) {
+        // The inserted trailing space is ordinary text. The next delete removes
+        // the entire tagged person, including @, and keeps preceding text.
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
+        XCTAssertEqual(field.value as? String, remaining)
+    }
+
+    private func focus(_ field: XCUIElement, in app: XCUIApplication) {
+        field.tap()
+        // A cold notification route can finish presenting after its field first
+        // appears. Establish keyboard focus before sending simulated keystrokes.
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 3) { field.tap() }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    }
+
+    private func commentComposer(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["activity.comment.composer"].firstMatch
+    }
+
     func testSpaceCompletesTypedNameAndHandleWithoutTappingAResult() {
         let app = launch(["-WanderNotificationPostUITest", "-WanderInitialTab", "map"])
         let field = app.textViews["activity.comment.input"]
         XCTAssertTrue(field.waitForExistence(timeout: 25))
-        field.tap()
+        focus(field, in: app)
         field.typeText("@Caitlin Cortez ")
         let caitlin = app.buttons["activity.comment.input.person.fixture_caitlin"]
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: caitlin)
@@ -129,7 +189,20 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertTrue(keyboard.exists)
         XCTAssertGreaterThan(panel.frame.height, 44)
         XCTAssertLessThanOrEqual(panel.frame.maxY, keyboard.frame.minY + 1)
-        XCTAssertLessThanOrEqual(keyboard.frame.minY - panel.frame.maxY, 60,
+        let bottomSurface: XCUIElement
+        if identifier == "activity.comment.input" {
+            let composer = commentComposer(app)
+            XCTAssertTrue(composer.exists)
+            // Accessibility exposes the inner scroll view, excluding the
+            // suggestion panel's existing six-point vertical padding.
+            XCTAssertEqual(panel.frame.maxY + 6, composer.frame.minY, accuracy: 1,
+                "Comment suggestions must sit above the whole composer.")
+            XCTAssertLessThanOrEqual(composer.frame.maxY, keyboard.frame.minY + 1)
+            bottomSurface = composer
+        } else {
+            bottomSurface = panel
+        }
+        XCTAssertLessThanOrEqual(keyboard.frame.minY - bottomSurface.frame.maxY, 60,
             "Suggestions must sit at the keyboard, allowing for the native predictions bar.")
     }
 
@@ -143,7 +216,7 @@ final class PersonTypeaheadUITests: XCTestCase {
 
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "REC-631-\(name)"
+        attachment.name = "REC-632-\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
