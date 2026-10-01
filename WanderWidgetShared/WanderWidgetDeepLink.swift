@@ -76,6 +76,8 @@ struct WanderCalendarDate: Equatable, Hashable, Sendable {
 }
 
 enum WanderDeepLinkRoute: Equatable, Sendable {
+    // Internal ordinary-entry destination; external URLs retain their own routes.
+    case feed
     case quickCapture
     case addSearch(query: String)
     case map
@@ -117,7 +119,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             Self.sharedEntityURL(root: "places", identifier: placeID)
         case .sharedActivity(let activityID):
             Self.sharedEntityURL(root: "activities", identifier: activityID)
-        case .checkInActivity:
+        case .feed, .checkInActivity:
             nil
         case .sharedList(let listID):
             Self.sharedEntityURL(root: "lists", identifier: listID)
