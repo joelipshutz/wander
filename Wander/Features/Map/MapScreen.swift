@@ -2227,7 +2227,14 @@ struct MapScreen: View {
 
                         WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
                             HStack(alignment: .bottom, spacing: WanderTheme.spacing3) {
-                                SearchBar(
+                                if isMoreFiltersPresented {
+                                    // UIKit-backed input can remain hittable under
+                                    // the glass dock's hidden SwiftUI parent.
+                                    Color.clear
+                                        .frame(maxWidth: .infinity, minHeight: 48)
+                                        .allowsHitTesting(false)
+                                } else {
+                                    SearchBar(
                                         query: $mapQuery,
                                         personMentions: $mapPersonMentions,
                                         isFocused: $isMapSearchFocused,
@@ -2239,12 +2246,13 @@ struct MapScreen: View {
                                         onQueryEdited: clearMapSearchPreviewForEditing,
                                         onClear: clearMapSelectionAndSearch,
                                         onSubmit: submitMapSearch
-                                )
-                                .walkthroughTarget(
+                                    )
+                                    .walkthroughTarget(
                                         walkthroughs.currentStep?.target == .mapSendoff
                                             ? .mapSendoff
                                             : .mapSearch
                                     )
+                                }
 
                                 if isMapSearchFocused {
                                     MapSearchCancelButton(action: cancelMapSearch)

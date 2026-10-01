@@ -761,6 +761,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
+        XCTAssertFalse(search.exists, "The hidden native input must leave the accessibility tree")
         XCTAssertFalse(search.isHittable)
         XCTAssertFalse(nearby.isHittable)
         XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
@@ -774,6 +775,8 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
+        XCTAssertTrue(search.waitForExistence(timeout: 2))
+        XCTAssertTrue(search.isHittable)
         XCTAssertTrue(add.waitForExistence(timeout: 2))
         XCTAssertTrue(add.isHittable)
     }
