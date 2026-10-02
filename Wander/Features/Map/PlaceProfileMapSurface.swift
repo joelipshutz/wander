@@ -85,6 +85,72 @@ struct PlaceProfileMapSurface: View {
     }
 }
 
+/// Foreground validation can outlive a Control Center appearance transition.
+/// Coalesce refresh requests and ignore results from an earlier scene/session.
+@MainActor
+final class PlaceProfileHistoryRefreshState: ObservableObject {
+    @Published private(set) var hasFailed = false
+    private(set) var generation = 0
+    private var pending: Request?
+    private var worker: Task<Void, Never>?
+
+    private struct Request {
+        let isReady: () -> Bool
+        let load: (Int) async -> PlaceActivityRefreshOutcome
+    }
+
+    func invalidate() { generation &+= 1 }
+
+    func reset() {
+        invalidate()
+        hasFailed = false
+    }
+
+    func cancel() {
+        invalidate()
+        pending = nil
+        worker?.cancel()
+    }
+
+    func isCurrent(_ requestGeneration: Int) -> Bool {
+        !Task.isCancelled && generation == requestGeneration
+    }
+
+    func refresh(
+        isReady: @escaping () -> Bool,
+        load: @escaping (Int) async -> PlaceActivityRefreshOutcome
+    ) async {
+        guard isReady() else { return }
+        pending = Request(isReady: isReady, load: load)
+        startWorkerIfNeeded()
+        await worker?.value
+    }
+
+    private func startWorkerIfNeeded() {
+        guard worker == nil else { return }
+        worker = Task { @MainActor in
+            defer {
+                worker = nil
+                // A new appearance may request a refresh while a canceled
+                // load is unwinding. Give that request an uncanceled worker.
+                if pending != nil { startWorkerIfNeeded() }
+            }
+            while !Task.isCancelled, let request = pending {
+                pending = nil
+                guard request.isReady() else { continue }
+                let requestGeneration = generation
+                let outcome = await request.load(requestGeneration)
+                guard isCurrent(requestGeneration), request.isReady() else { continue }
+                switch outcome {
+                case .refreshed: hasFailed = false
+                case .failed: hasFailed = true
+                case .cancelled: break
+                }
+            }
+        }
+    }
+}
+
 struct PlaceProfileFullScreen: View {
     private static let edgeSwipeActivationWidth: CGFloat = 28
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
@@ -121,8 +187,7 @@ struct PlaceProfileFullScreen: View {
     @State private var analyticsViewedPlaceID: String?
     @State private var remoteSaves: [VisiblePlace]?
     @State private var remoteSnapshotStartedAt: Date?
-    @State private var historyRefreshFailed = false
-    @State private var isRefreshingHistory = false
+    @StateObject private var historyRefresh = PlaceProfileHistoryRefreshState()
     @State private var localSaveContext: MapPlaceSaveContext?
     @State private var localListTarget: MapPlaceListTarget?
     @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
@@ -268,7 +333,7 @@ struct PlaceProfileFullScreen: View {
             onFloatingAction: handleSaveAction
         )
         .overlay(alignment: .top) {
-            if historyRefreshFailed {
+            if historyRefresh.hasFailed {
                 Button("History could not refresh. Tap to retry.") {
                     Task { await refreshHistory() }
                 }
@@ -286,7 +351,7 @@ struct PlaceProfileFullScreen: View {
             }
             remoteSaves = nil
             remoteSnapshotStartedAt = nil
-            historyRefreshFailed = false
+            historyRefresh.reset()
             if saveActionSnapshot == nil {
                 saveActionSnapshot = PlaceProfileSaveActionPolicy.snapshot(
                     state: currentUserActionState,
@@ -298,9 +363,16 @@ struct PlaceProfileFullScreen: View {
         }
         .refreshable { await refreshHistory() }
         .onChange(of: scenePhase) { _, phase in
+            historyRefresh.invalidate()
             guard phase == .active else { return }
             Task { await refreshHistory() }
         }
+        .onChange(of: auth.isSessionValidated) { _, isValidated in
+            historyRefresh.invalidate()
+            guard isValidated else { return }
+            Task { await refreshHistory() }
+        }
+        .onDisappear { historyRefresh.cancel() }
         .sheet(item: $localListTarget) { target in
             MapPlaceListPickerSheet(target: target) { _ in
                 localListTarget = nil
@@ -348,11 +420,25 @@ struct PlaceProfileFullScreen: View {
 
     @MainActor
     private func refreshHistory() async {
-        guard !isRefreshingHistory, auth.isSignedIn, backend.visitRepository != nil
-        else { return }
-        isRefreshingHistory = true
-        defer { isRefreshingHistory = false }
         let requestUserID = currentUserID
+        await historyRefresh.refresh(isReady: {
+            scenePhase == .active && auth.isSignedIn && auth.isSessionValidated
+                && auth.state.session?.userID == requestUserID
+                && store.currentUser.id == requestUserID
+                && backend.visitRepository != nil
+        }, load: { generation in
+            await loadHistory(requestUserID: requestUserID, generation: generation)
+        })
+    }
+
+    @MainActor
+    private func loadHistory(requestUserID: String, generation: Int) async -> PlaceActivityRefreshOutcome {
+        func isCurrentRequest() -> Bool {
+            historyRefresh.isCurrent(generation) && scenePhase == .active
+                && auth.isSessionValidated && auth.state.session?.userID == requestUserID
+                && store.currentUser.id == requestUserID
+        }
+        guard isCurrentRequest() else { return .cancelled }
         if backend.placeRepository != nil, let latitude = place.latitude, let longitude = place.longitude {
             let requestStartedAt = Date.now
             let viewport = MapViewport(
@@ -361,23 +447,28 @@ struct PlaceProfileFullScreen: View {
                 maxLatitude: min(90, latitude + 0.002),
                 maxLongitude: min(180, longitude + 0.002)
             )
-            guard let fetched = await store.fetchRemoteViewportPlaces(in: viewport, backend: backend) else {
-                if !Task.isCancelled { historyRefreshFailed = true }
-                return
+            let result = await store.fetchRemoteViewportPlacesResult(in: viewport, backend: backend)
+            guard isCurrentRequest() else { return .cancelled }
+            switch result {
+            case .success(let fetched):
+                remoteSnapshotStartedAt = requestStartedAt
+                remoteSaves = fetched
+            case .failure(is CancellationError):
+                return .cancelled
+            case .failure:
+                return .failed
             }
-            guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
-            remoteSnapshotStartedAt = requestStartedAt
-            remoteSaves = fetched
         }
-        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+        guard isCurrentRequest() else { return .cancelled }
         let userPlaceIDs = resolvedSaves.compactMap { summary -> String? in
             let id = summary.visiblePlace.userPlace.serverID ?? summary.visiblePlace.userPlace.id
             return UUID(uuidString: id) == nil ? nil : id
         }
-        let refreshed = await store.refreshRemotePlaceActivity(userPlaceIDs: userPlaceIDs, backend: backend)
-        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
-        historyRefreshFailed = !refreshed
+        let outcome = await store.refreshRemotePlaceActivityOutcome(userPlaceIDs: userPlaceIDs, backend: backend)
+        guard isCurrentRequest() else { return .cancelled }
+        guard outcome == .refreshed else { return outcome }
         await store.refreshPlaceActivityEngagement(userPlaceIDs: userPlaceIDs, backend: backend)
+        return isCurrentRequest() ? .refreshed : .cancelled
     }
 
     private var effectiveSaveContext: Binding<MapPlaceSaveContext?> {
@@ -2540,6 +2631,7 @@ struct PlaceProfileFloatingActions: View {
                             PlaceProfileFloatingActionSurface(
                                 isAstir: visualStyle == .astir,
                                 isSelected: action.isSelected,
+                                keepsLightAppearance: action.kind == .wanna,
                                 tone: Self.glassTone(for: action, variant: variant)
                             )
                         )
@@ -2550,6 +2642,7 @@ struct PlaceProfileFloatingActions: View {
                             PlaceProfileFloatingActionSurface(
                                 isAstir: visualStyle == .astir,
                                 isSelected: action.isSelected,
+                                keepsLightAppearance: action.kind == .wanna,
                                 tone: Self.glassTone(for: action, variant: variant)
                             )
                         )
@@ -2590,11 +2683,7 @@ struct PlaceProfileFloatingActions: View {
                 maxWidth: compactActionWidth,
                 minHeight: Self.compactActionHeight
             )
-            .foregroundStyle(
-                visualStyle == .astir
-                    ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
-                    : Self.glassTone(for: action, variant: variant).foregroundStyle
-            )
+            .foregroundStyle(foreground(for: action))
         } else {
             HStack(spacing: WanderTheme.spacing1) {
                 Image(systemName: systemImage(for: action))
@@ -2614,12 +2703,15 @@ struct PlaceProfileFloatingActions: View {
             )
             .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
             .padding(.horizontal, WanderTheme.spacing2)
-            .foregroundStyle(
-                visualStyle == .astir
-                    ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
-                    : Self.glassTone(for: action, variant: variant).foregroundStyle
-            )
+            .foregroundStyle(foreground(for: action))
         }
+    }
+
+    private func foreground(for action: PlaceProfileSaveAction) -> Color {
+        if action.kind == .wanna { return AstirBrandMode.editorialLight.primaryText }
+        return visualStyle == .astir
+            ? (action.isSelected ? astirBrandMode.selectedForeground : astirBrandMode.primaryText)
+            : Self.glassTone(for: action, variant: variant).foregroundStyle
     }
 
     private var compactActionWidth: CGFloat {
@@ -2696,14 +2788,27 @@ private struct PlaceProfileActionClusterSurface: ViewModifier {
 }
 
 private struct PlaceProfileFloatingActionSurface: ViewModifier {
-    @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.colorSchemeContrast) private var contrast
     let isAstir: Bool
     let isSelected: Bool
+    let keepsLightAppearance: Bool
     let tone: WanderGlassTone
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if isAstir {
+        if keepsLightAppearance {
+            // Glass samples the surrounding dark content, including when its
+            // color scheme is Light. Wanna intentionally keeps the paper fill.
+            let light = AstirBrandMode.editorialLight
+            let shape = RoundedRectangle(cornerRadius: PlaceProfileFloatingActions.compactCornerRadius,
+                                         style: .continuous)
+            content
+                .background(light.raisedBackground, in: shape)
+                .overlay {
+                    shape.stroke(isSelected ? light.accent : light.border,
+                                 lineWidth: contrast == .increased ? 2 : isSelected ? 1.15 : 0.75)
+                }
+        } else if isAstir {
             content.astirOutlinedSurface(selected: isSelected)
         } else {
             content.wanderGlassRoundedRectangle(
