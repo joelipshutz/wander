@@ -81,6 +81,18 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertGreaterThan(matches[0].score, matches[1].score)
     }
 
+    func testPhraseRankingPreservesWholePhraseAndCrossFieldMatches() {
+        let exact = makeVisiblePlace(id: "phrase-exact", name: "Quiet Coffee")
+        let prefix = makeVisiblePlace(id: "phrase-prefix", name: "Quiet Coffee House")
+        let suffix = makeVisiblePlace(id: "phrase-suffix", name: "House Quiet Coffee")
+        let split = makeVisiblePlace(id: "phrase-split", name: "Quiet", category: "Coffee shop")
+
+        let matches = TrustedPlaceSearch.matches(query: "quiet coffee", in: [split, suffix, prefix, exact])
+
+        XCTAssertEqual(matches.map(\.place.id), ["phrase-exact", "phrase-prefix", "phrase-suffix", "phrase-split"])
+        XCTAssertEqual(matches.map(\.score), [420, 360, 300, 92])
+    }
+
     func testSupportingFieldsIncludeEveryFieldThatMatchesTheQuery() throws {
         let place = makeVisiblePlace(
             id: "all-fields",

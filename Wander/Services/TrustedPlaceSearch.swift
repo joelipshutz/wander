@@ -133,7 +133,7 @@ enum TrustedPlaceSearch {
         }
 
         var score = tokenMatches.reduce(0) { $0 + ($1?.score ?? 0) }
-        score += document.phraseBonus(for: query.scoringPhrase)
+        score += document.phraseBonus(for: query.scoringPhrase, tokenCount: query.scoringTokens.count)
 
         var evidenceByField: [TrustedPlaceSearchField: (displayValue: String, tokens: [String])] = [:]
         for match in tokenMatches.compactMap({ $0 }) {
@@ -1127,11 +1127,13 @@ private struct TrustedPlaceSearchDocument {
             || (candidate.score == current.score && candidate.field.rawValue < current.field.rawValue)
     }
 
-    func phraseBonus(for phrase: String) -> Int {
+    func phraseBonus(for phrase: String, tokenCount: Int) -> Int {
         guard !phrase.isEmpty else { return 0 }
         var best = 0
 
-        for field in fields {
+        // A phrase cannot fit in a field containing fewer words. Most fields
+        // are short, so avoid repeated string searches for multi-word queries.
+        for field in fields where field.normalizedTokens.count >= tokenCount {
             let fieldPhrase = field.normalizedPhrase
             let multiplier: Int
             if fieldPhrase == phrase {
