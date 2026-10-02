@@ -7,7 +7,7 @@ import Foundation
 private enum AstirStorePanels {
     static let screenshotSize = NSSize(width: 1320, height: 2868)
     static let phoneInset: CGFloat = 14
-    static let headlineRect = NSRect(x: 96, y: 2380, width: 1128, height: 268)
+    static let headlineRect = NSRect(x: 92, y: 2370, width: 1136, height: 290)
 
     static let warm = color(0x141714)
     static let bone = color(0xF2E9DB)
@@ -26,42 +26,24 @@ private enum AstirStorePanels {
     }
 
     static let panels = [
-        Panel(
-            filename: "01-your-people-one-map.png",
-            sourceFilename: "recme-store-01-map-friends.png",
-            headline: "Your people.\nTheir places.",
-            background: warm
-        ),
-        Panel(
-            filename: "02-friends-actually-went.png",
-            sourceFilename: "recme-store-02-feed-places.png",
-            headline: "Places your\npeople loved.",
-            background: sky
-        ),
-        Panel(
-            filename: "03-fits-right-now.png",
-            sourceFilename: "recme-store-03-trusted-search.png",
-            headline: "Find your\nkind of place.",
-            background: sun
-        ),
-        Panel(
-            filename: "04-worth-returning-to.png",
-            sourceFilename: "recme-store-04-place-detail.png",
-            headline: "Keep the\nlittle details.",
-            background: bone
-        ),
-        Panel(
-            filename: "05-save-before-you-lose-it.png",
-            sourceFilename: "recme-store-05-add.png",
-            headline: "Save now.\nGo when it fits.",
-            background: terracottaTint
-        ),
-        Panel(
-            filename: "06-make-plans-together.png",
-            sourceFilename: "recme-store-06-lists.png",
-            headline: "Make plans.\nMake memories.",
-            background: warm
-        ),
+        Panel(filename: "01-keep-up-with-your-people.png",
+              sourceFilename: "recme-store-02-feed-places.png",
+              headline: "Keep up with\nyour people.", background: ink),
+        Panel(filename: "02-be-part-of-the-moment.png",
+              sourceFilename: "recme-store-08-conversation.png",
+              headline: "Be part of\nthe moment.", background: ink),
+        Panel(filename: "03-your-people-their-places.png",
+              sourceFilename: "recme-store-01-map-friends.png",
+              headline: "Find recommendations\nfrom your friends.", background: ink),
+        Panel(filename: "04-find-your-kind-of-place.png",
+              sourceFilename: "recme-store-03-trusted-search.png",
+              headline: "Find your\nkind of place.", background: ink),
+        Panel(filename: "05-remember-the-good-ones.png",
+              sourceFilename: "recme-store-04-place-detail.png",
+              headline: "Remember\nthe good ones.", background: ink),
+        Panel(filename: "06-turn-saves-into-plans.png",
+              sourceFilename: "recme-store-06-lists.png",
+              headline: "Turn saves\ninto plans.", background: ink),
     ]
 
     static func renderPanel(_ panel: Panel, inputDirectory: URL, outputDirectory: URL) throws -> URL {
@@ -84,7 +66,7 @@ private enum AstirStorePanels {
 
     static func renderBoard(panelURLs: [URL], outputDirectory: URL) throws -> URL {
         let boardSize = NSSize(width: 3320, height: 4300)
-        let outputURL = outputDirectory.appendingPathComponent("astir-app-store-storyboard-v2.png")
+        let outputURL = outputDirectory.appendingPathComponent("astir-app-store-storyboard-dark.png")
         let panelWidth: CGFloat = 840
         let panelHeight = panelWidth * screenshotSize.height / screenshotSize.width
         let xPositions: [CGFloat] = [260, 1240, 2220]
@@ -112,7 +94,7 @@ private enum AstirStorePanels {
             eyebrow.draw(at: NSPoint(x: 150, y: 4210))
 
             let title = NSAttributedString(
-                string: "Your people. Their places.",
+                string: "Keep up with your people.",
                 attributes: [
                     .font: editorialFont(size: 76, weight: .black),
                     .foregroundColor: bone,
@@ -121,7 +103,7 @@ private enum AstirStorePanels {
             title.draw(at: NSPoint(x: 150, y: 4100))
 
             let subtitle = NSAttributedString(
-                string: "ACTUAL APP SCREENS  ·  APPROVED SIGNAL IDENTITY",
+                string: "DARK MODE  /  ACTUAL SIMULATOR CAPTURES  /  FEED FIRST",
                 attributes: [
                     .font: NSFont.systemFont(ofSize: 28, weight: .semibold),
                     .foregroundColor: color(0xC9AC8F),
@@ -158,28 +140,13 @@ private enum AstirStorePanels {
     }
 
     private static func drawWordmark(isDark: Bool) throws {
-        let projectRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let iconURL = projectRoot.appendingPathComponent(
-            "docs/brand/approved/astir-55/Astir-App-Icon-55-signal-1024.png"
-        )
-        guard let icon = NSImage(contentsOf: iconURL) else {
-            throw RenderError.missingSource(iconURL.path)
-        }
-        icon.draw(in: NSRect(x: 96, y: 2714, width: 104, height: 104))
         NSAttributedString(
             string: "ASTIR",
-            attributes: [.font: editorialFont(size: 46, weight: .regular),
-                         .foregroundColor: isDark ? bone : ink, .kern: 8]
-        ).draw(at: NSPoint(x: 226, y: 2760))
-        NSAttributedString(
-            string: "OCEAN PARK",
-            attributes: [.font: NSFont(name: "AvenirNextCondensed-DemiBold", size: 16)
-                            ?? NSFont.systemFont(ofSize: 16, weight: .semibold),
-                         .foregroundColor: isDark ? bone : ink, .kern: 4]
-        ).draw(at: NSPoint(x: 229, y: 2736))
-        (isDark ? terracotta : color(0xB23620)).setFill()
-        NSRect(x: 96, y: 2360, width: 96, height: 6).fill()
+            attributes: [.font: editorialFont(size: 44, weight: .regular),
+                         .foregroundColor: bone, .kern: 9]
+        ).draw(at: NSPoint(x: 96, y: 2730))
+        terracotta.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 1194, y: 2750, width: 22, height: 22)).fill()
     }
 
     private static func drawHeadline(_ value: String, isDark: Bool) {
@@ -189,7 +156,7 @@ private enum AstirStorePanels {
         let headline = NSAttributedString(
             string: value,
             attributes: [
-                .font: editorialFont(size: 104, weight: .bold),
+                .font: editorialFont(size: value.hasPrefix("Find recommendations") ? 88 : 112, weight: .bold),
                 .foregroundColor: isDark ? bone : ink,
                 .paragraphStyle: paragraph,
             ]
@@ -202,11 +169,11 @@ private enum AstirStorePanels {
 
     private static func drawPhone(_ image: NSImage) {
         // Preserve the complete real screenshot and its aspect ratio.
-        let displayWidth: CGFloat = 1028
+        let displayWidth: CGFloat = 1048
         let displayHeight = displayWidth * image.size.height / image.size.width
         let phoneRect = NSRect(
             x: (screenshotSize.width - displayWidth - 2 * phoneInset) / 2,
-            y: 72, width: displayWidth + 2 * phoneInset,
+            y: 44, width: displayWidth + 2 * phoneInset,
             height: displayHeight + 2 * phoneInset
         )
         NSColor.black.setFill()

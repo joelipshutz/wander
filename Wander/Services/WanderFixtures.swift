@@ -305,11 +305,56 @@ struct WanderFixtures {
             ),
         ])
 
+        var storefrontPlaces = fixtures.places
+        var storefrontSaves = fixtures.userPlaces
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderStorefrontRichMap") {
+            // Fictional recommendations for a populated native storefront map.
+            // This changes only capture data, never the map UI or production data.
+            let spots: [(String, String, Double, Double)] = [
+                ("Sunday Window", "coffee", 34.102, -118.329),
+                ("Golden Hour Bakery", "bakery", 34.109, -118.278),
+                ("Paper Moon Books", "bookstore", 34.092, -118.308),
+                ("Clover Kitchen", "restaurant", 34.097, -118.251),
+                ("Little Lantern", "bar", 34.083, -118.326),
+                ("North Star Gallery", "museum", 34.081, -118.297),
+                ("Orchard Market", "shopping", 34.092, -118.271),
+                ("Citrus Courtyard", "restaurant", 34.068, -118.313),
+                ("Moss & Stone", "coffee", 34.065, -118.287),
+                ("Juniper Records", "shopping", 34.065, -118.252),
+                ("Evening Bloom", "bar", 34.052, -118.329),
+                ("Petal House", "restaurant", 34.052, -118.301),
+                ("The Sunday Studio", "museum", 34.049, -118.273),
+                ("Skyline Garden", "park", 34.052, -118.243),
+                ("Daylight Deli", "restaurant", 34.035, -118.320),
+                ("Good Company", "coffee", 34.033, -118.286),
+                ("Rosewood Cinema", "movie_theater", 34.034, -118.252),
+                ("South Loop Walk", "park", 34.021, -118.302),
+            ]
+            let owners = ["user_maya", "user_ryan", "user_demo"]
+            for (index, spot) in spots.enumerated() {
+                let id = "storefront_discovery_\(index)"
+                storefrontPlaces.append(LocalPlace(
+                    localID: id, serverID: id, canonicalName: spot.0,
+                    category: spot.1, latitude: spot.2, longitude: spot.3,
+                    sourceProvider: "storefront_fixture", syncState: .synced
+                ))
+                storefrontSaves.append(LocalUserPlace(
+                    localID: "save_\(id)", serverID: "save_\(id)",
+                    userID: owners[index % owners.count], placeID: id,
+                    status: .been, visibility: .followers,
+                    note: "A favorite worth sharing.", ratingScore: index % 2 == 0 ? 5 : 4,
+                    sourceType: "social_seed", syncState: .synced
+                ))
+            }
+        }
+        #endif
+
         return WanderFixtures(
             currentUser: fixtures.currentUser,
             profiles: fixtures.profiles,
-            places: fixtures.places,
-            userPlaces: fixtures.userPlaces,
+            places: storefrontPlaces,
+            userPlaces: storefrontSaves,
             placeAttributes: fixtures.placeAttributes,
             placeVisits: fixtures.placeVisits,
             visitPhotos: fixtures.visitPhotos,
