@@ -15,7 +15,13 @@ final class PersonTypeaheadUITests: XCTestCase {
     }
 
     func testFeedSearchPickerInsertsFullNameAndKeepsKeyboard() {
-        let app = launch(["-WanderInitialTab", "discover"])
+        let app = launch(["-WanderInitialTab", "map"])
+        // This exercises the picker after explicit navigation, independent of
+        // the initial tab restored by a preceding onboarding fixture.
+        let feed = app.tabBars.buttons["Feed"]
+        expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: feed)
+        waitForExpectations(timeout: 25)
+        feed.tap()
         let launcher = app.buttons["feed.searchLauncher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 25))
         launcher.tap()

@@ -365,10 +365,24 @@ final class ImportFormRefinementUITests: XCTestCase {
     }
 
     private func scrollToImportControl(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<10 where !element.isHittable || element.frame.maxY > app.frame.height - 120 {
-            app.swipeUp()
+        XCTAssertTrue(element.waitForExistence(timeout: 10))
+        let top = app.navigationBars["Import report"].frame.maxY + 12
+        let bottom = app.frame.maxY - 120
+        for _ in 0..<12 {
+            let frame = element.frame
+            if element.isHittable, frame.minY >= top, frame.maxY <= bottom { break }
+            // A full swipe can leave a hittable control underneath the glass
+            // navigation bar. Keep the complete target in the usable viewport
+            // and reverse direction after an overshoot.
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = app.coordinate(withNormalizedOffset: CGVector(
+                dx: 0.5, dy: frame.minY < top ? 0.7 : 0.3
+            ))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)
+        XCTAssertGreaterThanOrEqual(element.frame.minY, top)
+        XCTAssertLessThanOrEqual(element.frame.maxY, bottom)
     }
 
     func testSavedImportPlaceOpensItsProfile() {
@@ -389,7 +403,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
         app.launch()
         let lists = app.buttons["import.list.report-place-1"]
-        for _ in 0..<5 where !lists.isHittable || lists.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        scrollToImportControl(lists, in: app)
         lists.tap()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
