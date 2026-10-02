@@ -76,6 +76,7 @@ final class ForegroundEntryUITests: XCTestCase {
             "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover"
         ] + extras
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let feed = app.tabBars.buttons["Feed"]
         XCTAssertTrue(feed.waitForExistence(timeout: 20))
         // Native tab accessibility can appear beneath the launch image.

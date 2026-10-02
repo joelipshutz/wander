@@ -50,11 +50,16 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
             -testProductsPath "$RUNNER_TEMP/Parent.xctestproducts" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme AstirClip \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
+            -testProductsPath "$RUNNER_TEMP/Clip.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
           git rev-parse HEAD > "$RUNNER_TEMP/test-products-commit.txt"
           xcodebuild -version > "$RUNNER_TEMP/test-products-xcode.txt"
           # Preserve executable permissions and bundle symlinks in transport.
           tar -czf "$RUNNER_TEMP/parent-test-products.tar.gz" -C "$RUNNER_TEMP" \
-            Parent.xctestproducts test-products-commit.txt test-products-xcode.txt
+            Parent.xctestproducts Clip.xctestproducts test-products-commit.txt test-products-xcode.txt
       - uses: actions/upload-artifact@v4
         with:
           name: parent-test-products
@@ -64,13 +69,13 @@ jobs:
 
   parent:
     needs: build
-    name: Parent ${{ matrix.name }}
+    name: ${{ matrix.suite == 'clip' && 'App Clip suite' || format('Parent {0}', matrix.name) }}
     runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 110
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"unit suite","suite":"unit","shard":0},{"name":"replay privacy","suite":"replay","shard":0},{"name":"search performance","suite":"performance","shard":0},{"name":"map performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3}]') }}
+        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"replay privacy","suite":"replay","shard":0},{"name":"search performance","suite":"performance","shard":0},{"name":"map performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3}]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,7 +116,7 @@ jobs:
           # unchanged dark-mode and live-transition pixel assertions).
           subprocess.run(['xcrun', 'simctl', 'shutdown', device['udid']], check=True)
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
-          if os.environ['TEST_SUITE'] in ('ui', 'ui-performance', 'graphics', 'replay'):
+          if os.environ['TEST_SUITE'] in ('clip', 'ui', 'ui-performance', 'graphics', 'replay'):
               # Attach the display before testing native materials and frame
               # cadence or capturing the SDK's actual replay screenshot.
               subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', device['udid']], check=True)
@@ -133,10 +138,11 @@ jobs:
         env:
           TEST_SUITE: ${{ matrix.suite }}
           TEST_SHARD: ${{ matrix.shard }}
+          TEST_PRODUCT_NAME: ${{ matrix.suite == 'clip' && 'Clip' || 'Parent' }}
         run: >-
           python3 scripts/run-parent-regression.py --suite "$TEST_SUITE"
           --shard "$TEST_SHARD" --shard-count 4
-          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/$TEST_PRODUCT_NAME.xctestproducts"
           --result-bundle "$RUNNER_TEMP/Parent.xcresult"
           --selection-file "$RUNNER_TEMP/test-selection.json"
       - name: Summarize test result

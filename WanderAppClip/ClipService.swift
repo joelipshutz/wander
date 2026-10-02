@@ -41,25 +41,20 @@ final class ClipService: ClipServing {
                 imageURL: published?.imageURL, places: [place])
         }
         if authenticated, route.kind == .activity {
-            guard let row = try await rpc("activity_detail", ["input_activity_id": route.identifier]) as? [String: Any],
-                  let projection = row["place"] as? [String: Any], let place = place(projection) else { throw ClipError.unavailable }
-            return ClipPreview(title: published?.title ?? place.title, subtitle: text(row["note"]),
-                imageURL: published?.imageURL, places: [place])
+            guard let row = try await rpc("activity_detail", ["input_activity_id": route.identifier]) as? [String: Any] else { throw ClipError.unavailable }
+            if let projection = row["place"] as? [String: Any], let place = place(projection) {
+                return ClipPreview(title: published?.title ?? place.title, subtitle: text(row["note"]),
+                    imageURL: published?.imageURL, places: [place])
+            }
+            // List-created activities have no place. Resolve their list through
+            // the same authorized detail path, retaining the activity route for handoff.
+            guard row["event_type"] as? String == "list_created", row["place"] is NSNull,
+                  let list = row["list"] as? [String: Any], let id = list["id"] as? String,
+                  UUID(uuidString: id) != nil else { throw ClipError.unavailable }
+            return try await listPreview(id: id, imageURL: published?.imageURL)
         }
         if authenticated, route.kind == .list {
-            guard let row = try await rpc("place_list_detail", ["input_list_id": route.identifier]) as? [String: Any],
-                  let list = row["list"] as? [String: Any], let title = text(list["name"]) else { throw ClipError.unavailable }
-            // The list RPC has already authorized every item before exposing IDs.
-            let ids = Array(Set((row["items"] as? [[String: Any]] ?? []).compactMap { $0["place_id"] as? String })).sorted()
-            var places: [ClipPlace] = []
-            for id in ids.prefix(20) {
-                try Task.checkCancellation()
-                let row = try await publicPreview(kind: .place, id: id)
-                if let place = place(row) { places.append(place) }
-            }
-            let description = text(list["description"])
-            let subtitle = ids.count > 20 ? [description, "Showing 20 of \(ids.count) places"].compactMap { $0 }.joined(separator: "\n") : description
-            return ClipPreview(title: title, subtitle: subtitle, imageURL: published?.imageURL, places: places)
+            return try await listPreview(id: route.identifier, imageURL: published?.imageURL)
         }
         if authenticated, route.kind == .profile {
             let response = try await rpc("profile_visible_places", ["profile_id": route.identifier])
@@ -85,6 +80,22 @@ final class ClipService: ClipServing {
                 subtitle: "Sign in to see what's been shared with you.", imageURL: nil, places: [], needsSignIn: true)
         }
         throw ClipError.unavailable
+    }
+
+    private func listPreview(id: String, imageURL: URL?) async throws -> ClipPreview {
+        guard let row = try await rpc("place_list_detail", ["input_list_id": id]) as? [String: Any],
+              let list = row["list"] as? [String: Any], let title = text(list["name"]) else { throw ClipError.unavailable }
+        // The list RPC has already authorized every item before exposing IDs.
+        let ids = Array(Set((row["items"] as? [[String: Any]] ?? []).compactMap { $0["place_id"] as? String })).sorted()
+        var places: [ClipPlace] = []
+        for id in ids.prefix(20) {
+            try Task.checkCancellation()
+            let row = try await publicPreview(kind: .place, id: id)
+            if let place = place(row) { places.append(place) }
+        }
+        let description = text(list["description"])
+        let subtitle = ids.count > 20 ? [description, "Showing 20 of \(ids.count) places"].compactMap { $0 }.joined(separator: "\n") : description
+        return ClipPreview(title: title, subtitle: subtitle, imageURL: imageURL, places: places)
     }
 
     func profile() async throws -> ClipProfile? {

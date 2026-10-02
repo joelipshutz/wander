@@ -41,7 +41,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["unit", "replay", "performance", "ui-performance", "ui", "graphics"], required=True)
+    parser.add_argument("--suite", choices=["clip", "unit", "replay", "performance", "ui-performance", "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -59,7 +59,8 @@ def main() -> int:
         "WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds",
         "WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget",
     ]
-    inventory = (ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "graphics"} else
+    inventory = (["AstirClipTests", "AstirClipUITests"] if args.suite == "clip" else
+                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "graphics"} else
                  [replay] if args.suite == "replay" else
                  performance if args.suite == "performance" else ["WanderTests"])
     if args.suite in {"ui", "ui-performance", "graphics"} and not ISOLATED_UI_PERFORMANCE.issubset(inventory):
@@ -110,7 +111,8 @@ def main() -> int:
     if args.test_products:
         command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", args.test_products]
     else:
-        command = ["xcodebuild", "test", "-quiet", "-project", "Wander.xcodeproj", "-scheme", "Wander",
+        scheme = "AstirClip" if args.suite == "clip" else "Wander"
+        command = ["xcodebuild", "test", "-quiet", "-project", "Wander.xcodeproj", "-scheme", scheme,
                    "-derivedDataPath", args.derived_data,
                    "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "GENERATE_INFOPLIST_FILE=YES"]
     command += ["-destination", f"platform=iOS Simulator,id={args.destination}",
