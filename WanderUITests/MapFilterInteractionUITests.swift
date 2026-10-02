@@ -290,7 +290,11 @@ final class MapFilterInteractionUITests: XCTestCase {
         )
         let probe = app.descendants(matching: .any)["map.performanceProbe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 3))
-        let populatedProbe = NSPredicate(format: "value CONTAINS %@", "camera=")
+        let previousProbe = probe.value as? String ?? ""
+        let populatedProbe = NSPredicate { _, _ in
+            let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
+            return current != previousProbe && current.contains("camera=")
+        }
         var didMeasurePan = false
         var invocationCount = 0
         let options = XCTMeasureOptions()
@@ -314,7 +318,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             XCTAssertEqual(
                 XCTWaiter.wait(
                     for: [
-                        XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)
+                        XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)
                     ],
                     timeout: 3
                 ),

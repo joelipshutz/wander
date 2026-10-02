@@ -145,6 +145,8 @@ import XCTest
 
     func testEmptyVoiceFormRemainsUsableAfterBackgroundAndReopening() {
         let app = application()
+        app.launchArguments.append("-WanderNotificationAuthorizationDeniedFixture")
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.FeedbackLifecycle.\(UUID().uuidString)"
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
         let feedback = app.buttons["profile.feedback"]
@@ -157,6 +159,9 @@ import XCTest
             XCTAssertTrue(app.buttons["feedback.photos"].isEnabled)
             XCTAssertFalse(app.buttons["feedback.submit"].isEnabled)
             app.buttons["Close feedback"].tap()
+            // Returning can queue the app-open reminder behind this sheet.
+            // Complete that real prompt before reopening the feedback form.
+            dismissStartupNotificationPromptIfNeeded(in: app)
             XCTAssertTrue(feedback.waitForExistence(timeout: 5))
         }
     }
