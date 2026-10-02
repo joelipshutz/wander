@@ -69,6 +69,172 @@ final class PlaceProfileAppearanceTests: XCTestCase {
         }
     }
 
+    func testMountedProfileWaitsForValidatedSessionOnEveryForegroundReturn() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(
+            state: .signedIn(AuthSession(userID: store.currentUser.id, displayName: nil, handle: nil)),
+            token: "appearance-test-token"
+        ))
+        let repository = AuthenticatedAppearancePlaceRepository(auth: auth)
+        let backend = WanderBackend(placeRepository: repository, visitRepository: AppearanceVisitRepository())
+        let lifecycle = ProfileAppearanceLifecycle()
+        let host = UIHostingController(rootView: AuthenticatedProfileAppearanceProbe(lifecycle: lifecycle)
+            .environmentObject(store).environmentObject(auth).environmentObject(backend)
+            .environmentObject(PlaceSaveDraftStore())
+            .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false)))
+        let window = try makeTestWindow(size: CGSize(width: 393, height: 852))
+        let previous = window.windowScene?.windows.first(where: \.isKeyWindow)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKey() }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(repository.requests, 0, "Cached signed-in state is not yet permission to fetch history.")
+        await auth.refreshSession()
+        try await waitUntil { repository.successes > 0 }
+
+        for style in [UIUserInterfaceStyle.dark, .light, .dark, .light] {
+            lifecycle.phase = .inactive
+            try await Task.sleep(for: .milliseconds(100))
+            window.overrideUserInterfaceStyle = style
+            auth.beginSessionValidation()
+            let previousRequests = repository.requests
+            lifecycle.phase = .active
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertEqual(repository.requests, previousRequests,
+                           "Foreground history must wait while the real token gate is closed.")
+            let previousSuccesses = repository.successes
+            await auth.refreshSession()
+            try await waitUntil { repository.successes > previousSuccesses }
+        }
+        XCTAssertEqual(repository.rejectedTokens, 0)
+        XCTAssertNil(store.lastRemoteError)
+    }
+
+    func testValidationFinishingDuringOldRequestQueuesNewRefreshAndIgnoresOldFailure() async throws {
+        let state = PlaceProfileHistoryRefreshState()
+        let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(
+            state: .signedIn(AuthSession(userID: "appearance-user", displayName: nil, handle: nil)), token: "test"
+        ))
+        await auth.refreshSession()
+        var continuation: CheckedContinuation<PlaceActivityRefreshOutcome, Never>?
+        let old = Task {
+            await state.refresh(isReady: { auth.isSessionValidated }) { _ in
+                await withCheckedContinuation { continuation = $0 }
+            }
+        }
+        try await waitUntil { continuation != nil }
+        auth.beginSessionValidation()
+        state.invalidate()
+        await state.refresh(isReady: { auth.isSessionValidated }) { _ in
+            XCTFail("Must not start a request while validation blocks tokens")
+            return .failed
+        }
+        await auth.refreshSession()
+        var retries = 0
+        let latest = Task {
+            await state.refresh(isReady: { auth.isSessionValidated }) { _ in
+                XCTAssertFalse(state.hasFailed, "A stale failure must never flash the banner")
+                let token = try? await auth.supabaseAccessToken()
+                XCTAssertEqual(token, "test")
+                retries += 1
+                return .refreshed
+            }
+        }
+        // Let the new request join the existing worker before releasing it.
+        for _ in 0..<10 { await Task.yield() }
+        continuation?.resume(returning: .failed)
+        await old.value
+        await latest.value
+        XCTAssertEqual(retries, 1)
+        XCTAssertFalse(state.hasFailed)
+    }
+
+    func testRefreshBannerPreservesGenuineFailureAndClearsOnRetry() async {
+        let state = PlaceProfileHistoryRefreshState()
+        await state.refresh(isReady: { true }) { _ in .failed }
+        XCTAssertTrue(state.hasFailed)
+        await state.refresh(isReady: { true }) { _ in .cancelled }
+        XCTAssertTrue(state.hasFailed)
+        await state.refresh(isReady: { true }) { _ in .refreshed }
+        XCTAssertFalse(state.hasFailed)
+    }
+
+    func testDisappearingProfileDiscardsFailureAndDoesNotLoseReopenedRefresh() async throws {
+        let state = PlaceProfileHistoryRefreshState()
+        var continuation: CheckedContinuation<PlaceActivityRefreshOutcome, Never>?
+        let old = Task {
+            await state.refresh(isReady: { true }) { _ in
+                await withCheckedContinuation { continuation = $0 }
+            }
+        }
+        try await waitUntil { continuation != nil }
+        state.cancel()
+        var refreshed = false
+        let reopened = Task {
+            await state.refresh(isReady: { true }) { _ in
+                XCTAssertFalse(Task.isCancelled)
+                refreshed = true
+                return .refreshed
+            }
+        }
+        for _ in 0..<10 { await Task.yield() }
+        continuation?.resume(returning: .failed)
+        await old.value
+        await reopened.value
+        try await waitUntil { refreshed }
+        XCTAssertFalse(state.hasFailed)
+    }
+
+    func testWannaStaysLightWithReadableInkInBothAppearances() async throws {
+        for selected in [false, true] {
+            let host = UIHostingController(rootView: WannaAppearanceProbe(selected: selected)
+                .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false))
+                .astirAdaptiveBrandMode())
+            let window = try makeTestWindow(size: UIScreen.main.bounds.size)
+            let previous = window.windowScene?.windows.first(where: \.isKeyWindow)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; previous?.makeKey() }
+            for style in [UIUserInterfaceStyle.light, .dark, .light] {
+                window.overrideUserInterfaceStyle = style
+                host.view.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(700))
+                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                    window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                }
+                let attachment = XCTAttachment(image: image)
+                attachment.name = "Wanna selected=\(selected) appearance=\(style.rawValue)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                let crop = CGRect(x: window.bounds.midX + 8, y: window.bounds.midY - 24, width: 112, height: 48)
+                let cgImage = try XCTUnwrap(image.cgImage?.cropping(to: crop.applying(
+                    CGAffineTransform(scaleX: image.scale, y: image.scale))))
+                var pixels = [UInt8](repeating: 0, count: 112 * 48 * 4)
+                try pixels.withUnsafeMutableBytes { buffer in
+                    let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: 112, height: 48,
+                        bitsPerComponent: 8, bytesPerRow: 112 * 4, space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                    context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 112, height: 48))
+                }
+                let levels = stride(from: 0, to: pixels.count, by: 4).map {
+                    (Double(pixels[$0]) + Double(pixels[$0 + 1]) + Double(pixels[$0 + 2])) / 3
+                }
+                XCTAssertGreaterThan(Double(levels.filter { $0 > 180 }.count) / Double(levels.count), 0.55,
+                                     "Wanna must keep a white surface in both appearances")
+                XCTAssertGreaterThan(Double(levels.filter { $0 < 100 }.count) / Double(levels.count), 0.03,
+                                     "Wanna must keep a readable dark label and icon")
+            }
+        }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<100 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTFail("Timed out waiting for appearance refresh")
+    }
+
     private func makeTestWindow(size: CGSize) throws -> UIWindow {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -288,5 +454,59 @@ private struct AppearanceProbe: View {
 
     private func record() {
         observations.values.append(.init(scheme: scheme, brand: brand, identity: identity))
+    }
+}
+
+@MainActor
+private final class ProfileAppearanceLifecycle: ObservableObject {
+    @Published var phase: ScenePhase = .active
+}
+
+private struct AuthenticatedProfileAppearanceProbe: View {
+    @ObservedObject var lifecycle: ProfileAppearanceLifecycle
+    @EnvironmentObject private var store: WanderStore
+
+    var body: some View {
+        PlaceProfileFullScreen(
+            place: PlaceSheetPlace(candidate: PlaceCandidate(id: "appearance-place", name: "Appearance cafe",
+                category: "cafe", latitude: 34, longitude: -118, confidence: 1)),
+            saves: [], tasteSaves: [], currentUserID: store.currentUser.id,
+            action: .none, onBack: {}, onAction: {}
+        )
+        .environment(\.scenePhase, lifecycle.phase)
+        .astirAdaptiveBrandMode()
+    }
+}
+
+@MainActor
+private final class AuthenticatedAppearancePlaceRepository: PlaceRepository {
+    let auth: AuthSessionStore
+    var requests = 0
+    var successes = 0
+    var rejectedTokens = 0
+    init(auth: AuthSessionStore) { self.auth = auth }
+    func places(in viewport: MapViewport) async throws -> [VisiblePlace] {
+        requests += 1
+        do { _ = try await auth.supabaseAccessToken() }
+        catch { rejectedTokens += 1; throw error }
+        successes += 1
+        return []
+    }
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] { [] }
+}
+
+private struct WannaAppearanceProbe: View {
+    let selected: Bool
+    @Environment(\.astirBrandMode) private var brand
+    var body: some View {
+        PlaceProfileFloatingActions(actions: [
+            PlaceProfileSaveAction(kind: .checkIn, title: "Check in", isSelected: false, destinationStatus: .been),
+            PlaceProfileSaveAction(kind: .wanna, title: "Wanna", isSelected: selected, destinationStatus: .wannaGo)
+        ], variant: .option5, onAction: { _ in })
+        .environment(\.placeProfileVisualStyle, .astir)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(brand.background)
+        .ignoresSafeArea()
     }
 }
