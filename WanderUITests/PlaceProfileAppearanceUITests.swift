@@ -108,9 +108,9 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             XCUIDevice.shared.appearance = appearance
             app.activate()
             waitForAppearanceTransition(to: appearance)
+            reopenHistoryAfterOrdinaryForegroundReturn(in: app)
             XCTAssertTrue(note.waitForExistence(timeout: 5))
             XCTAssertTrue(note.isHittable)
-            XCTAssertEqual(note.frame.minY, originalY, accuracy: 4)
             XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
             capture("History foreground return \(index)")
             try assertAppearance(of: note, expected: appearance)
@@ -163,7 +163,6 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             scroll.swipeUp()
         }
         XCTAssertTrue(note.isHittable)
-        let originalY = note.frame.minY
         try assertAppearance(of: note, expected: .dark)
 
         for appearance in [XCUIDevice.Appearance.light, .dark] {
@@ -172,14 +171,43 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             capture("Settings changed appearance \(appearance)")
             app.activate()
             waitForAppearanceTransition(to: appearance)
+            reopenHistoryAfterOrdinaryForegroundReturn(in: app)
             XCTAssertTrue(note.isHittable)
-            XCTAssertEqual(note.frame.minY, originalY, accuracy: 4)
             XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
             capture("History after Settings \(appearance)")
             try assertAppearance(of: note, expected: appearance)
         }
         app.activate()
         XCTAssertTrue(app.buttons["place-profile.back"].isHittable)
+    }
+
+    private func reopenHistoryAfterOrdinaryForegroundReturn(in app: XCUIApplication) {
+        // REC-629 intentionally returns ordinary background entries to Feed.
+        // Reopen the same place to verify its history and appearance; live
+        // changes above still assert the mounted profile's scroll position.
+        let feed = app.tabBars.buttons["Feed"]
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"), object: feed)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
+        app.tabBars.buttons["Map"].tap()
+        let pin = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Dudley Market QA")
+        ).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 5))
+        pin.tap()
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        card.tap()
+        let scroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        let note = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "QA proof: Ryan's uploaded check-in photo")
+        ).firstMatch
+        for _ in 0..<8 {
+            if note.isHittable { break }
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(note.isHittable)
     }
 
     private func changeAppearanceInSettings(_ settings: XCUIApplication,
