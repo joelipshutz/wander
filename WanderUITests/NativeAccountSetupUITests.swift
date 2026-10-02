@@ -31,6 +31,10 @@ final class NativeAccountSetupUITests: XCTestCase {
     }
 
     func testNativeDarkSetupCaptureInventory() {
+        // A reused simulator may already allow location. The capture inventory
+        // specifically exercises the pre-permission screen, not the subsequent
+        // required contact-details form.
+        XCUIApplication().resetAuthorizationStatus(for: .location)
         for (route, screen) in [("identity", "N08"), ("location", "N09"), ("contacts", "N10"), ("friends", "N11"), ("notifications", "N12"), ("friends-empty", "N33"), ("friends-failure", "N34")] {
             let app = launchReview(route, extraArguments: ["-WanderBypassProductUpsellFrequencyCap"])
             let primary = app.buttons[route == "notifications" ? "productUpsell.primary" : route == "identity" ? "onboarding.identity.continue" : route == "location" ? "onboarding.location.primary" : route == "contacts" ? "onboarding.contacts.findFriends" : "onboarding.friends.continue"]

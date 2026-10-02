@@ -22,7 +22,6 @@ struct TrustedPlaceSearchQuery: Equatable {
     let scoringTokens: [String]
     let requiredTokens: [String]
     let consumedTokens: [String]
-    fileprivate let scoringPhrase: String
     fileprivate let requiredTokenIndexes: [Int]
 
     var hasMeaningfulTokens: Bool {
@@ -58,7 +57,6 @@ struct TrustedPlaceSearchQuery: Equatable {
         scoringTokens = scoring
         requiredTokens = required
         consumedTokens = consumed
-        scoringPhrase = scoring.joined(separator: " ")
         requiredTokenIndexes = required.compactMap { scoring.firstIndex(of: $0) }
     }
 }
@@ -133,22 +131,24 @@ enum TrustedPlaceSearch {
         }
 
         var score = tokenMatches.reduce(0) { $0 + ($1?.score ?? 0) }
-        score += document.phraseBonus(for: query.scoringPhrase)
+        score += document.phraseBonus(for: query.scoringTokens)
 
-        var evidenceByField: [TrustedPlaceSearchField: (displayValue: String, tokens: [String])] = [:]
-        for match in tokenMatches.compactMap({ $0 }) {
-            if evidenceByField[match.field] == nil {
-                evidenceByField[match.field] = (match.displayValue, [])
+        // There are only seven fields and usually a handful of query tokens.
+        // Gather in display order without allocating a grouping dictionary for
+        // every matching memory. Keep the first token's display value and the
+        // query's token order within each field.
+        var evidence: [TrustedPlaceSearchEvidence] = []
+        for field in TrustedPlaceSearchField.allCases {
+            var displayValue: String?
+            var tokens: [String] = []
+            for case let match? in tokenMatches where match.field == field {
+                if displayValue == nil { displayValue = match.displayValue }
+                tokens.append(match.token)
             }
-            evidenceByField[match.field]?.tokens.append(match.token)
-        }
-        let evidence = TrustedPlaceSearchField.allCases.compactMap { field in
-            evidenceByField[field].map {
-                TrustedPlaceSearchEvidence(
-                    field: field,
-                    displayValue: $0.displayValue,
-                    matchedTokens: $0.tokens
-                )
+            if let displayValue {
+                evidence.append(TrustedPlaceSearchEvidence(
+                    field: field, displayValue: displayValue, matchedTokens: tokens
+                ))
             }
         }
 
@@ -156,7 +156,9 @@ enum TrustedPlaceSearch {
             place: place,
             score: score,
             evidence: evidence,
-            supportingFields: document.supportingFields(for: query.scoringTokens)
+            supportingFields: TrustedPlaceSearchDocument.supportingFields(
+                for: tokenMatches.reduce(0) { $0 | ($1?.supportingFieldMask ?? 0) }
+            )
         )
     }
 
@@ -961,20 +963,31 @@ private struct TrustedPlaceSearchDocument {
         let field: TrustedPlaceSearchField
         let displayValue: String
         let score: Int
+        var supportingFieldMask: UInt8
     }
 
     private struct FieldValue {
         let field: TrustedPlaceSearchField
         let displayValue: String
         let normalizedTokens: [String]
-        let normalizedPhrase: String
         let weight: Int
 
     }
 
     private let fields: [FieldValue]
     private let exactMatches: [String: TokenMatch]
-    private let exactSupportingFields: [String: Set<TrustedPlaceSearchField>]
+
+    private static func fieldMask(_ field: TrustedPlaceSearchField) -> UInt8 {
+        switch field {
+        case .name: 1 << 0
+        case .owner: 1 << 1
+        case .category: 1 << 2
+        case .area: 1 << 3
+        case .note: 1 << 4
+        case .attribute: 1 << 5
+        case .status: 1 << 6
+        }
+    }
 
     init(place: VisiblePlace) {
         var values: [FieldValue] = []
@@ -1043,7 +1056,6 @@ private struct TrustedPlaceSearchDocument {
                         field: .attribute,
                         displayValue: displayValue,
                         normalizedTokens: tokens,
-                        normalizedPhrase: tokens.joined(separator: " "),
                         weight: 14
                     )
                 )
@@ -1058,19 +1070,23 @@ private struct TrustedPlaceSearchDocument {
 
         fields = values
         var matches: [String: TokenMatch] = [:]
-        var supportingFields: [String: Set<TrustedPlaceSearchField>] = [:]
         for field in values {
             for token in field.normalizedTokens {
-                supportingFields[token, default: []].insert(field.field)
-                let candidate = TokenMatch(
+                var candidate = TokenMatch(
                     token: token,
                     field: field.field,
                     displayValue: field.displayValue,
-                    score: field.weight
+                    score: field.weight,
+                    supportingFieldMask: Self.fieldMask(field.field)
                 )
-                if let current = matches[token] {
+                if var current = matches[token] {
+                    let supportingMask = current.supportingFieldMask | candidate.supportingFieldMask
                     if Self.isBetter(candidate, than: current) {
+                        candidate.supportingFieldMask = supportingMask
                         matches[token] = candidate
+                    } else {
+                        current.supportingFieldMask = supportingMask
+                        matches[token] = current
                     }
                 } else {
                     matches[token] = candidate
@@ -1078,7 +1094,6 @@ private struct TrustedPlaceSearchDocument {
             }
         }
         exactMatches = matches
-        exactSupportingFields = supportingFields
     }
 
     func bestMatch(for queryToken: String) -> TokenMatch? {
@@ -1088,13 +1103,16 @@ private struct TrustedPlaceSearchDocument {
         guard queryToken.count >= 3 else { return nil }
 
         var best: TokenMatch?
+        var supportingMask: UInt8 = 0
         for field in fields {
             guard field.normalizedTokens.contains(where: { $0.hasPrefix(queryToken) }) else { continue }
+            supportingMask |= Self.fieldMask(field.field)
             let candidate = TokenMatch(
                 token: queryToken,
                 field: field.field,
                 displayValue: field.displayValue,
-                score: max(1, field.weight * 4 / 5)
+                score: max(1, field.weight * 4 / 5),
+                supportingFieldMask: 0
             )
             guard let current = best else {
                 best = candidate
@@ -1104,22 +1122,14 @@ private struct TrustedPlaceSearchDocument {
                 best = candidate
             }
         }
+        best?.supportingFieldMask = supportingMask
         return best
     }
 
-    func supportingFields(for queryTokens: [String]) -> Set<TrustedPlaceSearchField> {
-        var result = Set<TrustedPlaceSearchField>()
-        for queryToken in queryTokens {
-            if let exactFields = exactSupportingFields[queryToken] {
-                result.formUnion(exactFields)
-                continue
-            }
-            guard queryToken.count >= 3 else { continue }
-            for field in fields where field.normalizedTokens.contains(where: { $0.hasPrefix(queryToken) }) {
-                result.insert(field.field)
-            }
-        }
-        return result
+    static func supportingFields(for mask: UInt8) -> Set<TrustedPlaceSearchField> {
+        // Each token lookup carries both its best evidence and all supporting
+        // fields, avoiding another dictionary lookup or prefix scan per token.
+        return Set(TrustedPlaceSearchField.allCases.filter { mask & Self.fieldMask($0) != 0 })
     }
 
     private static func isBetter(_ candidate: TokenMatch, than current: TokenMatch) -> Bool {
@@ -1127,24 +1137,24 @@ private struct TrustedPlaceSearchDocument {
             || (candidate.score == current.score && candidate.field.rawValue < current.field.rawValue)
     }
 
-    func phraseBonus(for phrase: String) -> Int {
-        guard !phrase.isEmpty else { return 0 }
+    func phraseBonus(for phraseTokens: [String]) -> Int {
+        guard let firstToken = phraseTokens.first else { return 0 }
         var best = 0
 
-        for field in fields {
-            let fieldPhrase = field.normalizedPhrase
-            let multiplier: Int
-            if fieldPhrase == phrase {
-                multiplier = 5
-            } else if fieldPhrase.hasPrefix(phrase + " ") {
-                multiplier = 4
-            } else if fieldPhrase.contains(" " + phrase + " ")
-                        || fieldPhrase.hasSuffix(" " + phrase) {
-                multiplier = 3
-            } else {
-                continue
+        // Both inputs already use normalized, space-delimited tokens. Compare
+        // those directly instead of allocating boundary strings for every field
+        // in every place. Short fields cannot contain the entire phrase.
+        for field in fields where field.normalizedTokens.count >= phraseTokens.count {
+            let tokens = field.normalizedTokens
+            for start in 0...(tokens.count - phraseTokens.count) {
+                guard tokens[start] == firstToken,
+                      phraseTokens.indices.dropFirst().allSatisfy({ tokens[start + $0] == phraseTokens[$0] })
+                else { continue }
+                let multiplier = start == 0 ? (tokens.count == phraseTokens.count ? 5 : 4) : 3
+                best = max(best, field.weight * multiplier)
+                // The first occurrence has the greatest possible phrase bonus.
+                break
             }
-            best = max(best, field.weight * multiplier)
         }
         return best
     }
@@ -1172,7 +1182,6 @@ private struct TrustedPlaceSearchDocument {
                     field: field,
                     displayValue: value,
                     normalizedTokens: tokens,
-                    normalizedPhrase: tokens.joined(separator: " "),
                     weight: weight
                 )
             )

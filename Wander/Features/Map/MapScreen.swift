@@ -2227,7 +2227,14 @@ struct MapScreen: View {
 
                         WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
                             HStack(alignment: .bottom, spacing: WanderTheme.spacing3) {
-                                SearchBar(
+                                if isMoreFiltersPresented {
+                                    // UIKit-backed input can remain hittable under
+                                    // the glass dock's hidden SwiftUI parent.
+                                    Color.clear
+                                        .frame(maxWidth: .infinity, minHeight: 48)
+                                        .allowsHitTesting(false)
+                                } else {
+                                    SearchBar(
                                         query: $mapQuery,
                                         personMentions: $mapPersonMentions,
                                         isFocused: $isMapSearchFocused,
@@ -2239,12 +2246,13 @@ struct MapScreen: View {
                                         onQueryEdited: clearMapSearchPreviewForEditing,
                                         onClear: clearMapSelectionAndSearch,
                                         onSubmit: submitMapSearch
-                                )
-                                .walkthroughTarget(
+                                    )
+                                    .walkthroughTarget(
                                         walkthroughs.currentStep?.target == .mapSendoff
                                             ? .mapSendoff
                                             : .mapSearch
                                     )
+                                }
 
                                 if isMapSearchFocused {
                                     MapSearchCancelButton(action: cancelMapSearch)
@@ -8239,6 +8247,9 @@ private final class MapDisplayLinkSampler: NSObject {
 
     func start() {
         let displayLink = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        // This diagnostic measures missed animation frames, so request a fixed
+        // cadence rather than interpreting adaptive/idle delivery as a hitch.
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
         displayLink.add(to: .main, forMode: .common)
         self.displayLink = displayLink
     }
@@ -13134,7 +13145,75 @@ enum CheckInDatePickerSelection {
 
 private final class CheckInDateTrayPresentation: ObservableObject {
     @Published var isExpanded = false
+    #if DEBUG
+    private var requestedAt: TimeInterval?
+    @Published private(set) var renderedLatency: TimeInterval?
+
+    func beginPresentationMeasurement() {
+        renderedLatency = nil
+        requestedAt = ProcessInfo.processInfo.systemUptime
+    }
+
+    func finishPresentationMeasurement() {
+        guard let requestedAt, renderedLatency == nil else { return }
+        renderedLatency = ProcessInfo.processInfo.systemUptime - requestedAt
+    }
+    #endif
 }
+
+#if DEBUG
+/// Measure app response through a displayed calendar frame, excluding XCTest's
+/// remote element lookup, event delivery and accessibility snapshot overhead.
+private struct CheckInDateRenderedFrameProbe: UIViewRepresentable {
+    let presented: @MainActor () -> Void
+
+    func makeUIView(context: Context) -> ProbeView { ProbeView(presented: presented) }
+    func updateUIView(_ view: ProbeView, context: Context) { view.presented = presented }
+    static func dismantleUIView(_ view: ProbeView, coordinator: ()) { view.stop() }
+
+    final class ProbeView: UIView {
+        var presented: @MainActor () -> Void
+        private var displayLink: CADisplayLink?
+        private var frames = 0
+        private var completed = false
+
+        init(presented: @escaping @MainActor () -> Void) {
+            self.presented = presented
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+            accessibilityElementsHidden = true
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard window != nil, !bounds.isEmpty, displayLink == nil, !completed else { return }
+            let link = CADisplayLink(target: self, selector: #selector(frameDisplayed))
+            displayLink = link
+            link.add(to: .main, forMode: .common)
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { stop() }
+            else { setNeedsLayout() }
+        }
+
+        @objc private func frameDisplayed() {
+            guard window != nil, !bounds.isEmpty else { return }
+            frames += 1
+            // The first callback precedes display; the second confirms that
+            // the mounted calendar has had a full display interval to render.
+            guard frames >= 2 else { return }
+            completed = true
+            stop()
+            presented()
+        }
+
+        func stop() { displayLink?.invalidate(); displayLink = nil }
+    }
+}
+#endif
 
 private struct MapCheckInDateSection: View {
     @Binding var visitedAt: Date
@@ -13150,6 +13229,9 @@ private struct MapCheckInDateSection: View {
             VStack(spacing: 0) {
                 Button {
                     let isOpening = !presentation.isExpanded
+                    #if DEBUG
+                    if isOpening { presentation.beginPresentationMeasurement() }
+                    #endif
                     presentation.isExpanded.toggle()
                     if isOpening {
                         onExpansionRequested()
@@ -13214,6 +13296,12 @@ private struct MapCheckInDateSection: View {
                     }
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("save.checkInDatePicker")
+                    #if DEBUG
+                    .background(CheckInDateRenderedFrameProbe {
+                        presentation.finishPresentationMeasurement()
+                    })
+                    .accessibilityValue(presentation.renderedLatency.map { String($0) } ?? "pending")
+                    #endif
                 }
             }
             .background(WanderTheme.surfaceRaised.color)

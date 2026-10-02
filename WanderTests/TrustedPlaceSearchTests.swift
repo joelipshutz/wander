@@ -50,6 +50,23 @@ final class TrustedPlaceSearchTests: XCTestCase {
         )
     }
 
+    func testEvidencePreservesFieldOrderFirstDisplayValueAndQueryTokenOrder() throws {
+        let place = makeVisiblePlace(
+            id: "evidence-order", name: "Circuit House", ownerName: "Ryan", ownerHandle: "rylie",
+            locality: "Pasadena", note: "Quiet garden"
+        )
+        let match = try XCTUnwrap(TrustedPlaceSearch.matches(
+            query: "garden rylie Pasadena house quiet Ryan circuit", in: [place]
+        ).first)
+
+        XCTAssertEqual(match.evidence, [
+            TrustedPlaceSearchEvidence(field: .name, displayValue: "Circuit House", matchedTokens: ["house", "circuit"]),
+            TrustedPlaceSearchEvidence(field: .owner, displayValue: "rylie", matchedTokens: ["rylie", "ryan"]),
+            TrustedPlaceSearchEvidence(field: .area, displayValue: "1 Main Street, Pasadena", matchedTokens: ["pasadena"]),
+            TrustedPlaceSearchEvidence(field: .note, displayValue: "Quiet garden", matchedTokens: ["garden", "quiet"])
+        ])
+    }
+
     func testEveryRequiredTokenMustMatch() {
         let place = makeVisiblePlace(id: "coffee", name: "Circuit", category: "Coffee shop")
 
@@ -81,6 +98,19 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertGreaterThan(matches[0].score, matches[1].score)
     }
 
+    func testPhraseRankingPreservesWholePhraseAndCrossFieldMatches() {
+        let exact = makeVisiblePlace(id: "phrase-exact", name: "Quiet Coffee")
+        let prefix = makeVisiblePlace(id: "phrase-prefix", name: "Quiet Coffee House")
+        let suffix = makeVisiblePlace(id: "phrase-suffix", name: "House Quiet Coffee")
+        let middle = makeVisiblePlace(id: "phrase-middle", name: "Small Quiet Coffee House")
+        let split = makeVisiblePlace(id: "phrase-split", name: "Quiet", category: "Coffee shop")
+
+        let matches = TrustedPlaceSearch.matches(query: "quiet coffee", in: [split, suffix, middle, prefix, exact])
+
+        XCTAssertEqual(matches.map(\.place.id), ["phrase-exact", "phrase-prefix", "phrase-middle", "phrase-suffix", "phrase-split"])
+        XCTAssertEqual(matches.map(\.score), [420, 360, 300, 300, 92])
+    }
+
     func testSupportingFieldsIncludeEveryFieldThatMatchesTheQuery() throws {
         let place = makeVisiblePlace(
             id: "all-fields",
@@ -102,6 +132,14 @@ final class TrustedPlaceSearchTests: XCTestCase {
             match.supportingFields,
             [.name, .owner, .category, .area, .note, .attribute, .status]
         )
+    }
+
+    func testExactSupportingFieldsExcludePrefixOnlyFields() throws {
+        let exact = makeVisiblePlace(id: "exact-support", name: "Cof", category: "Coffee shop", note: "Coffee garden")
+        let prefix = makeVisiblePlace(id: "prefix-support", name: "Coffee Counter", category: "Coffee shop", note: "Coffee garden")
+        let matches = TrustedPlaceSearch.matches(query: "cof", in: [exact, prefix])
+        XCTAssertEqual(try XCTUnwrap(matches.first { $0.place.id == exact.id }).supportingFields, [.name])
+        XCTAssertEqual(try XCTUnwrap(matches.first { $0.place.id == prefix.id }).supportingFields, [.name, .category, .note])
     }
 
     func testMapSearchSavedStrengthSeparatesPlaceIdentityFromMemoryContext() throws {

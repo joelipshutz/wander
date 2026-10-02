@@ -14,6 +14,23 @@ final class ClerkAuthService: AuthSessionProviding {
     private static let canonicalUserIDMetadataKey = "canonical_user_id"
 
     #if canImport(ClerkKit)
+    struct PasswordVerificationClient {
+        var signIn: @MainActor (String, String) async throws -> SignIn
+        var sendCode: @MainActor (SignIn, String) async throws -> SignIn
+        var verifyCode: @MainActor (SignIn, String) async throws -> SignIn
+
+        static let live = Self(
+            signIn: { emailAddress, password in
+                try await Clerk.shared.auth.signInWithPassword(identifier: emailAddress, password: password)
+            },
+            sendCode: { try await $0.sendMfaEmailCode(emailAddressId: $1) },
+            verifyCode: { try await $0.verifyMfaCode($1, type: .emailCode) }
+        )
+    }
+    private let passwordVerification: PasswordVerificationClient
+    private var pendingPasswordVerification: SignIn?
+    private var challengeGeneration = 0
+
     struct ResolvedSession: Sendable {
         let clerkSessionID: String
         let authSession: AuthSession
@@ -32,12 +49,14 @@ final class ClerkAuthService: AuthSessionProviding {
     private let sessionAdoptionRetryDelaysNanoseconds: [UInt64]
     private let sessionAdoptionTimeoutNanoseconds: UInt64
     private let sessionAdoptionSleeper: SessionAdoptionSleeper
+    private let sessionAdoptionTimeoutSleeper: SessionAdoptionSleeper
     private var pendingNativeAuthSessionID: String?
     private var nativeAuthSessionFence: NativeAuthSessionFence?
     private var refreshGeneration = 0
     private enum PendingEmailVerification {
         case signIn(SignIn)
         case signUp(SignUp)
+        case deviceTrust(SignIn)
     }
     private var pendingEmailVerification: PendingEmailVerification?
 
@@ -58,8 +77,13 @@ final class ClerkAuthService: AuthSessionProviding {
         sessionAdoptionSleeper: @escaping SessionAdoptionSleeper = { delay in
             try await Task<Never, Never>.sleep(nanoseconds: delay)
         },
+        sessionAdoptionTimeoutSleeper: @escaping SessionAdoptionSleeper = { delay in
+            try await Task<Never, Never>.sleep(nanoseconds: delay)
+        },
+        passwordVerification: PasswordVerificationClient = .live,
         configureClerk: (String) -> String = { Clerk.configure(publishableKey: $0).publishableKey }
     ) {
+        self.passwordVerification = passwordVerification
         self.configuration = configuration
         self.resolveAuthoritativeSession = resolveSession
         self.resolveActiveSessionID = resolveSessionID
@@ -79,6 +103,7 @@ final class ClerkAuthService: AuthSessionProviding {
         self.sessionAdoptionRetryDelaysNanoseconds = sessionAdoptionRetryDelaysNanoseconds
         self.sessionAdoptionTimeoutNanoseconds = sessionAdoptionTimeoutNanoseconds
         self.sessionAdoptionSleeper = sessionAdoptionSleeper
+        self.sessionAdoptionTimeoutSleeper = sessionAdoptionTimeoutSleeper
 
         if let publishableKey = configuration.clerkPublishableKey {
             let configuredPublishableKey = configureClerk(publishableKey)
@@ -476,7 +501,7 @@ final class ClerkAuthService: AuthSessionProviding {
         }
         let timeoutTask = Task {
             do {
-                try await Task<Never, Never>.sleep(nanoseconds: timeoutNanoseconds)
+                try await self.sessionAdoptionTimeoutSleeper(timeoutNanoseconds)
                 continuation.finish(throwing: SessionAdoptionTimeoutError())
             } catch {
                 // The resolver or caller won the race.
@@ -503,6 +528,7 @@ final class ClerkAuthService: AuthSessionProviding {
     }
 
     func prepareForInteractiveAuth() throws {
+        resetPendingEmailVerification()
         guard setNativeAuthSessionFence(.blockUncorrelated) else {
             sessionCache.save(nil)
             state = .signedOut
@@ -577,19 +603,33 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.emailVerificationUnavailable
         }
 
+        let generation = challengeGeneration
         do {
             let outcome: NativeAuthOutcome
             let completedSessionID: String?
             switch pendingEmailVerification {
             case .signIn(let signIn):
                 let updatedSignIn = try await signIn.verifyCode(code)
+                try Task.checkCancellation()
+                guard generation == challengeGeneration else { throw AuthSessionError.emailVerificationUnavailable }
                 self.pendingEmailVerification = .signIn(updatedSignIn)
                 outcome = updatedSignIn.status == .complete
                     ? .completed
                     : .requiresAdditionalVerification
                 completedSessionID = updatedSignIn.createdSessionId
+            case .deviceTrust(let signIn):
+                let updatedSignIn = try await passwordVerification.verifyCode(signIn, code)
+                try Task.checkCancellation()
+                guard generation == challengeGeneration, updatedSignIn.id == signIn.id else {
+                    throw AuthSessionError.emailVerificationUnavailable
+                }
+                self.pendingEmailVerification = .deviceTrust(updatedSignIn)
+                outcome = updatedSignIn.status == .complete ? .completed : .requiresAdditionalVerification
+                completedSessionID = updatedSignIn.createdSessionId
             case .signUp(let signUp):
                 let updatedSignUp = try await signUp.verifyEmailCode(code)
+                try Task.checkCancellation()
+                guard generation == challengeGeneration else { throw AuthSessionError.emailVerificationUnavailable }
                 self.pendingEmailVerification = .signUp(updatedSignUp)
                 outcome = updatedSignUp.status == .complete
                     ? .completed
@@ -597,8 +637,10 @@ final class ClerkAuthService: AuthSessionProviding {
                 completedSessionID = updatedSignUp.createdSessionId
             }
 
+            try Task.checkCancellation()
+            guard generation == challengeGeneration else { throw AuthSessionError.emailVerificationUnavailable }
             guard outcome == .completed else { return outcome }
-            self.pendingEmailVerification = nil
+            resetPendingEmailVerification()
             guard let completedSessionID else {
                 throw AuthSessionError.sessionUnavailable
             }
@@ -625,11 +667,16 @@ final class ClerkAuthService: AuthSessionProviding {
 
         try prepareForInteractiveAuth()
         do {
-            let signIn = try await Clerk.shared.auth.signInWithPassword(
-                identifier: emailAddress,
-                password: password
-            )
+            let generation = challengeGeneration
+            let signIn = try await passwordVerification.signIn(emailAddress, password)
+            try Task.checkCancellation()
+            guard generation == challengeGeneration else { throw AuthSessionError.emailVerificationUnavailable }
             guard signIn.status == .complete else {
+                // Device Trust is a server-enforced continuation of this exact
+                // password attempt, not a new first-factor sign-in.
+                if signIn.status == .needsClientTrust || signIn.status == .needsSecondFactor {
+                    pendingPasswordVerification = signIn
+                }
                 return .requiresAdditionalVerification
             }
             guard let completedSessionID = signIn.createdSessionId else {
@@ -649,8 +696,32 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
+    func sendPasswordVerificationCode() async throws {
+        #if canImport(ClerkKit)
+        guard let signIn = pendingPasswordVerification,
+              (signIn.status == .needsClientTrust || signIn.status == .needsSecondFactor),
+              let emailID = signIn.supportedSecondFactors?.first(where: { $0.strategy == .emailCode })?.emailAddressId else {
+            throw AuthSessionError.emailVerificationUnavailable
+        }
+        let generation = challengeGeneration
+        do {
+            let prepared = try await passwordVerification.sendCode(signIn, emailID)
+            try Task.checkCancellation()
+            guard generation == challengeGeneration, prepared.id == signIn.id,
+                  (prepared.status == .needsClientTrust || prepared.status == .needsSecondFactor) else {
+                throw AuthSessionError.emailVerificationUnavailable
+            }
+            pendingEmailVerification = .deviceTrust(prepared)
+        } catch { throw Self.authError(from: error) }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
     func resetPendingEmailVerification() {
         #if canImport(ClerkKit)
+        challengeGeneration &+= 1
+        pendingPasswordVerification = nil
         pendingEmailVerification = nil
         #endif
     }
@@ -660,6 +731,7 @@ final class ClerkAuthService: AuthSessionProviding {
         guard configuration.isClerkConfigured else {
             throw AuthSessionError.notConfigured
         }
+        resetPendingEmailVerification()
         try await Clerk.shared.auth.signOut()
         setNativeAuthSessionFence(nil)
         sessionCache.save(nil)
@@ -703,7 +775,8 @@ final class ClerkAuthService: AuthSessionProviding {
         }
         guard let session = Clerk.shared.session,
               Self.isActiveSessionStatus(session.status),
-              session.user != nil
+              let user = session.user,
+              state.session?.userID == Self.authSession(from: user).userID
         else {
             #if DEBUG
             WanderDebugLog.remote.error("clerk supabase token skipped reason=no_current_user")
@@ -716,6 +789,13 @@ final class ClerkAuthService: AuthSessionProviding {
                 WanderDebugLog.remote.error("clerk supabase token failed reason=nil_token")
                 #endif
                 throw AuthSessionError.tokenUnavailable
+            }
+            // Authentication can change while token retrieval is suspended.
+            // Never return a token from a different account/session to a
+            // caller that already selected the write it is about to perform.
+            guard Clerk.shared.session?.id == session.id,
+                  state.session?.userID == Self.authSession(from: user).userID else {
+                throw AuthSessionError.sessionUnavailable
             }
             #if DEBUG
             WanderDebugLog.remote.debug("clerk supabase token succeeded")

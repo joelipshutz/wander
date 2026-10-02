@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "scope": "Astir shared-link App Clip",
+  "checkedOn": "2026-10-01",
+  "verificationComplete": false,
+  "apple": {
+    "teamID": "Y7TVK75RZ8",
+    "appStoreAppID": "6776850787",
+    "parentBundleID": "com.grayline.wander",
+    "clipBundleID": "com.grayline.wander.Clip",
+    "continuationAppGroup": "group.com.grayline.wander.clip",
+    "evidence": [
+      "project.yml",
+      "scripts/testflight-release.mjs",
+      "WanderAppClip/Resources/AstirClip.entitlements",
+      "App Store Connect app information and Apple Developer identifiers dashboard, 2026-09-23",
+      "App Store Connect approved version 1.0.02 build 180 metadata, 2026-09-28"
+    ],
+    "verification": "Verified app and Developer team directly. Registered Clip and dedicated continuation App Group; saved and reopened both identifiers to verify group membership. Clip Sign in with Apple identifies the parent app. Existing parent shared group retained.",
+    "pending": [
+      "Verify exported/thinned size and release analytics configuration before an approved upload.",
+      "Validate fresh-install session migration separately from the verified existing-parent update and same-account destination handoff.",
+      "Upload an approved build containing the Clip and configure the default App Clip experience; approved version 1.0.02 build 180 has no embedded Clip."
+    ],
+    "organizationName": "Grayline Studio, LLC",
+    "appStoreName": "ASTIR Movement",
+    "appStoreConnectProviderID": "7f20b667-afd3-456b-b2bc-ca94ab295484",
+    "clipRegistered": true,
+    "parentAssociationVerified": true,
+    "associatedDomainsEnabled": true,
+    "continuationGroupAssignedToParentAndClip": true,
+    "signInWithAppleGroupedWithParent": true,
+    "signedDevelopmentClipVerified": true,
+    "signedClipVerification": "Development build succeeded; signature verification and embedded entitlements confirm the expected team, parent, Clip capability, Apple sign-in, dedicated App Group and all three associated domains.",
+    "signedParentAndEmbeddedClipVerified": true,
+    "signedLocalBuild": "1.0.02 (180)",
+    "provisioningProfilesExpireOn": "2027-09-24",
+    "releaseClipUnthinnedBytes": 15973956,
+    "signedDeviceExistingParentHandoffVerifiedOn": "2026-10-01",
+    "signedDeviceVerification": "Native sign-in, retained Clip session, existing and new Save, private-list Join and automatic same-account place/list continuation in the installed parent passed. Temporary test data was removed. Fresh-install migration and Apple-discovered invocation are not established by this development-device test."
+  },
+  "clerk": {
+    "frontendHost": "clerk.getrec.me",
+    "configuredEnvironment": "production",
+    "expectedOwnerLogin": "joe@bondaiapp.com",
+    "applicationIDFromSetupRecord": "app_3Eb3JbpbMDjOA2qKUCqfsZwfct9",
+    "productionInstanceID": "ins_3HsCj1oUzJlnKKgtoEZ1xnXSb5a",
+    "evidence": [
+      "project.yml",
+      "Wander/Config/Auth.xcconfig",
+      "docs/setup.md",
+      "https://linear.app/recme/issue/REC-182",
+      "Clerk production dashboard native applications and email authentication settings, 2026-09-23"
+    ],
+    "verification": "Verified production application, instance, frontend host, enabled Native API, parent and Clip registrations and mobile SSO callbacks directly. Native signed-device authentication and authenticated Save/Join using the existing canonical account passed. Device Trust email-code handling is implemented and contract-tested; a provider-specific new-device challenge remains unverified. Individual owner role not independently confirmed.",
+    "pending": [
+      "Validate Device Trust email-code continuation and provider-specific Apple/Google callbacks on a signed device.",
+      "Validate fresh-install session migration separately from the verified existing-parent account continuity.",
+      "Confirm owner membership and role if needed for further administrative changes."
+    ],
+    "applicationID": "app_3Eb3JbpbMDjOA2qKUCqfsZwfct9",
+    "organizationName": "Astir",
+    "nativeAPIEnabled": true,
+    "clipNativeApplicationRegistered": true,
+    "authenticationPolicy": {
+      "appleSignInEnabled": true,
+      "googleSignInEnabled": true,
+      "emailCodeSignUpEnabled": true,
+      "emailCodeSignInEnabled": true,
+      "passwordSignUpRequired": false,
+      "addPasswordEnabled": true,
+      "mfaStrategiesEnabled": false,
+      "mfaRequired": false,
+      "deviceTrustEnabled": true,
+      "newDevicePasswordVerificationRequired": true
+    },
+    "mobileSSORedirects": [
+      "com.grayline.wander://callback",
+      "com.grayline.wander.Clip://callback"
+    ]
+  },
+  "supabase": {
+    "projectRef": "rugmtlgufrhlxwfkumhw",
+    "projectName": "wander",
+    "apiURL": "https://rugmtlgufrhlxwfkumhw.supabase.co",
+    "organizationID": "kmuvkdjwociyvuuxnbqb",
+    "organizationName": "joe@bondaiapp.com's Org",
+    "region": "us-west-2",
+    "status": "ACTIVE_HEALTHY",
+    "evidence": [
+      "Supabase project and organization read APIs, 2026-09-23",
+      "project.yml",
+      "Hosted migration history, function security metadata and rollback-only App Clip Save regression, 2026-09-28",
+      "Supabase authentication dashboard, enabled production Clerk issuer, 2026-09-28"
+    ],
+    "verification": "Project identity, organization, region and health confirmed directly. Organization name does not independently establish an individual member's role.",
+    "pending": [],
+    "clerkIssuer": "https://clerk.getrec.me",
+    "clerkIssuerEnabled": true,
+    "clerkIssuerVerifiedOn": "2026-09-28",
+    "rollbackSmokeVerifiedOn": "2026-09-28",
+    "clipRPCDeployed": true,
+    "clipRPCMigrationVersion": "20260928231919",
+    "clipRPCDeployedOn": "2026-09-28",
+    "clipRPCFocusedSmokeVerifiedOn": "2026-09-28"
+  },
+  "sharing": {
+    "canonicalHost": "astirmovement.com",
+    "additionalHosts": [
+      "www.astirmovement.com",
+      "getrec.me"
+    ],
+    "appClipApplicationIdentifier": "Y7TVK75RZ8.com.grayline.wander.Clip",
+    "websiteRepository": "joelipshutz/astir-site",
+    "discoverySetting": "ASTIR_APP_CLIP_ENABLED",
+    "defaultDiscoveryEnabled": false,
+    "verification": "Website PR #24 is merged and both Vercel production deployments succeeded. Direct checks on all three hosts confirm the Clip AASA association, contextual title, app icon metadata, exact native destination, App Store fallback and generic unavailable-link privacy. Production Clip discovery remains off until Apple publication. Website build, lint and all 20 contract/HTTP tests pass.",
+    "websiteBranch": "codex/rec-408-app-clip",
+    "websitePullRequest": "https://github.com/joelipshutz/astir-site/pull/24",
+    "nativeBranch": "codex/rec-408-shared-app-clip",
+    "nativePullRequest": "https://github.com/joelipshutz/wander/pull/728",
+    "hosting": {
+      "provider": "Vercel",
+      "teamSlug": "hotchkiss-technologies",
+      "projectName": "astir-site",
+      "previewDiscoveryScope": "Preview environment, codex/rec-408-app-clip branch only",
+      "previewURL": "https://astir-site-git-codex-rec-408-app-clip-hotchkiss-technologies.vercel.app"
+    },
+    "websiteMergedCommit": "b562c8c9e9b5c63000ff18cc6f89d748fef12474",
+    "productionAASAVerifiedOn": "2026-10-01"
+  },
+  "analytics": {
+    "provider": "PostHog",
+    "tokenReference": "WANDER_POSTHOG_PROJECT_TOKEN",
+    "signedLocalBuildTokenPresent": true,
+    "verification": "Approved Astir configuration resolves in both signed local products. Live ingestion verified Clip opening, place_saved, place_list_invite_accepted and paired engagement events with the correct identity, namespace, surface and action. Observed properties contained no raw links, invitation tokens, place content or coordinates. Clip replay is disabled. Release archive configuration must still be verified independently before upload.",
+    "projectID": "557259"
+  }
+}

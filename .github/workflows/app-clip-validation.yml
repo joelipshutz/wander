@@ -1,0 +1,163 @@
+name: App Clip parent regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'WanderAppClip/**'
+      - 'WanderAppClipTests/**'
+      - 'WanderAppClipUITests/**'
+      - '.github/workflows/app-clip-validation.yml'
+      - 'scripts/run-parent-regression.py'
+  workflow_dispatch:
+    inputs:
+      graphics_only:
+        description: Run focused native appearance and map frame diagnostics
+        type: boolean
+        default: false
+      runner:
+        description: Standard macOS runner for a controlled rendering comparison
+        type: choice
+        options: [macos-26, macos-26-intel]
+        default: macos-26
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-clip-parent-${{ github.ref }}
+  # Preserve a complete result while fixes queue behind the active regression.
+  # Only the newest pending commit is retained by the concurrency group.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Parent test build
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          lfs: true
+          persist-credentials: false
+      - name: Build portable test products once
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
+            -testProductsPath "$RUNNER_TEMP/Parent.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme AstirClip \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
+            -testProductsPath "$RUNNER_TEMP/Clip.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          git rev-parse HEAD > "$RUNNER_TEMP/test-products-commit.txt"
+          xcodebuild -version > "$RUNNER_TEMP/test-products-xcode.txt"
+          # Preserve executable permissions and bundle symlinks in transport.
+          tar -czf "$RUNNER_TEMP/parent-test-products.tar.gz" -C "$RUNNER_TEMP" \
+            Parent.xctestproducts Clip.xctestproducts test-products-commit.txt test-products-xcode.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parent-test-products
+          path: ${{ runner.temp }}/parent-test-products.tar.gz
+          compression-level: 0
+          retention-days: 2
+
+  parent:
+    needs: build
+    name: ${{ matrix.suite == 'clip' && 'App Clip suite' || format('Parent {0}', matrix.name) }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"replay privacy","suite":"replay","shard":0},{"name":"search performance","suite":"performance","shard":0},{"name":"map performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3}]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          lfs: true
+          persist-credentials: false
+      - name: Generate project and select simulator
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -version
+          git rev-parse HEAD
+          # Keep rendering capability with the test evidence when investigating
+          # simulator-only animation or native material failures.
+          xcrun swift -e 'import Metal; let devices = MTLCopyAllDevices(); print("CI rendering device count:", devices.count); for gpu in devices { print("CI rendering device:", gpu.name, "lowPower:", gpu.isLowPower) }'
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                     for runtime, rows in devices.items() if 'iOS' in runtime
+                     for d in rows if d['name'] == 'iPhone 17 Pro']
+          assert choices, 'No existing iPhone 17 Pro simulator'
+          runtime, device = max(choices, key=lambda item: item[0])
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('TEST_DEVICE_ID=' + device['udid'] + '\n')
+          print('Testing on', device['name'], 'runtime', runtime)
+          import subprocess
+          # Start system services before compilation, so first-boot setup is not
+          # competing with the first app animation/performance measurement.
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
+          # A fresh iOS 26.5 runtime can report an appearance change without
+          # delivering it to any scene, including Settings. A second boot after
+          # initial setup restores the system notifications (verified against
+          # unchanged dark-mode and live-transition pixel assertions).
+          subprocess.run(['xcrun', 'simctl', 'shutdown', device['udid']], check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
+          if os.environ['TEST_SUITE'] in ('clip', 'ui', 'ui-performance', 'graphics', 'replay'):
+              # Attach the display before testing native materials and frame
+              # cadence or capturing the SDK's actual replay screenshot.
+              subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', device['udid']], check=True)
+              subprocess.run(['xcrun', 'simctl', 'ui', device['udid'], 'appearance'], check=True)
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: parent-test-products
+          path: ${{ runner.temp }}
+      - name: Verify and unpack test products
+        run: |
+          tar -xzf "$RUNNER_TEMP/parent-test-products.tar.gz" -C "$RUNNER_TEMP"
+          test "$(cat "$RUNNER_TEMP/test-products-commit.txt")" = "$(git rev-parse HEAD)"
+          xcodebuild -version > "$RUNNER_TEMP/current-xcode.txt"
+          diff -u "$RUNNER_TEMP/test-products-xcode.txt" "$RUNNER_TEMP/current-xcode.txt"
+      # Ad-hoc signing is required for Clerk's Keychain initialization in the
+      # real startup path; this uses no Apple distribution identity or secrets.
+      - name: Run complete parent suite
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_PRODUCT_NAME: ${{ matrix.suite == 'clip' && 'Clip' || 'Parent' }}
+        run: >-
+          python3 scripts/run-parent-regression.py --suite "$TEST_SUITE"
+          --shard "$TEST_SHARD" --shard-count 4
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/$TEST_PRODUCT_NAME.xctestproducts"
+          --result-bundle "$RUNNER_TEMP/Parent.xcresult"
+          --selection-file "$RUNNER_TEMP/test-selection.json"
+      - name: Summarize test result
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/Parent.xcresult/Info.plist" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Parent.xcresult" --format json > "$RUNNER_TEMP/parent-summary.json"
+          fi
+      - name: Retain regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-clip-parent-${{ matrix.suite }}-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/Parent.xcresult
+            ${{ runner.temp }}/parent-summary.json
+            ${{ runner.temp }}/test-selection.json
+          retention-days: 14

@@ -51,7 +51,9 @@ final class FeedActivityGroupingUITests: XCTestCase {
 
         for _ in 0..<3 where !disclosure.isHittable { app.swipeDown() }
         disclosure.tap()
-        XCTAssertFalse(wanna.exists)
+        // The disclosure removes these rows with an opacity transition. Wait
+        // for that removal before another tap can reverse the same animation.
+        XCTAssertTrue(wanna.waitForNonExistence(timeout: 3))
         XCTAssertEqual(disclosure.value as? String, "Collapsed, 3 activities")
         disclosure.tap()
         for _ in 0..<3 where !wanna.isHittable { app.swipeUp() }

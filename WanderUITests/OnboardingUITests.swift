@@ -10,9 +10,9 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.cells.matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
+        let activity = app.cells.matching(NSPredicate(format: "label ==[c] %@", "Astir")).firstMatch
         if !activity.waitForExistence(timeout: 5) {
-            let more = app.buttons["More"].firstMatch
+            let more = app.cells["More"].firstMatch
             if more.exists { more.tap() }
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
@@ -365,10 +365,24 @@ final class ImportFormRefinementUITests: XCTestCase {
     }
 
     private func scrollToImportControl(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<10 where !element.isHittable || element.frame.maxY > app.frame.height - 120 {
-            app.swipeUp()
+        XCTAssertTrue(element.waitForExistence(timeout: 10))
+        let top = app.navigationBars["Import report"].frame.maxY + 12
+        let bottom = app.frame.maxY - 120
+        for _ in 0..<12 {
+            let frame = element.frame
+            if element.isHittable, frame.minY >= top, frame.maxY <= bottom { break }
+            // A full swipe can leave a hittable control underneath the glass
+            // navigation bar. Keep the complete target in the usable viewport
+            // and reverse direction after an overshoot.
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = app.coordinate(withNormalizedOffset: CGVector(
+                dx: 0.5, dy: frame.minY < top ? 0.7 : 0.3
+            ))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)
+        XCTAssertGreaterThanOrEqual(element.frame.minY, top)
+        XCTAssertLessThanOrEqual(element.frame.maxY, bottom)
     }
 
     func testSavedImportPlaceOpensItsProfile() {
@@ -379,8 +393,11 @@ final class ImportFormRefinementUITests: XCTestCase {
         for _ in 0..<5 where !saved.isHittable { app.swipeUp() }
         XCTAssertTrue(saved.isHittable)
         saved.tap()
+        // The report already contains this place's name. Wait for the actual
+        // navigation destination before asserting that the report is gone.
+        XCTAssertTrue(app.scrollViews["place-profile.scroll"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Maru Coffee"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["import.save"].exists)
+        XCTAssertTrue(app.buttons["import.save"].waitForNonExistence(timeout: 5))
         keepScreenshot("Saved import — place profile")
     }
 
@@ -389,7 +406,7 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
         app.launch()
         let lists = app.buttons["import.list.report-place-1"]
-        for _ in 0..<5 where !lists.isHittable || lists.frame.maxY > app.frame.height - 120 { app.swipeUp() }
+        scrollToImportControl(lists, in: app)
         lists.tap()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-list-picker.list.")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -1104,12 +1121,16 @@ final class OnboardingUITests: XCTestCase {
 
     func testFeedIntroductionCentersWholeLatestTileThenReturnsToTopWithoutRepeating() {
         let app = XCUIApplication()
-        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity"]
-        app.launch()
+        app.resetAuthorizationStatus(for: .location)
+        // Hold each visual beat while XCTest measures its geometry. Automatic
+        // completion is covered by testMapRingsAutomaticallyContinueIntoFeedAndFinishAtTop.
+        app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity", "-WanderHoldWalkthroughStep"]
+        launchAfterResolvingLocationPermission(in: app)
         let circle = app.staticTexts["walkthrough.feed.feedActivity.circle"]
         let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
         XCTAssertTrue(circle.waitForExistence(timeout: 20))
         let headingY = app.staticTexts["Activity"].frame.minY
+        app.buttons["walkthrough.next.feed.feedActivity"].tap()
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
@@ -1117,6 +1138,7 @@ final class OnboardingUITests: XCTestCase {
                           "Only the latest card should be brought into view.")
         XCTAssertEqual(recent.label, "Keep up with their moments")
         XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
+        app.buttons["walkthrough.next.feed.feedActivity"].tap()
         XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
         let returned = expectation(for: NSPredicate(format: "hittable == true"),
                                    evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
@@ -1628,10 +1650,12 @@ final class OnboardingUITests: XCTestCase {
         app.launchArguments = [
             "-WanderAuthenticatedUITest",
             "-WanderUseDemoFixtures",
+            "-WanderDisableWalkthroughs",
             "-WanderInitialTab",
             "profile",
         ]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
 
         let settingsButton = app.buttons["Settings"]
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 8))
@@ -1774,6 +1798,7 @@ final class OnboardingUITests: XCTestCase {
 
     func testFirstMapWannaOpensAFreshDraftEachTime() {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
@@ -1784,12 +1809,16 @@ final class OnboardingUITests: XCTestCase {
             "-WanderMapSheetExpanded",
             "-WanderPlaceProfileSaveTrayV1"
         ]
-        app.launch()
+        launchAfterResolvingLocationPermission(in: app)
 
         let checkIn = app.buttons["place-profile.floating-action.checkIn"]
         let wanna = app.buttons["place-profile.floating-action.wanna"]
         XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
         XCTAssertTrue(wanna.waitForExistence(timeout: 2))
+        // The sheet enters the accessibility tree below the screen before its
+        // presentation finishes. Wait for the actual control to reach the viewport.
+        let presented = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: wanna)
+        wait(for: [presented], timeout: 8)
         wanna.tap()
 
         let attachedTray = app.otherElements["place-profile.attached-wanna"].firstMatch
@@ -1816,10 +1845,9 @@ final class OnboardingUITests: XCTestCase {
         let restoredNote = app.textViews["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         XCTAssertTrue(restoredNote.isHittable)
-        XCTAssertEqual(
-            restoredNote.value as? String,
-            "Who told you, what caught your eye, when you might go…"
-        )
+        // The native mention editor exposes its text, not its UILabel placeholder.
+        XCTAssertEqual(restoredNote.value as? String, "")
+        XCTAssertEqual(restoredNote.label, "What made you save this?")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "First Map Wanna attached editor"
@@ -1835,10 +1863,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         let preservedNote = app.textViews["save.note"]
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
-        XCTAssertEqual(
-            preservedNote.value as? String,
-            "The good bits, what you ordered, who you were with…"
-        )
+        XCTAssertEqual(preservedNote.value as? String, "")
+        XCTAssertEqual(preservedNote.label, "Check-in note")
     }
 
     func testMapWannaAndSaveRespondToSinglePhysicalTap() {
@@ -2153,6 +2179,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(note.value as? String, note.placeholderValue)
         note.tap()
         note.typeText("First unsaved Wanna")
+        // On hosted simulators, typeText can return before UIKit publishes the
+        // full input burst to accessibility. Require the exact complete draft
+        // before closing instead of racing the remaining keyboard events.
+        expectation(for: NSPredicate(format: "value == %@", "First unsaved Wanna"), evaluatedWith: note)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(note.value as? String, "First unsaved Wanna")
 
         app.buttons["save.close"].tap()
@@ -2167,6 +2198,8 @@ final class OnboardingUITests: XCTestCase {
                        "A repeated Wanna starts fresh instead of editing a saved or abandoned event")
         freshNote.tap()
         freshNote.typeText("Current Wanna draft")
+        expectation(for: NSPredicate(format: "value == %@", "Current Wanna draft"), evaluatedWith: freshNote)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(freshNote.value as? String, "Current Wanna draft")
 
         app.buttons["save.close"].tap()
@@ -2250,6 +2283,7 @@ final class OnboardingUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderDelayedDiscoverRefinementUITest",
             "-WanderDisableWalkthroughs",
             "-WanderInitialTab",
             "discover"
@@ -2293,6 +2327,8 @@ final class OnboardingUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(firstPlaceResult.waitForExistence(timeout: 4))
         XCTAssertTrue(firstPlaceResult.isHittable)
+        XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists)
+        XCTAssertFalse(app.staticTexts["favorites"].exists)
         firstPlaceResult.tap()
 
         let placeBackButton = app.buttons["place-profile.back"]
@@ -2303,6 +2339,15 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(placeBackButton.waitForNonExistence(timeout: 3))
         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
         XCTAssertEqual(searchField.value as? String, "coffee")
+        XCTAssertFalse(app.keyboards.firstMatch.exists,
+                       "Returning from a place must preserve submitted results without reopening the keyboard.")
+        XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists,
+                      "Returning must preserve the search still in flight.")
+        XCTAssertTrue(app.staticTexts["favorites"].waitForExistence(timeout: 60),
+                      "The pending refinement must finish and update results after returning.")
+        XCTAssertFalse(app.staticTexts["Refining with smart filters…"].exists)
+        XCTAssertEqual(searchField.value as? String, "coffee")
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
 
         app.swipeUp()
         XCTAssertTrue(backButton.exists)
@@ -2433,9 +2478,11 @@ final class OnboardingUITests: XCTestCase {
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
-        // The opening takes 17.1 seconds, then both real benefit
-        // pages receive their reading time before the finite flow opens signup.
-        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "6"
+        // Give XCTest enough time to inspect the real benefit pages between
+        // automatic transitions. CI accessibility snapshots can take 30 seconds;
+        // each page must remain available long enough to observe. Production
+        // reading intervals remain unchanged and covered by unit tests.
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "45"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
         // Start the timed observation with the real Play control. Simulator
         // automation setup can take longer than the opening's reading interval.
@@ -2447,19 +2494,22 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.next"].exists)
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
         app.buttons["onboarding.pause"].tap()
-        let signupDeadline = Date().addingTimeInterval(39)
-        expectation(
-            for: NSPredicate(format: "value == %@", "2"),
-            evaluatedWith: carouselPage
-        )
-        waitForExpectations(timeout: 20)
+        // The opening runs for 17.1 seconds. Accessibility snapshots can wait
+        // behind its continuous film/MapKit animation, so allow observation lag.
+        // Every page and the final signup are still required in this bounded run.
+        let signupDeadline = Date().addingTimeInterval(150)
+        // Resolve a new query for each observation. A retained XCUIElement can
+        // keep its opening snapshot while the live accessibility tree is on 2.
+        expectation(for: NSPredicate { _, _ in
+            app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch.value as? String == "2"
+        }, evaluatedWith: nil)
+        waitForExpectations(timeout: 60)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
-        expectation(
-            for: NSPredicate(format: "value == %@", "3"),
-            evaluatedWith: carouselPage
-        )
-        waitForExpectations(timeout: 10)
+        expectation(for: NSPredicate { _, _ in
+            app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch.value as? String == "3"
+        }, evaluatedWith: nil)
+        waitForExpectations(timeout: 60)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         XCTAssertTrue(app.textFields["auth.email"].waitForExistence(
@@ -2572,8 +2622,22 @@ final class OnboardingUITests: XCTestCase {
             XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
             app.buttons["auth.close"].tap()
             XCTAssertTrue(next.waitForExistence(timeout: 8))
-            next.tap(); next.tap(); next.tap()
             let email = app.textFields["auth.email"]
+            // The film can advance while login is opened and closed. Drive
+            // each remaining page until signup, rather than tapping a fixed
+            // three times after the carousel has already reached its end.
+            for _ in 0..<3 {
+                if email.exists { break }
+                let page = app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch
+                let previousPage = page.value as? String
+                app.buttons["onboarding.next"].tap()
+                let advanced = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    if email.exists { return true }
+                    let current = app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch
+                    return current.exists && current.value as? String != previousPage
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [advanced], timeout: 10), .completed)
+            }
             XCTAssertTrue(email.waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["Create your account"].exists)
             XCTAssertFalse(app.buttons["auth.close"].exists)
@@ -2750,12 +2814,21 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(app.textViews["save.note"].value as? String, "Wanna mode draft")
         checkInChoice.tap()
 
-        let start = ProcessInfo.processInfo.systemUptime
         disclosure.tap()
         XCTAssertTrue((disclosure.value as? String)?.contains("Expanded") == true)
         let picker = app.descendants(matching: .any)["save.checkInDatePicker"]
         XCTAssertTrue(picker.exists)
-        let elapsed = ProcessInfo.processInfo.systemUptime - start
+        // The runner's tap and two AX queries alone can exceed one second on
+        // CI. Keep the app's one-second budget measured from its tap handler
+        // through the first displayed calendar frame.
+        let rendered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            Double(picker.value as? String ?? "") != nil
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [rendered], timeout: 5), .completed)
+        guard let elapsed = Double(picker.value as? String ?? "") else {
+            XCTFail("Calendar presentation did not report a rendered frame")
+            return
+        }
 
         XCTContext.runActivity(named: String(format: "Calendar tray presented in %.3f seconds", elapsed)) { _ in }
         print(String(format: "REC241_CALENDAR_TRAY_LATENCY_SECONDS=%.3f", elapsed))

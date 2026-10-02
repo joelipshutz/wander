@@ -35,6 +35,19 @@ struct ShareCardContent: Equatable {
     var action: String {
         switch kind { case .wanna: "Let’s Go"; case .invitation: "Join"; default: "View" }
     }
+    /// Messages owns the caption layout. Keep essential context in its native title
+    /// because it does not reliably display a separate Open Graph description.
+    var linkTitle: String {
+        let detail = kind == .invitation ? name : subtitle
+        let title = [headline, detail]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        // Stay within both the database character limit and the website's UTF-16 limit.
+        var bounded = String(title.prefix(500))
+        while bounded.utf16.count > 500 { bounded.removeLast() }
+        return bounded
+    }
     var socialTitle: String {
         switch kind {
         case .checkIn: "\(firstName) was here."
@@ -67,7 +80,7 @@ enum ShareCardFormat: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var size: CGSize {
         switch self {
-        case .link: CGSize(width: 390, height: 326)
+        case .link: CGSize(width: 390, height: 238)
         case .story: CGSize(width: 360, height: 640)
         case .post: CGSize(width: 360, height: 450)
         }
@@ -89,27 +102,7 @@ struct ShareCardArtwork: View {
     var body: some View {
         Group {
             if format == .link {
-                VStack(spacing: 0) {
-                    hero.frame(height: 238)
-                    HStack(spacing: 12) {
-                        appIcon.frame(width: 36, height: 36)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(content.headline).font(.system(size: 17, weight: .semibold, design: .serif))
-                                .lineLimit(2).minimumScaleFactor(0.8)
-                            if let subtitle = content.subtitle {
-                                Text(subtitle).font(.custom("AvenirNext-Medium", size: 11))
-                                    .foregroundStyle(brand.secondaryText).lineLimit(2)
-                            }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                        // Actions never disappear to make room for a long list title.
-                        Text(content.action).font(.custom("AvenirNext-DemiBold", size: 13))
-                            .fixedSize().padding(.horizontal, 13).frame(minHeight: 40)
-                            .foregroundStyle(brand.accentForeground).background(brand.accent, in: Capsule())
-                    }
-                    .padding(14).frame(height: 88)
-                }
-                .background(brand.raisedBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
+                hero.frame(height: format.size.height)
             } else {
                 social
             }
@@ -120,7 +113,7 @@ struct ShareCardArtwork: View {
         // bounds. Artwork is static and must never intercept the adjacent controls.
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([content.headline, content.subtitle, content.action].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityLabel(format == .link ? content.linkTitle : [content.headline, content.subtitle, content.action].compactMap { $0 }.joined(separator: ". "))
     }
 
     private var appIcon: some View {
@@ -131,7 +124,9 @@ struct ShareCardArtwork: View {
         GeometryReader { proxy in
             ZStack(alignment: .bottomLeading) {
                 artwork.frame(width: proxy.size.width, height: proxy.size.height).clipped()
-                if !(content.isCollage && content.count == 0) {
+                if format == .link {
+                    if content.kind == .profile { avatar(size: 60).padding(18) }
+                } else if !(content.isCollage && content.count == 0) {
                     if images.map != nil {
                         LinearGradient(stops: [
                             .init(color: .clear, location: 0),
@@ -173,7 +168,9 @@ struct ShareCardArtwork: View {
         } else if content.isCollage && content.count == 0 {
             VStack(spacing: 12) {
                 Image(systemName: "rectangle.stack").font(.system(size: 34, weight: .light))
-                Text(content.name).font(.system(size: 22, weight: .medium, design: .serif))
+                if format != .link {
+                    Text(content.name).font(.system(size: 22, weight: .medium, design: .serif))
+                }
                 Text("The first place is still to come.").font(.custom("AvenirNext-Medium", size: 13))
             }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity).background(brand.recessedBackground)
         } else if content.isCollage && content.count >= 2 {

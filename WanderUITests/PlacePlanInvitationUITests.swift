@@ -9,6 +9,7 @@ import XCTest
                          "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest"]
         app.launchArguments = arguments + ["-WanderResetNotificationBadge"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
         app.buttons["Profile"].firstMatch.tap()
         let bell = app.buttons["profile.checkInInvitations"]
@@ -33,6 +34,7 @@ import XCTest
         app.terminate()
         app.launchArguments = arguments
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
         app.buttons["Profile"].firstMatch.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
@@ -50,6 +52,7 @@ import XCTest
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
         app.buttons["Profile"].firstMatch.tap()
         let notifications = app.buttons["profile.checkInInvitations"]
@@ -81,6 +84,7 @@ import XCTest
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         openInvitation(token: String(repeating: "a", count: 48), in: app)
         XCTAssertTrue(app.staticTexts["place-plan.message"].waitForExistence(timeout: 15))
         XCTAssertEqual(app.staticTexts["place-plan.message"].label, "Coffee on Saturday?")
