@@ -47,20 +47,16 @@ final class YourMapPrototypeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive close - all category pins including overlaps")
 
-        // Re-resolve a fully visible pin after every zoom. A cached target can
-        // move under the header or shrink to an eight-point dot, too small for
-        // XCTest to synthesize the next two-finger gesture.
+        // The inverse density transition uses a fixture-only native camera
+        // request because annotation hit regions overlap at this zoom. Native
+        // double-tap and pinch behavior is covered separately below.
+        let zoomOut = app.buttons["yourMap.fixture.zoomOut"]
+        XCTAssertTrue(zoomOut.waitForExistence(timeout: 3))
         for _ in 0..<6 {
             if dots.count > 0 { break }
-            let zoomTarget = try XCTUnwrap(pins.allElementsBoundByIndex.filter {
-                let frame = $0.frame
-                return !coincidentIDs.contains($0.identifier) && $0.isHittable
-                    && frame.width >= 40 && frame.height >= 40
-                    && frame.minY > 180 && frame.maxY < app.frame.maxY - 180
-            }.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
-            zoomTarget.twoFingerTap()
+            zoomOut.tap()
         }
-        capture("REC-573 adaptive after zoom-out gesture")
+        capture("REC-573 adaptive after zoom-out camera request")
         expectation(for: NSPredicate { _, _ in dots.count > 0 && categories.count > 0 }, evaluatedWith: app)
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive zoomed back out")

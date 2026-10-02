@@ -146,6 +146,11 @@ final class ShareCardMockupUITests: XCTestCase {
         XCTAssertTrue(alert.staticTexts["Check your internet connection, then try sharing again."].exists)
         capture("publication-connection-error")
         alert.buttons["OK"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        let retryReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true AND isEnabled == true"), object: copy
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [retryReady], timeout: 5), .completed)
         copy.tap()
         XCTAssertTrue(app.staticTexts["link copied"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.alerts.firstMatch.exists)

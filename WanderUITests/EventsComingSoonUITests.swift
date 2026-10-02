@@ -22,6 +22,7 @@ import UIKit
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        configureNotificationReminderFixture(in: app)
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
@@ -39,12 +40,14 @@ import UIKit
             // The OS animates its appearance change; this wait is only for that
             // system transition, never for a tab selection.
             let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+                guard let pixels = try? self.pixelStats(app.tabBars.firstMatch.screenshot().image) else { return false }
                 return appearance == .light ? pixels.luminance > 0.55 : pixels.luminance < 0.45
             }, object: nil)
             let appearanceResult = XCTWaiter.wait(for: [expectation], timeout: 10)
             capture("Live appearance — \(appearance)")
-            XCTAssertEqual(appearanceResult, .completed)
+            let finalPixels = try pixelStats(app.tabBars.firstMatch.screenshot().image)
+            XCTAssertEqual(appearanceResult, .completed,
+                           "Requested \(appearance), device \(XCUIDevice.shared.appearance), rendered luminance \(finalPixels.luminance)")
         }
     }
 
@@ -89,6 +92,7 @@ import UIKit
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        configureNotificationReminderFixture(in: app)
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
         let tabs = app.tabBars.firstMatch
@@ -98,12 +102,14 @@ import UIKit
         // screen. Establish the initial rendered appearance before measuring
         // transitions; subsequent switches must pass without this wait.
         let initialAppearance = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+            guard let pixels = try? self.pixelStats(app.tabBars.firstMatch.screenshot().image) else { return false }
             return isLight ? pixels.luminance > 0.55 : pixels.luminance < 0.45
         }, object: nil)
         let appearanceResult = XCTWaiter.wait(for: [initialAppearance], timeout: 10)
         capture("\(mode) — Map before Events")
-        XCTAssertEqual(appearanceResult, .completed)
+        let initialPixels = try pixelStats(app.tabBars.firstMatch.screenshot().image)
+        XCTAssertEqual(appearanceResult, .completed,
+                       "Requested \(mode), device \(XCUIDevice.shared.appearance), rendered luminance \(initialPixels.luminance)")
         for (index, label) in ["Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
             tabs.buttons[label].tap()
             XCTAssertTrue(tabs.buttons[label].isSelected)
@@ -199,6 +205,9 @@ import UIKit
         }
         XCUIDevice.shared.press(.home)
         app.activate()
+        // A denied notification permission can present the reminder again on
+        // foreground. Dismiss that real modal before exercising the tabs.
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
         // Foreground entry rebuilds the tab presentation. Resolve its current
         // controls instead of tapping through the pre-background snapshot.
@@ -251,5 +260,10 @@ import UIKit
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func configureNotificationReminderFixture(in app: XCUIApplication) {
+        app.launchArguments.append("-WanderNotificationAuthorizationDeniedFixture")
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Events.\(UUID().uuidString)"
     }
 }

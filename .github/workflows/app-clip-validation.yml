@@ -60,6 +60,8 @@ jobs:
           lfs: true
           persist-credentials: false
       - name: Generate project and select simulator
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
         run: |
           brew install xcodegen
           xcodegen generate
@@ -85,6 +87,11 @@ jobs:
           # Start system services before compilation, so first-boot setup is not
           # competing with the first app animation/performance measurement.
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
+          if os.environ['TEST_SUITE'] in ('ui', 'ui-performance'):
+              # Attach the display before testing native materials and frame
+              # cadence, rather than depending on headless display scheduling.
+              subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', device['udid']], check=True)
+              subprocess.run(['xcrun', 'simctl', 'ui', device['udid'], 'appearance'], check=True)
           PY
       # Ad-hoc signing is required for Clerk's Keychain initialization in the
       # real startup path; this uses no Apple distribution identity or secrets.
