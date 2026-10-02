@@ -22,7 +22,6 @@ struct TrustedPlaceSearchQuery: Equatable {
     let scoringTokens: [String]
     let requiredTokens: [String]
     let consumedTokens: [String]
-    fileprivate let scoringPhrase: String
     fileprivate let requiredTokenIndexes: [Int]
 
     var hasMeaningfulTokens: Bool {
@@ -58,7 +57,6 @@ struct TrustedPlaceSearchQuery: Equatable {
         scoringTokens = scoring
         requiredTokens = required
         consumedTokens = consumed
-        scoringPhrase = scoring.joined(separator: " ")
         requiredTokenIndexes = required.compactMap { scoring.firstIndex(of: $0) }
     }
 }
@@ -133,7 +131,7 @@ enum TrustedPlaceSearch {
         }
 
         var score = tokenMatches.reduce(0) { $0 + ($1?.score ?? 0) }
-        score += document.phraseBonus(for: query.scoringPhrase, tokenCount: query.scoringTokens.count)
+        score += document.phraseBonus(for: query.scoringTokens)
 
         var evidenceByField: [TrustedPlaceSearchField: (displayValue: String, tokens: [String])] = [:]
         for match in tokenMatches.compactMap({ $0 }) {
@@ -967,7 +965,6 @@ private struct TrustedPlaceSearchDocument {
         let field: TrustedPlaceSearchField
         let displayValue: String
         let normalizedTokens: [String]
-        let normalizedPhrase: String
         let weight: Int
 
     }
@@ -1043,7 +1040,6 @@ private struct TrustedPlaceSearchDocument {
                         field: .attribute,
                         displayValue: displayValue,
                         normalizedTokens: tokens,
-                        normalizedPhrase: tokens.joined(separator: " "),
                         weight: 14
                     )
                 )
@@ -1127,26 +1123,24 @@ private struct TrustedPlaceSearchDocument {
             || (candidate.score == current.score && candidate.field.rawValue < current.field.rawValue)
     }
 
-    func phraseBonus(for phrase: String, tokenCount: Int) -> Int {
-        guard !phrase.isEmpty else { return 0 }
+    func phraseBonus(for phraseTokens: [String]) -> Int {
+        guard let firstToken = phraseTokens.first else { return 0 }
         var best = 0
 
-        // A phrase cannot fit in a field containing fewer words. Most fields
-        // are short, so avoid repeated string searches for multi-word queries.
-        for field in fields where field.normalizedTokens.count >= tokenCount {
-            let fieldPhrase = field.normalizedPhrase
-            let multiplier: Int
-            if fieldPhrase == phrase {
-                multiplier = 5
-            } else if fieldPhrase.hasPrefix(phrase + " ") {
-                multiplier = 4
-            } else if fieldPhrase.contains(" " + phrase + " ")
-                        || fieldPhrase.hasSuffix(" " + phrase) {
-                multiplier = 3
-            } else {
-                continue
+        // Both inputs already use normalized, space-delimited tokens. Compare
+        // those directly instead of allocating boundary strings for every field
+        // in every place. Short fields cannot contain the entire phrase.
+        for field in fields where field.normalizedTokens.count >= phraseTokens.count {
+            let tokens = field.normalizedTokens
+            for start in 0...(tokens.count - phraseTokens.count) {
+                guard tokens[start] == firstToken,
+                      phraseTokens.indices.dropFirst().allSatisfy({ tokens[start + $0] == phraseTokens[$0] })
+                else { continue }
+                let multiplier = start == 0 ? (tokens.count == phraseTokens.count ? 5 : 4) : 3
+                best = max(best, field.weight * multiplier)
+                // The first occurrence has the greatest possible phrase bonus.
+                break
             }
-            best = max(best, field.weight * multiplier)
         }
         return best
     }
@@ -1174,7 +1168,6 @@ private struct TrustedPlaceSearchDocument {
                     field: field,
                     displayValue: value,
                     normalizedTokens: tokens,
-                    normalizedPhrase: tokens.joined(separator: " "),
                     weight: weight
                 )
             )

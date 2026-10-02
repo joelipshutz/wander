@@ -92,7 +92,18 @@ final class ProfileResponsivenessUITests: XCTestCase {
                 let link = app.descendants(matching: .any).matching(
                     NSPredicate(format: "identifier == %@ OR label == %@", row, row)
                 ).firstMatch
-                for _ in 0..<24 where !link.isHittable { app.swipeUp(velocity: .fast) }
+                let settingsScreen = app.descendants(matching: .any)["settings.screen"].firstMatch
+                // A fast fling can skip a short row and leave it above the
+                // viewport. Scroll toward the actual row without momentum.
+                for _ in 0..<24 {
+                    if link.isHittable { break }
+                    let rowFrame = link.exists ? link.frame : .zero
+                    if !rowFrame.isEmpty, rowFrame.maxY < settingsScreen.frame.midY {
+                        settingsScreen.swipeDown(velocity: .slow)
+                    } else {
+                        settingsScreen.swipeUp(velocity: .slow)
+                    }
+                }
                 XCTAssertTrue(link.isHittable, "Missing Settings destination: \(row)")
                 let start = Date()
                 link.tap()

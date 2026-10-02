@@ -41,6 +41,14 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
+        // Remote configuration arrives asynchronously even through the offline
+        // protocol. Wait for the real capture precondition before spending the
+        // layout budget; CI can otherwise finish all pulses before replay starts.
+        let activationDeadline = Date().addingTimeInterval(30)
+        while !sdk.isSessionReplayActive(), Date() < activationDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(sdk.isSessionReplayActive(), "Offline replay must activate before capture")
         // The SDK swizzles UIView.layoutSublayers(of:). SwiftUI's hosting view
         // and UIWindow can override that path, so pulse an ordinary UIView
         // instead of relying on unrelated app-host animations to trigger replay.

@@ -2441,8 +2441,10 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
         // Give XCTest enough time to inspect the real benefit pages between
-        // automatic transitions. The production timing is covered by unit tests.
-        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "12"
+        // automatic transitions. CI accessibility snapshots can take 30 seconds;
+        // each page must remain available long enough to observe. Production
+        // reading intervals remain unchanged and covered by unit tests.
+        app.launchEnvironment["WANDER_ONBOARDING_AUTO_ADVANCE_SECONDS"] = "45"
         app.launchEnvironment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] = "1"
         // Start the timed observation with the real Play control. Simulator
         // automation setup can take longer than the opening's reading interval.
@@ -2457,19 +2459,19 @@ final class OnboardingUITests: XCTestCase {
         // The opening runs for 17.1 seconds. Accessibility snapshots can wait
         // behind its continuous film/MapKit animation, so allow observation lag.
         // Every page and the final signup are still required in this bounded run.
-        let signupDeadline = Date().addingTimeInterval(65)
+        let signupDeadline = Date().addingTimeInterval(150)
         expectation(
             for: NSPredicate(format: "value == %@", "2"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 30)
+        waitForExpectations(timeout: 60)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         expectation(
             for: NSPredicate(format: "value == %@", "3"),
             evaluatedWith: carouselPage
         )
-        waitForExpectations(timeout: 20)
+        waitForExpectations(timeout: 60)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         XCTAssertTrue(app.textFields["auth.email"].waitForExistence(

@@ -17,13 +17,18 @@ final class YourMapPrototypeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive wide - all 177 places")
 
+        // These three fixture markers share the same coordinate. The map
+        // intentionally cycles their selection, so target a distinct place for
+        // the exact-ID tap assertion; close zoom still verifies every overlap.
+        let coincidentIDs = Set([0, 84, 173].map { "yourMap.prototype.pin.adaptive-\($0)" })
         let dot = dots.allElementsBoundByIndex.first {
-            $0.isHittable && $0.frame.minY > 180 && $0.frame.maxY < app.frame.maxY - 180
+            !coincidentIDs.contains($0.identifier) && $0.isHittable
+                && $0.frame.minY > 180 && $0.frame.maxY < app.frame.maxY - 180
         }
         XCTAssertNotNil(dot)
         let dotID = dot!.identifier
         let dotPosition = dot!.frame
-        dot!.tap()
+        dot!.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let promoted = pins.matching(identifier: dotID).firstMatch
         expectation(for: NSPredicate(format: "value == %@", "Category pin"), evaluatedWith: promoted)
         waitForExpectations(timeout: 5)
@@ -42,15 +47,18 @@ final class YourMapPrototypeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive close - all category pins including overlaps")
 
-        // XCTest spreads multi-touch events across the target's whole frame.
-        // Use the frontmost selected pin's larger frame so both touches reach
-        // the map and aren't obstructed by coincident pins or overlay controls.
-        let zoomTarget = try XCTUnwrap(pins.allElementsBoundByIndex.filter {
-            $0.isHittable && app.frame.contains($0.frame)
-        }.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+        // Re-resolve a fully visible pin after every zoom. A cached target can
+        // move under the header or shrink to an eight-point dot, too small for
+        // XCTest to synthesize the next two-finger gesture.
         for _ in 0..<6 {
-            zoomTarget.twoFingerTap()
             if dots.count > 0 { break }
+            let zoomTarget = try XCTUnwrap(pins.allElementsBoundByIndex.filter {
+                let frame = $0.frame
+                return !coincidentIDs.contains($0.identifier) && $0.isHittable
+                    && frame.width >= 40 && frame.height >= 40
+                    && frame.minY > 180 && frame.maxY < app.frame.maxY - 180
+            }.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+            zoomTarget.twoFingerTap()
         }
         capture("REC-573 adaptive after zoom-out gesture")
         expectation(for: NSPredicate { _, _ in dots.count > 0 && categories.count > 0 }, evaluatedWith: app)
