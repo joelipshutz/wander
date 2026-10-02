@@ -21,7 +21,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    name: Parent test build
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          lfs: true
+          persist-credentials: false
+      - name: Build portable test products once
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
+            -testProductsPath "$RUNNER_TEMP/Parent.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          git rev-parse HEAD > "$RUNNER_TEMP/test-products-commit.txt"
+          xcodebuild -version > "$RUNNER_TEMP/test-products-xcode.txt"
+          # Preserve executable permissions and bundle symlinks in transport.
+          tar -czf "$RUNNER_TEMP/parent-test-products.tar.gz" -C "$RUNNER_TEMP" \
+            Parent.xctestproducts test-products-commit.txt test-products-xcode.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parent-test-products
+          path: ${{ runner.temp }}/parent-test-products.tar.gz
+          compression-level: 0
+          retention-days: 2
+
   parent:
+    needs: build
     name: Parent ${{ matrix.name }}
     runs-on: macos-26
     timeout-minutes: 110
@@ -93,6 +125,16 @@ jobs:
               subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', device['udid']], check=True)
               subprocess.run(['xcrun', 'simctl', 'ui', device['udid'], 'appearance'], check=True)
           PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: parent-test-products
+          path: ${{ runner.temp }}
+      - name: Verify and unpack test products
+        run: |
+          tar -xzf "$RUNNER_TEMP/parent-test-products.tar.gz" -C "$RUNNER_TEMP"
+          test "$(cat "$RUNNER_TEMP/test-products-commit.txt")" = "$(git rev-parse HEAD)"
+          xcodebuild -version > "$RUNNER_TEMP/current-xcode.txt"
+          diff -u "$RUNNER_TEMP/test-products-xcode.txt" "$RUNNER_TEMP/current-xcode.txt"
       # Ad-hoc signing is required for Clerk's Keychain initialization in the
       # real startup path; this uses no Apple distribution identity or secrets.
       - name: Run complete parent suite
@@ -102,7 +144,7 @@ jobs:
         run: >-
           python3 scripts/run-parent-regression.py --suite "$TEST_SUITE"
           --shard "$TEST_SHARD" --shard-count 4
-          --destination "$TEST_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData"
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
           --result-bundle "$RUNNER_TEMP/Parent.xcresult"
           --selection-file "$RUNNER_TEMP/test-selection.json"
       - name: Summarize test result

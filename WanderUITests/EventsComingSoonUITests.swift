@@ -32,7 +32,7 @@ import UIKit
             source.press(forDuration: 0.4, thenDragTo: tabs.buttons[destination])
             XCTAssertTrue(tabs.buttons[destination].isSelected)
             capture("Scrub — \(destination)")
-            let pixels = try pixelStats(tabs.screenshot().image)
+            let pixels = try XCTUnwrap(tabBarPixels(in: app))
             XCTAssertGreaterThan(pixels.luminance, 0.55, "Light glass became dark after scrubbing to \(destination).")
         }
         for appearance in [XCUIDevice.Appearance.dark, .light, .dark, .light] {
@@ -40,12 +40,12 @@ import UIKit
             // The OS animates its appearance change; this wait is only for that
             // system transition, never for a tab selection.
             let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                guard let pixels = try? self.pixelStats(app.tabBars.firstMatch.screenshot().image) else { return false }
+                guard let pixels = try? self.tabBarPixels(in: app) else { return false }
                 return appearance == .light ? pixels.luminance > 0.55 : pixels.luminance < 0.45
             }, object: nil)
             let appearanceResult = XCTWaiter.wait(for: [expectation], timeout: 10)
             capture("Live appearance — \(appearance)")
-            let finalPixels = try pixelStats(app.tabBars.firstMatch.screenshot().image)
+            let finalPixels = try XCTUnwrap(tabBarPixels(in: app))
             XCTAssertEqual(appearanceResult, .completed,
                            "Requested \(appearance), device \(XCUIDevice.shared.appearance), rendered luminance \(finalPixels.luminance)")
         }
@@ -102,12 +102,12 @@ import UIKit
         // screen. Establish the initial rendered appearance before measuring
         // transitions; subsequent switches must pass without this wait.
         let initialAppearance = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let pixels = try? self.pixelStats(app.tabBars.firstMatch.screenshot().image) else { return false }
+            guard let pixels = try? self.tabBarPixels(in: app) else { return false }
             return isLight ? pixels.luminance > 0.55 : pixels.luminance < 0.45
         }, object: nil)
         let appearanceResult = XCTWaiter.wait(for: [initialAppearance], timeout: 10)
         capture("\(mode) — Map before Events")
-        let initialPixels = try pixelStats(app.tabBars.firstMatch.screenshot().image)
+        let initialPixels = try XCTUnwrap(tabBarPixels(in: app))
         XCTAssertEqual(appearanceResult, .completed,
                        "Requested \(mode), device \(XCUIDevice.shared.appearance), rendered luminance \(initialPixels.luminance)")
         for (index, label) in ["Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
@@ -121,12 +121,12 @@ import UIKit
             if index == 0 { capture("\(mode) — Events") }
             if index == 7 { capture("\(mode) — Map after Events") }
             let accentReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+                guard let pixels = try? self.tabBarPixels(in: app) else { return false }
                 return pixels.signalPixels > 30
             }, object: nil)
             XCTAssertEqual(XCTWaiter.wait(for: [accentReady], timeout: 3), .completed,
                            "The selected tab must settle to the coral accent on \(label), step \(index).")
-            let barPixels = try pixelStats(tabs.screenshot().image)
+            let barPixels = try XCTUnwrap(tabBarPixels(in: app))
             let luminance = barPixels.luminance
             XCTAssertGreaterThan(barPixels.signalPixels, 30, "The selected tab must keep the coral accent on \(label), step \(index).")
             if isLight {
@@ -135,6 +135,27 @@ import UIKit
                 XCTAssertLessThan(luminance, 0.45, "Dark bar became light on \(label), step \(index).")
             }
         }
+    }
+
+    /// Native appearance transitions briefly replace the accessibility element
+    /// with an empty frame. Observe the screen without asking XCTest to capture
+    /// that transient element (which fails the test before a wait can retry).
+    private func tabBarPixels(in app: XCUIApplication) throws -> (luminance: Double, signalPixels: Int)? {
+        let bar = app.tabBars.firstMatch
+        guard bar.exists else { return nil }
+        let frame = bar.frame, screen = app.frame
+        guard !frame.isEmpty, !screen.isEmpty else { return nil }
+        let image = XCUIScreen.main.screenshot().image
+        guard let cgImage = image.cgImage else { return nil }
+        let scaleX = CGFloat(cgImage.width) / screen.width
+        let scaleY = CGFloat(cgImage.height) / screen.height
+        let rect = CGRect(
+            x: (frame.minX - screen.minX) * scaleX,
+            y: (frame.minY - screen.minY) * scaleY,
+            width: frame.width * scaleX, height: frame.height * scaleY
+        ).intersection(CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+        guard !rect.isEmpty, let crop = cgImage.cropping(to: rect) else { return nil }
+        return try pixelStats(UIImage(cgImage: crop))
     }
 
     /// Measure the visible native bar, not a SwiftUI environment value. Cropping

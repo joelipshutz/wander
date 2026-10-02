@@ -152,6 +152,10 @@ final class PersonTypeaheadUITests: XCTestCase {
         // The inserted trailing space is ordinary text. The next delete removes
         // the entire tagged person, including @, and keeps preceding text.
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
+        // UIKit can finish the native edit before its accessibility value is
+        // refreshed. Observe the result without sending another delete.
+        expectation(for: NSPredicate(format: "value == %@", remaining), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(field.value as? String, remaining)
     }
 

@@ -46,6 +46,7 @@ def main() -> int:
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
     parser.add_argument("--derived-data")
+    parser.add_argument("--test-products", help="Prepared .xctestproducts bundle; run without recompiling")
     parser.add_argument("--result-bundle")
     parser.add_argument("--selection-file")
     parser.add_argument("--list-only", action="store_true")
@@ -88,8 +89,8 @@ def main() -> int:
     if args.list_only:
         print(json.dumps(selection, indent=2))
         return 0
-    if not all([args.destination, args.derived_data, args.result_bundle]):
-        parser.error("destination, derived-data and result-bundle are required to run tests")
+    if not all([args.destination, args.result_bundle]) or not (args.derived_data or args.test_products):
+        parser.error("destination, result-bundle and either derived-data or test-products are required to run tests")
     if "WanderUITests/NativeOnboardingFlowUITests/testProfilePreviewUpdatesWithOptionalPhoto" in selected:
         # The real PhotoKit picker needs an actual library item on a fresh CI
         # simulator. Use the same public bundled artwork as the review fixture;
@@ -98,12 +99,16 @@ def main() -> int:
         photo = root / "Wander/Resources/Assets.xcassets/PlaceCarouselAvatars.imageset/place-carousel-avatars.png"
         subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
-    command = ["xcodebuild", "test", "-quiet", "-project", "Wander.xcodeproj", "-scheme", "Wander",
-               "-destination", f"platform=iOS Simulator,id={args.destination}",
-               "-derivedDataPath", args.derived_data, "-jobs", "2", "-parallel-testing-enabled", "NO",
+    if args.test_products:
+        command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", args.test_products]
+    else:
+        command = ["xcodebuild", "test", "-quiet", "-project", "Wander.xcodeproj", "-scheme", "Wander",
+                   "-derivedDataPath", args.derived_data,
+                   "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "GENERATE_INFOPLIST_FILE=YES"]
+    command += ["-destination", f"platform=iOS Simulator,id={args.destination}",
+               "-jobs", "2", "-parallel-testing-enabled", "NO",
                "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
-               "-maximum-test-execution-time-allowance", "900", "-resultBundlePath", args.result_bundle,
-               "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "GENERATE_INFOPLIST_FILE=YES"]
+               "-maximum-test-execution-time-allowance", "900", "-resultBundlePath", args.result_bundle]
     command.extend(f"-only-testing:{identifier}" for identifier in selected)
     command.extend(f"-skip-testing:{identifier}" for identifier in excluded)
     return subprocess.run(command, cwd=root, check=False).returncode

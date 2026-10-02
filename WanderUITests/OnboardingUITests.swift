@@ -2617,8 +2617,22 @@ final class OnboardingUITests: XCTestCase {
             XCTAssertTrue(app.textFields["auth.email"].waitForExistence(timeout: 8))
             app.buttons["auth.close"].tap()
             XCTAssertTrue(next.waitForExistence(timeout: 8))
-            next.tap(); next.tap(); next.tap()
             let email = app.textFields["auth.email"]
+            // The film can advance while login is opened and closed. Drive
+            // each remaining page until signup, rather than tapping a fixed
+            // three times after the carousel has already reached its end.
+            for _ in 0..<3 {
+                if email.exists { break }
+                let page = app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch
+                let previousPage = page.value as? String
+                app.buttons["onboarding.next"].tap()
+                let advanced = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    if email.exists { return true }
+                    let current = app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch
+                    return current.exists && current.value as? String != previousPage
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [advanced], timeout: 10), .completed)
+            }
             XCTAssertTrue(email.waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["Create your account"].exists)
             XCTAssertFalse(app.buttons["auth.close"].exists)
