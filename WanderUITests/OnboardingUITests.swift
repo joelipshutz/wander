@@ -1364,7 +1364,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
     }
 
-    func testReturningUserColdStartOpensFeedAndForegroundKeepsSelectedTab() {
+    func testReturningUserColdStartAndOrdinaryForegroundOpenFeed() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
         app.launch()
@@ -1379,8 +1379,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(mapTab.isSelected)
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(mapTab.waitForExistence(timeout: 4))
-        XCTAssertTrue(mapTab.isSelected)
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
+        XCTAssertTrue(feedTab.isSelected)
 
         app.terminate()
         app.launch()
@@ -1449,7 +1449,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
 
         placeSearch.tap()
-        XCTAssertTrue(app.textFields["discover.placesSearchField"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.textViews["discover.placesSearchField"].waitForExistence(timeout: 4))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-383 adaptive Feed header restored"
@@ -1513,7 +1513,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let cancelButton = app.buttons["map.searchCancel"]
         let typeaheadPanel = app.otherElements["map.typeaheadPanel"]
         let keyboard = app.keyboards.firstMatch
@@ -1745,7 +1745,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
@@ -1758,7 +1758,7 @@ final class OnboardingUITests: XCTestCase {
         checkIn.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let restoredNote = app.textFields["save.note"]
+        let restoredNote = app.textViews["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
@@ -1800,7 +1800,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
@@ -1813,7 +1813,7 @@ final class OnboardingUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let restoredNote = app.textFields["save.note"]
+        let restoredNote = app.textViews["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
@@ -1833,7 +1833,7 @@ final class OnboardingUITests: XCTestCase {
         let switchedTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
         XCTAssertTrue(switchedTray.waitForExistence(timeout: 3))
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
-        let preservedNote = app.textFields["save.note"]
+        let preservedNote = app.textViews["save.note"]
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
@@ -1929,7 +1929,7 @@ final class OnboardingUITests: XCTestCase {
         let attachedTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
 
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         note.tap()
@@ -1975,7 +1975,7 @@ final class OnboardingUITests: XCTestCase {
             let wanna = app.buttons["place-profile.floating-action.wanna"]
             XCTAssertTrue(wanna.waitForExistence(timeout: 6))
             wanna.tap()
-            let note = app.textFields["save.note"]
+            let note = app.textViews["save.note"]
             XCTAssertTrue(note.waitForExistence(timeout: 4))
             XCTAssertFalse((note.value as? String ?? "").contains("Wanna record"))
             note.tap()
@@ -1996,7 +1996,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertNotNil(pencil, "Every owned Wanna tile should offer its edit pencil")
         guard let pencil else { return }
         pencil.tap()
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 4))
         let original = note.value as? String ?? ""
         XCTAssertTrue(original.contains("Wanna record"), "Editing must load this event's own details")
@@ -2031,7 +2031,7 @@ final class OnboardingUITests: XCTestCase {
         let scroll = app.scrollViews["save.editorScroll"].firstMatch
         XCTAssertTrue(scroll.waitForExistence(timeout: 4))
         let compactTop = scroll.frame.minY
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.exists)
         let noteTop = note.frame.minY
         let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.65))
@@ -2146,7 +2146,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
 
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         // The main Wanna action creates a new event, even for a saved place.
@@ -2161,7 +2161,7 @@ final class OnboardingUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let freshNote = app.textFields["save.note"]
+        let freshNote = app.textViews["save.note"]
         XCTAssertTrue(freshNote.waitForExistence(timeout: 3))
         XCTAssertEqual(freshNote.value as? String, freshNote.placeholderValue,
                        "A repeated Wanna starts fresh instead of editing a saved or abandoned event")
@@ -2180,7 +2180,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
-        let conversionNote = app.textFields["save.note"]
+        let conversionNote = app.textViews["save.note"]
         XCTAssertTrue(conversionNote.waitForExistence(timeout: 3))
         XCTAssertEqual(conversionNote.value as? String, "Current Wanna draft")
 
@@ -2260,7 +2260,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(launcher.waitForExistence(timeout: 4))
         launcher.tap()
 
-        let searchField = app.textFields["discover.placesSearchField"]
+        let searchField = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 4))
         let backButton = app.buttons["discover.searchBack"]
         XCTAssertTrue(backButton.waitForExistence(timeout: 2))
@@ -2344,7 +2344,7 @@ final class OnboardingUITests: XCTestCase {
         let launcher = app.buttons["feed.searchLauncher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 8))
         launcher.tap()
-        let search = app.textFields["discover.placesSearchField"]
+        let search = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(search.waitForExistence(timeout: 4))
         search.tap()
         search.typeText("ryan")
@@ -2709,7 +2709,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(statusSelector.exists)
         let rating = app.descendants(matching: .any)["place-rating-slider"]
         XCTAssertTrue(rating.exists)
-        let note = app.textFields["save.note"]
+        let note = app.textViews["save.note"]
         XCTAssertTrue(note.exists)
         XCTAssertLessThan(statusSelector.frame.minY, rating.frame.minY)
         XCTAssertLessThan(rating.frame.minY, note.frame.minY)
@@ -2727,10 +2727,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
         saveButton.tap()
         XCTAssertTrue(statusSelector.waitForExistence(timeout: 3))
-        XCTAssertNotEqual(app.textFields["save.note"].value as? String, "Discard this draft")
+        XCTAssertNotEqual(app.textViews["save.note"].value as? String, "Discard this draft")
 
-        app.textFields["save.note"].tap()
-        app.textFields["save.note"].typeText("Check-in mode draft")
+        app.textViews["save.note"].tap()
+        app.textViews["save.note"].typeText("Check-in mode draft")
         let wannaChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isHittable)
@@ -2739,15 +2739,15 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(wannaChoice.isSelected)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label IN %@", ["Show more options", "Hide more options"])).firstMatch.exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
-        let wannaNote = app.textFields["save.note"]
+        let wannaNote = app.textViews["save.note"]
         XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")
         wannaNote.tap()
         wannaNote.typeText("Wanna mode draft")
         XCTAssertTrue(checkInChoice.isHittable)
         checkInChoice.tap()
-        XCTAssertEqual(app.textFields["save.note"].value as? String, "Check-in mode draft")
+        XCTAssertEqual(app.textViews["save.note"].value as? String, "Check-in mode draft")
         wannaChoice.tap()
-        XCTAssertEqual(app.textFields["save.note"].value as? String, "Wanna mode draft")
+        XCTAssertEqual(app.textViews["save.note"].value as? String, "Wanna mode draft")
         checkInChoice.tap()
 
         let start = ProcessInfo.processInfo.systemUptime

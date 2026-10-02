@@ -1129,7 +1129,7 @@ final class MapHitTestingTests: XCTestCase {
                 .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier").first
         )
         XCTAssertTrue(searchBar.contains("onQueryEdited()"))
-        XCTAssertTrue(searchBar.contains("draftQuery = \"\"\n                    onClear()"))
+        XCTAssertTrue(searchBar.contains("draftQuery = \"\"\n                    personMentions = []\n                    onClear()"))
         XCTAssertTrue(searchBar.contains(".accessibilityIdentifier(\"map.searchClear\")"))
         XCTAssertTrue(searchBar.contains(".onChange(of: isFocused.wrappedValue)"))
         XCTAssertTrue(searchBar.contains("cancelPendingQueryCommitAndSyncDraft()"))
@@ -1580,16 +1580,16 @@ final class MapHitTestingTests: XCTestCase {
                 .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier").first
         )
         let submission = try XCTUnwrap(
-            searchBar.components(separatedBy: ".onSubmit {").last?
+            searchBar.components(separatedBy: "onSubmit: {").last?
                 .components(separatedBy: ".task(id: focusRequestID)").first
         )
 
         XCTAssertTrue(searchBar.contains("let onSubmit: (String) -> Void"))
-        XCTAssertTrue(submission.contains("let requestedQuery = draftQuery"))
-        XCTAssertTrue(submission.contains("commitDraftQuery(requestedQuery)"))
+        XCTAssertTrue(submission.contains("let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText"))
+        XCTAssertTrue(submission.contains("commitDraftQuery(draftQuery)"))
         XCTAssertTrue(submission.contains("onSubmit(requestedQuery)"))
         XCTAssertLessThan(
-            try XCTUnwrap(submission.range(of: "commitDraftQuery(requestedQuery)")).lowerBound,
+            try XCTUnwrap(submission.range(of: "commitDraftQuery(draftQuery)")).lowerBound,
             try XCTUnwrap(submission.range(of: "onSubmit(requestedQuery)")).lowerBound
         )
 

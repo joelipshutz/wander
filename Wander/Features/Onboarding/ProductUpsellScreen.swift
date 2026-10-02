@@ -257,21 +257,34 @@ struct OnboardingNotificationExamples: View {
 private struct ProductUpsellPresentationBlockerModifier: ViewModifier {
     @EnvironmentObject private var coordinator: ProductUpsellCoordinator
     let isPresented: Bool
+    let preservesForegroundEntry: Bool
     @State private var blockerID = UUID()
 
     func body(content: Content) -> some View {
         content
             .onChange(of: isPresented, initial: true) { _, isPresented in
-                coordinator.setPresentationBlocker(id: blockerID, isActive: isPresented)
+                updateBlocker()
+            }
+            .onChange(of: preservesForegroundEntry) { _, _ in
+                updateBlocker()
             }
             .onDisappear {
                 coordinator.setPresentationBlocker(id: blockerID, isActive: false)
             }
     }
+
+    private func updateBlocker() {
+        coordinator.setPresentationBlocker(
+            id: blockerID, isActive: isPresented,
+            preservesForegroundEntry: preservesForegroundEntry
+        )
+    }
 }
 
 extension View {
-    func blocksProductUpsells(while isPresented: Bool) -> some View {
-        modifier(ProductUpsellPresentationBlockerModifier(isPresented: isPresented))
+    func blocksProductUpsells(while isPresented: Bool, preservesForegroundEntry: Bool = false) -> some View {
+        modifier(ProductUpsellPresentationBlockerModifier(
+            isPresented: isPresented, preservesForegroundEntry: preservesForegroundEntry
+        ))
     }
 }

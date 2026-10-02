@@ -1426,6 +1426,7 @@ struct MapScreen: View {
     @State private var placeProfileDismissalID: UUID?
     @State private var placeProfileDismissalCompletion: (@MainActor () -> Void)?
     @State private var mapQuery: String
+    @State private var mapPersonMentions: [PersonMention] = []
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
     @State private var submittedSavedSearchGroups: [VisiblePlaceGroup] = []
@@ -1488,7 +1489,7 @@ struct MapScreen: View {
     #if DEBUG
     @State private var mapPerformanceProbeSnapshot = ""
     #endif
-    @FocusState private var isMapSearchFocused: Bool
+    @State private var isMapSearchFocused = false
     @State private var renderProjectionCache = MapRenderProjectionCache<
         MapRenderProjectionKey,
         MapRenderProjection
@@ -1892,9 +1893,13 @@ struct MapScreen: View {
         )
     }
 
+    private var resolvedMapQuery: String {
+        PersonMentionDraft(text: mapQuery, mentions: mapPersonMentions).searchText
+    }
+
     private var shouldShowTypeahead: Bool {
         let normalized = Self.normalized(mapQuery)
-        return normalized.count >= 2
+        return normalized.count >= 2 && !mapQuery.contains("@")
             && suppressedTypeaheadQuery != normalized
             && (isLoadingTypeahead || !typeaheadSuggestions.isEmpty)
     }
@@ -2221,9 +2226,10 @@ struct MapScreen: View {
                         }
 
                         WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
-                            HStack(spacing: WanderTheme.spacing3) {
+                            HStack(alignment: .bottom, spacing: WanderTheme.spacing3) {
                                 SearchBar(
                                         query: $mapQuery,
+                                        personMentions: $mapPersonMentions,
                                         isFocused: $isMapSearchFocused,
                                         focusRequestID: mapSearchFocusRequestID,
                                         onFocusRequestHandled: { requestID in
@@ -4571,7 +4577,7 @@ struct MapScreen: View {
                 requestRevision: requestRevision,
                 currentRevision: mapSearchRevision,
                 requestedQuery: requestedQuery,
-                currentQuery: mapQuery,
+                currentQuery: resolvedMapQuery,
                 isCancelled: Task.isCancelled,
                 requestAuthorizationContext: authorizationContext,
                 currentAuthorizationContext: mapSearchAuthorizationContext
@@ -4589,7 +4595,7 @@ struct MapScreen: View {
             requestRevision: requestRevision,
             currentRevision: mapSearchRevision,
             requestedQuery: requestedQuery,
-            currentQuery: mapQuery,
+            currentQuery: resolvedMapQuery,
             isCancelled: Task.isCancelled,
             requestAuthorizationContext: authorizationContext,
             currentAuthorizationContext: mapSearchAuthorizationContext
@@ -4618,7 +4624,7 @@ struct MapScreen: View {
                 requestRevision: requestRevision,
                 currentRevision: mapSearchRevision,
                 requestedQuery: requestedQuery,
-                currentQuery: mapQuery,
+                currentQuery: resolvedMapQuery,
                 isCancelled: Task.isCancelled,
                 requestAuthorizationContext: authorizationContext,
                 currentAuthorizationContext: mapSearchAuthorizationContext
@@ -4687,7 +4693,7 @@ struct MapScreen: View {
                 requestRevision: requestRevision,
                 currentRevision: mapSearchRevision,
                 requestedQuery: requestedQuery,
-                currentQuery: mapQuery,
+                currentQuery: resolvedMapQuery,
                 isCancelled: Task.isCancelled,
                 requestAuthorizationContext: authorizationContext,
                 currentAuthorizationContext: mapSearchAuthorizationContext
@@ -5989,7 +5995,7 @@ struct MapScreen: View {
         typeaheadTask?.cancel()
         let normalized = Self.normalized(query)
 
-        guard normalized.count >= 2 else {
+        guard normalized.count >= 2, !query.contains("@") else {
             typeaheadSuggestions = []
             isLoadingTypeahead = false
             return
@@ -9420,7 +9426,7 @@ private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var query: String
-    let isFocused: FocusState<Bool>.Binding
+    let isFocused: Binding<Bool>
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
     let onQueryEdited: () -> Void
@@ -9429,11 +9435,13 @@ private struct SearchBar: View {
     @Environment(\.wanderMapAppearance) private var appearance
     @Environment(\.astirBrandMode) private var astirBrandMode
     @State private var draftQuery: String
+    @Binding var personMentions: [PersonMention]
     @State private var queryCommitTask: Task<Void, Never>?
 
     init(
         query: Binding<String>,
-        isFocused: FocusState<Bool>.Binding,
+        personMentions: Binding<[PersonMention]>,
+        isFocused: Binding<Bool>,
         focusRequestID: UUID?,
         onFocusRequestHandled: @escaping (UUID) -> Void,
         onQueryEdited: @escaping () -> Void,
@@ -9441,6 +9449,7 @@ private struct SearchBar: View {
         onSubmit: @escaping (String) -> Void
     ) {
         _query = query
+        _personMentions = personMentions
         self.isFocused = isFocused
         self.focusRequestID = focusRequestID
         self.onFocusRequestHandled = onFocusRequestHandled
@@ -9451,42 +9460,55 @@ private struct SearchBar: View {
     }
 
     var body: some View {
+        PersonMentionField(
+            text: $draftQuery, mentions: $personMentions,
+            focus: isFocused,
+            placeholder: "search your map or people...", accessibilityLabel: "Search your map or people",
+            accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true,
+            onSubmit: {
+                let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText
+                commitDraftQuery(draftQuery)
+                onSubmit(requestedQuery)
+            }, decorateInput: { input in AnyView(searchChrome(input)) }
+        )
+        .task(id: focusRequestID) { await focusIfRequested() }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, focusRequestID != nil else { return }
+            Task { await focusIfRequested() }
+        }
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
+            value: isFocused.wrappedValue
+        )
+        .onChange(of: draftQuery) { _, value in
+            scheduleDraftQueryCommit(value)
+        }
+        .onChange(of: query) { _, value in
+            guard value != draftQuery else { return }
+            queryCommitTask?.cancel()
+            queryCommitTask = nil
+            draftQuery = value
+        }
+        .onChange(of: isFocused.wrappedValue) { _, focused in
+            guard !focused else { return }
+            cancelPendingQueryCommitAndSyncDraft()
+        }
+        .onDisappear {
+            queryCommitTask?.cancel()
+        }
+    }
+
+    private func searchChrome(_ input: AnyView) -> some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(astirBrandMode.secondaryText)
-            TextField(
-                "search your map or people...",
-                text: $draftQuery,
-                prompt: Text("search your map or people...")
-                    .foregroundStyle(astirBrandMode.secondaryText)
-            )
-                .focused(isFocused)
-                .accessibilityIdentifier("map.searchField")
-                .font(AstirTypography.bodySmall)
-                .foregroundStyle(astirBrandMode.primaryText)
-                .tint(astirBrandMode.accent)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .onSubmit {
-                    let requestedQuery = draftQuery
-                    commitDraftQuery(requestedQuery)
-                    onSubmit(requestedQuery)
-                }
-                .task(id: focusRequestID) {
-                    await focusIfRequested()
-                }
-                .onChange(of: scenePhase) { _, newPhase in
-                    guard newPhase == .active, focusRequestID != nil else { return }
-                    Task {
-                        await focusIfRequested()
-                    }
-                }
+            input
             Spacer()
             if !draftQuery.isEmpty {
                 Button {
                     queryCommitTask?.cancel()
                     draftQuery = ""
+                    personMentions = []
                     onClear()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -9508,26 +9530,6 @@ private struct SearchBar: View {
                     .accessibilityElement()
                     .accessibilityIdentifier("map.searchSurface")
             }
-        }
-        .animation(
-            reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
-            value: isFocused.wrappedValue
-        )
-        .onChange(of: draftQuery) { _, value in
-            scheduleDraftQueryCommit(value)
-        }
-        .onChange(of: query) { _, value in
-            guard value != draftQuery else { return }
-            queryCommitTask?.cancel()
-            queryCommitTask = nil
-            draftQuery = value
-        }
-        .onChange(of: isFocused.wrappedValue) { _, focused in
-            guard !focused else { return }
-            cancelPendingQueryCommitAndSyncDraft()
-        }
-        .onDisappear {
-            queryCommitTask?.cancel()
         }
     }
 
@@ -11595,6 +11597,12 @@ struct MapPlaceSaveContext: Identifiable {
         return nil
     }
 
+    /// A repeat visit borrows answers only; it never becomes an edit of its source.
+    var questionAnswerSourceVisit: LocalPlaceVisit? {
+        if case .addVisit = mode { return existingLatestVisit }
+        return editedVisit
+    }
+
     var sharedVisitInvitation: SharedVisitInvitation? {
         if case .sharedVisit(let invitation) = mode {
             return invitation
@@ -11802,12 +11810,13 @@ struct MapPlaceSaveContext: Identifiable {
             initialRatingScore: latestVisit?.ratingScore,
             initialNote: "",
             initialPlannedDate: nil,
-            initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
-            initialPersonalLabels: [],
+            initialAnswers: initialAnswers(from: defaultAttributes),
+            initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
             initialCuisine: initialCuisine(from: defaultAttributes),
             initialPhotoAttachments: initialPhotoAttachments,
             existingCurrentUserSave: visiblePlace,
-            existingLatestVisit: latestVisit
+            existingLatestVisit: latestVisit,
+            originalAttributes: defaultAttributes
         )
     }
 
@@ -11921,7 +11930,8 @@ struct MapPlaceSaveContext: Identifiable {
             existingCurrentUserSave: existingCurrentUserSave,
             existingLatestVisit: existingLatestVisit,
             initialVisitedAt: min(visitedAt, .now),
-            calendarReservationID: id
+            calendarReservationID: id,
+            originalAttributes: originalAttributes
         )
     }
 
@@ -12713,6 +12723,26 @@ func validatesPrivateCheckInDraft(_ submission: MapPlaceSaveSubmission, store: W
     }
 }
 
+/// Load defaults from the owner’s source visit without changing its answers.
+@MainActor
+func loadPrivateQuestionAnswerDefaults(
+    context: MapPlaceSaveContext,
+    ownerUserID: String,
+    preferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
+) throws -> [String: String] {
+    guard let visit = context.questionAnswerSourceVisit else { return [:] }
+    guard context.saveOwnerUserID == ownerUserID else {
+        throw CheckInQuestionPersistenceError.invalidPrivateAnswer
+    }
+    return try loadAndMigratePrivateCheckInAnswers(
+        originalAttributes: context.originalAttributes,
+        ownerUserID: ownerUserID,
+        userPlaceID: context.sourceVisiblePlace?.userPlace.localID ?? visit.userPlaceID,
+        visitID: visit.serverID ?? visit.localID,
+        preferences: preferences
+    )
+}
+
 /// Recover only legacy answers whose question and value are understood. Write
 /// the private copy before an editor can remove the legacy remote payload. A
 /// failure leaves the source unchanged and blocks the containing Check-in edit.
@@ -13369,6 +13399,9 @@ struct MapPlaceSaveEditor: View {
     @State private var isChoosingPlaceType = false
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
+    @State private var noteMentions: [PersonMention] = []
+    @State private var noteFocused = false
+    @State private var noteFieldHeight: CGFloat = 0
     @State private var visitedAt: Date
     @State private var checkInDateTrayPresentation = CheckInDateTrayPresentation()
     @State private var plannedDate: Date?
@@ -13731,9 +13764,22 @@ struct MapPlaceSaveEditor: View {
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("save.editorScroll")
                 .background(editorBackground)
-                .overlay(alignment: .bottom) {
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
+                    guard noteFocused else { return }
+                    // The keyboard accessory changes the viewport without
+                    // changing the note's own height.
+                    walkthroughScrollProxy.scrollTo(WalkthroughTargetID.saveNote, anchor: .bottom)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
                     if isReadyForDetails {
                         saveFooter
+                            .background { if noteFocused { editorBackground } }
+                    }
+                }
+                .onChange(of: noteFieldHeight) { _, _ in
+                    guard noteFocused else { return }
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        walkthroughScrollProxy.scrollTo(WalkthroughTargetID.saveNote, anchor: .bottom)
                     }
                 }
                 .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
@@ -14218,15 +14264,8 @@ struct MapPlaceSaveEditor: View {
                     categoryID: selectedAssignment.primaryCategory, subcategory: checkInQuestionSubtype
                 ).map(\.id)
             )
-            guard let visit = context.editedVisit else {
-                didLoadPrivateAnswers = true
-                return
-            }
-            let userPlaceID = context.sourceVisiblePlace?.userPlace.localID ?? visit.userPlaceID
-            customQuestionAnswers = try loadAndMigratePrivateCheckInAnswers(
-                originalAttributes: context.originalAttributes,
-                ownerUserID: store.currentUser.id, userPlaceID: userPlaceID,
-                visitID: visit.serverID ?? visit.localID, preferences: preferences
+            customQuestionAnswers = try loadPrivateQuestionAnswerDefaults(
+                context: context, ownerUserID: store.currentUser.id, preferences: preferences
             )
             // Private persisted answers win over any stale public draft state.
             for id in customQuestionAnswers.keys { selectedAnswers[id] = [] }
@@ -14247,18 +14286,20 @@ struct MapPlaceSaveEditor: View {
                     .font(AstirTypography.label)
                     .foregroundStyle(astirBrandMode.secondaryText)
             }
-            TextField(selectedStatus == .wannaGo ? "Who told you, what caught your eye, when you might go…" : "The good bits, what you ordered, who you were with…", text: $note, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(AstirTypography.body)
-                .accessibilityIdentifier("save.note")
-                .accessibilityLabel(selectedStatus == .wannaGo ? "What made you save this?" : "Check-in note")
-                .foregroundStyle(astirBrandMode.primaryText)
-                .tint(WanderTheme.terracotta.color)
-                .lineLimit(3, reservesSpace: true)
-                .padding(WanderTheme.spacing3)
-                .background(astirBrandMode.raisedBackground)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            PersonMentionField(
+                text: $note, mentions: $noteMentions, focus: $noteFocused,
+                placeholder: selectedStatus == .wannaGo ? "Who told you, what caught your eye, when you might go…" : "The good bits, what you ordered, who you were with…",
+                accessibilityLabel: selectedStatus == .wannaGo ? "What made you save this?" : "Check-in note",
+                accessibilityIdentifier: "save.note", minimumLines: 3, maximumLines: 5,
+                decorateInput: { input in
+                    AnyView(input
+                        .padding(WanderTheme.spacing3)
+                        .background(astirBrandMode.raisedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)))
+                }
+            )
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { noteFieldHeight = $0 }
     }
 
     private var droppedPinNameSection: some View {

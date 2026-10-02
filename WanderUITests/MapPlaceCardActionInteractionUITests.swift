@@ -166,7 +166,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         let launcher = app.buttons["feed.searchLauncher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 12))
         launcher.tap()
-        XCTAssertTrue(app.textFields["discover.placesSearchField"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.textViews["discover.placesSearchField"].waitForExistence(timeout: 3))
         app.buttons["discover.searchBack"].tap()
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["feed.headerAdd"].isHittable)
@@ -205,7 +205,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         app.buttons["save.close"].tap()
         XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
         app.buttons["place-profile.floating-action.wanna"].tap()
-        XCTAssertTrue(app.textFields["save.note"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textViews["save.note"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["save.checkInDateDisclosure"].exists)
         XCTAssertFalse(app.buttons["Remove from Wanna"].exists)
         app.buttons["save.close"].tap()

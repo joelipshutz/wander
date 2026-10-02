@@ -569,7 +569,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let card = app.buttons["map.selectedPlaceCard"]
         let message = app.staticTexts["map.searchMessage"]
-        let search = app.textFields["map.searchField"]
+        let search = app.textViews["map.searchField"]
         let addButton = app.buttons["map.headerAdd"]
         let nearby = app.buttons["map.nearby"]
 
@@ -758,7 +758,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         selectDemoPerson(in: app, panel: panel)
 
-        let search = app.textFields["map.searchField"]
+        let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
         XCTAssertFalse(search.isHittable)
