@@ -73,6 +73,10 @@ final class FeedAudienceUITests: XCTestCase {
     private func choose(_ title: String, in app: XCUIApplication) {
         let option = app.buttons[title]
         XCTAssertTrue(option.waitForExistence(timeout: 5))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.buttons[title].isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
         XCTAssertTrue(option.isHittable)
         // Send a normal touch to the visible row center instead of relying
         // on the native menu's synthesized accessibility activation point.
