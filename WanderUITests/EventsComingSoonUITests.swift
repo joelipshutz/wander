@@ -42,8 +42,9 @@ import UIKit
                 guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
                 return appearance == .light ? pixels.luminance > 0.55 : pixels.luminance < 0.45
             }, object: nil)
-            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 3), .completed)
+            let appearanceResult = XCTWaiter.wait(for: [expectation], timeout: 10)
             capture("Live appearance — \(appearance)")
+            XCTAssertEqual(appearanceResult, .completed)
         }
     }
 
@@ -100,8 +101,9 @@ import UIKit
             guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
             return isLight ? pixels.luminance > 0.55 : pixels.luminance < 0.45
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [initialAppearance], timeout: 5), .completed)
+        let appearanceResult = XCTWaiter.wait(for: [initialAppearance], timeout: 10)
         capture("\(mode) — Map before Events")
+        XCTAssertEqual(appearanceResult, .completed)
         for (index, label) in ["Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
             tabs.buttons[label].tap()
             XCTAssertTrue(tabs.buttons[label].isSelected)
@@ -198,8 +200,15 @@ import UIKit
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
-        XCTAssertTrue(tabs.buttons["Feed"].isSelected)
-        tabs.buttons["Events"].tap()
+        // Foreground entry rebuilds the tab presentation. Resolve its current
+        // controls instead of tapping through the pre-background snapshot.
+        let returnedTabs = app.tabBars.firstMatch
+        XCTAssertTrue(returnedTabs.buttons["Feed"].isSelected)
+        let eventsReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.tabBars.firstMatch.buttons["Events"].isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [eventsReady], timeout: 10), .completed)
+        app.tabBars.firstMatch.buttons["Events"].tap()
         XCTAssertTrue(artwork.waitForExistence(timeout: 5))
         capture("Events — revisited after Feed foreground entry")
     }

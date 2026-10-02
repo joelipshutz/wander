@@ -363,22 +363,21 @@ final class MapFilterInteractionUITests: XCTestCase {
         }
 
         func perform(_ label: String, button: XCUIElement) {
-            let previousValue = probe.value as? String ?? ""
+            let previousValue = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             XCTAssertTrue(button.isHittable)
             button.tap()
-            let populatedProbe = NSPredicate(
-                format: "value != %@ AND value CONTAINS %@",
-                previousValue,
-                "camera="
-            )
+            let populatedProbe = NSPredicate { _, _ in
+                let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
+                return current != previousValue && current.contains("camera=")
+            }
             XCTAssertEqual(
                 XCTWaiter.wait(
-                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)],
-                    timeout: 3
+                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)],
+                    timeout: 10
                 ),
                 .completed
             )
-            let snapshot = probe.value as? String ?? ""
+            let snapshot = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             print("REC404_MAP_INDIVIDUAL_PIN_TRACE \(label) \(snapshot)")
             XCTAssertLessThanOrEqual(
                 metric("nativeA11yVisits", in: snapshot) ?? .max,

@@ -54,10 +54,13 @@ def main() -> int:
         parser.error("shard must be within shard-count")
     root = Path(__file__).resolve().parents[1]
     replay = "WanderTests/ReplayMaskingTests"
-    performance = "WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds"
+    performance = [
+        "WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds",
+        "WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget",
+    ]
     inventory = (ui_test_identifiers(root) if args.suite in {"ui", "ui-performance"} else
                  [replay] if args.suite == "replay" else
-                 [performance] if args.suite == "performance" else ["WanderTests"])
+                 performance if args.suite == "performance" else ["WanderTests"])
     if args.suite in {"ui", "ui-performance"} and not ISOLATED_UI_PERFORMANCE.issubset(inventory):
         parser.error("isolated UI performance selection no longer matches the test inventory")
     if args.suite == "ui-performance":
@@ -72,7 +75,7 @@ def main() -> int:
     # its own test host, matching the independently passing Feed validation job.
     # Keep the unchanged search threshold required in a fresh process too,
     # rather than measuring after thousands of unrelated fixtures and SDKs.
-    isolated = {replay: "replay", performance: "performance"} if args.suite == "unit" else {}
+    isolated = {replay: "replay", **{test: "performance" for test in performance}} if args.suite == "unit" else {}
     if args.suite == "ui":
         isolated = {test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)}
     excluded = list(isolated)

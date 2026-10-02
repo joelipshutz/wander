@@ -2493,17 +2493,17 @@ final class OnboardingUITests: XCTestCase {
         // behind its continuous film/MapKit animation, so allow observation lag.
         // Every page and the final signup are still required in this bounded run.
         let signupDeadline = Date().addingTimeInterval(150)
-        expectation(
-            for: NSPredicate(format: "value == %@", "2"),
-            evaluatedWith: carouselPage
-        )
+        // Resolve a new query for each observation. A retained XCUIElement can
+        // keep its opening snapshot while the live accessibility tree is on 2.
+        expectation(for: NSPredicate { _, _ in
+            app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch.value as? String == "2"
+        }, evaluatedWith: nil)
         waitForExpectations(timeout: 60)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
-        expectation(
-            for: NSPredicate(format: "value == %@", "3"),
-            evaluatedWith: carouselPage
-        )
+        expectation(for: NSPredicate { _, _ in
+            app.descendants(matching: .any)["onboarding.carouselPage"].firstMatch.value as? String == "3"
+        }, evaluatedWith: nil)
         waitForExpectations(timeout: 60)
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)

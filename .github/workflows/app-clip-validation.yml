@@ -65,6 +65,9 @@ jobs:
           xcodegen generate
           xcodebuild -version
           git rev-parse HEAD
+          # Keep rendering capability with the test evidence when investigating
+          # simulator-only animation or native material failures.
+          xcrun swift -e 'import Metal; let devices = MTLCopyAllDevices(); print("CI rendering device count:", devices.count); for gpu in devices { print("CI rendering device:", gpu.name, "lowPower:", gpu.isLowPower) }'
           xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
           python3 - <<'PY'
           import json, os, re
@@ -78,6 +81,10 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as f:
               f.write('TEST_DEVICE_ID=' + device['udid'] + '\n')
           print('Testing on', device['name'], 'runtime', runtime)
+          import subprocess
+          # Start system services before compilation, so first-boot setup is not
+          # competing with the first app animation/performance measurement.
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
           PY
       # Ad-hoc signing is required for Clerk's Keychain initialization in the
       # real startup path; this uses no Apple distribution identity or secrets.

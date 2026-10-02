@@ -8247,6 +8247,9 @@ private final class MapDisplayLinkSampler: NSObject {
 
     func start() {
         let displayLink = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        // This diagnostic measures missed animation frames, so request a fixed
+        // cadence rather than interpreting adaptive/idle delivery as a hitch.
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
         displayLink.add(to: .main, forMode: .common)
         self.displayLink = displayLink
     }

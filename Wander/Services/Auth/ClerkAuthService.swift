@@ -49,6 +49,7 @@ final class ClerkAuthService: AuthSessionProviding {
     private let sessionAdoptionRetryDelaysNanoseconds: [UInt64]
     private let sessionAdoptionTimeoutNanoseconds: UInt64
     private let sessionAdoptionSleeper: SessionAdoptionSleeper
+    private let sessionAdoptionTimeoutSleeper: SessionAdoptionSleeper
     private var pendingNativeAuthSessionID: String?
     private var nativeAuthSessionFence: NativeAuthSessionFence?
     private var refreshGeneration = 0
@@ -76,6 +77,9 @@ final class ClerkAuthService: AuthSessionProviding {
         sessionAdoptionSleeper: @escaping SessionAdoptionSleeper = { delay in
             try await Task<Never, Never>.sleep(nanoseconds: delay)
         },
+        sessionAdoptionTimeoutSleeper: @escaping SessionAdoptionSleeper = { delay in
+            try await Task<Never, Never>.sleep(nanoseconds: delay)
+        },
         passwordVerification: PasswordVerificationClient = .live,
         configureClerk: (String) -> String = { Clerk.configure(publishableKey: $0).publishableKey }
     ) {
@@ -99,6 +103,7 @@ final class ClerkAuthService: AuthSessionProviding {
         self.sessionAdoptionRetryDelaysNanoseconds = sessionAdoptionRetryDelaysNanoseconds
         self.sessionAdoptionTimeoutNanoseconds = sessionAdoptionTimeoutNanoseconds
         self.sessionAdoptionSleeper = sessionAdoptionSleeper
+        self.sessionAdoptionTimeoutSleeper = sessionAdoptionTimeoutSleeper
 
         if let publishableKey = configuration.clerkPublishableKey {
             let configuredPublishableKey = configureClerk(publishableKey)
@@ -496,7 +501,7 @@ final class ClerkAuthService: AuthSessionProviding {
         }
         let timeoutTask = Task {
             do {
-                try await Task<Never, Never>.sleep(nanoseconds: timeoutNanoseconds)
+                try await self.sessionAdoptionTimeoutSleeper(timeoutNanoseconds)
                 continuation.finish(throwing: SessionAdoptionTimeoutError())
             } catch {
                 // The resolver or caller won the race.
