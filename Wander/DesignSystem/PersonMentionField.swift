@@ -17,6 +17,7 @@ struct PersonMentionField: View {
     var maximumLines = 4
     var isSearch = false
     var submitOnReturn = false
+    var suggestionPlacement: SuggestionPlacement = .keyboard
     var onSubmit: () -> Void = {}
     var onSelect: (ProfileShell) -> Void = { _ in }
     var onFocus: () -> Void = {}
@@ -31,6 +32,12 @@ struct PersonMentionField: View {
     @StateObject private var results = PersonTypeaheadModel()
     @StateObject private var editor = PersonMentionInputController()
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 58
+
+    enum SuggestionPlacement {
+        case keyboard
+        /// For a bottom-pinned composer, show results above its entire chrome.
+        case aboveInput
+    }
 
     private var mentionBinding: Binding<[PersonMention]> { mentions ?? $internalMentions }
     private var focusBinding: Binding<Bool> { focus ?? $internalFocus }
@@ -50,7 +57,11 @@ struct PersonMentionField: View {
     }
 
     var body: some View {
-        decorateInput(AnyView(PersonMentionNativeInput(
+        VStack(spacing: 0) {
+            if suggestionPlacement == .aboveInput, suggestionHeight > 0 {
+                suggestions
+            }
+            decorateInput(AnyView(PersonMentionNativeInput(
                 text: $text, mentions: mentionBinding, selection: $selection, focus: focusBinding,
                 placeholder: placeholder, accessibilityLabel: accessibilityLabel,
                 accessibilityIdentifier: accessibilityIdentifier,
@@ -60,9 +71,10 @@ struct PersonMentionField: View {
                 placeholderColor: UIColor(brand.secondaryText),
                 minimumLines: minimumLines, maximumLines: maximumLines, isSearch: isSearch, submitOnReturn: submitOnReturn,
                 suggestions: AnyView(suggestions.environment(\.astirBrandMode, brand)),
-                suggestionHeight: suggestionHeight,
+                suggestionHeight: suggestionPlacement == .keyboard ? suggestionHeight : 0,
                 onSubmit: onSubmit, onFocus: onFocus, onCompletionRequest: complete
             )))
+        }
         .task(id: requestID) {
             let owner = store.currentUser.id
             await results.search(
@@ -207,6 +219,9 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         view.textContainer.lineFragmentPadding = 0
         view.delegate = context.coordinator
+        view.expandedDeletionRange = { [weak coordinator = context.coordinator] text, range in
+            coordinator?.deletionRange(in: text, for: range)
+        }
         editor.view = view
         editor.coordinator = context.coordinator
         view.adjustsFontForContentSizeCategory = true
@@ -289,13 +304,33 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 
     final class MentionTextView: UITextView {
         let placeholder = UILabel()
+        var expandedDeletionRange: ((String, NSRange) -> NSRange?)?
         override init(frame: CGRect, textContainer: NSTextContainer?) {
             super.init(frame: frame, textContainer: textContainer)
+            // Atomic tag deletion must not also consume adjacent whitespace.
+            smartInsertDeleteType = .no
             placeholder.isUserInteractionEnabled = false
             placeholder.numberOfLines = 0
             addSubview(placeholder)
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func deleteBackward() {
+            if markedTextRange == nil {
+                let selection = selectedRange
+                let deletion: NSRange
+                if selection.length == 0, selection.location > 0 {
+                    deletion = (text as NSString).rangeOfComposedCharacterSequence(at: selection.location - 1)
+                } else {
+                    deletion = selection
+                }
+                if let expanded = expandedDeletionRange?(text, deletion), expanded != deletion {
+                    selectedRange = expanded
+                }
+            }
+            // Let UIKit perform the deletion once, keeping its input context,
+            // undo registration, and delegate notifications in the same edit.
+            super.deleteBackward()
+        }
         override func layoutSubviews() {
             super.layoutSubviews()
             let size = placeholder.sizeThatFits(CGSize(width: bounds.width, height: bounds.height))
@@ -307,6 +342,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         var parent: PersonMentionNativeInput
         var lastText: String
         var pendingText: String?
+        private var proposedEdit: (originalText: String, draft: PersonMentionDraft)?
         var updating = false
         var focusUpdatePending = false
         var accessoryUpdateTask: Task<Void, Never>?
@@ -345,6 +381,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
                       length: draft.text.utf16.count - view.text.utf16.count + range.length), in: draft.text) else { return false }
             updating = true
             defer { updating = false }
+            proposedEdit = nil
             // UITextInput replacement also updates the keyboard's document
             // context; editing backing storage alone leaves its caret stale.
             view.replace(nativeRange, withText: String(draft.text[replacementRange]))
@@ -407,8 +444,16 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             guard !updating else { return }
             updating = true
             defer { updating = false }
-            var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
-            draft.reconcile(textView.text)
+            var draft: PersonMentionDraft
+            if let proposedEdit, proposedEdit.originalText == lastText, proposedEdit.draft.text == textView.text {
+                // Repeated display names are ambiguous to a string diff. Keep
+                // the identities associated with the actual native edit range.
+                draft = proposedEdit.draft
+            } else {
+                draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
+                draft.reconcile(textView.text)
+            }
+            proposedEdit = nil
             lastText = draft.text
             pendingText = draft.text
             parent.text = draft.text
@@ -437,11 +482,28 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 
         func textViewDidEndEditing(_ textView: UITextView) { parent.focus = false }
 
+        func deletionRange(in text: String, for range: NSRange) -> NSRange? {
+            var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
+            draft.reconcile(text)
+            guard let deletion = draft.deletionRange(for: range) else { return nil }
+            // Direct native deleteBackward can skip shouldChangeTextIn. Keep
+            // its exact range as well, so duplicate names retain their IDs.
+            draft.replace(deletion, with: "")
+            proposedEdit = (text, draft)
+            return deletion
+        }
+
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard !updating else { return true }
             if (parent.isSearch || parent.submitOnReturn), text == "\n" {
                 parent.onSubmit()
                 return false
             }
+            var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
+            draft.reconcile(textView.text)
+            let originalText = draft.text
+            draft.replace(range, with: text)
+            proposedEdit = (originalText, draft)
             return true
         }
 
