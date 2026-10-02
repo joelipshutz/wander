@@ -100,6 +100,16 @@ struct PersonMentionDraft: Equatable {
         text.replaceSubrange(swiftRange, with: replacement)
     }
 
+    /// A resolved person is one editing token, including its plain @ prefix.
+    /// Leave surrounding spaces and unresolved text to native deletion.
+    func deletionRange(for range: NSRange) -> NSRange? {
+        guard range.length > 0, Range(range, in: text) != nil else { return nil }
+        return mentions.reduce(range) { deletion, mention in
+            guard mention.isValid(in: text), NSIntersectionRange(mention.range, range).length > 0 else { return deletion }
+            return NSUnionRange(deletion, mention.range)
+        }
+    }
+
     mutating func reconcile(_ updatedText: String) {
         guard updatedText != text else { return }
         let prefix = text.commonPrefix(with: updatedText)

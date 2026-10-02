@@ -1177,6 +1177,17 @@ struct ActivityCommentsScreen: View {
     }
 
     private var composer: some View {
+        PersonMentionField(
+            text: $draft, mentions: $draftMentions,
+            focus: $composerFocused,
+            placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
+            accessibilityIdentifier: "activity.comment.input", submitOnReturn: true,
+            suggestionPlacement: .aboveInput, onSubmit: post,
+            decorateInput: { AnyView(composerRow($0)) }
+        )
+    }
+
+    private func composerRow(_ input: AnyView) -> some View {
         VStack(spacing: 0) {
             Divider()
                 .overlay(brandMode.border)
@@ -1189,21 +1200,13 @@ struct ActivityCommentsScreen: View {
                     color: brandMode.accentWash
                 )
 
-                PersonMentionField(
-                    text: $draft, mentions: $draftMentions,
-                    focus: $composerFocused,
-                    placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
-                    accessibilityIdentifier: "activity.comment.input", submitOnReturn: true, onSubmit: post,
-                    decorateInput: { input in
-                        AnyView(input
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.vertical, 10)
-                            .background(brandMode.raisedBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                            .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                                .stroke(brandMode.border, lineWidth: 1)))
-                    }
-                )
+                input
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.vertical, 10)
+                    .background(brandMode.raisedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(brandMode.border, lineWidth: 1))
 
                 Button(action: post) {
                     Group {
@@ -1229,6 +1232,8 @@ struct ActivityCommentsScreen: View {
             .padding(.vertical, WanderTheme.spacing2)
         }
         .background(brandMode.background)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("activity.comment.composer")
     }
 
     private var normalizedDraft: String {
