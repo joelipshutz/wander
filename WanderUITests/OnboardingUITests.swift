@@ -1368,7 +1368,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
     }
 
-    func testReturningUserColdStartOpensFeedAndForegroundKeepsSelectedTab() {
+    func testReturningUserColdStartAndOrdinaryForegroundOpenFeed() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
         app.launch()
@@ -1383,8 +1383,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(mapTab.isSelected)
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(mapTab.waitForExistence(timeout: 4))
-        XCTAssertTrue(mapTab.isSelected)
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
+        XCTAssertTrue(feedTab.isSelected)
 
         app.terminate()
         app.launch()

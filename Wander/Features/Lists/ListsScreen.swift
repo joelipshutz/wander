@@ -44,6 +44,8 @@ struct ListsScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     private let scenario: ListsScreenScenario
+    private let presentationResetRequest: WanderPresentationResetRequest?
+    @State private var handledPresentationResetID: UUID?
     private let scenarioList: PlaceListMock?
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
@@ -65,7 +67,11 @@ struct ListsScreen: View {
     @State private var lastScrollOffset: CGFloat?
     @State private var accumulatedScrollTravel: CGFloat = 0
 
-    init(scenario: ListsScreenScenario = .resolved()) {
+    init(
+        scenario: ListsScreenScenario = .resolved(),
+        presentationResetRequest: WanderPresentationResetRequest? = nil
+    ) {
+        self.presentationResetRequest = presentationResetRequest
         self.scenario = scenario
         // Live/empty screens never use preview lists. Building the nested demo
         // catalog here can exhaust the physical device's Debug launch stack.
@@ -165,6 +171,9 @@ struct ListsScreen: View {
             isPresented: editorPresentation != nil
                 && walkthroughs.activeSurface == .listEditor
         )
+        .onChange(of: presentationResetRequest?.id, initial: true) { _, _ in
+            resetPresentationsIfNeeded()
+        }
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
         }
@@ -192,7 +201,23 @@ struct ListsScreen: View {
         )
     }
 
+    private func resetPresentationsIfNeeded() {
+        guard let requestID = presentationResetRequest?.id,
+              handledPresentationResetID != requestID else { return }
+        handledPresentationResetID = requestID
+        editorPresentation = nil
+        selectedList = nil
+        collaboratorList = nil
+        mapList = nil
+        selectedProfileID = nil
+        pendingListInvite = nil
+        listInviteErrorMessage = nil
+    }
+
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
+        // Consume a pending reset before applying the new destination, so a
+        // later SwiftUI change callback cannot erase the route just opened.
+        resetPresentationsIfNeeded()
         guard let request else { return }
 
         switch request.destination {
@@ -2936,6 +2961,7 @@ private struct CollaboratorInviteSheet: View {
                 Text(inviteLinkErrorMessage ?? "Try again in a moment.")
             }
         }
+        .blocksProductUpsells(while: true, preservesForegroundEntry: true)
     }
 
     private var canInviteWhilePrivate: Bool {
@@ -4508,6 +4534,7 @@ private struct ListEditorSheet: View {
                 Text(deleteConfirmationMessage)
             }
         }
+        .blocksProductUpsells(while: true, preservesForegroundEntry: true)
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listEditor)
     }
 
