@@ -9,6 +9,15 @@ import re
 import subprocess
 
 
+# Display-link/CPU budgets need a fresh simulator process, not one that has
+# already rendered dozens of unrelated MapKit, camera, and movie fixtures.
+# These remain required tests with the same assertions and thresholds.
+ISOLATED_UI_PERFORMANCE = {
+    "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork",
+    "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
+}
+
+
 def ui_test_identifiers(root: Path) -> list[str]:
     identifiers = []
     for path in sorted((root / "WanderUITests").rglob("*.swift")):
@@ -32,7 +41,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["unit", "replay", "performance", "ui"], required=True)
+    parser.add_argument("--suite", choices=["unit", "replay", "performance", "ui-performance", "ui"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -46,19 +55,30 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     replay = "WanderTests/ReplayMaskingTests"
     performance = "WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds"
-    inventory = (ui_test_identifiers(root) if args.suite == "ui" else
+    inventory = (ui_test_identifiers(root) if args.suite in {"ui", "ui-performance"} else
                  [replay] if args.suite == "replay" else
                  [performance] if args.suite == "performance" else ["WanderTests"])
-    selected = inventory[args.shard::args.shard_count] if args.suite == "ui" else inventory
+    if args.suite in {"ui", "ui-performance"} and not ISOLATED_UI_PERFORMANCE.issubset(inventory):
+        parser.error("isolated UI performance selection no longer matches the test inventory")
+    if args.suite == "ui-performance":
+        selected = sorted(ISOLATED_UI_PERFORMANCE)
+    elif args.suite == "ui":
+        # Preserve shard assignment/order for all remaining tests.
+        selected = [test for test in inventory[args.shard::args.shard_count]
+                    if test not in ISOLATED_UI_PERFORMANCE]
+    else:
+        selected = inventory
     # The SDK installs process-wide replay observers. Keep this required test in
     # its own test host, matching the independently passing Feed validation job.
     # Keep the unchanged search threshold required in a fresh process too,
     # rather than measuring after thousands of unrelated fixtures and SDKs.
     isolated = {replay: "replay", performance: "performance"} if args.suite == "unit" else {}
+    if args.suite == "ui":
+        isolated = {test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)}
     excluded = list(isolated)
     if not selected:
         parser.error("empty test selection")
-    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite == "ui" else None,
+    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance"} else None,
                  "identifiers": selected, "isolatedTestSuites": isolated}
     if args.selection_file:
         Path(args.selection_file).write_text(json.dumps(selection, indent=2) + "\n")

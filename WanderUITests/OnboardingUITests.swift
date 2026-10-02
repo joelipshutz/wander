@@ -1104,10 +1104,11 @@ final class OnboardingUITests: XCTestCase {
 
     func testFeedIntroductionCentersWholeLatestTileThenReturnsToTopWithoutRepeating() {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
         // Hold each visual beat while XCTest measures its geometry. Automatic
         // completion is covered by testMapRingsAutomaticallyContinueIntoFeedAndFinishAtTop.
         app.launchArguments = nativeOverviewArguments + ["-WanderNUXFeedFixture", "-WanderWalkthroughTarget", "feedActivity", "-WanderHoldWalkthroughStep"]
-        app.launch()
+        launchAfterResolvingLocationPermission(in: app)
         let circle = app.staticTexts["walkthrough.feed.feedActivity.circle"]
         let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
         XCTAssertTrue(circle.waitForExistence(timeout: 20))
@@ -1778,6 +1779,7 @@ final class OnboardingUITests: XCTestCase {
 
     func testFirstMapWannaOpensAFreshDraftEachTime() {
         let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
@@ -1788,7 +1790,7 @@ final class OnboardingUITests: XCTestCase {
             "-WanderMapSheetExpanded",
             "-WanderPlaceProfileSaveTrayV1"
         ]
-        app.launch()
+        launchAfterResolvingLocationPermission(in: app)
 
         let checkIn = app.buttons["place-profile.floating-action.checkIn"]
         let wanna = app.buttons["place-profile.floating-action.wanna"]
@@ -2158,6 +2160,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(note.value as? String, note.placeholderValue)
         note.tap()
         note.typeText("First unsaved Wanna")
+        // On hosted simulators, typeText can return before UIKit publishes the
+        // full input burst to accessibility. Require the exact complete draft
+        // before closing instead of racing the remaining keyboard events.
+        expectation(for: NSPredicate(format: "value == %@", "First unsaved Wanna"), evaluatedWith: note)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(note.value as? String, "First unsaved Wanna")
 
         app.buttons["save.close"].tap()
@@ -2172,6 +2179,8 @@ final class OnboardingUITests: XCTestCase {
                        "A repeated Wanna starts fresh instead of editing a saved or abandoned event")
         freshNote.tap()
         freshNote.typeText("Current Wanna draft")
+        expectation(for: NSPredicate(format: "value == %@", "Current Wanna draft"), evaluatedWith: freshNote)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(freshNote.value as? String, "Current Wanna draft")
 
         app.buttons["save.close"].tap()
@@ -2255,6 +2264,7 @@ final class OnboardingUITests: XCTestCase {
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderDelayedDiscoverRefinementUITest",
             "-WanderDisableWalkthroughs",
             "-WanderInitialTab",
             "discover"
@@ -2298,6 +2308,8 @@ final class OnboardingUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(firstPlaceResult.waitForExistence(timeout: 4))
         XCTAssertTrue(firstPlaceResult.isHittable)
+        XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists)
+        XCTAssertFalse(app.staticTexts["favorites"].exists)
         firstPlaceResult.tap()
 
         let placeBackButton = app.buttons["place-profile.back"]
@@ -2310,6 +2322,13 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(searchField.value as? String, "coffee")
         XCTAssertFalse(app.keyboards.firstMatch.exists,
                        "Returning from a place must preserve submitted results without reopening the keyboard.")
+        XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists,
+                      "Returning must preserve the search still in flight.")
+        XCTAssertTrue(app.staticTexts["favorites"].waitForExistence(timeout: 60),
+                      "The pending refinement must finish and update results after returning.")
+        XCTAssertFalse(app.staticTexts["Refining with smart filters…"].exists)
+        XCTAssertEqual(searchField.value as? String, "coffee")
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
 
         app.swipeUp()
         XCTAssertTrue(backButton.exists)

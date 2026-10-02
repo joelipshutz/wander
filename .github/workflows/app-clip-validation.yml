@@ -38,6 +38,9 @@ jobs:
           - name: search performance
             suite: performance
             shard: 0
+          - name: map performance
+            suite: ui-performance
+            shard: 0
           - name: UI shard 1
             suite: ui
             shard: 0

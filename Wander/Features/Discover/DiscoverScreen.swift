@@ -21,6 +21,8 @@ struct DiscoverScreen: View {
     @State private var isPlaceSearchLoading = false
     @State private var isPlaceSearchRefining = false
     @State private var placeSearchResultStage = "immediate"
+    // Query-owned tasks survive detail navigation. Exit, clear, and query
+    // replacement cancel them; a temporary disappearance does not.
     @State private var placeSearchTask: Task<Void, Never>?
     @State private var communityPlaceSearchTask: Task<Void, Never>?
     @State private var externalPlaceSearchTask: Task<Void, Never>?
@@ -28,6 +30,7 @@ struct DiscoverScreen: View {
     @State private var activeExternalSearchRequestID: UUID?
     @State private var didTrackPlaceSearchOpen = false
     @State private var didInitializeContent = false
+    @State private var didLoadInitialContent = false
     @StateObject private var peopleSearch = PeopleSearchModel()
     @State private var peopleSearchRetry = 0
     @State private var memberQuery = ""
@@ -312,44 +315,49 @@ struct DiscoverScreen: View {
                 // A pushed place returns to this same search state. Re-running
                 // launch setup would reopen the keyboard and resubmit results
                 // while the navigation pop is restoring its scroll layout.
-                guard !didInitializeContent else { return }
-                didInitializeContent = true
-                applyRequestedSection()
-                if isPlaceSearchPresented, !didTrackPlaceSearchOpen {
-                    didTrackPlaceSearchOpen = true
-                    store.trackDiscoverSearchEvent(
-                        WanderAnalyticsEvents.discoverSearchOpened,
-                        properties: ["entry_surface": onClose == nil ? "discover" : "feed"]
-                    )
+                if !didInitializeContent {
+                    didInitializeContent = true
+                    applyRequestedSection()
+                    if isPlaceSearchPresented, !didTrackPlaceSearchOpen {
+                        didTrackPlaceSearchOpen = true
+                        store.trackDiscoverSearchEvent(
+                            WanderAnalyticsEvents.discoverSearchOpened,
+                            properties: ["entry_surface": onClose == nil ? "discover" : "feed"]
+                        )
+                    }
+                    if isPlaceSearchPresented,
+                       walkthroughs.activeSurface != .feedSearch,
+                       !ProcessInfo.processInfo.arguments.contains("-WanderDisableSearchAutofocus") {
+                        await Task.yield()
+                        searchFieldFocused = true
+                    }
+                    if !placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        submitPlaceSearch()
+                    }
                 }
-                if isPlaceSearchPresented,
-                   walkthroughs.activeSurface != .feedSearch,
-                   !ProcessInfo.processInfo.arguments.contains("-WanderDisableSearchAutofocus") {
-                    await Task.yield()
-                    searchFieldFocused = true
-                }
-                if !placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    submitPlaceSearch()
-                }
+                // SwiftUI cancels this task during navigation. Retry an
+                // interrupted default load without resetting the search.
+                guard !didLoadInitialContent else { return }
                 activityLoadState = .loading
                 await refreshDiscoverDefaultContent()
+                guard !Task.isCancelled else { return }
+                didLoadInitialContent = true
                 lastHandledAuthState = auth.isSignedIn
                 lastHandledVisiblePlaceRevision = store.presentationRevision
             }
             .task(id: auth.isSignedIn) {
                 let requestedAuthState = auth.isSignedIn
                 let previousAuthState = lastHandledAuthState
-                lastHandledAuthState = requestedAuthState
                 guard !Task.isCancelled,
                       auth.isSignedIn == requestedAuthState
                 else {
                     return
                 }
-                guard let previousAuthState,
-                      previousAuthState != requestedAuthState
-                else {
+                guard let previousAuthState else {
+                    lastHandledAuthState = requestedAuthState
                     return
                 }
+                guard previousAuthState != requestedAuthState else { return }
                 activityLoadState = .loading
                 await refreshDiscoverDefaultContent(forceRecommendations: true)
                 guard !Task.isCancelled,
@@ -368,6 +376,8 @@ struct DiscoverScreen: View {
                 }
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
+                guard !Task.isCancelled else { return }
+                lastHandledAuthState = requestedAuthState
             }
             .task(id: "\(store.currentUser.id)|\(auth.isSignedIn)|\(isPlaceSearchPresented)|\(resolvedPlacesQuery)|\(peopleSearchRetry)") {
                 await peopleSearch.search(
@@ -414,12 +424,13 @@ struct DiscoverScreen: View {
                     return
                 }
                 guard previousRevision != revision else { return }
-                lastHandledVisiblePlaceRevision = revision
                 if submittedPlacesQuery != nil {
                     await refreshPlaces(query: resolvedPlacesQuery)
                 }
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
+                guard !Task.isCancelled else { return }
+                lastHandledVisiblePlaceRevision = revision
             }
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
@@ -478,7 +489,6 @@ struct DiscoverScreen: View {
                     || listSelectionPlace != nil
                     || listMessage != nil
             )
-            .onDisappear(perform: cancelPlaceSearchWork)
     }
 
     private func applyRequestedSection() {
