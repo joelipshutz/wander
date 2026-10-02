@@ -50,6 +50,23 @@ final class TrustedPlaceSearchTests: XCTestCase {
         )
     }
 
+    func testEvidencePreservesFieldOrderFirstDisplayValueAndQueryTokenOrder() throws {
+        let place = makeVisiblePlace(
+            id: "evidence-order", name: "Circuit House", ownerName: "Ryan", ownerHandle: "rylie",
+            locality: "Pasadena", note: "Quiet garden"
+        )
+        let match = try XCTUnwrap(TrustedPlaceSearch.matches(
+            query: "garden rylie Pasadena house quiet Ryan circuit", in: [place]
+        ).first)
+
+        XCTAssertEqual(match.evidence, [
+            TrustedPlaceSearchEvidence(field: .name, displayValue: "Circuit House", matchedTokens: ["house", "circuit"]),
+            TrustedPlaceSearchEvidence(field: .owner, displayValue: "rylie", matchedTokens: ["rylie", "ryan"]),
+            TrustedPlaceSearchEvidence(field: .area, displayValue: "1 Main Street, Pasadena", matchedTokens: ["pasadena"]),
+            TrustedPlaceSearchEvidence(field: .note, displayValue: "Quiet garden", matchedTokens: ["garden", "quiet"])
+        ])
+    }
+
     func testEveryRequiredTokenMustMatch() {
         let place = makeVisiblePlace(id: "coffee", name: "Circuit", category: "Coffee shop")
 
@@ -115,6 +132,14 @@ final class TrustedPlaceSearchTests: XCTestCase {
             match.supportingFields,
             [.name, .owner, .category, .area, .note, .attribute, .status]
         )
+    }
+
+    func testExactSupportingFieldsExcludePrefixOnlyFields() throws {
+        let exact = makeVisiblePlace(id: "exact-support", name: "Cof", category: "Coffee shop", note: "Coffee garden")
+        let prefix = makeVisiblePlace(id: "prefix-support", name: "Coffee Counter", category: "Coffee shop", note: "Coffee garden")
+        let matches = TrustedPlaceSearch.matches(query: "cof", in: [exact, prefix])
+        XCTAssertEqual(try XCTUnwrap(matches.first { $0.place.id == exact.id }).supportingFields, [.name])
+        XCTAssertEqual(try XCTUnwrap(matches.first { $0.place.id == prefix.id }).supportingFields, [.name, .category, .note])
     }
 
     func testMapSearchSavedStrengthSeparatesPlaceIdentityFromMemoryContext() throws {

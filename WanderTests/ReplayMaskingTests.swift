@@ -66,6 +66,14 @@ final class ReplayMaskingTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(100))
             if attempt >= 20, frames.image != nil { break }
         }
+        // Drawing is synchronous, but the pinned SDK encodes/enqueues on its
+        // replay queue and then invokes beforeSend asynchronously. A slow host
+        // can finish all layout pulses before that first event arrives. Drain
+        // the real pipeline without adding more full-resolution captures.
+        let frameDeadline = Date().addingTimeInterval(30)
+        while frames.image == nil, Date() < frameDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
         let sdkDrawCount = window.drawCount
         let baseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
