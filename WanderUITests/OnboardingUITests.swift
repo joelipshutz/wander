@@ -393,8 +393,11 @@ final class ImportFormRefinementUITests: XCTestCase {
         for _ in 0..<5 where !saved.isHittable { app.swipeUp() }
         XCTAssertTrue(saved.isHittable)
         saved.tap()
+        // The report already contains this place's name. Wait for the actual
+        // navigation destination before asserting that the report is gone.
+        XCTAssertTrue(app.scrollViews["place-profile.scroll"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Maru Coffee"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["import.save"].exists)
+        XCTAssertTrue(app.buttons["import.save"].waitForNonExistence(timeout: 5))
         keepScreenshot("Saved import — place profile")
     }
 
@@ -1647,10 +1650,12 @@ final class OnboardingUITests: XCTestCase {
         app.launchArguments = [
             "-WanderAuthenticatedUITest",
             "-WanderUseDemoFixtures",
+            "-WanderDisableWalkthroughs",
             "-WanderInitialTab",
             "profile",
         ]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
 
         let settingsButton = app.buttons["Settings"]
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 8))

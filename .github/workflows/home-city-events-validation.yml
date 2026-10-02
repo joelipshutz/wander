@@ -75,6 +75,10 @@ jobs:
             xcrun simctl shutdown "$PRO_DEVICE_ID"
           fi
           xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
+          # Finish first-boot initialization before the live-auth cold launch.
+          # Match the second-boot setup used by the full parent regression.
+          xcrun simctl shutdown "$COMPACT_DEVICE_ID"
+          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
       - name: Repeat native screen flows on compact iPhone 16e
         if: success() || failure()
         run: >-

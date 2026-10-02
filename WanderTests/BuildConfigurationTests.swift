@@ -671,6 +671,7 @@ final class BuildConfigurationTests: XCTestCase {
             try collectedDataTypes(in: manifest),
             [
                 "NSPrivacyCollectedDataTypeAudioData",
+                "NSPrivacyCollectedDataTypeCoarseLocation",
                 "NSPrivacyCollectedDataTypeContacts",
                 "NSPrivacyCollectedDataTypeDeviceID",
                 "NSPrivacyCollectedDataTypeEmailAddress",
@@ -678,6 +679,7 @@ final class BuildConfigurationTests: XCTestCase {
                 "NSPrivacyCollectedDataTypeOtherUserContent",
                 "NSPrivacyCollectedDataTypePhoneNumber",
                 "NSPrivacyCollectedDataTypePhotosorVideos",
+                "NSPrivacyCollectedDataTypePreciseLocation",
                 "NSPrivacyCollectedDataTypeSearchHistory",
                 "NSPrivacyCollectedDataTypeUserID"
             ]
@@ -695,6 +697,35 @@ final class BuildConfigurationTests: XCTestCase {
             XCTAssertEqual(declaration["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)
             XCTAssertEqual(declaration["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
         }
+    }
+
+    func testReadableReplayManifestDeclaresLinkedAnalyticsContent() throws {
+        let manifest = try privacyManifest("Wander/Resources/PrivacyInfo.xcprivacy")
+        let declarations = try collectedDataDeclarations(in: manifest)
+        let analyticsTypes = Set(declarations.compactMap { declaration -> String? in
+            let purposes = declaration["NSPrivacyCollectedDataTypePurposes"] as? [String] ?? []
+            guard purposes.contains("NSPrivacyCollectedDataTypePurposeAnalytics") else { return nil }
+            return declaration["NSPrivacyCollectedDataType"] as? String
+        })
+        XCTAssertEqual(analyticsTypes, Set([
+            "NSPrivacyCollectedDataTypeCoarseLocation",
+            "NSPrivacyCollectedDataTypeContacts",
+            "NSPrivacyCollectedDataTypeDeviceID",
+            "NSPrivacyCollectedDataTypeEmailAddress",
+            "NSPrivacyCollectedDataTypeName",
+            "NSPrivacyCollectedDataTypeOtherUserContent",
+            "NSPrivacyCollectedDataTypePhoneNumber",
+            "NSPrivacyCollectedDataTypePhotosorVideos",
+            "NSPrivacyCollectedDataTypePreciseLocation",
+            "NSPrivacyCollectedDataTypeSearchHistory",
+            "NSPrivacyCollectedDataTypeUserID"
+        ]))
+        let audio = try XCTUnwrap(declarations.first {
+            $0["NSPrivacyCollectedDataType"] as? String == "NSPrivacyCollectedDataTypeAudioData"
+        })
+        XCTAssertEqual(audio["NSPrivacyCollectedDataTypePurposes"] as? [String], [
+            "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+        ], "Optional voice feedback is app functionality; replay does not record microphone audio.")
     }
 
     func testShareExtensionPrivacyManifestDeclaresOnlyContainerFileTimestamps() throws {

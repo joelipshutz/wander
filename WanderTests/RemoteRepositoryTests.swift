@@ -789,7 +789,7 @@ final class RemoteRepositoryTests: XCTestCase {
             body: FeedRPCProbeParameters()
         )
         defer { auth.releaseForcedRefreshes() }
-        try await auth.waitForForcedRefreshToStart()
+        await fulfillment(of: [auth.forcedRefreshStarted], timeout: 10)
         try await waitForFeedRequestCount(2)
         for _ in 0..<20 {
             await Task.yield()
@@ -5147,6 +5147,7 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
     let canPresentNativeAuth = false
     private(set) var cachedTokenRequestCount = 0
     private(set) var forcedTokenRequestCount = 0
+    let forcedRefreshStarted = XCTestExpectation(description: "Forced token refresh started")
     private var forcedTokens: [String]
     private var forcedRefreshFailuresRemaining: Int
     private let pausesForcedRefresh: Bool
@@ -5183,6 +5184,7 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
 
     func refreshSupabaseAccessToken() async throws -> String {
         forcedTokenRequestCount += 1
+        if forcedTokenRequestCount == 1 { forcedRefreshStarted.fulfill() }
         if pausesForcedRefresh, !forcedRefreshGateIsOpen {
             await withCheckedContinuation { continuation in
                 pausedForcedRefreshes.append(continuation)
@@ -5201,17 +5203,6 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
             return forcedTokens.removeFirst()
         }
         return forcedTokens.first ?? "fresh-token"
-    }
-
-    func waitForForcedRefreshToStart() async throws {
-        for _ in 0..<1_000 {
-            if forcedTokenRequestCount > 0 {
-                return
-            }
-            try await Task.sleep(nanoseconds: 1_000_000)
-        }
-        XCTFail("Timed out waiting for the forced token refresh to start")
-        throw URLError(.timedOut)
     }
 
     func releaseForcedRefreshes() {

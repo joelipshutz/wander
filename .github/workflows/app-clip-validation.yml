@@ -105,6 +105,12 @@ jobs:
           # Start system services before compilation, so first-boot setup is not
           # competing with the first app animation/performance measurement.
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
+          # A fresh iOS 26.5 runtime can report an appearance change without
+          # delivering it to any scene, including Settings. A second boot after
+          # initial setup restores the system notifications (verified against
+          # unchanged dark-mode and live-transition pixel assertions).
+          subprocess.run(['xcrun', 'simctl', 'shutdown', device['udid']], check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
           if os.environ['TEST_SUITE'] in ('ui', 'ui-performance', 'graphics', 'replay'):
               # Attach the display before testing native materials and frame
               # cadence or capturing the SDK's actual replay screenshot.
