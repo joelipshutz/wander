@@ -2308,6 +2308,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(placeBackButton.waitForNonExistence(timeout: 3))
         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
         XCTAssertEqual(searchField.value as? String, "coffee")
+        XCTAssertFalse(app.keyboards.firstMatch.exists,
+                       "Returning from a place must preserve submitted results without reopening the keyboard.")
 
         app.swipeUp()
         XCTAssertTrue(backButton.exists)
@@ -2758,12 +2760,21 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(app.textViews["save.note"].value as? String, "Wanna mode draft")
         checkInChoice.tap()
 
-        let start = ProcessInfo.processInfo.systemUptime
         disclosure.tap()
         XCTAssertTrue((disclosure.value as? String)?.contains("Expanded") == true)
         let picker = app.descendants(matching: .any)["save.checkInDatePicker"]
         XCTAssertTrue(picker.exists)
-        let elapsed = ProcessInfo.processInfo.systemUptime - start
+        // The runner's tap and two AX queries alone can exceed one second on
+        // CI. Keep the app's one-second budget measured from its tap handler
+        // through the first displayed calendar frame.
+        let rendered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            Double(picker.value as? String ?? "") != nil
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [rendered], timeout: 5), .completed)
+        guard let elapsed = Double(picker.value as? String ?? "") else {
+            XCTFail("Calendar presentation did not report a rendered frame")
+            return
+        }
 
         XCTContext.runActivity(named: String(format: "Calendar tray presented in %.3f seconds", elapsed)) { _ in }
         print(String(format: "REC241_CALENDAR_TRAY_LATENCY_SECONDS=%.3f", elapsed))

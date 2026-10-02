@@ -27,6 +27,7 @@ struct DiscoverScreen: View {
     @State private var activePlaceSearchSubmissionID: UUID?
     @State private var activeExternalSearchRequestID: UUID?
     @State private var didTrackPlaceSearchOpen = false
+    @State private var didInitializeContent = false
     @StateObject private var peopleSearch = PeopleSearchModel()
     @State private var peopleSearchRetry = 0
     @State private var memberQuery = ""
@@ -308,6 +309,11 @@ struct DiscoverScreen: View {
                 )
             )
             .task {
+                // A pushed place returns to this same search state. Re-running
+                // launch setup would reopen the keyboard and resubmit results
+                // while the navigation pop is restoring its scroll layout.
+                guard !didInitializeContent else { return }
+                didInitializeContent = true
                 applyRequestedSection()
                 if isPlaceSearchPresented, !didTrackPlaceSearchOpen {
                     didTrackPlaceSearchOpen = true

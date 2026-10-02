@@ -41,7 +41,6 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
-        sdk.capture("offline_replay_fixture_ready")
         // The SDK swizzles UIView.layoutSublayers(of:). SwiftUI's hosting view
         // and UIWindow can override that path, so pulse an ordinary UIView
         // instead of relying on unrelated app-host animations to trigger replay.
