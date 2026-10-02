@@ -86,6 +86,11 @@ import XCTest
         let phone = app.textFields["accountContactDetails.phone"]
         phone.tap()
         phone.typeText("01 42 68 53 00")
+        let canContinue = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == true"),
+            object: app.buttons["accountContactDetails.continue"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [canContinue], timeout: 5), .completed)
         XCTAssertTrue(app.buttons["accountContactDetails.continue"].isEnabled)
         capture(app, name: "Typeahead 05 — Paris selected")
     }

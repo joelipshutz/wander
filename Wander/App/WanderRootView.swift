@@ -3626,6 +3626,20 @@ private struct WanderNativeTabAppearance: UIViewRepresentable {
             bar.unselectedItemTintColor = ink
             bar.tintColor = accent
             syncGeometry()
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-WanderTabAppearanceDiagnostics") {
+                bar.accessibilityValue = [
+                    "window=\(window.traitCollection.userInterfaceStyle.rawValue)",
+                    "anchor=\(anchor.traitCollection.userInterfaceStyle.rawValue)",
+                    "bar=\(bar.traitCollection.userInterfaceStyle.rawValue)",
+                    "material=\(material.traitCollection.userInterfaceStyle.rawValue)",
+                    "materialHidden=\(material.isHidden)",
+                    "materialAlpha=\(material.alpha)",
+                    "reduceTransparency=\(UIAccessibility.isReduceTransparencyEnabled)",
+                    "increaseContrast=\(UIAccessibility.isDarkerSystemColorsEnabled)"
+                ].joined(separator: ";")
+            }
+            #endif
         }
 
         private func syncGeometry() {

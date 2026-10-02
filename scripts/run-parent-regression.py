@@ -41,7 +41,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["unit", "replay", "performance", "ui-performance", "ui"], required=True)
+    parser.add_argument("--suite", choices=["unit", "replay", "performance", "ui-performance", "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -59,12 +59,20 @@ def main() -> int:
         "WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds",
         "WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget",
     ]
-    inventory = (ui_test_identifiers(root) if args.suite in {"ui", "ui-performance"} else
+    inventory = (ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "graphics"} else
                  [replay] if args.suite == "replay" else
                  performance if args.suite == "performance" else ["WanderTests"])
-    if args.suite in {"ui", "ui-performance"} and not ISOLATED_UI_PERFORMANCE.issubset(inventory):
+    if args.suite in {"ui", "ui-performance", "graphics"} and not ISOLATED_UI_PERFORMANCE.issubset(inventory):
         parser.error("isolated UI performance selection no longer matches the test inventory")
-    if args.suite == "ui-performance":
+    if args.suite == "graphics":
+        selected = sorted(ISOLATED_UI_PERFORMANCE | {
+            "WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits",
+            "WanderUITests/EventsComingSoonUITests/testDarkTabBarStaysDarkAcrossEventsVisits",
+            "WanderUITests/EventsComingSoonUITests/testTabGlassSurvivesScrubbingAndLiveAppearanceChanges",
+        })
+        if not set(selected).issubset(inventory):
+            parser.error("graphics diagnostic selection no longer matches the test inventory")
+    elif args.suite == "ui-performance":
         selected = sorted(ISOLATED_UI_PERFORMANCE)
     elif args.suite == "ui":
         # Preserve shard assignment/order for all remaining tests.
@@ -82,7 +90,7 @@ def main() -> int:
     excluded = list(isolated)
     if not selected:
         parser.error("empty test selection")
-    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance"} else None,
+    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "graphics"} else None,
                  "identifiers": selected, "isolatedTestSuites": isolated}
     if args.selection_file:
         Path(args.selection_file).write_text(json.dumps(selection, indent=2) + "\n")

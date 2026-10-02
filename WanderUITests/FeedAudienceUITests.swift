@@ -2,6 +2,11 @@ import XCTest
 
 @MainActor
 final class FeedAudienceUITests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+    }
+
     func testMenuFiltersAndResetsOnTabEntryAndColdLaunch() {
         let app = launch()
         let menu = app.descendants(matching: .any)["feed.audience"].firstMatch
@@ -14,7 +19,7 @@ final class FeedAudienceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Only Me"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Only Friends"].exists)
         capture("feed-audience-menu")
-        choose("Only Me", in: app, menu: menu)
+        choose("Only Me", in: app)
         XCTAssertTrue(app.buttons["feed.activity.fixture-feed-own.actor"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"].exists)
         capture("feed-audience-only-me")
@@ -36,7 +41,7 @@ final class FeedAudienceUITests: XCTestCase {
         XCTAssertEqual(menu.value as? String, "Only Me")
         for _ in 0..<4 where !menu.isHittable { app.swipeDown() }
         menu.tap()
-        choose("Only Friends", in: app, menu: menu)
+        choose("Only Friends", in: app)
         XCTAssertTrue(app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.actor"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["feed.activity.fixture-feed-own.actor"].exists)
         XCTAssertFalse(app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"].exists)
@@ -46,7 +51,7 @@ final class FeedAudienceUITests: XCTestCase {
         app.tabBars.buttons["Feed"].tap()
         XCTAssertEqual(menu.value as? String, "Everyone")
         menu.tap()
-        choose("Only Me", in: app, menu: menu)
+        choose("Only Me", in: app)
         app.terminate()
         app.launch()
         XCTAssertTrue(menu.waitForExistence(timeout: 20))
@@ -65,12 +70,19 @@ final class FeedAudienceUITests: XCTestCase {
         capture("feed-audience-large-text-menu")
     }
 
-    private func choose(_ title: String, in app: XCUIApplication, menu: XCUIElement) {
+    private func choose(_ title: String, in app: XCUIApplication) {
         let option = app.buttons[title]
         XCTAssertTrue(option.waitForExistence(timeout: 5))
-        option.press(forDuration: 0.1)
+        XCTAssertTrue(option.isHittable)
+        // Send a normal touch to the visible row center instead of relying
+        // on the native menu's synthesized accessibility activation point.
+        option.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(option.waitForNonExistence(timeout: 5))
-        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", title), object: menu)
+        // Opening the native menu replaces its accessibility snapshot. Resolve
+        // the current control on every observation, including its updated value.
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.descendants(matching: .any)["feed.audience"].firstMatch.value as? String == title
+        }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 

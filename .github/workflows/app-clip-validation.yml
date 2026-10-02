@@ -10,6 +10,16 @@ on:
       - '.github/workflows/app-clip-validation.yml'
       - 'scripts/run-parent-regression.py'
   workflow_dispatch:
+    inputs:
+      graphics_only:
+        description: Run focused native appearance and map frame diagnostics
+        type: boolean
+        default: false
+      runner:
+        description: Standard macOS runner for a controlled rendering comparison
+        type: choice
+        options: [macos-26, macos-26-intel]
+        default: macos-26
 
 permissions:
   contents: read
@@ -23,7 +33,7 @@ concurrency:
 jobs:
   build:
     name: Parent test build
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -55,36 +65,12 @@ jobs:
   parent:
     needs: build
     name: Parent ${{ matrix.name }}
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 110
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: unit suite
-            suite: unit
-            shard: 0
-          - name: replay privacy
-            suite: replay
-            shard: 0
-          - name: search performance
-            suite: performance
-            shard: 0
-          - name: map performance
-            suite: ui-performance
-            shard: 0
-          - name: UI shard 1
-            suite: ui
-            shard: 0
-          - name: UI shard 2
-            suite: ui
-            shard: 1
-          - name: UI shard 3
-            suite: ui
-            shard: 2
-          - name: UI shard 4
-            suite: ui
-            shard: 3
+        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"unit suite","suite":"unit","shard":0},{"name":"replay privacy","suite":"replay","shard":0},{"name":"search performance","suite":"performance","shard":0},{"name":"map performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3}]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,7 +105,7 @@ jobs:
           # Start system services before compilation, so first-boot setup is not
           # competing with the first app animation/performance measurement.
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
-          if os.environ['TEST_SUITE'] in ('ui', 'ui-performance'):
+          if os.environ['TEST_SUITE'] in ('ui', 'ui-performance', 'graphics'):
               # Attach the display before testing native materials and frame
               # cadence, rather than depending on headless display scheduling.
               subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', device['udid']], check=True)

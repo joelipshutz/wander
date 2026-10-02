@@ -47,7 +47,7 @@ import UIKit
             capture("Live appearance — \(appearance)")
             let finalPixels = try XCTUnwrap(tabBarPixels(in: app))
             XCTAssertEqual(appearanceResult, .completed,
-                           "Requested \(appearance), device \(XCUIDevice.shared.appearance), rendered luminance \(finalPixels.luminance)")
+                           "Requested \(appearance), device \(XCUIDevice.shared.appearance), rendered luminance \(finalPixels.luminance); \(app.tabBars.firstMatch.value as? String ?? "no appearance probe")")
         }
     }
 
@@ -109,7 +109,7 @@ import UIKit
         capture("\(mode) — Map before Events")
         let initialPixels = try XCTUnwrap(tabBarPixels(in: app))
         XCTAssertEqual(appearanceResult, .completed,
-                       "Requested \(mode), device \(XCUIDevice.shared.appearance), rendered luminance \(initialPixels.luminance)")
+                       "Requested \(mode), device \(XCUIDevice.shared.appearance), rendered luminance \(initialPixels.luminance); \(app.tabBars.firstMatch.value as? String ?? "no appearance probe")")
         for (index, label) in ["Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
             tabs.buttons[label].tap()
             XCTAssertTrue(tabs.buttons[label].isSelected)
@@ -284,7 +284,7 @@ import UIKit
     }
 
     private func configureNotificationReminderFixture(in app: XCUIApplication) {
-        app.launchArguments.append("-WanderNotificationAuthorizationDeniedFixture")
+        app.launchArguments += ["-WanderNotificationAuthorizationDeniedFixture", "-WanderTabAppearanceDiagnostics"]
         app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Events.\(UUID().uuidString)"
     }
 }
