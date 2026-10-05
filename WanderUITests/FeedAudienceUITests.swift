@@ -73,11 +73,18 @@ final class FeedAudienceUITests: XCTestCase {
     private func choose(_ title: String, in app: XCUIApplication) {
         let option = app.buttons[title]
         XCTAssertTrue(option.waitForExistence(timeout: 5))
+        var previousFrame = CGRect.null
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            app.buttons[title].isHittable
+            let row = app.buttons[title]
+            guard row.exists, row.isHittable else { return false }
+            let frame = row.frame
+            defer { previousFrame = frame }
+            return !frame.isEmpty && frame == previousFrame
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
         XCTAssertTrue(option.isHittable)
+        // Wait for the native menu's presentation frame to settle before
+        // resolving its touch point. It becomes hittable during the animation.
         // Send a normal touch to the visible row center instead of relying
         // on the native menu's synthesized accessibility activation point.
         option.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()

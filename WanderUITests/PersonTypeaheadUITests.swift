@@ -154,9 +154,11 @@ final class PersonTypeaheadUITests: XCTestCase {
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
         // UIKit can finish the native edit before its accessibility value is
         // refreshed. Observe the result without sending another delete.
-        expectation(for: NSPredicate(format: "value == %@", remaining), evaluatedWith: field)
+        expectation(for: NSPredicate { _, _ in
+            field.exists && (field.value as? String ?? "") == remaining
+        }, evaluatedWith: field)
         waitForExpectations(timeout: 5)
-        XCTAssertEqual(field.value as? String, remaining)
+        XCTAssertEqual(field.value as? String ?? "", remaining)
     }
 
     private func focus(_ field: XCUIElement, in app: XCUIApplication) {

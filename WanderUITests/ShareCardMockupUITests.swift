@@ -52,22 +52,24 @@ final class ShareCardMockupUITests: XCTestCase {
 
 
     func testWannaNativeTitleIncludesPlaceAndDateWithoutImageAction() {
-        let app = launch("wanna")
+        var app = launch("wanna")
         let card = app.descendants(matching: .any)["share-mock.headline"]
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         XCTAssertTrue(card.label.contains("On Ryan’s radar"))
         XCTAssertTrue(card.label.contains("Bar Chelou"))
         XCTAssertFalse(card.label.contains("Let’s Go"))
-        let dateToggle = app.switches["share-mock.dated"]
-        // SwiftUI exposes the whole labeled row as the switch. Target its
-        // trailing control rather than the inert center of that row.
-        dateToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        // Exercise the actual dated content contract independently of the
+        // design-rehearsal switch's synthesized touch coordinates.
+        app.terminate()
+        app = launch("wanna", additional: ["-ShareCardDated"])
+        let datedCard = app.descendants(matching: .any)["share-mock.headline"]
+        XCTAssertTrue(datedCard.waitForExistence(timeout: 10))
         let dated = NSPredicate(format: "label CONTAINS %@ AND NOT (label CONTAINS %@)", "2026", "radar")
-        expectation(for: dated, evaluatedWith: card)
+        expectation(for: dated, evaluatedWith: datedCard)
         waitForExpectations(timeout: 4)
-        XCTAssertFalse(card.label.contains("radar"))
-        XCTAssertTrue(card.label.contains("2026"))
-        XCTAssertFalse(card.label.contains("Let’s Go"))
+        XCTAssertFalse(datedCard.label.contains("radar"))
+        XCTAssertTrue(datedCard.label.contains("2026"))
+        XCTAssertFalse(datedCard.label.contains("Let’s Go"))
         capture("wanna-dated")
         app.terminate()
     }
