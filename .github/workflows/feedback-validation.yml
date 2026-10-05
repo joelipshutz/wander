@@ -46,6 +46,8 @@ jobs:
           # Match the parent regression's initialized simulator. On first boot,
           # XCTest can keep reporting Foreground after Home is visibly open.
           subprocess.run(['xcrun', 'simctl', 'bootstatus', chosen['udid'], '-b'], check=True)
+          subprocess.run(['xcrun', 'simctl', 'ui', chosen['udid'], 'appearance', 'dark'], check=True)
+          subprocess.run(['xcrun', 'simctl', 'ui', chosen['udid'], 'appearance', 'light'], check=True)
           subprocess.run(['xcrun', 'simctl', 'shutdown', chosen['udid']], check=True)
           subprocess.run(['xcrun', 'simctl', 'bootstatus', chosen['udid'], '-b'], check=True)
           subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', chosen['udid']], check=True)
