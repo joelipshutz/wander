@@ -20,7 +20,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         XCTAssertEqual(shared.message, "")
     }
 
-    func testCanonicalPlaceStillPublishesItsArtworkAndExactTarget() async throws {
+    func testCanonicalLinkPublishesExactTargetWithoutRenderingPrivateArtwork() async throws {
         let transport = CardTransport()
         let id = UUID().uuidString
         let content = try XCTUnwrap(WanderShareContent.place(serverID: id, name: "Sample place", message: ""))
@@ -29,7 +29,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
             renderCount += 1
             return self.png
         }
-        XCTAssertEqual(renderCount, 1)
+        XCTAssertEqual(renderCount, 0)
         XCTAssertEqual(transport.params["input_kind"], "place")
         XCTAssertEqual(transport.params["input_identifier"]?.lowercased(), id.lowercased())
         XCTAssertEqual(shared.items.count, 1)
@@ -46,23 +46,23 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
             XCTFail("A canonical link must not silently fall back to a generic URL")
         } catch {
             XCTAssertEqual(error as? ShareCardPreparationError, .session)
-            XCTAssertTrue(transport.deleted)
+            XCTAssertFalse(transport.deleted)
         }
         transport.fail = false
         let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: repo) { self.png }
         XCTAssertNotEqual(shared.item, content.item)
     }
 
-    func testArtworkFailureNeverUploadsAndRetainsItsSpecificError() async throws {
+    func testLinkPublicationNeverExecutesThePrivateArtworkClosure() async throws {
         let transport = CardTransport()
-        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
-        do {
-            _ = try await ShareCardLinkPreparation.prepare(content: content, repository: repository(transport)) {
-                throw ShareCardPreparationError.artwork
-            }
-            XCTFail("Expected rendering failure")
-        } catch { XCTAssertEqual(error as? ShareCardPreparationError, .artwork) }
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Private name", handle: "private")!
+        let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: repository(transport)) {
+            XCTFail("Protected artwork must stay local")
+            throw ShareCardPreparationError.artwork
+        }
         XCTAssertTrue(transport.path.isEmpty)
+        XCTAssertEqual(transport.params["input_title"], "Shared on Astir")
+        XCTAssertEqual(shared.subject, "Shared on Astir")
     }
 
     func testMissingPublisherAndUnsupportedURLsFailBeforeRendering() async {
@@ -84,33 +84,18 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         }
     }
 
-    func testCancellationDuringArtworkNeverPublishes() async {
-        let transport = CardTransport()
-        do {
-            _ = try await ShareCardLinkPreparation.prepare(
-                content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!,
-                repository: repository(transport)
-            ) { throw CancellationError() }
-            XCTFail("Expected cancellation")
-        } catch { XCTAssertTrue(error is CancellationError) }
-        XCTAssertTrue(transport.path.isEmpty)
-    }
-
-    func testCancelledArtworkDoesNotBecomeAVisibleRenderingFailure() async {
+    func testCancelledPublicationDoesNotPublishOrUploadArtwork() async {
         let transport = CardTransport()
         let task = Task {
-            try await ShareCardLinkPreparation.prepare(
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await ShareCardLinkPreparation.prepare(
                 content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!,
                 repository: repository(transport)
-            ) {
-                withUnsafeCurrentTask { $0?.cancel() }
-                throw ShareCardPreparationError.artwork
-            }
+            ) { XCTFail("Cancelled work must not render"); return self.png }
         }
-        do {
-            _ = try await task.value
-            XCTFail("Expected cancellation")
-        } catch { XCTAssertTrue(error is CancellationError) }
+        do { _ = try await task.value; XCTFail("Expected cancellation") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.params.isEmpty)
         XCTAssertTrue(transport.path.isEmpty)
     }
 
@@ -219,13 +204,15 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         XCTAssertFalse(properties.values.contains { $0.contains(id) || $0.contains(token) })
     }
 
-    func testPublicationUploadsOnceAndReturnsOneURLWithoutPromotionalTextOrAttachment() async throws {
+    func testPublicationNeverUploadsAndReturnsOneURLWithoutPrivateTextOrAttachment() async throws {
         let transport = CardTransport()
         let repo = repository(transport)
         let original = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan Example", handle: "ryan")!
         let shared = try await repo.publish(content: original, previewPNG: png)
-        XCTAssertEqual(transport.bucket, "share-card-previews")
-        XCTAssertTrue(transport.path.hasPrefix("user_ryan/"))
+        XCTAssertTrue(transport.bucket.isEmpty)
+        XCTAssertTrue(transport.path.isEmpty)
+        XCTAssertEqual(transport.params["input_image_path"], "")
+        XCTAssertEqual(shared.subject, "Shared on Astir")
         XCTAssertEqual(transport.params["input_kind"], "profile")
         XCTAssertEqual(transport.params["input_identifier"], "user_ryan")
         XCTAssertEqual(shared.items, [shared.item])
@@ -238,24 +225,25 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         XCTAssertFalse(transport.deleted)
     }
 
-    func testFailedPublicationCleansUpArtworkAndNeverReturnsGenericURL() async {
+    func testFailedAuthorizationNeverReturnsAShareLink() async {
         let transport = CardTransport()
         transport.fail = true
         do {
             _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!, previewPNG: png)
             XCTFail("Publication must fail")
-        } catch { XCTAssertTrue(transport.deleted) }
+        } catch { XCTAssertFalse(transport.deleted) }
     }
 
-    func testInvalidTokenCleansUpAndInvalidImageNeverUploads() async {
+    func testInvalidTokenIsRejectedAndArtworkIsNeverUploaded() async {
         let transport = CardTransport()
         transport.token = "../evil"
         let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
         do { _ = try await repository(transport).publish(content: content, previewPNG: png); XCTFail() }
-        catch { XCTAssertTrue(transport.deleted) }
+        catch { XCTAssertFalse(transport.deleted) }
         let invalid = CardTransport()
-        do { _ = try await repository(invalid).publish(content: content, previewPNG: Data()); XCTFail() }
-        catch { XCTAssertTrue(invalid.path.isEmpty) }
+        do { _ = try await repository(invalid).publish(content: content, previewPNG: Data()) }
+        catch { XCTFail("Generic links need no image: \(error)") }
+        XCTAssertTrue(invalid.path.isEmpty)
     }
 
     private var png: Data { UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }.pngData()! }

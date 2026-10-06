@@ -705,6 +705,7 @@ struct UserPlaceDraft: Equatable {
     let categoryOverrideConfidence: Double?
     let nearbyConfirmed: Bool
     let plannedDate: Date?
+    let isPrivateListCompanion: Bool
     let sourceType: String
     let attributes: [PlaceAttributeDraft]
 
@@ -722,6 +723,7 @@ struct UserPlaceDraft: Equatable {
         nearbyConfirmed: Bool,
         plannedDate: Date? = nil,
         sourceType: String,
+        isPrivateListCompanion: Bool = false,
         attributes: [PlaceAttributeDraft]
     ) {
         self.place = place
@@ -739,6 +741,7 @@ struct UserPlaceDraft: Equatable {
             ? plannedDate.map { WannaGoDate.normalized($0) }
             : nil
         self.sourceType = sourceType
+        self.isPrivateListCompanion = isPrivateListCompanion
         self.attributes = attributes
     }
 }
@@ -1231,7 +1234,7 @@ struct PlacePhoto: Decodable, Equatable {
 
     init(localVisitPhoto photo: LocalVisitPhoto) {
         self.init(
-            provider: "visit_photo",
+            provider: photo.uploadState == .uploaded || photo.isSharedCopy ? "visit_photo" : "local_capture",
             providerPlaceID: photo.id,
             photoURLString: photo.remoteURLString ?? "",
             width: photo.width,
@@ -1276,6 +1279,7 @@ struct PlacePhoto: Decodable, Equatable {
     var authorAvatarURL: URL? { authorAvatarURLString.flatMap(URL.init(string:)) }
     var sourcePhotoURL: URL? { sourcePhotoURLString.flatMap(URL.init(string:)) }
     var isGooglePlacesPhoto: Bool { provider == "google_places" }
+    var requiresAccessCheck: Bool { provider != "local_capture" && (provider == "visit_photo" || storageBucket == "visit-photos") }
 
     var cacheKey: String {
         [provider, providerPlaceID, storageBucket, storagePath, localAssetRef]
@@ -1977,6 +1981,7 @@ extension PlaceCandidateResolving {
 
 @MainActor
 protocol PlaceRepository {
+    func ratingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries
     func places(in viewport: MapViewport) async throws -> [VisiblePlace]
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
     func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
@@ -1987,6 +1992,10 @@ protocol PlaceRepository {
 }
 
 extension PlaceRepository {
+    func ratingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries {
+        throw WanderRemoteError.notImplemented("place rating summaries")
+    }
+
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("rec.me place search")
     }
@@ -2089,6 +2098,7 @@ protocol SocialPlaceSaveRepository {
 
 @MainActor
 protocol PlacePhotoRepository {
+    func validateAccess(to photo: PlacePhoto) async throws
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
     func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult]
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
@@ -2103,6 +2113,11 @@ protocol PlacePhotoRepository {
 }
 
 extension PlacePhotoRepository {
+    func validateAccess(to photo: PlacePhoto) async throws {
+        // Repositories without an authorization contract cannot serve protected media.
+        if photo.requiresAccessCheck { throw WanderRemoteError.notConfigured }
+    }
+
     func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
         var results: [PlacePhotoBatchResult] = []
         results.reserveCapacity(requests.count)
@@ -2166,7 +2181,7 @@ protocol VisitRepository {
     func photos(for visitID: String) async throws -> [VisitPhotoResult]
     func visibleUploadedPhotos(for visitID: String) async throws -> [VisitPhotoResult]
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult
-    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws
     func deletePhoto(photoID: String, bucket: String, path: String) async throws
 }
 

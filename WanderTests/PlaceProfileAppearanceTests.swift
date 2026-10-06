@@ -187,7 +187,10 @@ final class PlaceProfileAppearanceTests: XCTestCase {
 
     func testWannaStaysLightWithReadableInkInBothAppearances() async throws {
         for selected in [false, true] {
+            // This fixed pixel crop targets the normal horizontal action layout.
+            // Accessibility layout is adaptive and has different button coordinates.
             let host = UIHostingController(rootView: WannaAppearanceProbe(selected: selected)
+                .dynamicTypeSize(.large)
                 .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false))
                 .astirAdaptiveBrandMode())
             let window = try makeTestWindow(size: UIScreen.main.bounds.size)
@@ -421,7 +424,7 @@ private final class AppearanceVisitRepository: VisitRepository {
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
         throw WanderRemoteError.notConfigured
     }
-    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {
         throw WanderRemoteError.notConfigured
     }
     func deletePhoto(photoID: String, bucket: String, path: String) async throws {

@@ -11,8 +11,9 @@ explicitly pending. It contains no credentials or private keys.
 
 ## Behavior
 
-The Clip displays public share artwork, then uses the same account-authorized
-RPCs as the full app for protected content. A published image token never grants
+The Clip validates generic share-card metadata, then uses the same account-authorized
+RPCs as the full app for protected content. It never loads retired public share
+artwork or uses a card title in place of the current source. A generic preview token never grants
 access to a private profile, activity or list. The first native implementation
 shows up to 20 list places and 100 profile places, with the cap stated on screen.
 

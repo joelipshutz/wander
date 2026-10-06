@@ -111,6 +111,35 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertEqual(matches.map(\.score), [420, 360, 300, 300, 92])
     }
 
+    func testPhraseRankingPreservesWholeTokenBoundariesAndPosition() throws {
+        let names = [
+            "exact": "Quiet Patio",
+            "prefix": "Quiet Patio Coffee",
+            "middle": "Coffee Quiet Patio Garden",
+            "suffix": "Coffee Quiet Patio",
+            "separated": "Quiet Coffee Patio",
+            "partial": "Quiet Patios",
+            "repeated": "Quiet Quiet Patio"
+        ]
+        let places = names.map { makeVisiblePlace(id: $0.key, name: $0.value, category: "Restaurant") }
+        let matches = TrustedPlaceSearch.matches(query: "quiet patio", in: places)
+        let scores = Dictionary(uniqueKeysWithValues: matches.map { ($0.place.id, $0.score) })
+
+        XCTAssertEqual(scores.count, names.count)
+        let exact = try XCTUnwrap(scores["exact"])
+        let prefix = try XCTUnwrap(scores["prefix"])
+        let middle = try XCTUnwrap(scores["middle"])
+        let suffix = try XCTUnwrap(scores["suffix"])
+        let separated = try XCTUnwrap(scores["separated"])
+        let partial = try XCTUnwrap(scores["partial"])
+        XCTAssertGreaterThan(exact, prefix)
+        XCTAssertGreaterThan(prefix, middle)
+        XCTAssertEqual(middle, suffix)
+        XCTAssertEqual(middle, scores["repeated"])
+        XCTAssertGreaterThan(middle, separated)
+        XCTAssertGreaterThan(separated, partial)
+    }
+
     func testSupportingFieldsIncludeEveryFieldThatMatchesTheQuery() throws {
         let place = makeVisiblePlace(
             id: "all-fields",

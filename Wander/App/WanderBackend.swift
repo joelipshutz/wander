@@ -196,6 +196,14 @@ final class WanderBackend: ObservableObject {
     let configuration: WanderBackendConfiguration
     let feedbackRepository: (any FeedbackRepository)?
     let photoCacheScopeID = UUID()
+    private let photoAuthSession: (any AuthSessionProviding)?
+    private var deniedPhotoKeys = Set<String>()
+    @Published private(set) var photoAccessRevision = 0
+    private var photoAccessGenerations: [String: Int] = [:]
+    private var photoSessionTask: Task<Void, Never>?
+    @Published private(set) var photoSessionRevision = 0
+
+    var photoViewerID: String? { photoAuthSession?.state.session?.userID }
     let featureFlagRepository: (any FeatureFlagRepository)?
     let profileRepository: (any ProfileRepository)?
     let contactDiscovery: ContactDiscoveryService
@@ -243,6 +251,7 @@ final class WanderBackend: ObservableObject {
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
+        self.photoAuthSession = authSession
         self.featureFlagDeviceOverrides = FeatureFlagOverrideStore().launchSnapshot()
         self.placePhotoDataDiskCache = .shared
         self.placePhotoDownloadLimiter = .shared
@@ -311,6 +320,7 @@ final class WanderBackend: ObservableObject {
             self.shareCardPreviewRepository = nil
             self.placePlanInvitationRepository = nil
         }
+        observePhotoSession()
     }
 
     init(
@@ -349,10 +359,12 @@ final class WanderBackend: ObservableObject {
         eventsAccessRepository: (any EventsAccessRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
         featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
+        photoAuthSession: (any AuthSessionProviding)? = nil,
         placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
         placePhotoDownloadLimiter: PlacePhotoDownloadLimiter = .shared
     ) {
         self.configuration = configuration
+        self.photoAuthSession = photoAuthSession
         self.feedbackRepository = nil
         self.featureFlagDeviceOverrides = featureFlagDeviceOverrides
         self.shareCardPreviewRepository = shareCardPreviewRepository
@@ -385,7 +397,23 @@ final class WanderBackend: ObservableObject {
         self.accountContactDetailsRepository = accountContactDetailsRepository
         self.eventsAccessRepository = eventsAccessRepository
         self.sharedVisitRepository = sharedVisitRepository
+        observePhotoSession()
     }
+
+    private func observePhotoSession() {
+        guard let photoAuthSession else { return }
+        photoSessionTask = Task { @MainActor [weak self, photoAuthSession] in
+            for await _ in photoAuthSession.sessionChanges() {
+                guard !Task.isCancelled, let self else { return }
+                self.photoSessionRevision += 1
+                self.placePhotoImageCache.removeAllObjects()
+                self.placePhotoImageTasks.values.forEach { $0.cancel() }
+                self.placePhotoImageTasks.removeAll()
+            }
+        }
+    }
+
+    deinit { photoSessionTask?.cancel() }
 
     var canUseRemoteData: Bool {
         featureFlagRepository != nil
@@ -691,47 +719,101 @@ final class WanderBackend: ObservableObject {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured
         }
-        let key = "\(canonicalPlaceKey.utf8.count):\(canonicalPlaceKey)|\(photo.cacheKey)|\(variant.rawValue)"
+        let viewerID = photoViewerID
+        let sessionRevision = photoSessionRevision
+        let protected = photo.requiresAccessCheck
+        if protected, photoAuthSession != nil, viewerID == nil { throw WanderRemoteError.notAuthenticated }
+        // Protected bytes never use the legacy cache, which was shared across accounts.
+        let cachePlaceKey = protected
+            ? "protected-v2:\(viewerID ?? photoCacheScopeID.uuidString):\(photo.cacheKey)"
+            : canonicalPlaceKey
+        let key = "\(cachePlaceKey.utf8.count):\(cachePlaceKey)|\(photo.cacheKey)|\(variant.rawValue)"
+        let generation = photoAccessGenerations[cachePlaceKey, default: 0]
+        var offlineError: Error?
+        if protected {
+            let revocationRevision = await placePhotoDataDiskCache.revocationRevision(cachePlaceKey)
+            do {
+                try await placePhotoRepository.validateAccess(to: photo)
+                guard !Task.isCancelled, viewerID == photoViewerID,
+                      generation == photoAccessGenerations[cachePlaceKey, default: 0] else {
+                    throw CancellationError()
+                }
+                guard await placePhotoDataDiskCache.clearRevocation(cachePlaceKey, ifRevision: revocationRevision) else {
+                    throw CancellationError()
+                }
+                deniedPhotoKeys.remove(cachePlaceKey)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard !Task.isCancelled, viewerID == photoViewerID else { throw CancellationError() }
+                if ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                    offlineError = error
+                } else {
+                    if deniedPhotoKeys.insert(cachePlaceKey).inserted {
+                        photoAccessGenerations[cachePlaceKey, default: 0] += 1
+                        photoAccessRevision += 1
+                    }
+                    for variant in PlacePhotoRenderVariant.allCases {
+                        let variantKey = "\(cachePlaceKey.utf8.count):\(cachePlaceKey)|\(photo.cacheKey)|\(variant.rawValue)"
+                        placePhotoImageCache.removeObject(forKey: variantKey as NSString)
+                        placePhotoImageTasks.removeValue(forKey: variantKey)?.cancel()
+                    }
+                    await placePhotoDataDiskCache.remove(canonicalPlaceKey: cachePlaceKey, photoKey: photo.cacheKey)
+                    await placePhotoDataDiskCache.recordRevocation(cachePlaceKey)
+                    throw error
+                }
+            }
+        }
+        func checkCurrentAccess() throws {
+            try Task.checkCancellation()
+            guard viewerID == photoViewerID, sessionRevision == photoSessionRevision,
+                  generation == photoAccessGenerations[cachePlaceKey, default: 0] else {
+                throw CancellationError()
+            }
+        }
+        try checkCurrentAccess()
+        if offlineError != nil, await placePhotoDataDiskCache.hasRevocation(cachePlaceKey) {
+            throw WanderRemoteError.invalidResponse("photo_not_visible")
+        }
+        // Uploaded local files may be shared copies. Seed the authorized cache
+        // online; offline reads use that cache, never an unverified local original.
+        // Pending owner captures use local_capture and do not enter this path.
+        if offlineError == nil, let viewerID, photo.storagePath?.hasPrefix(viewerID + "/") == true,
+           let localAssetRef = photo.localAssetRef,
+           let localData = await Task.detached(priority: .utility, operation: {
+               VisitPhotoLocalFileStore.data(from: localAssetRef)
+           }).value {
+            try checkCurrentAccess()
+            placePhotoImageCache.setObject(localData as NSData, forKey: key as NSString, cost: localData.count)
+            await placePhotoDataDiskCache.insert(localData, canonicalPlaceKey: cachePlaceKey, photoKey: photo.cacheKey, variant: variant)
+            try checkCurrentAccess()
+            return localData
+        }
         if let cached = placePhotoImageCache.object(forKey: key as NSString) {
             await placePhotoDataDiskCache.recordMemoryHit()
+            try checkCurrentAccess()
             return cached as Data
         }
-        if let existingTask = placePhotoImageTasks[key] {
-            return try await existingTask.value
-        }
-
         if let diskData = await placePhotoDataDiskCache.data(
-            canonicalPlaceKey: canonicalPlaceKey,
-            photoKey: photo.cacheKey,
-            variant: variant
+            canonicalPlaceKey: cachePlaceKey, photoKey: photo.cacheKey, variant: variant
         ) {
-            placePhotoImageCache.setObject(
-                diskData as NSData,
-                forKey: key as NSString,
-                cost: diskData.count
-            )
+            try checkCurrentAccess()
+            placePhotoImageCache.setObject(diskData as NSData, forKey: key as NSString, cost: diskData.count)
             return diskData
         }
-
-        // The disk actor hop yields the main actor. Another visible surface may
-        // have filled memory or started this exact download while we waited.
-        if let cached = placePhotoImageCache.object(forKey: key as NSString) {
-            await placePhotoDataDiskCache.recordMemoryHit()
-            return cached as Data
-        }
+        try checkCurrentAccess()
+        if let offlineError { throw offlineError }
         if let existingTask = placePhotoImageTasks[key] {
-            return try await existingTask.value
+            let data = try await existingTask.value
+            try checkCurrentAccess()
+            return data
         }
-
         let task = Task { @MainActor in
             try await placePhotoDownloadLimiter.acquire()
             do {
                 let startedAt = ContinuousClock.now
                 let data = try await placePhotoRepository.imageData(for: photo, variant: variant)
-                await PlacePhotoPerformanceMonitor.shared.record(
-                    .networkDownload,
-                    startedAt: startedAt
-                )
+                await PlacePhotoPerformanceMonitor.shared.record(.networkDownload, startedAt: startedAt)
                 await placePhotoDownloadLimiter.release()
                 return data
             } catch {
@@ -743,18 +825,13 @@ final class WanderBackend: ObservableObject {
         do {
             let data = try await task.value
             placePhotoImageTasks[key] = nil
-            placePhotoImageCache.setObject(
-                data as NSData,
-                forKey: key as NSString,
-                cost: data.count
-            )
+            try checkCurrentAccess()
+            placePhotoImageCache.setObject(data as NSData, forKey: key as NSString, cost: data.count)
             await placePhotoDataDiskCache.recordNetworkLoad()
             await placePhotoDataDiskCache.insert(
-                data,
-                canonicalPlaceKey: canonicalPlaceKey,
-                photoKey: photo.cacheKey,
-                variant: variant
+                data, canonicalPlaceKey: cachePlaceKey, photoKey: photo.cacheKey, variant: variant
             )
+            try checkCurrentAccess()
             return data
         } catch {
             placePhotoImageTasks[key] = nil
@@ -880,6 +957,11 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await placeRepository.places(in: viewport)
+    }
+
+    func placeRatingSummaries(for lookup: PlaceRatingLookup) async throws -> PlaceRatingSummaries {
+        guard let placeRepository else { throw WanderRemoteError.notConfigured }
+        return try await placeRepository.ratingSummaries(for: lookup)
     }
 
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
@@ -1207,7 +1289,7 @@ final class WanderBackend: ObservableObject {
         return try await visitRepository.upsertPhotoMetadata(draft)
     }
 
-    func uploadVisitPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+    func uploadVisitPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {
         guard let visitRepository else {
             throw WanderRemoteError.notConfigured
         }

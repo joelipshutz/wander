@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shares the full app's strict canonical route validation. Preview tokens are
-/// retained for the published artwork, never used to authorize account actions.
+/// retained to validate the generic card, never used to authorize account actions.
 struct AppClipRoute: Equatable, Sendable {
     enum Kind: String, Codable, Sendable { case profile, place, list, activity, invite }
     let url: URL

@@ -267,6 +267,7 @@ final class LocalUserPlace {
     var visitedAt: Date?
     var savedAt: Date
     var plannedDate: Date?
+    var isPrivateListCompanion: Bool = false
     var sourceType: String
     var sourceArtifactID: String?
     var sourceUserPlaceID: String?
@@ -283,7 +284,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, viewerPrimaryCategory: String? = nil, viewerSubcategory: String? = nil, viewerFoodType: String? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, viewerPrimaryCategory: String? = nil, viewerSubcategory: String? = nil, viewerFoodType: String? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, isPrivateListCompanion: Bool = false, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -309,6 +310,7 @@ final class LocalUserPlace {
             ? plannedDate.map { WannaGoDate.normalized($0) }
             : nil
         self.sourceType = sourceType
+        self.isPrivateListCompanion = isPrivateListCompanion
         self.sourceArtifactID = sourceArtifactID
         self.sourceUserPlaceID = sourceUserPlaceID
         self.attributionUserID = attributionUserID
@@ -465,6 +467,7 @@ final class LocalVisitPhoto {
     @Attribute(.unique) var localID: String
     var serverID: String?
     var visitID: String
+    var sourcePhotoID: String?
     var storageBucket: String
     var storagePath: String?
     var localAssetRef: String?
@@ -488,6 +491,7 @@ final class LocalVisitPhoto {
         localID: String,
         serverID: String? = nil,
         visitID: String,
+        sourcePhotoID: String? = nil,
         storageBucket: String = "visit-photos",
         storagePath: String? = nil,
         localAssetRef: String? = nil,
@@ -510,6 +514,7 @@ final class LocalVisitPhoto {
         self.localID = localID
         self.serverID = serverID
         self.visitID = visitID
+        self.sourcePhotoID = sourcePhotoID
         self.storageBucket = storageBucket
         self.storagePath = storagePath
         self.localAssetRef = localAssetRef
@@ -531,6 +536,8 @@ final class LocalVisitPhoto {
     }
 
     var id: String { serverID ?? localID }
+    // The prefix is the exact identity assigned by older shared-visit clients.
+    var isSharedCopy: Bool { sourcePhotoID != nil || localID.hasPrefix("local_photo_shared_") }
     var uploadState: VisitPhotoUploadState { VisitPhotoUploadState(rawValue: uploadStateRaw) ?? .pendingUpload }
     var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
 }

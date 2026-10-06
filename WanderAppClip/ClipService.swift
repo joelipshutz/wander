@@ -22,58 +22,56 @@ final class ClipService: ClipServing {
     }
 
     func preview(_ route: AppClipRoute, authenticated: Bool) async throws -> ClipPreview {
-        var published: ClipPreview?
+        let hasPublishedCard = route.cardToken != nil
         if let token = route.cardToken {
             let response = try await rpc("share_card_preview", ["input_token": token,
                 "input_kind": route.kind.rawValue, "input_identifier": route.identifier], authenticated: false)
-            guard let card = response as? [String: Any], let title = text(card["title"]),
-                  let path = card["image_path"] as? String,
-                  path.range(of: "^[A-Za-z0-9_-]+/[a-f0-9-]{36}/preview[.]png$", options: .regularExpression) != nil,
-                  let root = configuration.supabaseURL else { throw ClipError.unavailable }
-            published = ClipPreview(title: title, subtitle: nil,
-                imageURL: root.appendingPathComponent("storage/v1/object/public/share-card-previews/" + path), places: [])
+            // Public cards confirm a valid share token only. Content and artwork
+            // must come from the current source-authorized contracts below.
+            guard let card = response as? [String: Any],
+                  card["preview_mode"] as? String == "generic" else { throw ClipError.unavailable }
         }
 
         if route.kind == .place {
             let row = try await publicPreview(kind: .place, id: route.identifier)
             guard let place = place(row) else { throw ClipError.unavailable }
-            return ClipPreview(title: published?.title ?? place.title, subtitle: text(row["subtitle"]),
-                imageURL: published?.imageURL, places: [place])
+            return ClipPreview(title: place.title, subtitle: text(row["subtitle"]),
+                imageURL: nil, places: [place])
         }
         if authenticated, route.kind == .activity {
             guard let row = try await rpc("activity_detail", ["input_activity_id": route.identifier]) as? [String: Any] else { throw ClipError.unavailable }
             if let projection = row["place"] as? [String: Any], let place = place(projection) {
-                return ClipPreview(title: published?.title ?? place.title, subtitle: text(row["note"]),
-                    imageURL: published?.imageURL, places: [place])
+                return ClipPreview(title: place.title, subtitle: text(row["note"]),
+                    imageURL: nil, places: [place])
             }
             // List-created activities have no place. Resolve their list through
             // the same authorized detail path, retaining the activity route for handoff.
             guard row["event_type"] as? String == "list_created", row["place"] is NSNull,
                   let list = row["list"] as? [String: Any], let id = list["id"] as? String,
                   UUID(uuidString: id) != nil else { throw ClipError.unavailable }
-            return try await listPreview(id: id, imageURL: published?.imageURL)
+            return try await listPreview(id: id)
         }
         if authenticated, route.kind == .list {
-            return try await listPreview(id: route.identifier, imageURL: published?.imageURL)
+            return try await listPreview(id: route.identifier)
         }
         if authenticated, route.kind == .profile {
             let response = try await rpc("profile_visible_places", ["profile_id": route.identifier])
             guard let rows = response as? [[String: Any]] else { throw ClipError.unavailable }
             let publicRow = try? await publicPreview(kind: .profile, id: route.identifier)
-            return ClipPreview(title: published?.title ?? publicRow.flatMap { text($0["title"]) } ?? "Shared map",
-                subtitle: rows.count > 100 ? "Showing 100 of \(rows.count) places visible to your account" : "Places visible to your account", imageURL: published?.imageURL,
+            return ClipPreview(title: publicRow.flatMap { text($0["title"]) } ?? "Shared map",
+                subtitle: rows.count > 100 ? "Showing 100 of \(rows.count) places visible to your account" : "Places visible to your account", imageURL: nil,
                 places: rows.prefix(100).compactMap(place))
         }
         if route.kind == .profile || route.kind == .invite {
             if let row = try? await publicPreview(kind: route.kind, id: route.identifier), let title = text(row["title"]) {
-                return ClipPreview(title: published?.title ?? title, subtitle: text(row["description"]),
-                    imageURL: published?.imageURL ?? safeImage(row["image_url"]), places: [],
+                return ClipPreview(title: title, subtitle: text(row["description"]),
+                    imageURL: safeImage(row["image_url"]), places: [],
                     needsSignIn: route.kind == .profile)
             }
         }
-        if let published {
-            return ClipPreview(title: published.title, subtitle: nil, imageURL: published.imageURL,
-                places: [], needsSignIn: [.list, .activity, .profile].contains(route.kind))
+        if hasPublishedCard, route.kind == .profile || route.kind == .invite {
+            return ClipPreview(title: route.kind == .invite ? "You’re invited to a list on Astir" : "Shared map",
+                subtitle: nil, imageURL: nil, places: [], needsSignIn: route.kind == .profile)
         }
         if [.list, .activity].contains(route.kind), !authenticated {
             return ClipPreview(title: route.kind == .list ? "Shared list" : "Shared activity",
@@ -82,7 +80,7 @@ final class ClipService: ClipServing {
         throw ClipError.unavailable
     }
 
-    private func listPreview(id: String, imageURL: URL?) async throws -> ClipPreview {
+    private func listPreview(id: String) async throws -> ClipPreview {
         guard let row = try await rpc("place_list_detail", ["input_list_id": id]) as? [String: Any],
               let list = row["list"] as? [String: Any], let title = text(list["name"]) else { throw ClipError.unavailable }
         // The list RPC has already authorized every item before exposing IDs.
@@ -95,7 +93,7 @@ final class ClipService: ClipServing {
         }
         let description = text(list["description"])
         let subtitle = ids.count > 20 ? [description, "Showing 20 of \(ids.count) places"].compactMap { $0 }.joined(separator: "\n") : description
-        return ClipPreview(title: title, subtitle: subtitle, imageURL: imageURL, places: places)
+        return ClipPreview(title: title, subtitle: subtitle, imageURL: nil, places: places)
     }
 
     func profile() async throws -> ClipProfile? {

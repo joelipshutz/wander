@@ -14,6 +14,33 @@ final class PersonTypeaheadUITests: XCTestCase {
         capture("comments-saved")
     }
 
+    func testCommentDraftAndSelectedMentionSurviveBackgroundEntry() {
+        let app = launch(["-WanderNotificationPostUITest", "-WanderInitialTab", "map",
+                          "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"])
+        let field = app.textViews["activity.comment.input"]
+        XCTAssertTrue(field.waitForExistence(timeout: 25))
+        focus(field, in: app)
+        field.typeText("With @c")
+        let person = app.buttons["activity.comment.input.person.fixture_caitlin"]
+        XCTAssertTrue(person.waitForExistence(timeout: 5))
+        person.tap()
+        XCTAssertEqual(field.value as? String, "With @Caitlin Cortez ")
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "The draft must preserve the comments destination")
+        XCTAssertEqual(field.value as? String, "With @Caitlin Cortez ")
+        focus(field, in: app)
+        // A recreated UITextView starts its caret at zero, and XCUI's default
+        // activation point can tap the beginning. Establish the deletion point
+        // explicitly, then verify the retained mention still deletes atomically.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        field.typeText("x")
+        XCTAssertEqual(field.value as? String, "With @Caitlin Cortez x")
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        assertAtomicBackspace(field, remaining: "With ")
+    }
+
     func testFeedSearchPickerInsertsFullNameAndKeepsKeyboard() {
         let app = launch(["-WanderInitialTab", "map"])
         // This exercises the picker after explicit navigation, independent of

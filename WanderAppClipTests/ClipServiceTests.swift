@@ -30,7 +30,7 @@ final class ClipServiceTests: XCTestCase {
         catch { XCTAssertEqual(error as? ClipError, .signIn) }
     }
 
-    func testPublishedImageDoesNotGrantPrivateActivityAccess() async throws {
+    func testGenericCardDoesNotGrantPrivateActivityAccess() async throws {
         let auth = ClipTestAuth(); auth.state = .signedIn(ClipTestAuth.account)
         let route = try XCTUnwrap(AppClipRoute(url: URL(string:
             "https://astirmovement.com/cards/activities/00000000-0000-0000-0000-000000000408?card=" + String(repeating: "a", count: 48))!))
@@ -39,13 +39,98 @@ final class ClipServiceTests: XCTestCase {
             let method = request.url!.lastPathComponent; calls.append(method)
             if method == "share_card_preview" {
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-public-key")
-                return self.response(request, body: "{\"title\":\"Shared preview\",\"image_path\":\"fixture/00000000-0000-0000-0000-000000000408/preview.png\"}")
+                return self.response(request, body: "{\"preview_mode\":\"generic\"}")
             }
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-test-token")
             return self.response(request, status: 403, body: "{\"message\":\"private backend content\"}")
         })
-        do { _ = try await service.preview(route, authenticated: true); XCTFail("Image is not an access grant") }
+        do { _ = try await service.preview(route, authenticated: true); XCTFail("A generic card is not an access grant") }
         catch { XCTAssertEqual(error as? ClipError, .unavailable) }
+        XCTAssertEqual(calls, ["share_card_preview", "activity_detail"])
+    }
+
+    func testGenericCardsOpenEveryLinkKindWithoutAnonymousProtectedReads() async throws {
+        let auth = ClipTestAuth()
+        let place = ClipTestService().place
+        let token = String(repeating: "a", count: 48)
+        let cases: [(String, String, [String], Bool)] = [
+            ("places/\(place.id)", place.title, ["share_card_preview", "public_web_preview"], false),
+            ("lists/00000000-0000-0000-0000-000000000408", "Shared list", ["share_card_preview"], true),
+            ("activities/00000000-0000-0000-0000-000000000408", "Shared activity", ["share_card_preview"], true),
+            ("profiles/fixture_user", "Shared map", ["share_card_preview", "public_web_preview"], true),
+            ("invites/\(token)", "You’re invited to a list on Astir", ["share_card_preview", "public_web_preview"], false)
+        ]
+        for (path, title, expectedCalls, needsSignIn) in cases {
+            let route = try XCTUnwrap(AppClipRoute(url: URL(string: "https://astirmovement.com/cards/\(path)?card=\(token)")!))
+            var calls: [String] = []
+            let service = ClipService(configuration: configuration, auth: auth, transport: { request in
+                let method = request.url!.lastPathComponent; calls.append(method)
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-public-key")
+                if method == "share_card_preview" {
+                    // Legacy fields must not override the current authorized source.
+                    return self.response(request, body: """
+                        {"preview_mode":"generic","title":"Retired title","image_path":"fixture/00000000-0000-0000-0000-000000000408/preview.png"}
+                        """)
+                }
+                XCTAssertEqual(method, "public_web_preview")
+                if route.kind == .place {
+                    return self.response(request, body: """
+                        {"is_available":true,"place_id":"\(place.id)","title":"Demo Coffee","latitude":0,"longitude":0}
+                        """)
+                }
+                // A private profile/invitation must not reveal source metadata.
+                return self.response(request, body: "{\"is_available\":false}")
+            })
+            let preview = try await service.preview(route, authenticated: false)
+            XCTAssertEqual(preview.title, title)
+            XCTAssertNil(preview.imageURL)
+            XCTAssertNil(preview.subtitle?.range(of: "Retired"))
+            XCTAssertEqual(preview.needsSignIn, needsSignIn)
+            XCTAssertEqual(preview.places, route.kind == .place ? [place] : [])
+            XCTAssertEqual(calls, expectedCalls)
+        }
+    }
+
+    func testInvalidOrRetiredCardPayloadDoesNotReadProtectedSource() async throws {
+        let auth = ClipTestAuth(); auth.state = .signedIn(ClipTestAuth.account)
+        let route = try XCTUnwrap(AppClipRoute(url: URL(string:
+            "https://astirmovement.com/cards/activities/00000000-0000-0000-0000-000000000408?card=" + String(repeating: "a", count: 48))!))
+        for body in ["null", "{}", "{\"preview_mode\":\"unknown\"}",
+                     "{\"title\":\"Retired title\",\"image_path\":\"fixture/00000000-0000-0000-0000-000000000408/preview.png\"}"] {
+            var calls: [String] = []
+            let service = ClipService(configuration: configuration, auth: auth, transport: { request in
+                calls.append(request.url!.lastPathComponent)
+                return self.response(request, body: body)
+            })
+            do { _ = try await service.preview(route, authenticated: true); XCTFail("Invalid cards must be unavailable") }
+            catch { XCTAssertEqual(error as? ClipError, .unavailable) }
+            XCTAssertEqual(calls, ["share_card_preview"])
+        }
+    }
+
+    func testGenericActivityCardUsesCurrentAuthorizedPlaceAndNote() async throws {
+        let auth = ClipTestAuth(); auth.state = .signedIn(ClipTestAuth.account)
+        let place = ClipTestService().place
+        let route = try XCTUnwrap(AppClipRoute(url: URL(string:
+            "https://astirmovement.com/cards/activities/00000000-0000-0000-0000-000000000408?card=" + String(repeating: "a", count: 48))!))
+        var calls: [String] = []
+        let service = ClipService(configuration: configuration, auth: auth, transport: { request in
+            let method = request.url!.lastPathComponent; calls.append(method)
+            if method == "share_card_preview" {
+                return self.response(request, body: "{\"preview_mode\":\"generic\"}")
+            }
+            XCTAssertEqual(method, "activity_detail")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-test-token")
+            return self.response(request, body: """
+                {"note":"Authorized note","place":{"place_id":"\(place.id)","canonical_name":"Demo Coffee","latitude":0,"longitude":0}}
+                """)
+        })
+        let preview = try await service.preview(route, authenticated: true)
+        XCTAssertEqual(preview.title, place.title)
+        XCTAssertEqual(preview.subtitle, "Authorized note")
+        XCTAssertEqual(preview.places, [place])
+        XCTAssertNil(preview.imageURL)
+        XCTAssertFalse(preview.needsSignIn)
         XCTAssertEqual(calls, ["share_card_preview", "activity_detail"])
     }
 
@@ -56,7 +141,6 @@ final class ClipServiceTests: XCTestCase {
         let place = ClipTestService().place
         let route = try XCTUnwrap(AppClipRoute(url: URL(string:
             "https://astirmovement.com/cards/activities/\(activityID)?card=" + String(repeating: "a", count: 48))!))
-        let imagePath = "fixture/\(activityID)/preview.png"
         var calls: [String] = []
         let service = ClipService(configuration: configuration, auth: auth, transport: { request in
             let method = request.url!.lastPathComponent; calls.append(method)
@@ -65,7 +149,7 @@ final class ClipServiceTests: XCTestCase {
             case "share_card_preview":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-public-key")
                 return self.response(request, body: """
-                    {"title":"Shared list activity","image_path":"\(imagePath)"}
+                    {"preview_mode":"generic"}
                     """)
             case "activity_detail":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-test-token")
@@ -94,8 +178,7 @@ final class ClipServiceTests: XCTestCase {
         XCTAssertEqual(preview.title, "Weekend favorites")
         XCTAssertEqual(preview.subtitle, "Places to try")
         XCTAssertEqual(preview.places, [place])
-        XCTAssertEqual(preview.imageURL?.absoluteString,
-            "https://clip-fixture.invalid/storage/v1/object/public/share-card-previews/\(imagePath)")
+        XCTAssertNil(preview.imageURL)
         XCTAssertFalse(preview.needsSignIn)
         XCTAssertEqual(calls, ["share_card_preview", "activity_detail", "place_list_detail", "public_web_preview"])
     }

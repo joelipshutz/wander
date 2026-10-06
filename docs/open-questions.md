@@ -1,19 +1,29 @@
 # Open Questions
 
-Last updated: 2026-09-22
+Last updated: 2026-10-06
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
 
 ## App Clip release evidence (REC-408)
 
 The shared-link scope is decided: native sign-in, profile setup, Save and Join
-run inside the Clip. Release remains blocked on signed-device proof of Clerk
-provider registration, Apple account continuity, Keychain migration into the full
-app, and same-account link continuation through onboarding. Verify any configured
-MFA/additional-verification requirement; the initial Clip currently reports that
-case instead of completing a second-factor flow. Hosted rollback-only save RPC
-validation and the published Messages experience also remain unverified.
+run inside the Clip. Signed-device authentication, retained sessions, Save, Join,
+and same-account continuation into the existing full app have passed, as has the
+hosted rollback-only Save RPC validation. Fresh-install Keychain migration,
+provider-specific device-trust behavior, and the published Messages experience
+remain release evidence gaps. Verify any configured MFA/additional-verification
+requirement; the initial Clip reports that case instead of completing a
+second-factor flow.
 See [the implementation and rollout guide](app-clip.md).
+
+## Activity privacy rollout (REC-590)
+
+Offline cache behavior and evidence-only companion cleanup were decided on
+September 23; see `docs/decisions.md`. These are no longer pending product choices.
+
+Small-sample and before/after inference from Astir rating is explicitly deferred
+to [REC-608](https://linear.app/recme/issue/REC-608/review-small-sample-inference-in-global-astir-ratings).
+Do not invent a minimum-count threshold in the current implementation.
 
 ## Onboarding copy and explorations (REC-529)
 
@@ -114,7 +124,7 @@ Reference: [Apple background transfers for extensions](https://developer.apple.c
 | Question | Recommendation | Notes |
 |---|---|---|
 | Share extension timing? | Later, after in-app add/map/social loop works. | Share extension can be a capture booster but should not block v0.1. |
-| Private profiles/follow requests? | Defer. | v0.1 follow graph is open one-way follows with visibility per place. |
+| Private profiles/follow requests? | Accepted; remaining implementation tracked in REC-634 after the REC-590 hardening slice. | Preserve legacy per-place audiences while adding account-based activity and accepted follow requests. |
 | Following users not on Wander yet? | Defer. | Needs invite/link/contact matching model. |
 | iPad layout? | Defer. | Later use map + side panel, not stretched iPhone UI. |
 
