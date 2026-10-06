@@ -4,6 +4,55 @@ Last updated: 2026-09-28
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
+## Historical data and testing scope (REC-590, September 29)
+
+Historical PostHog diagnostic cleanup is optional follow-up and does not block
+privacy acceptance testing or rollout. The previously approved support request
+remains submitted; removing it as a gate does not assert deletion or withdrawal.
+Future notification reporting remains aggregate-only.
+
+No historical check-ins, ratings, lists, photos, or Wanna records need deletion
+for the current testing slice. The completed audit found no proven historical
+private-list companions eligible for an audience repair. Before any future
+cleanup that changes user-facing historical records, report the affected scope.
+Keep the scoped legacy photo/share-preview link invalidation request: it revokes
+old access while preserving stored photos and database records. Its completion
+remains a separate rollout verification, without blocking branch testing. REC-633
+tracks this pre-existing legacy access separately from landing the tested app
+protections. An app merge does not certify historical CDN retirement. The remaining
+follow-request and audience-exclusion product controls are tracked in REC-634.
+
+## Cached activity and source revocation (REC-590, September 23)
+
+Opening another person's cached activity, check-in history, or protected photo
+rechecks its source access. Previously authorized cache may be used on a genuine
+offline connection error. A denied/deleted source, expired authentication, or
+server failure must not fall back to cached content. Known-denied photos stay
+unavailable across app restarts; caches are scoped to the viewer. Offline viewing
+can therefore show an unseen privacy change until connectivity returns. Owner
+drafts and offline capture remain available.
+
+A Wanna automatically created by adding a new place through a stealth-list
+selection starts self-only, even with mixed public/private list selection.
+Record that origin on the server. Repair only saves with authoritative automatic
+origin and no later explicit audience change. Membership in a stealth list,
+manual source type, or nearby timestamps alone do not prove intent. Existing
+independently saved places and ambiguous historical saves keep their audiences.
+
+Copied shared-visit photos retain source provenance and inherit later source
+revocation. A recipient's independent notes, rating, and original uploads remain
+their own. Notification inbox reads, claims, and the final delivery step check
+current source access. Social pushes use generic copy because delivered OS
+notifications cannot be recalled.
+
+Canonical Astir share links use generic public artwork and text. The website
+reader must be deployed before existing public share artwork becomes private.
+The cutover must invalidate CDN copies and verify previously issued public and
+signed URLs no longer serve protected bytes; token expiry alone is insufficient.
+Explicitly exported images and previously downloaded third-party copies cannot
+be recalled. Small-sample inference in anonymous Astir ratings stays deferred
+to REC-608.
+
 ## Feed on ordinary app entry (REC-629)
 
 Ordinary authenticated launches and returns from the background land on Feed.
@@ -548,6 +597,29 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+## 2026-09-22 — Ratings and automatic saves from private lists (REC-590)
+
+Place profiles always display Your rating, Friends rating, and Astir rating.
+Astir replaces the displayed Fit score. The implementation follows the proposed
+weighting default: Your and Astir averages count rated check-ins; Friends averages
+each followed person's readable ratings and counts only those people. This
+weighting was not a separate explicit approval. Hidden activity contributes to neither the Friends score
+nor its count, but remains in the anonymous numeric Astir aggregate. Deleted
+accounts and deleted check-ins are excluded. Empty aggregates display `—/5`;
+loading and failed requests remain distinct from a successful empty response.
+
+A new Wanna automatically created by adding a place to a stealth list is
+self-only from its first local and remote write, including retries. When
+several lists are selected together, a stealth selection determines that new
+companion save's audience. Moving an existing save into a list does not rewrite
+the audience explicitly chosen earlier; moving a private Wanna into a public
+list does not publish the Wanna. Historical saves require a separate cleanup
+decision because list membership alone does not prove how a save was created.
+
+Small-sample inference from the global aggregate is deferred to REC-608. These
+rating and list changes do not by themselves complete account-based audiences,
+follow requests, per-activity exclusions, or revocable content delivery.
 
 ## 2026-09-23 — Historical visit Feed identity (REC-614)
 

@@ -19,7 +19,8 @@ final class ReplayMaskingTests: XCTestCase {
         let scene = try XCTUnwrap(foregroundScene, "Replay capture requires a foreground-active scene")
         let originalWindow = scene.keyWindow
         let window = UIWindow(windowScene: scene)
-        window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture())
+        // Fixed pixel probes require fixed typography, independent of simulator accessibility settings.
+        window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture().dynamicTypeSize(.large))
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true

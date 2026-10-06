@@ -145,6 +145,40 @@ final class FeedPaginationTests: XCTestCase {
         XCTAssertEqual(repository.cursors.count, 1)
     }
 
+    func testRevocationCancelsPendingInitialRefreshForColdAndWarmFeed() async {
+        for startsWarm in [false, true] {
+            let store = WanderStore(fixtures: .seed())
+            let revokedID = UUID().uuidString
+            let revoked = FeedActivity(id: revokedID, kind: .placeBeen,
+                                       actor: store.shell(for: store.currentUser), occurredAt: .now)
+            let stalePage = FollowedFeedPage(activity: [revoked] + page(store, 1..<20).activity,
+                                            featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+            let recoveryPage = page(store, 1..<20)
+            let repository = PagingRepository(pages: startsWarm
+                ? [stalePage, stalePage, recoveryPage] : [stalePage, recoveryPage])
+            let engagement = ActivityEngagementRepositoryStub(activityResponses: [
+                .failure(WanderRemoteError.invalidResponse("activity_not_visible"))
+            ])
+            let backend = WanderBackend(feedRepository: repository, activityEngagementRepository: engagement)
+            if startsWarm { _ = await store.refreshFollowedFeed(backend: backend) }
+            repository.suspend = true
+            let pending = Task { await store.refreshFollowedFeed(backend: backend) }
+            await waitForRequest(repository, count: startsWarm ? 2 : 1)
+
+            let denied = await store.activity(id: revokedID, backend: backend)
+            XCTAssertNil(denied)
+            repository.suspend = false
+            let accepted = await pending.value
+            XCTAssertFalse(accepted)
+            XCTAssertFalse(store.followedFeedPage?.activity.contains { $0.id == revokedID } ?? false)
+            XCTAssertFalse(store.visibleFeedActivityGroups.contains { $0.activities.contains { $0.id == revokedID } })
+
+            let recovered = await store.refreshFollowedFeed(backend: backend, force: false)
+            XCTAssertTrue(recovered, "Revocation must not prevent a newly authorized refresh")
+            XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), recoveryPage.activity.map(\.id))
+        }
+    }
+
     func testRevocationCancelsPendingPageWithoutRestoringRemovedActivity() async {
         let store = WanderStore(fixtures: .seed())
         let revokedID = UUID().uuidString

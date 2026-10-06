@@ -27,7 +27,7 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
-    func testResolverUsesLocalFileWithoutRepositoryImageRequest() async throws {
+    func testResolverUsesPendingOwnerCaptureWithoutRepositoryImageRequest() async throws {
         let localPhotoID = try XCTUnwrap(
             UUID(uuidString: "00000000-0000-0000-0000-000000000113")
         )
@@ -39,7 +39,7 @@ final class ListPlacePhotoTests: XCTestCase {
             )
         )
         let userPhoto = photo(
-            provider: "visit_photo",
+            provider: "local_capture",
             id: "local-user-photo",
             localAssetRef: localAssetRef
         )
@@ -382,7 +382,7 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
-    func testResolverRevisitUsesBoundedSelectionAndDecodedCachesWithoutReloading() async throws {
+    func testResolverRevisitRechecksAccessBeforeReusingProtectedBytes() async throws {
         let userPhoto = photo(provider: "visit_photo", id: "revisited-user-photo")
         let repository = RecordingListPlacePhotoRepository(
             visibleUserResult: .success(userPhoto),
@@ -414,6 +414,14 @@ final class ListPlacePhotoTests: XCTestCase {
         XCTAssertEqual(repository.metadataCalls, [.visibleUser])
         XCTAssertEqual(repository.imageRequests, [userPhoto.providerPlaceID])
         XCTAssertEqual(selectionCache.entryCount, 1)
+        XCTAssertEqual(repository.authorizationRequests, [userPhoto.providerPlaceID, userPhoto.providerPlaceID])
+        repository.authorizationError = TestError.missing
+        let denied = await ListPlacePhotoResolver.resolve(
+            request: request, preferredUserPhoto: userPhoto,
+            authorizationScopeKey: "revisit-authorization", targetPixelSize: 128,
+            backend: backend, selectionCache: selectionCache)
+        XCTAssertNil(denied, "Decoded/memory caches must not bypass a later access denial")
+        XCTAssertEqual(repository.imageRequests, [userPhoto.providerPlaceID])
     }
 
     @MainActor
@@ -693,6 +701,8 @@ private final class RecordingListPlacePhotoRepository: PlacePhotoRepository {
     let imageDelayNanoseconds: UInt64
     private(set) var metadataCalls: [MetadataCall] = []
     private(set) var imageRequests: [String] = []
+    private(set) var authorizationRequests: [String] = []
+    var authorizationError: Error?
     private(set) var providerBatchRequests: [[PlacePhotoRequest]] = []
     private(set) var visibleUserBatchRequests: [[PlacePhotoRequest]] = []
 
@@ -713,6 +723,11 @@ private final class RecordingListPlacePhotoRepository: PlacePhotoRepository {
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
         metadataCalls.append(.provider)
         return try providerResult.get()
+    }
+
+    func validateAccess(to photo: PlacePhoto) async throws {
+        authorizationRequests.append(photo.providerPlaceID)
+        if let authorizationError { throw authorizationError }
     }
 
     func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {

@@ -278,18 +278,35 @@ struct ActivityEngagementMedia: Identifiable, Equatable {
     let id: String
     let urlString: String?
     let localAssetRef: String?
+    let storageBucket: String?
+    let storagePath: String?
+    let isPendingLocalCapture: Bool
     let accessibilityLabel: String
 
     init(
         id: String,
         urlString: String? = nil,
         localAssetRef: String? = nil,
+        storageBucket: String? = nil,
+        storagePath: String? = nil,
+        isPendingLocalCapture: Bool = false,
         accessibilityLabel: String
     ) {
         self.id = id
         self.urlString = urlString
         self.localAssetRef = localAssetRef
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
+        self.isPendingLocalCapture = isPendingLocalCapture
         self.accessibilityLabel = accessibilityLabel
+    }
+
+    var placePhoto: PlacePhoto {
+        PlacePhoto(provider: isPendingLocalCapture || (storagePath == nil && localAssetRef != nil) ? "local_capture" : "visit_photo",
+                   providerPlaceID: id, photoURLString: "",
+                   width: nil, height: nil, authorName: nil, authorProfileURLString: nil,
+                   authorAvatarURLString: nil, sourcePhotoURLString: nil, flagContentURLString: nil,
+                   storageBucket: storageBucket, storagePath: storagePath, localAssetRef: localAssetRef)
     }
 }
 
