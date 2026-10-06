@@ -15,7 +15,6 @@ import XCTest
 
     func testProfileFeedbackAndSubmission() {
         let app = application()
-        app.launchArguments.append("-WanderNotificationAuthorizationDeniedFixture")
         app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Feedback.\(UUID().uuidString)"
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
@@ -145,7 +144,6 @@ import XCTest
 
     func testEmptyVoiceFormRemainsUsableAfterBackgroundAndReopening() {
         let app = application()
-        app.launchArguments.append("-WanderNotificationAuthorizationDeniedFixture")
         app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.FeedbackLifecycle.\(UUID().uuidString)"
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
@@ -176,7 +174,12 @@ import XCTest
     private func application() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUsePerformanceFixtures",
-            "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile", "-WanderFeedbackUITest"]
+            "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile", "-WanderFeedbackUITest",
+            "-WanderNotificationAuthorizationDeniedFixture"]
+        // Exercise the real in-app reminder with a deterministic permission
+        // result. A pending OS permission alert from a prior test must not
+        // intercept feedback taps; native authorization has its own UI suite.
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Feedback.\(UUID().uuidString)"
         return app
     }
     private func capture(_ name: String) {

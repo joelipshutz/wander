@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "scope": "Astir shared-link App Clip",
-  "checkedOn": "2026-10-01",
+  "checkedOn": "2026-10-06",
   "verificationComplete": false,
   "apple": {
     "teamID": "Y7TVK75RZ8",
@@ -25,6 +25,15 @@
     "organizationName": "Grayline Studio, LLC",
     "appStoreName": "ASTIR Movement",
     "appStoreConnectProviderID": "7f20b667-afd3-456b-b2bc-ca94ab295484",
+    "releaseAPIKey": {
+      "name": "Astir Release Ryan",
+      "keyID": "XS48MR9JYM",
+      "role": "App Manager",
+      "issuerID": "7f20b667-afd3-456b-b2bc-ca94ab295484",
+      "privateKeyReference": "ASC_KEY_PATH",
+      "createdOn": "2026-10-06",
+      "verification": "Created and downloaded once in App Store Connect. App API reads return FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED pending Account Holder acceptance of the updated Developer Program License Agreement."
+    },
     "clipRegistered": true,
     "parentAssociationVerified": true,
     "associatedDomainsEnabled": true,
