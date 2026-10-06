@@ -112,7 +112,7 @@ Reference: [Apple background transfers for extensions](https://developer.apple.c
 | Question | Recommendation | Notes |
 |---|---|---|
 | Share extension timing? | Later, after in-app add/map/social loop works. | Share extension can be a capture booster but should not block v0.1. |
-| Private profiles/follow requests? | Accepted for REC-590; implementation in progress. | Preserve legacy per-place audiences while adding account-based activity and accepted follow requests. |
+| Private profiles/follow requests? | Accepted; remaining implementation tracked in REC-634 after the REC-590 hardening slice. | Preserve legacy per-place audiences while adding account-based activity and accepted follow requests. |
 | Following users not on Wander yet? | Defer. | Needs invite/link/contact matching model. |
 | iPad layout? | Defer. | Later use map + side panel, not stretched iPhone UI. |
 

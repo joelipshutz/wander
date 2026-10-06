@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'Wander/DesignSystem/PlaceRatingExplanation.swift'
+      - 'Wander/Features/Activity/ActivityEngagementViews.swift'
+      - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
@@ -52,6 +54,7 @@ jobs:
           -only-testing:WanderTests
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
+          -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=NO

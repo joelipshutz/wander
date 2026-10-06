@@ -90,7 +90,7 @@ final class MapPlaceCardUITests: XCTestCase {
 
     func testREC352AdaptiveCategorySearchEvidence() {
         let app = launchREC352AdaptiveSearchFixture()
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
@@ -129,7 +129,7 @@ final class MapPlaceCardUITests: XCTestCase {
 
     func testREC352LarchmontCorpusEvidence() {
         let app = launchREC352SearchFixture()
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
@@ -156,7 +156,7 @@ final class MapPlaceCardUITests: XCTestCase {
 
     func testREC352ContextualRankingEvidence() {
         let app = launchREC352SearchFixture()
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
@@ -182,7 +182,7 @@ final class MapPlaceCardUITests: XCTestCase {
 
     func testTappingMapTypeaheadSuggestionExplicitlySelectsItsPreviewAndPin() {
         let app = launchREC352SearchFixture()
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let card = app.buttons["map.selectedPlaceCard"]
         let selectedPin = app.descendants(matching: .any)[
             "map.pin.active.search.rec352_mapkit_long_tables_cafe"
@@ -217,7 +217,7 @@ final class MapPlaceCardUITests: XCTestCase {
         app.launch()
 
         let card = app.buttons["map.selectedPlaceCard"]
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         XCTAssertTrue(card.waitForExistence(timeout: 8))
         XCTAssertTrue(card.label.contains("Woodcat Coffee"))
 
@@ -236,7 +236,7 @@ final class MapPlaceCardUITests: XCTestCase {
 
     func testClearingACompletedMapSearchLeavesNoPlacePreview() {
         let app = launchREC352SearchFixture()
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let card = app.buttons["map.selectedPlaceCard"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
@@ -264,7 +264,7 @@ final class MapPlaceCardUITests: XCTestCase {
         ]
         app.launch()
 
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let card = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 8))
         XCTAssertTrue(card.label.contains("Woodcat Coffee"))
@@ -292,7 +292,7 @@ final class MapPlaceCardUITests: XCTestCase {
         app.launch()
 
         let card = app.buttons["map.selectedPlaceCard"]
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         XCTAssertTrue(card.waitForExistence(timeout: 8))
         XCTAssertTrue(card.label.contains("Woodcat Coffee"))
 
@@ -309,7 +309,7 @@ final class MapPlaceCardUITests: XCTestCase {
 
     func testCancelingMapTypeaheadRestoresAnExternalPlacePreview() {
         let app = launchREC352SearchFixture()
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let card = app.buttons["map.selectedPlaceCard"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
@@ -339,7 +339,7 @@ final class MapPlaceCardUITests: XCTestCase {
         ]
         app.launch()
 
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let card = app.buttons["map.selectedPlaceCard"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
@@ -423,7 +423,7 @@ final class MapPlaceCardUITests: XCTestCase {
         ]
         app.launch()
 
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let card = app.buttons["map.selectedPlaceCard"]
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
@@ -455,7 +455,7 @@ final class MapPlaceCardUITests: XCTestCase {
         let card = app.descendants(matching: .any)["map.selectedPlaceCardSurface"]
         let searchSurface = app.descendants(matching: .any)["map.searchSurface"]
         let addButton = app.buttons["map.headerAdd"]
-        let searchField = app.textFields["map.searchField"]
+        let searchField = app.textViews["map.searchField"]
         let window = app.windows.firstMatch
 
         XCTAssertTrue(card.waitForExistence(timeout: 8))

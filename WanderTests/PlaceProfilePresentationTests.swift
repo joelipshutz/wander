@@ -1244,14 +1244,29 @@ final class PlaceProfilePresentationTests: XCTestCase {
             )
             .environmentObject(backend)
         )
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        // Attach the fixture to the active scene so SwiftUI starts its image task.
+        var activeScene: UIWindowScene?
+        for _ in 0..<100 {
+            activeScene = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+            if activeScene != nil { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let scene = try XCTUnwrap(activeScene)
+        let originalWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 320, height: 240)
+        defer {
+            window.isHidden = true
+            originalWindow?.makeKeyAndVisible()
+        }
         window.rootViewController = host
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
 
         await fulfillment(of: [failureReported], timeout: 1.0)
-        window.isHidden = true
     }
 
     @MainActor

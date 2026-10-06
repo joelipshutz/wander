@@ -5187,7 +5187,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredByKey[PlaceMemoryAttributeKeys.personalLabels]?.valueJSON, "[\"date night\"]")
     }
 
-    func testAddVisitContextCarriesVisitDetailsWithoutPrefillingTagsOrLabels() throws {
+    func testAddVisitContextCarriesOnlyRatingTagsAndAnswers() throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let result = store.saveCandidate(
@@ -5226,8 +5226,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(wantContext.hasPriorCheckIn)
         XCTAssertNil(wantContext.initialRatingScore)
         XCTAssertEqual(wantContext.initialNote, "")
-        XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
-        XCTAssertTrue(wantContext.initialPersonalLabels.isEmpty)
+        XCTAssertEqual(wantContext.initialAnswers["coffee_tags"], ["sunny"])
+        XCTAssertEqual(wantContext.initialPersonalLabels, ["weekend"])
 
         let reselectedWantContext = MapPlaceSaveContext.reselectCurrentUserSave(
             wantPlace,
@@ -5303,8 +5303,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(visitContext.hasPriorCheckIn)
         XCTAssertEqual(visitContext.initialRatingScore, 4.5)
         XCTAssertEqual(visitContext.initialNote, "")
-        XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
-        XCTAssertTrue(visitContext.initialPersonalLabels.isEmpty)
+        XCTAssertEqual(visitContext.initialAnswers["coffee_tags"], ["quiet"])
+        XCTAssertEqual(visitContext.initialPersonalLabels, ["return"])
 
         let reselectedBeenContext = MapPlaceSaveContext.addCandidate(
             visitContext.candidate,
@@ -6766,7 +6766,7 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertNil(socialSaveContext.initialAnswers["price"])
-        XCTAssertNil(addVisitContext.initialAnswers["price"])
+        XCTAssertEqual(addVisitContext.initialAnswers["price"], ["$$$"])
         XCTAssertEqual(editContext.initialAnswers["price"], Set(["$$$"]))
     }
 
@@ -7145,7 +7145,7 @@ final class WanderStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testPlusRepeatCheckInDraftKeepsRatingButStartsWithUnansweredDetails() throws {
+    func testPlusRepeatCheckInDraftKeepsRatingTagsAndAnswersWithFreshMetadata() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
         let candidate = PlaceCandidate(
@@ -7185,10 +7185,39 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(draft.form.selectedRatingScore, 4)
-        XCTAssertTrue(draft.form.selectedAnswers.isEmpty, "A new visit asks for firsthand answers instead of copying the previous visit")
-        XCTAssertTrue(draft.form.unifiedTags.isEmpty)
+        XCTAssertEqual(draft.form.selectedAnswers["work_setup"], ["yes"])
+        XCTAssertEqual(draft.form.unifiedTags, ["quiet"])
+        XCTAssertEqual(draft.form.note, "")
+        XCTAssertTrue(draft.form.photoAttachments.isEmpty)
+        XCTAssertTrue(draft.form.selectedInviteeUserIDs.isEmpty)
+        XCTAssertNil(draft.form.plannedDate)
+        XCTAssertGreaterThanOrEqual(draft.form.visitedAt, latestVisit.visitedAt)
         XCTAssertEqual(draft.baselineUserPlaceLocalID, existingPlace.userPlace.localID)
         XCTAssertEqual(draft.baselineVisitLocalID, latestVisit.localID)
+
+        let context = sourceContext.resolvingExistingSave(selection: .been)
+        XCTAssertNil(context.editedVisit)
+        XCTAssertEqual(context.questionAnswerSourceVisit?.id, latestVisit.id)
+        let priorAnswers = latestVisit.attributeAnswersJSON
+        let submission = MapPlaceSaveSubmission(
+            context: context, candidate: candidate, status: .been, visibility: .followers,
+            ratingScore: 3.5, note: nil,
+            attributes: [PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["sunny"])],
+            photoAttachments: [], inviteeUserIDs: [], reconcilesSharedVisitInvitees: false,
+            visitedAt: draft.form.visitedAt
+        )
+        let saved = await persistAddPlaceSaveSubmission(submission, store: store, backend: nil)
+        XCTAssertNotNil(saved)
+        let visits = store.visits(for: firstSave.userPlaceID)
+        let newVisit = try XCTUnwrap(visits.first { $0.id != latestVisit.id })
+        XCTAssertEqual(visits.count, 2)
+        XCTAssertNil(newVisit.note, "An intentional empty note must not borrow the previous visit's note")
+        XCTAssertEqual(newVisit.ratingScore, 3.5, "The prefilled rating stays editable")
+        XCTAssertEqual(newVisit.tags, ["sunny"])
+        XCTAssertEqual(newVisit.visitedAt, draft.form.visitedAt)
+        XCTAssertEqual(latestVisit.note, "first visit")
+        XCTAssertEqual(latestVisit.ratingScore, 4)
+        XCTAssertEqual(latestVisit.attributeAnswersJSON, priorAnswers)
     }
 
     @MainActor
@@ -7706,6 +7735,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
 
         XCTAssertEqual(store.searchProfiles(handleQuery: "ry").map(\.handle), ["ryan"])
+        XCTAssertEqual(store.searchProfiles(handleQuery: "r").map(\.handle), ["ryan"])
         XCTAssertFalse(store.isBlockedBetweenCurrentUser(and: "user_ryan"))
 
         store.block(userID: "user_ryan")

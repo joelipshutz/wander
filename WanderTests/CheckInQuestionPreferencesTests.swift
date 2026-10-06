@@ -5,6 +5,35 @@ import XCTest
 final class CheckInQuestionPreferencesTests: XCTestCase {
     private let defaultsIDs = ["place_detail_outlets", "place_detail_noise", "place_detail_seating"]
 
+    func testRepeatVisitCopiesPrivateDefaultsWithoutChangingPriorAnswersOrOtherAccounts() throws {
+        let (defaults, suite) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = CheckInQuestionPreferenceStore(defaults: defaults)
+        let store = WanderStore(fixtures: .seed())
+        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let previous = try XCTUnwrap(store.createVisit(userPlaceID: place.userPlace.id, note: "Earlier visit", ratingScore: 4))
+        let owner = store.currentUser.id
+        let previousID = previous.serverID ?? previous.localID
+        try preferences.savePrivateAnswers(["place_detail_outlets": "Plenty"], ownerUserID: owner,
+                                           userPlaceID: place.userPlace.localID, visitID: previousID)
+        let context = MapPlaceSaveContext.addVisitVisiblePlace(
+            place, attributes: place.attributes, latestVisit: previous
+        )
+        var answers = try loadPrivateQuestionAnswerDefaults(context: context, ownerUserID: owner, preferences: preferences)
+        XCTAssertEqual(answers, ["place_detail_outlets": "Plenty"])
+        XCTAssertNil(context.editedVisit)
+        XCTAssertEqual(context.initialNote, "")
+        XCTAssertThrowsError(try loadPrivateQuestionAnswerDefaults(context: context, ownerUserID: "another-account", preferences: preferences))
+        let next = try XCTUnwrap(store.createVisit(userPlaceID: place.userPlace.id, ratingScore: context.initialRatingScore))
+        answers.removeAll() // Clearing the default belongs only to the new visit.
+        try preferences.savePrivateAnswers(answers, ownerUserID: owner,
+                                           userPlaceID: place.userPlace.localID, visitID: next.serverID ?? next.localID)
+        XCTAssertEqual(try preferences.loadPrivateAnswers(ownerUserID: owner, userPlaceID: place.userPlace.localID,
+                                                          visitID: previousID), ["place_detail_outlets": "Plenty"])
+        XCTAssertTrue(try preferences.loadPrivateAnswers(ownerUserID: owner, userPlaceID: place.userPlace.localID,
+                                                         visitID: next.serverID ?? next.localID).isEmpty)
+    }
+
     func testNotUsefulPersistsPerSubtypeAndOwnerWithoutDeletingHistory() throws {
         let (defaults, suite) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }

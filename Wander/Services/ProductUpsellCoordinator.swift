@@ -265,6 +265,7 @@ final class ProductUpsellCoordinator: ObservableObject {
     @Published private(set) var activePresentation: ProductUpsellPresentation?
     @Published private(set) var appOpenID = UUID()
     @Published private(set) var presentationBlockerCount = 0
+    @Published private(set) var foregroundEntryBlockerCount = 0
     @Published private(set) var actionInFlightPresentationIDs: Set<UUID> = []
 
     private struct PendingRequest {
@@ -288,6 +289,7 @@ final class ProductUpsellCoordinator: ObservableObject {
     private var suspendedPresentation: SuspendedPresentation?
     private var boundUserID: String?
     private var presentationBlockerIDs: Set<UUID> = []
+    private var foregroundEntryBlockerIDs: Set<UUID> = []
     private var didEnterBackground = false
     private var registeredAppOpenIDs: [String: UUID] = [:]
     private var presentedAppOpenIDs: [String: UUID] = [:]
@@ -560,13 +562,21 @@ final class ProductUpsellCoordinator: ObservableObject {
         )
     }
 
-    func setPresentationBlocker(id: UUID, isActive: Bool) {
+    func setPresentationBlocker(id: UUID, isActive: Bool, preservesForegroundEntry: Bool = false) {
         if isActive {
             presentationBlockerIDs.insert(id)
         } else {
             presentationBlockerIDs.remove(id)
         }
         presentationBlockerCount = presentationBlockerIDs.count
+        // Only unfinished workflows suppress the foreground default. Read-only
+        // destinations may block a primer without blocking an ordinary entry.
+        if isActive && preservesForegroundEntry {
+            foregroundEntryBlockerIDs.insert(id)
+        } else {
+            foregroundEntryBlockerIDs.remove(id)
+        }
+        foregroundEntryBlockerCount = foregroundEntryBlockerIDs.count
         if isActive {
             suspendActivePresentation()
         }

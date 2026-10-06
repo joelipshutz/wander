@@ -809,6 +809,62 @@ extension EnvironmentValues {
     }
 }
 
+/// Composer state outlives temporary authorization/loading views, but belongs
+/// to one viewer and activity. Revocation also retires any in-flight post.
+struct ActivityCommentComposerState {
+    struct Scope: Equatable {
+        let viewerID: String
+        let activityID: String
+        let isSignedIn: Bool
+    }
+
+    struct PendingPost {
+        let id: UUID
+        let draft: String
+        let mentions: [PersonMention]
+        var body: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    private(set) var scope: Scope?
+    var draft = ""
+    var mentions: [PersonMention] = []
+    private(set) var pendingPostID: UUID?
+    var isPosting: Bool { pendingPostID != nil }
+    var preservesForegroundEntry: Bool { !draft.isEmpty || isPosting }
+
+    mutating func prepare(for scope: Scope) {
+        guard self.scope != scope else { return }
+        self = Self()
+        self.scope = scope
+    }
+
+    mutating func revokeAccess(for scope: Scope) {
+        guard self.scope == scope else { return }
+        self = Self()
+        self.scope = scope
+    }
+
+    mutating func beginPost() -> PendingPost? {
+        guard !isPosting, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let post = PendingPost(id: UUID(), draft: draft, mentions: mentions)
+        pendingPostID = post.id
+        draft = ""
+        mentions = []
+        return post
+    }
+
+    @discardableResult
+    mutating func finishPost(_ post: PendingPost, succeeded: Bool) -> Bool {
+        guard pendingPostID == post.id else { return false }
+        pendingPostID = nil
+        if !succeeded, draft.isEmpty {
+            draft = post.draft
+            mentions = post.mentions
+        }
+        return true
+    }
+}
+
 /// Every entry point, including an already resolved navigation route, checks
 /// the immutable source again before mounting its cached header or photo sheet.
 struct ActivityCommentsScreen: View {
@@ -822,10 +878,15 @@ struct ActivityCommentsScreen: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (String) -> Void
     @State private var retryID = 0
+    @State private var composer = ActivityCommentComposerState()
     @State private var checkedKey: String?
     @State private var checkedGeneration = 0
     @State private var checkedContext: ActivityEngagementContext?
     @State private var checkedPlace: VisiblePlace?
+
+    private var composerScope: ActivityCommentComposerState.Scope {
+        .init(viewerID: store.currentUser.id, activityID: context.activityID, isSignedIn: auth.isSignedIn)
+    }
 
     private var accessKey: String {
         "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase):\(retryID)"
@@ -835,7 +896,8 @@ struct ActivityCommentsScreen: View {
         Group {
             if checkedKey == accessKey, checkedGeneration == store.activityAccessGeneration(for: context.activityID), let checkedContext {
                 AuthorizedActivityCommentsScreen(context: checkedContext, visiblePlace: checkedPlace,
-                    openProfile: openProfile, openPlace: openPlace, openList: openList, recheckAccess: recheckAccess)
+                    openProfile: openProfile, openPlace: openPlace, openList: openList,
+                    recheckAccess: recheckAccess, composer: $composer)
             } else if checkedKey == accessKey {
                 ContentUnavailableView("Activity unavailable", systemImage: "lock",
                     description: Text("This activity is no longer available, or couldn’t be checked. Try again when connected."))
@@ -846,7 +908,15 @@ struct ActivityCommentsScreen: View {
                 ProgressView("Opening activity…")
             }
         }
+        .blocksProductUpsells(while: composer.preservesForegroundEntry, preservesForegroundEntry: true)
+        .onChange(of: composerScope, initial: true) { _, scope in
+            composer.prepare(for: scope)
+        }
+        .onChange(of: store.activityAccessGeneration(for: context.activityID)) { _, _ in
+            composer.revokeAccess(for: composerScope)
+        }
         .task(id: accessKey) {
+            composer.prepare(for: composerScope)
             guard scenePhase == .active else { return }
             let key = accessKey
             checkedKey = nil
@@ -865,6 +935,7 @@ struct ActivityCommentsScreen: View {
                 checkedContext = activity?.activityEngagementContext
                 checkedPlace = activity?.place
             }
+            if checkedContext == nil { composer.revokeAccess(for: composerScope) }
             checkedGeneration = store.activityAccessGeneration(for: context.activityID)
             checkedKey = key
         }
@@ -882,6 +953,7 @@ struct ActivityCommentsScreen: View {
         guard !Task.isCancelled, key == accessKey else { return false }
         checkedContext = activity?.activityEngagementContext
         checkedPlace = activity?.place
+        if checkedContext == nil { composer.revokeAccess(for: composerScope) }
         checkedGeneration = store.activityAccessGeneration(for: context.activityID)
         return checkedContext != nil
     }
@@ -900,14 +972,13 @@ private struct AuthorizedActivityCommentsScreen: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (String) -> Void
     let recheckAccess: () async -> Bool
-    @State private var draft = ""
+    @Binding var composer: ActivityCommentComposerState
     @State private var isLoading = true
-    @State private var isPosting = false
     @State private var commentError: String?
     @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
     @State private var reportSubject: CommunityReportSubject?
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -974,7 +1045,7 @@ private struct AuthorizedActivityCommentsScreen: View {
         }
         .background(brandMode.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            composer
+            composerInput
         }
         .task(id: "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
             guard scenePhase == .active else { return }
@@ -1177,7 +1248,18 @@ private struct AuthorizedActivityCommentsScreen: View {
         return { openList(listContext.id) }
     }
 
-    private var composer: some View {
+    private var composerInput: some View {
+        PersonMentionField(
+            text: $composer.draft, mentions: $composer.mentions,
+            focus: $composerFocused,
+            placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
+            accessibilityIdentifier: "activity.comment.input", submitOnReturn: true,
+            suggestionPlacement: .aboveInput, onSubmit: post,
+            decorateInput: { AnyView(composerRow($0)) }
+        )
+    }
+
+    private func composerRow(_ input: AnyView) -> some View {
         VStack(spacing: 0) {
             Divider()
                 .overlay(brandMode.border)
@@ -1190,25 +1272,17 @@ private struct AuthorizedActivityCommentsScreen: View {
                     color: brandMode.accentWash
                 )
 
-                TextField("Add a comment…", text: $draft, axis: .vertical)
-                    .accessibilityIdentifier("activity.comment.input")
-                    .font(AstirTypography.body)
-                    .lineLimit(1...4)
-                    .focused($composerFocused)
-                    .submitLabel(.send)
-                    .onSubmit(post)
+                input
                     .padding(.horizontal, WanderTheme.spacing3)
                     .padding(.vertical, 10)
                     .background(brandMode.raisedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                            .stroke(brandMode.border, lineWidth: 1)
-                    )
+                    .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(brandMode.border, lineWidth: 1))
 
                 Button(action: post) {
                     Group {
-                        if isPosting {
+                        if composer.isPosting {
                             ProgressView().tint(brandMode.accentForeground)
                         } else {
                             Image(systemName: "arrow.up")
@@ -1222,43 +1296,43 @@ private struct AuthorizedActivityCommentsScreen: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isPosting ? "Sending comment" : "Send comment")
+                .accessibilityLabel(composer.isPosting ? "Sending comment" : "Send comment")
                 .accessibilityIdentifier("activity.comment.send")
-                .disabled(normalizedDraft.isEmpty || normalizedDraft.count > 1_000 || isPosting)
+                .disabled(normalizedDraft.isEmpty || normalizedDraft.count > 1_000 || composer.isPosting)
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.vertical, WanderTheme.spacing2)
         }
         .background(brandMode.background)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("activity.comment.composer")
     }
 
     private var normalizedDraft: String {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        composer.draft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func post() {
         let body = normalizedDraft
-        guard !body.isEmpty, body.count <= 1_000, !isPosting else { return }
+        guard !body.isEmpty, body.count <= 1_000, !composer.isPosting else { return }
         do {
             try CommunityContentPolicy.validate(body)
         } catch {
             commentError = error.localizedDescription
             return
         }
-        draft = ""
-        isPosting = true
+        guard let post = composer.beginPost() else { return }
         commentError = nil
         Task {
             let didPost = await store.addActivityComment(
                 activityID: context.activityID,
-                body: body,
+                body: post.body,
                 backend: auth.isSignedIn ? backend : nil
             )
+            guard composer.finishPost(post, succeeded: didPost) else { return }
             if !didPost {
-                if draft.isEmpty { draft = body }
                 commentError = "Your comment couldn't post. Try again."
             }
-            isPosting = false
             composerFocused = true
         }
     }
@@ -1434,7 +1508,9 @@ struct ActivityCommentsRouteScreen: View {
             }
         }
         .task(id: "\(requestID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
-            guard scenePhase == .active else { return }
+            // Once resolved, the child rechecks source access without replacing
+            // the route and losing its scoped composer during foregrounding.
+            guard scenePhase == .active, currentRoute?.context == nil else { return }
             await retry()
         }
         .navigationTitle("")

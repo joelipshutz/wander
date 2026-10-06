@@ -6,6 +6,63 @@ import XCTest
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    func testCommentComposerPreservesDraftAndMentionsThroughRepeatedAccessChecks() {
+        let scope = ActivityCommentComposerState.Scope(viewerID: "viewer", activityID: "activity", isSignedIn: true)
+        var composer = ActivityCommentComposerState()
+        composer.prepare(for: scope)
+        composer.draft = "Meet @Maya"
+        composer.mentions = [PersonMention(userID: "maya", handle: "maya", name: "Maya", location: 5, length: 5)]
+
+        // Background/loading unmounts the protected child; foreground starts
+        // another access check in the stable parent's existing scope.
+        composer.prepare(for: scope)
+        XCTAssertEqual(composer.draft, "Meet @Maya")
+        XCTAssertEqual(composer.mentions.map(\.userID), ["maya"])
+        XCTAssertTrue(composer.mentions[0].isValid(in: composer.draft))
+        XCTAssertTrue(composer.preservesForegroundEntry)
+    }
+
+    func testCommentComposerKeepsPostingBlockerAndRestoresMentionsAfterTemporaryRemount() throws {
+        let scope = ActivityCommentComposerState.Scope(viewerID: "viewer", activityID: "activity", isSignedIn: true)
+        var composer = ActivityCommentComposerState()
+        composer.prepare(for: scope)
+        composer.draft = "Meet @Maya"
+        composer.mentions = [PersonMention(userID: "maya", handle: "maya", name: "Maya", location: 5, length: 5)]
+        let pending = try XCTUnwrap(composer.beginPost())
+        XCTAssertTrue(composer.draft.isEmpty)
+        XCTAssertTrue(composer.preservesForegroundEntry)
+
+        composer.prepare(for: scope)
+        XCTAssertTrue(composer.finishPost(pending, succeeded: false))
+        XCTAssertEqual(composer.draft, "Meet @Maya")
+        XCTAssertEqual(composer.mentions.map(\.userID), ["maya"])
+        XCTAssertTrue(composer.mentions[0].isValid(in: composer.draft))
+    }
+
+    func testCommentComposerRevocationAndScopeChangesRejectLatePostResults() throws {
+        let initial = ActivityCommentComposerState.Scope(viewerID: "viewer", activityID: "activity", isSignedIn: true)
+        let replacements = [initial,
+            .init(viewerID: "other", activityID: "activity", isSignedIn: true),
+            .init(viewerID: "viewer", activityID: "other", isSignedIn: true),
+            .init(viewerID: "viewer", activityID: "activity", isSignedIn: false)]
+        for replacement in replacements {
+            var composer = ActivityCommentComposerState()
+            composer.prepare(for: initial)
+            composer.draft = "Meet @Maya"
+            composer.mentions = [PersonMention(userID: "maya", handle: "maya", name: "Maya", location: 5, length: 5)]
+            let pending = try XCTUnwrap(composer.beginPost())
+            if replacement == initial {
+                composer.revokeAccess(for: initial)
+            } else {
+                composer.prepare(for: replacement)
+            }
+            XCTAssertFalse(composer.finishPost(pending, succeeded: false))
+            XCTAssertTrue(composer.draft.isEmpty)
+            XCTAssertTrue(composer.mentions.isEmpty)
+            XCTAssertFalse(composer.preservesForegroundEntry)
+        }
+    }
+
     func testPostcardUploadedMediaUsesProtectedStorageIdentityEvenWithLegacyURL() {
         let media = ActivityEngagementMedia(id: "photo", urlString: "https://example.com/old-signed.jpg",
             localAssetRef: "local_file:old.jpg", storageBucket: "visit-photos",
@@ -1058,9 +1115,11 @@ final class ActivityEngagementTests: XCTestCase {
         repository.finish()
         let refreshed = await store.refreshFollowedFeed(backend: WanderBackend(feedRepository: repository))
         XCTAssertTrue(refreshed)
-        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [own.id, shared.id])
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 2)
+        XCTAssertEqual(Set(store.followedFeedPage?.activity.map(\.id) ?? []), [own.id, shared.id])
         XCTAssertTrue(store.followedFeedPage?.featuredPlaces.isEmpty == true)
-        XCTAssertEqual(store.followedFeedPage?.nextCursor, "next")
+        XCTAssertNil(store.followedFeedPage?.nextCursor)
+        XCTAssertEqual(repository.requestCount, 2)
     }
 
     func testExactStealthActivityIsVisibleOnlyToOwner() async {
@@ -1160,7 +1219,7 @@ final class ActivityEngagementTests: XCTestCase {
         let initial = await store.activity(id: activity.id, backend: backend)
         XCTAssertNotNil(initial)
         let refreshed = await store.refreshFollowedFeed(backend: backend, preservingActivityID: activity.id)
-        XCTAssertTrue(refreshed)
+        XCTAssertFalse(refreshed, "The denied exact read retires its in-flight feed refresh")
         XCTAssertTrue(store.followedFeedPage?.activity.isEmpty == true)
         XCTAssertEqual(activityRepository.activityRequestCount, 2)
     }
@@ -1652,7 +1711,7 @@ private enum ActivityEngagementTestError: Error {
 }
 
 @MainActor
-private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
+final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     var placeError: Error?
     var placeFailuresRemaining = 0
@@ -1669,6 +1728,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     let deleteError: Error?
     private(set) var activityRequestCount = 0
     private(set) var summariesRequestCount = 0
+    private(set) var summariesRequests: [[String]] = []
     private(set) var commentsRequestCount = 0
     private var commentsResponses: [Result<ActivityCommentsPage, Error>]
     private var areCommentsSuspended: Bool
@@ -1723,6 +1783,8 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
         summariesRequestCount += 1
+        summariesRequests.append(activityIDs)
+        guard activityIDs.count <= 100 else { throw ActivityEngagementTestError.expected }
         while areSummariesSuspended { await Task.yield() }
         return summariesResult ?? activityIDs.map(ActivityEngagementSummary.empty(activityID:))
     }
@@ -1824,6 +1886,9 @@ private final class SuspendedActivityFeedRepository: FeedRepository {
         requestCount += 1
         while isSuspended {
             await Task.yield()
+        }
+        if before != nil {
+            return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
         }
         return page
     }

@@ -8,8 +8,8 @@ account has saved unless a case explicitly asks for an existing save.
 The current test slice covers the three rating displays, automatic private-list
 Wannas, cached activity/photo reauthorization, and source-aware shared content.
 Follow requests and account/activity exclusion controls remain unfinished parts
-of the larger REC-590 transcript; use the existing audience/private/block controls
-for the checks below.
+of the larger REC-590 transcript and are tracked in REC-634; use the existing
+audience/private/block controls for the checks below.
 
 Both privacy migrations and the source-aware notification worker are deployed.
 The generic-preview website reader is deployed to astirmovement.com. The full
@@ -18,8 +18,10 @@ schema without preview migrations. Both photo buckets are private. No ambiguous
 historical Wanna was changed: the hosted audit found no authoritative companion
 origins eligible for repair; future origins are recorded.
 
-Legacy signed-photo CDN retirement still requires verification before the full
-rollout is called closed. The project is on the Free plan; manual CDN purge requires Pro or provider assistance.
+Legacy signed-photo CDN retirement is tracked separately in
+[REC-633](https://linear.app/recme/issue/REC-633/verify-retirement-of-legacy-signed-photo-and-preview-links).
+Merging the tested app protections does not establish retirement of every old link;
+that verification is still required before the full historical cutover is called closed. The project is on the Free plan; manual CDN purge requires Pro or provider assistance.
 The scoped Supabase support request has been submitted and the dashboard
 confirmed receipt. Provider completion is pending. No billing changes or visit-photo rewrites have been made.
 All 12 recorded historical public artwork URLs now reject access. Their original
@@ -50,8 +52,9 @@ This branch has not been uploaded to TestFlight.
 record the latest verified commit, native results, provider cleanup status, and
 remaining gates. Check those records before treating this as a release-ready build.
 
-The `Privacy native validation` workflow runs all unit tests plus the two rating
-layout tests on iPhone 17, then repeats the layouts on compact iPhone 16e. Its
+The `Privacy native validation` workflow runs all unit tests, the two rating
+layout tests, and the comment-draft foreground regression on iPhone 17, then
+repeats the layouts on compact iPhone 16e. Its
 artifacts include result bundles and screenshots for the three rating rows and
 the start/end of the largest-text explanation. The explanation uses a scrollable
 native sheet with a Done button at accessibility sizes and a popover at normal

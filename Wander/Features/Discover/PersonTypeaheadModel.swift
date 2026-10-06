@@ -1,0 +1,141 @@
+import Combine
+import Foundation
+
+@MainActor
+final class PersonTypeaheadModel: ObservableObject {
+    @Published private(set) var profiles: [ProfileShell] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var failed = false
+    private var generation = UUID()
+    private var ownerID: String?
+    private var recommendations: [ProfileShell]?
+    private var completions: [UUID: Task<Void, Never>] = [:]
+    private var completionRequests: [UUID: PersonMentionCompletionRequest] = [:]
+
+    /// Space lookups survive subsequent typing, independently of the picker query.
+    /// Always include remote matches before deciding a full name is unambiguous.
+    @discardableResult
+    func complete(request: PersonMentionCompletionRequest, local: [ProfileShell],
+                  remote: @escaping (String) async throws -> [ProfileShell],
+                  eligible: @escaping (ProfileShell) -> Bool,
+                  beforeApply: @escaping () async throws -> Void = {},
+                  apply: @escaping (PersonMentionCompletionRequest, ProfileShell?) -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        completionRequests[id] = request
+        let task = Task { [weak self] in
+            defer { self?.completions[id] = nil; self?.completionRequests[id] = nil }
+            do {
+                let matches = try await remote(request.query.text)
+                try await beforeApply()
+                guard !Task.isCancelled, let current = self?.completionRequests[id] else { return }
+                apply(current, PersonMentionCandidates.exactMatch((local + matches).filter(eligible), query: current.query.text))
+            } catch {
+                // A failed lookup cannot establish that a full name is unique.
+                if !Task.isCancelled, let current = self?.completionRequests[id] { apply(current, nil) }
+            }
+        }
+        completions[id] = task
+        return task
+    }
+
+    func rebaseCompletions(replacing range: NSRange, with replacement: String) {
+        for (id, var request) in completionRequests {
+            if request.rebase(replacing: range, with: replacement) {
+                completionRequests[id] = request
+            } else {
+                completions[id]?.cancel()
+                completionRequests[id] = nil
+            }
+        }
+    }
+
+    func cancelCompletions() {
+        completions.values.forEach { $0.cancel() }
+        completions.removeAll()
+        completionRequests.removeAll()
+    }
+
+    func search(
+        query: String?, ownerID: String,
+        local: () -> [ProfileShell],
+        recommendations loadRecommendations: () async throws -> [ProfileShell],
+        remote: (String) async throws -> [ProfileShell],
+        eligible: (ProfileShell) -> Bool,
+        debounce: Duration = .milliseconds(180)
+    ) async {
+        let request = UUID()
+        generation = request
+        if self.ownerID != ownerID {
+            self.ownerID = ownerID
+            recommendations = nil
+        }
+        failed = false
+        guard let query else {
+            profiles = []
+            // Recheck contact consent and ranking when the next picker opens.
+            recommendations = nil
+            isLoading = false
+            return
+        }
+        profiles = PersonMentionCandidates.matching(
+            (local() + (recommendations ?? [])).filter(eligible), query: query
+        )
+        isLoading = true
+        defer { if generation == request { isLoading = false } }
+        do {
+            try await Task.sleep(for: debounce)
+            try Task.checkCancellation()
+            if recommendations == nil {
+                do {
+                    let ranked = try await loadRecommendations()
+                    guard generation == request, !Task.isCancelled else { return }
+                    recommendations = ranked
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard generation == request, !Task.isCancelled else { return }
+                    // A recommendations outage must not disable explicit search.
+                    failed = query.isEmpty
+                }
+            }
+            var candidates = local() + (recommendations ?? [])
+            if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let matches = try await remote(query)
+                guard generation == request, !Task.isCancelled else { return }
+                candidates += matches
+            }
+            guard generation == request, !Task.isCancelled else { return }
+            profiles = PersonMentionCandidates.matching(candidates.filter(eligible), query: query)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard generation == request, !Task.isCancelled else { return }
+            failed = true
+            profiles = PersonMentionCandidates.matching(
+                (local() + (recommendations ?? [])).filter(eligible), query: query
+            )
+        }
+    }
+}
+
+extension WanderStore {
+    /// Known connections first; the shared recommender excludes existing follows.
+    /// The picker never treats a mention as an invitation or visibility grant.
+    var personTypeaheadConnections: [ProfileShell] {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderPersonTypeaheadUITest"),
+           (ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures")
+                || ProcessInfo.processInfo.arguments.contains("-WanderUseDemoFixtures")) {
+            return PersonTypeaheadUITestFixtures.profiles
+        }
+        #endif
+        return (friends(of: currentUser.id) + following(of: currentUser.id) + followers(of: currentUser.id))
+            .map(shell(for:))
+            .filter(isEligibleForPersonTypeahead)
+    }
+
+    func isEligibleForPersonTypeahead(_ profile: ProfileShell) -> Bool {
+        profile.id != currentUser.id && profile.isPrivateProfile != true
+            && !isProfilePrivate(profile.id) && !isBlockedBetweenCurrentUser(and: profile.id)
+    }
+}
