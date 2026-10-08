@@ -633,6 +633,7 @@ select is(
   'capture-ready notification uses the current app name'
 );
 
+reset role;
 select ok(
   (
     select prosecdef and provolatile = 'v' and prorettype = 'jsonb'::regtype
@@ -645,6 +646,7 @@ select ok(
   ),
   'capture copy preserves the service-only extraction completion contract'
 );
+set local role service_role;
 
 select public.complete_extraction_job(
   '43000000-0000-0000-0000-000000000001',
