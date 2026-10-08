@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(40);
+select plan(41);
 
 select is(
   (
@@ -217,6 +217,16 @@ select is(
   ),
   2,
   'calendar sync queues both waterfall stages in the central platform'
+);
+
+select is(
+  (
+    select body from public.notification_events
+    where recipient_user_id = 'user_calendar_owner'
+      and notification_type = 'calendar_reservation_live'
+  ),
+  'Your take helps friends know if it fits. Check in on Astir.',
+  'the calendar reminder uses the current app name'
 );
 
 select ok(

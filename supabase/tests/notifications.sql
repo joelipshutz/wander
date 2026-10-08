@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(80);
+select plan(82);
 
 select is(
   (
@@ -625,6 +625,25 @@ select is(
   (select notification_type from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
   'capture_ready',
   'needs-confirmation extraction completion queues a capture-ready push'
+);
+
+select is(
+  (select body from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  'Open Astir to confirm the match.',
+  'capture-ready notification uses the current app name'
+);
+
+select ok(
+  (
+    select prosecdef and provolatile = 'v' and prorettype = 'jsonb'::regtype
+      and 'search_path=app, public' = any(coalesce(proconfig, array[]::text[]))
+      and has_function_privilege('service_role', oid, 'execute')
+      and not has_function_privilege('authenticated', oid, 'execute')
+      and not has_function_privilege('anon', oid, 'execute')
+    from pg_proc
+    where oid = 'app.complete_extraction_job(uuid,text,jsonb,double precision,jsonb,text,text)'::regprocedure
+  ),
+  'capture copy preserves the service-only extraction completion contract'
 );
 
 select public.complete_extraction_job(

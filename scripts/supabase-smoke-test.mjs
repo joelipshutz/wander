@@ -469,6 +469,8 @@ async function runCalendarReservationNotificationSmokeChecks(
         count(distinct event.dedupe_key)::integer as dedupe_count,
         bool_and(event.dedupe_key like 'calendar_reservation:%:group:%') as grouped_dedupe,
         bool_and(event.source = 'calendar_reservation') as governed_source,
+        bool_and(event.body = 'Your take helps friends know if it fits. Check in on Astir.')
+          filter (where event.notification_type = 'calendar_reservation_live') as astir_copy,
         bool_and(event.data - array['reservation_id', 'prompt_stage'] = '{}'::jsonb) as safe_payload
       from public.notification_events event
       where event.recipient_user_id = $1
@@ -482,6 +484,7 @@ async function runCalendarReservationNotificationSmokeChecks(
       && result.rows[0].dedupe_count === 2
       && result.rows[0].grouped_dedupe === true
       && result.rows[0].governed_source === true
+      && result.rows[0].astir_copy === true
       && result.rows[0].safe_payload === true,
   );
 
