@@ -256,11 +256,11 @@ enum ShareCardRenderer {
         let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: context.actor.avatarURL)
         var photo: UIImage?
         for media in context.media.prefix(4) {
-            if let path = media.localAssetRef, let data = VisitPhotoLocalFileStore.data(from: path) {
+            if media.storagePath == nil, let path = media.localAssetRef, let data = VisitPhotoLocalFileStore.data(from: path) {
                 photo = await decode(data)
-            } else if let raw = media.urlString, let url = URL(string: raw), url.scheme == "https",
-                      let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 15)),
-                      (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 15_000_000 {
+            } else if let data = try? await backend.placePhotoImageData(
+                for: media.placePhoto, canonicalPlaceKey: "activity-photo:\(media.id)", variant: .card
+            ) {
                 photo = await decode(data)
             }
             if photo != nil { break }

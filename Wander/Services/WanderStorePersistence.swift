@@ -561,6 +561,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let visitedAt: Date?
         let savedAt: Date
         let plannedDate: Date?
+        let isPrivateListCompanion: Bool?
         let sourceType: String
         let sourceArtifactID: String?
         let sourceUserPlaceID: String?
@@ -602,6 +603,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             savedAt = userPlace.savedAt
             plannedDate = userPlace.plannedDate
             sourceType = userPlace.sourceType
+            isPrivateListCompanion = userPlace.isPrivateListCompanion
             sourceArtifactID = userPlace.sourceArtifactID
             sourceUserPlaceID = userPlace.sourceUserPlaceID
             attributionUserID = userPlace.attributionUserID
@@ -643,6 +645,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 savedAt: savedAt,
                 plannedDate: plannedDate,
                 sourceType: sourceType,
+                isPrivateListCompanion: isPrivateListCompanion ?? false,
                 sourceArtifactID: sourceArtifactID,
                 sourceUserPlaceID: sourceUserPlaceID,
                 attributionUserID: attributionUserID,
@@ -809,6 +812,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let localID: String
         let serverID: String?
         let visitID: String
+        let sourcePhotoID: String?
         let storageBucket: String
         let storagePath: String?
         let localAssetRef: String?
@@ -832,6 +836,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             localID = photo.localID
             serverID = photo.serverID
             visitID = photo.visitID
+            sourcePhotoID = photo.sourcePhotoID
             storageBucket = photo.storageBucket
             storagePath = photo.storagePath
             localAssetRef = photo.localAssetRef
@@ -857,6 +862,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 localID: localID,
                 serverID: serverID,
                 visitID: visitID,
+                sourcePhotoID: sourcePhotoID,
                 storageBucket: storageBucket,
                 storagePath: storagePath,
                 localAssetRef: localAssetRef,

@@ -37,7 +37,7 @@ enum ShareCardPreparationError: Error, Equatable {
 }
 
 /// Existing external place links have no Astir entity to publish. Keep those
-/// one-URL shares local; canonical Astir links still require their approved card.
+/// one-URL shares local; canonical Astir links use an authorized generic preview.
 @MainActor
 enum ShareCardLinkPreparation {
     static func isExternalPlaceLink(_ url: URL) -> Bool {
@@ -55,9 +55,8 @@ enum ShareCardLinkPreparation {
         guard ShareCardLinkTarget(url: content.item) != nil else { throw ShareCardPreparationError.unavailable }
         guard let repository else { throw ShareCardPreparationError.configuration }
         do {
-            let png = try await previewPNG()
-            try Task.checkCancellation()
-            let result = try await repository.publish(content: content, previewPNG: png)
+            // Link unfurling is public and cannot retain a mutable activity’s artwork.
+            let result = try await repository.publish(content: content, previewPNG: Data())
             try Task.checkCancellation()
             return result
         } catch {
@@ -103,37 +102,28 @@ struct ShareCardLinkTarget: Equatable {
 final class SupabaseShareCardPreviewRepository: ShareCardPreviewRepository {
     static let bucket = "share-card-previews"
     private let rpc: any RemoteProcedureCalling
-    private let storage: any RemoteStorageCalling
     private let authSession: any AuthSessionProviding
 
     init(rpc: any RemoteProcedureCalling, storage: any RemoteStorageCalling, authSession: any AuthSessionProviding) {
         self.rpc = rpc
-        self.storage = storage
         self.authSession = authSession
     }
 
     func publish(content: WanderShareContent, previewPNG: Data) async throws -> WanderShareContent {
         guard case .signedIn(let session) = authSession.state else { throw WanderRemoteError.notAuthenticated }
         guard let target = ShareCardLinkTarget(url: content.item),
-              session.userID.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil,
-              previewPNG.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-              previewPNG.count <= 5_242_880 else { throw WanderRemoteError.invalidResponse("invalid_share_card") }
-        let path = "\(session.userID)/\(UUID().uuidString.lowercased())/preview.png"
-        try await storage.uploadObject(bucket: Self.bucket, path: path, data: previewPNG, contentType: "image/png", upsert: false)
-        do {
-            try Task.checkCancellation()
-            let result: CreatedCard = try await rpc.call("create_share_card_preview", params: [
-                "input_kind": target.kind, "input_identifier": target.identifier,
-                "input_image_path": path, "input_title": content.subject
-            ])
-            guard let url = ShareCardLinkTarget.link(content.item, token: result.token) else {
-                throw WanderRemoteError.invalidResponse("invalid_share_card_token")
-            }
-            return content.withLink(url)
-        } catch {
-            try? await storage.deleteObject(bucket: Self.bucket, path: path)
-            throw error
+              session.userID.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil
+        else { throw WanderRemoteError.invalidResponse("invalid_share_card") }
+        try Task.checkCancellation()
+        let result: CreatedCard = try await rpc.call("create_share_card_preview", params: [
+            "input_kind": target.kind, "input_identifier": target.identifier,
+            "input_image_path": "", "input_title": "Shared on Astir"
+        ])
+        guard authSession.state.session?.userID == session.userID else { throw CancellationError() }
+        guard let url = ShareCardLinkTarget.link(content.item, token: result.token) else {
+            throw WanderRemoteError.invalidResponse("invalid_share_card_token")
         }
+        return content.withLink(url).withSubject("Shared on Astir")
     }
 }
 

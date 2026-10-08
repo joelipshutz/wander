@@ -127,7 +127,14 @@ including silent and zero-recipient outcomes. The worker wrapper recomputes grou
 copy and destination from current visibility on each claim/retry, or cancels a
 group with no accessible content.
 
-**September 28 product correction, pending in REC-590:** preserve personalized
+**October 8 delivery correction:** eligible pushes retain detailed copy after
+current source authorization, including when another actor is not connected to
+the recipient. Final authorization re-renders grouped names/counts/destinations
+from the immutable manifest, excluding sources hidden since queue claim.
+`20261008203017_personalized_authorized_push_copy.sql` preserves service-role-only
+execution, pinned search path, and the data-key allowlist.
+
+**September 28 historical-receipt correction, separate follow-up:** preserve personalized
 already-issued notifications after later Stealth/audience changes, while checking
 current access when opening their source activity. The deployed raw-read behavior
 below describes the original 1A implementation; its post-issuance hiding must be

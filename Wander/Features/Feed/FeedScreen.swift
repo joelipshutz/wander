@@ -25,6 +25,7 @@ struct FeedScreen: View {
     @EnvironmentObject private var followInbox: FollowNotificationInbox
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
     @State private var isFloatingHeaderHidden = false
+    @State private var previousPagingMetrics: FeedScrollMetrics?
     @State private var lastFeedScrollOffset: CGFloat?
     @State private var accumulatedFeedScrollTravel: CGFloat = 0
     @Namespace private var searchTransitionNamespace
@@ -291,45 +292,69 @@ struct FeedScreen: View {
 
     private var placesSurface: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                AstirScrollOffsetReader(
-                    coordinateSpaceName: FeedScrollCoordinateSpace.places
-                )
+            GeometryReader { viewport in
+                ScrollView {
+                    AstirScrollOffsetReader(
+                        coordinateSpaceName: FeedScrollCoordinateSpace.places
+                    )
 
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    content
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        content
+                    }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, feedContentTopInset)
+                    .padding(.bottom, WanderTheme.spacing16)
+                    .walkthroughTarget(.feedActivity)
+                    .id("nux.feed.top")
+                    .background {
+                        GeometryReader { content in
+                            Color.clear.preference(
+                                key: FeedPagingMetricsKey.self,
+                                value: FeedScrollMetrics(
+                                    offset: -content.frame(in: .named(FeedScrollCoordinateSpace.places)).minY,
+                                    contentHeight: content.size.height,
+                                    viewportHeight: viewport.size.height
+                                )
+                            )
+                        }
+                    }
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, feedContentTopInset)
-                .padding(.bottom, WanderTheme.spacing16)
-                .walkthroughTarget(.feedActivity)
-                .id("nux.feed.top")
-            }
-            .coordinateSpace(name: FeedScrollCoordinateSpace.places)
-            .astirScrollTracking(
-                coordinateSpaceName: FeedScrollCoordinateSpace.places
-            ) { offset in
-                updateFloatingHeaderVisibility(scrollOffset: offset)
-            }
-            .accessibilityIdentifier("feed.places.scroll")
-            .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
-                if walkthroughs.currentStep?.target == .feedActivity {
-                    walkthroughs.dismissCurrentContext()
+                .coordinateSpace(name: FeedScrollCoordinateSpace.places)
+                .astirScrollTracking(
+                    coordinateSpaceName: FeedScrollCoordinateSpace.places
+                ) { offset in
+                    updateFloatingHeaderVisibility(scrollOffset: offset)
                 }
-            })
-            .onChange(of: walkthroughs.feedIntroductionScrollTarget, initial: true) { _, target in
-                scrollForIntroduction(target, proxy: proxy)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .refreshable {
-                await refresh()
-            }
-            .onChange(of: focusedActivityID, initial: true) { _, activityID in
-                scrollToFocusedActivity(activityID, proxy: proxy)
-            }
-            .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
-                scrollToFocusedActivity(focusedActivityID, proxy: proxy)
-                scrollForIntroduction(walkthroughs.feedIntroductionScrollTarget, proxy: proxy)
+                .accessibilityIdentifier("feed.places.scroll")
+                .accessibilityValue("\(store.visibleFeedActivityGroups.count) activities loaded")
+                .onPreferenceChange(FeedPagingMetricsKey.self) { metrics in
+                    defer { previousPagingMetrics = metrics }
+                    guard let metrics, metrics.reachedBottom(after: previousPagingMetrics),
+                          isFeedTabActive, !isShowingSearch, selectedProfile == nil,
+                          selectedPlace == nil, activityNavigation.commentsRoute == nil,
+                          !store.isLoadingMoreFeed, !store.feedPaginationFailed,
+                          store.hasMoreFeed else { return }
+                    Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                }
+                .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                    if walkthroughs.currentStep?.target == .feedActivity {
+                        walkthroughs.dismissCurrentContext()
+                    }
+                })
+                .onChange(of: walkthroughs.feedIntroductionScrollTarget, initial: true) { _, target in
+                    scrollForIntroduction(target, proxy: proxy)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .refreshable {
+                    await refresh()
+                }
+                .onChange(of: focusedActivityID, initial: true) { _, activityID in
+                    scrollToFocusedActivity(activityID, proxy: proxy)
+                }
+                .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
+                    scrollToFocusedActivity(focusedActivityID, proxy: proxy)
+                    scrollForIntroduction(walkthroughs.feedIntroductionScrollTarget, proxy: proxy)
+                }
             }
         }
     }
@@ -473,11 +498,31 @@ struct FeedScreen: View {
                 FeedAudienceEmptyState(audience: audienceSelection)
             } else {
                 FeedActivityList(
-                    activity: visibleActivity,
+                    groups: store.visibleFeedActivityGroups,
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
                 )
+            }
+
+            if store.isLoadingMoreFeed {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ProgressView()
+                    Text("Loading more...")
+                        .font(AstirTypography.body)
+                }
+                .foregroundStyle(astirBrandMode.secondaryText)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("feed.loadingMore")
+            } else if store.feedPaginationFailed {
+                FeedRetryRow(
+                    title: "More activity couldn't load",
+                    subtitle: "Your loaded activity is still here.",
+                    actionTitle: "Retry",
+                    retry: { _ = await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                )
+                .accessibilityIdentifier("feed.loadMoreRetry")
             }
 
             if store.feedLoadState == .stale {
@@ -620,6 +665,8 @@ struct FeedScreen: View {
                   $0.activities.contains { $0.id == activityID }
               })
         else { return }
+        store.revealFeedActivity(activityID)
+        focusedActivityID = nil
         Task { @MainActor in
             await Task.yield()
             withAnimation(.easeOut(duration: 0.25)) {
@@ -1136,14 +1183,13 @@ private struct FeedFeaturedCard: View {
 }
 
 private struct FeedActivityList: View {
-    let activity: [FeedActivity]
+    let groups: [FeedActivityGroup]
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
         LazyVStack(spacing: WanderTheme.spacing3) {
-            let groups = FeedPresentation.groupedActivity(activity)
             ForEach(groups) { group in
                 FeedActivityModule(
                     group: group,
@@ -1338,6 +1384,8 @@ private extension FeedMediaPreview {
         ActivityEngagementMedia(
             id: id,
             urlString: urlString,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
             accessibilityLabel: accessibilityLabel
         )
     }
@@ -1732,5 +1780,13 @@ func categorySymbol(for category: String) -> String {
         "wineglass.fill"
     default:
         "mappin.and.ellipse"
+    }
+}
+
+private struct FeedPagingMetricsKey: PreferenceKey {
+    static let defaultValue: FeedScrollMetrics? = nil
+
+    static func reduce(value: inout FeedScrollMetrics?, nextValue: () -> FeedScrollMetrics?) {
+        value = nextValue() ?? value
     }
 }

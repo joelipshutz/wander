@@ -23,7 +23,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
         app.launch()
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
         for destination in ["Events", "Map", "Profile", "Events", "Feed", "Map", "Events"] {
             let source = tabs.buttons.matching(NSPredicate(format: "isSelected == true")).firstMatch
@@ -89,7 +89,7 @@ import UIKit
         app.launch()
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
-        XCTAssertTrue(app.textFields["map.searchField"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         // Accessibility can expose tabs while the launch image is still on
         // screen. Establish the initial rendered appearance before measuring
         // transitions; subsequent switches must pass without this wait.
@@ -165,6 +165,10 @@ import UIKit
         let artwork = app.descendants(matching: .any)["events.comingSoon"].firstMatch
         XCTAssertTrue(artwork.waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: tabs.buttons["Map"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
         for label in ["Map", "Feed", "Events", "Lists", "Profile"] {
             XCTAssertTrue(tabs.buttons[label].isHittable)
         }
@@ -173,18 +177,27 @@ import UIKit
         capture("Events — native tab bar")
         for label in ["Map", "Feed", "Lists", "Profile", "Map", "Profile", "Feed", "Lists"] {
             tabs.buttons[label].tap()
-            XCTAssertTrue(tabs.buttons[label].isSelected)
+            let selectedTab = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"), object: tabs.buttons[label]
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [selectedTab], timeout: 10), .completed)
             if label == "Profile" {
                 capture("Events — unselected beside Profile")
             }
             tabs.buttons["Events"].tap()
-            XCTAssertTrue(tabs.buttons["Events"].isSelected)
+            let selectedEvents = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"), object: tabs.buttons["Events"]
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [selectedEvents], timeout: 10), .completed)
             XCTAssertTrue(artwork.waitForExistence(timeout: 2))
         }
         XCUIDevice.shared.press(.home)
         app.activate()
+        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
+        XCTAssertTrue(tabs.buttons["Feed"].isSelected)
+        tabs.buttons["Events"].tap()
         XCTAssertTrue(artwork.waitForExistence(timeout: 5))
-        capture("Events — after switching and foreground return")
+        capture("Events — revisited after Feed foreground entry")
     }
 
     func testTabBarHidesAndReturnsWithProfileNavigation() {

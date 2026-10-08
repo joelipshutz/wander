@@ -68,10 +68,14 @@ struct FeedMediaPreview: Identifiable, Equatable, Sendable {
     let id: String
     let urlString: String?
     let accessibilityLabel: String
+    let storageBucket: String?
+    let storagePath: String?
 
-    init(id: String, urlString: String? = nil, accessibilityLabel: String) {
+    init(id: String, urlString: String? = nil, storageBucket: String? = nil, storagePath: String? = nil, accessibilityLabel: String) {
         self.id = id
         self.urlString = urlString
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
         self.accessibilityLabel = accessibilityLabel
     }
 }
@@ -181,6 +185,39 @@ struct FollowedFeedPage {
     let featuredPlaces: [FeedFeaturedPlace]
     let nextCursor: String?
     let fetchedAt: Date
+}
+
+enum FeedPagination {
+    static let pageSize = 20
+
+    /// A cursor page contains events, while one visible tile can group several events.
+    static func appending(_ next: FollowedFeedPage, to current: FollowedFeedPage) -> FollowedFeedPage {
+        var seen = Set<String>()
+        let activity = (current.activity + next.activity).filter { seen.insert($0.id).inserted }
+        return FollowedFeedPage(
+            activity: FeedPresentation.newestFirst(activity),
+            featuredPlaces: current.featuredPlaces,
+            nextCursor: next.nextCursor,
+            fetchedAt: current.fetchedAt
+        )
+    }
+}
+
+struct FeedScrollMetrics: Equatable {
+    let offset: CGFloat
+    let contentHeight: CGFloat
+    let viewportHeight: CGFloat
+
+    var isAtBottom: Bool {
+        viewportHeight > 0 && offset > 0 && offset + viewportHeight >= contentHeight - 1
+    }
+
+    /// Layout, initial appearance and upward scrolling must not request another page.
+    func reachedBottom(after previous: Self?) -> Bool {
+        guard let previous, contentHeight == previous.contentHeight,
+              viewportHeight == previous.viewportHeight else { return false }
+        return isAtBottom && !previous.isAtBottom && offset > previous.offset
+    }
 }
 
 enum FeedLoadState: Equatable {

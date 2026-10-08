@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-09-28
+Last updated: 2026-10-08
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -33,6 +33,87 @@ REC-590 correction must reconcile both its source guard and this restrictive
 policy with historical receipts; the sender branch does not claim that follow-up
 implemented or verified. Recipient ownership and source authorization remain
 required, and notification history never grants activity access.
+
+## Personalized push delivery (REC-589, October 8)
+
+An eligible recipient receives detailed notification copy after final source
+authorization, including when they are friends with the primary saver but not
+another actor in the activity. Actor presence alone must never replace useful
+copy with “New activity on Astir / Open Astir to view.” Silent, receiver settings,
+blocks, mutes, expiry, and source access still control whether delivery occurs.
+
+The final delivery RPC refreshes grouped import names, counts, and destinations
+from the frozen first-save manifest. A place hidden after queue claim is excluded;
+a group with no remaining visible places is suppressed. Later import selections
+never expand this manifest. Delivered events are not rewritten or re-enqueued.
+This corrects the former generic-copy policy below. Historical inbox retention
+after a later privacy change remains a separate follow-up.
+
+## Historical data and testing scope (REC-590, September 29)
+
+Historical PostHog diagnostic cleanup is optional follow-up and does not block
+privacy acceptance testing or rollout. The previously approved support request
+remains submitted; removing it as a gate does not assert deletion or withdrawal.
+Future notification reporting remains aggregate-only.
+
+No historical check-ins, ratings, lists, photos, or Wanna records need deletion
+for the current testing slice. The completed audit found no proven historical
+private-list companions eligible for an audience repair. Before any future
+cleanup that changes user-facing historical records, report the affected scope.
+Keep the scoped legacy photo/share-preview link invalidation request: it revokes
+old access while preserving stored photos and database records. Its completion
+remains a separate rollout verification, without blocking branch testing. REC-633
+tracks this pre-existing legacy access separately from landing the tested app
+protections. An app merge does not certify historical CDN retirement. The remaining
+follow-request and audience-exclusion product controls are tracked in REC-634.
+
+## Cached activity and source revocation (REC-590, September 23)
+
+Opening another person's cached activity, check-in history, or protected photo
+rechecks its source access. Previously authorized cache may be used on a genuine
+offline connection error. A denied/deleted source, expired authentication, or
+server failure must not fall back to cached content. Known-denied photos stay
+unavailable across app restarts; caches are scoped to the viewer. Offline viewing
+can therefore show an unseen privacy change until connectivity returns. Owner
+drafts and offline capture remain available.
+
+A Wanna automatically created by adding a new place through a stealth-list
+selection starts self-only, even with mixed public/private list selection.
+Record that origin on the server. Repair only saves with authoritative automatic
+origin and no later explicit audience change. Membership in a stealth list,
+manual source type, or nearby timestamps alone do not prove intent. Existing
+independently saved places and ambiguous historical saves keep their audiences.
+
+Copied shared-visit photos retain source provenance and inherit later source
+revocation. A recipient's independent notes, rating, and original uploads remain
+their own. Notification inbox reads, claims, and the final delivery step check
+current source access. The original generic social-copy policy is superseded by
+the October 8 personalized-delivery decision above. Delivered OS notifications
+cannot be recalled.
+
+Canonical Astir share links use generic public artwork and text. The website
+reader must be deployed before existing public share artwork becomes private.
+The cutover must invalidate CDN copies and verify previously issued public and
+signed URLs no longer serve protected bytes; token expiry alone is insufficient.
+Explicitly exported images and previously downloaded third-party copies cannot
+be recalled. Small-sample inference in anonymous Astir ratings stays deferred
+to REC-608.
+
+## Feed on ordinary app entry (REC-629)
+
+Ordinary authenticated launches and returns from the background land on Feed.
+This extends REC-562's cold-launch default. Explicit destinations from links,
+notifications, widgets and shortcuts take priority, including lists, profiles,
+places, map/search, calendar, invitations and activity/comment views. A later
+ordinary entry can return to Feed; the earlier destination is not a permanent
+exception. Inactive-only interruptions do not count as a new entry.
+
+Onboarding and unfinished workflows retain their context, including
+capture/save/import, authentication, settings, list editors, feedback and comment
+drafts. Read-only profiles, places and lists do not suppress a later ordinary entry.
+An entry suppressed by one of these flows is consumed; closing the flow must
+not trigger a delayed jump to Feed. Foreground defaults use the existing root
+presentation handoff, and any newer explicit navigation cancels that default.
 
 ## Onboarding home city and phone (REC-584)
 
@@ -284,7 +365,7 @@ and a refresh recomputes it solely from currently visible events.
 ## Check-in details (REC-485, revised 2026-09-17)
 
 - Each selectable place subcategory has three deliberately curated, optional default questions. Cuisine alone does not change dining logistics: ordinary restaurants share parking, outdoor seating and dietary options; vegan/vegetarian, gluten-free, tabletop cooking, takeaway and fine dining get practical exceptions. Coffee, tea and sweets always include dogs. Synonymous gym, cafe, lodging and station types can share defaults, while genuine differences such as Pilates, CrossFit, beach courts and hostels remain distinct. Shared questions are reused when the practical need is the same; functional subtypes receive their own selection. The complete inventory is in [the question catalog](product/check-in-question-catalog.md).
-- A fresh Check-in starts with no answers. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
+- A first Check-in starts with no answers. For repeat Check-ins (REC-628), the latest visit supplies editable rating, tags/personal labels, and question answers, including account-scoped private answers. Note, visit identity, date, photos, and invited friends start fresh; submitting creates a distinct visit and leaves the prior visit unchanged. Explicit negative and qualified answers are retained as observations; unanswered means unknown. Later unanswered visits do not erase earlier explicit observations. Editing or deleting an observation updates the owner's latest available details.
 - Wanna leads with one introduction/context note, with its optional date above categories. Check-in orders rating, note, date, categories, Useful details, then friends/photos. Optional tags stay at the bottom. Adding a visit retains the original Wanna note.
 - Customize belongs beside Useful details and in Settings → Check-in questions. A person can search subtypes, reorder, remove, restore, add catalog questions, or create recurring yes/no questions. Configuration is account-scoped on the current device. Removing a question retains its previous answers. Not useful persists a hidden ID for that account and subtype, including when editing an older save; the current row grays out with Undo. Explicit re-add or confirmed Restore brings a prompt back. Restoring suggestions requires a native confirmation; existing customizations do not silently adopt changed defaults.
 - Each recurring question has an inline eye button (signal open eye for shared, gray slashed eye for private), with no separate Stealth page. Each question has a Stealth setting: on keeps its answer owner-private on this device; off shares it only with that Check-in's audience. New custom questions default to Stealth on; catalog questions default off. Add/create screens omit privacy controls; the recurring-list eye is the single place to change them. The Check-in shows its gray Stealth badge beside the question. Changing a default in Settings never republishes historical answers. Only an explicit audience change in the visit editor moves its draft answer between channels.
@@ -293,6 +374,10 @@ and a refresh recomputes it solely from currently visible events.
 - Tag suggestions describe uses and occasions rather than repeating question facts. Each category offers a small curated set; exact duplicates and an explicit list of near-synonyms render as one chip. Existing personal labels remain stored unchanged unless the person explicitly removes their chip.
 - Synced owner visits hydrate complete answer JSON through `own_place_visit_details`, an authenticated owner-only read. Raw table-column grants remain restricted. Unknown remote answers cannot be edited or synchronized as an empty answer set. This endpoint exposes no other person's answer history.
 - Voice capture and semantic personal recall remain separate follow-up work (REC-490, REC-491, REC-492). This change preserves useful narrative context without introducing those features.
+
+## Feed pagination (REC-628)
+
+Feed shows 20 activity tiles initially. Only downward scrolling to the actual bottom loads the next 20 tiles and displays “Loading more...” while loading. Grouped events count as one tile, so server cursor pages may be combined and overflow buffered. Loading errors retain existing tiles with an explicit retry. Refreshing, changing audience, or switching accounts cancels pending pagination and resets to the first page. Opening an older linked activity reveals its tile explicitly.
 
 ## Release Decisions
 
@@ -558,6 +643,29 @@ for this product. Verify the Astir URL prefix for the existing sandbox and
 production configurations, serve the return path in the association file,
 and retain the verified legacy domain for installed clients. Provider
 production approval is separate from domain ownership verification.
+
+## 2026-09-22 — Ratings and automatic saves from private lists (REC-590)
+
+Place profiles always display Your rating, Friends rating, and Astir rating.
+Astir replaces the displayed Fit score. The implementation follows the proposed
+weighting default: Your and Astir averages count rated check-ins; Friends averages
+each followed person's readable ratings and counts only those people. This
+weighting was not a separate explicit approval. Hidden activity contributes to neither the Friends score
+nor its count, but remains in the anonymous numeric Astir aggregate. Deleted
+accounts and deleted check-ins are excluded. Empty aggregates display `—/5`;
+loading and failed requests remain distinct from a successful empty response.
+
+A new Wanna automatically created by adding a place to a stealth list is
+self-only from its first local and remote write, including retries. When
+several lists are selected together, a stealth selection determines that new
+companion save's audience. Moving an existing save into a list does not rewrite
+the audience explicitly chosen earlier; moving a private Wanna into a public
+list does not publish the Wanna. Historical saves require a separate cleanup
+decision because list membership alone does not prove how a save was created.
+
+Small-sample inference from the global aggregate is deferred to REC-608. These
+rating and list changes do not by themselves complete account-based audiences,
+follow requests, per-activity exclusions, or revocable content delivery.
 
 ## 2026-09-23 — Historical visit Feed identity (REC-614)
 

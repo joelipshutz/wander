@@ -33,26 +33,51 @@ Silent off. A historical import can announce its first selected check-ins as a
 group when the sender explicitly chooses Notify. Plain Wanna alone does not
 produce a follower announcement.
 
-## Notification-history correction pending in REC-590
+## Quick solo check: simulator sends, Ryan's iPhone receives
 
-The September 28 decision preserves an already-issued notification and its
-personalized text after later Stealth/audience changes. Opening that receipt must
-deny newly private source activity. The deployed REC-590 worker currently sends
-generic social push text, and the two deployed read guards can hide historical
-receipts. The separate privacy correction must fix both before personalized-copy
-and retained-history acceptance can pass. Earlier sender/SQL results validate the
-original contract; they do not prove this new behavior. Silent and the first-three,
-later-seven rule remain unchanged.
+Use a different test account in the iPhone 17 simulator. Ryan follows that account
+(or both follow each other for Friends). Enable notifications on Ryan's phone and
+leave Astir in the background. Use distinct places so existing deduplication and
+frequency limits do not confuse results; allow a few minutes for delivery.
+
+1. Simulator: check in for today with Silent **off**. Ryan gets detailed actor/place copy.
+2. Simulator: check in elsewhere with Silent **on**. Ryan gets no announcement;
+   the activity still appears wherever its audience permits.
+3. Simulator: import places, check into three, tap Save, choose **No, notify followers**.
+   Ryan gets one grouped notification. Return and save the remaining places: no second notification.
+4. Simulator: start a fresh import and choose **Yes, save silently**. Ryan gets no announcement.
+5. Simulator: add a place to a list shared with Ryan using Silent on, then another
+   with Silent off. Only the second eligible addition announces.
+
+For a notification involving someone else, use an existing shared activity that
+Ryan can read through the primary saver. Its eligible push must retain detailed
+copy even if Ryan does not follow the other actor. A third test account is only
+needed to create that exact relationship from scratch.
+
+## Personalized copy and remaining notification-history follow-up
+
+Detailed social push copy is restored by
+`20261008203017_personalized_authorized_push_copy.sql`. The final delivery RPC
+checks current access and refreshes grouped import copy, while preserving its
+worker-only grants and restricted payload keys. SQL regression covers a friend
+of the primary saver receiving detailed copy involving an unrelated actor.
+
+The September 28 historical-receipt decision remains separate: after issuance,
+later Stealth changes should preserve the receipt while denying its source.
+Existing inbox read guards can still hide those historical receipts. Do not treat
+this copy fix as validation of retained-history acceptance. Silent and the
+first-three, later-seven rule remain unchanged.
 
 ## Test setup
 
-1. Install a signed build from this branch on the sender's iPhone. Applying the
+1. Install this branch on the sender's simulator or iPhone, with a physical
+   iPhone receiving pushes. Applying the
    database migration alone does not add these controls to an older app build.
    The migration file is
    `supabase/migrations/20260923193108_sender_notification_controls.sql`, followed by
    `supabase/migrations/20260924035547_sender_import_notification_read_guard.sql`.
-   Both are deployed; migration presence and the combined hosted regression were
-   verified September 25, 2026.
+   These and `20261008203017_personalized_authorized_push_copy.sql` are deployed;
+   all 15 generated hosted smoke transactions passed October 8, 2026.
 2. Use test accounts: A sends; B follows A and belongs to the shared test list;
    C is outside the tested audience. For source-attribution tests, A saves a
    place from B's map. For acceptance tests, use a separate follower of the

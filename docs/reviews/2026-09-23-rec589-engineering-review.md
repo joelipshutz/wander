@@ -344,3 +344,54 @@ claim the privacy correction implemented or deployed.
 VERDICT: Ready for review. Engineering review, sender implementation, and native scenarios are complete. Final signed validation passes all 2,576 unit tests and seven targeted UI checks; earlier transient failures and their passing reruns are recorded above. The REC-590 notification-history correction and signed-device APNs remain separate rollout checks.
 
 NO UNRESOLVED DECISIONS
+
+
+## October 8 personalized-copy integration
+
+Integrated `origin/main` at `b096e0adf` (including REC-590) and resolved the save,
+list-picker, model, and repository overlaps. Private-list companion provenance
+and audience rules remain intact alongside the captured Silent policy; the
+existing mixed-list regression now asserts both contracts through persistence.
+XcodeGen regenerated project membership. No dependency versions changed.
+
+The deployed REC-590 delivery RPC was replacing every actor-bearing notification
+with generic copy after authorization. The additive
+`20261008203017_personalized_authorized_push_copy.sql` preserves the producer's
+detailed copy after the same current-source, claim, expiry, mute, and preference
+checks. It retains worker-only grants, SECURITY DEFINER, the pinned search path,
+volatile JSONB ABI, and the push-data allowlist. It does not modify sent events.
+
+A grouped import can lose one source after claim. Final authorization now refreshes
+its body, count, and destination from the frozen manifest, or suppresses an empty
+group. Regression coverage includes partial and complete revocation, an eligible
+friend of the saver receiving details involving an unrelated actor, stale claims,
+restricted payload keys, and passing the refreshed envelope unchanged to APNs.
+
+Backend validation: all 14 preview transactions passed, then all 15 deployed
+smoke transactions passed using the checked-in runner's credential-free generated
+SQL over the authorized connector. Fixtures rolled back. Hosted metadata confirms
+service_role-only execution and matching function security attributes. All 12
+worker tests passed without network access after granting the inspected fixture
+environment allowlist; the two earlier restricted runs were permission failures.
+Dependency installation and the review-storage check passed.
+
+Historical inbox retention after a later Stealth change remains a separate
+privacy follow-up. This change fixes personalized delivery and does not certify
+that historical-receipt rule or real-device APNs delivery.
+
+
+Native validation: all **14 sender UI cases passed** on the integrated build.
+The first combined run had one failure in the added test assertion: it checked
+all seeded list items rather than only the new membership. The corrected assertion
+requires exactly one matching new item and Silent on that item. Production code
+was unchanged. The final complete unit rerun passed **2,680 tests**, zero failures
+or skips. Result bundles are retained in the shared REC-589 review evidence
+directory as `personalized-copy-integration.xcresult` and
+`personalized-copy-unit-confirmation.xcresult`; the first failure is preserved.
+
+The normal Wander scheme was rebuilt and launched on **iPhone 17 / iOS 26.5**.
+Xcode's Branch Chooser shows `codex/rec-589-silent-notifications` from the isolated
+worktree. Live authentication and Feed loading succeeded; no account switch or
+manual save was performed. The testing guide includes simulator-sender and
+physical-phone-recipient steps. No broader full UI-suite or real-device push
+pass is claimed. This follow-up is ready for manual acceptance testing.

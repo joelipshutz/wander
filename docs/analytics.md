@@ -250,6 +250,12 @@ actor IDs, APNs IDs, device tokens, notification title/body, deep links, or
 notification `data` from the server. Keep per-recipient frequency computation
 inside Supabase and export only the aggregate summary and fixed histogram.
 
+The worker's `analytics_snapshot` invocation follows the same rule. It calls only
+`notification_operations_snapshot`, emits the aggregate frequency events, and
+never claims notifications or fetches recipient directories or notification-copy
+audit rows. A failed export returns an error. Previously exported private audit
+records require separate retention cleanup; a worker deployment cannot retract them.
+
 ## Provision the dashboard
 
 The script uses only rec.me-specific credentials. It intentionally does not fall back to generic `POSTHOG_*` variables, because this machine also has credentials for other products.

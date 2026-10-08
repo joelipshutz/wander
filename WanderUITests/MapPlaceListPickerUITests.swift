@@ -16,7 +16,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
         let launcher = app.buttons["feed.searchLauncher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 8))
         launcher.tap()
-        let searchField = app.textFields["discover.placesSearchField"]
+        let searchField = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
         searchField.tap()
         searchField.typeText("coffee\n")

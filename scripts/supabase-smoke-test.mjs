@@ -104,12 +104,24 @@ async function main() {
           : "hosted schema";
         console.log(`Supabase ${target} passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
+        await client.query(sourceAuthorizationSmokeSQL());
+        console.log("ok - source access, copied photos, notifications, and proven companion repair");
+        await client.query(privateListCompanionSmokeSQL());
+        console.log("ok - a stealth-list companion stays private in Feed and activity links");
+        await client.query(placeRatingSummariesSmokeSQL());
+        console.log("ok - independent ratings exclude hidden Friends contributions while preserving the Astir aggregate");
         await client.query("savepoint ranked_people_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/ranked_people_recommendations.sql", import.meta.url)), "rollback"));
         await client.query("rollback to savepoint ranked_people_smoke");
         await client.query("release savepoint ranked_people_smoke");
         console.log("ok - shared people ranking combines contact, location, curated and social signals");
+        await client.query("savepoint person_typeahead_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/person_typeahead_search.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint person_typeahead_smoke");
+        await client.query("release savepoint person_typeahead_smoke");
+        console.log("ok - person typeahead matches first letters and names without duplicate or hidden accounts");
         await client.query("savepoint contact_discovery_smoke");
         await client.query(transactionBody(loadStrictPgTapSQL(
           new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback"));
@@ -1374,6 +1386,8 @@ function runLinkedSmokeChecks(
   const discoverPreviewSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(discoverSmokeSQL, "rollback")}\nrollback;`;
   const rankedPeopleSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/ranked_people_recommendations.sql", import.meta.url)), "rollback")}\nrollback;`;
+  const personTypeaheadSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(readFileSync(
+    new URL("../supabase/tests/person_typeahead_search.sql", import.meta.url), "utf8"), "rollback")}\nrollback;`;
   const contactDiscoverySmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
     new URL("../supabase/tests/contact_discovery.sql", import.meta.url)), "rollback")}\nrollback;`;
   const launchProfileSmokeSQL = `begin;\n${migrationPreviewSQL}\n${transactionBody(loadStrictPgTapSQL(
@@ -1424,7 +1438,7 @@ function runLinkedSmokeChecks(
         strangerUserID,
         migrationPreviewSQL,
         migrationPreviewTestSQL,
-      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${historicalFeedSmokeSQL}\n${visitFeedSmokeSQL}\n${questionSnapshotSmokeSQL}`;
+      )}\n${cuisineSmokeSQL}\n${discoverPreviewSmokeSQL}\n${launchProfileSmokeSQL}\n${contactDiscoverySmokeSQL}\n${rankedPeopleSmokeSQL}\n${personTypeaheadSmokeSQL}\n${socialImportAdmissionSmokeSQL}\n${snapshotCoverSmokeSQL}\n${checkInHistorySmokeSQL}\n${feedActivitySmokeSQL}\n${feedAudienceSmokeSQL}\n${historicalFeedSmokeSQL}\n${visitFeedSmokeSQL}\n${questionSnapshotSmokeSQL}`;
     if (outputSQLPath) {
       writeFileSync(resolve(outputSQLPath), linkedSQL, { encoding: "utf8", mode: 0o600 });
       console.log("Wrote rollback-only linked smoke SQL; no database checks have run.");
@@ -1528,6 +1542,12 @@ function buildLinkedSmokeSQL(
 begin;
 
 ${migrationPreviewSQL}
+
+${sourceAuthorizationSmokeSQL()}
+
+${privateListCompanionSmokeSQL()}
+
+${placeRatingSummariesSmokeSQL()}
 
 ${buildProductionSecuritySmokeSQL()}
 
@@ -2791,6 +2811,24 @@ rollback to savepoint feedback_slack_smoke;
 release savepoint feedback_slack_smoke;
 rollback;
 `;
+}
+
+function sourceAuthorizationSmokeSQL() {
+  return transactionBody(readFileSync(
+    new URL("../supabase/tests/rec590_source_authorization.sql", import.meta.url), "utf8"
+  ), "rollback");
+}
+
+function privateListCompanionSmokeSQL() {
+  return transactionBody(readFileSync(
+    new URL("../supabase/tests/rec590_private_list_companion.sql", import.meta.url), "utf8"
+  ), "rollback");
+}
+
+function placeRatingSummariesSmokeSQL() {
+  return transactionBody(readFileSync(
+    new URL("../supabase/tests/rec590_place_rating_summaries.sql", import.meta.url), "utf8"
+  ), "rollback");
 }
 
 function buildProductionSecuritySmokeSQL() {

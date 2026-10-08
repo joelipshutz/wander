@@ -44,6 +44,8 @@ struct ListsScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     private let scenario: ListsScreenScenario
+    private let presentationResetRequest: WanderPresentationResetRequest?
+    @State private var handledPresentationResetID: UUID?
     private let scenarioList: PlaceListMock?
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
@@ -65,7 +67,11 @@ struct ListsScreen: View {
     @State private var lastScrollOffset: CGFloat?
     @State private var accumulatedScrollTravel: CGFloat = 0
 
-    init(scenario: ListsScreenScenario = .resolved()) {
+    init(
+        scenario: ListsScreenScenario = .resolved(),
+        presentationResetRequest: WanderPresentationResetRequest? = nil
+    ) {
+        self.presentationResetRequest = presentationResetRequest
         self.scenario = scenario
         // Live/empty screens never use preview lists. Building the nested demo
         // catalog here can exhaust the physical device's Debug launch stack.
@@ -165,6 +171,9 @@ struct ListsScreen: View {
             isPresented: editorPresentation != nil
                 && walkthroughs.activeSurface == .listEditor
         )
+        .onChange(of: presentationResetRequest?.id, initial: true) { _, _ in
+            resetPresentationsIfNeeded()
+        }
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
         }
@@ -192,7 +201,23 @@ struct ListsScreen: View {
         )
     }
 
+    private func resetPresentationsIfNeeded() {
+        guard let requestID = presentationResetRequest?.id,
+              handledPresentationResetID != requestID else { return }
+        handledPresentationResetID = requestID
+        editorPresentation = nil
+        selectedList = nil
+        collaboratorList = nil
+        mapList = nil
+        selectedProfileID = nil
+        pendingListInvite = nil
+        listInviteErrorMessage = nil
+    }
+
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
+        // Consume a pending reset before applying the new destination, so a
+        // later SwiftUI change callback cannot erase the route just opened.
+        resetPresentationsIfNeeded()
         guard let request else { return }
 
         switch request.destination {
@@ -2974,6 +2999,7 @@ private struct CollaboratorInviteSheet: View {
                 Text(inviteLinkErrorMessage ?? "Try again in a moment.")
             }
         }
+        .blocksProductUpsells(while: true, preservesForegroundEntry: true)
     }
 
     private var canInviteWhilePrivate: Bool {
@@ -4127,6 +4153,7 @@ private struct ListMapCompactMedia: View {
 
 private struct ListPlacePhotoMedia: View {
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.displayScale) private var displayScale
     @Environment(\.listPhotoAuthorizationScopeKey) private var photoAuthorizationScopeKey
     let place: ListPlaceMock
@@ -4174,6 +4201,7 @@ private struct ListPlacePhotoMedia: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
+                guard scenePhase == .active else { return }
                 if let cachedPhoto {
                     resolvedPhoto = cachedPhoto
                     resolvedPhotoKey = resolutionKey
@@ -4197,6 +4225,10 @@ private struct ListPlacePhotoMedia: View {
             }
         }
         .clipped()
+        .onDisappear {
+            resolvedPhotoKey = nil
+            resolvedPhoto = nil
+        }
     }
 
     private var photoResolutionKey: String {
@@ -4204,7 +4236,9 @@ private struct ListPlacePhotoMedia: View {
             place.canonicalProfilePlace.photoLookupKey,
             place.preferredUserPhoto?.cacheKey ?? "no-preloaded-user-photo",
             eligibleUserIDs?.sorted().joined(separator: ",") ?? "all-visible-users",
-            photoAuthorizationScopeKey
+            photoAuthorizationScopeKey,
+            backend.photoViewerID ?? "signed-out",
+            "session:\(backend.photoSessionRevision):\(backend.photoAccessRevision):\(scenePhase)"
         ]
             .joined(separator: "|")
     }
@@ -4546,6 +4580,7 @@ private struct ListEditorSheet: View {
                 Text(deleteConfirmationMessage)
             }
         }
+        .blocksProductUpsells(while: true, preservesForegroundEntry: true)
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listEditor)
     }
 
@@ -6037,15 +6072,24 @@ struct SnapshotListEditorScreen: View {
 }
 
 private struct ListSnapshotCover: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     let data: Data?
     let path: String?
     @State private var downloadedData: Data?
+    @State private var loadedKey: String?
+    @State private var loadedScopeKey: String?
+
+    private var scopeKey: String { "\(store.currentUser.id):\(path ?? "local")" }
+    private var accessKey: String { "\(scopeKey):\(scenePhase)" }
+    private var imageData: Data? {
+        path == nil ? data : (loadedKey == accessKey ? downloadedData : nil)
+    }
 
     var body: some View {
         Group {
-            if let imageData = data ?? downloadedData, let image = UIImage(data: imageData) {
+            if let imageData, let image = UIImage(data: imageData) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -6058,13 +6102,23 @@ private struct ListSnapshotCover: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WanderTheme.surfaceSand.color)
-        .task(id: "\(store.currentUser.id):\(path ?? "local")") {
-            downloadedData = nil
-            guard data == nil, let path else { return }
-            let result = try? await backend.listSnapshotCoverData(path: path)
-            guard !Task.isCancelled else { return }
-            downloadedData = result
+        .task(id: accessKey) {
+            guard scenePhase == .active, let path else { return }
+            let key = accessKey, scope = scopeKey
+            do {
+                let result = try await backend.listSnapshotCoverData(path: path)
+                guard !Task.isCancelled, accessKey == key else { return }
+                downloadedData = result
+                loadedScopeKey = scope
+            } catch {
+                guard !Task.isCancelled, accessKey == key else { return }
+                if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) || loadedScopeKey != scope {
+                    downloadedData = nil
+                }
+            }
+            loadedKey = key
         }
+        .onDisappear { loadedKey = nil }
     }
 }
 

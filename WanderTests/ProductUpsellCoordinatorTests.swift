@@ -487,6 +487,26 @@ final class ProductUpsellCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.presentationBlockerCount, 0)
     }
 
+    func testOnlyUnfinishedChildFlowsPreserveForegroundEntry() {
+        let coordinator = ProductUpsellCoordinator()
+        let profile = UUID()
+        let editor = UUID()
+        coordinator.setPresentationBlocker(id: profile, isActive: true)
+        XCTAssertEqual(coordinator.foregroundEntryBlockerCount, 0)
+
+        coordinator.setPresentationBlocker(id: editor, isActive: true, preservesForegroundEntry: true)
+        coordinator.setPresentationBlocker(id: editor, isActive: true, preservesForegroundEntry: true)
+        XCTAssertEqual(coordinator.foregroundEntryBlockerCount, 1)
+        coordinator.setPresentationBlocker(id: editor, isActive: true, preservesForegroundEntry: false)
+        XCTAssertEqual(coordinator.foregroundEntryBlockerCount, 0)
+        XCTAssertEqual(coordinator.presentationBlockerCount, 2)
+
+        coordinator.setPresentationBlocker(id: editor, isActive: true, preservesForegroundEntry: true)
+        coordinator.setPresentationBlocker(id: editor, isActive: false)
+        XCTAssertEqual(coordinator.foregroundEntryBlockerCount, 0)
+        XCTAssertEqual(coordinator.presentationBlockerCount, 1)
+    }
+
     func testTriggerBufferRetainsDistinctEventsUntilSessionValidation() {
         var buffer = ProductUpsellTriggerBuffer()
         let saveRequest = ProductUpsellTriggerRequest(trigger: .placeSaved)

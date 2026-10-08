@@ -53,6 +53,7 @@ enum MapPlaceListTarget: Identifiable {
         store: WanderStore,
         backend: WanderBackend?,
         analyticsSurface: String = "map",
+        keepNewCompanionPrivate: Bool = false,
         senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) async -> ListPlaceAddResult {
         switch self {
@@ -62,6 +63,7 @@ enum MapPlaceListTarget: Identifiable {
                 to: list,
                 backend: backend,
                 analyticsSurface: analyticsSurface,
+                keepNewCompanionPrivate: keepNewCompanionPrivate,
                 senderNotificationPolicy: senderNotificationPolicy
             )
         case .visiblePlace(let visiblePlace):
@@ -70,6 +72,7 @@ enum MapPlaceListTarget: Identifiable {
                 to: list,
                 backend: backend,
                 analyticsSurface: analyticsSurface,
+                keepNewCompanionPrivate: keepNewCompanionPrivate,
                 senderNotificationPolicy: senderNotificationPolicy
             )
         }
@@ -372,7 +375,7 @@ struct MapPlaceListPickerSheet: View {
                 .foregroundStyle(brandMode.accentText)
                 .frame(width: 18, height: 18)
 
-            Text(onStage == nil ? "This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go." : "List choices are applied when you tap Save in the import report. You can also choose Wanna or Check In.")
+            Text(onStage == nil ? "This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go. If you choose a stealth list, the new Wanna will be visible only to you." : "List choices are applied when you tap Save in the import report. You can also choose Wanna or Check In.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -572,7 +575,10 @@ struct MapPlaceListPickerSheet: View {
             dismiss()
             return
         }
+        // If one selection creates a companion Wanna, the strictest selected
+        // audience must be chosen before any save can reach Feed or push.
         let lists = pendingLists
+        let keepNewCompanionPrivate = lists.contains { $0.visibility == .stealth }
         guard !lists.isEmpty else {
             dismiss()
             return
@@ -584,7 +590,8 @@ struct MapPlaceListPickerSheet: View {
         var results: [ListPlaceAddResult] = []
         for list in lists {
             for target in targets {
-                results.append(await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface,
+                results.append(await target.add(to: list, store: store, backend: backend,
+                    analyticsSurface: analyticsSurface, keepNewCompanionPrivate: keepNewCompanionPrivate,
                     senderNotificationPolicy: notificationPolicy))
             }
         }
