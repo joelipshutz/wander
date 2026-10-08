@@ -2039,7 +2039,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @MainActor
     private func add(visiblePlace: VisiblePlace?, to list: LocalPlaceList?, backend: WanderBackend?) async {
         guard let visiblePlace, let list else { return }
-        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend, senderNotificationPolicy: .silent)
     }
 
     private func markDisplayedReceiptsPresented() {
@@ -2855,7 +2855,7 @@ struct PlaceImportInboxScreen: View {
         backend: WanderBackend?
     ) async {
         guard let visiblePlace, let list else { return }
-        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend, senderNotificationPolicy: .silent)
     }
 
     private func receiptDidDismiss() {

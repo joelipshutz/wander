@@ -37,6 +37,12 @@ declare
   repaired_count integer;
   event_id uuid := gen_random_uuid();
   claim_id uuid := gen_random_uuid();
+  engagement_event uuid := gen_random_uuid();
+  activity_id uuid;
+  second_venue uuid := gen_random_uuid();
+  second_save uuid := gen_random_uuid();
+  second_import_visit uuid := gen_random_uuid();
+  expected_import jsonb;
   import_visit uuid := gen_random_uuid();
   import_commit uuid := gen_random_uuid();
   import_event uuid := gen_random_uuid();
@@ -205,12 +211,12 @@ begin
 
   -- Pending/claimed envelopes and inbox rows must obey the current source.
   perform app.ensure_notification_preferences(viewer_id);
-  update public.notification_preferences set push_enabled=true,followed_activity_enabled=true where user_id=viewer_id;
+  update public.notification_preferences set push_enabled=true,followed_activity_enabled=true,engagement_enabled=true where user_id=viewer_id;
   insert into public.notification_device_tokens(user_id,environment,device_token)
     values(viewer_id,'sandbox',repeat('e',64));
   insert into public.notification_events(id,recipient_user_id,actor_user_id,notification_type,
     title,body,data,status,claim_token,claim_expires_at,expires_at,latest_at)
-  values(event_id,viewer_id,owner_id,'followed_place_visit','Private venue','Private note',
+  values(event_id,viewer_id,owner_id,'followed_place_visit','Smoke source checked in','Privacy smoke venue',
     jsonb_build_object('visit_id',source_visit,'private_note','Must not leave server'),
     'claimed',claim_id,now()+interval '5 minutes',now()+interval '1 hour',now()+interval '1 hour');
   set local role authenticated;
@@ -235,20 +241,52 @@ begin
     raise exception 'stale claim was accepted';
   end if;
   payload := public.authorize_push_notification_delivery(event_id,claim_id);
-  if payload is null or payload->>'title' <> 'New activity on Astir'
-    or payload->>'body' <> 'Open Astir to view.' or payload->'data' ? 'private_note'
+  if payload is null or payload->>'title' <> 'Smoke source checked in'
+    or payload->>'body' <> 'Privacy smoke venue' or payload->'data' ? 'private_note'
     or jsonb_array_length(payload->'tokens') <> 1 then
-    raise exception 'authorized push did not return a fresh minimal envelope';
+    raise exception 'authorized friend push lost personalized copy or minimal payload isolation';
   end if;
   reset role;
+
+  -- The recipient is friends with the primary saver, not the other actor.
+  -- A second person in an authorized activity must not genericize its copy.
+  select id into activity_id from public.feed_events where visit_id=source_visit limit 1;
+  if activity_id is null then raise exception 'missing primary saver activity'; end if;
+  insert into public.notification_events(id,recipient_user_id,actor_user_id,notification_type,
+    title,body,data,status,claim_token,claim_expires_at,expires_at,latest_at)
+  values(engagement_event,viewer_id,stranger_id,'activity_liked',
+    'Smoke stranger liked a check-in','Smoke source at Privacy smoke venue',
+    jsonb_build_object('activity_id',activity_id),
+    'claimed',claim_id,now()+interval '5 minutes',now()+interval '1 hour',now()+interval '1 hour');
+  set local role service_role;
+  payload := public.authorize_push_notification_delivery(engagement_event,claim_id);
+  if payload is null or payload->>'title' <> 'Smoke stranger liked a check-in'
+    or payload->>'body' <> 'Smoke source at Privacy smoke venue' then
+    raise exception 'primary saver friend lost detailed copy for an unrelated actor';
+  end if;
+  reset role;
+  update public.user_places set visibility='self' where id=source_save;
+  set local role service_role;
+  if public.authorize_push_notification_delivery(engagement_event,claim_id) is not null then
+    raise exception 'unrelated actor bypassed primary saver source privacy';
+  end if;
+  reset role;
+  update public.user_places set visibility='followers' where id=source_save;
 
   -- A deployed REC-589 import envelope has no visit_id. Keep valid groups
   -- deliverable, but recheck their current source visibility before sending.
   if to_regprocedure('app.import_notification_content(text,text,text)') is not null then
     insert into public.place_visits(id,user_place_id,note,notification_silent,sender_import_id,sender_import_commit_id)
       values(import_visit,source_save,'Import smoke',true,import_key,import_commit);
+    insert into public.places(id,canonical_name,category,latitude,longitude,source_provider)
+      values(second_venue,'Still visible venue','coffee_tea_sweets',0,0,'codex_smoke');
+    insert into public.user_places(id,user_id,place_id,status,visibility,source_type)
+      values(second_save,owner_id,second_venue,'been','followers','manual');
+    insert into public.place_visits(id,user_place_id,notification_silent,sender_import_id,sender_import_commit_id)
+      values(second_import_visit,second_save,true,import_key,import_commit);
     insert into app.import_notification_commits(owner_user_id,import_id,commit_id,silent,visit_ids,sealed_at)
-      values(owner_id,import_key,import_commit,false,array[import_visit],now());
+      values(owner_id,import_key,import_commit,false,array[import_visit,second_import_visit],now());
+    expected_import := app.import_notification_content(owner_id,viewer_id,import_key);
     insert into public.notification_events(id,recipient_user_id,actor_user_id,notification_type,
       title,body,data,status,claim_token,claim_expires_at,expires_at,latest_at)
       values(import_event,viewer_id,owner_id,'followed_place_visit','Import','Private venue',
@@ -256,11 +294,25 @@ begin
         'claimed',import_claim,now()+interval '5 minutes',now()+interval '1 hour',now()+interval '1 hour');
     set local role service_role;
     payload := public.authorize_push_notification_delivery(import_event,import_claim);
-    if payload is null or payload->>'body' <> 'Open Astir to view.' then
+    if payload is null or payload->>'body' <> expected_import->>'body'
+      or payload->'data'->>'place_id' <> expected_import->>'place_id' then
       raise exception 'authorized grouped import lost its delivery contract';
     end if;
     reset role;
     update public.user_places set visibility='self' where id=source_save;
+    set local role service_role;
+    payload := public.authorize_push_notification_delivery(import_event,import_claim);
+    if payload is null or payload->>'body' <> 'Still visible venue'
+      or payload->'data'->>'place_id' <> second_venue::text
+      or payload->>'deeplink_url' <> 'recme://places/'||second_venue::text then
+      raise exception 'partially revoked group retained a hidden place name, count, or destination';
+    end if;
+    reset role;
+    if not exists(select 1 from public.notification_events where id=import_event
+      and data->>'place_count'='1') then
+      raise exception 'partially revoked group retained a stale stored count';
+    end if;
+    update public.user_places set visibility='self' where id=second_save;
     set local role service_role;
     if public.authorize_push_notification_delivery(import_event,import_claim) is not null then
       raise exception 'hidden grouped import remains deliverable';

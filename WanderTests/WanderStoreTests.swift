@@ -12860,11 +12860,22 @@ final class WanderStoreTests: XCTestCase {
             // A stealth selection can fail before a successful public addition.
             // That public addition still receives the whole selection's privacy.
             _ = await target.add(to: publicList, store: store,
-                backend: WanderBackend(userPlaceRepository: repository), keepNewCompanionPrivate: true)
+                backend: WanderBackend(userPlaceRepository: repository), keepNewCompanionPrivate: true,
+                senderNotificationPolicy: .silent)
             XCTAssertEqual(repository.savedDrafts.map(\.visibility), [.selfOnly])
-        XCTAssertEqual(repository.savedDrafts.map(\.isPrivateListCompanion), [true])
+            XCTAssertEqual(repository.savedDrafts.map(\.isPrivateListCompanion), [true])
+            XCTAssertEqual(repository.savedDrafts.map(\.senderNotificationPolicy), [.silent])
             let own = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.place.canonicalName == target.placeName })
             XCTAssertEqual(own.userPlace.visibility, .selfOnly)
+            XCTAssertEqual(own.userPlace.senderNotificationPolicy, .silent)
+            let addedItems = store.placeListItems.filter {
+                [publicList.id, publicList.localID, publicList.serverID].contains($0.listID)
+            }
+            XCTAssertEqual(addedItems.count, 1)
+            XCTAssertTrue(addedItems.allSatisfy { $0.senderNotificationPolicy.silent })
+            let restored = WanderStoreSnapshot.UserPlaceRecord(own.userPlace).model()
+            XCTAssertTrue(restored.isPrivateListCompanion)
+            XCTAssertEqual(restored.senderNotificationPolicy, .silent)
         }
     }
 

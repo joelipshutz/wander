@@ -153,6 +153,10 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(addSuggestion.waitForExistence(timeout: 8))
         addSuggestion.tap()
 
+        let silentAddition = app.buttons["Add silently"]
+        XCTAssertTrue(silentAddition.waitForExistence(timeout: 5))
+        silentAddition.tap()
+
         app.navigationBars.buttons["Done"].tap()
         XCTAssertTrue(app.staticTexts["29 places"].waitForExistence(timeout: 8))
 
@@ -207,12 +211,23 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["28 places"].waitForExistence(timeout: 8))
 
         for expectedCount in stride(from: 27, through: 25, by: -1) {
-            let removeButton = app.buttons.matching(
+            let removeButtons = app.buttons.matching(
                 NSPredicate(format: "label BEGINSWITH %@", "Remove ")
-            ).firstMatch
-            reveal(removeButton, in: app)
-            XCTAssertTrue(removeButton.isHittable)
-            removeButton.tap()
+            )
+            // Lazy rows retain offscreen accessibility elements. Removing any
+            // visible row exercises the count without chasing firstMatch above
+            // the viewport as scrolling realizes new rows.
+            var visibleRemoveButton: XCUIElement?
+            for _ in 0..<8 {
+                visibleRemoveButton = removeButtons.allElementsBoundByIndex.first(where: \.isHittable)
+                if visibleRemoveButton != nil { break }
+                app.scrollViews.firstMatch.swipeUp(velocity: .slow)
+            }
+            guard let visibleRemoveButton else {
+                XCTFail("A visible place must offer removal.")
+                return
+            }
+            visibleRemoveButton.tap()
             XCTAssertTrue(app.staticTexts["\(expectedCount) places"].waitForExistence(timeout: 8))
         }
 

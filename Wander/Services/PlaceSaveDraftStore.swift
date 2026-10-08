@@ -34,6 +34,7 @@ struct PlaceSaveDraftForm: Codable, Equatable {
     var customQuestionAnswers: [String: String]? = nil
     /// Optional so drafts from before check-in list selection still decode.
     var selectedListIDs: Set<String>? = nil
+    var silentNotifications: Bool? = nil
 }
 
 struct PlaceSaveDraftUpdate: Equatable {
