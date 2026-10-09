@@ -1,8 +1,22 @@
 # Open Questions
 
-Last updated: 2026-09-23
+Last updated: 2026-10-09
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## Live experience review (REC-636)
+
+The [review package](designs/astir-live/review-guide.md) records D1–D11 with
+recommendations and implementation gates. No major Profile redesign is in scope.
+
+| Question | Review recommendation | Gate |
+|---|---|---|
+| Which Your Map capabilities belong in the new Feed? | Preserve the current Profile/Your Map/Patterns experience; evaluate filtering, area selection and personal-history views individually for reuse. | D5 feature inventory; no blanket relocation. |
+| Does the circle control draw a geographic area or open a map? | Prototype area selection with explicit Apply/Cancel and accessible radius alternatives. | D4 wording and interaction approval. |
+| Which shell and first production slice should ship? | Review Live/Lists/Profile and a map/feed slice with existing social actions; phase richer plans, private messaging and Events. | D1 and D6–D7, followed by native and access-contract gates. |
+
+Other query, migration and offline-access choices stay in the linked decision
+register to avoid conflicting copies of the proposal.
 
 ## Activity privacy rollout (REC-590)
 

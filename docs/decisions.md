@@ -1,8 +1,20 @@
 # Decisions
 
-Last updated: 2026-09-28
+Last updated: 2026-10-09
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Profile continuity during the Live exploration (REC-636, October 9)
+
+Ryan confirmed that the Live/Feed redesign must not substantially change the
+Profile tab. Preserve its existing hierarchy and personal-history entry points.
+Your Map may contribute selected capabilities to the new Feed; moving or removing
+the complete Your Map experience is not approved. Keep Your Map and Patterns
+available while that feature-level decision is reviewed.
+
+The [Live review package](designs/astir-live/review-guide.md) proposes navigation,
+map/feed interaction and migration details. Those proposals remain review choices;
+this scope decision does not approve them or change production behavior.
 
 ## Historical data and testing scope (REC-590, September 29)
 
