@@ -41,6 +41,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          lfs: true
       - name: Generate project
         run: |
           brew install xcodegen
@@ -69,11 +70,24 @@ jobs:
           -only-testing:WanderTests -only-testing:WanderUITests/ContactDiscoveryUITests
           -only-testing:WanderUITests/CompactPeopleCardsUITests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -resultBundlePath "$RUNNER_TEMP/ContactDiscovery.xcresult" CODE_SIGNING_ALLOWED=NO
+      # Keep the existing CPU budgets required, measured in a fresh test host
+      # rather than after thousands of unrelated fixtures and SDK observers.
+      - name: Isolated high-data performance regression
+        run: >-
+          xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
+          -resultBundlePath "$RUNNER_TEMP/ContactPerformance.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Summarize native tests
         if: always()
         run: |
           xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ContactDiscovery.xcresult" --format json | tee "$RUNNER_TEMP/contact-discovery-summary.json"
+          if [ -f "$RUNNER_TEMP/ContactPerformance.xcresult/Info.plist" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ContactPerformance.xcresult" --format json > "$RUNNER_TEMP/contact-performance-summary.json"
+          fi
       - name: Save native evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,4 +96,6 @@ jobs:
           path: |
             ${{ runner.temp }}/ContactDiscovery.xcresult
             ${{ runner.temp }}/contact-discovery-summary.json
+            ${{ runner.temp }}/ContactPerformance.xcresult
+            ${{ runner.temp }}/contact-performance-summary.json
           retention-days: 14

@@ -11,7 +11,7 @@ import UIKit
         defer { audio.close() }
         audio.togglePlayback()
         XCTAssertTrue(audio.isPlaying)
-        try await Task.sleep(for: .milliseconds(350))
+        try await waitForPlaybackToAdvance(audio, after: 0)
         audio.togglePlayback()
         let pausedAt = audio.playbackSeconds
         XCTAssertFalse(audio.isPlaying)
@@ -19,7 +19,7 @@ import UIKit
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertEqual(audio.playbackSeconds, pausedAt, accuracy: 0.01)
         audio.togglePlayback()
-        try await Task.sleep(for: .milliseconds(350))
+        try await waitForPlaybackToAdvance(audio, after: pausedAt)
         XCTAssertGreaterThan(audio.playbackSeconds, pausedAt)
         audio.pauseForBackground()
         XCTAssertFalse(audio.isPlaying)
@@ -58,7 +58,7 @@ import UIKit
             let previousPosition = audio.playbackSeconds
             audio.togglePlayback()
             XCTAssertTrue(audio.isPlaying)
-            try await Task.sleep(for: .milliseconds(350))
+            try await waitForPlaybackToAdvance(audio, after: previousPosition)
             audio.pauseForBackground()
             let pausedPosition = audio.playbackSeconds
             XCTAssertFalse(audio.isPlaying)
@@ -79,6 +79,23 @@ import UIKit
         audio.togglePlayback()
         XCTAssertTrue(audio.isPlaying)
         XCTAssertNil(audio.errorMessage)
+    }
+    // Observe real playback progress rather than assuming the simulator's audio
+    // service and main-actor progress monitor always advance within one fixed sleep.
+    private func waitForPlaybackToAdvance(
+        _ audio: FeedbackAudioRecorder,
+        after position: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(3))
+        while audio.isPlaying, audio.playbackSeconds <= position, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(audio.isPlaying, file: file, line: line)
+        XCTAssertNil(audio.errorMessage, file: file, line: line)
+        XCTAssertGreaterThan(audio.playbackSeconds, position, file: file, line: line)
     }
     #endif
 

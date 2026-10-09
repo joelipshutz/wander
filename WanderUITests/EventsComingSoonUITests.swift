@@ -22,7 +22,9 @@ import UIKit
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        configureNotificationReminderFixture(in: app)
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
         for destination in ["Events", "Map", "Profile", "Events", "Feed", "Map", "Events"] {
@@ -30,7 +32,7 @@ import UIKit
             source.press(forDuration: 0.4, thenDragTo: tabs.buttons[destination])
             XCTAssertTrue(tabs.buttons[destination].isSelected)
             capture("Scrub — \(destination)")
-            let pixels = try pixelStats(tabs.screenshot().image)
+            let pixels = try XCTUnwrap(tabBarPixels(in: app))
             XCTAssertGreaterThan(pixels.luminance, 0.55, "Light glass became dark after scrubbing to \(destination).")
         }
         for appearance in [XCUIDevice.Appearance.dark, .light, .dark, .light] {
@@ -38,11 +40,14 @@ import UIKit
             // The OS animates its appearance change; this wait is only for that
             // system transition, never for a tab selection.
             let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+                guard let pixels = try? self.tabBarPixels(in: app) else { return false }
                 return appearance == .light ? pixels.luminance > 0.55 : pixels.luminance < 0.45
             }, object: nil)
-            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 3), .completed)
+            let appearanceResult = XCTWaiter.wait(for: [expectation], timeout: 10)
             capture("Live appearance — \(appearance)")
+            let finalPixels = try XCTUnwrap(tabBarPixels(in: app))
+            XCTAssertEqual(appearanceResult, .completed,
+                           "Requested \(appearance), device \(XCUIDevice.shared.appearance), rendered luminance \(finalPixels.luminance); \(app.tabBars.firstMatch.value as? String ?? "no appearance probe")")
         }
     }
 
@@ -51,6 +56,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let button = app.buttons["events.keepMePosted"]
         XCTAssertTrue(button.waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
@@ -86,7 +92,9 @@ import UIKit
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        configureNotificationReminderFixture(in: app)
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
         XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 20))
@@ -94,11 +102,14 @@ import UIKit
         // screen. Establish the initial rendered appearance before measuring
         // transitions; subsequent switches must pass without this wait.
         let initialAppearance = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+            guard let pixels = try? self.tabBarPixels(in: app) else { return false }
             return isLight ? pixels.luminance > 0.55 : pixels.luminance < 0.45
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [initialAppearance], timeout: 5), .completed)
+        let appearanceResult = XCTWaiter.wait(for: [initialAppearance], timeout: 10)
         capture("\(mode) — Map before Events")
+        let initialPixels = try XCTUnwrap(tabBarPixels(in: app))
+        XCTAssertEqual(appearanceResult, .completed,
+                       "Requested \(mode), device \(XCUIDevice.shared.appearance), rendered luminance \(initialPixels.luminance); \(app.tabBars.firstMatch.value as? String ?? "no appearance probe")")
         for (index, label) in ["Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
             tabs.buttons[label].tap()
             XCTAssertTrue(tabs.buttons[label].isSelected)
@@ -110,12 +121,12 @@ import UIKit
             if index == 0 { capture("\(mode) — Events") }
             if index == 7 { capture("\(mode) — Map after Events") }
             let accentReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                guard let pixels = try? self.pixelStats(tabs.screenshot().image) else { return false }
+                guard let pixels = try? self.tabBarPixels(in: app) else { return false }
                 return pixels.signalPixels > 30
             }, object: nil)
             XCTAssertEqual(XCTWaiter.wait(for: [accentReady], timeout: 3), .completed,
                            "The selected tab must settle to the coral accent on \(label), step \(index).")
-            let barPixels = try pixelStats(tabs.screenshot().image)
+            let barPixels = try XCTUnwrap(tabBarPixels(in: app))
             let luminance = barPixels.luminance
             XCTAssertGreaterThan(barPixels.signalPixels, 30, "The selected tab must keep the coral accent on \(label), step \(index).")
             if isLight {
@@ -124,6 +135,27 @@ import UIKit
                 XCTAssertLessThan(luminance, 0.45, "Dark bar became light on \(label), step \(index).")
             }
         }
+    }
+
+    /// Native appearance transitions briefly replace the accessibility element
+    /// with an empty frame. Observe the screen without asking XCTest to capture
+    /// that transient element (which fails the test before a wait can retry).
+    private func tabBarPixels(in app: XCUIApplication) throws -> (luminance: Double, signalPixels: Int)? {
+        let bar = app.tabBars.firstMatch
+        guard bar.exists else { return nil }
+        let frame = bar.frame, screen = app.frame
+        guard !frame.isEmpty, !screen.isEmpty else { return nil }
+        let image = XCUIScreen.main.screenshot().image
+        guard let cgImage = image.cgImage else { return nil }
+        let scaleX = CGFloat(cgImage.width) / screen.width
+        let scaleY = CGFloat(cgImage.height) / screen.height
+        let rect = CGRect(
+            x: (frame.minX - screen.minX) * scaleX,
+            y: (frame.minY - screen.minY) * scaleY,
+            width: frame.width * scaleX, height: frame.height * scaleY
+        ).intersection(CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+        guard !rect.isEmpty, let crop = cgImage.cropping(to: rect) else { return nil }
+        return try pixelStats(UIImage(cgImage: crop))
     }
 
     /// Measure the visible native bar, not a SwiftUI environment value. Cropping
@@ -162,6 +194,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let artwork = app.descendants(matching: .any)["events.comingSoon"].firstMatch
         XCTAssertTrue(artwork.waitForExistence(timeout: 20))
         let tabs = app.tabBars.firstMatch
@@ -193,9 +226,19 @@ import UIKit
         }
         XCUIDevice.shared.press(.home)
         app.activate()
+        // A denied notification permission can present the reminder again on
+        // foreground. Dismiss that real modal before exercising the tabs.
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
-        XCTAssertTrue(tabs.buttons["Feed"].isSelected)
-        tabs.buttons["Events"].tap()
+        // Foreground entry rebuilds the tab presentation. Resolve its current
+        // controls instead of tapping through the pre-background snapshot.
+        let returnedTabs = app.tabBars.firstMatch
+        XCTAssertTrue(returnedTabs.buttons["Feed"].isSelected)
+        let eventsReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.tabBars.firstMatch.buttons["Events"].isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [eventsReady], timeout: 10), .completed)
+        app.tabBars.firstMatch.buttons["Events"].tap()
         XCTAssertTrue(artwork.waitForExistence(timeout: 5))
         capture("Events — revisited after Feed foreground entry")
     }
@@ -205,6 +248,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 20))
         preview.tap()
@@ -222,6 +266,7 @@ import UIKit
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "events"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.descendants(matching: .any)["events.comingSoon"].firstMatch.waitForExistence(timeout: 20))
         let options = XCTMeasureOptions()
         options.iterationCount = 5
@@ -236,5 +281,10 @@ import UIKit
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func configureNotificationReminderFixture(in app: XCUIApplication) {
+        app.launchArguments += ["-WanderNotificationAuthorizationDeniedFixture", "-WanderTabAppearanceDiagnostics"]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Events.\(UUID().uuidString)"
     }
 }

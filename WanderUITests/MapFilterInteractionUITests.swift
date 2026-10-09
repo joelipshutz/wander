@@ -290,7 +290,11 @@ final class MapFilterInteractionUITests: XCTestCase {
         )
         let probe = app.descendants(matching: .any)["map.performanceProbe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 3))
-        let populatedProbe = NSPredicate(format: "value CONTAINS %@", "camera=")
+        let previousProbe = probe.value as? String ?? ""
+        let populatedProbe = NSPredicate { _, _ in
+            let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
+            return current != previousProbe && current.contains("camera=")
+        }
         var didMeasurePan = false
         var invocationCount = 0
         let options = XCTMeasureOptions()
@@ -314,7 +318,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             XCTAssertEqual(
                 XCTWaiter.wait(
                     for: [
-                        XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)
+                        XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)
                     ],
                     timeout: 3
                 ),
@@ -363,22 +367,21 @@ final class MapFilterInteractionUITests: XCTestCase {
         }
 
         func perform(_ label: String, button: XCUIElement) {
-            let previousValue = probe.value as? String ?? ""
+            let previousValue = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             XCTAssertTrue(button.isHittable)
             button.tap()
-            let populatedProbe = NSPredicate(
-                format: "value != %@ AND value CONTAINS %@",
-                previousValue,
-                "camera="
-            )
+            let populatedProbe = NSPredicate { _, _ in
+                let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
+                return current != previousValue && current.contains("camera=")
+            }
             XCTAssertEqual(
                 XCTWaiter.wait(
-                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)],
-                    timeout: 3
+                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)],
+                    timeout: 10
                 ),
                 .completed
             )
-            let snapshot = probe.value as? String ?? ""
+            let snapshot = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             print("REC404_MAP_INDIVIDUAL_PIN_TRACE \(label) \(snapshot)")
             XCTAssertLessThanOrEqual(
                 metric("nativeA11yVisits", in: snapshot) ?? .max,
@@ -761,6 +764,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
+        XCTAssertFalse(search.exists, "The hidden native input must leave the accessibility tree")
         XCTAssertFalse(search.isHittable)
         XCTAssertFalse(nearby.isHittable)
         XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
@@ -774,6 +778,8 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
+        XCTAssertTrue(search.waitForExistence(timeout: 2))
+        XCTAssertTrue(search.isHittable)
         XCTAssertTrue(add.waitForExistence(timeout: 2))
         XCTAssertTrue(add.isHittable)
     }

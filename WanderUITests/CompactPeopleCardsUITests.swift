@@ -2,7 +2,7 @@ import XCTest
 
 final class CompactPeopleCardsUITests: XCTestCase {
     @MainActor
-    func testFollowPaddingAcceptsTapAndPendingRequestKeepsRailScrollable() {
+    func testFollowPaddingAcceptsTapAndPendingRequestKeepsRailScrollable() throws {
         let app = launch(delayedFollow: true)
         let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
         XCTAssertTrue(follow.waitForExistence(timeout: 15))
@@ -10,8 +10,7 @@ final class CompactPeopleCardsUITests: XCTestCase {
 
         // This is inside the painted button, well outside the text glyphs.
         follow.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5)).tap()
-        XCTAssertEqual(follow.label, "Following Alex Rivera")
-        XCTAssertFalse(follow.isEnabled)
+        try assertPendingFollow(follow)
 
         let start = follow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let end = app.coordinate(withNormalizedOffset: .zero)
@@ -38,29 +37,26 @@ final class CompactPeopleCardsUITests: XCTestCase {
     }
 
     @MainActor
-    func testTopRightAndBottomFollowPaddingAcceptTaps() {
+    func testTopRightAndBottomFollowPaddingAcceptTaps() throws {
         for point in [CGVector(dx: 0.5, dy: 0.08), CGVector(dx: 0.94, dy: 0.5), CGVector(dx: 0.5, dy: 0.92)] {
             let app = launch(delayedFollow: true)
             let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
             XCTAssertTrue(follow.waitForExistence(timeout: 15))
             follow.coordinate(withNormalizedOffset: point).tap()
-            XCTAssertEqual(follow.label, "Following Alex Rivera")
-            XCTAssertFalse(follow.isEnabled)
+            try assertPendingFollow(follow)
             app.terminate()
         }
     }
 
     @MainActor
-    func testFollowShowsFollowingBeforeRequestCompletesAndRecoversOnFailure() {
+    func testFollowShowsFollowingBeforeRequestCompletesAndRecoversOnFailure() throws {
         let app = launch(delayedFollow: true)
         let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
         let profile = app.buttons["people.recommendation.user_compact_alex.profile"]
         XCTAssertTrue(follow.waitForExistence(timeout: 15))
         follow.tap()
 
-        XCTAssertEqual(follow.label, "Following Alex Rivera")
-        XCTAssertFalse(follow.descendants(matching: .activityIndicator).firstMatch.exists)
-        XCTAssertFalse(follow.isEnabled, "A pending follow must not submit duplicate requests")
+        try assertPendingFollow(follow)
         XCTAssertTrue(profile.isHittable, "The profile remains available during the request")
         capture("compact-people-instant-follow")
 
@@ -69,8 +65,7 @@ final class CompactPeopleCardsUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         XCTAssertTrue(follow.isEnabled)
         follow.tap()
-        XCTAssertEqual(follow.label, "Following Alex Rivera")
-        XCTAssertFalse(follow.descendants(matching: .activityIndicator).firstMatch.exists)
+        try assertPendingFollow(follow)
     }
 
     @MainActor
@@ -109,6 +104,27 @@ final class CompactPeopleCardsUITests: XCTestCase {
         XCTAssertTrue(follow.isHittable)
         XCTAssertGreaterThanOrEqual(follow.frame.height, 44)
         capture("compact-people-accessibility-text")
+    }
+
+    @MainActor
+    private func assertPendingFollow(
+        _ follow: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        // Separate accessibility requests can straddle the fixture's five-second
+        // completion. Assert the label, duplicate-request guard, and spinner from
+        // one snapshot of the same pending state.
+        let pending = try follow.snapshot()
+        XCTAssertEqual(pending.label, "Following Alex Rivera", file: file, line: line)
+        XCTAssertFalse(pending.isEnabled, "A pending follow must not submit duplicate requests", file: file, line: line)
+        XCTAssertFalse(containsActivityIndicator(pending), file: file, line: line)
+    }
+
+    @MainActor
+    private func containsActivityIndicator(_ snapshot: XCUIElementSnapshot) -> Bool {
+        snapshot.elementType == .activityIndicator
+            || snapshot.children.contains(where: containsActivityIndicator)
     }
 
     @MainActor

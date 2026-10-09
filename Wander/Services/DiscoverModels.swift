@@ -1065,10 +1065,21 @@ enum VisiblePlaceGrouping {
         return keys
     }
 
-    private static func normalizedText(_ value: String?) -> String {
-        let folded = (value ?? "")
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .lowercased()
+    static func normalizedText(_ value: String?, locale: Locale = .current) -> String {
+        let source = value ?? ""
+        // Most grouping fields are ASCII. Avoid Foundation's Unicode folding
+        // for those fields, while preserving its locale-specific dotted-I
+        // behavior and the existing normalization of international text.
+        let needsLocalizedI = source.utf8.contains(73)
+            && ["tr", "az"].contains(locale.language.languageCode?.identifier ?? "")
+        let folded: String
+        if !needsLocalizedI, source.utf8.allSatisfy({ $0 < 128 }) {
+            folded = source.lowercased()
+        } else {
+            folded = source
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: locale)
+                .lowercased()
+        }
         var normalized = String()
         normalized.reserveCapacity(folded.utf8.count)
         var needsSeparator = false

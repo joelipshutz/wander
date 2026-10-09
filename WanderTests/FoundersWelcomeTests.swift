@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import Wander
 
@@ -47,5 +48,14 @@ final class FoundersWelcomeTests: XCTestCase {
         XCTAssertNil(model.player.currentItem)
         model.play()
         XCTAssertFalse(model.hasStarted, "A disappearing player cannot restart playback.")
+    }
+
+    func testBundledMovieIsPlayableMedia() async throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "founders-welcome", withExtension: "mp4"))
+        let asset = AVURLAsset(url: url)
+        let isPlayable = try await asset.load(.isPlayable)
+        let duration = try await asset.load(.duration)
+        XCTAssertTrue(isPlayable, "Fetch the tracked Git LFS runtime media before building.")
+        XCTAssertEqual(duration.seconds, FoundersWelcomePlayer.duration, accuracy: 1)
     }
 }

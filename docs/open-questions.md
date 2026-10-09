@@ -1,8 +1,20 @@
 # Open Questions
 
-Last updated: 2026-09-23
+Last updated: 2026-10-06
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## App Clip release evidence (REC-408)
+
+The shared-link scope is decided: native sign-in, profile setup, Save and Join
+run inside the Clip. Signed-device authentication, retained sessions, Save, Join,
+and same-account continuation into the existing full app have passed, as has the
+hosted rollback-only Save RPC validation. Fresh-install Keychain migration,
+provider-specific device-trust behavior, and the published Messages experience
+remain release evidence gaps. Verify any configured MFA/additional-verification
+requirement; the initial Clip reports that case instead of completing a
+second-factor flow.
+See [the implementation and rollout guide](app-clip.md).
 
 ## Activity privacy rollout (REC-590)
 

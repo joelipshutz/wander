@@ -1,6 +1,6 @@
 # rec.me App Store privacy inventory
 
-Updated: 2026-09-21
+Updated: 2026-10-02
 
 Owner: [REC-185](https://linear.app/recme/issue/REC-185/complete-app-store-privacy-manifests-labels-and-permission-audit)
 
@@ -11,26 +11,28 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 - Keep PostHog with explicit allowlisted events and the internal auth user ID. REC-626 supersedes REC-582: screenshot replay shows app content (including text, images and maps), with passwords/sign-in codes and system-owned views masked. Explicit person properties contain name and username; replay requires swizzling. Element capture, automatic screen/lifecycle events, surveys, crash autocapture, automatic person properties, console logs and network telemetry remain disabled. Recordings are arriving from TestFlight as of September 25; the new readable/named client still requires release-candidate playback validation. See [the replay activation checklist](../analytics.md#ios-session-replay) before release.
 - Add `$geoip_disable = true` to every PostHog event before it is queued. PostHog project `557259` was browser-verified on 2026-08-14 with **Discard client IP data** enabled. The rec.me personal API key still lacks `project:read`; the authenticated project setting is the current evidence source.
 - Declare no tracking and do not request App Tracking Transparency permission. rec.me does not combine its data with third-party data for targeted advertising, advertising measurement, or data-broker sharing.
-- Keep native Contacts. REC-560 adds a separate, optional Find friends consent: permitted phone numbers and email addresses are transmitted over TLS for an immediate authenticated match. Names, organizations, notes, addresses and contact photos are not part of matching. No uploaded address book, unmatched identifiers or contact edges are retained; a private HMAC index contains only opted-in members’ verified account identifiers. Contact values never enter analytics. The separate invitation flow remains local and passes only selected recipients to Messages. Existing iOS permission grants do not imply Find friends consent. See [contact discovery](../contact-discovery.md).
-- Do not declare device precise location as collected. Current location is used on-device for nearby MapKit results and the nearby widget, and is not uploaded or analytics-logged. Saved businesses carry their own place coordinates, which are place metadata rather than a device location trail.
+- Keep native Contacts. REC-560 adds a separate, optional Find friends consent: permitted phone numbers and email addresses are transmitted over TLS for an immediate authenticated match. Names, organizations, notes, addresses and contact photos are not part of matching. No uploaded address book, unmatched identifiers or contact edges are retained; a private HMAC index contains only opted-in members’ verified account identifiers. Matching payloads never enter analytics events. Readable account/contact fields and social relationships shown in the app are covered by the separate replay disclosure below. The separate invitation flow remains local and passes only selected recipients to Messages. Existing iOS permission grants do not imply Find friends consent. See [contact discovery](../contact-discovery.md).
+- Declare both precise and coarse location for linked Analytics in the full app: an unmasked replay can capture the current-location marker at the displayed precision, including when iOS supplies approximate location. Nearby functionality itself uses the device reading on-device; coordinate event properties remain forbidden. Saved venue coordinates are place metadata, distinct from a device location trail. The App Clip does not record replay or collect device location.
 - Declare trusted-search history. The raw query is sent to the authenticated parsing function and AI provider to produce filters.
 - Treat Apple Calendar access as optional app functionality. EventKit rows are inspected locally; MapKit receives a bounded restaurant query, while rec.me services receive only a hashed occurrence key, matched place identity, reservation time, and time zone. Raw calendar identifiers, titles, notes, attendees, URLs, and addresses are not uploaded to rec.me.
 
 ## App-owned privacy manifest
 
-`Wander/Resources/PrivacyInfo.xcprivacy` declares the app-owned data rec.me sends to Clerk/Supabase-backed product services:
+`Wander/Resources/PrivacyInfo.xcprivacy` declares product-service data and the additional analytics purposes of readable replay. All entries remain linked to the user and not used for tracking:
 
 | Data type | Linked | Tracking | Purpose |
 |---|---:|---:|---|
-| Name | Yes | No | App functionality |
-| Email address | Yes | No | App functionality |
-| Phone number | Yes | No | App functionality |
-| Contacts/social graph | Yes | No | App functionality |
-| Photos or videos | Yes | No | App functionality |
-| Other user content | Yes | No | App functionality; product personalization |
-| Search history | Yes | No | App functionality; product personalization |
-| User ID | Yes | No | App functionality |
-| Device ID | Yes | No | App functionality |
+| Name | Yes | No | App functionality; analytics |
+| Email address | Yes | No | App functionality; analytics |
+| Phone number | Yes | No | App functionality; analytics |
+| Contacts/social graph | Yes | No | App functionality; analytics |
+| Photos or videos | Yes | No | App functionality; analytics |
+| Other user content | Yes | No | App functionality; product personalization; analytics |
+| Search history | Yes | No | App functionality; product personalization; analytics |
+| User ID | Yes | No | App functionality; analytics |
+| Device ID | Yes | No | App functionality; analytics |
+| Precise and coarse location visible in replay | Yes | No | Analytics |
+| Audio data from optional voice feedback | Yes | No | App functionality |
 
 App required-reason API declarations:
 
@@ -57,7 +59,7 @@ PostHog event properties must remain non-PII. Current policy forbids place names
 
 REC-626 adds an explicit exception for `name`, `display_name`, and `username` person properties. Replay snapshots use a separate SDK pipeline from event-property sanitization: ordinary visible app content, including photos, notes, searches and maps, can now be sent to PostHog and linked to a named person. Do not describe these recordings as anonymous or content-free. Passwords, verification codes, system views and other SDK-sensitive text inputs remain masked; individual email/phone inputs are explicitly readable under the user-approved replay policy.
 
-Before distribution, review Analytics purpose for Name, Photos/Videos, Other User Content, Search History, Contacts and any location/contact information visible in replay against actual release-candidate playback. The existing App Functionality declarations alone do not describe the expanded replay use. No App Store Connect responses or published privacy policy were changed by this code PR. Preserve the accurate current data linkage and do not infer a live disclosure update from this inventory.
+Before distribution, verify the above Analytics purposes against actual release-candidate playback and publish the matching policy and App Store responses. The October 2 source update declares the readable content and displayed location; it does not establish live disclosure publication or controlled playback. App Functionality alone does not describe this expanded use. Preserve user linkage. Voice feedback is a separate, explicit submission; session replay does not record microphone audio.
 
 Clerk receives account identifiers and contact information for authentication. Supabase receives the app-owned product data listed above. The authenticated parsing service passes trusted-search text to the configured AI provider. Apple system frameworks receive selected message recipients and media only when the person explicitly invokes those system flows.
 
@@ -65,24 +67,27 @@ Clerk receives account identifiers and contact information for authentication. S
 
 Mark these as collected and linked to the user, not used for tracking:
 
-- Contact Info: Name, Email Address, Phone Number — App Functionality.
-- Contacts — App Functionality. This covers the social graph and optional contact matching. Phone/email matching inputs are processed transiently; verified opted-in member identifier tokens and account consent are retained. Reconcile the final privacy-policy and App Review copy with REC-560 before distributing the new binary.
-- User Content: Photos or Videos — App Functionality.
-- User Content: Other User Content — App Functionality and Product Personalization.
-- Search History — App Functionality and Product Personalization.
+- Contact Info: Name, Email Address, Phone Number — App Functionality and Analytics.
+- Contacts — App Functionality and Analytics. This covers the social graph, optional contact matching, and visible social content in replay. Phone/email matching inputs are processed transiently; verified opted-in member identifier tokens and account consent are retained. Reconcile the final privacy-policy and App Review copy with REC-560 before distributing the new binary.
+- User Content: Photos or Videos — App Functionality and Analytics.
+- User Content: Other User Content — App Functionality, Product Personalization and Analytics.
+- User Content: Audio Data — App Functionality, for optional voice feedback.
+- Search History — App Functionality, Product Personalization and Analytics.
+- Location: Precise Location and Coarse Location — Analytics, for location visible in replay.
 - Identifiers: User ID — App Functionality and Analytics.
 - Identifiers: Device ID — App Functionality and Analytics.
 - Usage Data: Product Interaction and Other Usage Data — Analytics.
 
-Do not mark data as used for tracking. Do not declare advertising data, purchases, financial information, health/fitness, sensitive information, emails/text-message contents, audio, browsing history, environment scanning, hands, or head data.
+Do not mark data as used for tracking. Do not declare advertising data, purchases, financial information, health/fitness, sensitive information, emails/text-message contents, browsing history, environment scanning, hands, or head data based on these flows.
 
-REC-626 removes map masks, so visible maps/pins may transmit location information in replay even without coordinate event properties. Reassess the location disclosure against the release candidate; do not rely on the previous no-location conclusion. rec.me adds `$geoip_disable = true` to every PostHog event, and the project-level **Discard client IP data** setting was verified enabled on 2026-08-14.
+REC-626 removes map masks, so displayed current location may be recorded even without coordinate event properties. This is the basis for the location Analytics declaration; the previous no-location conclusion no longer describes the full app. rec.me adds `$geoip_disable = true` to every PostHog event, and the project-level **Discard client IP data** setting was verified enabled on 2026-08-14.
 
 ## Permission audit
 
 | Permission | Trigger | Behavior without access | Store/privacy treatment |
 |---|---|---|---|
-| Location When In Use | Nearby place search after contextual UI; nearby widget uses WidgetKit authorization | Manual search/map remains available | Used on-device; not collected |
+| Location When In Use | Nearby place search after contextual UI; nearby widget uses WidgetKit authorization | Manual search/map remains available | Device reading used on-device; displayed location can be collected in full-app replay |
+| Microphone | User chooses to record a voice attachment in Feedback | Text and photo feedback remain available | Optional submitted audio is App Functionality; not replay audio |
 | Contacts | Optional Find friends in onboarding/Discover/Settings, or separate local invitations | General suggestions, username search and share links remain available | Explicit matching consent before transmitting permitted phone/email values; no retained address books; private verified-member index; local invitation flow unchanged |
 | Camera | User chooses to take a photo | Photo picker/manual save remains available | Uploaded chosen photos disclosed |
 | Photo Library Add | User chooses Save/Instagram/TikTok for generated share media | Standard share paths remain available | User-initiated write only |

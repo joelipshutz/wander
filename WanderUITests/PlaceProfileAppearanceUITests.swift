@@ -190,13 +190,20 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             predicate: NSPredicate(format: "isSelected == true"), object: feed)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
         app.tabBars.buttons["Map"].tap()
-        let pin = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "Dudley Market QA")
-        ).firstMatch
-        XCTAssertTrue(pin.waitForExistence(timeout: 5))
-        pin.tap()
         let card = app.buttons["map.selectedPlaceCard"]
+        // The map retains its selected place across the ordinary Feed return.
+        // Its card also includes the place name, so a broad name query can tap
+        // that card as if it were a pin, then tap through the opened profile.
+        if !card.exists {
+            let pin = app.buttons.matching(NSPredicate(
+                format: "label CONTAINS %@ AND identifier != %@",
+                "Dudley Market QA", "map.selectedPlaceCard"
+            )).firstMatch
+            XCTAssertTrue(pin.waitForExistence(timeout: 5))
+            pin.tap()
+        }
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Dudley Market QA"))
         card.tap()
         let scroll = app.scrollViews["place-profile.scroll"]
         XCTAssertTrue(scroll.waitForExistence(timeout: 5))

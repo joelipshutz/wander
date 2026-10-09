@@ -4375,6 +4375,29 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         )
     }
 
+    func testGroupingASCIIFastPathMatchesLocaleAwareNormalization() {
+        let samples: [String?] = [
+            nil, "", "Realistic place 001", "Los Angeles", "US", "CA",
+            "  Main St. #42\t\n", "Istanbul I IKEA", "Café Déjà-Vu!",
+            "İstanbul", "I\u{307}", "Straße", "東京", "42 Rue-de l’Été"
+        ]
+        for localeID in ["en_US", "tr_TR", "az_AZ", "lt_LT"] {
+            let locale = Locale(identifier: localeID)
+            for sample in samples {
+                let expected = (sample ?? "")
+                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: locale)
+                    .lowercased()
+                    .components(separatedBy: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789").inverted)
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+                XCTAssertEqual(
+                    VisiblePlaceGrouping.normalizedText(sample, locale: locale), expected,
+                    "Grouping must preserve existing normalization for \(localeID): \(sample ?? "nil")"
+                )
+            }
+        }
+    }
+
     func testGroupsLegacyAndCanonicalHotchkissAddressesIntoOnePin() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

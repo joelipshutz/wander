@@ -42,7 +42,13 @@ final class PersonTypeaheadUITests: XCTestCase {
     }
 
     func testFeedSearchPickerInsertsFullNameAndKeepsKeyboard() {
-        let app = launch(["-WanderInitialTab", "discover"])
+        let app = launch(["-WanderInitialTab", "map"])
+        // This exercises the picker after explicit navigation, independent of
+        // the initial tab restored by a preceding onboarding fixture.
+        let feed = app.tabBars.buttons["Feed"]
+        expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: feed)
+        waitForExpectations(timeout: 25)
+        feed.tap()
         let launcher = app.buttons["feed.searchLauncher"]
         XCTAssertTrue(launcher.waitForExistence(timeout: 25))
         launcher.tap()
@@ -173,7 +179,13 @@ final class PersonTypeaheadUITests: XCTestCase {
         // The inserted trailing space is ordinary text. The next delete removes
         // the entire tagged person, including @, and keeps preceding text.
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
-        XCTAssertEqual(field.value as? String, remaining)
+        // UIKit can finish the native edit before its accessibility value is
+        // refreshed. Observe the result without sending another delete.
+        expectation(for: NSPredicate { _, _ in
+            field.exists && (field.value as? String ?? "") == remaining
+        }, evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(field.value as? String ?? "", remaining)
     }
 
     private func focus(_ field: XCUIElement, in app: XCUIApplication) {

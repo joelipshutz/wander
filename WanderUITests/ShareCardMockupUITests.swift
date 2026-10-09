@@ -41,7 +41,7 @@ final class ShareCardMockupUITests: XCTestCase {
         let app = launch("profile", additional: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
         let title = app.descendants(matching: .any)["share-mock.headline"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Discover Ryan’s world. View")
+        XCTAssertEqual(title.label, "Discover Ryan’s world")
         for _ in 0..<4 where !title.isHittable { app.swipeUp() }
         XCTAssertTrue(title.isHittable)
         capture("profile-accessibility")
@@ -51,22 +51,25 @@ final class ShareCardMockupUITests: XCTestCase {
     }
 
 
-    func testWannaDateReplacesRadarAndKeepsLetsGo() {
-        let app = launch("wanna")
+    func testWannaNativeTitleIncludesPlaceAndDateWithoutImageAction() {
+        var app = launch("wanna")
         let card = app.descendants(matching: .any)["share-mock.headline"]
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         XCTAssertTrue(card.label.contains("On Ryan’s radar"))
-        XCTAssertTrue(card.label.contains("Let’s Go"))
-        let dateToggle = app.switches["share-mock.dated"]
-        // SwiftUI exposes the whole labeled row as the switch. Target its
-        // trailing control rather than the inert center of that row.
-        dateToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        XCTAssertTrue(card.label.contains("Bar Chelou"))
+        XCTAssertFalse(card.label.contains("Let’s Go"))
+        // Exercise the actual dated content contract independently of the
+        // design-rehearsal switch's synthesized touch coordinates.
+        app.terminate()
+        app = launch("wanna", additional: ["-ShareCardDated"])
+        let datedCard = app.descendants(matching: .any)["share-mock.headline"]
+        XCTAssertTrue(datedCard.waitForExistence(timeout: 10))
         let dated = NSPredicate(format: "label CONTAINS %@ AND NOT (label CONTAINS %@)", "2026", "radar")
-        expectation(for: dated, evaluatedWith: card)
+        expectation(for: dated, evaluatedWith: datedCard)
         waitForExpectations(timeout: 4)
-        XCTAssertFalse(card.label.contains("radar"))
-        XCTAssertTrue(card.label.contains("2026"))
-        XCTAssertTrue(card.label.contains("Let’s Go"))
+        XCTAssertFalse(datedCard.label.contains("radar"))
+        XCTAssertTrue(datedCard.label.contains("2026"))
+        XCTAssertFalse(datedCard.label.contains("Let’s Go"))
         capture("wanna-dated")
         app.terminate()
     }
@@ -110,7 +113,10 @@ final class ShareCardMockupUITests: XCTestCase {
         expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: copy)
         waitForExpectations(timeout: 10)
         for (format, destination) in [("Link", "Messages"), ("Story", "Instagram Story"), ("Post", "Open more sharing options")] {
-            formats.buttons[format].tap()
+            let formatButton = formats.buttons[format]
+            expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: formatButton)
+            waitForExpectations(timeout: 10)
+            formatButton.tap()
             app.buttons[destination].tap()
             // Messages and Instagram are unavailable on the simulator, so both
             // use the same native fallback as More. Never send to a recipient.
@@ -123,6 +129,7 @@ final class ShareCardMockupUITests: XCTestCase {
             XCTAssertFalse(app.alerts.firstMatch.exists)
             capture("external-place-\(format)-destination")
             close.tap()
+            XCTAssertTrue(activityList.waitForNonExistence(timeout: 10))
             XCTAssertTrue(formats.waitForExistence(timeout: 5))
         }
         app.terminate()
@@ -141,6 +148,11 @@ final class ShareCardMockupUITests: XCTestCase {
         XCTAssertTrue(alert.staticTexts["Check your internet connection, then try sharing again."].exists)
         capture("publication-connection-error")
         alert.buttons["OK"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        let retryReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true AND isEnabled == true"), object: copy
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [retryReady], timeout: 5), .completed)
         copy.tap()
         XCTAssertTrue(app.staticTexts["link copied"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.alerts.firstMatch.exists)
