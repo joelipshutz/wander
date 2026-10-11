@@ -734,7 +734,10 @@ struct SupabaseFeedRepository: FeedRepository {
             response = try await rpc.call("live_activity_feed", params: LiveActivityFeedParams(
                 input_audience: audience.rawValue, input_after: LiveFeedQuery.timestamp(query.occurredAfter),
                 input_until: LiveFeedQuery.timestamp(query.occurredBefore), input_activity_type: query.activityType.rawValue,
-                input_polygon: query.polygon, input_before: before, input_limit: boundedLimit))
+                input_polygon: query.polygon, input_before: before, input_limit: boundedLimit,
+                input_center_latitude: query.center?.latitude, input_center_longitude: query.center?.longitude,
+                input_radius_meters: query.radiusMeters, input_category_ids: query.categoryIDs,
+                input_person_ids: query.personIDs))
         } else {
             response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
         }
@@ -3768,6 +3771,11 @@ private struct LiveActivityFeedParams: Encodable {
     let input_polygon: [LiveFeedQuery.Vertex]?
     let input_before: String?
     let input_limit: Int
+    let input_center_latitude: Double?
+    let input_center_longitude: Double?
+    let input_radius_meters: Int?
+    let input_category_ids: [String]
+    let input_person_ids: [String]
 }
 
 private struct FollowedFeedParams: Encodable {

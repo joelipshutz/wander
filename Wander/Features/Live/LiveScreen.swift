@@ -13,6 +13,7 @@ struct LiveScreen: View {
     @Environment(\.astirBrandMode) private var brand
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     @State private var camera: MapCameraPosition = .automatic
     @State private var viewport: MKCoordinateRegion?
     @State private var didFrame = false
@@ -206,6 +207,7 @@ struct LiveScreen: View {
             selection = LiveBrowseSelection(); draftSelection = selection; detent = 1
             introductionAudience = nil; introductionAcknowledged = false; showsIntroductionGuide = false
             updateIntroduction()
+            installCommittedQuery()
             frameInitialMap()
         }
         .onChange(of: presentationResetRequest?.id) { _, _ in
@@ -224,6 +226,7 @@ struct LiveScreen: View {
             Button("OK", role: .cancel) {}
         } message: { Text("Choose a region smaller than half the world, then draw or use the visible area.") }
         .onAppear {
+            installCommittedQuery()
             updateIntroduction()
             #if DEBUG && targetEnvironment(simulator)
             if demoMessageRepository == nil {
@@ -236,6 +239,9 @@ struct LiveScreen: View {
             #endif
         }
         .onChange(of: introductionContext) { _, _ in updateIntroduction() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.refreshLiveFeedDisplayLease() }
+        }
     }
 
     private var messageRepository: (any PrivateMessageRepository)? { demoMessageRepository ?? backend.privateMessageRepository }
@@ -282,7 +288,7 @@ struct LiveScreen: View {
                             .frame(minWidth: 44, minHeight: 44)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(pin.place.place.canonicalName), \(pin.isWanna ? "Wanna" : "check-in"), \(pin.activities.count) updates")
+                        .accessibilityLabel(pin.accessibilityLabel)
                         .accessibilityIdentifier("live.pin.\(pin.id)")
                     }
                     .annotationTitles(.hidden)
@@ -292,8 +298,8 @@ struct LiveScreen: View {
                         .foregroundStyle(brand.accent.opacity(0.12))
                         .stroke(brand.accent, lineWidth: 3)
                 }
-                if selection.scope == .nearby, let city = selection.city {
-                    MapCircle(center: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude),
+                if selection.scope == .nearby, let center = selection.center {
+                    MapCircle(center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
                               radius: Double(selection.radius.rawValue))
                         .foregroundStyle(brand.accent.opacity(0.05))
                         .stroke(brand.accent.opacity(0.7), lineWidth: 1.5)
@@ -360,7 +366,7 @@ struct LiveScreen: View {
                 Button { startDrawing() } label: { Label(area == nil ? "Draw area" : "Redraw", systemImage: "pencil.and.outline").frame(minHeight: 44) }
                     .accessibilityIdentifier("live.draw")
                 if area != nil {
-                    Button("Clear") { area = nil; selectedPlaceID = nil }.frame(minHeight: 44).accessibilityIdentifier("live.clearArea")
+                    Button("Clear") { area = nil; commitSelection(selection) }.frame(minHeight: 44).accessibilityIdentifier("live.clearArea")
                 }
                 Spacer()
                 control("Filters", symbol: "slider.horizontal.3") {
@@ -425,13 +431,20 @@ struct LiveScreen: View {
             })
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-            .accessibilityValue(filterSummary)
+            .accessibilityValue("\(activity.count) loaded updates. \(filterSummary)")
             .accessibilityAdjustableAction { direction in
                 changeDetent(detent + (direction == .increment ? 1 : -1))
             }
             .accessibilityIdentifier("live.drawerHandle")
 
             VStack(spacing: 0) {
+                if store.liveFeedSocialExpired {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Reconnect to refresh your people’s activity").font(AstirTypography.bodySmall)
+                        Button("Try again") { commitSelection(selection) }.frame(minHeight: 44)
+                            .accessibilityIdentifier("live.reconnect")
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20)
+                }
                 if migrationRecord != nil, selectedPin == nil,
                    !introductionContext.hasPriorityPresentation, detent > 0 {
                     LiveIntroductionMigrationCard(onContinue: onContinueMigration,
@@ -469,7 +482,10 @@ struct LiveScreen: View {
                     isEmbedded: true, filteredActivityIDs: Set(activity.map(\.id)),
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
                     onPrivateReply: openReply,
-                    onRefreshRequested: { selection = selection.committed(at: .now) },
+                    onRefreshRequested: {
+                        selection = selection.committed(at: .now)
+                        installCommittedQuery(refresh: false)
+                    },
                     onAdd: onAdd
                 )
             }
@@ -493,8 +509,14 @@ struct LiveScreen: View {
             }
             ForEach(pin.activities) { event in
                 HStack {
-                    Text("\(event.actor.displayName) · \(event.resolvedTicketKind == .wanna ? "Wanna" : "Check-in")")
-                        .font(AstirTypography.body)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(event.actor.displayName) · \(LiveActivityPresentation.title(for: event))")
+                            .font(AstirTypography.body)
+                        Text(FeedPresentation.timestampText(for: event.occurredAt))
+                            .font(.caption).foregroundStyle(brand.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("live.activityTime.\(event.id)")
+                    }
                     Spacer()
                     Button("Open") { changeDetent(2); focusRequest = .init(activityID: event.id, target: .place) }
                 }
@@ -551,6 +573,7 @@ struct LiveScreen: View {
         Button {
             guard let draftArea else { return }
             area = draftArea; self.draftArea = nil; drawing = false; selectedPlaceID = nil
+            commitSelection(selection)
         } label: {
             Text("Apply").fixedSize(horizontal: false, vertical: true)
         }.frame(minHeight: 44).disabled(draftArea == nil).buttonStyle(.borderedProminent)
@@ -580,7 +603,7 @@ struct LiveScreen: View {
                     if area != nil {
                         Toggle("Keep drawn area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
                     }
-                    Text("Filters narrow the map and loaded Feed. Load more to find additional matching updates.")
+                    Text("Filters apply to your people’s activity before each page loads. Map and Feed show the same matching updates.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Text("Time window ends \(selection.committedAt.formatted(date: .abbreviated, time: .shortened)). Apply or refresh updates the window.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -599,9 +622,9 @@ struct LiveScreen: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Apply") {
                         guard draftSelection.isValid else { return }
-                        commitSelection(draftSelection)
                         store.selectFeedAudience(draftAudience)
                         if draftClearsArea { area = nil }
+                        commitSelection(draftSelection)
                         filtersPresented = false
                     }.disabled(!draftSelection.isValid).accessibilityIdentifier("live.applyFilters")
                 }
@@ -629,9 +652,8 @@ struct LiveScreen: View {
     }
 
     private var categoryFilterSection: some View {
-        Section("Categories in loaded activity") {
-            let categories = LiveBrowseSelection.categories(in: authorizedActivity)
-            if categories.isEmpty { Text("No categories loaded yet").foregroundStyle(.secondary) }
+        Section("Categories") {
+            let categories = WanderPlaceCategory.allowedCategories
             ForEach(categories, id: \.self) { category in
                 Toggle(WanderPlaceCategory.display(for: category).category,
                        isOn: Binding(get: { draftSelection.categoryIDs.contains(category) }, set: { selected in
@@ -646,9 +668,8 @@ struct LiveScreen: View {
     }
 
     private var personFilterSection: some View {
-        Section("People in loaded activity") {
-            let people = LiveBrowseSelection.people(in: authorizedActivity)
-            if people.isEmpty { Text("No people loaded yet").foregroundStyle(.secondary) }
+        Section("People") {
+            let people = [store.currentUser] + store.following(of: store.currentUser.id)
             ForEach(people) { person in
                 Toggle(person.displayName, isOn: Binding(get: { draftSelection.personIDs.contains(person.id) }, set: { selected in
                     if selected { draftSelection.personIDs.insert(person.id) }
@@ -676,12 +697,13 @@ struct LiveScreen: View {
     private func commitSelection(_ next: LiveBrowseSelection) {
         guard next.isValid else { return }
         let changedNearby = next.scope == .nearby && (selection.scope != .nearby
-            || next.cityID != selection.cityID || next.radius != selection.radius)
+            || next.center != selection.center || next.radius != selection.radius)
         selection = next.committed(at: .now)
         selectedPlaceID = nil
-        if changedNearby, let city = selection.city {
+        installCommittedQuery()
+        if changedNearby, let center = selection.center {
             camera = .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude),
+                center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
                 latitudinalMeters: Double(selection.radius.rawValue) * 2.8,
                 longitudinalMeters: Double(selection.radius.rawValue) * 2.8
             ))
@@ -692,6 +714,19 @@ struct LiveScreen: View {
     private var filterSummary: String {
         ([selection.summary] + (store.feedAudience == .everyone ? [] : [store.feedAudience.title])
             + (area == nil ? [] : ["Drawn area"])).joined(separator: " · ")
+    }
+
+    private func installCommittedQuery(refresh: Bool = true) {
+        guard selection.isValid else { return }
+        store.selectLiveFeedQuery(selection.query(area: area))
+        store.refreshLiveFeedDisplayLease()
+        if refresh {
+            let userID = store.currentUser.id, query = store.liveFeedQuery
+            Task {
+                guard store.currentUser.id == userID, store.liveFeedQuery == query else { return }
+                await store.refreshFeedSurface(backend: auth.isSignedIn ? backend : nil, force: false)
+            }
+        }
     }
 
     private var activeFilterCount: Int {
@@ -782,11 +817,35 @@ struct LiveScreen: View {
     }
 }
 
+/// Shared copy for Live's map and selection chooser; Feed cards keep their own presentation.
+enum LiveActivityPresentation {
+    static func title(for activity: FeedActivity) -> String {
+        switch activity.resolvedTicketKind {
+        case .wanna: "Wanna"
+        case .checkIn: "Check-in"
+        case .list: "List update"
+        case .saved: "Saved place"
+        }
+    }
+}
+
 private struct LivePlacePin: Identifiable {
     let id: String
     let place: VisiblePlace
     let activities: [FeedActivity]
     var isWanna: Bool { activities.allSatisfy { $0.resolvedTicketKind == .wanna } }
+
+    var accessibilityLabel: String {
+        // Pin activities are already ordered by FeedPresentation.newestFirst.
+        guard let latest = activities.first else { return place.place.canonicalName }
+        let kind = LiveActivityPresentation.title(for: latest)
+        let latestSummary = "\(latest.actor.displayName), \(kind), \(FeedPresentation.timestampText(for: latest.occurredAt))"
+        guard activities.count > 1 else {
+            return "\(place.place.canonicalName), \(latestSummary)"
+        }
+        let peopleCount = Set(activities.map { $0.actor.id }).count
+        return "\(place.place.canonicalName), \(activities.count) updates from \(peopleCount) \(peopleCount == 1 ? "person" : "people"). Latest: \(latestSummary)"
+    }
 }
 
 private struct LiveModalLifecycle: ViewModifier {

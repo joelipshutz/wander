@@ -10,9 +10,13 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.cells.matching(NSPredicate(format: "label == %@", "Astir")).firstMatch
+        // The system may use the host's ASTIR name or the extension's
+        // Save to Astir title. Both are exact branded destinations.
+        let activity = app.cells.matching(NSPredicate(
+            format: "label ==[c] %@ OR label ==[c] %@", "Astir", "Save to Astir"
+        )).firstMatch
         if !activity.waitForExistence(timeout: 5) {
-            let more = app.buttons["More"].firstMatch
+            let more = app.cells.matching(NSPredicate(format: "label == %@", "More")).firstMatch
             if more.exists { more.tap() }
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
@@ -1366,6 +1370,7 @@ final class OnboardingUITests: XCTestCase {
 
     func testReturningUserColdStartAndOrdinaryForegroundOpenFeed() {
         let app = XCUIApplication()
+        guard seedStalePrimaryCheckpoint(in: app) else { return }
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
         app.launch()
 
@@ -1386,6 +1391,35 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(feedTab.waitForExistence(timeout: 8))
         XCTAssertTrue(feedTab.isSelected)
+    }
+
+    func testReturningUserExplicitProfileDestinationSurvivesStaleCheckpointCleanup() {
+        let app = XCUIApplication()
+        guard seedStalePrimaryCheckpoint(in: app) else { return }
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+                               "-WanderInitialTab", "profile"]
+        app.launch()
+
+        let profileTab = app.buttons["Profile"]
+        XCTAssertTrue(profileTab.waitForExistence(timeout: 8))
+        XCTAssertTrue(profileTab.isSelected)
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["Map"].isSelected)
+    }
+
+    private func seedStalePrimaryCheckpoint(in app: XCUIApplication) -> Bool {
+        // Clear only the known fictional account's teaching state using the
+        // existing authenticated/demo fixture, then leave a real checkpoint.
+        app.launchArguments = nativeOverviewArguments + [
+            "-WanderHoldWalkthroughStep", "-WanderLiveIntroductionUITest", "cleanup",
+            "-WanderLiveIntroductionUITestRun", UUID().uuidString
+        ]
+        app.launch()
+        let checkpoint = app.descendants(matching: .any)["walkthrough.map.mapFeatured"]
+        let didSeed = checkpoint.waitForExistence(timeout: 18)
+        XCTAssertTrue(didSeed, "The regression must start with a held primary checkpoint.")
+        app.terminate()
+        return didSeed
     }
 
     func testPrimaryTabTapNavigatesToFeed() {
@@ -1818,8 +1852,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
             restoredNote.value as? String,
-            "Who told you, what caught your eye, when you might go…"
+            "",
+            "A reopened Wanna must not restore the cancelled note. Placeholder copy is not input text."
         )
+        XCTAssertEqual(restoredNote.label, "What made you save this?")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "First Map Wanna attached editor"
@@ -1837,8 +1873,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
-            "The good bits, what you ordered, who you were with…"
+            "",
+            "Switching to Check-in must not reuse the cancelled Wanna note."
         )
+        XCTAssertEqual(preservedNote.label, "Check-in note")
     }
 
     func testMapWannaAndSaveRespondToSinglePhysicalTap() {
@@ -1857,7 +1895,15 @@ final class OnboardingUITests: XCTestCase {
 
         let wanna = app.buttons["place-profile.floating-action.wanna"]
         XCTAssertTrue(wanna.waitForExistence(timeout: 5))
-        XCTAssertTrue(wanna.isHittable)
+        // The place profile can enter accessibility before the startup overlay
+        // and presentation transition finish. Count the single physical tap
+        // only after its actual action is reachable.
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: wanna
+        )
+        let readiness = XCTWaiter.wait(for: [ready], timeout: 10)
+        XCTAssertEqual(readiness, .completed)
+        guard readiness == .completed else { return }
         wanna.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         let attachedTray = app.otherElements["place-profile.attached-wanna"].firstMatch
@@ -2246,6 +2292,14 @@ final class OnboardingUITests: XCTestCase {
     }
 
     func testFeedInlineSearchCoversEntryEmptyResultsNavigationAndBack() {
+        exerciseFeedInlineSearchReturn(usesEdgeGesture: true)
+    }
+
+    func testFeedInlineSearchBackButtonCoversEntryEmptyResultsNavigationAndBack() {
+        exerciseFeedInlineSearchReturn(usesEdgeGesture: false)
+    }
+
+    private func exerciseFeedInlineSearchReturn(usesEdgeGesture: Bool) {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2297,9 +2351,13 @@ final class OnboardingUITests: XCTestCase {
 
         let placeBackButton = app.buttons["place-profile.back"]
         XCTAssertTrue(placeBackButton.waitForExistence(timeout: 4))
-        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5))
-        leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
+        if usesEdgeGesture {
+            let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+            let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5))
+            leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
+        } else {
+            placeBackButton.tap()
+        }
         XCTAssertTrue(placeBackButton.waitForNonExistence(timeout: 3))
         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
         XCTAssertEqual(searchField.value as? String, "coffee")
@@ -2448,18 +2506,16 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
         app.buttons["onboarding.pause"].tap()
         let signupDeadline = Date().addingTimeInterval(39)
-        expectation(
-            for: NSPredicate(format: "value == %@", "2"),
-            evaluatedWith: carouselPage
-        )
-        waitForExpectations(timeout: 20)
+        // Resolve the current page value in the query. A retained element's
+        // predicate can evaluate an older snapshot during the slide animation.
+        XCTAssertTrue(app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ AND value == %@", "onboarding.carouselPage", "2")
+        ).firstMatch.waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
-        expectation(
-            for: NSPredicate(format: "value == %@", "3"),
-            evaluatedWith: carouselPage
-        )
-        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ AND value == %@", "onboarding.carouselPage", "3")
+        ).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["onboarding.next"].isHittable)
         XCTAssertTrue(app.buttons["onboarding.logIn"].isHittable)
         XCTAssertTrue(app.textFields["auth.email"].waitForExistence(

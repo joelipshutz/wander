@@ -76,6 +76,11 @@ struct PrivateMessageThreadScreen: View {
             await state.load(userID: userID, target: target, repository: repository)
         }
         .onChange(of: userID) { _, newID in state.reset(userID: newID, target: target) }
+        .onChange(of: scenePhase) { _, phase in
+            // Hide the system keyboard and its predictive text before the
+            // app-switcher snapshot. The account-scoped draft stays in state.
+            if phase != .active { composerFocused = false }
+        }
         .modifier(PrivateMessagingInactiveCover())
     }
 

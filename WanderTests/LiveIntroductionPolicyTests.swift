@@ -356,6 +356,98 @@ final class LiveIntroductionPolicyTests: XCTestCase {
         XCTAssertTrue(NSDictionary(dictionary: before).isEqual(to: defaults.dictionaryRepresentation()))
     }
 
+    func testReplayDisappearanceWithoutContinueDoesNotOpenRecovery() {
+        let record = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .profileCalendar), requiredTargets: [])
+        var handoff = LiveIntroductionReplayRecoveryHandoff()
+        XCTAssertNotNil(record.recovery)
+        // Guide navigation, ordinary Back and tab changes must stay inert.
+        XCTAssertNil(handoff.takeAfterDisappearance(authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true, latestRecord: record))
+        XCTAssertFalse(handoff.hasPendingRequest)
+    }
+
+    func testReplayContinueWaitsForDisappearanceAndConsumesLatestRecordOnce() throws {
+        let record = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .profileCalendar), requiredTargets: [])
+        var handoff = LiveIntroductionReplayRecoveryHandoff()
+        XCTAssertTrue(handoff.queue(record, authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true))
+        XCTAssertTrue(handoff.hasPendingRequest)
+        XCTAssertFalse(handoff.queue(record, authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true), "Double taps cannot replace a pending dismissal")
+        var latest = record
+        latest.hasBeenOffered = true
+        let delivered = try XCTUnwrap(handoff.takeAfterDisappearance(
+            authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true, latestRecord: latest))
+        XCTAssertEqual(delivered, latest)
+        XCTAssertFalse(delivered.recoveryOpened, "Queueing/dismissing the replay does not claim the destination opened")
+        XCTAssertFalse(delivered.recoveryCompleted)
+        XCTAssertFalse(handoff.hasPendingRequest)
+        XCTAssertNil(handoff.takeAfterDisappearance(authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true, latestRecord: latest))
+    }
+
+    func testReplayHandoffRejectsChangedAccountAndSupersededOrResolvedRecovery() {
+        let record = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .profileCalendar), requiredTargets: [])
+        let newer = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .saveSubmit), requiredTargets: [])
+        let otherOwner = LiveIntroductionMigrationRecord(id: record.id, userID: "b",
+            checkpoint: record.checkpoint, requiredTargets: [])
+        var dismissed = record
+        dismissed.recoveryDismissed = true
+        var completed = record
+        completed.recoveryCompleted = true
+        let cases: [(String?, String, LiveIntroductionMigrationRecord?)] = [
+            (nil, "a", record), ("b", "a", record), ("a", "b", record),
+            ("a", "a", nil), ("a", "a", newer), ("a", "a", otherOwner),
+            ("a", "a", dismissed), ("a", "a", completed)
+        ]
+        for (authenticatedUserID, storeUserID, latest) in cases {
+            var handoff = LiveIntroductionReplayRecoveryHandoff()
+            XCTAssertTrue(handoff.queue(record, authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true))
+            XCTAssertNil(handoff.takeAfterDisappearance(authenticatedUserID: authenticatedUserID,
+                storeUserID: storeUserID, isSessionValidated: true, latestRecord: latest))
+            XCTAssertFalse(handoff.hasPendingRequest)
+        }
+    }
+
+    func testReplayHandoffRejectsUnvalidatedQueueAndCancelsAbandonedIntent() {
+        let record = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .profileCalendar), requiredTargets: [])
+        let guide = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .mapFriends), requiredTargets: [.mapFriends])
+        var handoff = LiveIntroductionReplayRecoveryHandoff()
+        XCTAssertFalse(handoff.queue(record, authenticatedUserID: nil, storeUserID: "a", isSessionValidated: true))
+        XCTAssertFalse(handoff.queue(record, authenticatedUserID: "a", storeUserID: "b", isSessionValidated: true))
+        XCTAssertNil(guide.recovery)
+        XCTAssertFalse(handoff.queue(guide, authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true))
+        XCTAssertTrue(handoff.queue(record, authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true))
+        handoff.cancel()
+        XCTAssertNil(handoff.takeAfterDisappearance(authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true, latestRecord: record))
+    }
+
+    func testReplayRecoveryRequiresValidatedSessionAtQueueAndDelivery() {
+        let record = LiveIntroductionMigrationRecord(id: UUID(), userID: "a",
+            checkpoint: makeCheckpoint(target: .profileCalendar), requiredTargets: [])
+        let session = AuthSession(userID: "a", displayName: "A", handle: "a")
+        let unvalidatedStates: [AuthState] = [.signedIn(session), .offline(session, message: "Offline")]
+        for state in unvalidatedStates {
+            XCTAssertTrue(state.isSignedIn, "Signed-in identity alone does not authorize Root recovery")
+            var handoff = LiveIntroductionReplayRecoveryHandoff()
+            XCTAssertFalse(handoff.queue(record, authenticatedUserID: state.session?.userID,
+                storeUserID: "a", isSessionValidated: false), "The replay must remain presented")
+            XCTAssertFalse(handoff.hasPendingRequest)
+            XCTAssertTrue(handoff.queue(record, authenticatedUserID: "a",
+                storeUserID: "a", isSessionValidated: true))
+            XCTAssertNil(handoff.takeAfterDisappearance(authenticatedUserID: state.session?.userID,
+                storeUserID: "a", isSessionValidated: false, latestRecord: record),
+                "Validation lost while dismissing cannot publish a request Root will reject")
+            XCTAssertFalse(handoff.hasPendingRequest)
+        }
+        var validated = LiveIntroductionReplayRecoveryHandoff()
+        XCTAssertTrue(validated.queue(record, authenticatedUserID: "a", storeUserID: "a", isSessionValidated: true))
+        XCTAssertEqual(validated.takeAfterDisappearance(authenticatedUserID: "a", storeUserID: "a",
+            isSessionValidated: true, latestRecord: record), record)
+    }
+
     private func context(userID: String? = "a", active: Bool = true, validated: Bool = true,
                          setup: Bool = true, priority: Bool = false, checkpoint: Bool = false,
                          firstVisit: Bool = false) -> LiveIntroductionContext {

@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-10-10
+Last updated: 2026-10-11
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -15,12 +15,11 @@ Wanna pins use a muted outlined bookmark with a distinct shape from Check-ins.
 
 D2/D3 query presets and defaults are explicitly accepted. Following uses the
 existing authorized audience and defaults to seven days. Nearby begins at 5 km
-with explicit expansion up to 25 km; it never expands social visibility. Local
-controls now use an explicitly selected public city center, loaded category/person
-choices and 24-hour/7-day/30-day/all-time ranges. Time bounds remain fixed until
-Apply or explicit refresh; drawn geometry stays independent. New native evidence,
-complete server filtering/paging, current-location centering and separately
-eligible discovery remain pending and are distinct from product approval.
+with explicit expansion up to 25 km; it never expands social visibility. Controls use an explicitly selected public city center, category/person choices
+and 24-hour/7-day/30-day/all-time ranges. Committed fields now reach the Live
+repository through the store, with stable bounds and cursor/account fencing.
+SQL applies every predicate before pagination; hosted execution remains pending.
+Current-location centering and separately eligible discovery remain distinct work.
 
 Recent activity must remain the current Feed experience: the existing cards,
 grouping and actions, with **Invite people to Astir → People worth following →
@@ -43,27 +42,41 @@ The D10 source now provides a compact Upcoming invitations entry and a separate
 sheet with at most three dated invitations, ascending by suggested time. It
 reuses the account's latest 100 received invitations and existing recipient/full
 inbox routes. This is not a complete calendar, sent-plan list or RSVP/attendance
-system. Undated invitations remain in the ordinary inbox. Native validation for
-this new slice remains pending; real Events discovery is still separate work.
+system. Undated invitations remain in the ordinary inbox. Real Events discovery is still separate work.
 
-The first integration projects existing authorized loaded Feed data. It does
-not yet implement the planned server-filtered Live query. Its visible count is
+The map and drawer share authorized loaded Live query data. The native query
+integration is implemented; its SQL remains unpackaged, undeployed and unexecuted.
+The visible count is
 “N updates shown,” with accessibility label “N loaded updates”; neither is a
 server total. Current tabs stay visible at every drawer detent; full height exits
 through handle drag or VoiceOver adjustment, without a Map pill. This differs
 from the earlier hidden-peek-tabs/Map-pill target and is not evidence that target
 was completed. Earlier standalone-prototype captures do not validate the current
 integrated app. The [integrated validation report](designs/astir-live/review/integrated-validation.md)
-records current native results and remaining reruns. D9 end-to-end integration
-is in progress; final migration/rollback proof remains pending. Messaging's
-inactive-scene cover is implemented, with actual snapshot/replay evidence still
-pending. Production release and hosted validation remain separate gates.
+is the single authority for candidate identity, native results and outstanding
+validation. D9 recovery and messaging's inactive-scene cover are implemented;
+release evidence must establish their behavior, including rollback and replay
+privacy. Production release and hosted validation remain separate gates.
 
-Freehand drawing with explicit Apply and account-session area retention remain
-unanswered optional working defaults. D11's proposed 15-minute lease for a new
-Live social cache remains an unanswered product gate; existing shared-cache and
-Profile policy is unchanged. See the [current contract](designs/astir-live/product-spec.md)
-and [remaining questions](open-questions.md#live-experience-review-rec-636).
+Freehand drawing uses explicit Apply/Cancel and account-session area retention.
+The committed area survives tab/detail return; it is not persisted across accounts
+or launches. Ryan approved D11's **15-minute** display lease for other people's
+Live activity. Each row uses a monotonic authorized-response receipt captured
+before media work. Suspension counts; wall-clock changes cannot extend access.
+Only successful authorization renews the returned rows; expired rows disappear
+until revalidated. Owner content and Profile/shared-cache
+history retain their existing policy.
+
+Ryan delegated the first messaging rollout choice. The initial rollout is limited
+to internal testers: both participants must have explicit server-side account
+`unified_live_v1` enablement, in addition to mutual friendship and current access.
+A global flag or device override alone cannot grant messaging access. Broad rollout
+still requires message reporting and explicit soft-delete retention/export rules;
+no public rollout is authorized by this review. Soft deletion denies access;
+physical profile deletion cascades stored conversations/messages.
+
+See the [current contract](designs/astir-live/product-spec.md) and
+[remaining questions](open-questions.md#live-experience-review-rec-636).
 
 ## Historical data and testing scope (REC-590, September 29)
 

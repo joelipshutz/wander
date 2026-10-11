@@ -10,6 +10,7 @@ declare
   fixture_place_id uuid; saved_id uuid; activity_id uuid; thread_id uuid; other_thread_id uuid;
   client_id uuid := gen_random_uuid(); first_message_id uuid; second_message_id uuid;
   payload jsonb; original jsonb; page jsonb; cursor jsonb; receipt jsonb; proc record;
+  revoked_viewer text; global_live_enabled boolean;
 begin
   perform set_config('request.jwt.claim.sub','',true);
   perform set_config('request.jwt.claim.canonical_user_id','',true);
@@ -21,7 +22,7 @@ begin
   then raise exception 'private tables must deny direct client access and enable RLS'; end if;
   for proc in select p.*, n.nspname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where (n.nspname='public' and p.proname in ('private_message_start','private_message_conversation','private_message_inbox','private_message_history','private_message_send','private_message_mark_read'))
-       or (n.nspname='app' and p.proname in ('private_message_pair_allowed','private_message_context_allowed','private_message_json','private_conversation_json'))
+       or (n.nspname='app' and p.proname in ('private_message_participant_enabled','private_message_pair_allowed','private_message_context_allowed','private_message_json','private_conversation_json'))
   loop
     if not proc.prosecdef or not ('search_path=pg_catalog, public, app'=any(proc.proconfig))
       or has_function_privilege('anon',proc.oid,'execute')
@@ -34,11 +35,18 @@ begin
   end loop;
   if not exists(select 1 from public.feature_flags where key='unified_live_v1' and user_id is null and value_type='boolean' and integer_value is null)
   then raise exception 'Live flag must be registered as Boolean'; end if;
+  if has_table_privilege('authenticated','public.feature_flags','insert,update,delete,truncate')
+    or has_table_privilege('anon','public.feature_flags','insert,update,delete,truncate')
+  then raise exception 'participant approval flags must remain operator-owned'; end if;
 
   insert into public.profiles(id,handle,display_name,is_private_profile) values
     (sender,'codex_message_sender','Message Sender',false),
     (recipient,'codex_message_recipient','Message Recipient',false),
     (stranger,'codex_message_stranger','Message Stranger',false);
+  insert into public.feature_flags(key,user_id,enabled,value_type,integer_value)
+    values ('unified_live_v1',sender,true,'boolean',null),
+           ('unified_live_v1',recipient,true,'boolean',null),
+           ('unified_live_v1',stranger,true,'boolean',null);
   insert into public.follows(follower_user_id,followed_user_id,source) values(sender,recipient,'username');
   perform set_config('request.jwt.claims',jsonb_build_object('sub',sender,'role','authenticated')::text,true);
   set local role authenticated;
@@ -57,6 +65,16 @@ begin
   select id into activity_id from public.feed_events where user_place_id=saved_id order by created_at desc limit 1;
   if activity_id is null then raise exception 'activity fixture missing'; end if;
   insert into public.follows(follower_user_id,followed_user_id,source) values(recipient,sender,'username');
+  -- Global/client enablement is not a substitute for both explicit internal
+  -- participant overrides. Neither client may grant its own access.
+  update public.feature_flags set enabled=false where key='unified_live_v1' and user_id=recipient;
+  set local role authenticated;
+  begin perform public.private_message_start(recipient,'place',fixture_place_id); raise exception 'unapproved participant accepted';
+  exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+  begin update public.feature_flags set enabled=true where key='unified_live_v1' and user_id=recipient; raise exception 'client granted messaging access';
+  exception when insufficient_privilege then null; end;
+  reset role;
+  update public.feature_flags set enabled=true where key='unified_live_v1' and user_id=recipient;
   set local role authenticated;
   begin perform public.private_message_start(recipient,'activity',gen_random_uuid()); raise exception 'forged source accepted';
   exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
@@ -89,6 +107,51 @@ begin
   exception when raise_exception then if sqlerrm<>'private_message_invalid_cursor' then raise; end if; end;
   begin perform public.private_message_history(thread_id,now(),gen_random_uuid(),1); raise exception 'foreign cursor accepted';
   exception when raise_exception then if sqlerrm<>'private_message_invalid_cursor' then raise; end if; end;
+  reset role;
+
+  -- Revocation applies to already-established threads and every subsequent
+  -- operation for both participants, including retries of acknowledged sends.
+  -- A global enabled row must not replace the required per-account approval.
+  select enabled into strict global_live_enabled from public.feature_flags
+    where key='unified_live_v1' and user_id is null;
+  update public.feature_flags set enabled=true where key='unified_live_v1' and user_id is null;
+  update public.feature_flags set enabled=false where key='unified_live_v1' and user_id=recipient;
+  foreach revoked_viewer in array array[sender,recipient] loop
+    perform set_config('request.jwt.claims',jsonb_build_object('sub',revoked_viewer,'role','authenticated')::text,true);
+    set local role authenticated;
+    page := public.private_message_inbox();
+    if page->'items'<>'[]'::jsonb or page->'nextCursor'<>'null'::jsonb
+    then raise exception 'revoked participant inbox or cursor leaked'; end if;
+    begin perform public.private_message_conversation(thread_id); raise exception 'revoked participant conversation leaked';
+    exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+    begin perform public.private_message_history(thread_id); raise exception 'revoked participant history leaked';
+    exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+    begin perform public.private_message_send(thread_id,'Revoked send',gen_random_uuid()); raise exception 'revoked participant send accepted';
+    exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+    begin perform public.private_message_send(thread_id,'A private reply',client_id,'activity',activity_id); raise exception 'revoked participant retry leaked';
+    exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+    begin perform public.private_message_mark_read(thread_id,second_message_id); raise exception 'revoked participant read accepted';
+    exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+    begin perform public.private_message_start(case when revoked_viewer=sender then recipient else sender end,'activity',activity_id);
+      raise exception 'revoked participant reopened established thread';
+    exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+    reset role;
+  end loop;
+  delete from public.feature_flags where key='unified_live_v1' and user_id=recipient;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',sender,'role','authenticated')::text,true);
+  set local role authenticated;
+  if public.private_message_inbox()->'items'<>'[]'::jsonb then raise exception 'global flag replaced absent participant override'; end if;
+  begin perform public.private_message_history(thread_id); raise exception 'missing participant approval leaked history';
+  exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+  reset role;
+  insert into public.feature_flags(key,user_id,enabled,value_type,integer_value)
+    values('unified_live_v1',recipient,true,'boolean',null);
+  update public.feature_flags set enabled=global_live_enabled where key='unified_live_v1' and user_id is null;
+  set local role authenticated;
+  if jsonb_array_length(public.private_message_inbox()->'items')<>1
+    or jsonb_array_length(public.private_message_history(thread_id)->'items')<>2
+    or (public.private_message_send(thread_id,'A private reply',client_id,'activity',activity_id)->>'id')::uuid<>first_message_id
+  then raise exception 'restored participant lost existing history or idempotent acknowledgment'; end if;
   reset role;
 
   perform set_config('request.jwt.claims',jsonb_build_object('sub',recipient,'role','authenticated')::text,true);

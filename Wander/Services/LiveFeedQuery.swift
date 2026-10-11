@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 /// Immutable committed Live filters. Keep the time window fixed until the user
 /// applies a change or explicitly refreshes it; cursors are bound to this query.
@@ -12,15 +13,25 @@ struct LiveFeedQuery: Equatable, Sendable {
     let occurredBefore: Date?
     let activityType: ActivityType
     let polygon: [Vertex]?
+    let center: Vertex?
+    let radiusMeters: Int?
+    let categoryIDs: [String]
+    let personIDs: [String]
     private let polygonIsValid: Bool
 
     init(occurredAfter: Date? = nil, occurredBefore: Date? = nil,
-         activityType: ActivityType = .all, polygon: [Vertex]? = nil) {
+         activityType: ActivityType = .all, polygon: [Vertex]? = nil,
+         center: Vertex? = nil, radiusMeters: Int? = nil,
+         categoryIDs: Set<String> = [], personIDs: Set<String> = []) {
         // Use the same millisecond precision as the wire representation.
         self.occurredAfter = occurredAfter.map { Date(timeIntervalSince1970: floor($0.timeIntervalSince1970 * 1_000) / 1_000) }
         self.occurredBefore = occurredBefore.map { Date(timeIntervalSince1970: floor($0.timeIntervalSince1970 * 1_000) / 1_000) }
         self.activityType = activityType
         self.polygon = polygon
+        self.center = center
+        self.radiusMeters = radiusMeters
+        self.categoryIDs = categoryIDs.sorted()
+        self.personIDs = personIDs.sorted()
         self.polygonIsValid = Self.validPolygon(polygon)
     }
 
@@ -28,6 +39,14 @@ struct LiveFeedQuery: Equatable, Sendable {
         if let occurredAfter, !occurredAfter.timeIntervalSince1970.isFinite { return false }
         if let occurredBefore, !occurredBefore.timeIntervalSince1970.isFinite { return false }
         if let occurredAfter, let occurredBefore, occurredAfter > occurredBefore { return false }
+        guard categoryIDs.count <= 100, personIDs.count <= 100,
+              personIDs.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.unicodeScalars.count <= 256 }),
+              categoryIDs.allSatisfy({ $0.range(of: "^[a-z][a-z0-9_]{0,63}$", options: .regularExpression) != nil }) else { return false }
+        if let center {
+            guard center.latitude.isFinite, center.longitude.isFinite,
+                  (-90...90).contains(center.latitude), (-180...180).contains(center.longitude),
+                  let radiusMeters, (100...25_000).contains(radiusMeters) else { return false }
+        } else if radiusMeters != nil { return false }
         return polygonIsValid
     }
 
@@ -42,9 +61,27 @@ struct LiveFeedQuery: Equatable, Sendable {
         case .checkIns: if activity.resolvedTicketKind != .checkIn { return false }
         case .wannas: if activity.resolvedTicketKind != .wanna { return false }
         }
+        if !personIDs.isEmpty, !personIDs.contains(activity.actor.id) { return false }
+        if !categoryIDs.isEmpty {
+            guard let place = activity.place, categoryIDs.contains(Self.categoryID(for: place)) else { return false }
+        }
+        if let center, let radiusMeters {
+            guard let place = activity.place?.place,
+                  place.latitude.isFinite, place.longitude.isFinite,
+                  CLLocationCoordinate2DIsValid(.init(latitude: place.latitude, longitude: place.longitude)) else { return false }
+            guard CLLocation(latitude: center.latitude, longitude: center.longitude)
+                .distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude)) <= Double(radiusMeters) else { return false }
+        }
         guard polygon != nil else { return true }
         guard let place = activity.place?.place else { return false }
         return contains(latitude: place.latitude, longitude: place.longitude)
+    }
+
+    /// Live's server projection supplies the viewer's canonical taxonomy. Do
+    /// not reinterpret it from provider hints or another member's override.
+    static func categoryID(for place: VisiblePlace) -> String {
+        place.userPlace.viewerPrimaryCategory.map(WanderPlaceCategory.normalizedPrimaryCategory)
+            ?? place.effectiveCategory
     }
 
     func contains(latitude: Double, longitude: Double) -> Bool {

@@ -162,9 +162,11 @@ struct LiveIntroductionMigrationCard: View {
 /// Settings and the optional migration card share the same resumable guide.
 struct LiveIntroductionReplayView: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
     let userID: String
     @State private var record: LiveIntroductionMigrationRecord?
+    @State private var recoveryHandoff = LiveIntroductionReplayRecoveryHandoff()
     init(userID: String) {
         self.userID = userID
         _record = State(initialValue: LiveIntroductionMigrationStore().load(for: userID))
@@ -177,9 +179,16 @@ struct LiveIntroductionReplayView: View {
                         Section("Your unfinished step") {
                             Text(recoveryMessage(record))
                             Button("Continue") {
-                                guard store.currentUser.id == userID else { return }
-                                LiveIntroductionRecoveryCenter.shared.open(record)
+                                guard let latest = LiveIntroductionMigrationStore().load(for: userID),
+                                      latest.id == record.id,
+                                      recoveryHandoff.queue(latest, authenticatedUserID: authenticatedUserID,
+                                          storeUserID: store.currentUser.id,
+                                          isSessionValidated: auth.isSessionValidated) else { return }
+                                // Pop this Settings destination (or dismiss its
+                                // migration sheet) before Root routes recovery.
+                                dismiss()
                             }.accessibilityIdentifier("live.migration.openRecovery")
+                                .disabled(!auth.isSessionValidated)
                             Text("Opening a screen does not complete a save, send an invitation, or change permissions.")
                                 .font(.footnote).foregroundStyle(.secondary)
                             Button("Dismiss this old tutorial step") {
@@ -206,9 +215,22 @@ struct LiveIntroductionReplayView: View {
         }
         .navigationTitle("What’s changed").navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .onChange(of: store.currentUser.id) { _, id in if id != userID { dismiss() } }
+        .disabled(recoveryHandoff.hasPendingRequest)
+        .onChange(of: store.currentUser.id) { _, id in
+            if id != userID { recoveryHandoff.cancel(); dismiss() }
+        }
         .onAppear { record = LiveIntroductionMigrationStore().load(for: userID) }
+        .onDisappear {
+            // Pushing a teaching guide also disappears this view, but cannot
+            // route anything without an explicit queued Continue action.
+            guard let latest = recoveryHandoff.takeAfterDisappearance(
+                authenticatedUserID: authenticatedUserID, storeUserID: store.currentUser.id,
+                isSessionValidated: auth.isSessionValidated,
+                latestRecord: LiveIntroductionMigrationStore().load(for: userID)) else { return }
+            LiveIntroductionRecoveryCenter.shared.open(latest)
+        }
     }
+    private var authenticatedUserID: String? { auth.isSignedIn ? auth.state.session?.userID : nil }
     private func acknowledge(_ step: LiveIntroductionStep, record: LiveIntroductionMigrationRecord) {
         guard store.currentUser.id == userID else { return }
         _ = LiveIntroductionMigrationStore().acknowledge(step, userID: userID, recordID: record.id)

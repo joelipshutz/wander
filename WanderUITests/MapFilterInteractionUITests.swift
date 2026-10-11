@@ -761,6 +761,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
+        if search.isHittable {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Unexpected hidden Map editor accessibility tree"
+            hierarchy.lifetime = .keepAlways
+            self.add(hierarchy)
+            let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            capture.name = "Map dock hidden while accessibility reports hittable"
+            capture.lifetime = .keepAlways
+            self.add(capture)
+        }
         XCTAssertFalse(search.isHittable)
         XCTAssertFalse(nearby.isHittable)
         XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")

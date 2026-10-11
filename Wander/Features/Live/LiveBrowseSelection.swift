@@ -1,8 +1,7 @@
 import CoreLocation
 import Foundation
 
-/// Local presentation over already-authorized loaded Feed records. These fields
-/// are not a replacement for the pending server query/pagination contract.
+/// Draft controls become an immutable server query only when committed.
 struct LiveBrowseSelection: Equatable {
     enum Scope: String, CaseIterable, Identifiable {
         case following = "Following everywhere", nearby = "Nearby"
@@ -30,7 +29,10 @@ struct LiveBrowseSelection: Equatable {
     init(now: Date = .now) { committedAt = now }
 
     var city: HomeMetro? { HomeMetro.find(cityID) }
-    var isValid: Bool { committedAt.timeIntervalSince1970.isFinite && (scope != .nearby || city != nil) }
+    var center: LiveFeedQuery.Vertex? {
+        city.map { .init(latitude: $0.latitude, longitude: $0.longitude) }
+    }
+    var isValid: Bool { committedAt.timeIntervalSince1970.isFinite && (scope != .nearby || center != nil) && query().isValid }
     var occurredAfter: Date? {
         time == .all ? nil : committedAt.addingTimeInterval(-Double(time.rawValue) * 86_400)
     }
@@ -43,21 +45,19 @@ struct LiveBrowseSelection: Equatable {
     }
 
     func includes(_ activity: FeedActivity) -> Bool {
-        guard isValid, activity.occurredAt <= occurredBefore else { return false }
-        if let occurredAfter, activity.occurredAt < occurredAfter { return false }
-        guard activityType.includes(activity), personIDs.isEmpty || personIDs.contains(activity.actor.id) else { return false }
-        if !categoryIDs.isEmpty {
-            guard let place = activity.place, categoryIDs.contains(place.effectiveCategory) else { return false }
+        isValid && query().includes(activity)
+    }
+
+    func query(area: LiveDrawnArea? = nil) -> LiveFeedQuery {
+        let type: LiveFeedQuery.ActivityType = switch activityType {
+        case .all: .all
+        case .checkIns: .checkIns
+        case .wannas: .wannas
         }
-        if scope == .nearby {
-            guard let city, let place = activity.place else { return false }
-            let coordinate = CLLocationCoordinate2D(latitude: place.place.latitude, longitude: place.place.longitude)
-            guard CLLocationCoordinate2DIsValid(coordinate) else { return false }
-            let center = CLLocation(latitude: city.latitude, longitude: city.longitude)
-            let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            guard center.distance(from: location) <= Double(radius.rawValue) else { return false }
-        }
-        return true
+        return LiveFeedQuery(occurredAfter: occurredAfter, occurredBefore: occurredBefore,
+            activityType: type, polygon: area?.vertices.map { .init(latitude: $0.latitude, longitude: $0.longitude) },
+            center: scope == .nearby ? center : nil, radiusMeters: scope == .nearby ? radius.rawValue : nil,
+            categoryIDs: categoryIDs, personIDs: personIDs)
     }
 
     var summary: String {
@@ -76,7 +76,7 @@ struct LiveBrowseSelection: Equatable {
     /// Derive choices before local refinements so a selection cannot remove its
     /// own picker option. Never hydrate people or private categories separately.
     static func categories(in authorizedActivity: [FeedActivity]) -> [String] {
-        Set(authorizedActivity.compactMap { $0.place?.effectiveCategory }).sorted()
+        Set(authorizedActivity.compactMap { $0.place.map(LiveFeedQuery.categoryID) }).sorted()
     }
 
     static func people(in authorizedActivity: [FeedActivity]) -> [ProfileShell] {

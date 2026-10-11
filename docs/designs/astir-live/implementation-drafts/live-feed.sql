@@ -8,6 +8,10 @@ begin;
 -- grants, source projections and Profile history are unchanged. The eligibility
 -- and rendering CTEs are copied from 20260923015217_feed_audience.sql, whose
 -- helpers include the later historical-identity and visit-metadata corrections.
+-- Viewer taxonomy uses 20260824080307_private_place_taxonomy.sql and the
+-- projection boundary from 20260925002745_feed_visit_metadata_identity.sql.
+-- Radius reads the existing indexed places.geog geography; it only narrows
+-- the current trusted Feed subset, never anonymous/public-place discovery.
 -- Filters are applied before the keyset limit; no unbounded client page scan.
 -- Definer is intentional because feed_events/projections are private. Caller
 -- identity remains app.current_user_id(), never a supplied viewer identifier.
@@ -60,7 +64,12 @@ create function app.live_activity_feed(
   input_activity_type text default 'all',
   input_polygon jsonb default null,
   input_before text default null,
-  input_limit integer default 25
+  input_limit integer default 25,
+  input_center_latitude double precision default null,
+  input_center_longitude double precision default null,
+  input_radius_meters integer default null,
+  input_category_ids text[] default null,
+  input_person_ids text[] default null
 )
 returns jsonb
 language plpgsql
@@ -77,6 +86,9 @@ declare
   longitude_origin double precision;
   query_key text;
   cursor_parts text[];
+  query_center geography;
+  query_categories text[];
+  query_people text[];
 begin
   if input_audience is null or input_audience not in ('everyone', 'only_me', 'only_friends') then
     raise exception 'Invalid feed audience' using errcode = '22023';
@@ -87,13 +99,39 @@ begin
     or (input_until is not null and not isfinite(input_until))
     or (input_after is not null and input_until is not null and input_after > input_until)
   then raise exception 'Invalid Live query' using errcode = '22023'; end if;
+  -- Radius is a committed geographic intersection, never a broader audience.
+  -- Reject partial/invalid inputs rather than silently removing a constraint.
+  if num_nonnulls(input_center_latitude,input_center_longitude,input_radius_meters) not in (0,3)
+    or (input_radius_meters is not null and (
+      input_radius_meters not between 100 and 25000
+      or input_center_latitude not between -90 and 90
+      or input_center_longitude not between -180 and 180
+      or input_center_latitude::text in ('NaN','Infinity','-Infinity')
+      or input_center_longitude::text in ('NaN','Infinity','-Infinity')))
+  then raise exception 'Invalid Live radius' using errcode='22023'; end if;
+  if input_radius_meters is not null then
+    query_center := st_setsrid(st_makepoint(input_center_longitude,input_center_latitude),4326)::geography;
+  end if;
+  if coalesce(array_ndims(input_category_ids),1)>1 or cardinality(input_category_ids)>100
+    or exists(select 1 from unnest(input_category_ids) value where value is null or value !~ '^[a-z][a-z0-9_]{0,63}$')
+    or coalesce(array_ndims(input_person_ids),1)>1 or cardinality(input_person_ids)>100
+    or exists(select 1 from unnest(input_person_ids) value where value is null
+      or length(value) not between 1 and 256 or value<>btrim(value) or value ~ '[[:cntrl:]]')
+  then raise exception 'Invalid Live refinement' using errcode='22023'; end if;
+  -- Set order and duplicate choices do not change the semantic cursor scope.
+  select array_agg(value order by value) into query_categories
+    from (select distinct value from unnest(input_category_ids) value) categories;
+  select array_agg(value order by value) into query_people
+    from (select distinct value from unnest(input_person_ids) value) people;
   query_geometry := app.live_feed_polygon(input_polygon);
   longitude_origin := (input_polygon->0->>'longitude')::double precision;
   -- This fingerprint is a scope binding, never an authorization capability.
   -- Auth and every source policy are still reevaluated below for each page.
   query_key := md5(jsonb_build_object('viewer',viewer_id,'audience',input_audience,
     'after',input_after at time zone 'UTC','until',input_until at time zone 'UTC',
-    'type',input_activity_type,'polygon',input_polygon)::text);
+    'type',input_activity_type,'polygon',input_polygon,
+    'center_latitude',input_center_latitude,'center_longitude',input_center_longitude,
+    'radius_meters',input_radius_meters,'category_ids',query_categories,'person_ids',query_people)::text);
 
   if viewer_id is null or not exists(select 1 from public.profiles where id=viewer_id and deleted_at is null) then
     return jsonb_build_object(
@@ -158,6 +196,21 @@ begin
         )
         and (input_after is null or event.occurred_at >= input_after)
         and (input_until is null or event.occurred_at <= input_until)
+        and (query_people is null or event.actor_user_id=any(query_people))
+        and (query_categories is null or exists (
+          select 1 from public.user_places category_source
+          cross join lateral app.viewer_place_taxonomy(category_source.place_id) viewer_taxonomy
+          where category_source.id=event.user_place_id
+            -- This resolves the authenticated viewer's override/snapshot/global
+            -- category, not another person's private override or food type.
+            and app.place_primary_category(viewer_taxonomy.primary_category)=any(query_categories)
+        ))
+        and (query_center is null or exists (
+          select 1 from public.user_places radius_source
+          join public.places radius_place on radius_place.id=radius_source.place_id
+          where radius_source.id=event.user_place_id
+            and st_dwithin(radius_place.geog,query_center,input_radius_meters,true)
+        ))
         and (
           input_activity_type = 'all'
           or (input_activity_type = 'check_ins' and (event.event_type = 'place_been'
@@ -265,10 +318,25 @@ begin
             else 'follower'
           end
         ) as actor_json,
-        app.feed_wanna_place_projection(page.user_place_id, page.visit_id, page.id) as place_json,
+        -- Live carries an authoritative viewer category for its query/facets,
+        -- including unfrozen global fallback. Do not let a client's provider
+        -- heuristic discard a server category match. Legacy Feed is untouched.
+        case when projection.place_json is null then null else
+          projection.place_json || jsonb_build_object('attributes',
+            coalesce((select jsonb_agg(attribute)
+              from jsonb_array_elements(coalesce(projection.place_json->'attributes','[]'::jsonb)) attribute
+              where attribute->>'question_key'<>'__viewer_taxonomy_primary_category'),'[]'::jsonb)
+            || jsonb_build_array(jsonb_build_object(
+              'question_definition_id',null,'question_key','__viewer_taxonomy_primary_category',
+              'value_type','text','value',app.place_primary_category(viewer_taxonomy.primary_category),
+              'prompt',null,'options','[]'::jsonb,'is_system',true)))
+        end as place_json,
         app.feed_list_projection(page.list_id) as list_json
       from page
       join public.profiles actor on actor.id = page.actor_user_id
+      left join public.user_places projection_source on projection_source.id=page.user_place_id
+      left join lateral app.viewer_place_taxonomy(projection_source.place_id) viewer_taxonomy on true
+      cross join lateral (select app.feed_wanna_place_projection(page.user_place_id, page.visit_id, page.id) as place_json) projection
     )
     select jsonb_build_object(
       'activity', coalesce(
@@ -314,22 +382,25 @@ begin
 end;
 $$;
 
-revoke all on function app.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer) from public,anon,authenticated;
+revoke all on function app.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer,double precision,double precision,integer,text[],text[]) from public,anon,authenticated;
 
 create function public.live_activity_feed(
   input_audience text, input_after timestamptz default null, input_until timestamptz default null,
   input_activity_type text default 'all', input_polygon jsonb default null,
-  input_before text default null, input_limit integer default 25
+  input_before text default null, input_limit integer default 25,
+  input_center_latitude double precision default null, input_center_longitude double precision default null,
+  input_radius_meters integer default null, input_category_ids text[] default null, input_person_ids text[] default null
 ) returns jsonb language sql stable security definer
 set search_path = pg_catalog, public, app, extensions
 as $$
-  select app.live_activity_feed(input_audience,input_after,input_until,input_activity_type,input_polygon,input_before,input_limit);
+  select app.live_activity_feed(input_audience,input_after,input_until,input_activity_type,input_polygon,input_before,input_limit,
+    input_center_latitude,input_center_longitude,input_radius_meters,input_category_ids,input_person_ids);
 $$;
-revoke all on function public.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer) from public,anon;
-grant execute on function public.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer) to authenticated;
+revoke all on function public.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer,double precision,double precision,integer,text[],text[]) from public,anon;
+grant execute on function public.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer,double precision,double precision,integer,text[],text[]) to authenticated;
 
 create index if not exists feed_events_live_time_idx on public.feed_events(occurred_at desc,id desc);
-comment on function public.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer) is
-  'Authorized Live activity filtered by audience, time, type, and optional polygon before pagination. Cursors bind the account and committed query; no nearby-person visibility expansion.';
+comment on function public.live_activity_feed(text,timestamptz,timestamptz,text,jsonb,text,integer,double precision,double precision,integer,text[],text[]) is
+  'Authorized Live activity filtered by audience, time, type, polygon, geodesic radius, viewer category and actor before pagination. Cursors bind the account and every committed filter; no nearby-person visibility expansion.';
 notify pgrst, 'reload schema';
 commit;

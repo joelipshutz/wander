@@ -121,6 +121,33 @@ import XCTest
         XCTAssertTrue(later.includes(event("new", personID: "person", offset: 30)))
     }
 
+    func testCommittedServerQueryCarriesAllFiltersAndStableBoundsAcrossPaging() throws {
+        var draft = LiveBrowseSelection(now: now)
+        draft.scope = .nearby
+        draft.cityID = "los-angeles"
+        draft.radius = .twentyFiveKilometers
+        draft.time = .day
+        draft.activityType = .wannas
+        draft.personIDs = ["selected-person"]
+        draft.categoryIDs = [WanderPlaceCategory.coffeeTeaSweets]
+        let committed = draft.committed(at: now.addingTimeInterval(60))
+        let area = try XCTUnwrap(LiveDrawnArea(coordinates: [
+            .init(latitude: 33, longitude: -119), .init(latitude: 33, longitude: -117),
+            .init(latitude: 35, longitude: -117), .init(latitude: 35, longitude: -119)]))
+        let query = committed.query(area: area)
+        XCTAssertTrue(query.isValid)
+        XCTAssertEqual(query.occurredBefore, now.addingTimeInterval(60))
+        XCTAssertEqual(query.occurredAfter, now.addingTimeInterval(60 - 86_400))
+        XCTAssertEqual(query.center, committed.center)
+        XCTAssertEqual(query.radiusMeters, 25_000)
+        XCTAssertEqual(query.activityType, .wannas)
+        XCTAssertEqual(query.categoryIDs, [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(query.personIDs, ["selected-person"])
+        XCTAssertEqual(query.polygon?.count, 4)
+        draft.time = .all
+        XCTAssertEqual(committed.query(area: area), query, "Editing a draft must not change the committed request")
+    }
+
     func testSummaryAndCountsDescribeLocalRefinementsWithoutClaimingServerTotals() {
         var selection = LiveBrowseSelection(now: now)
         XCTAssertEqual(selection.activeFilterCount, 0)

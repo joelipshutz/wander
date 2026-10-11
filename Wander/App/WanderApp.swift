@@ -152,6 +152,7 @@ struct WanderApp: App {
             #endif
         }
         #if DEBUG && targetEnvironment(simulator)
+        LiveIntroductionUITestFixtures.prepare(authenticatedUserID: authStore.state.session?.userID)
         let fixtureMetro = forcedOnboardingStep == nil ? EventsAccessPolicy.fixtureMetroID() : nil
         let simulatorContactDetails = SimulatorAccountContactDetailsRepository(details: fixtureMetro.map {
             AccountContactDetails(metroID: $0, homeCountryCode: HomeMetro.find($0)?.country, phoneCountryCode: "US", phoneE164: nil)
@@ -407,11 +408,51 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     private static var croppedImageCache: [Int: UIImage] = [:]
     private static var encodedImageCache: [Int: Data] = [:]
 
-    init() {
-        guard ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures") else {
+    private let enablesREC386PhotoFixture: Bool
+
+    init(launchArguments: [String] = ProcessInfo.processInfo.arguments) {
+        enablesREC386PhotoFixture = Set([
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderREC386PhotoFixture"
+        ]).isSubset(of: Set(launchArguments))
+        if launchArguments.contains("-WanderUsePerformanceFixtures") {
+            Self.prewarmTileCache()
+        }
+    }
+
+    func validateAccess(to photo: PlacePhoto) async throws {
+        guard photo.requiresAccessCheck else { return }
+        guard photo.provider == "visit_photo" else {
+            throw WanderRemoteError.notConfigured
+        }
+        // Authorize only bundled resources synthesized by this DEBUG repository.
+        // Production protected-media authorization remains fail-closed.
+        let isCaptureTile = (0..<Self.tileCount).contains { index in
+            photo.providerPlaceID == "capture-visit-\(index)"
+                && photo.photoURLString == "capture://place-carousel/\(index)"
+        }
+        if isCaptureTile,
+           photo.storageBucket == nil,
+           photo.storagePath == nil,
+           photo.localAssetRef == nil {
             return
         }
-        Self.prewarmTileCache()
+        let isREC386Gallery = photo.photoURLString == "capture://place-carousel/3"
+            && photo.localAssetRef == nil
+        let isREC386CheckIn = photo.photoURLString.isEmpty
+            && photo.localAssetRef == "local_file:55000000-0000-0000-0000-000000000386.png"
+        if enablesREC386PhotoFixture,
+           photo.providerPlaceID == "55000000-0000-0000-0000-000000000386",
+           photo.storageBucket == "visit-photos",
+           photo.storagePath == "user_ryan/54000000-0000-0000-0000-000000000386/photo.png",
+           isREC386Gallery || isREC386CheckIn {
+            // The gallery uses a capture URL; the same check-in's LocalVisitPhoto
+            // has no remote URL. Both resolve to the bundled tile in imageData.
+            return
+        }
+        throw WanderRemoteError.notConfigured
     }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -438,7 +479,7 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
-        if ProcessInfo.processInfo.arguments.contains("-WanderREC386PhotoFixture"),
+        if enablesREC386PhotoFixture,
            cursor == nil,
            placeIDs.contains("50000000-0000-0000-0000-000000000386") {
             let photo = PlacePhoto(

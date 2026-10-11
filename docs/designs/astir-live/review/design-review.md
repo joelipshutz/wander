@@ -1,5 +1,11 @@
 # Experience review findings
 
+> Historical proposal and standalone-prototype review. Later decisions supersede
+> the unresolved choices below: the accepted shell is Live / Lists / Profile,
+> with only Draw reused from Your Map. See the [current specification](../product-spec.md)
+> for scope and [integrated validation](integrated-validation.md) for candidate
+> results and outstanding checks.
+
 October 9, 2026 · REC-636 · Proposal review with native simulator evidence; pending human product decisions
 
 ## Scope challenge

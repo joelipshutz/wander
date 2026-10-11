@@ -1,6 +1,6 @@
 # Open Questions
 
-Last updated: 2026-10-10
+Last updated: 2026-10-11
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
 
@@ -14,32 +14,37 @@ accepted: Following defaults to seven days; Nearby starts at 5 km with explicit
 expansion up to 25 km under existing visibility. These decisions are settled and
 are not waiting for another approval. Local selected-city 5/25 km, loaded
 category/person and 24-hour controls now exist, with fixed bounds advanced by
-Apply or explicit refresh. Local unit/UI checks pass on the large review phone;
-final two-size results are recorded in the validation report. Complete server
-filtering/paging, current-location centering and eligible discovery remain work.
+Apply or explicit refresh.
+The native query is wired and SQL predicates/cursor binding are prepared; the SQL
+remains unpackaged, undeployed and unexecuted. Current device-location centering
+is not implemented; selected-city centers work. Eligible discovery remains
+distinct work.
 Profile and all non-drawing Your Map tools remain unchanged.
 
-| Unanswered question | Working recommendation | Gate |
+D11 is resolved: other people's Live rows receive a 15-minute display lease
+from per-row monotonic authorized-response receipts captured before media work.
+Suspension counts; wall-clock changes cannot extend access. Profile history is
+unchanged. Drawing uses freehand Apply/Cancel and account-session retention. The first messaging rollout
+is internal-only with both participants explicitly enabled server-side.
+
+| Deferred question | Current boundary | Gate |
 |---|---|---|
-| Use freehand area selection followed by explicit Apply? | Current implementation uses a freehand draft with Apply/Cancel and an accessible visible-area alternative. | Optional D4 answer; do not describe the working default as explicit approval. |
-| Retain the committed drawn area for the account session? | Keep it on tab/detail return; clear on account change; no durable or cross-device persistence. | Optional D4 answer; relaunch persistence is not approved. |
-| How long may a new Live cache display last-authorized other-person content while offline? | D11 proposes 15 minutes since successful access validation, then reconnect; owner history retains existing policy. | **Unanswered product gate before implementing/activating a new lease.** No implicit Profile/shared-cache policy change. |
-| What reporting and account-deletion behavior should private messaging ship with? | Decide between adding message reporting/deletion now or limiting the first rollout to internal testers until the rules are settled. Current SQL denies soft-deleted accounts access but retains rows until physical deletion. | Unanswered before broad rollout; current demo and synthetic tests do not establish a retention or abuse-handling policy. |
+| What reporting and soft-delete retention/export policy should broader messaging use? | Internal testers only; soft deletion denies access, physical profile deletion cascades messages. No automatic purge period or message-report workflow is introduced. | Decide and implement before broader availability; does not block internal review. |
 
 Complete server-side geography/time filtering and real messaging access/delivery
 validation are implementation work, not evidence already supplied by the earlier
-prototype. The current first pass uses authorized loaded Feed data; “N updates
+prototype. The integrated query uses authorized loaded Live rows; “N updates
 shown” / accessibility “N loaded updates” is not a server total. D2/D3 are
 accepted implementation work, not unresolved product recommendations. Their
 acceptance does not establish a complete query or broaden social visibility.
 
 Current drawer tabs remain visible at all detents, with handle drag/VoiceOver
 adjustment as the escape; the earlier hidden-peek-tabs/Map-pill target is not
-implemented. D9 end-to-end recovery integration and its final native/rollback
-proof remain in progress. Messaging's inactive-scene cover exists, but actual
-snapshot/replay evidence is pending. See the [integrated validation report](designs/astir-live/review/integrated-validation.md)
-for candidate-specific native results and outstanding checks; these are implementation
-and validation gaps, not reasons to reopen the accepted decisions.
+implemented. D9 recovery and messaging's inactive-scene cover are integrated.
+The [integrated validation report](designs/astir-live/review/integrated-validation.md)
+is the single authority for candidate-specific results and outstanding checks,
+including recovery/rollback and replay privacy. Those implementation and validation
+gates do not reopen the accepted decisions.
 
 ## Activity privacy rollout (REC-590)
 

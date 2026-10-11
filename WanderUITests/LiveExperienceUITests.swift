@@ -42,6 +42,8 @@ final class LiveExperienceUITests: XCTestCase {
         let app = launch()
         let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         XCTAssertTrue(handle.waitForExistence(timeout: 30))
+        XCTAssertTrue((handle.value as? String)?.contains("loaded updates") == true,
+                      "The combined drawer element must retain its loaded count for VoiceOver.")
         let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
         XCTAssertTrue(app.buttons["invite people to Astir"].waitForExistence(timeout: 8)
@@ -137,7 +139,13 @@ final class LiveExperienceUITests: XCTestCase {
         let app = launch()
         let pin = app.buttons["live.pin.place_noodles"]
         XCTAssertTrue(pin.waitForExistence(timeout: 15))
+        XCTAssertTrue(pin.label.contains("Ryan"))
+        XCTAssertTrue(pin.label.contains("Wanna"))
+        XCTAssertTrue(pin.label.contains("5h ago"), "Pin accessibility must describe the activity time, not current presence.")
         pin.tap()
+        let activityTime = app.staticTexts["live.activityTime.fixture-feed-ryan-wanna-noodles"]
+        XCTAssertTrue(activityTime.waitForExistence(timeout: 5))
+        XCTAssertEqual(activityTime.label, "5h ago")
         let reply = app.buttons["Reply privately"].firstMatch
         XCTAssertTrue(reply.waitForExistence(timeout: 5))
         reply.tap()

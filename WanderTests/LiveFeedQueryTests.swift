@@ -53,7 +53,9 @@ final class LiveFeedQueryTests: XCTestCase {
         let repository = SupabaseFeedRepository(rpc: transport)
         let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 1_234.12345),
                                   activityType: .wannas,
-                                  polygon: [.init(latitude: 0, longitude: 0), .init(latitude: 1, longitude: 0), .init(latitude: 0, longitude: 1)])
+                                  polygon: [.init(latitude: 0, longitude: 0), .init(latitude: 1, longitude: 0), .init(latitude: 0, longitude: 1)],
+                                  center: .init(latitude: 34.05, longitude: -118.24), radiusMeters: 5_000,
+                                  categoryIDs: ["restaurants_food", "coffee_tea_sweets"], personIDs: ["person-b", "person-a"])
         var contentCalls = 0
         _ = try await repository.liveFeed(audience: .onlyFriends, query: query, before: "bound|timestamp|id", limit: 500) { _ in contentCalls += 1 }
         XCTAssertEqual(transport.names, ["live_activity_feed"])
@@ -63,7 +65,45 @@ final class LiveFeedQueryTests: XCTestCase {
         XCTAssertEqual(transport.parameters?["input_before"] as? String, "bound|timestamp|id")
         XCTAssertEqual(transport.parameters?["input_limit"] as? Int, 50)
         XCTAssertEqual((transport.parameters?["input_polygon"] as? [[String: Double]])?.count, 3)
+        XCTAssertEqual(transport.parameters?["input_center_latitude"] as? Double, 34.05)
+        XCTAssertEqual(transport.parameters?["input_center_longitude"] as? Double, -118.24)
+        XCTAssertEqual(transport.parameters?["input_radius_meters"] as? Int, 5_000)
+        XCTAssertEqual(transport.parameters?["input_category_ids"] as? [String], ["coffee_tea_sweets", "restaurants_food"])
+        XCTAssertEqual(transport.parameters?["input_person_ids"] as? [String], ["person-a", "person-b"])
         XCTAssertEqual(contentCalls, 1)
+    }
+
+    func testRadiusRequiresCompleteFiniteBoundedCenterAndFilterArraysAreBounded() {
+        let center = LiveFeedQuery.Vertex(latitude: 34, longitude: -118)
+        XCTAssertFalse(LiveFeedQuery(center: center).isValid)
+        XCTAssertFalse(LiveFeedQuery(radiusMeters: 5_000).isValid)
+        XCTAssertFalse(LiveFeedQuery(center: .init(latitude: .nan, longitude: -118), radiusMeters: 5_000).isValid)
+        XCTAssertFalse(LiveFeedQuery(center: center, radiusMeters: 99).isValid)
+        XCTAssertFalse(LiveFeedQuery(center: center, radiusMeters: 25_001).isValid)
+        XCTAssertTrue(LiveFeedQuery(center: center, radiusMeters: 100).isValid)
+        XCTAssertTrue(LiveFeedQuery(center: center, radiusMeters: 25_000).isValid)
+        XCTAssertFalse(LiveFeedQuery(personIDs: [" "]).isValid)
+        XCTAssertFalse(LiveFeedQuery(personIDs: Set((0...100).map(String.init))).isValid)
+    }
+
+    func testRadiusPolygonPersonAndCanonicalViewerCategoryIntersect() throws {
+        let store = WanderStore(fixtures: .seed())
+        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        place.userPlace.viewerPrimaryCategory = WanderPlaceCategory.coffeeTeaSweets
+        place.userPlace.categoryOverride = WanderPlaceCategory.restaurantsFood
+        let coordinate = LiveFeedQuery.Vertex(latitude: place.place.latitude, longitude: place.place.longitude)
+        let query = LiveFeedQuery(center: coordinate, radiusMeters: 100,
+            categoryIDs: [WanderPlaceCategory.coffeeTeaSweets], personIDs: [store.currentUser.id])
+        let event = FeedActivity(id: "matching", kind: .placeBeen, actor: store.shell(for: store.currentUser),
+                                 place: place, occurredAt: .now)
+        XCTAssertTrue(query.includes(event), "Use canonical viewer taxonomy, not an actor/provider override")
+        XCTAssertFalse(LiveFeedQuery(center: .init(latitude: 0, longitude: 0), radiusMeters: 100).includes(event))
+        XCTAssertFalse(LiveFeedQuery(personIDs: ["another-person"]).includes(event))
+        let polygon = [LiveFeedQuery.Vertex(latitude: -1, longitude: -1), .init(latitude: -1, longitude: 1),
+                       .init(latitude: 1, longitude: 1), .init(latitude: 1, longitude: -1)]
+        XCTAssertFalse(LiveFeedQuery(polygon: polygon, center: coordinate, radiusMeters: 100).includes(event))
+        XCTAssertFalse(query.includes(FeedActivity(id: "unmapped", kind: .listCreated,
+            actor: store.shell(for: store.currentUser), occurredAt: .now)))
     }
 
     func testMissingLiveRPCAndLegacyRepositoryCannotFallBackToLoadedPageFiltering() async {

@@ -597,33 +597,7 @@ struct FeedScreen: View {
                 )
             }
 
-            if store.isLoadingMoreFeed {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ProgressView()
-                    Text("Loading more...")
-                        .font(AstirTypography.body)
-                }
-                .foregroundStyle(astirBrandMode.secondaryText)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("feed.loadingMore")
-            } else if store.feedPaginationFailed {
-                FeedRetryRow(
-                    title: "More activity couldn't load",
-                    subtitle: "Your loaded activity is still here.",
-                    actionTitle: "Retry",
-                    retry: { _ = await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
-                )
-                .accessibilityIdentifier("feed.loadMoreRetry")
-            } else if filteredActivityIDs != nil, store.hasMoreFeed {
-                // A short filtered page may never create a scroll-to-bottom transition.
-                Button("Load more activity") {
-                    Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
-                }
-                .font(AstirTypography.body)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .accessibilityIdentifier("feed.filteredLoadMore")
-            }
+            paginationControls
 
             if store.feedLoadState == .stale {
                 FeedRetryRow(
@@ -635,6 +609,7 @@ struct FeedScreen: View {
             }
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
             FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)
+            if isEmbedded { paginationControls }
         } else {
             FeedSectionHeading(title: "Activity", audience: audienceSelection)
             if filteredActivityIDs != nil {
@@ -650,6 +625,37 @@ struct FeedScreen: View {
                     follow: follow
                 )
             }
+            // Local visibility changes can remove every row from a server
+            // page without removing its cursor. Keep later rows reachable.
+            if isEmbedded { paginationControls }
+        }
+    }
+
+    @ViewBuilder
+    private var paginationControls: some View {
+        if store.isLoadingMoreFeed {
+            HStack(spacing: WanderTheme.spacing2) {
+                ProgressView()
+                Text("Loading more...").font(AstirTypography.body)
+            }
+            .foregroundStyle(astirBrandMode.secondaryText)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("feed.loadingMore")
+        } else if store.feedPaginationFailed {
+            FeedRetryRow(
+                title: "More activity couldn't load",
+                subtitle: "Your loaded activity is still here.",
+                actionTitle: "Retry",
+                retry: { _ = await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+            ).accessibilityIdentifier("feed.loadMoreRetry")
+        } else if filteredActivityIDs != nil, store.hasMoreFeed {
+            Button("Load more activity") {
+                Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+            }
+            .font(AstirTypography.body)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .accessibilityIdentifier("feed.filteredLoadMore")
         }
     }
 

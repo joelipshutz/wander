@@ -88,9 +88,23 @@ final class PersonTypeaheadUITests: XCTestCase {
 
     func testCheckInAndWannaNotesUseTheSamePicker() {
         for mode in ["checkIn", "wanna"] {
-            let app = launch(["-WanderMapPlace", "Griffith Observatory Trail", "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"], demo: true)
+            let app = launch(["-WanderMapPlace", "Griffith Observatory Trail", "-WanderPlaceProfileSaveTrayV1"], demo: true)
+            // This test covers picker semantics. Open the normal visible card
+            // instead of depending on the separate expanded-startup fixture.
+            let card = app.buttons["map.selectedPlaceCard"]
+            let cardReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: card
+            )], timeout: 25) == .completed
+            XCTAssertTrue(cardReady, "The selected place card must be ready for a real tap.")
+            guard cardReady else { return }
+            card.tap()
+
             let action = app.buttons["place-profile.floating-action.\(mode)"]
-            XCTAssertTrue(action.waitForExistence(timeout: 25))
+            let actionReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: action
+            )], timeout: 10) == .completed
+            XCTAssertTrue(actionReady, "The expanded place action must be visible and hittable.")
+            guard actionReady else { return }
             action.tap()
             let field = app.textViews["save.note"]
             XCTAssertTrue(field.waitForExistence(timeout: 10))

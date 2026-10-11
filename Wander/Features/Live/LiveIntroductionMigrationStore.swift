@@ -168,6 +168,32 @@ struct LiveIntroductionRecoveryRequest: Equatable, Identifiable {
     let recordID: UUID
 }
 
+/// A replay may disappear because it pushed a teaching guide or changed tabs.
+/// Only an explicit Continue action arms this one-shot, process-only handoff.
+struct LiveIntroductionReplayRecoveryHandoff {
+    private var pending: LiveIntroductionRecoveryRequest?
+    var hasPendingRequest: Bool { pending != nil }
+
+    mutating func queue(_ record: LiveIntroductionMigrationRecord,
+                        authenticatedUserID: String?, storeUserID: String, isSessionValidated: Bool) -> Bool {
+        guard isSessionValidated, pending == nil, record.userID == authenticatedUserID,
+              record.userID == storeUserID, record.recovery != nil else { return false }
+        pending = LiveIntroductionRecoveryRequest(userID: record.userID, recordID: record.id)
+        return true
+    }
+
+    mutating func cancel() { pending = nil }
+
+    mutating func takeAfterDisappearance(authenticatedUserID: String?, storeUserID: String,
+                                         isSessionValidated: Bool, latestRecord: LiveIntroductionMigrationRecord?) -> LiveIntroductionMigrationRecord? {
+        defer { pending = nil }
+        guard isSessionValidated, let pending, pending.userID == authenticatedUserID, pending.userID == storeUserID,
+              let latestRecord, latestRecord.userID == pending.userID,
+              latestRecord.id == pending.recordID, latestRecord.recovery != nil else { return nil }
+        return latestRecord
+    }
+}
+
 /// Process-only handoff from Settings or the guide to the authenticated root.
 @MainActor
 final class LiveIntroductionRecoveryCenter: ObservableObject {

@@ -81,6 +81,23 @@ final class LiveMapPolicyTests: XCTestCase {
         XCTAssertEqual(nextLaunch.value(for: "a"), false)
     }
 
+    @MainActor
+    func testLiveActivityCopyKeepsPlaceBackedListUpdatesDistinctFromCheckIns() throws {
+        let store = WanderStore(fixtures: .seed())
+        let place = try XCTUnwrap(store.visiblePlaces().first { $0.userPlace.status == .been })
+        let actor = store.shell(for: store.currentUser)
+        let listUpdate = FeedActivity(id: "list-update", kind: .listItemAdded,
+                                      actor: actor, place: place, occurredAt: .now)
+        XCTAssertEqual(LiveActivityPresentation.title(for: listUpdate), "List update",
+                       "Adding an already-visited place to a list is not another check-in.")
+        let checkIn = FeedActivity(id: "check-in", kind: .placeBeen,
+                                   actor: actor, place: place, occurredAt: .now)
+        let wanna = FeedActivity(id: "wanna", kind: .placeWannaGo,
+                                actor: actor, place: place, occurredAt: .now)
+        XCTAssertEqual(LiveActivityPresentation.title(for: checkIn), "Check-in")
+        XCTAssertEqual(LiveActivityPresentation.title(for: wanna), "Wanna")
+    }
+
     private func point(_ lat: Double, _ lon: Double) -> CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lon)
     }

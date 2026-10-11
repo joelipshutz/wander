@@ -54,6 +54,18 @@ alter table public.private_conversations enable row level security;
 alter table public.private_messages enable row level security;
 revoke all on table public.private_conversations, public.private_messages from public, anon, authenticated;
 
+-- First rollout is internal. Both participants need an operator-owned account
+-- override; a global Live enablement or client/device override cannot opt a
+-- person into private messaging. Clients have SELECT-only feature-flag access.
+create function app.private_message_participant_enabled(input_user_id text)
+returns boolean language sql stable security definer
+set search_path = pg_catalog, public, app
+as $$
+  select exists(select 1 from public.feature_flags
+    where key = 'unified_live_v1' and user_id = input_user_id
+      and enabled and value_type = 'boolean')
+$$;
+
 create function app.private_message_pair_allowed(first_user text, second_user text)
 returns boolean language sql stable security definer
 set search_path = pg_catalog, public, app
@@ -62,6 +74,8 @@ as $$
     and first_user <> second_user
     and exists(select 1 from public.profiles where id = first_user and deleted_at is null)
     and exists(select 1 from public.profiles where id = second_user and deleted_at is null)
+    and app.private_message_participant_enabled(first_user)
+    and app.private_message_participant_enabled(second_user)
     and not app.is_blocked(first_user, second_user)
     and app.is_mutual(first_user, second_user)
 $$;
@@ -309,7 +323,8 @@ $$;
 
 -- Private helpers have no client execute grants. API definer posture is
 -- intentional: clients have no direct table rights and cannot supply actor IDs.
-revoke all on function app.private_message_pair_allowed(text,text), app.private_message_context_allowed(text,text,text,uuid),
+revoke all on function app.private_message_participant_enabled(text),
+  app.private_message_pair_allowed(text,text), app.private_message_context_allowed(text,text,text,uuid),
   app.private_message_json(uuid,text), app.private_conversation_json(uuid,text) from public, anon, authenticated;
 revoke all on function public.private_message_conversation(uuid), public.private_message_start(text,text,uuid),
   public.private_message_inbox(timestamptz,uuid,integer), public.private_message_history(uuid,timestamptz,uuid,integer),

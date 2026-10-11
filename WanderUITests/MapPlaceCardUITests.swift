@@ -365,6 +365,18 @@ final class MapPlaceCardUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Dudley Market QA"].firstMatch.waitForExistence(timeout: 8))
+        // Google stays first; select the member page instead of depending on
+        // which asynchronous photo request completed first.
+        let galleryPosition = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ OR label == %@", "Photo 1 of 2", "Photo 2 of 2")
+        ).firstMatch
+        XCTAssertTrue(galleryPosition.waitForExistence(timeout: 6))
+        let memberAttribution = app.descendants(matching: .any)["Photo by Ryan"]
+        if !memberAttribution.exists {
+            let providerPhoto = app.buttons["Open place photo of Dudley Market QA full screen"]
+            XCTAssertTrue(providerPhoto.waitForExistence(timeout: 3))
+            providerPhoto.swipeLeft()
+        }
         let memberPhoto = app.buttons["Open place photo by Ryan full screen"]
         XCTAssertTrue(memberPhoto.waitForExistence(timeout: 6))
         XCTAssertFalse(memberPhoto.frame.isEmpty)

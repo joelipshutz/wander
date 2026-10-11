@@ -1,10 +1,168 @@
 import XCTest
 import SwiftUI
 import PostHog
+import Vision
 @testable import Wander
 
 /// Exercises the pinned SDK's real screenshot path, entirely offline with fictional data.
 final class ReplayMaskingTests: XCTestCase {
+    @MainActor
+    func testPrivateMessageContentIsMaskedInActualReplayImage() async throws {
+        var foregroundScene: UIWindowScene?
+        for _ in 0..<100 {
+            foregroundScene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+            if foregroundScene != nil { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let scene = try XCTUnwrap(foregroundScene)
+        let originalWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        // The SDK can conservatively mask the entire SwiftUI hosting surface
+        // on iOS 26. A native sibling proves capture is live without weakening
+        // the privacy assertion or requiring the private heading to be readable.
+        let container = UIViewController()
+        let control = UILabel()
+        control.text = "Replay ready"; control.textColor = .black
+        control.backgroundColor = .green; control.textAlignment = .center
+        container.view.addSubview(control)
+        control.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            control.topAnchor.constraint(equalTo: container.view.safeAreaLayoutGuide.topAnchor),
+            control.leadingAnchor.constraint(equalTo: container.view.leadingAnchor),
+            control.trailingAnchor.constraint(equalTo: container.view.trailingAnchor),
+            control.heightAnchor.constraint(equalToConstant: 54)
+        ])
+        window.rootViewController = container
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; originalWindow?.makeKeyAndVisible() }
+
+        let frames = ReplayFrameCollector()
+        let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
+        let session = URLSessionConfiguration.ephemeral
+        session.protocolClasses = [ReplayOfflineProtocol.self]
+        config.urlSessionConfiguration = session
+        config.preloadFeatureFlags = false
+        config.sessionReplayConfig.throttleDelay = 0.1
+        config.setBeforeSend { event in frames.receive(event); return nil }
+        let sdk = PostHogSDK.with(config)
+        defer { sdk.close() }
+
+        // Require the recorder to produce a frame before creating any private
+        // view. Never reset the collector: first presentation is part of the proof.
+        var recorderReady = false
+        for _ in 0..<60 {
+            container.view.setNeedsLayout(); container.view.layoutIfNeeded()
+            window.layer.setNeedsLayout(); window.layer.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+            if sdk.isSessionReplayActive(), let frame = frames.image,
+               try recognizedText(frame).contains("replay ready") {
+                recorderReady = true
+                break
+            }
+        }
+        XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
+        guard recorderReady else { return }
+        let readyFrameCount = frames.images.count
+
+        let repository = try XCTUnwrap(PrivateMessageUITestFixtures.make(
+            userID: "user_joe", authenticatedUITest: true, unifiedLiveEnabled: true))
+        let conversationID = try XCTUnwrap(UUID(uuidString: "63600000-0000-0000-0000-000000000010"))
+        let thread = UIHostingController(rootView: NavigationStack {
+            PrivateMessageThreadScreen(userID: "user_joe", repository: repository, target: .conversation(conversationID))
+        }.environment(\.scenePhase, .active).dynamicTypeSize(.large))
+        container.addChild(thread)
+        container.view.addSubview(thread.view)
+        thread.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            thread.view.topAnchor.constraint(equalTo: control.bottomAnchor),
+            thread.view.leadingAnchor.constraint(equalTo: container.view.leadingAnchor),
+            thread.view.trailingAnchor.constraint(equalTo: container.view.trailingAnchor),
+            thread.view.bottomAnchor.constraint(equalTo: container.view.bottomAnchor)
+        ])
+        thread.didMove(toParent: container)
+
+        var baseline: UIImage?
+        var baselineText = ""
+        for _ in 0..<60 {
+            container.view.setNeedsLayout(); container.view.layoutIfNeeded()
+            window.layer.setNeedsLayout(); window.layer.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+            let capture = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            baseline = capture
+            baselineText = try recognizedText(capture)
+            if baselineText.contains("maya chen"), baselineText.contains("patio") { break }
+        }
+        XCTAssertTrue(baselineText.contains("maya chen"), "Baseline must contain the actual fictional participant.")
+        XCTAssertTrue(baselineText.contains("patio"), "Baseline must contain the loaded message, not an empty screen.")
+        let before = XCTAttachment(image: try XCTUnwrap(baseline))
+        before.name = "Private thread — fictional baseline"; before.lifetime = .keepAlways; add(before)
+
+        // A distinct post-hydration control rules out passing on only an old
+        // public frame or a loading placeholder from the transition.
+        let preLoadedControlFrameCount = frames.images.count
+        control.text = "Replay loaded"
+        // Commit the changed native sentinel before the SDK's own
+        // drawHierarchy(afterScreenUpdates: false) screenshot path runs.
+        // Layout alone can leave the label's previously rendered pixels intact.
+        let loadedBaseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        XCTAssertTrue(try recognizedText(loadedBaseline).contains("replay loaded"),
+                      "The native post-load control must be rendered before observing SDK frames.")
+        var replay: UIImage?
+        for _ in 0..<60 {
+            window.rootViewController?.view.setNeedsLayout()
+            window.rootViewController?.view.layoutIfNeeded()
+            window.layer.setNeedsLayout(); window.layer.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+            if let frame = frames.image, try recognizedText(frame).contains("replay loaded") {
+                replay = frame
+                break
+            }
+        }
+        // Preserve evidence even when the exact post-load control gate fails.
+        // A missing gate must not skip checking the frames that were captured.
+        let capturedFrames = frames.images
+        let diagnostic = XCTAttachment(string: """
+        ready_frame_count=\(readyFrameCount)
+        pre_loaded_control_frame_count=\(preLoadedControlFrameCount)
+        final_frame_count=\(capturedFrames.count)
+        replay_active=\(sdk.isSessionReplayActive())
+        foreground_active=\(scene.activationState == .foregroundActive)
+        fixture_key_window=\(scene.keyWindow === window)
+        loaded_control_observed=\(replay != nil)
+        """)
+        diagnostic.name = "Private replay capture diagnostics"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        if let latest = capturedFrames.last {
+            let latestAttachment = XCTAttachment(image: latest)
+            latestAttachment.name = "Private thread — latest actual SDK frame, including failure"
+            latestAttachment.lifetime = .keepAlways
+            add(latestAttachment)
+        }
+        for frame in capturedFrames {
+            let text = try recognizedText(frame)
+            for privateToken in ["maya", "chen", "patio", "lovely", "sunny", "afternoon"] {
+                XCTAssertFalse(text.contains(privateToken), "Private content must not appear in any captured frame, including startup.")
+            }
+        }
+        XCTAssertTrue(sdk.isSessionReplayActive())
+        let loadedReplay = try XCTUnwrap(replay, "Pinned SDK must supply a frame after private content has loaded.")
+        let attachment = XCTAttachment(image: loadedReplay)
+        attachment.name = "Private thread — actual offline SDK replay"; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    private func recognizedText(_ image: UIImage) throws -> String {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        try VNImageRequestHandler(cgImage: XCTUnwrap(image.cgImage)).perform([request])
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
+    }
+
     @MainActor
     func testReadableContentAndCredentialMaskingInActualReplayImage() async throws {
         // Match the SDK's capture precondition; connected scenes can still be inactive at launch.
@@ -125,8 +283,9 @@ private struct ReplayPrivacyFixture: View {
 
 private final class ReplayFrameCollector: @unchecked Sendable {
     private let lock = NSLock()
-    private var latest: UIImage?
-    var image: UIImage? { lock.lock(); defer { lock.unlock() }; return latest }
+    private var captured: [UIImage] = []
+    var image: UIImage? { lock.lock(); defer { lock.unlock() }; return captured.last }
+    var images: [UIImage] { lock.lock(); defer { lock.unlock() }; return captured }
 
     func receive(_ event: PostHogEvent) {
         guard event.event == "$snapshot", let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
@@ -136,7 +295,7 @@ private final class ReplayFrameCollector: @unchecked Sendable {
                 guard let raw = frame["base64"] as? String,
                       let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
                       let image = UIImage(data: data) else { continue }
-                lock.lock(); latest = image; lock.unlock()
+                lock.lock(); captured.append(image); lock.unlock()
             }
         }
     }

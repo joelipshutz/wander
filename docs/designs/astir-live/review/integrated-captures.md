@@ -1,14 +1,18 @@
 # Integrated Live review captures
 
-October 10, 2026 · REC-636 · Final V4 simulator candidate
+REC-636 · V12 final native candidate · Current integrated app candidate
 
-These screenshots come from the normal Wander target with authenticated review fixtures: iPhone 17 Pro and iPhone SE (3rd generation), iOS 26.5. Both devices used the same compiled Swift sources, including the final Map controls inset and accessible drawing labels. They are compressed review copies; originals and result bundles remain outside Git in `/private/tmp/rec636-evidence/`.
+These 14 images were selected from completed large and compact simulator runs of the normal Wander target. All 11 Live UI cases passed on each device. Both runs match the same frozen Swift and project-input hashes; the exact device, capture time, test and original/review image hashes are in [capture provenance](integrated/capture-provenance.json).
 
-Use the [review guide](../review-guide.md) for interactions and the [validation record](integrated-validation.md) for test results and limits. The review scheme also supplies a dated invitation; the basic landing capture uses the ordinary Live test fixture without that extra invitation. No message or invitation was sent to another person. Private-message acknowledgements are simulated, and the invitation preview is an isolated rehearsal. These images do not demonstrate hosted security/delivery or complete-query coverage.
+Tested checkout: `f3f08b3dd0a058eab4f0eecd9494b01e4846110b` on `codex/live-experience-review`, plus the frozen source manifest. The commit alone does not identify uncommitted tested changes. Xcode: 26.6 (iOS 26.5 Simulator); signing: Ad-hoc Simulator signing.
 
-## Live landing · current phone
+These are compressed complete-screen review copies. Originals, recordings and result bundles remain in `/private/tmp/rec636-evidence/`. This gallery replaces the V4 review copies; V4 remains historical evidence in its original bundles and Git history. The [standalone prototype captures](captures.md) are separately historical and do not show this implementation.
 
-![Live landing · current phone](integrated/large-live-home.jpg)
+The fixtures are fictional. Messages and invitation rehearsals do not deliver to another person; the messaging UI labels acknowledgements Simulated. Settings guide replay is optional. Stills do not establish hosted authorization/delivery, production query execution, spoken VoiceOver order or hardware gestures. See the [review guide](../review-guide.md) and [validation record](integrated-validation.md) for those boundaries.
+
+## Live landing · large phone
+
+![Live landing · large phone](integrated/large-live-home.jpg)
 
 ## Live landing · compact phone
 

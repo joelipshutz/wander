@@ -1,58 +1,79 @@
 # REC-636 integrated validation
 
-October 10, 2026 · Integrated `Wander` app · **Draft implementation; activation blocked**
+October 11, 2026 · Integrated `Wander` app · **Draft; Live remains off**
 
-This record supersedes the standalone prototype as implementation evidence. The historical [prototype validation](validation.md) and [prototype captures](captures.md) remain design references only. Selected integrated screenshots are in the [current gallery](integrated-captures.md).
+**Final candidate V12 large passed all 2,807 unit tests and all 11 Live UI journeys: 2,818 tests passed.** Isolated replay is excluded from that run. **The same built app also passed all 11 compact Live UI journeys, with no failures or skips.** The broader native gate remains incomplete: Map accessibility, inbox switcher capture and private-message replay freshness are still open.
 
-## Candidate and reproduction
+This report is the candidate/results authority for the [review guide](../review-guide.md) and [capture gallery](integrated-captures.md). A focused pass establishes the named check, not a passing full suite or hosted readiness.
 
-- Branch: `codex/live-experience-review`, based on `origin/main` commit `d9f827353648bab91a17187721b5ea41e65e1a42`. The implementation commit containing this report identifies the candidate; later documentation-only edits do not change the app.
-- Isolated worktree: `/private/tmp/wander-live-review`.
-- Review scheme: **Live Experience Review** in the normal `Wander.xcodeproj`, generated from `project.yml` with XcodeGen. It uses explicit authenticated Simulator fixtures, disables walkthrough overlays and supplies a dated received invitation. It does not activate a hosted flag.
-- Toolchain: Xcode 26.6, iOS Simulator SDK/runtime 26.5. Dedicated review devices: iPhone 17 Pro and iPhone SE (3rd generation).
-- Raw results, recordings and original captures: `/private/tmp/rec636-evidence/`, outside the worktree. Only selected compressed final screenshots are in Git.
+## Candidate and current checks
 
-Open the project, select the review scheme, and Run on either phone. For the focused gate, run the `WanderTests` target and `WanderUITests/LiveExperienceUITests`. To repeat the full native gate, run both targets without an `-only-testing` restriction. Use a new result bundle and record the actual candidate/destination.
+- Branch: `codex/live-experience-review`; integration base `d9f827353648bab91a17187721b5ea41e65e1a42`.
+- Worktree: `/private/tmp/wander-live-review`; raw evidence: `/private/tmp/rec636-evidence/`.
+- V12 source: **392 Swift files and six build inputs** match across both runs, recorded in `v12-source-hashes.json` and `v12-build-inputs.json`. Later source changes require a new candidate record.
+- Xcode 26.6 / iOS 26.5; iPhone 17 Pro and iPhone SE (3rd generation).
 
-The review scheme exercises the production Live shell, drawing, existing Feed/Profile routes and new messaging UI. Demo messages use an isolated memory repository, are labelled **nothing is delivered**, and acknowledge **Simulated**. The demo plan uses the existing invitation editor and recipient rehearsal; its detached Wanna does not write to the shared store or send an invitation. Production repository and HTTP behavior are tested separately with synthetic responses. Neither establishes hosted delivery.
+| Check | Result | Evidence and scope |
+|---|---|---|
+| V12 large | **2,818 passed: 2,807 units + 11 Live UI** | `live-v12-final-large.xcresult`; units exclude isolated `ReplayMaskingTests`. Includes final query/store/lease, messaging, recovery and first-entry search-focus source. |
+| V12 compact | **11/11 passed; no failures or skips** | `live-v12-final-compact.xcresult`; all 11 Live UI journeys using the same built app as large. |
+| Original Feed return regressions | **2/2 passed** | `live-v11-search-return.xcresult`; original automatic-focus back-button and swipe-back paths pass after restricting Discover autofocus to a new search entry. Temporary manual-focus diagnostic removed from V12. |
+| Credential replay | **Passed alone in a fresh process** | `live-v8-credential-isolated.xcresult`; does not establish private-message replay freshness. |
+| Analytics/tooling | **Contract check and 12 dashboard tests passed** | No subsequent analytics event/property changes. Demo sends suppress analytics; message-success properties are aggregate-only. |
+| SQL preparation | **Smoke-runner syntax and both rollback-preview generation checks rerun successfully; static review completed** | Both drafts remain **unpackaged, undeployed and unexecuted**. Generating rollback SQL is not database execution. |
 
-## Results
+Native units cover query/account/page fencing, accepted filter dimensions, monotonic per-row receipts before media work, lease expiry and filtered-empty-page continuation. Messaging tests use synthetic responses for retry identity, refresh/context loss, account/cancellation fences, one 401 refresh and disabled HTTP cache/cookies. They do not establish server authorization or real delivery.
 
-| Check | Observed result |
+The **Live Experience Review** scheme uses the production Live shell and existing Feed/Profile with isolated authenticated fixtures. Demo replies acknowledge **Simulated** and deliver nothing. Invitation rehearsal uses a detached Wanna, without sending an invitation or writing to the shared store; the dated received-invitation fixture exercises the existing recipient route. The [V12 gallery](integrated-captures.md) presents fourteen selected large/compact captures with candidate provenance. Original captures remain outside Git; the selected images do not prove hosted delivery or replay freshness.
+
+## Full-run failure reconciliation
+
+V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**. The table accounts for all eleven failures. Ten have subsequent focused passing rechecks; Map accessibility remains open. This is not a rerun of the whole UI suite on V12.
+
+| V6 failing test | Later result |
 |---|---|
-| V3 large, `live-final-v3-large.xcresult` | **2,781 passed: 2,770 unit + all 11 Live UI tests. Zero failures or skips.** Includes D2/D3 local filters, latest D9 semantic migration and D10 invitation routes. |
-| V3 compact, `live-final-v3-compact.xcresult` | **10 of 11 Live UI tests passed.** Feed-card scrolling failed after five full swipes; the compact check now uses shorter edge drags to avoid skipping cards and starting inside horizontal recommendations. The final V4 rerun passes on both sizes; the original failure is preserved as diagnosis history. |
-| **Final V4 compact**, `live-final-v4-compact.xcresult` | **2,781 passed: 2,770 unit + all 11 Live UI tests. Zero failures or skips.** Includes final Map top inset, accessible drawing labels and short Feed scroll gestures. |
-| **Final V4 large**, `live-final-v4-large.xcresult` | **All 11 Live UI tests passed, zero failures or skips**, using the same compiled build as final compact. Pins are clear of controls on both sizes. All 383 Swift source hashes matched the validated candidate at packaging. |
-| Full native suite, earlier integrated candidate, `app-native-full.xcresult` | **2,955 passed, 16 failed, zero skipped.** This is not a passing full-suite gate. Two older Live failures are superseded by later focused results. The other failures remain unresolved except the dark Events tab recheck below. |
-| Legacy root recheck, `legacy-root-recheck.xcresult` | **1 passed, 2 failed.** Events dark-tab navigation passed after correcting empty root inset spacing. More Filters navigation and REC-386 member-photo checks still failed. |
-| Legacy Feed audience recheck, `live-final-v2-large.xcresult` | Unit tests passed before the legacy menu-filter test failed and cascaded through later assertions. The run was stopped; **interrupted, not a pass**. Standalone Feed audience navigation remains an unresolved regression check. |
-| Real messaging transport tests | All eight passed within the V3 unit suite: account changes during authentication/response, cancellation, one 401 refresh, repeated-401 failure and no URL cache/cookies. Synthetic responses only. |
-| Messaging state tests | All 24 passed within the V3 unit suite: ambiguous-send retry identity, authoritative refresh/access failure, draft preservation, context revocation and stale-response fencing. |
-| Analytics/dashboard contract | `analytics:check` and all 12 dashboard tooling tests passed. Private-message success properties are aggregate-only; fixture messages suppress analytics. |
-| SQL draft preparation | JavaScript syntax, rollback-preview generation and static contract inspection passed. **No database execution.** |
-| New Live query | Native geometry/time/type/repository tests passed. Five proposed store-integration tests remain an unapplied patch and have not run. |
+| `AccountContactDetailsUITests/testNormalAppLaunchReachesLiveAuthentication` | **Closed — V7 signed pass.** |
+| `ImportFormRefinementUITests/testShareExtensionAutomaticallyCapturesExactlyOnce` | **Closed — V7 signed pass.** |
+| `LiveMigrationAndPrivacyUITests/testDeferredCalendarRecoverySurvivesRelaunchAndExplicitOffRollback` | **Closed — V7 and V9 pass.** |
+| `LiveMigrationAndPrivacyUITests/testPartialGuideAcknowledgementsPersistAcrossRelaunchAndRollback` | **Closed — V7 and V9 pass.** |
+| `MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting` | **Open — V7 and V9 still fail.** XCTest reports the disabled hidden field as hittable; the semantic accessibility regression remains open. This is not evidence of a VoiceOver privacy leak. |
+| `MapPlaceCardUITests/testREC386ShowsMemberPhotoThenDeletesDisposableCheckIn` | **Closed — V7 signed pass.** |
+| `OnboardingUITests/testFeedInlineSearchCoversEntryEmptyResultsNavigationAndBack` | **Closed — V11 original swipe-back pass**, alongside the original automatic-focus back-button test. |
+| `OnboardingUITests/testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible` | **Closed — V9 pass** with fresh page-value queries. |
+| `OnboardingUITests/testMapWannaAndSaveRespondToSinglePhysicalTap` | **Closed — V7 pass.** |
+| `OnboardingUITests/testReturningUserColdStartAndOrdinaryForegroundOpenFeed` | **Closed — V9 pass** with deterministic stale-checkpoint coverage; the new explicit-Profile destination check also passes. |
+| `PersonTypeaheadUITests/testCheckInAndWannaNotesUseTheSamePicker` | **Closed — V7 and V9 pass.** All seven people-picker checks passed V7. |
 
-No baseline run establishes that the outstanding native failures predate this branch. Keep them as review/activation gates rather than calling them unrelated or pre-existing.
+Recheck bundles: `live-v7-signed-recheck.xcresult` (**2,828/2,834 passed**), `live-v9-focused.xcresult` (**49/53 passed**) and `live-v11-search-return.xcresult` (**2/2 passed**). V7's stale unit source assertion was corrected; V12 all-unit verification passes. V9 passed all 41 walkthrough units, three D9 recovery checks, thread switcher privacy, carousel, both stale-checkpoint destinations and notes. Its four failures were Map accessibility, inbox switcher capture, private-message replay and Feed back-button return; V11 closes the Feed failure.
 
-## Remaining full-suite failures
+## Remaining gates
 
-The earlier full run failed founders welcome playback (two), normal live authentication (one), Events appearance (two), map filter/place behavior (two), dense-map performance (one), import/history/share-extension flows (three), onboarding (three) and the two superseded Live checks. The dark Events tab test subsequently passed; the other Events appearance check has no passing rerun. The separate standalone Feed audience menu recheck also remains unresolved.
+1. **Map accessibility:** resolve the hidden input's XCTest hittability while More Filters is open, then pass `testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting`. The disabled field's reported semantics remain a regression gate, not a proven VoiceOver privacy leak.
+2. **Inbox switcher capture:** establish the required privacy-cover observation with the Astir card fully visible. V9's card was cropped on the right with map background and no private content visible; its thread switcher check passed. The inbox capture remains unverified.
+3. **Private-message replay:** obtain a fresh post-load SDK control frame and verify private content is absent. In V10 the new public label passed native OCR, but all 18 SDK frames retained the old public “Ready” label with the private area black. No private-content leak assertion failed; stale frames cannot validate privacy. Preserve the strengthened post-load control assertion. These three open checks leave the broad native gate incomplete.
+4. **Database:** package messaging then Live-query SQL as ordered CLI-generated migrations, reconcile target/history, execute regression and metadata checks and pass rollback-only hosted smoke. Follow the [packaging instructions](../implementation-drafts/README.md). Missing RPC/schema must fail verification.
+5. **Real messaging:** verify delivery between two mutual accounts, both explicit server account flags, revocation/restoration, hard blocks, context access and same-ID retries before internal activation. Global/device flags cannot enroll participants. Reporting and soft-delete retention/export remain broader-rollout gates.
+6. **Handoff and device review:** open this isolated worktree's `Wander.xcodeproj`, verify the branch chooser and **Live Experience Review** scheme, and complete outstanding hardware drawing, spoken VoiceOver and production-volume review before claiming those properties.
 
-Founders playback has a confirmed prerequisite: `Wander/Resources/FoundersWelcome/founders-welcome.mp4` remains a Git LFS pointer in both available checkouts, and Git LFS is unavailable on the validation host. Fetch the required payload before rerunning playback. Normal authentication requires live Clerk configuration/connectivity and signed-out state; share-extension testing requires the embedded extension to be registered. Import fixtures enter their own harness, bypassing Live. These observations narrow diagnosis; they do not convert failures into passes.
+D11 is settled: **15 minutes per social activity, measured from its monotonic authorized-response receipt**; owner rows are exempt and Profile/legacy cache policy is unchanged. Initial messaging rollout is **internal-only**. Current device-location centering is not implemented; selected-city centers work. Keep `unified_live_v1` default off and the PR in draft. Native fixtures do not establish hosted activation, real delivery or TestFlight readiness.
 
-## Native review scope
+## Resume commands
 
-The 11 Live cases cover three tabs/Profile continuity; visible-area Apply/Clear/tab retention; drawer drag and original Feed modules/cards; staged filter reset/cancel; committed audience retention; Settings guide replay; private demo reply/keyboard/foreground draft; Wanna → contextual reply → existing invitation editor → preview → recipient; Nearby 5/25 km staging and tab retention; Upcoming → recipient/inbox; and drawing at the largest accessibility text size.
+Run from `/private/tmp/wander-live-review`. Both V12 result bundles are closed. Use fresh result-bundle paths for any further native run and record source identity. Run replay by itself after addressing its freshness failure; repeating the unchanged diagnostic is not a fix.
 
-Still screenshots establish visible layout only. They do not prove freehand gesture geometry on hardware, spoken VoiceOver order, production-volume performance, readable-replay exclusion, app-switcher snapshot timing or real two-account messaging. The inactive-scene cover is implemented, but actual snapshot and replay inspection remain separate requirements. D9 policy/unit coverage does not replace retained-checkpoint, fresh-account, force-quit and rollback UI validation.
+```sh
+xcrun xcresulttool get test-results summary --path /private/tmp/rec636-evidence/live-v12-final-compact.xcresult
 
-## Activation gates and restart
+xcodebuild test -project Wander.xcodeproj -scheme Wander \
+  -destination 'platform=iOS Simulator,id=21FFD105-FF94-44D6-82F0-2DF1DF4A6724' \
+  -derivedDataPath /private/tmp/rec636-evidence/FinalDerivedData \
+  -resultBundlePath /private/tmp/rec636-evidence/live-next-private-replay.xcresult \
+  -jobs 2 -parallel-testing-enabled NO \
+  -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
 
-1. **Shared query integration:** recheck and apply the prepared [Feed-only store patch](../implementation-drafts/store.patch), run its five tests, and bind committed Live queries with fixed pagination bounds. Current pins/cards filter authorized loaded Feed rows. Extend the initial time/type/polygon RPC draft for the accepted radius/category/person controls; current-location centering and eligible discovery remain pending.
-2. **Hosted contracts:** package the two SQL drafts as ordered CLI-created migrations, review the confirmed target/history, install them and verify RLS/grants, mutual/block/source checks, idempotency, pagination and quotas using the rollback-only hosted smoke suites. No schema has been deployed.
-3. **Migration:** verify retained onboarding/save/import/contact work, explicit-route priority, account changes, force-quit and rollback. Opening a destination is not completion.
-4. **Native gates:** resolve or isolate the outstanding full-suite and standalone Feed audience failures. Open this worktree's project in Xcode and verify the branch chooser and review scheme; that final GUI handoff has not been verified.
-5. **Product/privacy rollout:** D11 cache lease remains unanswered. Existing Profile/shared-cache policy is unchanged. Message reporting and soft-delete retention require a rollout decision. Readable replay, app-switcher and actual mutual-friend delivery still need operational evidence.
-
-Keep `unified_live_v1` default off and this PR in draft. `ship` classification is required because the branch contains app behavior; it is not an activation or release approval. No merge, hosted deployment, real message/invitation send or TestFlight release is part of this handoff.
+# After reviewed migrations are installed on the confirmed target:
+supabase migration list --linked
+npm --prefix scripts ci --ignore-scripts
+node scripts/supabase-smoke-test.mjs
+```

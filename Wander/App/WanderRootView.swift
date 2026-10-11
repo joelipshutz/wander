@@ -1744,7 +1744,8 @@ struct WanderRootView: View {
     @discardableResult
     private func retireWalkthroughPresentationAndDraft(
         for ownerUserID: String,
-        forceRootCleanup: Bool
+        forceRootCleanup: Bool,
+        preserveInactiveDestination: Bool = false
     ) -> Bool {
         let persistedDraft: PlaceSaveDraft?
         if let draft = placeSaveDraftStore.draft, draft.ownerUserID == ownerUserID {
@@ -1766,6 +1767,10 @@ struct WanderRootView: View {
         guard forceRootCleanup || didDiscardWalkthroughDraft else { return false }
         pendingCommittedWalkthroughDraft = nil
         interruptedSaveRecoveryMessage = nil
+        // Disabled stale progress does not own the current tab or an explicit
+        // destination. Still retire its old tutorial draft above. Expiration
+        // and a tutorial that was actually mounted keep their existing cleanup.
+        guard forceRootCleanup || !preserveInactiveDestination else { return true }
         presentationResetRequest = WanderPresentationResetRequest()
         resetRootPresentationsForDeepLink()
         selectedTab = .map
@@ -2729,7 +2734,7 @@ struct WanderRootView: View {
             isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
             isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         ), enrollCurrentUser: isEnabled)
-        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePrimaryJourney
+        let hadActiveWalkthroughPresentation = walkthroughs.hasPresentedPrimaryJourney
             || walkthroughs.isPresentingLaunchLesson
         walkthroughs.setEnabled(isEnabled)
 
@@ -2752,7 +2757,8 @@ struct WanderRootView: View {
                 walkthroughs.retireJourneyForDisabledExperience()
                 retireWalkthroughPresentationAndDraft(
                     for: userID,
-                    forceRootCleanup: hadActiveWalkthroughPresentation
+                    forceRootCleanup: hadActiveWalkthroughPresentation,
+                    preserveInactiveDestination: true
                 )
             }
             walkthroughs.activate(walkthroughSurface(for: selectedTab))
