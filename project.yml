@@ -32,6 +32,26 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  Live Experience Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        -WanderUnifiedLiveUITest: true
+        -WanderNUXFeedFixture: true
+        -WanderPlacePlanUITest: true
+        -WanderLiveUpcomingUITest: true
+        "-WanderInitialTab discover": true
+    test:
+      config: Debug
+      targets:
+        - WanderTests
+        - WanderUITests
   City and Phone Review:
     build:
       targets:

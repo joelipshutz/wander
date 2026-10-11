@@ -700,6 +700,14 @@ struct SupabaseFeedRepository: FeedRepository {
         try await followedFeed(before: before, limit: limit, onContent: { _ in })
     }
 
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        guard query.isValid else { throw WanderRemoteError.invalidResponse("Invalid Live query") }
+        return try await loadFeed(audience: audience, before: before, limit: limit, query: query, onContent: onContent)
+    }
+
     func followedFeed(
         before: String?,
         limit: Int,
@@ -717,10 +725,19 @@ struct SupabaseFeedRepository: FeedRepository {
 
     private func loadFeed(
         audience: FeedAudience?, before: String?, limit: Int,
+        query: LiveFeedQuery? = nil,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         let boundedLimit = min(max(limit, 1), 50)
-        let response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
+        let response: RemoteFollowedFeedPageDTO
+        if let query, let audience {
+            response = try await rpc.call("live_activity_feed", params: LiveActivityFeedParams(
+                input_audience: audience.rawValue, input_after: LiveFeedQuery.timestamp(query.occurredAfter),
+                input_until: LiveFeedQuery.timestamp(query.occurredBefore), input_activity_type: query.activityType.rawValue,
+                input_polygon: query.polygon, input_before: before, input_limit: boundedLimit))
+        } else {
+            response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
+        }
         // Reserve the artwork slot while the separate authorized-media read is
         // pending. A non-renderable marker prevents the card from starting a
         // provider-photo fallback that would be replaced by visit media later.
@@ -3741,6 +3758,16 @@ private struct ActivityFeedParams: Encodable {
         case before = "input_before"
         case limit = "input_limit"
     }
+}
+
+private struct LiveActivityFeedParams: Encodable {
+    let input_audience: String
+    let input_after: String?
+    let input_until: String?
+    let input_activity_type: String
+    let input_polygon: [LiveFeedQuery.Vertex]?
+    let input_before: String?
+    let input_limit: Int
 }
 
 private struct FollowedFeedParams: Encodable {

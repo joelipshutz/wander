@@ -2015,6 +2015,10 @@ extension PlaceRepository {
 
 @MainActor
 protocol FeedRepository {
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage
     func activityFeed(
         audience: FeedAudience, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
@@ -2029,6 +2033,14 @@ protocol FeedRepository {
 }
 
 extension FeedRepository {
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        // A legacy page cannot prove complete filtered pagination. Fail visibly.
+        throw WanderRemoteError.notImplemented("Live feed query")
+    }
+
     func activityFeed(
         audience: FeedAudience, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void

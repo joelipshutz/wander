@@ -1,22 +1,45 @@
 # Open Questions
 
-Last updated: 2026-10-09
+Last updated: 2026-10-10
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
 
 ## Live experience review (REC-636)
 
-The [review package](designs/astir-live/review-guide.md) records D1–D11 with
-recommendations and implementation gates. No major Profile redesign is in scope.
+The [current contract](designs/astir-live/product-spec.md) records the accepted
+Live / Lists / Profile shell, exact Feed preservation, drawing-only Your Map
+reuse, production mutual-only messaging, existing invitation reuse, D9 migration
+and D10 Upcoming separation. D2/D3 query presets/defaults are also explicitly
+accepted: Following defaults to seven days; Nearby starts at 5 km with explicit
+expansion up to 25 km under existing visibility. These decisions are settled and
+are not waiting for another approval. Local selected-city 5/25 km, loaded
+category/person and 24-hour controls now exist, with fixed bounds advanced by
+Apply or explicit refresh. Local unit/UI checks pass on the large review phone;
+final two-size results are recorded in the validation report. Complete server
+filtering/paging, current-location centering and eligible discovery remain work.
+Profile and all non-drawing Your Map tools remain unchanged.
 
-| Question | Review recommendation | Gate |
+| Unanswered question | Working recommendation | Gate |
 |---|---|---|
-| Which Your Map capabilities belong in the new Feed? | Preserve the current Profile/Your Map/Patterns experience; evaluate filtering, area selection and personal-history views individually for reuse. | D5 feature inventory; no blanket relocation. |
-| Does the circle control draw a geographic area or open a map? | Prototype area selection with explicit Apply/Cancel and accessible radius alternatives. | D4 wording and interaction approval. |
-| Which shell and first production slice should ship? | Review Live/Lists/Profile and a map/feed slice with existing social actions; phase richer plans, private messaging and Events. | D1 and D6–D7, followed by native and access-contract gates. |
+| Use freehand area selection followed by explicit Apply? | Current implementation uses a freehand draft with Apply/Cancel and an accessible visible-area alternative. | Optional D4 answer; do not describe the working default as explicit approval. |
+| Retain the committed drawn area for the account session? | Keep it on tab/detail return; clear on account change; no durable or cross-device persistence. | Optional D4 answer; relaunch persistence is not approved. |
+| How long may a new Live cache display last-authorized other-person content while offline? | D11 proposes 15 minutes since successful access validation, then reconnect; owner history retains existing policy. | **Unanswered product gate before implementing/activating a new lease.** No implicit Profile/shared-cache policy change. |
+| What reporting and account-deletion behavior should private messaging ship with? | Decide between adding message reporting/deletion now or limiting the first rollout to internal testers until the rules are settled. Current SQL denies soft-deleted accounts access but retains rows until physical deletion. | Unanswered before broad rollout; current demo and synthetic tests do not establish a retention or abuse-handling policy. |
 
-Other query, migration and offline-access choices stay in the linked decision
-register to avoid conflicting copies of the proposal.
+Complete server-side geography/time filtering and real messaging access/delivery
+validation are implementation work, not evidence already supplied by the earlier
+prototype. The current first pass uses authorized loaded Feed data; “N updates
+shown” / accessibility “N loaded updates” is not a server total. D2/D3 are
+accepted implementation work, not unresolved product recommendations. Their
+acceptance does not establish a complete query or broaden social visibility.
+
+Current drawer tabs remain visible at all detents, with handle drag/VoiceOver
+adjustment as the escape; the earlier hidden-peek-tabs/Map-pill target is not
+implemented. D9 end-to-end recovery integration and its final native/rollback
+proof remain in progress. Messaging's inactive-scene cover exists, but actual
+snapshot/replay evidence is pending. See the [integrated validation report](designs/astir-live/review/integrated-validation.md)
+for candidate-specific native results and outstanding checks; these are implementation
+and validation gaps, not reasons to reopen the accepted decisions.
 
 ## Activity privacy rollout (REC-590)
 

@@ -46,6 +46,18 @@ test("engagement and retention queries use canonical events", () => {
   assert.match(retention.query.query, /d30_percent/);
 });
 
+test("private messages measure server confirmation with coarse allowlisted surfaces only", () => {
+  const insight = insights.find(({ key }) => key === "engagement-private-messages");
+  assert.equal(insight.query.series[0].event, "private_message_sent");
+  assert.equal(insight.query.series[0].math, "total");
+  assert.deepEqual(insight.query.series[0].properties.map(({ key, value }) => ({ key, value })), [
+    { key: "surface", value: ["live", "messages"] },
+  ]);
+  assert.equal(insight.query.breakdownFilter.breakdown, "surface");
+  assert.doesNotMatch(JSON.stringify(insight.query), /message_body|recipient_id|conversation_id|context_id|client_id/);
+  assert.ok(sections.find(({ title }) => title === "Engagement").insightKeys.includes(insight.key));
+});
+
 test("notification operations includes delivery, opens, frequency, and aggregate histogram", () => {
   const section = sections.find(({ title }) => title === "Notification Operations");
   assert.equal(section.insightKeys.length, 9);

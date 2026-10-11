@@ -1,5 +1,9 @@
 # REC-636 validation record
 
+> Historical standalone-prototype evidence. The implementation and accepted
+> scope have since changed. See [integrated validation](integrated-validation.md)
+> for current native-app results and remaining gates.
+
 October 9, 2026 · Standalone product-review package
 
 ## Scope and baseline

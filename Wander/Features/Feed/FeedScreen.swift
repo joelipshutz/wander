@@ -1,5 +1,48 @@
 import SwiftUI
 
+/// A fresh request ID allows repeated pin selections to reopen the same Feed destination.
+struct FeedActivityFocusRequest: Identifiable, Equatable {
+    enum Target: Equatable { case activity, place, profile }
+
+    let id: UUID
+    let activityID: String
+    let target: Target
+
+    init(id: UUID = UUID(), activityID: String, target: Target = .activity) {
+        self.id = id
+        self.activityID = activityID
+        self.target = target
+    }
+}
+
+struct FeedSurfaceRequest: Identifiable, Equatable {
+    enum Target: Equatable { case search, notifications }
+
+    let id: UUID
+    let target: Target
+
+    init(id: UUID = UUID(), target: Target) {
+        self.id = id
+        self.target = target
+    }
+}
+
+/// Apply the host's map filter only to the store's authorized, audience-filtered tiles.
+/// Regroup after filtering so an excluded event cannot survive inside a combined card.
+enum FeedEmbeddedProjection {
+    static func groups(
+        from authorizedGroups: [FeedActivityGroup],
+        matching activityIDs: Set<String>?,
+        relativeTo now: Date = .now
+    ) -> [FeedActivityGroup] {
+        guard let activityIDs else { return authorizedGroups }
+        return FeedPresentation.groupedActivity(
+            authorizedGroups.flatMap(\.activities).filter { activityIDs.contains($0.id) },
+            relativeTo: now
+        )
+    }
+}
+
 struct FeedScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -19,6 +62,8 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
+    @State private var handledActivityFocusRequestID: UUID?
+    @State private var handledSurfaceRequestID: UUID?
     @State private var showsNotifications = false
     @EnvironmentObject private var planInbox: PlacePlanInvitationInbox
     @EnvironmentObject private var notificationBadge: NotificationBadgeStore
@@ -35,6 +80,12 @@ struct FeedScreen: View {
     private let onPresentation: (WanderDeepLinkPresentationToken) -> Void
     private let onWillDismiss: (WanderDeepLinkPresentationToken) -> Void
     private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
+    private let isEmbedded: Bool
+    private let filteredActivityIDs: Set<String>?
+    private let activityFocusRequest: FeedActivityFocusRequest?
+    private let surfaceRequest: FeedSurfaceRequest?
+    private let onPrivateReply: ((FeedActivity) -> Void)?
+    private let onRefreshRequested: () -> Void
 
     init(
         isFeedTabActive: Bool = true,
@@ -42,6 +93,12 @@ struct FeedScreen: View {
         onPresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
+        isEmbedded: Bool = false,
+        filteredActivityIDs: Set<String>? = nil,
+        activityFocusRequest: FeedActivityFocusRequest? = nil,
+        surfaceRequest: FeedSurfaceRequest? = nil,
+        onPrivateReply: ((FeedActivity) -> Void)? = nil,
+        onRefreshRequested: @escaping () -> Void = {},
         onAdd: @escaping () -> Void = {}
     ) {
         self.isFeedTabActive = isFeedTabActive
@@ -49,6 +106,12 @@ struct FeedScreen: View {
         self.onPresentation = onPresentation
         self.onWillDismiss = onWillDismiss
         self.onDidDismiss = onDidDismiss
+        self.isEmbedded = isEmbedded
+        self.filteredActivityIDs = filteredActivityIDs
+        self.activityFocusRequest = activityFocusRequest
+        self.surfaceRequest = surfaceRequest
+        self.onPrivateReply = onPrivateReply
+        self.onRefreshRequested = onRefreshRequested
         self.onAdd = onAdd
 
     }
@@ -63,6 +126,11 @@ struct FeedScreen: View {
     private var audienceSelection: Binding<FeedAudience> {
         Binding(get: { store.feedAudience }, set: { store.selectFeedAudience($0) })
     }
+    private var displayedActivityGroups: [FeedActivityGroup] {
+        FeedEmbeddedProjection.groups(
+            from: store.visibleFeedActivityGroups, matching: filteredActivityIDs
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -70,27 +138,29 @@ struct FeedScreen: View {
                 ZStack(alignment: .top) {
                     placesSurface
 
-                    floatingHeader
-                        .background {
-                            GeometryReader { proxy in
-                                Color.clear.preference(
-                                    key: FeedFloatingHeaderHeightPreferenceKey.self,
-                                    value: proxy.size.height
-                                )
+                    if !isEmbedded {
+                        floatingHeader
+                            .background {
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: FeedFloatingHeaderHeightPreferenceKey.self,
+                                        value: proxy.size.height
+                                    )
+                                }
                             }
-                        }
-                        .offset(
-                            y: isFloatingHeaderHidden
-                                ? -(floatingHeaderHeight + WanderTheme.spacing4)
-                                : 0
-                        )
-                        .opacity(isFloatingHeaderHidden ? 0 : 1)
-                        .allowsHitTesting(!isFloatingHeaderHidden)
-                        .animation(
-                            AstirFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
-                            value: isFloatingHeaderHidden
-                        )
-                        .zIndex(3)
+                            .offset(
+                                y: isFloatingHeaderHidden
+                                    ? -(floatingHeaderHeight + WanderTheme.spacing4)
+                                    : 0
+                            )
+                            .opacity(isFloatingHeaderHidden ? 0 : 1)
+                            .allowsHitTesting(!isFloatingHeaderHidden)
+                            .animation(
+                                AstirFloatingHeaderBehavior.animation(reduceMotion: reduceMotion),
+                                value: isFloatingHeaderHidden
+                            )
+                            .zIndex(3)
+                    }
                 }
                 .opacity(isShowingSearch ? 0 : 1)
                 .allowsHitTesting(!isShowingSearch)
@@ -118,7 +188,22 @@ struct FeedScreen: View {
                 floatingHeaderHeight = height
             }
             .onChange(of: isFeedTabActive) { _, isActive in
-                if isActive { store.selectFeedAudience(.everyone) }
+                if isActive {
+                    // Live owns a committed map/Feed query across tab returns.
+                    // The standalone Feed retains its existing entry reset.
+                    if !isEmbedded { store.selectFeedAudience(.everyone) }
+                    handleSurfaceRequest()
+                    handleActivityFocusRequest()
+                }
+            }
+            .onChange(of: surfaceRequest?.id, initial: true) { _, _ in
+                handleSurfaceRequest()
+            }
+            .onChange(of: activityFocusRequest?.id, initial: true) { _, _ in
+                handleActivityFocusRequest()
+            }
+            .onChange(of: filteredActivityIDs) { _, _ in
+                handleActivityFocusRequest()
             }
             .task(id: "\(auth.isSignedIn)-\(store.currentUser.id)-\(store.feedAudience.rawValue)") {
                 // Commit the selected tab's first frame before starting the
@@ -218,6 +303,9 @@ struct FeedScreen: View {
                 selectedProfile = nil
                 placeSaveFlow = nil
                 savedMessage = nil
+                focusedActivityID = nil
+                handledActivityFocusRequestID = activityFocusRequest?.id
+                handledSurfaceRequestID = surfaceRequest?.id
                 isShowingSearch = false
                 showsNotifications = false
                 resetFloatingHeaderScrollTracking(revealHeader: true)
@@ -326,7 +414,7 @@ struct FeedScreen: View {
                     updateFloatingHeaderVisibility(scrollOffset: offset)
                 }
                 .accessibilityIdentifier("feed.places.scroll")
-                .accessibilityValue("\(store.visibleFeedActivityGroups.count) activities loaded")
+                .accessibilityValue("\(displayedActivityGroups.count) activities loaded")
                 .onPreferenceChange(FeedPagingMetricsKey.self) { metrics in
                     defer { previousPagingMetrics = metrics }
                     guard let metrics, metrics.reachedBottom(after: previousPagingMetrics),
@@ -352,6 +440,7 @@ struct FeedScreen: View {
                     scrollToFocusedActivity(activityID, proxy: proxy)
                 }
                 .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
+                    handleActivityFocusRequest()
                     scrollToFocusedActivity(focusedActivityID, proxy: proxy)
                     scrollForIntroduction(walkthroughs.feedIntroductionScrollTarget, proxy: proxy)
                 }
@@ -368,7 +457,7 @@ struct FeedScreen: View {
                 proxy.scrollTo("nux.feed.top", anchor: .top)
             }
         case .recent:
-            guard let id = FeedPresentation.groupedActivity(page?.activity ?? []).first?.id else { return }
+            guard let id = displayedActivityGroups.first?.id else { return }
             setFloatingHeaderHidden(true)
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
                 proxy.scrollTo(id, anchor: .center)
@@ -377,13 +466,13 @@ struct FeedScreen: View {
     }
 
     private var feedContentTopInset: CGFloat {
-        floatingHeaderHeight + WanderTheme.spacing3
+        isEmbedded ? WanderTheme.spacing3 : floatingHeaderHeight + WanderTheme.spacing3
     }
 
     private func updateFloatingHeaderVisibility(
         scrollOffset: CGFloat
     ) {
-        guard !isShowingSearch else { return }
+        guard !isEmbedded, !isShowingSearch else { return }
         if walkthroughs.feedIntroductionScrollTarget == .recent { return }
 
         if scrollOffset <= AstirFloatingHeaderBehavior.topRevealOffset {
@@ -494,14 +583,17 @@ struct FeedScreen: View {
             }
 
             FeedSectionHeading(title: "Activity", detail: freshnessDetail, audience: audienceSelection)
-            if visibleActivity.isEmpty {
+            if filteredActivityIDs != nil, displayedActivityGroups.isEmpty {
+                filteredActivityEmptyState
+            } else if visibleActivity.isEmpty {
                 FeedAudienceEmptyState(audience: audienceSelection)
             } else {
                 FeedActivityList(
-                    groups: store.visibleFeedActivityGroups,
+                    groups: displayedActivityGroups,
                     openProfile: openProfile,
                     openPlace: openPlace,
-                    openList: openList
+                    openList: openList,
+                    onPrivateReply: onPrivateReply
                 )
             }
 
@@ -523,6 +615,14 @@ struct FeedScreen: View {
                     retry: { _ = await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
                 )
                 .accessibilityIdentifier("feed.loadMoreRetry")
+            } else if filteredActivityIDs != nil, store.hasMoreFeed {
+                // A short filtered page may never create a scroll-to-bottom transition.
+                Button("Load more activity") {
+                    Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                }
+                .font(AstirTypography.body)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityIdentifier("feed.filteredLoadMore")
             }
 
             if store.feedLoadState == .stale {
@@ -537,7 +637,9 @@ struct FeedScreen: View {
             FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)
         } else {
             FeedSectionHeading(title: "Activity", audience: audienceSelection)
-            if store.feedAudience != .everyone {
+            if filteredActivityIDs != nil {
+                filteredActivityEmptyState
+            } else if store.feedAudience != .everyone {
                 FeedAudienceEmptyState(audience: audienceSelection)
             } else {
                 FeedEmptyState(
@@ -549,6 +651,15 @@ struct FeedScreen: View {
                 )
             }
         }
+    }
+
+    private var filteredActivityEmptyState: some View {
+        Text("No activity in this page matches your map filters.")
+            .font(AstirTypography.body)
+            .foregroundStyle(astirBrandMode.secondaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, WanderTheme.spacing4)
+            .accessibilityIdentifier("feed.filteredEmpty")
     }
 
     private var feedPeopleRecommendations: [DiscoverPeopleRecommendation] {
@@ -609,6 +720,7 @@ struct FeedScreen: View {
     }
 
     private func refresh() async {
+        onRefreshRequested()
         await refresh(force: true)
     }
 
@@ -660,18 +772,44 @@ struct FeedScreen: View {
     }
 
     private func scrollToFocusedActivity(_ activityID: String?, proxy: ScrollViewProxy) {
-        guard let activityID,
-              let group = FeedPresentation.groupedActivity(page?.activity ?? []).first(where: {
+        guard let activityID else { return }
+        store.revealFeedActivity(activityID)
+        guard let group = displayedActivityGroups.first(where: {
                   $0.activities.contains { $0.id == activityID }
               })
         else { return }
-        store.revealFeedActivity(activityID)
         focusedActivityID = nil
         Task { @MainActor in
             await Task.yield()
             withAnimation(.easeOut(duration: 0.25)) {
                 proxy.scrollTo(group.id, anchor: .center)
             }
+        }
+    }
+
+    private func handleSurfaceRequest() {
+        guard isFeedTabActive, let request = surfaceRequest,
+              handledSurfaceRequestID != request.id else { return }
+        handledSurfaceRequestID = request.id
+        switch request.target {
+        case .search: openDiscoverSearch()
+        case .notifications: showsNotifications = true
+        }
+    }
+
+    private func handleActivityFocusRequest() {
+        guard isFeedTabActive, let request = activityFocusRequest,
+              handledActivityFocusRequestID != request.id else { return }
+        store.revealFeedActivity(request.activityID)
+        guard let activity = displayedActivityGroups.flatMap(\.activities)
+            .first(where: { $0.id == request.activityID }) else { return }
+        handledActivityFocusRequestID = request.id
+        switch request.target {
+        case .activity: focusedActivityID = activity.id
+        case .place:
+            if let place = activity.place { openPlace(place) }
+            else if let list = activity.list { openList(list) }
+        case .profile: openProfile(activity.actor)
         }
     }
 
@@ -1187,6 +1325,7 @@ private struct FeedActivityList: View {
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
+    var onPrivateReply: ((FeedActivity) -> Void)? = nil
 
     var body: some View {
         LazyVStack(spacing: WanderTheme.spacing3) {
@@ -1197,6 +1336,13 @@ private struct FeedActivityList: View {
                     openPlace: openPlace,
                     openList: openList
                 )
+                .contextMenu {
+                    if let onPrivateReply, group.primaryActivity.actor.relationship == .mutual {
+                        Button("Reply privately", systemImage: "bubble.left") {
+                            onPrivateReply(group.primaryActivity)
+                        }
+                    }
+                }
                 .id(group.id)
                 .walkthroughTarget(
                     group.id == groups.first?.id ? .feedRecent : nil

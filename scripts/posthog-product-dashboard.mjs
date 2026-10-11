@@ -186,6 +186,11 @@ from events where event = 'engagement_action_performed' and ${productionSQL}
   and timestamp >= now() - interval 30 day group by need, action order by need, unique_users desc limit 100`),
   },
   {
+    key: "engagement-private-messages", name: "Connect — confirmed private message volume",
+    description: "Server-confirmed private messages from Live or Messages. An ambiguous retry counts once after confirmation; this does not measure delivery or reads. No message content, recipient, conversation, or context identifiers.",
+    query: trends([eventTotal("private_message_sent", [{ ...property("surface", "live"), value: ["live", "messages"] }])], { breakdown: "surface" }),
+  },
+  {
     key: "save-editor-funnel", name: "Saves — editor to submitted to local completion",
     description: "Unique-user diagnostic funnel for new/repeat saves; edits excluded. Synced and pending both count as local completion. Not an attempt-level conversion rate or a server-success claim.",
     query: funnel([
@@ -387,6 +392,7 @@ const sections = [
       "engagement-surfaces",
       "engagement-human-needs",
       "engagement-actions",
+      "engagement-private-messages",
       "save-editor-funnel",
       "save-editor-outcomes",
       "discovery-use",
@@ -454,6 +460,13 @@ function assertDefinition() {
   }
   if (sections.at(-1)?.title !== "Notification Operations") {
     throw new Error("Notification Operations must remain the bottom dashboard section");
+  }
+  const privateMessages = insights.find(({ key }) => key === "engagement-private-messages");
+  if (privateMessages?.query.breakdownFilter?.breakdown !== "surface" ||
+      privateMessages.query.series.some(({ event: name, properties }) =>
+        name !== "private_message_sent" || properties.some(({ key, value }) =>
+          key !== "surface" || value.some((surface) => !["live", "messages"].includes(surface))))) {
+    throw new Error("Private messaging insight must use only the coarse surface allowlist");
   }
   return { dashboard: "Astir Launch — Product Behavior", sections: sections.length, insights: insights.length };
 }

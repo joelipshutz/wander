@@ -32,6 +32,12 @@ PostHog project 557259's **Settings → Product analytics → Person display nam
 
 The [project recording switch](https://us.posthog.com/project/557259/settings/project-replay) must remain enabled. `sampleRate` is unset so Mobile recording conditions control sampling remotely; **Record user sessions** remains the server-side kill switch. The user supplied a working TestFlight recording on September 25. New visibility and identity properties require an app update; this cannot unmask previously uploaded frames or change what an older binary captures.
 
+Private messaging adds a narrower privacy boundary: conversation participants,
+previews, context titles, message bodies, and composer inputs use
+`sessionReplayMasked()`. Ordinary public/shared app content keeps the existing
+REC-626 treatment. The authenticated simulator-only messaging fixture always
+uses Noop analytics and displays an explicit simulation label.
+
 ### Release verification
 
 1. Run `BuildConfigurationTests` and store identity/profile tests; verify the complete unit suite.
@@ -70,7 +76,7 @@ engagement_action_performed
 
 | Human need | Current action values | Product behavior |
 |---|---|---|
-| Connect | `follow_created`, `activity_liked`, `activity_comment_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared` | Build and interact with a trusted people graph. |
+| Connect | `follow_created`, `activity_liked`, `activity_comment_liked`, `activity_commented`, `contact_invite_sent`, `shared_visit_invites_queued`, `trusted_profile_viewed`, `place_plan_shared`, `private_message_sent` | Build and interact with a trusted people graph. |
 | Expression | `place_saved`, `check_in_created`, `list_created`, `list_place_added`, `recommendation_shared` | Record and communicate personal taste and place memory. |
 | Status | `save_streak_advanced`, `shared_visit_accepted`, `own_profile_viewed` | See progress, participation, and the identity created by one’s contributions. |
 
@@ -121,6 +127,7 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | `activity_like_changed` | Like state succeeds locally/remotely | `is_liked`, `outcome` |
 | `activity_comment_like_changed` | Comment like/unlike succeeds locally/remotely | `is_liked`, `outcome`; no comment, activity, author IDs or content |
 | `activity_comment_created` | Comment succeeds locally/remotely | `outcome` |
+| `private_message_sent` | A matching server acknowledgement confirms the explicit send, or an authorized refresh reconciles its pending client ID; once per attempted client ID in the account-scoped composer | `surface=live` or `messages`; Boolean `has_context`; never body, preview, participant, message/conversation/client/context IDs, titles, or raw errors |
 | `activity_share_opened` | Share preview opens | `ticket_kind` |
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
 | `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |
@@ -134,6 +141,17 @@ SQL tables use fixed 30-day operational windows and 90-day cohort windows; dashb
 | `notification_opened` | A routable local/remote notification response is accepted, or a received plan successfully opens from Notifications | allowlisted `notification_type`; `delivery_channel` (`local`, `remote`, `in_app`, `unknown`); coarse `route` |
 | `calendar_reservation_sync_completed` | An authorized Apple Calendar scan reconciles privacy-minimal reservation intents with the notification platform | coarse `reason`; detected, resolved, queued, and cancelled counts |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
+
+Private messages also emit `engagement_action_performed` with `need=connect`,
+`action=private_message_sent`, the same allowlisted `surface`, and
+`has_context`. Opening, history hydration, draft changes, unconfirmed sends,
+and retries do not independently emit either success event. The pending client
+ID is used only in memory for deduplication; it never enters analytics. A
+confirmed send means server persistence, not delivery, reading, or notification
+acceptance. The managed Engagement tile counts confirmed send volume by the
+two allowed surfaces. No private payload is used in its query. Release
+verification must also inspect masking on inbox, transcript, contextual reply,
+and keyboard/composer views with fictional messages.
 
 The shared add-to-lists picker attributes successful additions to its entry
 surface: `map` for Map and place-profile actions, `discover` for Discover search

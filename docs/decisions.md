@@ -1,20 +1,69 @@
 # Decisions
 
-Last updated: 2026-10-09
+Last updated: 2026-10-10
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
-## Profile continuity during the Live exploration (REC-636, October 9)
+## Live integration and Profile continuity (REC-636, October 10)
 
-Ryan confirmed that the Live/Feed redesign must not substantially change the
-Profile tab. Preserve its existing hierarchy and personal-history entry points.
-Your Map may contribute selected capabilities to the new Feed; moving or removing
-the complete Your Map experience is not approved. Keep Your Map and Patterns
-available while that feature-level decision is reviewed.
+Ryan accepted **Live / Lists / Profile** as the primary tabs, with Add as an
+action. Live combines the map and existing Feed through a directly draggable
+drawer. Remove the redundant Live/place memories/your people header and the
+separate drawer arrow, while retaining accessible alternatives. Initial camera
+framing responds to authorized activity density and then respects user pan.
+Wanna pins use a muted outlined bookmark with a distinct shape from Check-ins.
 
-The [Live review package](designs/astir-live/review-guide.md) proposes navigation,
-map/feed interaction and migration details. Those proposals remain review choices;
-this scope decision does not approve them or change production behavior.
+D2/D3 query presets and defaults are explicitly accepted. Following uses the
+existing authorized audience and defaults to seven days. Nearby begins at 5 km
+with explicit expansion up to 25 km; it never expands social visibility. Local
+controls now use an explicitly selected public city center, loaded category/person
+choices and 24-hour/7-day/30-day/all-time ranges. Time bounds remain fixed until
+Apply or explicit refresh; drawn geometry stays independent. New native evidence,
+complete server filtering/paging, current-location centering and separately
+eligible discovery remain pending and are distinct from product approval.
+
+Recent activity must remain the current Feed experience: the existing cards,
+grouping and actions, with **Invite people to Astir → People worth following →
+Activity** in their existing order. Profile retains identity/social, streak,
+recent activity, Your Map and calendar. **Only area drawing is reused from Your
+Map.** Full owner/member maps, Patterns, history, lenses, Snapshot, sharing and
+return routes stay in Profile; no wholesale or additional owner-map relocation
+is approved.
+
+D6/D7 approve production private messaging with a **mutual-only baseline**.
+Implement actual access, block/report, delivery/retry and privacy contracts;
+existing public comments are not private replies. Wanna planning reuses the
+existing place-plan invitation composer/repository and its truthful share/inbox
+outcome. It does not invent acceptance, attendance or a new planning backend.
+D9's dismissible account/version migration teaching and D10's separately labelled
+Upcoming plans/events are accepted. Events retains its own lifecycle and access
+contracts.
+
+The D10 source now provides a compact Upcoming invitations entry and a separate
+sheet with at most three dated invitations, ascending by suggested time. It
+reuses the account's latest 100 received invitations and existing recipient/full
+inbox routes. This is not a complete calendar, sent-plan list or RSVP/attendance
+system. Undated invitations remain in the ordinary inbox. Native validation for
+this new slice remains pending; real Events discovery is still separate work.
+
+The first integration projects existing authorized loaded Feed data. It does
+not yet implement the planned server-filtered Live query. Its visible count is
+“N updates shown,” with accessibility label “N loaded updates”; neither is a
+server total. Current tabs stay visible at every drawer detent; full height exits
+through handle drag or VoiceOver adjustment, without a Map pill. This differs
+from the earlier hidden-peek-tabs/Map-pill target and is not evidence that target
+was completed. Earlier standalone-prototype captures do not validate the current
+integrated app. The [integrated validation report](designs/astir-live/review/integrated-validation.md)
+records current native results and remaining reruns. D9 end-to-end integration
+is in progress; final migration/rollback proof remains pending. Messaging's
+inactive-scene cover is implemented, with actual snapshot/replay evidence still
+pending. Production release and hosted validation remain separate gates.
+
+Freehand drawing with explicit Apply and account-session area retention remain
+unanswered optional working defaults. D11's proposed 15-minute lease for a new
+Live social cache remains an unanswered product gate; existing shared-cache and
+Profile policy is unchanged. See the [current contract](designs/astir-live/product-spec.md)
+and [remaining questions](open-questions.md#live-experience-review-rec-636).
 
 ## Historical data and testing scope (REC-590, September 29)
 

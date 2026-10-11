@@ -175,7 +175,9 @@ struct WanderApp: App {
                     includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderFollowNotificationUITest")
                 ),
                 placePlanInvitationRepository: SimulatorPlacePlanInvitationRepository(
-                    includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
+                    includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest"),
+                    suggestedAt: ProcessInfo.processInfo.arguments.contains("-WanderLiveUpcomingUITest")
+                        ? Calendar.current.date(byAdding: .day, value: 1, to: .now) : nil
                 ),
                 eventsInterestRepository: SimulatorEventsInterestRepository(),
                 accountContactDetailsRepository: simulatorContactDetails,

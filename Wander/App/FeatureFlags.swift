@@ -69,9 +69,19 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     case placeProfileActionVariant = "place_profile_action_variant"
     case profileFeedbackV1 = "profile_feedback_v1"
     case notificationRepromptCampaign = "notification_reprompt_campaign"
+    case unifiedLiveV1 = "unified_live_v1"
 
     var definition: FeatureFlagDefinition {
         switch self {
+        case .unifiedLiveV1:
+            FeatureFlagDefinition(
+                title: "Unified Live experience",
+                summary: "Combines Map and Feed with three tabs and private replies. Restart to apply.",
+                bundledDefault: .boolean(false),
+                integerRange: nil,
+                allowsRemoteAccountOverride: true,
+                isEditableOnDevice: true
+            )
         case .firstVisitNUX:
             FeatureFlagDefinition(
                 title: "First-visit NUX",
@@ -252,6 +262,7 @@ struct FeatureFlagOverrideStore {
              .semanticPlaceSearchV1,
              .socialImportApifyGeminiV1,
              .profileFeedbackV1,
+             .unifiedLiveV1,
              .notificationRepromptCampaign:
             nil
         }

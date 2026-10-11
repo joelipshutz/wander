@@ -1,5 +1,10 @@
 # Astir Live review prototype
 
+> Historical design prototype. For the current integrated implementation, open
+> the repository's `Wander.xcodeproj` and select **Live Experience Review** on
+> an iPhone simulator. See [the current review guide](../../docs/designs/astir-live/review-guide.md).
+> This earlier demo contains superseded controls and simulated journeys.
+
 An isolated native SwiftUI review app for iOS 17 and later. Its bundle identifier is `com.grayline.astirlivereview`. It has no package dependencies and does not modify, link to, or connect with the production Wander app.
 
 ## Opening the prototype
