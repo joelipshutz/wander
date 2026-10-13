@@ -45,13 +45,29 @@ jobs:
         run: |
           brew install xcodegen
           xcodegen generate
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/build-devices.json"
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'build-devices.json').read_text())['devices']
+          choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                     for runtime, rows in devices.items() if 'iOS' in runtime
+                     for d in rows if d['name'] == 'iPhone 17 Pro']
+          assert choices, 'No existing iPhone 17 Pro simulator'
+          _, device = max(choices, key=lambda item: item[0])
+          # Initialize CoreSimulator before Xcode resolves a destination on a
+          # fresh runner. OS:latest can otherwise expose only placeholders.
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
+          Path(os.environ['RUNNER_TEMP'], 'build-device-id.txt').write_text(device['udid'])
+          PY
+          BUILD_DEVICE_ID="$(cat "$RUNNER_TEMP/build-device-id.txt")"
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -destination "platform=iOS Simulator,id=$BUILD_DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
             -testProductsPath "$RUNNER_TEMP/Parent.xctestproducts" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme AstirClip \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -destination "platform=iOS Simulator,id=$BUILD_DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
             -testProductsPath "$RUNNER_TEMP/Clip.xctestproducts" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
