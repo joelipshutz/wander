@@ -52,6 +52,7 @@ final class ReplayMaskingTests: XCTestCase {
         config.setBeforeSend { event in frames.receive(event); return nil }
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
+        var layoutPump = ReplayLayoutPump(interval: .seconds(config.sessionReplayConfig.throttleDelay))
 
         // Require the recorder to produce a frame before creating any private
         // view. Never reset the collector: first presentation is part of the proof.
@@ -59,8 +60,7 @@ final class ReplayMaskingTests: XCTestCase {
         var observedReadyFrameCount = 0
         let readyDeadline = ContinuousClock.now.advanced(by: .seconds(30))
         while ContinuousClock.now < readyDeadline {
-            container.view.setNeedsLayout(); container.view.layoutIfNeeded()
-            window.layer.setNeedsLayout(); window.layer.layoutIfNeeded()
+            layoutPump.requestLayoutWhenReady(window: window, frames: frames)
             try await Task.sleep(for: .milliseconds(100))
             let available = frames.images
             // Re-running Vision on the same image competes with the SDK's
@@ -68,7 +68,7 @@ final class ReplayMaskingTests: XCTestCase {
             guard available.count > observedReadyFrameCount else { continue }
             observedReadyFrameCount = available.count
             if sdk.isSessionReplayActive(), let frame = available.last,
-               try recognizedText(frame).contains("replay ready") {
+               try await Self.recognizedText(frame).contains("replay ready") {
                 recorderReady = true
                 break
             }
@@ -82,6 +82,8 @@ final class ReplayMaskingTests: XCTestCase {
             fixture_key_window=\(scene.keyWindow === window)
             sdk_style_draws_ready_success=\(window.successfulReadyDraws)
             sdk_style_draws_failed=\(window.failedDraws)
+            fixture_frames_delivered=\(frames.imageCount(windowID: window.hash))
+            fixture_layout_requests=\(layoutPump.requestCount)
             """)
             diagnostic.name = "Private replay readiness diagnostics"
             diagnostic.lifetime = .keepAlways
@@ -116,14 +118,13 @@ final class ReplayMaskingTests: XCTestCase {
         var baseline: UIImage?
         var baselineText = ""
         for _ in 0..<60 {
-            container.view.setNeedsLayout(); container.view.layoutIfNeeded()
-            window.layer.setNeedsLayout(); window.layer.layoutIfNeeded()
+            layoutPump.requestLayoutWhenReady(window: window, frames: frames)
             try await Task.sleep(for: .milliseconds(100))
             let capture = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
                 window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
             }
             baseline = capture
-            baselineText = try recognizedText(capture)
+            baselineText = try await Self.recognizedText(capture)
             if baselineText.contains("maya chen"), baselineText.contains("patio") { break }
         }
         XCTAssertTrue(baselineText.contains("maya chen"), "Baseline must contain the actual fictional participant.")
@@ -141,20 +142,19 @@ final class ReplayMaskingTests: XCTestCase {
         let loadedBaseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
-        XCTAssertTrue(try recognizedText(loadedBaseline).contains("replay loaded"),
+        let loadedBaselineText = try await Self.recognizedText(loadedBaseline)
+        XCTAssertTrue(loadedBaselineText.contains("replay loaded"),
                       "The native post-load control must be rendered before observing SDK frames.")
         var replay: UIImage?
         var observedLoadedFrameCount = 0
         let loadedDeadline = ContinuousClock.now.advanced(by: .seconds(30))
         while ContinuousClock.now < loadedDeadline {
-            window.rootViewController?.view.setNeedsLayout()
-            window.rootViewController?.view.layoutIfNeeded()
-            window.layer.setNeedsLayout(); window.layer.layoutIfNeeded()
+            layoutPump.requestLayoutWhenReady(window: window, frames: frames)
             try await Task.sleep(for: .milliseconds(100))
             let available = frames.images
             guard available.count > observedLoadedFrameCount else { continue }
             observedLoadedFrameCount = available.count
-            if let frame = available.last, try recognizedText(frame).contains("replay loaded") {
+            if let frame = available.last, try await Self.recognizedText(frame).contains("replay loaded") {
                 replay = frame
                 break
             }
@@ -173,6 +173,8 @@ final class ReplayMaskingTests: XCTestCase {
         sdk_style_draws_ready_success=\(window.successfulReadyDraws)
         sdk_style_draws_loaded_success=\(window.successfulLoadedDraws)
         sdk_style_draws_failed=\(window.failedDraws)
+        fixture_frames_delivered=\(frames.imageCount(windowID: window.hash))
+        fixture_layout_requests=\(layoutPump.requestCount)
         """)
         diagnostic.name = "Private replay capture diagnostics"
         diagnostic.lifetime = .keepAlways
@@ -184,7 +186,7 @@ final class ReplayMaskingTests: XCTestCase {
             add(latestAttachment)
         }
         for frame in capturedFrames {
-            let text = try recognizedText(frame)
+            let text = try await Self.recognizedText(frame)
             for privateToken in ["maya", "chen", "patio", "lovely", "sunny", "afternoon"] {
                 XCTAssertFalse(text.contains(privateToken), "Private content must not appear in any captured frame, including startup.")
             }
@@ -195,11 +197,17 @@ final class ReplayMaskingTests: XCTestCase {
         attachment.name = "Private thread — actual offline SDK replay"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
-    private func recognizedText(_ image: UIImage) throws -> String {
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        try VNImageRequestHandler(cgImage: XCTUnwrap(image.cgImage)).perform([request])
-        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
+    private nonisolated static func recognizedText(_ image: UIImage) async throws -> String {
+        // Vision can take seconds on a hosted simulator. Keep UIKit's main
+        // queue available for the SDK's genuine screenshot rendering while
+        // inspecting the immutable captured image.
+        try await Task.detached(priority: .utility) {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            try VNImageRequestHandler(cgImage: XCTUnwrap(image.cgImage)).perform([request])
+            return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: " ").lowercased()
+        }.value
     }
 
     @MainActor
@@ -341,11 +349,48 @@ private final class ReplayProbeWindow: UIWindow {
     }
 }
 
+/// Pace only the test's extra layout requests, never the recorder or native UI.
+/// The SDK's render guard ends before its serial mask/WebP encoding completes.
+/// Wait for delivery progress before requesting another layout. A renderer or
+/// encoder can drop a frame, so retry after ten seconds rather than requiring
+/// native draw and delivered image counts to match forever.
+@MainActor
+private struct ReplayLayoutPump {
+    private let interval: Duration
+    private var nextRequestAt = ContinuousClock.now
+    private var retryAt = ContinuousClock.now
+    private var deliveredCountAtRequest: Int?
+    private(set) var requestCount = 0
+
+    init(interval: Duration) { self.interval = interval }
+
+    mutating func requestLayoutWhenReady(window: ReplayProbeWindow, frames: ReplayFrameCollector) {
+        let now = ContinuousClock.now
+        let delivered = frames.imageCount(windowID: window.hash)
+        let deliveryAdvanced = deliveredCountAtRequest.map { delivered > $0 } ?? true
+        guard now >= nextRequestAt, deliveryAdvanced || now >= retryAt else { return }
+        deliveredCountAtRequest = delivered
+        nextRequestAt = now.advanced(by: interval)
+        retryAt = now.advanced(by: .seconds(10))
+        requestCount += 1
+        window.rootViewController?.view.setNeedsLayout()
+        window.rootViewController?.view.layoutIfNeeded()
+        window.layer.setNeedsLayout()
+        window.layer.layoutIfNeeded()
+    }
+}
+
 private final class ReplayFrameCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var captured: [UIImage] = []
+    private var windowImageCounts: [Int: Int] = [:]
     var image: UIImage? { lock.lock(); defer { lock.unlock() }; return captured.last }
     var images: [UIImage] { lock.lock(); defer { lock.unlock() }; return captured }
+
+    func imageCount(windowID: Int) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return windowImageCounts[windowID, default: 0]
+    }
 
     func receive(_ event: PostHogEvent) {
         guard event.event == "$snapshot", let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
@@ -355,7 +400,13 @@ private final class ReplayFrameCollector: @unchecked Sendable {
                 guard let raw = frame["base64"] as? String,
                       let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
                       let image = UIImage(data: data) else { continue }
-                lock.lock(); captured.append(image); lock.unlock()
+                lock.lock()
+                captured.append(image)
+                // The pinned SDK assigns each screenshot wireframe its actual
+                // UIWindow hash. Use this only for pacing; freshness still
+                // requires the visible post-hydration sentinel in SDK pixels.
+                if let windowID = frame["id"] as? Int { windowImageCounts[windowID, default: 0] += 1 }
+                lock.unlock()
             }
         }
     }

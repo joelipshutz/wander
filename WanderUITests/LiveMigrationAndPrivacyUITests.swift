@@ -113,7 +113,7 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         capture("D9-device-acknowledged-after-rollback")
     }
 
-    func testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview() throws {
+    func testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview() async throws {
         let app = launchLive()
         app.buttons["Messages"].tap()
         let conversation = app.buttons["messaging.conversation.63600000-0000-0000-0000-000000000010"]
@@ -121,12 +121,12 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         let activeText = try recognizedText(in: app.screenshot())
         XCTAssertTrue(activeText.contains("maya chen"), "OCR must read the active fictional participant before checking concealment.")
         capture("privacy-inbox-active-fixture")
-        try assertAppSwitcherCover(app, forbidden: ["maya chen", "little patio", "sunny afternoon"], name: "privacy-inbox-switcher-covered")
+        try await assertAppSwitcherCover(app, forbidden: ["maya chen", "little patio", "sunny afternoon"], name: "privacy-inbox-switcher-covered")
         app.activate()
         XCTAssertTrue(conversation.waitForExistence(timeout: 10))
     }
 
-    func testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn() throws {
+    func testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn() async throws {
         let app = launchLive()
         app.buttons["Messages"].tap()
         let conversation = app.buttons["messaging.conversation.63600000-0000-0000-0000-000000000010"]
@@ -139,7 +139,7 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, "Orchid signal private draft")
         XCTAssertTrue(try recognizedText(in: app.screenshot()).contains("orchid signal"))
         capture("privacy-thread-active-keyboard-fixture")
-        try assertAppSwitcherCover(app, forbidden: ["orchid", "signal", "draft", "maya chen", "little patio", "sunny afternoon"],
+        try await assertAppSwitcherCover(app, forbidden: ["orchid", "signal", "draft", "maya chen", "little patio", "sunny afternoon"],
                                   name: "privacy-thread-switcher-covered")
         app.activate()
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
@@ -222,7 +222,7 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         }
     }
 
-    private func assertAppSwitcherCover(_ app: XCUIApplication, forbidden: [String], name: String) throws {
+    private func assertAppSwitcherCover(_ app: XCUIApplication, forbidden: [String], name: String) async throws {
         // Real system gesture: pull from the home indicator and hold to reveal
         // the app-switcher card. A home-screen-only screenshot is insufficient.
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995))
@@ -236,57 +236,66 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         // The cover can be readable in a transient animation frame while the
         // card ultimately settles offscreen. Accept only a stable, centered
         // label before deciding that no framing gesture is needed.
-        if !waitForStableSwitcherCover(timeout: 3) {
+        var stableScreenshot = try await stableSwitcherScreenshot(timeout: 3)
+        if stableScreenshot == nil {
             springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
                 .press(forDuration: 0.05,
                        thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.5)),
                        withVelocity: .slow, thenHoldForDuration: 0.2)
+            stableScreenshot = try await stableSwitcherScreenshot(timeout: 8)
         }
-        let hasStableCover = waitForStableSwitcherCover(timeout: 8)
         // Preserve the actual failed switcher frame even when this test stops
         // at the first assertion; a missing cover label alone is inconclusive.
-        let screenshot = XCUIScreen.main.screenshot()
+        let screenshot = stableScreenshot ?? XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = "REC-636-\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
-        XCTAssertTrue(hasStableCover, "The privacy cover must settle in the visible app-switcher card.")
+        XCTAssertNotNil(stableScreenshot, "The privacy cover must settle in the visible app-switcher card.")
         let text = try recognizedText(in: screenshot)
         XCTAssertTrue(text.contains("private messages"), "The app-switcher capture must show the actual inactive privacy cover.")
         for token in forbidden { XCTAssertFalse(text.contains(token), "Private fixture content is visible in the app-switcher snapshot: \(token)") }
     }
 
-    private func waitForStableSwitcherCover(timeout: TimeInterval) -> Bool {
-        var previousBounds: CGRect?
-        var previousTime: TimeInterval?
-        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            let observations = try? self.recognizedLines(in: XCUIScreen.main.screenshot())
-            guard let line = observations?.first(where: {
-                $0.topCandidates(1).first?.string.lowercased().contains("private messages") == true
-            }) else {
-                previousBounds = nil
-                previousTime = nil
-                return false
+    private func stableSwitcherScreenshot(timeout: TimeInterval) async throws -> XCUIScreenshot? {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(timeout))
+        while ContinuousClock.now < deadline {
+            let first = XCUIScreen.main.screenshot()
+            // Measure rendered stability between distinct captures, rather
+            // than counting expensive Vision work inside a predicate timeout.
+            try await Task.sleep(for: .milliseconds(500))
+            guard ContinuousClock.now < deadline else { return nil }
+            let second = XCUIScreen.main.screenshot()
+            guard ContinuousClock.now < deadline else { return nil }
+            let firstBounds = try await Self.switcherCoverBounds(in: first.pngRepresentation)
+            let secondBounds = try await Self.switcherCoverBounds(in: second.pngRepresentation)
+            if let firstBounds, let secondBounds,
+               abs(firstBounds.midX - secondBounds.midX) < 0.015,
+               abs(firstBounds.midY - secondBounds.midY) < 0.015,
+               abs(firstBounds.width - secondBounds.width) < 0.015 {
+                // The full-screen forbidden-content scan below inspects this
+                // same second frame, never a different post-check screenshot.
+                return second
             }
+        }
+        return nil
+    }
+
+    private nonisolated static func switcherCoverBounds(in data: Data) async throws -> CGRect? {
+        try await Task.detached(priority: .utility) {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .fast
+            request.usesLanguageCorrection = false
+            request.recognitionLanguages = ["en-US"]
+            try VNImageRequestHandler(data: data).perform([request])
+            guard let line = request.results?.first(where: {
+                $0.topCandidates(1).first?.string.lowercased().contains("private messages") == true
+            }) else { return nil }
             let bounds = line.boundingBox
             guard (0.3...0.7).contains(bounds.midX), bounds.minX > 0.05, bounds.maxX < 0.95,
-                  bounds.minY > 0.1, bounds.maxY < 0.9 else {
-                previousBounds = nil
-                previousTime = nil
-                return false
-            }
-            let now = ProcessInfo.processInfo.systemUptime
-            if let previousBounds, let previousTime,
-               abs(bounds.midX - previousBounds.midX) < 0.015,
-               abs(bounds.midY - previousBounds.midY) < 0.015,
-               abs(bounds.width - previousBounds.width) < 0.015 {
-                return now - previousTime >= 0.5
-            }
-            previousBounds = bounds
-            previousTime = now
-            return false
-        }, object: nil)
-        return XCTWaiter.wait(for: [settled], timeout: timeout) == .completed
+                  bounds.minY > 0.1, bounds.maxY < 0.9 else { return nil }
+            return bounds
+        }.value
     }
 
     private func recognizedText(in screenshot: XCUIScreenshot) throws -> String {
