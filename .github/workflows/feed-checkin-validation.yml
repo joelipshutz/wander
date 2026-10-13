@@ -7,6 +7,8 @@ on:
       - 'Wander/Features/Feed/**'
       - 'Wander/Features/Add/PlaceSaveAttributePolicy.swift'
       - 'Wander/Features/Map/MapScreen.swift'
+      - 'Wander/DesignSystem/PersonMentionField.swift'
+      - 'WanderTests/PersonMention*Tests.swift'
       - 'Wander/Services/FeedModels.swift'
       - 'Wander/Services/WanderLocalStore.swift'
       - 'WanderTests/Feed*Tests.swift'
@@ -15,6 +17,8 @@ on:
       - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
+      - 'WanderUITests/FeedAudienceUITests.swift'
+      - 'WanderUITests/MapFilterInteractionUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
 
@@ -68,16 +72,26 @@ jobs:
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
+          -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
-      # SDK replay capture owns process-wide observers; validate in a fresh test host.
-      - name: Verify replay masking in an isolated process
+      # Replay capture owns process-wide SDK state. Each scenario starts a fresh
+      # test host; both remain required checks.
+      - name: Verify private-message replay in an isolated process
         if: success() || failure()
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/ReplayMaskingTests
-          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=NO
+          -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage
+          -resultBundlePath "$RUNNER_TEMP/replay-private.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Verify credential replay in an isolated process
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage
+          -resultBundlePath "$RUNNER_TEMP/replay-credentials.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Stop large simulator
         if: always()
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
@@ -88,6 +102,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Generic Simulator build
         if: success() || failure()
@@ -99,7 +114,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small replay; do
+          for size in large small replay-private replay-credentials; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -113,5 +128,6 @@ jobs:
             ${{ runner.temp }}/evidence
             ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
-            ${{ runner.temp }}/replay.xcresult
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
           retention-days: 14

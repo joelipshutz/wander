@@ -4,6 +4,32 @@ import SwiftUI
 
 @MainActor
 final class PersonMentionVisibilityTests: XCTestCase {
+    func testContainerRetainsNativeMeasurementAndChildWhenHidden() {
+        let view = PersonMentionNativeInput.MentionTextView()
+        view.font = .preferredFont(forTextStyle: .body)
+        view.isScrollEnabled = false
+        view.text = "Short note"
+        let container = PersonMentionNativeInput.InputContainerView(textView: view)
+        container.frame = CGRect(x: 0, y: 0, width: 180, height: 100)
+        container.layoutIfNeeded()
+        let proposal = CGSize(width: 180, height: CGFloat.greatestFiniteMagnitude)
+        let shortHeight = container.sizeThatFits(proposal).height
+        view.text = Array(repeating: "A longer note wraps onto additional lines.", count: 5).joined(separator: " ")
+        let longSize = container.sizeThatFits(proposal)
+        XCTAssertGreaterThan(longSize.height, shortHeight)
+        XCTAssertEqual(longSize, view.sizeThatFits(proposal))
+        XCTAssertEqual(container.intrinsicContentSize, view.intrinsicContentSize)
+        XCTAssertEqual(view.frame, container.bounds)
+        container.setInputVisibility(false)
+        XCTAssertTrue(container.subviews.first === view)
+        XCTAssertEqual(container.sizeThatFits(proposal), longSize, "Hiding must preserve native sizing and text")
+        XCTAssertEqual(container.accessibilityElements?.count, 0)
+        container.setInputVisibility(true)
+        XCTAssertTrue(container.subviews.first === view)
+        XCTAssertEqual(container.accessibilityElements?.count, 1)
+        XCTAssertTrue(container.accessibilityElements?.first as? UITextView === view)
+    }
+
     func testHideAndRevealPreserveNativeTextMentionsCaretAndEditor() {
         let mention = PersonMention(userID: "caitlin", handle: "cait123", name: "Caitlin Cortez", location: 5, length: 15)
         let state = InputState(text: "With @Caitlin Cortez tomorrow", mentions: [mention], caret: NSRange(location: 22, length: 0))

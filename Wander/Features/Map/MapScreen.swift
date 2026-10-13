@@ -9507,11 +9507,14 @@ private struct SearchBar: View {
 
     private func searchChrome(_ input: AnyView) -> some View {
         HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(astirBrandMode.secondaryText)
+            if isVisible {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(astirBrandMode.secondaryText)
+                    .accessibilityHidden(true)
+            }
             input
             Spacer()
-            if !draftQuery.isEmpty {
+            if isVisible && !draftQuery.isEmpty {
                 Button {
                     queryCommitTask?.cancel()
                     draftQuery = ""
@@ -9521,14 +9524,18 @@ private struct SearchBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(astirBrandMode.secondaryText)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Clear map search")
                 .accessibilityIdentifier("map.searchClear")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
-        .contentShape(Rectangle())
+        // Keep hit shapes on the controls: a row-wide shape expands Clear's
+        // accessibility frame across the native editor.
         .mapSearchCapsuleSurface()
         .overlay {
             if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {

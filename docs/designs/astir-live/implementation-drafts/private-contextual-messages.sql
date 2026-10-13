@@ -189,6 +189,11 @@ begin
     or not app.private_message_context_allowed(viewer, input_recipient_id, input_context_kind, input_context_id)
   then raise exception 'private_message_unavailable'; end if;
   perform pg_advisory_xact_lock(hashtextextended('private-message:' || viewer, 0));
+  -- Eligibility may change while waiting. Recheck before either admitting a
+  -- new pair or reusing an existing conversation from this contextual entry.
+  if not app.private_message_pair_allowed(viewer, input_recipient_id)
+    or not app.private_message_context_allowed(viewer, input_recipient_id, input_context_kind, input_context_id)
+  then raise exception 'private_message_unavailable'; end if;
   select id into thread_id from public.private_conversations
     where low_user_id = least(viewer, input_recipient_id) and high_user_id = greatest(viewer, input_recipient_id);
   if thread_id is null then
@@ -200,6 +205,11 @@ begin
     select id into thread_id from public.private_conversations
       where low_user_id = least(viewer, input_recipient_id) and high_user_id = greatest(viewer, input_recipient_id);
   end if;
+  -- Reciprocal starts use different sender locks and may also wait on the
+  -- unique pair insert. Recheck its context after that wait; the serializer
+  -- independently rechecks participant eligibility before returning the pair.
+  if not app.private_message_context_allowed(viewer, input_recipient_id, input_context_kind, input_context_id)
+  then raise exception 'private_message_unavailable'; end if;
   return public.private_message_conversation(thread_id);
 end;
 $$;

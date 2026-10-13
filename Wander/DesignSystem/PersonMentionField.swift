@@ -221,8 +221,9 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> MentionTextView {
+    func makeUIView(context: Context) -> InputContainerView {
         let view = MentionTextView()
+        let container = InputContainerView(textView: view)
         view.backgroundColor = .clear
         view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         view.textContainer.lineFragmentPadding = 0
@@ -240,10 +241,11 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         view.returnKeyType = isSearch ? .search : (submitOnReturn ? .send : .default)
         view.allowsEditingTextAttributes = false
         context.coordinator.setInputVisibility(isVisible, for: view)
-        return view
+        return container
     }
 
-    static func dismantleUIView(_ view: MentionTextView, coordinator: Coordinator) {
+    static func dismantleUIView(_ container: InputContainerView, coordinator: Coordinator) {
+        let view = container.textView
         coordinator.accessoryUpdateTask?.cancel()
         if coordinator.parent.editor.view === view {
             coordinator.parent.editor.view = nil
@@ -251,8 +253,8 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
     }
 
-    func updateUIView(_ view: MentionTextView, context: Context) {
-        update(view, coordinator: context.coordinator)
+    func updateUIView(_ container: InputContainerView, context: Context) {
+        update(container.textView, coordinator: context.coordinator)
     }
 
     func update(_ view: MentionTextView, coordinator: Coordinator) {
@@ -308,14 +310,48 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         return UIFontMetrics(forTextStyle: style).scaledFont(for: font)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: MentionTextView, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: InputContainerView, context: Context) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
+        let view = uiView.textView
         let lineHeight = regularFont.lineHeight
-        let desired = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let desired = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
         let minimum = lineHeight * CGFloat(minimumLines) + 12
         let maximum = lineHeight * CGFloat(maximumLines) + 12
-        if uiView.isScrollEnabled != (desired > maximum) { uiView.isScrollEnabled = desired > maximum }
+        if view.isScrollEnabled != (desired > maximum) { view.isScrollEnabled = desired > maximum }
         return CGSize(width: width, height: max(minimum, min(maximum, desired)))
+    }
+
+    /// The Map host can export a represented UITextView even while its native
+    /// visibility flags exclude it. Keep the editor as a persistent child of a
+    /// plain represented view so UIKit controls that child's accessibility tree.
+    final class InputContainerView: UIView {
+        let textView: MentionTextView
+
+        init(textView: MentionTextView) {
+            self.textView = textView
+            super.init(frame: .zero)
+            backgroundColor = .clear
+            isAccessibilityElement = false
+            setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(textView)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            textView.frame = bounds
+        }
+
+        override var intrinsicContentSize: CGSize { textView.intrinsicContentSize }
+        override func sizeThatFits(_ size: CGSize) -> CGSize { textView.sizeThatFits(size) }
+
+        func setInputVisibility(_ visible: Bool) {
+            isUserInteractionEnabled = visible
+            accessibilityElementsHidden = !visible
+            accessibilityElements = visible ? [textView] : []
+        }
     }
 
     final class MentionTextView: UITextView {
@@ -330,6 +366,10 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             addSubview(placeholder)
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func invalidateIntrinsicContentSize() {
+            super.invalidateIntrinsicContentSize()
+            (superview as? InputContainerView)?.invalidateIntrinsicContentSize()
+        }
         override func deleteBackward() {
             if markedTextRange == nil {
                 let selection = selectedRange
@@ -375,6 +415,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             // Do not rely on parent here: pendingText can intentionally retain
             // an older parent snapshot until the latest keystroke publishes.
             isVisible = visible
+            (view.superview as? InputContainerView)?.setInputVisibility(visible)
             view.isHidden = !visible
             view.isUserInteractionEnabled = visible
             view.isAccessibilityElement = visible

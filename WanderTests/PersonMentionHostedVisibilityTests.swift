@@ -30,11 +30,15 @@ final class PersonMentionHostedVisibilityTests: XCTestCase {
         // initial hidden render as well as later hide/show updates.
         try await settle(window: window, editor: editor, visible: false)
         let view = try XCTUnwrap(editor.view)
+        let container = try XCTUnwrap(view.superview as? PersonMentionNativeInput.InputContainerView)
         let coordinator = try XCTUnwrap(editor.coordinator)
         let text = state.text
         let mentions = state.mentions
         let caret = state.caret
         XCTAssertTrue(view.window === window)
+        XCTAssertTrue(container.textView === view)
+        XCTAssertFalse(container.isAccessibilityElement, "Only the native editor should be an accessibility element")
+        XCTAssertEqual(view.frame, container.bounds)
         assertHidden(view)
         XCTAssertEqual(view.text, text)
         XCTAssertEqual(view.selectedRange, caret)
@@ -42,6 +46,7 @@ final class PersonMentionHostedVisibilityTests: XCTestCase {
         state.isVisible = true
         try await settle(window: window, editor: editor, visible: true)
         assertVisible(view)
+        XCTAssertTrue(view.superview === container)
         let attributedText = NSAttributedString(attributedString: view.attributedText)
 
         state.isVisible = false
@@ -49,6 +54,7 @@ final class PersonMentionHostedVisibilityTests: XCTestCase {
         assertHidden(view)
         XCTAssertFalse(view.isFirstResponder)
         XCTAssertTrue(editor.view === view, "Hiding must retain the native editor")
+        XCTAssertTrue(view.superview === container, "Hiding must retain its represented container")
         XCTAssertTrue(editor.coordinator === coordinator)
         XCTAssertEqual(view.attributedText, attributedText)
         XCTAssertEqual(view.selectedRange, caret)
@@ -59,6 +65,7 @@ final class PersonMentionHostedVisibilityTests: XCTestCase {
         try await settle(window: window, editor: editor, visible: true)
         assertVisible(view)
         XCTAssertTrue(editor.view === view)
+        XCTAssertTrue(view.superview === container)
         XCTAssertTrue(editor.coordinator === coordinator)
         XCTAssertEqual(view.attributedText, attributedText)
         XCTAssertEqual(view.selectedRange, caret)
@@ -72,6 +79,10 @@ final class PersonMentionHostedVisibilityTests: XCTestCase {
         XCTAssertFalse(view.isAccessibilityElement, file: file, line: line)
         XCTAssertTrue(view.accessibilityElementsHidden, file: file, line: line)
         XCTAssertNil(view.hitTest(CGPoint(x: view.bounds.midX, y: view.bounds.midY), with: nil), file: file, line: line)
+        let container = view.superview as? PersonMentionNativeInput.InputContainerView
+        XCTAssertTrue(container?.accessibilityElementsHidden == true, file: file, line: line)
+        XCTAssertEqual(container?.accessibilityElements?.count, 0, file: file, line: line)
+        XCTAssertNil(container?.hitTest(CGPoint(x: view.frame.midX, y: view.frame.midY), with: nil), file: file, line: line)
     }
 
     private func assertVisible(_ view: UITextView, file: StaticString = #filePath, line: UInt = #line) {
@@ -80,6 +91,14 @@ final class PersonMentionHostedVisibilityTests: XCTestCase {
         XCTAssertTrue(view.isAccessibilityElement, file: file, line: line)
         XCTAssertFalse(view.accessibilityElementsHidden, file: file, line: line)
         XCTAssertNotNil(view.hitTest(CGPoint(x: view.bounds.midX, y: view.bounds.midY), with: nil), file: file, line: line)
+        let container = view.superview as? PersonMentionNativeInput.InputContainerView
+        XCTAssertFalse(container?.accessibilityElementsHidden ?? true, file: file, line: line)
+        XCTAssertEqual(container?.accessibilityElements?.count, 1, file: file, line: line)
+        XCTAssertTrue(container?.accessibilityElements?.first as? UITextView === view, file: file, line: line)
+        XCTAssertTrue(container?.isUserInteractionEnabled == true, file: file, line: line)
+        let hit = container?.hitTest(CGPoint(x: view.frame.midX, y: view.frame.midY), with: nil)
+        XCTAssertTrue(hit === view || hit?.isDescendant(of: view) == true,
+                      "A tap through the represented container must reach its editor", file: file, line: line)
     }
 
     private func settle(window: UIWindow, editor: PersonMentionInputController, visible: Bool) async throws {

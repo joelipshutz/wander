@@ -186,12 +186,23 @@ begin
   if public.private_message_history(thread_id)->'items'<>'[]'::jsonb
     or public.private_message_conversation(thread_id)->'lastMessagePreview'<>'null'::jsonb
     or public.private_message_inbox()->'items'<>'[]'::jsonb then raise exception 'revoked context leaked'; end if;
+  -- Sequential access/recovery contracts; the lock-wait race also requires
+  -- a second session that revokes the source while start waits for its lock.
+  begin perform public.private_message_start(recipient,'activity',activity_id); raise exception 'revoked activity reopened conversation';
+  exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
+  begin perform public.private_message_start(recipient,'place',fixture_place_id); raise exception 'revoked place reopened conversation';
+  exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
   begin perform public.private_message_send(thread_id,'A private reply',client_id,'activity',activity_id); raise exception 'revoked retry leaked acknowledgment';
   exception when raise_exception then if sqlerrm<>'private_message_unavailable' then raise; end if; end;
   perform public.private_message_send(thread_id,'A separate private message',gen_random_uuid());
   if jsonb_array_length(public.private_message_history(thread_id)->'items')<>1 then raise exception 'noncontext message lost'; end if;
   reset role;
   update public.user_places set visibility='followers' where id=saved_id;
+  set local role authenticated;
+  if (public.private_message_start(recipient,'activity',activity_id)->>'id')::uuid is distinct from thread_id
+    or (public.private_message_start(recipient,'place',fixture_place_id)->>'id')::uuid is distinct from thread_id
+  then raise exception 'restored context did not reuse the original conversation'; end if;
+  reset role;
   update public.user_places set deleted_at=clock_timestamp() where id=saved_id;
   set local role authenticated;
   if jsonb_array_length(public.private_message_history(thread_id)->'items')<>1
@@ -273,5 +284,99 @@ begin
   reset role;
 end;
 $test$;
+
+-- Exercise the daily new-pair quota without making 50 real start calls. Every
+-- seeded row and RPC write is synthetic and remains inside this outer rollback.
+do $conversation_quota_test$
+declare
+  quota_sender text := 'user_codex_pm_quota_sender';
+  other_sender text := 'user_codex_pm_quota_other';
+  peers text[]; handles text[]; allowed_peer text;
+  quota_place_id uuid; existing_thread_id uuid; fiftieth_thread_id uuid;
+  unrelated_thread_id uuid; replacement_thread_id uuid; payload jsonb;
+  venue jsonb := '{"canonical_name":"Conversation Quota Smoke Park","category":"coffee_tea_sweets","primary_category":"coffee_tea_sweets","latitude":0,"longitude":0,"source_provider":"codex_smoke","source_provider_place_id":"rec636-private-conversation-quota","confidence":1}';
+begin
+  perform set_config('request.jwt.claim.sub','',true);
+  perform set_config('request.jwt.claim.canonical_user_id','',true);
+  select array_agg('user_codex_pm_quota_peer_' || n order by n),
+         array_agg('codex_pm_quota_peer_' || n order by n)
+    into peers, handles from generate_series(1,51) n;
+  -- Abort rather than adopt, update or delete a preexisting identity or place.
+  if exists(select 1 from public.profiles
+      where id=any(array[quota_sender,other_sender] || peers)
+        or handle=any(array['codex_pm_quota_sender','codex_pm_quota_other'] || handles))
+    or exists(select 1 from public.places where source_provider='codex_smoke'
+      and source_provider_place_id='rec636-private-conversation-quota')
+  then raise exception 'conversation quota fixture collision'; end if;
+
+  insert into public.profiles(id,handle,display_name,is_private_profile) values
+    (quota_sender,'codex_pm_quota_sender','Quota Sender',false),
+    (other_sender,'codex_pm_quota_other','Other Quota Sender',false);
+  insert into public.profiles(id,handle,display_name,is_private_profile)
+    select peers[n],handles[n],'Quota Peer ' || n,false from generate_series(1,51) n;
+  insert into public.feature_flags(key,user_id,enabled,value_type,integer_value)
+    select 'unified_live_v1',fixture_id,true,'boolean',null
+    from unnest(array[quota_sender,other_sender,peers[1],peers[50],peers[51]]) fixture_id;
+  foreach allowed_peer in array array[other_sender,peers[1],peers[50],peers[51]] loop
+    insert into public.follows(follower_user_id,followed_user_id,source)
+      values(quota_sender,allowed_peer,'username'),(allowed_peer,quota_sender,'username');
+  end loop;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',quota_sender,'role','authenticated')::text,true);
+  set local role authenticated;
+  payload := public.save_own_place(venue,
+    '{"status":"been","visibility":"followers","source_type":"manual","nearby_confirmed":false}','[]');
+  quota_place_id := (payload->>'place_id')::uuid;
+  reset role;
+
+  insert into public.private_conversations(low_user_id,high_user_id,created_by,created_at)
+    select least(quota_sender,peers[n]),greatest(quota_sender,peers[n]),quota_sender,
+      clock_timestamp()-interval '1 hour' from generate_series(1,49) n;
+  select id into strict existing_thread_id from public.private_conversations
+    where low_user_id=least(quota_sender,peers[1]) and high_user_id=greatest(quota_sender,peers[1]);
+  set local role authenticated;
+  fiftieth_thread_id := (public.private_message_start(peers[50],'place',quota_place_id)->>'id')::uuid;
+  if fiftieth_thread_id is null then raise exception '50th daily conversation rejected'; end if;
+  begin
+    perform public.private_message_start(peers[51],'place',quota_place_id);
+    raise exception '51st daily conversation accepted';
+  exception when raise_exception then
+    if sqlerrm<>'private_message_rate_limited' then raise; end if;
+  end;
+  if (public.private_message_start(peers[1],'place',quota_place_id)->>'id')::uuid is distinct from existing_thread_id
+    or (public.private_message_start(peers[50],'place',quota_place_id)->>'id')::uuid is distinct from fiftieth_thread_id
+  then raise exception 'daily quota blocked existing conversation reuse'; end if;
+  reset role;
+  if (select count(*) from public.private_conversations where created_by=quota_sender)<>50
+    or exists(select 1 from public.private_conversations
+      where low_user_id=least(quota_sender,peers[51]) and high_user_id=greatest(quota_sender,peers[51]))
+  then raise exception 'daily quota rejection or reuse changed conversation count'; end if;
+
+  -- Receiving a new conversation does not spend the recipient's creator quota.
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',other_sender,'role','authenticated')::text,true);
+  set local role authenticated;
+  unrelated_thread_id := (public.private_message_start(quota_sender,'place',quota_place_id)->>'id')::uuid;
+  if unrelated_thread_id is null then raise exception 'another sender inherited daily conversation quota'; end if;
+  reset role;
+  if (select count(*) from public.private_conversations where created_by=other_sender)<>1
+    or (select count(*) from public.private_conversations where created_by=quota_sender)<>50
+  then raise exception 'daily conversation quota charged the wrong creator'; end if;
+
+  -- Move one fixture safely outside the rolling window, avoiding timing-sensitive
+  -- equality at exactly 24 hours. The older conversation must remain intact.
+  update public.private_conversations set created_at=clock_timestamp()-interval '25 hours'
+    where low_user_id=least(quota_sender,peers[2]) and high_user_id=greatest(quota_sender,peers[2]);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',quota_sender,'role','authenticated')::text,true);
+  set local role authenticated;
+  replacement_thread_id := (public.private_message_start(peers[51],'place',quota_place_id)->>'id')::uuid;
+  if replacement_thread_id is null then raise exception 'expired daily window did not restore conversation capacity'; end if;
+  if (public.private_message_start(other_sender,'place',quota_place_id)->>'id')::uuid is distinct from unrelated_thread_id
+  then raise exception 'recipient-created conversation was duplicated at daily quota'; end if;
+  reset role;
+  if (select count(*) from public.private_conversations where created_by=quota_sender)<>51
+    or (select count(*) from public.private_conversations where created_by=quota_sender
+      and created_at>clock_timestamp()-interval '1 day')<>50
+  then raise exception 'daily conversation window counted expired rows or lost history'; end if;
+end;
+$conversation_quota_test$;
 
 rollback;

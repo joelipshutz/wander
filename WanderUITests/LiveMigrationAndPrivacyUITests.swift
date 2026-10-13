@@ -233,16 +233,16 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         // the card's center before releasing, then verify the rendered cover.
         // Process foreground state does not identify an inactive switcher card.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        if (try? recognizedText(in: XCUIScreen.main.screenshot()).contains("private messages")) != true {
+        // The cover can be readable in a transient animation frame while the
+        // card ultimately settles offscreen. Accept only a stable, centered
+        // label before deciding that no framing gesture is needed.
+        if !waitForStableSwitcherCover(timeout: 3) {
             springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
                 .press(forDuration: 0.05,
                        thenDragTo: springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.5)),
                        withVelocity: .slow, thenHoldForDuration: 0.2)
         }
-        let covered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            (try? self.recognizedText(in: XCUIScreen.main.screenshot()).contains("private messages")) == true
-        }, object: nil)
-        let coverResult = XCTWaiter.wait(for: [covered], timeout: 8)
+        let hasStableCover = waitForStableSwitcherCover(timeout: 8)
         // Preserve the actual failed switcher frame even when this test stops
         // at the first assertion; a missing cover label alone is inconclusive.
         let screenshot = XCUIScreen.main.screenshot()
@@ -250,19 +250,56 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         attachment.name = "REC-636-\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
-        XCTAssertEqual(coverResult, .completed)
+        XCTAssertTrue(hasStableCover, "The privacy cover must settle in the visible app-switcher card.")
         let text = try recognizedText(in: screenshot)
         XCTAssertTrue(text.contains("private messages"), "The app-switcher capture must show the actual inactive privacy cover.")
         for token in forbidden { XCTAssertFalse(text.contains(token), "Private fixture content is visible in the app-switcher snapshot: \(token)") }
     }
 
+    private func waitForStableSwitcherCover(timeout: TimeInterval) -> Bool {
+        var previousBounds: CGRect?
+        var previousTime: TimeInterval?
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let observations = try? self.recognizedLines(in: XCUIScreen.main.screenshot())
+            guard let line = observations?.first(where: {
+                $0.topCandidates(1).first?.string.lowercased().contains("private messages") == true
+            }) else {
+                previousBounds = nil
+                previousTime = nil
+                return false
+            }
+            let bounds = line.boundingBox
+            guard (0.3...0.7).contains(bounds.midX), bounds.minX > 0.05, bounds.maxX < 0.95,
+                  bounds.minY > 0.1, bounds.maxY < 0.9 else {
+                previousBounds = nil
+                previousTime = nil
+                return false
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if let previousBounds, let previousTime,
+               abs(bounds.midX - previousBounds.midX) < 0.015,
+               abs(bounds.midY - previousBounds.midY) < 0.015,
+               abs(bounds.width - previousBounds.width) < 0.015 {
+                return now - previousTime >= 0.5
+            }
+            previousBounds = bounds
+            previousTime = now
+            return false
+        }, object: nil)
+        return XCTWaiter.wait(for: [settled], timeout: timeout) == .completed
+    }
+
     private func recognizedText(in screenshot: XCUIScreenshot) throws -> String {
+        try recognizedLines(in: screenshot).compactMap { $0.topCandidates(1).first?.string }
+            .joined(separator: " ").lowercased()
+    }
+
+    private func recognizedLines(in screenshot: XCUIScreenshot) throws -> [VNRecognizedTextObservation] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(data: screenshot.pngRepresentation).perform([request])
-        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
-            .joined(separator: " ").lowercased()
+        return request.results ?? []
     }
 
     private func capture(_ name: String) {

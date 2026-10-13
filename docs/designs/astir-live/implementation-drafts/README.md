@@ -12,11 +12,23 @@ D11 is approved and implemented as session-only, per-activity monotonic authoriz
 
 ## Package and verify
 
-1. Inspect `supabase --version`, `supabase migration new --help` and `supabase db push --help`. Review the confirmed linked target and migration history before any hosted change.
+1. Inspect `supabase --version`, `supabase migration new --help` and `supabase db push --help`. Review the confirmed linked target and migration history before any hosted change. Do not replay old migrations or repair unrelated history as part of this feature. Use a reviewed, targeted deployment of only the new ordered pair; a CLI push is acceptable only if its dry run identifies exactly those two files.
 2. Run `supabase migration new private_contextual_messages` first. Copy reviewed [private-contextual-messages.sql](private-contextual-messages.sql) into the CLI-generated file and replace its draft-status comments. This creates the messaging contract and dormant Boolean `unified_live_v1` registry row while preserving existing keys/ranges.
 3. Run `supabase migration new live_activity_feed` second. Copy [live-feed.sql](live-feed.sql) into that CLI-generated file. It adds the complete Live query RPC, polygon validator and time index without replacing legacy Feed APIs or visibility helpers. Do not invent migration filenames or apply documentation drafts directly.
 4. Review both generated migrations and run their rollback-only regressions. Verify radius/category/person predicates precede the limit, all filters bind the cursor, viewer taxonomy matches the native projection, and no authorized source subset broadens. Run the integrated native store/query/lease tests and appropriate regression suite.
-5. Apply through the approved migration workflow to the confirmed target, verify `supabase migration list --linked`, inspect function/grant metadata and run hosted smoke. Activation remains a separate internal rollout step through the full-launch flag platform.
+5. Apply through the approved migration workflow to the confirmed target, then compare local and hosted migration records, inspect function/grant metadata and run hosted smoke. If the migration tool allocates its own version, reconcile the returned version with the local filename before another deployment. Keep the global `unified_live_v1` value false. Activation remains a separate internal rollout step through the full-launch flag platform.
+
+## Two-account verification protocol
+
+Use two designated internal test accounts, mutually following each other, with explicit operator-owned account flags. Keep the global flag off. Use a shared synthetic place and synthetic message text; record pass/fail and aggregate counts without saving credentials or private message bodies in evidence.
+
+1. Start from the same Wanna context on both accounts. Confirm the existing invitation route is unchanged, then send a private message, fetch it on the other account, reply and mark it read. Relaunch and verify server-acknowledged history and read state.
+2. Send the same client UUID concurrently and after an interrupted response. Both successful replies must identify the same message and history must contain one row. Concurrent reciprocal conversation starts must return the same conversation ID. Concurrent sends from opposite participants must both finish without deadlock.
+3. Remove either account's approval, remove a mutual follow, block in each direction and revoke the quoted source in separate trials. Existing and fresh inbox/history/send/retry/read requests must respect each change. Restore only the fixture state between trials. Global enablement or a device override must never replace account approval.
+4. Verify Live type/time/category/person/radius/drawn-area filters against known synthetic results, including a second page and a cursor reused with a different query/account. Verify a broad initial camera in sparse data, a tighter default in dense data and no automatic reframing after a manual pan.
+5. Go offline after an authorized Live refresh. Social rows must disappear after their individual 15-minute leases; owner rows and Profile history remain. Resume, change accounts, background the messaging inbox/thread and verify no stale private state is exposed. Actual replay and app-switcher captures remain separate required evidence.
+
+Quota boundaries and authorization during lock waits need controlled synthetic fixtures and two database sessions; do not flood real accounts to reach limits. At 19 messages in the minute, two simultaneous new sends by one sender must yield one acceptance and one rate limit, while an idempotent retry still succeeds. Hold the sender advisory lock, start a contextual request in another session, revoke its source and release the lock: the waiting request must reject access. A reciprocal-start test must also cover the unique-pair conflict wait. The rollback SQL suite covers single-session limits and access changes; it does not prove these concurrent cases or real client authentication.
 
 ## Verification status and commands
 

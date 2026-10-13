@@ -761,17 +761,19 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Hidden Map dock accessibility tree"
+        hierarchy.lifetime = .keepAlways
+        self.add(hierarchy)
         if search.isHittable {
-            let hierarchy = XCTAttachment(string: app.debugDescription)
-            hierarchy.name = "Unexpected hidden Map editor accessibility tree"
-            hierarchy.lifetime = .keepAlways
-            self.add(hierarchy)
             let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             capture.name = "Map dock hidden while accessibility reports hittable"
             capture.lifetime = .keepAlways
             self.add(capture)
         }
+        XCTAssertFalse(search.exists, "The hidden editor must leave the accessibility tree")
         XCTAssertFalse(search.isHittable)
+        XCTAssertFalse(app.images["magnifyingglass"].exists, "The search icon is decorative; the native field supplies its label")
         XCTAssertFalse(nearby.isHittable)
         XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
         XCTAssertFalse(add.isHittable)
@@ -784,8 +786,47 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
+        XCTAssertTrue(search.waitForExistence(timeout: 2))
+        XCTAssertTrue(search.isHittable, "Dismissing More filters must restore the retained editor")
+        XCTAssertEqual(app.textViews.matching(identifier: "map.searchField").count, 1)
         XCTAssertTrue(add.waitForExistence(timeout: 2))
         XCTAssertTrue(add.isHittable)
+
+        // Exercise real nonempty editor state too: hiding must remove the
+        // clear action without removing the editor or discarding its query.
+        search.tap()
+        search.typeText("coffee")
+        let clear = app.buttons["map.searchClear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 3))
+        search.typeText("\n")
+        let more = app.buttons["map.filter.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 3))
+        more.tap()
+        XCTAssertTrue(panel.waitForExistence(timeout: 3))
+        XCTAssertTrue(search.waitForNonExistence(timeout: 3))
+        XCTAssertEqual(app.textViews.matching(identifier: "map.searchField").count, 0)
+        XCTAssertFalse(clear.exists)
+        XCTAssertFalse(app.images["magnifyingglass"].exists)
+        XCTAssertFalse(add.exists)
+        XCTAssertFalse(app.buttons["map.searchCancel"].exists)
+        let retainedHierarchy = XCTAttachment(string: app.debugDescription)
+        retainedHierarchy.name = "Hidden Map dock with retained query accessibility tree"
+        retainedHierarchy.lifetime = .keepAlways
+        self.add(retainedHierarchy)
+        panel.buttons["Done"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        let restoredHierarchy = XCTAttachment(string: app.debugDescription)
+        restoredHierarchy.name = "Restored Map query accessibility tree"
+        restoredHierarchy.lifetime = .keepAlways
+        self.add(restoredHierarchy)
+        XCTAssertTrue(search.isHittable)
+        XCTAssertEqual(search.value as? String, "coffee")
+        XCTAssertEqual(app.textViews.matching(identifier: "map.searchField").count, 1)
+        XCTAssertTrue(clear.waitForExistence(timeout: 3))
+        XCTAssertTrue(clear.isHittable)
+        XCTAssertFalse(clear.frame.intersects(search.frame), "Clear must not cover the editor's accessibility frame")
+        search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "The restored retained editor must accept a physical tap")
     }
 
     func testThreeMinutesOnAnotherTabResetsMoreFilters() {

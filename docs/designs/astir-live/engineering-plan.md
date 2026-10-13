@@ -205,12 +205,13 @@ Use the shared **Live Experience Review** scheme to inspect the integrated targe
 
 Proposed performance acceptance targets remain targets, not measured behavior: smooth 60 fps drawer/map interaction, bounded server page size, no query per camera pan, responsive first text independent of media, and a stable memory plateau under repeated filters/paging. Measure against the existing app on a smaller and current phone. Any future retained-window cap or fill budget must be explicit and must evict map/list records together; it is not delivered by the current code merely because it was proposed earlier.
 
-Next work, in order:
+Completion order:
 
-1. Review the final integrated captures and resolve or isolate outstanding full-suite/legacy Feed failures while preserving exact Feed/Profile behavior.
-2. Package and validate the full-parameter Live SQL through the migration workflow before hosted-query or activation claims.
-3. Package/validate messaging SQL and real two-account behavior, including operator-owned participant approval/revocation; restrict the first rollout to internal testers. Resolve abuse/retention and operational gates before broader activation.
-4. Validate D9 fresh-orientation semantic progress and integrated recovery/rollback paths, including read-only replay, partial acknowledgements and explicit missing-payload destinations. Validate the integrated D10 received-invitation slice; keep existing Events interest functionality until its separate discovery dependencies are ready.
-5. Complete flag registration, next-launch rollback, full native/hosted/analytics validation and reviewed device evidence before a controlled rollout. D11 is approved only for the implemented Live display lease; broader cache changes are outside scope. Current device-location centering is not implemented; selected-city centers work.
+1. Finish native and CI checks while preserving exact Feed/Profile behavior: Map accessibility, inbox app-switcher framing, actual private-message replay freshness and compact Feed pagination. Keep D9 recovery/rollback and D10 received-invitation coverage in the native gate.
+2. In parallel with step 1, finalize and package the messaging migration first, then the full-parameter Live query migration. Review authorization, grants, quotas, cursor/filter scope and rollback regressions.
+3. After steps 1 and 2 pass, reconcile the target and migration history, apply only the reviewed ordered pair with Live globally off, then execute metadata checks, SQL regressions and hosted smoke. A generated SQL preview is not an executed check.
+4. Immediately follow with the [two-account verification protocol](implementation-drafts/README.md#two-account-verification-protocol): actual client authentication, send/reply/read, interrupted and concurrent retries, participant approval/revocation, blocks, source access, Live refinements and offline lease expiry. Keep the initial rollout internal-only; resolve reporting, retention/export and operational gates before broader activation.
+
+Reviewed device evidence, flag rollback and the ordinary release gate remain required before a controlled rollout. D11 covers only the implemented Live display lease; broader cache changes are outside scope. Current device-location centering is not implemented; selected-city centers work.
 
 Targeted native passes do not establish hosted deployment, production activation or release readiness. Hardware, privacy and host recovery journeys retain their own validation gates. Profile/Your Map remains supported in both shell configurations.

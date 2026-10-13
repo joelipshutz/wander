@@ -5,7 +5,16 @@ on:
     branches: [main]
     paths:
       - 'Wander/DesignSystem/PlaceRatingExplanation.swift'
+      - 'Wander/DesignSystem/PersonMentionField.swift'
       - 'Wander/Features/Activity/ActivityEngagementViews.swift'
+      - 'Wander/Features/Live/LiveScreen.swift'
+      - 'Wander/Features/Messaging/**'
+      - 'Wander/Models/PrivateMessageModels.swift'
+      - 'Wander/Services/Remote/PrivateMessage*.swift'
+      - 'Wander/Services/PostHogAnalyticsClient.swift'
+      - 'WanderTests/PrivateMessag*Tests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderUITests/LiveMigrationAndPrivacyUITests.swift'
       - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
@@ -52,12 +61,32 @@ jobs:
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests
+          -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=NO
+      # Replay owns process-wide SDK state; each scenario starts a fresh host.
+      - name: Verify private-message replay in an isolated process
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage
+          -resultBundlePath "$RUNNER_TEMP/replay-private.xcresult" CODE_SIGNING_ALLOWED=NO
+      - name: Verify credential replay in an isolated process
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage
+          -resultBundlePath "$RUNNER_TEMP/replay-credentials.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Release Pro simulator and wait for compact startup
         if: success() || failure()
         run: |
@@ -73,6 +102,8 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=NO
@@ -80,7 +111,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact; do
+          for device in pro compact replay-private replay-credentials; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
@@ -101,6 +132,8 @@ jobs:
           path: |
             ${{ runner.temp }}/pro.xcresult
             ${{ runner.temp }}/compact.xcresult
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
           retention-days: 14
       - name: Package simulator app for local review
         if: always()

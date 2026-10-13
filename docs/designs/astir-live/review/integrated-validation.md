@@ -1,8 +1,8 @@
 # REC-636 integrated validation
 
-October 11, 2026 · Integrated `Wander` app · **Draft; Live remains off**
+October 13, 2026 · Integrated `Wander` app · **Draft; Live remains off**
 
-**Final candidate V12 large passed all 2,807 unit tests and all 11 Live UI journeys: 2,818 tests passed.** Isolated replay is excluded from that run. **The same built app also passed all 11 compact Live UI journeys, with no failures or skips.** The broader native gate remains incomplete: Map accessibility, inbox switcher capture and private-message replay freshness are still open.
+**The frozen V13 full run completed with 3,082 of 3,092 tests passing: all 2,808 units and 274 of 284 UI tests, with ten UI failures and no skips. All ten original failures subsequently passed against the unchanged built app.** The failed full result remains part of the record; later focused passes do not replace it. All Live journeys, recovery/privacy, Map input and Feed paging cases passed within the full run. Final focused V13 checks also pass Map accessibility on both sizes, compact Feed paging and both large inbox/thread switcher captures. Actual private-message replay passed separately on both sizes. The final integrated full-suite gate and new CI confirmation remain open.
 
 This report is the candidate/results authority for the [review guide](../review-guide.md) and [capture gallery](integrated-captures.md). A focused pass establishes the named check, not a passing full suite or hosted readiness.
 
@@ -11,6 +11,7 @@ This report is the candidate/results authority for the [review guide](../review-
 - Branch: `codex/live-experience-review`; integration base `d9f827353648bab91a17187721b5ea41e65e1a42`.
 - Worktree: `/private/tmp/wander-live-review`; raw evidence: `/private/tmp/rec636-evidence/`.
 - V12 source: **392 Swift files and six build inputs** match across both runs, recorded in `v12-source-hashes.json` and `v12-build-inputs.json`. Later source changes require a new candidate record.
+- V13 source is frozen in `v13-source-hashes.json` and `v13-build-inputs.json`: **403 native Swift files and 21 tracked build inputs**. All hashes and the native source path set were verified unchanged after the full run. This expands the manifest to existing extension/shared source and tracked configurations; it does not imply new source files. XcodeGen produced no project or generated-file diff before the freeze.
 - Xcode 26.6 / iOS 26.5; iPhone 17 Pro and iPhone SE (3rd generation).
 
 | Check | Result | Evidence and scope |
@@ -21,14 +22,50 @@ This report is the candidate/results authority for the [review guide](../review-
 | Credential replay | **Passed alone in a fresh process** | `live-v8-credential-isolated.xcresult`; does not establish private-message replay freshness. |
 | Analytics/tooling | **Contract check and 12 dashboard tests passed** | No subsequent analytics event/property changes. Demo sends suppress analytics; message-success properties are aggregate-only. |
 | SQL preparation | **Smoke-runner syntax and both rollback-preview generation checks rerun successfully; static review completed** | Both drafts remain **unpackaged, undeployed and unexecuted**. Generating rollback SQL is not database execution. |
+| V13 private replay | **Passed on large and compact** | `replay-v13-private-opaque-large.xcresult` and `replay-v13-private-opaque-compact.xcresult`; exact post-load SDK control plus forbidden-text checks across every collected frame. |
+| V13 credential replay | **Passed in its own process on compact** | `replay-v13-credential-bounded-cadence.xcresult`; credential assertions retained. |
+| V13 switcher privacy | **Inbox and thread focused checks passed on large** | `ui-v13-inbox-isolated.xcresult` and the thread case in `ui-v13-large-map-privacy-baseline.xcresult`; active fictional content, centered inactive cover and return behavior checked. See the startup-tap limitation below. |
+| V13 compact Feed | **Passed with fresh accessibility count queries** | `ui-v13-feed-fresh-query.xcresult`; original counts, pagination/end assertions and 15-second wait retained. No Feed implementation change. Hosted CI confirmation remains pending. |
+| Final V13 compact focus | **38/38 passed** | `ui-v13-final-focused-compact.xcresult`; 36 shared-input contracts, expanded Map regression and Feed paging. |
+| Final V13 large focus | **39/39 passed** | `ui-v13-final-focused-large.xcresult`; the same 36 shared-input contracts, expanded Map regression and both private inbox/thread switcher checks. |
+| V13 full native | **3,082/3,092 passed; ten UI failures, no skips** | `live-v13-full-native.xcresult`; all 2,808 units and 274/284 UI passed. Isolated replay is excluded. See the late-run failures below. |
+| V13 late-failure rechecks | **All ten original failures passed unchanged** | `ui-v13-awake-failure-recheck.xcresult` passed nine cases; its appearance case exceeded an insufficient 300-second command limit. `ui-v13-awake-appearance-recheck.xcresult` then passed that case in 431.322 seconds with a 600-second allowance. No app/test source or assertion changes. |
 
 Native units cover query/account/page fencing, accepted filter dimensions, monotonic per-row receipts before media work, lease expiry and filtered-empty-page continuation. Messaging tests use synthetic responses for retry identity, refresh/context loss, account/cancellation fences, one 401 refresh and disabled HTTP cache/cookies. They do not establish server authorization or real delivery.
 
 The **Live Experience Review** scheme uses the production Live shell and existing Feed/Profile with isolated authenticated fixtures. Demo replies acknowledge **Simulated** and deliver nothing. Invitation rehearsal uses a detached Wanna, without sending an invitation or writing to the shared store; the dated received-invitation fixture exercises the existing recipient route. The [V12 gallery](integrated-captures.md) presents fourteen selected large/compact captures with candidate provenance. Original captures remain outside Git; the selected images do not prove hosted delivery or replay freshness.
 
+## Focused V13 privacy evidence
+
+The replay fixture now uses the production configuration's one-second capture cadence. Its former 0.1-second override could queue screenshots faster than the SDK's serial image encoder delivered them. The test waits for exact public controls before and after loading the private view, inspects only newly delivered images while waiting, then checks every collected image for forbidden private text. Each replay scenario runs in a separate process in CI. Events are dropped before upload and the fixture transport is offline.
+
+The native fixture independently renders readable fictional participant/message content. The actual SDK output then shows the new public **Replay loaded** control with the private SwiftUI surface masked. The final large run collected eight SDK images and reported 23 successful native draws with zero incomplete draws. Compact collected ten images and reported nine successful and two incomplete native draws; the SDK does not attach draw-success metadata to individual images. Compact's freshness/privacy checks still passed, but it is not proof that every native capture was complete. No production masking behavior was changed to obtain these results.
+
+| Large native fixture | Large actual SDK frame | Compact actual SDK frame |
+|---|---|---|
+| ![Readable fictional private fixture](privacy/private-fixture-large.png) | ![Fresh large SDK frame with private content masked](privacy/private-replay-large.png) | ![Fresh compact SDK frame with private content masked](privacy/private-replay-compact.png) |
+
+These are original PNGs copied without visual edits from the two final opaque-fixture result bundles. Frozen replay test SHA-256: `feecbe2bab22f8c2fd22b7c5b996ccf41b1c5f06a58c7f1c8c3aa3ac455acaad`.
+
+The switcher test now waits for the privacy-cover label to be centered and stable before accepting the card framing; full-screen forbidden-content assertions remain. Both final large captures visibly show the centered Astir card with the opaque cover. Full-resolution recordings and switcher PNGs stay with the result bundles outside Git. In the first V13 combined run, the inbox case failed earlier: a highlighted Messages tap did not open the sheet. The exact isolated case and both switcher cases in the full run subsequently passed without a retry or navigation delay. Source review did not establish a startup reset cause; this history is not a claimed navigation fix.
+
+The messaging draft also rechecks context after both the sender-lock wait and a possible reciprocal-pair insert wait. Rollback regressions now cover the 50-conversation daily boundary, existing-thread reuse, another sender's quota, window expiry and revoked-context restoration. Swift/SQL RPC argument, response and cursor contracts were independently reviewed without a blocking mismatch. These remain preparation results, not database execution or real-client authentication evidence.
+
+## Final V13 Map accessibility repair
+
+The Map host exported a directly represented text editor even when its native hidden, interaction and accessibility flags excluded it. A plain represented container now retains the same native editor and controls its accessibility children. Native/hosted tests preserve text, mentions, selection, composition, sizing and parent-level hit testing through hide/show. The hidden search icon and Clear action are omitted while the editor remains mounted.
+
+The expanded nonempty-query check independently found that the search row's inherited interaction shape made Clear claim the entire capsule in accessibility. Removing that row-level shape and giving Clear its own 44-point plain target restores distinct, nonoverlapping editor/button bounds. The original glass surface is unchanged. Testing the original represented editor with this shape fix still failed hidden accessibility, establishing that the container is also required.
+
+Both final phone runs verify no hidden editor, placeholder, icon, Clear, Add or Cancel; after dismissal, exactly one hittable editor retains `coffee`, Clear has separate bounds, and a physical tap opens the keyboard. Original navigation/filter assertions remain. Failed intermediate experiments are not retained in production code.
+
 ## Full-run failure reconciliation
 
-V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**. The table accounts for all eleven failures. Ten have subsequent focused passing rechecks; Map accessibility remains open. This is not a rerun of the whole UI suite on V12.
+V13 completed all scheduled tests, but its ten late UI failures keep that full result red. One appearance test, one Profile alignment test, one Profile header test, all three Profile responsiveness tests, two Share Card tests and two Your Map tests failed. Several nominally short actions took hundreds of seconds, including actions in passing neighboring tests. The adaptive Your Map test additionally reused a pin whose unobstructed gesture frame shrank after zoom. All ten passed unchanged on the same built app in the separate rechecks above. No production or test fix is claimed for these ten cases.
+
+The first recheck's 300-second command-level limit was shorter than the appearance test's earlier passing V6 baseline of 362.647 seconds. Its separate 600-second recheck passed without changing the original five-second appearance assertions. Keep that harness-limit failure distinct from the original full-run failures. The final integration candidate still needs its own full run and CI confirmation.
+
+V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**. The table accounts for all eleven failures. All eleven have subsequent focused passing rechecks and also passed within V13's full run. This is not a passing full-suite result on V12 or V13.
 
 | V6 failing test | Later result |
 |---|---|
@@ -36,7 +73,7 @@ V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**
 | `ImportFormRefinementUITests/testShareExtensionAutomaticallyCapturesExactlyOnce` | **Closed — V7 signed pass.** |
 | `LiveMigrationAndPrivacyUITests/testDeferredCalendarRecoverySurvivesRelaunchAndExplicitOffRollback` | **Closed — V7 and V9 pass.** |
 | `LiveMigrationAndPrivacyUITests/testPartialGuideAcknowledgementsPersistAcrossRelaunchAndRollback` | **Closed — V7 and V9 pass.** |
-| `MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting` | **Open — V7 and V9 still fail.** XCTest reports the disabled hidden field as hittable; the semantic accessibility regression remains open. This is not evidence of a VoiceOver privacy leak. |
+| `MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting` | **Closed — final V13 passes on both sizes.** Hidden AX absence, original navigation/filter behavior, retained nonempty query, distinct Clear bounds and restored physical input are checked. |
 | `MapPlaceCardUITests/testREC386ShowsMemberPhotoThenDeletesDisposableCheckIn` | **Closed — V7 signed pass.** |
 | `OnboardingUITests/testFeedInlineSearchCoversEntryEmptyResultsNavigationAndBack` | **Closed — V11 original swipe-back pass**, alongside the original automatic-focus back-button test. |
 | `OnboardingUITests/testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible` | **Closed — V9 pass** with fresh page-value queries. |
@@ -48,9 +85,9 @@ Recheck bundles: `live-v7-signed-recheck.xcresult` (**2,828/2,834 passed**), `li
 
 ## Remaining gates
 
-1. **Map accessibility:** resolve the hidden input's XCTest hittability while More Filters is open, then pass `testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting`. The disabled field's reported semantics remain a regression gate, not a proven VoiceOver privacy leak.
-2. **Inbox switcher capture:** establish the required privacy-cover observation with the Astir card fully visible. V9's card was cropped on the right with map background and no private content visible; its thread switcher check passed. The inbox capture remains unverified.
-3. **Private-message replay:** obtain a fresh post-load SDK control frame and verify private content is absent. In V10 the new public label passed native OCR, but all 18 SDK frames retained the old public “Ready” label with the private area black. No private-content leak assertion failed; stale frames cannot validate privacy. Preserve the strengthened post-load control assertion. These three open checks leave the broad native gate incomplete.
+1. **Final native/CI confirmation:** integrate current main and run the full native suite on the resulting frozen candidate, preserve the passing private replay and switcher assertions, and verify compact Feed paging in CI. All ten late V13 failures passed unchanged in focused rechecks. Both switcher cases passed in the full run; retain the earlier unexplained first inbox tap in the failure history instead of claiming a navigation fix. The broad native gate remains open.
+2. **Candidate record:** frozen V13 manifests match after the full run; verify them again before commit. Any further source or integration change requires a new candidate record. V12 captures retain their original provenance; new focused passes do not silently relabel that earlier binary.
+3. **Source/CI handoff:** publish the verified candidate and inspect the required workflow results before calling step 1 complete.
 4. **Database:** package messaging then Live-query SQL as ordered CLI-generated migrations, reconcile target/history, execute regression and metadata checks and pass rollback-only hosted smoke. Follow the [packaging instructions](../implementation-drafts/README.md). Missing RPC/schema must fail verification.
 5. **Real messaging:** verify delivery between two mutual accounts, both explicit server account flags, revocation/restoration, hard blocks, context access and same-ID retries before internal activation. Global/device flags cannot enroll participants. Reporting and soft-delete retention/export remain broader-rollout gates.
 6. **Handoff and device review:** open this isolated worktree's `Wander.xcodeproj`, verify the branch chooser and **Live Experience Review** scheme, and complete outstanding hardware drawing, spoken VoiceOver and production-volume review before claiming those properties.
@@ -59,7 +96,7 @@ D11 is settled: **15 minutes per social activity, measured from its monotonic au
 
 ## Resume commands
 
-Run from `/private/tmp/wander-live-review`. Both V12 result bundles are closed. Use fresh result-bundle paths for any further native run and record source identity. Run replay by itself after addressing its freshness failure; repeating the unchanged diagnostic is not a fix.
+Run from `/private/tmp/wander-live-review`. Both V12 result bundles and the named V13 replay bundles are closed. Use fresh result-bundle paths for any further native run and record source identity. Replay scenarios must remain in separate test processes; their focused passes above are complete and need repetition only when a relevant change or new failure requires it.
 
 ```sh
 xcrun xcresulttool get test-results summary --path /private/tmp/rec636-evidence/live-v12-final-compact.xcresult
