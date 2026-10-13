@@ -243,8 +243,20 @@ final class PersonTypeaheadUITests: XCTestCase {
         } else {
             bottomSurface = panel
         }
-        XCTAssertLessThanOrEqual(keyboard.frame.minY - bottomSurface.frame.maxY, 60,
-            "Suggestions must sit at the keyboard, allowing for the native predictions bar.")
+        // XCUI's Keyboard frame contains the keys, excluding Apple's native
+        // prediction bar. That bar is 78 points on iOS 26.3, and can sit below
+        // the display while a hardware keyboard is connected. Measure app
+        // spacing from its upper edge rather than counting it as blank space.
+        let assistant = app.otherElements["SystemInputAssistantView"].firstMatch
+        let assistantFrame = assistant.exists ? assistant.frame : .zero
+        let keyboardTop = assistant.exists && assistantFrame.height > 0
+            && assistantFrame.minY <= keyboard.frame.minY
+            && assistantFrame.maxY <= keyboard.frame.minY + 1
+            ? assistantFrame.minY : keyboard.frame.minY
+        XCTAssertLessThanOrEqual(bottomSurface.frame.maxY, keyboardTop + 1,
+            "Suggestions and the composer must not overlap the native input bar.")
+        XCTAssertLessThanOrEqual(keyboardTop - bottomSurface.frame.maxY, 12,
+            "Only the suggestion panel's padding may separate it from the native input bar.")
     }
 
     private func launch(_ arguments: [String], demo: Bool = false) -> XCUIApplication {
