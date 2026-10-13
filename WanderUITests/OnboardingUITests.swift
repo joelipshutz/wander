@@ -1130,7 +1130,9 @@ final class OnboardingUITests: XCTestCase {
         let recent = app.staticTexts["walkthrough.feed.feedActivity.recent"]
         XCTAssertTrue(circle.waitForExistence(timeout: 20))
         let headingY = app.staticTexts["Activity"].frame.minY
-        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        // Use the visible center of the capsule for both manual transitions.
+        app.buttons["walkthrough.next.feed.feedActivity"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
@@ -1138,7 +1140,8 @@ final class OnboardingUITests: XCTestCase {
                           "Only the latest card should be brought into view.")
         XCTAssertEqual(recent.label, "Keep up with their moments")
         XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
-        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        app.buttons["walkthrough.next.feed.feedActivity"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
         let returned = expectation(for: NSPredicate(format: "hittable == true"),
                                    evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
@@ -1390,6 +1393,7 @@ final class OnboardingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
 
         let feedTab = app.buttons["Feed"]
         XCTAssertTrue(feedTab.waitForExistence(timeout: 8))
@@ -1399,8 +1403,10 @@ final class OnboardingUITests: XCTestCase {
         let mapTab = app.buttons["Map"]
         mapTab.tap()
         XCTAssertTrue(mapTab.isSelected)
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
         XCTAssertTrue(feedTab.isSelected)
 
@@ -1656,6 +1662,11 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
+        // Retiring a persisted walkthrough draft can return to Map. This test
+        // starts at the profile surface, independent of an earlier journey.
+        let profileTab = app.tabBars.buttons["Profile"]
+        XCTAssertTrue(profileTab.waitForExistence(timeout: 10))
+        profileTab.tap()
 
         let settingsButton = app.buttons["Settings"]
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 8))

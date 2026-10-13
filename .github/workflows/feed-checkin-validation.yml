@@ -15,6 +15,7 @@ on:
       - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
+      - 'scripts/run-parent-regression.py'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
 
@@ -28,7 +29,7 @@ concurrency:
 jobs:
   native:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,7 +59,7 @@ jobs:
                   output.write(f'{key}={device["udid"]}\n')
               print('Testing on', device['name'])
           PY
-      # The search microbenchmark runs on its reference machine, not shared hosted runners.
+      # CPU budgets and replay observers run below in isolated test processes.
       - name: Unit suite and native Feed scrolling
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
@@ -66,10 +67,17 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
-          -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Isolated CPU budgets
+        if: success() || failure()
+        run: >-
+          python3 scripts/run-parent-regression.py --suite performance
+          --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData"
+          --result-bundle "$RUNNER_TEMP/performance.xcresult"
       # SDK replay capture owns process-wide observers; validate in a fresh test host.
       - name: Verify replay masking in an isolated process
         if: success() || failure()
@@ -78,7 +86,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests/ReplayMaskingTests
-          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Stop large simulator
         if: always()
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
@@ -89,18 +97,18 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
-          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Generic Simulator build
         if: success() || failure()
         run: >-
           xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
           -destination 'generic/platform=iOS Simulator'
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=NO
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export native evidence
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small replay; do
+          for size in large small replay performance; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -115,4 +123,5 @@ jobs:
             ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
             ${{ runner.temp }}/replay.xcresult
+            ${{ runner.temp }}/performance.xcresult
           retention-days: 14

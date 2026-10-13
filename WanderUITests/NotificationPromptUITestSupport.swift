@@ -1,6 +1,17 @@
 import XCTest
 
 extension XCTestCase {
+    /// Home is asynchronous on a busy simulator. Wait for the actual lifecycle
+    /// transition before requesting foreground entry or opening a deep link.
+    @MainActor
+    func backgroundApplication(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        XCUIDevice.shared.press(.home)
+        let backgrounded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.state == .runningBackground || app.state == .runningBackgroundSuspended
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [backgrounded], timeout: 10), .completed, file: file, line: line)
+    }
+
     /// The first-visit reminder covers the app's controls. Complete its real
     /// interaction before testing unrelated tabs; do not disable production UX.
     @MainActor

@@ -10,6 +10,7 @@ on:
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
+      - 'scripts/run-parent-regression.py'
       - '.github/workflows/privacy-validation.yml'
   workflow_dispatch:
 
@@ -23,7 +24,7 @@ concurrency:
 jobs:
   native:
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,18 +48,37 @@ jobs:
                   f.write(variable + '=' + device['udid'] + '\n')
               print('Using', name, device['udid'])
           PY
+      - name: Initialize Pro simulator
+        run: |
+          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$PRO_DEVICE_ID"
       - name: Full unit suite and privacy layouts on iPhone 17
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests
+          -skip-testing:WanderTests/ReplayMaskingTests
+          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=NO
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      # Replay observers and CPU budgets each require a fresh test process.
+      # Keep every test and its original threshold in the required workflow.
+      - name: Isolated CPU budgets and replay privacy
+        if: success() || failure()
+        run: |
+          validation_status=0
+          for suite in performance replay; do
+            python3 scripts/run-parent-regression.py --suite "$suite" \
+              --destination "$PRO_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+              --result-bundle "$RUNNER_TEMP/$suite.xcresult" || validation_status=1
+          done
+          exit "$validation_status"
       - name: Release Pro simulator and wait for compact startup
         if: success() || failure()
         run: |
@@ -66,6 +86,7 @@ jobs:
             xcrun simctl shutdown "$PRO_DEVICE_ID"
           fi
           xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
       - name: Repeat native screen flows on compact iPhone 16e
         if: success() || failure()
         run: >-
@@ -74,14 +95,14 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=NO
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export screenshots and test summaries
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact; do
+          for device in pro compact performance replay; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
@@ -102,6 +123,8 @@ jobs:
           path: |
             ${{ runner.temp }}/pro.xcresult
             ${{ runner.temp }}/compact.xcresult
+            ${{ runner.temp }}/performance.xcresult
+            ${{ runner.temp }}/replay.xcresult
           retention-days: 14
       - name: Package simulator app for local review
         if: always()

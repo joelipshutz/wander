@@ -287,8 +287,9 @@ final class YourMapPrototypeUITests: XCTestCase {
 
     func testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderResetWalkthroughs", "-WanderInitialTab", "profile"]
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         // The combined preview can exist below the tab bar. Bring its actual

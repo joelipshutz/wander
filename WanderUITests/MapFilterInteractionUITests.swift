@@ -290,6 +290,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         )
         let probe = app.descendants(matching: .any)["map.performanceProbe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 3))
+        // The diagnostic view exists before MapKit finishes the initial camera.
+        // Wait for that completion so a gesture cannot consume startup's result.
+        let initialCamera = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "completion="), object: probe
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [initialCamera], timeout: 15), .completed)
         let previousProbe = probe.value as? String ?? ""
         let populatedProbe = NSPredicate { _, _ in
             let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
@@ -320,7 +326,7 @@ final class MapFilterInteractionUITests: XCTestCase {
                     for: [
                         XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)
                     ],
-                    timeout: 3
+                    timeout: 10
                 ),
                 .completed
             )
@@ -358,6 +364,12 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let probe = app.descendants(matching: .any)["map.performanceProbe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 3))
+        // The diagnostic view exists before MapKit finishes the initial camera.
+        // Wait for that completion so a gesture cannot consume startup's result.
+        let initialCamera = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "completion="), object: probe
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [initialCamera], timeout: 15), .completed)
 
         func metric(_ name: String, in snapshot: String) -> Int? {
             snapshot

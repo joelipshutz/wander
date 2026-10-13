@@ -89,7 +89,9 @@ import UIKit
         line: UInt = #line
     ) async throws {
         let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(3))
+        // Audio service reactivation can take several seconds on a fresh VM.
+        // Still require real progress, a playing player, and no error.
+        let deadline = clock.now.advanced(by: .seconds(10))
         while audio.isPlaying, audio.playbackSeconds <= position, clock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }

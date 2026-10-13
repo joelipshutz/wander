@@ -8,6 +8,7 @@ import XCTest
                                "-WanderInitialTab", "discover", "-WanderResetNotificationBadge", "-WanderFollowNotificationUITest",
                                "-WanderCompactPeopleUITest"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         return app
     }
 

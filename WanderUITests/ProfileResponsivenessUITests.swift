@@ -15,6 +15,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
         measure(metrics: [XCTOSSignpostMetric.scrollingAndDecelerationMetric], options: options) {
             app.terminate()
             app.launch()
+            dismissStartupNotificationPromptIfNeeded(in: app)
             XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 20))
             startMeasuring()
             app.swipeUp(velocity: .fast)
@@ -33,6 +34,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
     func testProfileSharePresentsAndCancelsOnColdAndWarmEntry() {
         let app = application()
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let share = app.buttons["Share profile"]
         XCTAssertTrue(share.waitForExistence(timeout: 20))
         for attempt in 0..<3 {
@@ -59,6 +61,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
     func testSettingsDestinationsAndReturnToScrolledProfile() {
         let app = application()
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let settings = app.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 20))
         app.swipeUp()

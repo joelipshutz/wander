@@ -13,8 +13,10 @@ final class ForegroundEntryUITests: XCTestCase {
         for title in ["Map", "Lists", "Profile", "Feed"] {
             tabs.buttons[title].tap()
             assertSelected(title, in: app)
-            XCUIDevice.shared.press(.home)
+            backgroundApplication(app)
             app.activate()
+            XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+            dismissStartupNotificationPromptIfNeeded(in: app)
             assertSelected("Feed", in: app)
             XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 5))
         }
@@ -23,30 +25,36 @@ final class ForegroundEntryUITests: XCTestCase {
     func testMapLinkWinsOnBackgroundEntryAndNextOrdinaryEntryOpensFeed() {
         let app = launch()
         app.tabBars.buttons["Lists"].tap()
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.open(URL(string: "recme://map")!)
         let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
         if open.waitForExistence(timeout: 3) { open.tap() }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         assertSelected("Map", in: app)
         XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 5))
 
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        dismissStartupNotificationPromptIfNeeded(in: app)
         assertSelected("Feed", in: app)
     }
 
     func testProfileLinkWinsButDoesNotProtectALaterOrdinaryEntry() {
         let app = launch()
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.open(URL(string: "recme://profiles/user_maya")!)
         let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
         if open.waitForExistence(timeout: 3) { open.tap() }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         let back = app.buttons["profile.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 10))
 
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         XCTAssertTrue(back.waitForNonExistence(timeout: 10))
+        dismissStartupNotificationPromptIfNeeded(in: app)
         assertSelected("Feed", in: app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].isHittable)
     }
@@ -63,8 +71,9 @@ final class ForegroundEntryUITests: XCTestCase {
         XCTAssertTrue(text.waitForExistence(timeout: 5))
         text.tap()
         text.typeText("Keep this draft")
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         XCTAssertTrue(text.waitForExistence(timeout: 5))
         XCTAssertEqual(text.value as? String, "Keep this draft")
     }
