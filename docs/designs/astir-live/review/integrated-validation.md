@@ -2,9 +2,11 @@
 
 October 13, 2026 · Integrated `Wander` app · **Draft; Live remains off**
 
-**The frozen V13 full run completed with 3,082 of 3,092 tests passing: all 2,808 units and 274 of 284 UI tests, with ten UI failures and no skips. All ten original failures subsequently passed against the unchanged built app.** The failed full result remains part of the record; later focused passes do not replace it. All Live journeys, recovery/privacy, Map input and Feed paging cases passed within the full run. Final focused V13 checks also pass Map accessibility on both sizes, compact Feed paging and both large inbox/thread switcher captures. Actual private-message replay passed separately on both sizes. The final integrated full-suite gate and new CI confirmation remain open.
+**Current candidate: V14, source commit `6caa00f9d36724d835593c78e19752b4b88b22fe`, integrated with main `bc2fa4d585ceb6fb97858e1c157a2cc43019e982` (build 181).** Current full-suite, CI and backend gate results are maintained in [PR #736](https://github.com/joelipshutz/wander/pull/736) and [REC-636](https://linear.app/recme/issue/REC-636/specify-and-prototype-the-unified-live-map-feed-and-user-journey). This file preserves the completed V12/V13 evidence and its limits; a newer status in the PR does not relabel these historical binaries.
 
-This report is the candidate/results authority for the [review guide](../review-guide.md) and [capture gallery](integrated-captures.md). A focused pass establishes the named check, not a passing full suite or hosted readiness.
+**The frozen V13 full run completed with 3,082 of 3,092 tests passing: all 2,808 units and 274 of 284 UI tests, with ten UI failures and no skips. All ten original failures subsequently passed against the unchanged built app.** The failed full result remains part of the record; later focused passes do not replace it. All Live journeys, recovery/privacy, Map input and Feed paging cases passed within the full run. Final focused V13 checks also pass Map accessibility on both sizes, compact Feed paging and both large inbox/thread switcher captures. Actual private-message replay passed separately on both sizes. Consult the PR for the final integrated full-suite and CI results.
+
+This report records candidate provenance for the [review guide](../review-guide.md) and [capture gallery](integrated-captures.md); the linked PR carries the current review gate status. A focused pass establishes the named check, not a passing full suite or hosted readiness.
 
 ## Candidate and current checks
 
@@ -12,6 +14,7 @@ This report is the candidate/results authority for the [review guide](../review-
 - Worktree: `/private/tmp/wander-live-review`; raw evidence: `/private/tmp/rec636-evidence/`.
 - V12 source: **392 Swift files and six build inputs** match across both runs, recorded in `v12-source-hashes.json` and `v12-build-inputs.json`. Later source changes require a new candidate record.
 - V13 source is frozen in `v13-source-hashes.json` and `v13-build-inputs.json`: **403 native Swift files and 21 tracked build inputs**. All hashes and the native source path set were verified unchanged after the full run. This expands the manifest to existing extension/shared source and tracked configurations; it does not imply new source files. XcodeGen produced no project or generated-file diff before the freeze.
+- V14 retains the same **403 native source files and 21 tracked build inputs**, recorded in `v14-source-hashes.json` and `v14-build-inputs.json`. Main contributes only build 181 metadata and the people-picker spacing test assertions. XcodeGen produces no further diff; independent merge review confirms the Live tests and imported assertions are preserved.
 - Xcode 26.6 / iOS 26.5; iPhone 17 Pro and iPhone SE (3rd generation).
 
 | Check | Result | Evidence and scope |
@@ -83,11 +86,11 @@ V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**
 
 Recheck bundles: `live-v7-signed-recheck.xcresult` (**2,828/2,834 passed**), `live-v9-focused.xcresult` (**49/53 passed**) and `live-v11-search-return.xcresult` (**2/2 passed**). V7's stale unit source assertion was corrected; V12 all-unit verification passes. V9 passed all 41 walkthrough units, three D9 recovery checks, thread switcher privacy, carousel, both stale-checkpoint destinations and notes. Its four failures were Map accessibility, inbox switcher capture, private-message replay and Feed back-button return; V11 closes the Feed failure.
 
-## Remaining gates
+## Review gates
 
-1. **Final native/CI confirmation:** integrate current main and run the full native suite on the resulting frozen candidate, preserve the passing private replay and switcher assertions, and verify compact Feed paging in CI. All ten late V13 failures passed unchanged in focused rechecks. Both switcher cases passed in the full run; retain the earlier unexplained first inbox tap in the failure history instead of claiming a navigation fix. The broad native gate remains open.
+1. **Final native/CI confirmation:** use the V14 full-suite and CI results recorded in the linked PR. All ten late V13 failures passed unchanged in focused rechecks. Both switcher cases passed in the V13 full run; retain the earlier unexplained first inbox tap in the failure history instead of claiming a navigation fix. Do not infer a passing final gate solely from this historical report.
 2. **Candidate record:** frozen V13 manifests match after the full run; verify them again before commit. Any further source or integration change requires a new candidate record. V12 captures retain their original provenance; new focused passes do not silently relabel that earlier binary.
-3. **Source/CI handoff:** publish the verified candidate and inspect the required workflow results before calling step 1 complete.
+3. **Source/CI handoff:** verify the published candidate and required workflow results in the PR before calling step 1 complete.
 4. **Database:** package messaging then Live-query SQL as ordered CLI-generated migrations, reconcile target/history, execute regression and metadata checks and pass rollback-only hosted smoke. Follow the [packaging instructions](../implementation-drafts/README.md). Missing RPC/schema must fail verification.
 5. **Real messaging:** verify delivery between two mutual accounts, both explicit server account flags, revocation/restoration, hard blocks, context access and same-ID retries before internal activation. Global/device flags cannot enroll participants. Reporting and soft-delete retention/export remain broader-rollout gates.
 6. **Handoff and device review:** open this isolated worktree's `Wander.xcodeproj`, verify the branch chooser and **Live Experience Review** scheme, and complete outstanding hardware drawing, spoken VoiceOver and production-volume review before claiming those properties.
