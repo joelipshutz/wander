@@ -645,11 +645,12 @@ struct FeedScreen: View {
 
         let activity: FeedActivity?
         if let target = route.checkInTarget {
-            activity = await store.activity(checkIn: target, backend: auth.isSignedIn ? backend : nil)
+            activity = await store.activity(checkIn: target, backend: auth.isSignedIn ? backend : nil, authSession: auth)
         } else {
-            activity = await store.activity(id: route.activityID, backend: auth.isSignedIn ? backend : nil)
+            activity = await store.activity(id: route.activityID, backend: auth.isSignedIn ? backend : nil, authSession: auth)
         }
         guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
+        guard allowsCachedContext || ActivitySessionReadiness(auth: auth) != .validating else { return }
         guard activityNavigation.commentsRoute?.id == route.id else { return }
         focusedActivityID = activity?.id
         activityNavigation.resolve(
