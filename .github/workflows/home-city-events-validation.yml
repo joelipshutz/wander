@@ -50,6 +50,12 @@ jobs:
                   f.write(variable + '=' + device['udid'] + '\n')
               print('Using', name, device['udid'])
           PY
+      - name: Finish Pro simulator first-boot setup before timed async tests
+        if: ${{ !inputs.compact_only }}
+        run: |
+          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
+          xcrun simctl shutdown "$PRO_DEVICE_ID"
+          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
       - name: Feature units and native screen flows on iPhone 17 Pro
         if: ${{ !inputs.compact_only }}
         run: >-

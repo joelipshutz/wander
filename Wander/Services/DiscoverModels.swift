@@ -1067,19 +1067,34 @@ enum VisiblePlaceGrouping {
 
     static func normalizedText(_ value: String?, locale: Locale = .current) -> String {
         let source = value ?? ""
+        guard !source.isEmpty else { return "" }
         // Most grouping fields are ASCII. Avoid Foundation's Unicode folding
         // for those fields, while preserving its locale-specific dotted-I
         // behavior and the existing normalization of international text.
         let needsLocalizedI = source.utf8.contains(73)
             && ["tr", "az"].contains(locale.language.languageCode?.identifier ?? "")
-        let folded: String
         if !needsLocalizedI, source.utf8.allSatisfy({ $0 < 128 }) {
-            folded = source.lowercased()
-        } else {
-            folded = source
-                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: locale)
-                .lowercased()
+            // Append bytes for the common ASCII path. Repeated Unicode-scalar
+            // mutations rebuild String state for every character in thousands
+            // of list grouping fields, although the output is ASCII by contract.
+            var normalized: [UInt8] = []
+            normalized.reserveCapacity(source.utf8.count)
+            var needsSeparator = false
+            for byte in source.utf8 {
+                let lower = (65...90).contains(byte) ? byte + 32 : byte
+                if (48...57).contains(lower) || (97...122).contains(lower) {
+                    if needsSeparator, !normalized.isEmpty { normalized.append(32) }
+                    normalized.append(lower)
+                    needsSeparator = false
+                } else if !normalized.isEmpty {
+                    needsSeparator = true
+                }
+            }
+            return String(decoding: normalized, as: UTF8.self)
         }
+        let folded = source
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: locale)
+            .lowercased()
         var normalized = String()
         normalized.reserveCapacity(folded.utf8.count)
         var needsSeparator = false

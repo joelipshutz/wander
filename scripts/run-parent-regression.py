@@ -15,6 +15,7 @@ import subprocess
 ISOLATED_UI_PERFORMANCE = {
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork",
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
+    "WanderUITests/OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
 }
 
 

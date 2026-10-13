@@ -124,7 +124,10 @@ import UIKit
                 guard let pixels = try? self.tabBarPixels(in: app) else { return false }
                 return pixels.signalPixels > 30
             }, object: nil)
-            XCTAssertEqual(XCTWaiter.wait(for: [accentReady], timeout: 3), .completed,
+            // This checks the rendered colors, not transition latency. Each
+            // remote screenshot/AX-frame sample can itself take several seconds
+            // on hosted simulators; allow another sample after a transition.
+            XCTAssertEqual(XCTWaiter.wait(for: [accentReady], timeout: 10), .completed,
                            "The selected tab must settle to the coral accent on \(label), step \(index).")
             let barPixels = try XCTUnwrap(tabBarPixels(in: app))
             let luminance = barPixels.luminance

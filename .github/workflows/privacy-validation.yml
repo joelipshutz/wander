@@ -27,6 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          lfs: true
           persist-credentials: false
       - name: Generate project and select existing simulators
         run: |

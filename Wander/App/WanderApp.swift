@@ -427,6 +427,15 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     private static var croppedImageCache: [Int: UIImage] = [:]
     private static var encodedImageCache: [Int: Data] = [:]
 
+    func validateAccess(to photo: PlacePhoto) async throws {
+        // This DEBUG repository serves only bundled screenshot assets. Keep
+        // the new protected-photo contract explicit and reject real media.
+        guard let url = photo.photoURL,
+              url.scheme == "capture", url.host == "place-carousel",
+              let tile = Int(url.lastPathComponent), (0..<Self.tileCount).contains(tile)
+        else { throw WanderRemoteError.notConfigured }
+    }
+
     init() {
         guard ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures") else {
             return

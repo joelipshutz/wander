@@ -2060,7 +2060,9 @@ struct MapScreen: View {
                                     } label: {
                                         Color.black.opacity(0.001)
                                             .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
                                     }
+                                    .buttonStyle(.plain)
                                     .accessibilityIdentifier("map.performanceZoomOut")
 
                                     Button {
@@ -2068,7 +2070,9 @@ struct MapScreen: View {
                                     } label: {
                                         Color.black.opacity(0.001)
                                             .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
                                     }
+                                    .buttonStyle(.plain)
                                     .accessibilityIdentifier("map.performanceZoomIn")
                                 }
                                 .offset(y: 180)

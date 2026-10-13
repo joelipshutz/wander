@@ -933,6 +933,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
 
         let googlePhoto = try await repository.photo(for: googleRequest)
+        try await repository.validateAccess(to: googlePhoto)
         let googleImageData = try await repository.imageData(for: googlePhoto)
 
         XCTAssertEqual(googlePhoto.provider, "google_places")
@@ -950,12 +951,31 @@ final class PlaceProfilePresentationTests: XCTestCase {
             sourceProviderPlaceID: "coordinate_37.73635_-119.57366"
         )
         let visibleUserPhoto = try await repository.photo(for: coordinateRequest)
-        let visibleUserImageData = try await repository.imageData(for: visibleUserPhoto)
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let visibleUserImageData = try await backend.placePhotoImageData(
+            for: visibleUserPhoto, canonicalPlaceKey: "capture-access-contract", variant: .profile
+        )
 
         XCTAssertEqual(visibleUserPhoto.provider, "visit_photo")
         XCTAssertTrue(visibleUserPhoto.providerPlaceID.hasPrefix("capture-visit-"))
         XCTAssertNil(visibleUserPhoto.sourcePhotoURLString)
         XCTAssertNotNil(UIImage(data: visibleUserImageData))
+    }
+
+    @MainActor
+    func testMapCaptureRepositoryDoesNotAuthorizeRemoteProtectedPhotos() async throws {
+        let repository = MapCapturePlacePhotoRepository()
+        let remote = PlacePhoto(
+            provider: "visit_photo", providerPlaceID: "real-remote-photo",
+            photoURLString: "https://example.test/photo.png", width: nil, height: nil,
+            authorName: nil, authorProfileURLString: nil, authorAvatarURLString: nil,
+            sourcePhotoURLString: nil, flagContentURLString: nil,
+            storageBucket: "visit-photos", storagePath: "owner/photo.png", localAssetRef: nil
+        )
+        do {
+            try await repository.validateAccess(to: remote)
+            XCTFail("Only bundled capture assets may pass the fixture authorization contract")
+        } catch WanderRemoteError.notConfigured {}
     }
 
     @MainActor
