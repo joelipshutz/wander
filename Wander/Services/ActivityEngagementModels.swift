@@ -254,6 +254,76 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     }
 }
 
+/// A gallery may render only the result of its current source authorization.
+/// Scope changes hide old content immediately, before a replacement task runs.
+struct ActivityPhotoViewerAccessState {
+    struct Scope: Equatable {
+        let activityID: String
+        let viewerID: String
+        let isSignedIn: Bool
+        let sessionRevision: Int
+        let photoAccessRevision: Int
+        let activityGeneration: Int
+        let isActive: Bool
+        let retryID: Int
+
+        /// Source denial increments activityGeneration during the read itself.
+        /// Hide that result immediately, but require explicit retry instead of
+        /// letting the denial repeatedly trigger another identical read.
+        var refreshTrigger: Scope {
+            Scope(activityID: activityID, viewerID: viewerID, isSignedIn: isSignedIn,
+                  sessionRevision: sessionRevision, photoAccessRevision: photoAccessRevision,
+                  activityGeneration: 0, isActive: isActive, retryID: retryID)
+        }
+    }
+
+    struct Request: Equatable {
+        let id: UUID
+        let scope: Scope
+    }
+
+    private var activeRequest: Request?
+    private var resolvedScope: Scope?
+    private var resolvedContext: ActivityEngagementContext?
+
+    mutating func begin(scope: Scope) -> Request {
+        invalidate()
+        let request = Request(id: UUID(), scope: scope)
+        activeRequest = request
+        return request
+    }
+
+    @discardableResult
+    mutating func finish(
+        _ request: Request,
+        context: ActivityEngagementContext?,
+        currentScope: Scope
+    ) -> Bool {
+        guard activeRequest == request,
+              request.scope == currentScope,
+              currentScope.isActive,
+              context == nil || context?.activityID == currentScope.activityID else { return false }
+        activeRequest = nil
+        resolvedScope = currentScope
+        resolvedContext = context
+        return true
+    }
+
+    func context(for scope: Scope) -> ActivityEngagementContext? {
+        isResolved(for: scope) ? resolvedContext : nil
+    }
+
+    func isResolved(for scope: Scope) -> Bool {
+        scope.isActive && resolvedScope == scope
+    }
+
+    mutating func invalidate() {
+        activeRequest = nil
+        resolvedScope = nil
+        resolvedContext = nil
+    }
+}
+
 extension FeedTicketKind {
     var defaultTicketEyebrow: String {
         switch self {
