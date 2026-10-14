@@ -1,8 +1,53 @@
 # Decisions
 
-Last updated: 2026-09-28
+Last updated: 2026-10-08
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Sender silence and import announcements (REC-589)
+
+Silent controls automatic save announcements independently of audience and Feed
+visibility. Explicit invitations remain intentional communications. Imports
+default to Silent and ask for a native final-Save choice; one import has one
+lifetime announcement opportunity. A first three-place check-in can announce
+once as a group, and later selections never announce. Counts and names include
+only places each recipient may see, rechecked immediately before delivery.
+
+The first save attempt closes a durable visit manifest, including partial success
+or crash recovery. Later actions cannot expand it. Server finalization locks and
+seals an owner/import ledger even for silent or zero-recipient outcomes. Existing
+saved imports and background autosaves remain silent. See the
+[product specification and engineering plan](plans/rec589-sender-notifications.md).
+
+**September 28 correction:** an already-issued notification is a historical
+receipt. Later Stealth/audience changes must preserve its original personalized
+copy in the recipient's inbox and delivered push. Opening it rechecks current
+source access and must not reveal newly private activity or cached source content.
+An unsent push still requires authorization before delivery. Silent and the frozen
+once-per-import manifest are unchanged. Block and deletion rules remain separate.
+
+The deployed REC-589 restrictive read guard currently hides stale grouped
+snapshots after partial or full access revocation, including issued notifications.
+That post-issuance behavior is superseded by the decision above. The separate
+REC-590 correction must reconcile both its source guard and this restrictive
+policy with historical receipts; the sender branch does not claim that follow-up
+implemented or verified. Recipient ownership and source authorization remain
+required, and notification history never grants activity access.
+
+## Personalized push delivery (REC-589, October 8)
+
+An eligible recipient receives detailed notification copy after final source
+authorization, including when they are friends with the primary saver but not
+another actor in the activity. Actor presence alone must never replace useful
+copy with “New activity on Astir / Open Astir to view.” Silent, receiver settings,
+blocks, mutes, expiry, and source access still control whether delivery occurs.
+
+The final delivery RPC refreshes grouped import names, counts, and destinations
+from the frozen first-save manifest. A place hidden after queue claim is excluded;
+a group with no remaining visible places is suppressed. Later import selections
+never expand this manifest. Delivered events are not rewritten or re-enqueued.
+This corrects the former generic-copy policy below. Historical inbox retention
+after a later privacy change remains a separate follow-up.
 
 ## Historical data and testing scope (REC-590, September 29)
 
@@ -42,8 +87,9 @@ independently saved places and ambiguous historical saves keep their audiences.
 Copied shared-visit photos retain source provenance and inherit later source
 revocation. A recipient's independent notes, rating, and original uploads remain
 their own. Notification inbox reads, claims, and the final delivery step check
-current source access. Social pushes use generic copy because delivered OS
-notifications cannot be recalled.
+current source access. The original generic social-copy policy is superseded by
+the October 8 personalized-delivery decision above. Delivered OS notifications
+cannot be recalled.
 
 Canonical Astir share links use generic public artwork and text. The website
 reader must be deployed before existing public share artwork becomes private.

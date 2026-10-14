@@ -179,6 +179,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeVisits: [LocalPlaceVisit]
     @Published private(set) var visitPhotos: [LocalVisitPhoto]
     @Published private(set) var sharedVisitInvitations: [SharedVisitInvitation]
+    @Published private(set) var importNotificationCommits: [ImportNotificationCommit] = []
     @Published private(set) var pendingSharedVisitInvites: [PendingSharedVisitInvite]
     @Published private(set) var sharedVisitCompanionsByVisitID: [String: [SharedVisitCompanion]] = [:]
     private(set) var sharedVisitInboxUserID: String?
@@ -636,6 +637,13 @@ final class WanderStore: ObservableObject {
             self.userPlaces = restored.userPlaces
             self.placeAttributes = restored.placeAttributes
             self.remoteVisiblePlaceCache = restored.cachedCurrentUserVisiblePlaces
+            // A restored first attempt can only replay its already durable visits.
+            // Newly selected actions must never expand that announcement.
+            self.importNotificationCommits = restored.importNotificationCommits.map { commit in
+                var closed = commit
+                closed.locallyComplete = true
+                return closed
+            }
             self.placeWannaSaves = restored.placeWannaSaves
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
@@ -712,6 +720,74 @@ final class WanderStore: ObservableObject {
         }
         if shouldPersistAfterRestore {
             persist()
+        }
+    }
+
+    func importNeedsNotificationChoice(_ batch: PlaceImportBatch) -> Bool {
+        !importNotificationCommits.contains { $0.ownerID == currentUser.id && $0.importID == batch.notificationImportID }
+            && !batch.hasPreviouslySavedSelections
+    }
+
+    func beginImportNotificationCommit(_ batch: PlaceImportBatch, silent: Bool, selectedItemIDs: Set<String> = []) -> SenderNotificationPolicy {
+        if let index = importNotificationCommits.firstIndex(where: {
+            $0.ownerID == currentUser.id && $0.importID == batch.notificationImportID
+        }) {
+            // Retain the original server identity/choice. All imported actions
+            // suppress individual alerts; only the closed manifest can announce.
+            importNotificationCommits[index].locallyComplete = true
+            persist()
+            flushPersistence()
+            return importNotificationCommits[index].policy
+        }
+        let legacy = batch.hasPreviouslySavedSelections
+        let commit = ImportNotificationCommit(id: UUID().uuidString.lowercased(), ownerID: currentUser.id,
+            importID: batch.notificationImportID, silent: legacy || silent, selectedItemIDs: selectedItemIDs)
+        importNotificationCommits.append(commit)
+        persist()
+        flushPersistence()
+        return commit.policy
+    }
+
+    func completeImportNotificationCommit(_ policy: SenderNotificationPolicy, completedItemIDs: Set<String> = []) {
+        guard let index = importNotificationCommits.firstIndex(where: {
+            $0.ownerID == currentUser.id && $0.id == policy.importCommitID
+        }) else { return }
+        importNotificationCommits[index].completedItemIDs.formUnion(completedItemIDs)
+        importNotificationCommits[index].locallyComplete = true
+        persist()
+        flushPersistence()
+    }
+
+    func syncPendingImportNotifications(backend: WanderBackend?) async {
+        guard let repository = backend?.userPlaceRepository as? any ImportNotificationRepository else { return }
+        let ownerID = currentUser.id
+        let pending = importNotificationCommits.filter { $0.ownerID == ownerID && $0.locallyComplete && !$0.isSynced }
+        for commit in pending {
+            guard currentUser.id == ownerID else { return }
+            var remoteIDs: [String] = []
+            var ready = true
+            for id in commit.visitIDs {
+                guard let visit = placeVisits.first(where: { [$0.id, $0.localID, $0.serverID].contains(id) }) else {
+                    // A removed local-only visit has no remote content to announce.
+                    continue
+                }
+                if visit.deletedAt != nil { continue }
+                guard visit.syncState == .synced, let remoteID = visit.serverID else { ready = false; break }
+                remoteIDs.append(remoteID)
+            }
+            guard ready else { continue }
+            do {
+                try await repository.finalizeImportNotification(commit, visitIDs: remoteIDs.sorted())
+                guard currentUser.id == ownerID else { return }
+                if let index = importNotificationCommits.firstIndex(where: { $0.id == commit.id && $0.ownerID == ownerID }) {
+                    importNotificationCommits[index].isSynced = true
+                    persist()
+                }
+            } catch {
+                guard currentUser.id == ownerID else { return }
+                lastRemoteError = remoteErrorMessage(error)
+                // Keep the same intent for maintenance/relaunch retry. No legacy fallback.
+            }
         }
     }
 
@@ -1602,6 +1678,7 @@ final class WanderStore: ObservableObject {
         placeAttributes = []
         placeWannaSaves = []
         placeVisits = []
+        importNotificationCommits = []
         visitPhotos = []
         follows = []
         blocks = []
@@ -3383,7 +3460,8 @@ final class WanderStore: ObservableObject {
         to list: LocalPlaceList,
         backend: WanderBackend?,
         analyticsSurface: String? = nil,
-        keepNewCompanionPrivate: Bool = false
+        keepNewCompanionPrivate: Bool = false,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
@@ -3423,10 +3501,11 @@ final class WanderStore: ObservableObject {
                         confidence: place.confidence ?? 1
                     ),
                     status: .wannaGo, visibility: .selfOnly, note: nil,
-                    sourceType: .manual, isPrivateListCompanion: true, backend: backend
+                    sourceType: .manual, isPrivateListCompanion: true,
+                    senderNotificationPolicy: senderNotificationPolicy, backend: backend
                 )
             } else {
-                result = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
+                result = await saveVisiblePlace(visiblePlace, status: .wannaGo, senderNotificationPolicy: senderNotificationPolicy, backend: backend)
             }
             ownerUserPlaceID = result.userPlaceID
             companionSave = .createdWanna(userPlaceID: result.userPlaceID)
@@ -3439,7 +3518,8 @@ final class WanderStore: ObservableObject {
             ownerUserPlaceID: ownerUserPlaceID,
             sourceUserPlaceID: visiblePlace.userPlace.id,
             addedByUserID: currentUser.id,
-            syncState: .pendingCreate
+            syncState: .pendingCreate,
+            senderNotificationPolicy: senderNotificationPolicy
         )
         placeListItems.append(item)
         if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
@@ -3473,7 +3553,8 @@ final class WanderStore: ObservableObject {
     func addCurrentUserPlace(
         userPlaceID: String,
         to list: LocalPlaceList,
-        analyticsSurface: String? = nil
+        analyticsSurface: String? = nil,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) -> ListPlaceAddResult {
         guard canAddPlaces(to: list),
               let userPlace = currentUserPlace(matching: userPlaceID)
@@ -3508,7 +3589,8 @@ final class WanderStore: ObservableObject {
             ownerUserPlaceID: userPlace.id,
             sourceUserPlaceID: userPlace.id,
             addedByUserID: currentUser.id,
-            syncState: .pendingCreate
+            syncState: .pendingCreate,
+            senderNotificationPolicy: senderNotificationPolicy
         )
         placeListItems.append(item)
         if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
@@ -3537,7 +3619,8 @@ final class WanderStore: ObservableObject {
         listIDs: Set<String>,
         ownerUserID: String,
         backend: WanderBackend?,
-        analyticsSurface: String = "check_in"
+        analyticsSurface: String = "check_in",
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) async -> PlaceSaveListResult {
         guard currentUser.id == ownerUserID,
               let userPlace = currentUserPlace(matching: userPlaceID)
@@ -3555,7 +3638,7 @@ final class WanderStore: ObservableObject {
                 continue
             }
             guard selectedLocalListIDs.insert(list.localID).inserted else { continue }
-            let result = addCurrentUserPlace(userPlaceID: userPlaceID, to: list, analyticsSurface: analyticsSurface)
+            let result = addCurrentUserPlace(userPlaceID: userPlaceID, to: list, analyticsSurface: analyticsSurface, senderNotificationPolicy: senderNotificationPolicy)
             guard result.outcome != .permissionDenied,
                   let item = listItems(for: list).first(where: { item in
                       item.ownerUserPlaceID == userPlace.id || item.sourceUserPlaceID == userPlace.id
@@ -3594,7 +3677,8 @@ final class WanderStore: ObservableObject {
         to list: LocalPlaceList,
         backend: WanderBackend?,
         analyticsSurface: String? = nil,
-        keepNewCompanionPrivate: Bool = false
+        keepNewCompanionPrivate: Bool = false,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
@@ -3606,7 +3690,8 @@ final class WanderStore: ObservableObject {
                 to: list,
                 backend: backend,
                 analyticsSurface: analyticsSurface,
-                keepNewCompanionPrivate: keepNewCompanionPrivate
+                keepNewCompanionPrivate: keepNewCompanionPrivate,
+                senderNotificationPolicy: senderNotificationPolicy
             )
         }
 
@@ -3630,6 +3715,7 @@ final class WanderStore: ObservableObject {
             note: nil,
             sourceType: .manual,
             isPrivateListCompanion: list.visibility == .stealth || keepNewCompanionPrivate,
+            senderNotificationPolicy: senderNotificationPolicy,
             backend: backend
         )
 
@@ -3644,7 +3730,8 @@ final class WanderStore: ObservableObject {
             savedVisiblePlace,
             to: list,
             backend: backend,
-            analyticsSurface: nil
+            analyticsSurface: nil,
+            senderNotificationPolicy: senderNotificationPolicy
         )
         let saveAlreadyExisted = !existingCurrentUserSaveIDs.isDisjoint(with: Set([
             saveResult.userPlaceID,
@@ -4318,7 +4405,8 @@ final class WanderStore: ObservableObject {
             listID: listID,
             placeID: placeID,
             ownerUserPlaceID: ownerUserPlaceID,
-            sourceUserPlaceID: sourceUserPlaceID
+            sourceUserPlaceID: sourceUserPlaceID,
+            senderNotificationPolicy: item.senderNotificationPolicy
         )
     }
 
@@ -5575,7 +5663,8 @@ final class WanderStore: ObservableObject {
                 sourceType: AddSourceType.socialSave.rawValue,
                 attributionUserID: invitation.sourceOwnerUserID,
                 syncState: .synced,
-                serverUpdatedAt: now
+                serverUpdatedAt: now,
+                senderNotificationJSON: draft.senderNotificationPolicy.persistedJSON
             )
             userPlaces.append(userPlace)
             createdNewUserPlace = true
@@ -5601,6 +5690,7 @@ final class WanderStore: ObservableObject {
             existingVisit.deletedAt = nil
             existingVisit.updatedAt = now
             existingVisit.localUpdatedAt = now
+            existingVisit.senderNotificationJSON = draft.senderNotificationPolicy.persistedJSON
             visit = existingVisit
         } else {
             visit = LocalPlaceVisit(
@@ -5614,7 +5704,8 @@ final class WanderStore: ObservableObject {
                 tags: VisitAttributeAnswers.tags(from: draft.attributes),
                 backfilledFromUserPlace: result.backfilledFromUserPlace,
                 syncState: .synced,
-                serverUpdatedAt: now
+                serverUpdatedAt: now,
+                senderNotificationJSON: draft.senderNotificationPolicy.persistedJSON
             )
             placeVisits.append(visit)
         }
@@ -6120,7 +6211,8 @@ final class WanderStore: ObservableObject {
         ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft] = [],
         visibility: PlaceVisibility? = nil,
-        preservesPriorWanna: Bool = true
+        preservesPriorWanna: Bool = true,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) -> LocalPlaceVisit? {
         let userPlace: LocalUserPlace
         if let localUserPlace = currentUserPlace(matching: userPlaceID) {
@@ -6148,7 +6240,8 @@ final class WanderStore: ObservableObject {
             syncState: .pendingCreate,
             localUpdatedAt: now,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            senderNotificationJSON: senderNotificationPolicy.persistedJSON
         )
 
         if userPlace.status == .wannaGo && preservesPriorWanna {
@@ -6166,6 +6259,11 @@ final class WanderStore: ObservableObject {
         userPlace.localUpdatedAt = now
         userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
         placeVisits.append(visit)
+        if let index = importNotificationCommits.firstIndex(where: {
+            $0.ownerID == currentUser.id && $0.id == senderNotificationPolicy.importCommitID && !$0.locallyComplete
+        }) {
+            importNotificationCommits[index].visitIDs.insert(visit.id)
+        }
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
         analytics.track(
             AnalyticsEvent(
@@ -7108,7 +7206,8 @@ final class WanderStore: ObservableObject {
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         requestsProductUpsell: Bool = true,
-        isPrivateListCompanion: Bool = false
+        isPrivateListCompanion: Bool = false,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
         if status == .wannaGo,
@@ -7171,7 +7270,8 @@ final class WanderStore: ObservableObject {
                         note: note,
                         ratingScore: savedRatingScore,
                         attributes: attributeDrafts,
-                        visibility: resolvedVisibility
+                        visibility: resolvedVisibility,
+                        senderNotificationPolicy: senderNotificationPolicy
                     )
                     return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
                 }
@@ -7181,7 +7281,8 @@ final class WanderStore: ObservableObject {
                     note: note,
                     ratingScore: savedRatingScore,
                     attributes: attributeDrafts,
-                    visibility: resolvedVisibility
+                    visibility: resolvedVisibility,
+                    senderNotificationPolicy: senderNotificationPolicy
                 )
                 refreshUserPlaceVisitSummary(userPlaceID: existing.id)
             } else {
@@ -7228,7 +7329,8 @@ final class WanderStore: ObservableObject {
                 ? plannedDate.map { WannaGoDate.normalized($0) }
                 : nil,
             sourceType: sourceType.rawValue,
-            syncState: .pendingCreate
+            syncState: .pendingCreate,
+            senderNotificationJSON: senderNotificationPolicy.persistedJSON
         )
         userPlace.isPrivateListCompanion = isPrivateListCompanion
         userPlaces.append(userPlace)
@@ -7243,7 +7345,8 @@ final class WanderStore: ObservableObject {
                 note: note,
                 ratingScore: savedRatingScore,
                 attributes: attributeDrafts,
-                visibility: resolvedVisibility
+                visibility: resolvedVisibility,
+                senderNotificationPolicy: senderNotificationPolicy
             )
         }
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
@@ -7297,6 +7400,7 @@ final class WanderStore: ObservableObject {
         plannedDate: Date?,
         attributes: [PlaceAttributeDraft],
         sourceType: AddSourceType = .manual,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard,
         backend: WanderBackend?
     ) async -> SaveResult {
         guard let existing = currentUserVisiblePlaces.first(where: {
@@ -7304,7 +7408,7 @@ final class WanderStore: ObservableObject {
         }) else {
             return await saveCandidate(candidate, status: .wannaGo, visibility: visibility,
                                        note: note, sourceType: sourceType, plannedDate: plannedDate,
-                                       attributes: attributes, backend: backend)
+                                       attributes: attributes, senderNotificationPolicy: senderNotificationPolicy, backend: backend)
         }
         if let pending = placeWannaSaves.first(where: { $0.id == operationID && $0.ownerID == currentUser.id }) {
             guard pending.deletedAt == nil else {
@@ -7611,7 +7715,8 @@ final class WanderStore: ObservableObject {
         ratingScore: Double? = nil,
         visitedAt: Date = .now,
         plannedDate: Date? = nil,
-        attributes: [PlaceAttributeDraft]? = nil
+        attributes: [PlaceAttributeDraft]? = nil,
+        senderNotificationPolicy: SenderNotificationPolicy = .silent
     ) -> SaveResult {
         if let existingPlace = place(matching: candidate),
            let existingUserPlace = currentUserPlace(for: existingPlace) {
@@ -7632,7 +7737,8 @@ final class WanderStore: ObservableObject {
                 visitedAt: visitedAt,
                 plannedDate: plannedDate,
                 attributes: attributes,
-                requestsProductUpsell: false
+                requestsProductUpsell: false,
+                senderNotificationPolicy: senderNotificationPolicy
             )
         }
 
@@ -7646,7 +7752,8 @@ final class WanderStore: ObservableObject {
             visitedAt: visitedAt,
             plannedDate: plannedDate,
             attributes: attributes,
-            requestsProductUpsell: false
+            requestsProductUpsell: false,
+            senderNotificationPolicy: senderNotificationPolicy
         )
     }
 
@@ -7740,6 +7847,7 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft]? = nil,
         requestsProductUpsell: Bool = true,
         isPrivateListCompanion: Bool = false,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard,
         backend: WanderBackend?
     ) async -> SaveResult {
         #if DEBUG
@@ -7756,7 +7864,8 @@ final class WanderStore: ObservableObject {
             plannedDate: plannedDate,
             attributes: attributes,
             requestsProductUpsell: requestsProductUpsell,
-            isPrivateListCompanion: isPrivateListCompanion
+            isPrivateListCompanion: isPrivateListCompanion,
+            senderNotificationPolicy: senderNotificationPolicy
         )
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
@@ -8023,6 +8132,7 @@ final class WanderStore: ObservableObject {
             wannaCount += removedWannas
             if removedWannas > 0 { _ = await retryPendingVisitDeletes(backend: backend) }
         }
+        await syncPendingImportNotifications(backend: backend)
         return syncedCount + deletedCount + wannaCount
     }
 
@@ -8056,6 +8166,7 @@ final class WanderStore: ObservableObject {
             wannaCount += removedWannas
             if removedWannas > 0 { _ = await retryPendingVisitDeletes(backend: backend) }
         }
+        await syncPendingImportNotifications(backend: backend)
         return syncedCount + deletedCount + wannaCount
     }
 
@@ -8536,7 +8647,7 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo) -> SaveResult {
+    func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo, senderNotificationPolicy: SenderNotificationPolicy = .standard) -> SaveResult {
         if status == .wannaGo,
            let existingOwnSave = currentUserVisiblePlaces.first(where: {
                VisiblePlaceGrouping.matches($0, visiblePlace)
@@ -8600,7 +8711,8 @@ final class WanderStore: ObservableObject {
             visibility: effectiveDefaultVisibility,
             note: nil,
             sourceType: .socialSave,
-            attributes: copiedAttributes
+            attributes: copiedAttributes,
+            senderNotificationPolicy: senderNotificationPolicy
         )
         if let saved = currentUserPlace(matching: result.userPlaceID) {
             saved.viewerPrimaryCategory = taxonomyAssignment.primaryCategory
@@ -8648,8 +8760,8 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo, backend: WanderBackend?) async -> SaveResult {
-        let localResult = saveVisiblePlace(visiblePlace, status: status)
+    func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo, senderNotificationPolicy: SenderNotificationPolicy = .standard, backend: WanderBackend?) async -> SaveResult {
+        let localResult = saveVisiblePlace(visiblePlace, status: status, senderNotificationPolicy: senderNotificationPolicy)
 
         if status == .wannaGo,
            currentUserPlace(matching: localResult.userPlaceID)?.status == .been {
@@ -8667,7 +8779,8 @@ final class WanderStore: ObservableObject {
         do {
             let remoteResult = try await backend.saveVisiblePlace(
                 placeID: remoteIDs.placeID,
-                sourceUserPlaceID: remoteIDs.sourceUserPlaceID
+                sourceUserPlaceID: remoteIDs.sourceUserPlaceID,
+                senderNotificationPolicy: senderNotificationPolicy
             )
             markUserPlace(savingUserPlace, serverID: remoteResult.userPlaceID, syncState: .synced)
             lastRemoteError = nil
@@ -10668,7 +10781,8 @@ final class WanderStore: ObservableObject {
             plannedDate: userPlace.plannedDate,
             sourceType: userPlace.sourceType,
             isPrivateListCompanion: userPlace.isPrivateListCompanion && userPlace.serverID == nil,
-            attributes: attributeDrafts
+            attributes: attributeDrafts,
+            senderNotificationPolicy: userPlace.senderNotificationPolicy
         )
     }
 
@@ -11248,7 +11362,8 @@ final class WanderStore: ObservableObject {
             note: visit.note,
             ratingScore: visit.ratingScore,
             attributeAnswersJSON: visit.attributeAnswersJSON,
-            backfilledFromUserPlace: visit.backfilledFromUserPlace
+            backfilledFromUserPlace: visit.backfilledFromUserPlace,
+            senderNotificationPolicy: visit.senderNotificationPolicy
         )
     }
 

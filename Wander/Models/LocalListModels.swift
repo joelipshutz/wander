@@ -102,6 +102,7 @@ struct LocalPlaceListMember: Identifiable, Equatable, Hashable {
 }
 
 struct LocalPlaceListItem: Identifiable, Equatable, Hashable {
+    var senderNotificationPolicy: SenderNotificationPolicy
     let localID: String
     var serverID: String?
     var listID: String
@@ -125,8 +126,10 @@ struct LocalPlaceListItem: Identifiable, Equatable, Hashable {
         syncState: SyncState = .localOnly,
         createdAt: Date = .now,
         updatedAt: Date = .now,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) {
+        self.senderNotificationPolicy = senderNotificationPolicy
         self.localID = localID
         self.serverID = serverID
         self.listID = listID
