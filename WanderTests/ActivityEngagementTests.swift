@@ -11,6 +11,207 @@ final class ActivityEngagementTests: XCTestCase {
     // budgets. Allow shared runners to schedule the task before asserting state.
     private let activityReadSynchronizationTimeout: TimeInterval = 10
 
+    func testPhotoViewerAccessPublishesOnlyTheExactResolvedContext() {
+        let scope = photoViewerScope()
+        let context = photoViewerContext()
+        var state = ActivityPhotoViewerAccessState()
+        let request = state.begin(scope: scope)
+        XCTAssertNil(state.context(for: scope))
+        XCTAssertFalse(state.isResolved(for: scope))
+
+        XCTAssertTrue(state.finish(request, context: context, currentScope: scope))
+        XCTAssertEqual(state.context(for: scope), context)
+        XCTAssertTrue(state.isResolved(for: scope))
+        XCTAssertFalse(state.finish(request, context: nil, currentScope: scope))
+        XCTAssertEqual(state.context(for: scope), context)
+    }
+
+    func testPhotoViewerScopeChangesHideMediaAndRejectLateAuthorization() {
+        let initial = photoViewerScope()
+        let replacements = [
+            photoViewerScope(activityID: "other-activity"),
+            photoViewerScope(viewerID: "other-viewer"),
+            photoViewerScope(isSignedIn: false),
+            photoViewerScope(sessionReadiness: .validating),
+            photoViewerScope(sessionReadiness: .unavailable),
+            photoViewerScope(sessionRevision: 1),
+            photoViewerScope(photoAccessRevision: 1),
+            photoViewerScope(activityGeneration: 1),
+            photoViewerScope(retryID: 1)
+        ]
+        for replacement in replacements {
+            var state = ActivityPhotoViewerAccessState()
+            let resolvedRequest = state.begin(scope: initial)
+            XCTAssertTrue(state.finish(resolvedRequest, context: photoViewerContext(), currentScope: initial))
+            XCTAssertNil(state.context(for: replacement))
+            XCTAssertFalse(state.isResolved(for: replacement))
+
+            let pendingRequest = state.begin(scope: initial)
+            XCTAssertFalse(state.finish(pendingRequest, context: photoViewerContext(), currentScope: replacement))
+            XCTAssertNil(state.context(for: replacement))
+            XCTAssertFalse(state.isResolved(for: replacement))
+        }
+    }
+
+    func testPhotoViewerNewRequestSupersedesOldRequestEvenInTheSameScope() {
+        let scope = photoViewerScope()
+        var state = ActivityPhotoViewerAccessState()
+        let previous = state.begin(scope: scope)
+        let current = state.begin(scope: scope)
+        XCTAssertNotEqual(previous.id, current.id)
+        XCTAssertFalse(state.finish(previous, context: photoViewerContext(), currentScope: scope))
+        XCTAssertFalse(state.isResolved(for: scope))
+        XCTAssertTrue(state.finish(current, context: photoViewerContext(mediaIDs: ["new-photo"]), currentScope: scope))
+        XCTAssertEqual(state.context(for: scope)?.media.map(\.id), ["new-photo"])
+    }
+
+    func testPhotoViewerSessionValidationHidesMediaAndRestartsAuthorizationForTheRetainedAccount() {
+        let ready = photoViewerScope()
+        let validating = photoViewerScope(sessionReadiness: .validating)
+        let unavailable = photoViewerScope(sessionReadiness: .unavailable)
+        var state = ActivityPhotoViewerAccessState()
+        let context = photoViewerContext()
+        let authorized = state.begin(scope: ready)
+        XCTAssertTrue(state.finish(authorized, context: context, currentScope: ready))
+
+        // Foreground validation retains the account and signed-in surface.
+        // Readiness alone must hide old media and restart the gallery task.
+        XCTAssertEqual(ready.viewerID, validating.viewerID)
+        XCTAssertEqual(ready.isSignedIn, validating.isSignedIn)
+        XCTAssertEqual(ready.sessionRevision, validating.sessionRevision)
+        XCTAssertNotEqual(ready.refreshTrigger, validating.refreshTrigger)
+        XCTAssertNil(state.context(for: validating))
+        XCTAssertFalse(state.isResolved(for: validating))
+
+        let validationRead = state.begin(scope: validating)
+        XCTAssertFalse(state.finish(validationRead, context: context, currentScope: ready))
+        let afterValidation = state.begin(scope: ready)
+        XCTAssertTrue(state.finish(afterValidation, context: context, currentScope: ready))
+        XCTAssertEqual(state.context(for: ready), context)
+
+        XCTAssertNotEqual(validating.refreshTrigger, unavailable.refreshTrigger)
+        XCTAssertNil(state.context(for: unavailable))
+        let offlineRead = state.begin(scope: unavailable)
+        XCTAssertTrue(state.finish(offlineRead, context: nil, currentScope: unavailable))
+        XCTAssertTrue(state.isResolved(for: unavailable))
+        XCTAssertNil(state.context(for: unavailable))
+        XCTAssertNotEqual(unavailable.refreshTrigger, ready.refreshTrigger)
+        let retryAfterRecovery = state.begin(scope: ready)
+        XCTAssertTrue(state.finish(retryAfterRecovery, context: context, currentScope: ready))
+        XCTAssertEqual(state.context(for: ready), context)
+    }
+
+    func testPhotoViewerRevocationHidesMediaWithoutTriggeringAnotherReadUntilRetryOrSessionChange() {
+        let initial = photoViewerScope()
+        let revoked = photoViewerScope(activityGeneration: 1)
+        var state = ActivityPhotoViewerAccessState()
+        let request = state.begin(scope: initial)
+        XCTAssertTrue(state.finish(request, context: photoViewerContext(), currentScope: initial))
+
+        XCTAssertNotEqual(initial, revoked)
+        XCTAssertEqual(initial.refreshTrigger, revoked.refreshTrigger)
+        XCTAssertNil(state.context(for: revoked))
+        XCTAssertFalse(state.isResolved(for: revoked))
+
+        let retry = photoViewerScope(activityGeneration: 1, retryID: 1)
+        let newSession = photoViewerScope(sessionRevision: 1, activityGeneration: 1)
+        for nextScope in [retry, newSession] {
+            XCTAssertNotEqual(revoked.refreshTrigger, nextScope.refreshTrigger)
+            let nextRequest = state.begin(scope: nextScope)
+            XCTAssertTrue(state.finish(nextRequest, context: photoViewerContext(), currentScope: nextScope))
+            XCTAssertEqual(state.context(for: nextScope), photoViewerContext())
+            XCTAssertNil(state.context(for: revoked))
+        }
+    }
+
+    func testPhotoViewerInvalidationClearsMediaAndRejectsInFlightResults() {
+        let scope = photoViewerScope()
+        var state = ActivityPhotoViewerAccessState()
+        let resolved = state.begin(scope: scope)
+        XCTAssertTrue(state.finish(resolved, context: photoViewerContext(), currentScope: scope))
+        state.invalidate()
+        XCTAssertNil(state.context(for: scope))
+        XCTAssertFalse(state.isResolved(for: scope))
+
+        let pending = state.begin(scope: scope)
+        state.invalidate()
+        XCTAssertFalse(state.finish(pending, context: photoViewerContext(), currentScope: scope))
+        XCTAssertNil(state.context(for: scope))
+        XCTAssertFalse(state.isResolved(for: scope))
+    }
+
+    func testPhotoViewerInactiveSceneCannotDisplayOrResolveMedia() {
+        let active = photoViewerScope()
+        let inactive = photoViewerScope(isActive: false)
+        var state = ActivityPhotoViewerAccessState()
+        let request = state.begin(scope: active)
+        XCTAssertTrue(state.finish(request, context: photoViewerContext(), currentScope: active))
+        XCTAssertNil(state.context(for: inactive))
+        XCTAssertFalse(state.isResolved(for: inactive))
+
+        let inactiveRequest = state.begin(scope: inactive)
+        XCTAssertFalse(state.finish(inactiveRequest, context: photoViewerContext(), currentScope: inactive))
+        XCTAssertFalse(state.isResolved(for: inactive))
+        XCTAssertNil(state.context(for: active))
+    }
+
+    func testPhotoViewerRejectsAResponseForAnotherActivity() {
+        let scope = photoViewerScope()
+        var state = ActivityPhotoViewerAccessState()
+        let request = state.begin(scope: scope)
+        XCTAssertFalse(state.finish(request, context: photoViewerContext(activityID: "other-activity"), currentScope: scope))
+        XCTAssertNil(state.context(for: scope))
+        XCTAssertFalse(state.isResolved(for: scope))
+    }
+
+    func testPhotoViewerAuthoritativeRemovalDoesNotRetainEarlierMedia() {
+        let scope = photoViewerScope()
+        let removedContexts: [ActivityEngagementContext?] = [nil, photoViewerContext(mediaIDs: [])]
+        for removed in removedContexts {
+            var state = ActivityPhotoViewerAccessState()
+            let previous = state.begin(scope: scope)
+            XCTAssertTrue(state.finish(previous, context: photoViewerContext(), currentScope: scope))
+            let refresh = state.begin(scope: scope)
+            XCTAssertNil(state.context(for: scope))
+            XCTAssertFalse(state.isResolved(for: scope))
+
+            XCTAssertTrue(state.finish(refresh, context: removed, currentScope: scope))
+            XCTAssertTrue(state.isResolved(for: scope))
+            XCTAssertEqual(state.context(for: scope), removed)
+            XCTAssertTrue(state.context(for: scope)?.media.isEmpty ?? true)
+        }
+    }
+
+    private func photoViewerScope(
+        activityID: String = "activity",
+        viewerID: String = "viewer",
+        isSignedIn: Bool = true,
+        sessionReadiness: ActivitySessionReadiness = .ready,
+        sessionRevision: Int = 0,
+        photoAccessRevision: Int = 0,
+        activityGeneration: Int = 0,
+        isActive: Bool = true,
+        retryID: Int = 0
+    ) -> ActivityPhotoViewerAccessState.Scope {
+        .init(activityID: activityID, viewerID: viewerID, isSignedIn: isSignedIn,
+              sessionReadiness: sessionReadiness,
+              sessionRevision: sessionRevision, photoAccessRevision: photoAccessRevision,
+              activityGeneration: activityGeneration, isActive: isActive, retryID: retryID)
+    }
+
+    private func photoViewerContext(
+        activityID: String = "activity", mediaIDs: [String] = ["photo"]
+    ) -> ActivityEngagementContext {
+        ActivityEngagementContext(
+            activityID: activityID,
+            actor: ProfileShell(id: "owner", handle: "owner", displayName: "Owner",
+                                avatarURL: nil, bio: nil, relationship: .follower),
+            placeName: "Photo fixture", placeServerID: nil, placeDetail: "Coffee",
+            status: .been, occurredAt: Date(timeIntervalSince1970: 1_800_000_000),
+            media: mediaIDs.map { ActivityEngagementMedia(id: $0, accessibilityLabel: "Activity photo") }
+        )
+    }
+
     func testCommentComposerPreservesDraftAndMentionsThroughRepeatedAccessChecks() {
         let scope = ActivityCommentComposerState.Scope(viewerID: "viewer", activityID: "activity", isSignedIn: true)
         var composer = ActivityCommentComposerState()

@@ -155,6 +155,103 @@ final class FeedActivityGroupingUITests: XCTestCase {
     }
 
     @MainActor
+    func testFeedRatingsStayAtTopRightForShortAndLongPlaceNames() {
+        var ratingFrames: [CGRect] = []
+        for longTitle in [false, true] {
+            let app = launchPhotoStackFixture(extraArguments: longTitle ? ["-WanderFeedPhotoStackLongTitle"] : [])
+            let title = app.buttons["feed.photo-stack.place"]
+            let rating = app.staticTexts["feed.photo-stack.postcard.rating.value"]
+            XCTAssertTrue(title.waitForExistence(timeout: 10))
+            XCTAssertTrue(rating.exists)
+            XCTAssertEqual(rating.label, longTitle ? "Rating 4 out of 5" : "Rating 5 out of 5")
+            XCTAssertGreaterThan(rating.frame.minX, title.frame.minX)
+            XCTAssertGreaterThan(rating.frame.midX, app.frame.midX)
+            XCTAssertGreaterThanOrEqual(rating.frame.minX, title.frame.maxX)
+            XCTAssertEqual(rating.frame.minY, title.frame.minY, accuracy: 22,
+                           "The rating stays beside the first title line, including when the name wraps.")
+            ratingFrames.append(rating.frame)
+
+            let actor = app.buttons["feed.photo-stack.actor"]
+            XCTAssertTrue(actor.exists)
+            XCTAssertEqual(actor.label, "Ryan Lieblein checked in, just now")
+            XCTAssertFalse(actor.label.localizedCaseInsensitiveContains("your activity"))
+            XCTAssertFalse(actor.label.localizedCaseInsensitiveContains("someone you follow"))
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(
+                format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "your activity", "someone you follow"
+            )).firstMatch.exists)
+            capture(longTitle ? "REC-641-long-title" : "REC-641-short-title")
+            app.terminate()
+        }
+        XCTAssertEqual(ratingFrames[0].minY, ratingFrames[1].minY, accuracy: 2)
+        XCTAssertEqual(ratingFrames[0].maxX, ratingFrames[1].maxX, accuracy: 2)
+    }
+
+    @MainActor
+    func testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace() {
+        let app = launchPhotoStackFixture(extraArguments: ["-WanderFeedPhotoStackLongTitle"])
+        let photos = app.buttons["feed.photo-stack.postcard.photos"]
+        XCTAssertTrue(photos.waitForExistence(timeout: 10))
+        XCTAssertEqual(photos.value as? String, "3 photos")
+        XCTAssertGreaterThanOrEqual(photos.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(photos.frame.height, 44)
+        let actor = app.buttons["feed.photo-stack.actor"]
+        XCTAssertGreaterThanOrEqual(photos.frame.minX, actor.frame.maxX)
+        photos.tap()
+
+        let back = app.buttons["activity.photos.back"]
+        let position = app.staticTexts["activity.photos.position"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        XCTAssertTrue(position.waitForExistence(timeout: 5))
+        XCTAssertEqual(position.label, "1 of 3")
+        XCTAssertFalse(app.descendants(matching: .any)["activity.photos.unavailable"].exists)
+        XCTAssertFalse(app.staticTexts["feed.photo-stack.profile.opened"].exists)
+        XCTAssertFalse(app.staticTexts["feed.photo-stack.place.opened"].exists)
+        capture("REC-641-photos-first")
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).press(
+            forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        )
+        let secondPhoto = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "2 of 3"), object: position)
+        XCTAssertEqual(XCTWaiter.wait(for: [secondPhoto], timeout: 5), .completed)
+        capture("REC-641-photos-second")
+        back.tap()
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(photos.isHittable)
+        XCTAssertFalse(back.exists)
+
+        actor.tap()
+        XCTAssertTrue(app.staticTexts["feed.photo-stack.profile.opened"].waitForExistence(timeout: 5))
+        XCTAssertFalse(back.exists)
+        app.buttons["feed.photo-stack.destination.done"].tap()
+        let place = app.buttons["feed.photo-stack.place"]
+        XCTAssertTrue(place.waitForExistence(timeout: 5))
+        place.tap()
+        XCTAssertTrue(app.staticTexts["feed.photo-stack.place.opened"].waitForExistence(timeout: 5))
+        XCTAssertFalse(back.exists)
+    }
+
+    @MainActor
+    func testFeedOmitsPhotoStackWhenSaveHasNoPhotos() {
+        let app = launchPhotoStackFixture(extraArguments: ["-WanderFeedPhotoStackNoPhotos"])
+        XCTAssertTrue(app.buttons["feed.photo-stack.actor"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["feed.photo-stack.postcard.photos"].exists)
+        XCTAssertTrue(app.staticTexts["feed.photo-stack.postcard.rating.value"].exists)
+        capture("REC-641-no-photos")
+    }
+
+    @MainActor
+    private func launchPhotoStackFixture(extraArguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+            "-WanderFeedPhotoStackUITest", "-AppleInterfaceStyle", "Dark"
+        ] + extraArguments
+        app.launch()
+        return app
+    }
+
+    @MainActor
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name

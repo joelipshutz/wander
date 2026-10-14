@@ -9,6 +9,8 @@ on:
       - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
+      - 'WanderTests/WanderPlaceCategoryTests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
       - 'scripts/run-parent-regression.py'
       - '.github/workflows/privacy-validation.yml'
