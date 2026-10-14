@@ -25,6 +25,14 @@ Only the draft-status comments changed during packaging; executable SQL matches 
 4. Review both generated migrations and run their rollback-only regressions. Verify radius/category/person predicates precede the limit, all filters bind the cursor, viewer taxonomy matches the native projection, and no authorized source subset broadens. Run the integrated native store/query/lease tests and appropriate regression suite.
 5. Apply through the approved migration workflow to the confirmed target, then compare local and hosted migration records, inspect function/grant metadata and run hosted smoke. If the migration tool allocates its own version, reconcile the returned version with the local filename before another deployment. Keep the global `unified_live_v1` value false. Activation remains a separate internal rollout step through the full-launch flag platform.
 
+## Durable dormant checks
+
+[rec636_dormant_metadata.sql](../../../../supabase/tests/rec636_dormant_metadata.sql) checks the fourteen exact function identities and ABI/security/grant contracts, private-table RLS, the nine-key flag registry and 660 type/range combinations. It requires global Live Off, uses only the catalog search path for expression evaluation and rejects unreviewed executable dependencies. Run it inside the ordered rollback preview before installation, then without previews after installation. These checks supplement the behavior smoke suite.
+
+[rec636_preinstall_baseline.sql](../../../../supabase/tests/rec636_preinstall_baseline.sql) reports only aggregate new-object, Live-row and exact reserved-profile counts. Compare before and after each rolled-back preview; all new-object/row counts must remain zero. It is not a post-install success check.
+
+Offline verifier contracts run with `node --test scripts/rec636-dormant-metadata.test.mjs`. The recovery metadata preview and rollback baseline pass; this does not install the migrations or establish real client delivery.
+
 ## Read-only real-client preflight
 
 `scripts/rec636-real-client-verification.mjs` defaults to offline input validation. Explicit `--preflight` validates two supplied identities through the actual gateway and reads their inboxes; `--help` describes its stdin-only input. It discovers no credentials and reports no tokens, profile fields or message bodies. Sixteen offline tests cover its target, identity, transport and output contracts.

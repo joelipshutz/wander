@@ -1,14 +1,35 @@
 # REC-636 integrated validation
 
-October 13, 2026 · Integrated `Wander` app · **Draft; Live remains off**
+October 14, 2026 · Integrated `Wander` app · **Draft; Live remains off**
 
-**Current native candidate: V15, source commit `362f9418dd0e097d6ab0063017c79cebba34ea50`, integrated with main `bc2fa4d585ceb6fb97858e1c157a2cc43019e982` (build 181).** Current full-suite, CI and backend gate results are maintained in [PR #736](https://github.com/joelipshutz/wander/pull/736) and [REC-636](https://linear.app/recme/issue/REC-636/specify-and-prototype-the-unified-live-map-feed-and-user-journey). The V16 checks below use the frozen V15 binary. This file also preserves completed V12/V13 evidence and its limits; a newer status in the PR does not relabel these historical binaries.
+**Historical V15 native candidate: source commit `362f9418dd0e097d6ab0063017c79cebba34ea50`, integrated with main `bc2fa4d585ceb6fb97858e1c157a2cc43019e982` (build 181).** Current full-suite, CI and backend gate results are maintained in [PR #736](https://github.com/joelipshutz/wander/pull/736) and [REC-636](https://linear.app/recme/issue/REC-636/specify-and-prototype-the-unified-live-map-feed-and-user-journey). The V16 checks below use the frozen V15 binary. This file also preserves completed V12/V13 evidence and its limits; a newer status in the PR does not relabel these historical binaries.
 
 **The frozen V13 full run completed with 3,082 of 3,092 tests passing: all 2,808 units and 274 of 284 UI tests, with ten UI failures and no skips. All ten original failures subsequently passed against the unchanged built app.** The failed full result remains part of the record; later focused passes do not replace it. All Live journeys, recovery/privacy, Map input and Feed paging cases passed within the full run. Final focused V13 checks also pass Map accessibility on both sizes, compact Feed paging and both large inbox/thread switcher captures. Actual private-message replay passed separately on both sizes. Consult the PR for the final integrated full-suite and CI results.
 
 This report records candidate provenance for the [review guide](../review-guide.md) and [capture gallery](integrated-captures.md); the linked PR carries the current review gate status. A focused pass establishes the named check, not a passing full suite or hosted readiness.
 
-## Current V15/V16 evidence
+## Recovery verification — October 14
+
+Published source was recovered after temporary local storage became unavailable. Original local V16/V17 bundles, logs and unpublished tooling are currently unavailable; their prior counts remain historical observations. Three current-head CI evidence archives were recovered with matching GitHub SHA-256 digests. They are separate from the missing local full-suite result.
+
+The V18/V20 recovery source is identical across all 424 tracked Swift files, including the standalone prototype. Only two native test files differ from published head `9f31d33a5`: bounded exact-value readiness for the typed draft, and replay callback/decode diagnostics plus inspection of every unseen frame. App source, replay cadence, performance limits and all privacy assertions are unchanged.
+
+| Recovery check | Result and scope |
+|---|---|
+| V18 isolated private replay | 1/1 passed, zero skips. Fresh loaded control and all-frame forbidden-text checks passed across five frames; one native draw was incomplete. The actual SDK image masks private content. |
+| V18 isolated credential replay | 1/1 passed in its own process. |
+| V18 large inbox/thread switcher | 2/2 passed on iPhone 17 Pro. |
+| V20 compact inbox/thread switcher | 2/2 passed on iPhone 13 mini. Draft readiness, visible stable cover, forbidden-text scan and restored draft checks remain. |
+| V20 full units plus remaining V16 failure rechecks | 2,819/2,819 passed, zero skips: all 2,808 included units and eleven original failed UI cases. Together with the large thread check, every original V16 failing case has a later focused pass. This does not relabel the original full run. |
+| Dormant metadata recovery | Reviewed metadata preview passed fourteen function ABI/security checks, two private tables, nine keys and 660 type/range probes. Global Live stayed Off; baseline before/after found no new objects, Live flag rows or any of 64 reserved profiles. No migration is installed. |
+
+V18 compact privacy failed because the local iPhone SE bottom swipe opened Control Center. A V19 Home-button attempt reached the Home screen and failed the same stable-cover gate; that test change was removed. These failed bundles remain in durable evidence. V20 uses the supported Home-indicator gesture on iPhone 13 mini; the passing capture does not establish an SE app-switcher result.
+
+An independent review found that the metadata evaluator needed a restricted catalog search path and rejection of unreviewed executable dependencies before dynamic evaluation. That guard is now in the durable verifier; its hardened rollback preview passes. Definition fingerprints from the reviewed preview supplement the ABI/grant checks before installation.
+
+Upstream REC-641 and REC-642 landed after this candidate's integration base. Their Feed, notification and test changes require integration and a new candidate record before current CI/native readiness. The current PR remains draft and Live remains globally Off.
+
+## Historical V15/V16 evidence
 
 - V15 changes only three test files after V14: replay layout/OCR scheduling, switcher screenshot/OCR timing, and separately asserted mention deletion steps. App source, performance budgets and all 21 tracked build inputs remain unchanged. The 403-source/21-input manifests match after the V16 focused runs.
 - [V15 Privacy CI](https://github.com/joelipshutz/wander/actions/runs/38478621783) passed 2,813 unit/large-UI tests and four compact tests, zero skips. Inbox/thread switcher checks passed on both sizes. Private SDK replay and credential replay each passed in separate processes.
@@ -113,18 +134,14 @@ D11 is settled: **15 minutes per social activity, measured from its monotonic au
 
 ## Resume commands
 
-Run from `/private/tmp/wander-live-review`. Both V12 result bundles and the named V13 replay bundles are closed. Use fresh result-bundle paths for any further native run and record source identity. Replay scenarios must remain in separate test processes; their focused passes above are complete and need repetition only when a relevant change or new failure requires it.
+Use the restored isolated review worktree and a durable issue evidence directory. Set `REC636_EVIDENCE_DIR` to that directory before running these commands; the former temporary paths are unavailable. Use fresh result paths and record candidate identity for every further run. Private and credential replay must run in separate processes.
 
 ```sh
-xcrun xcresulttool get test-results summary --path /private/tmp/rec636-evidence/live-v12-final-compact.xcresult
+xcrun xcresulttool get test-results summary \
+  --path "$REC636_EVIDENCE_DIR/v20-unit-and-failure-rechecks.xcresult"
 
-xcodebuild test -project Wander.xcodeproj -scheme Wander \
-  -destination 'platform=iOS Simulator,id=21FFD105-FF94-44D6-82F0-2DF1DF4A6724' \
-  -derivedDataPath /private/tmp/rec636-evidence/FinalDerivedData \
-  -resultBundlePath /private/tmp/rec636-evidence/live-next-private-replay.xcresult \
-  -jobs 2 -parallel-testing-enabled NO \
-  -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+node --test scripts/rec636-dormant-metadata.test.mjs \
+  scripts/rec636-real-client-verification.test.mjs
 
 # After reviewed migrations are installed on the confirmed target:
 supabase migration list --linked

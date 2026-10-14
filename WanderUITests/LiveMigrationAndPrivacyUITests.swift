@@ -136,6 +136,7 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         composer.tap()
         composer.typeText("Orchid signal private draft")
+        waitForValue("Orchid signal private draft", in: composer)
         XCTAssertEqual(composer.value as? String, "Orchid signal private draft")
         XCTAssertTrue(try recognizedText(in: app.screenshot()).contains("orchid signal"))
         capture("privacy-thread-active-keyboard-fixture")
@@ -188,6 +189,12 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         let tab = app.tabBars.buttons[title]
         XCTAssertTrue(tab.waitForExistence(timeout: 25))
         waitUntilHittable(tab)
+    }
+
+    private func waitForValue(_ value: String, in element: XCUIElement) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed,
+                       "Typed text must settle before taking the private-draft baseline.")
     }
 
     private func waitUntilHittable(_ element: XCUIElement) {

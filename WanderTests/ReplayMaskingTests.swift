@@ -52,6 +52,8 @@ final class ReplayMaskingTests: XCTestCase {
         config.setBeforeSend { event in frames.receive(event); return nil }
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
+        sdk.capture(ReplayFrameCollector.probeEvent)
+        XCTAssertEqual(frames.probeCallbackCount, 1, "The offline collector must receive the SDK callback probe.")
         var layoutPump = ReplayLayoutPump(interval: .seconds(config.sessionReplayConfig.throttleDelay))
 
         // Require the recorder to produce a frame before creating any private
@@ -65,13 +67,16 @@ final class ReplayMaskingTests: XCTestCase {
             let available = frames.images
             // Re-running Vision on the same image competes with the SDK's
             // serial image encoder without adding freshness evidence.
-            guard available.count > observedReadyFrameCount else { continue }
-            observedReadyFrameCount = available.count
-            if sdk.isSessionReplayActive(), let frame = available.last,
-               try await Self.recognizedText(frame).contains("replay ready") {
-                recorderReady = true
-                break
+            while observedReadyFrameCount < available.count, ContinuousClock.now < readyDeadline {
+                let frame = available[observedReadyFrameCount]
+                let text = try await Self.recognizedText(frame)
+                observedReadyFrameCount += 1
+                if sdk.isSessionReplayActive(), text.contains("replay ready") {
+                    recorderReady = true
+                    break
+                }
             }
+            if recorderReady { break }
         }
         XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
         guard recorderReady else {
@@ -84,6 +89,7 @@ final class ReplayMaskingTests: XCTestCase {
             sdk_style_draws_failed=\(window.failedDraws)
             fixture_frames_delivered=\(frames.imageCount(windowID: window.hash))
             fixture_layout_requests=\(layoutPump.requestCount)
+            \(frames.diagnostics)
             """)
             diagnostic.name = "Private replay readiness diagnostics"
             diagnostic.lifetime = .keepAlways
@@ -146,18 +152,22 @@ final class ReplayMaskingTests: XCTestCase {
         XCTAssertTrue(loadedBaselineText.contains("replay loaded"),
                       "The native post-load control must be rendered before observing SDK frames.")
         var replay: UIImage?
-        var observedLoadedFrameCount = 0
+        var observedLoadedFrameCount = preLoadedControlFrameCount
         let loadedDeadline = ContinuousClock.now.advanced(by: .seconds(30))
         while ContinuousClock.now < loadedDeadline {
             layoutPump.requestLayoutWhenReady(window: window, frames: frames)
             try await Task.sleep(for: .milliseconds(100))
             let available = frames.images
-            guard available.count > observedLoadedFrameCount else { continue }
-            observedLoadedFrameCount = available.count
-            if let frame = available.last, try await Self.recognizedText(frame).contains("replay loaded") {
-                replay = frame
-                break
+            while observedLoadedFrameCount < available.count, ContinuousClock.now < loadedDeadline {
+                let frame = available[observedLoadedFrameCount]
+                let text = try await Self.recognizedText(frame)
+                observedLoadedFrameCount += 1
+                if text.contains("replay loaded") {
+                    replay = frame
+                    break
+                }
             }
+            if replay != nil { break }
         }
         // Preserve evidence even when the exact post-load control gate fails.
         // A missing gate must not skip checking the frames that were captured.
@@ -175,6 +185,7 @@ final class ReplayMaskingTests: XCTestCase {
         sdk_style_draws_failed=\(window.failedDraws)
         fixture_frames_delivered=\(frames.imageCount(windowID: window.hash))
         fixture_layout_requests=\(layoutPump.requestCount)
+        \(frames.diagnostics)
         """)
         diagnostic.name = "Private replay capture diagnostics"
         diagnostic.lifetime = .keepAlways
@@ -247,6 +258,8 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
+        sdk.capture(ReplayFrameCollector.probeEvent)
+        XCTAssertEqual(frames.probeCallbackCount, 1, "The offline collector must receive the SDK callback probe.")
 
         // Drive genuine layout notifications, which trigger the SDK screenshot recorder.
         let minimumCaptureTime = ContinuousClock.now.advanced(by: .seconds(2))
@@ -381,26 +394,71 @@ private struct ReplayLayoutPump {
 }
 
 private final class ReplayFrameCollector: @unchecked Sendable {
+    static let probeEvent = "replay_fixture_callback_probe"
+
+    private struct Counts {
+        var callbacks = 0
+        var probeCallbacks = 0
+        var snapshotCallbacks = 0
+        var snapshotArrays = 0
+        var wireframeArrays = 0
+        var wireframes = 0
+        var base64Strings = 0
+        var dataDecodes = 0
+        var imageDecodes = 0
+    }
+
     private let lock = NSLock()
+    private var counts = Counts()
     private var captured: [UIImage] = []
     private var windowImageCounts: [Int: Int] = [:]
     var image: UIImage? { lock.lock(); defer { lock.unlock() }; return captured.last }
     var images: [UIImage] { lock.lock(); defer { lock.unlock() }; return captured }
+    var probeCallbackCount: Int { lock.lock(); defer { lock.unlock() }; return counts.probeCallbacks }
+    var diagnostics: String {
+        lock.lock(); defer { lock.unlock() }
+        return """
+        collector_callbacks=\(counts.callbacks)
+        collector_probe_callbacks=\(counts.probeCallbacks)
+        collector_snapshot_callbacks=\(counts.snapshotCallbacks)
+        collector_snapshot_arrays=\(counts.snapshotArrays)
+        collector_wireframe_arrays=\(counts.wireframeArrays)
+        collector_wireframes=\(counts.wireframes)
+        collector_base64_strings=\(counts.base64Strings)
+        collector_data_decodes=\(counts.dataDecodes)
+        collector_image_decodes=\(counts.imageDecodes)
+        """
+    }
 
     func imageCount(windowID: Int) -> Int {
         lock.lock(); defer { lock.unlock() }
         return windowImageCounts[windowID, default: 0]
     }
 
+    private func record(_ update: (inout Counts) -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        update(&counts)
+    }
+
     func receive(_ event: PostHogEvent) {
-        guard event.event == "$snapshot", let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
+        record { $0.callbacks += 1 }
+        if event.event == Self.probeEvent { record { $0.probeCallbacks += 1 } }
+        guard event.event == "$snapshot" else { return }
+        record { $0.snapshotCallbacks += 1 }
+        guard let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
+        record { $0.snapshotArrays += 1 }
         for snapshot in snapshots {
             guard let data = snapshot["data"] as? [String: Any], let frames = data["wireframes"] as? [[String: Any]] else { continue }
+            record { $0.wireframeArrays += 1 }
             for frame in frames {
-                guard let raw = frame["base64"] as? String,
-                      let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
-                      let image = UIImage(data: data) else { continue }
+                record { $0.wireframes += 1 }
+                guard let raw = frame["base64"] as? String else { continue }
+                record { $0.base64Strings += 1 }
+                guard let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")) else { continue }
+                record { $0.dataDecodes += 1 }
+                guard let image = UIImage(data: data) else { continue }
                 lock.lock()
+                counts.imageDecodes += 1
                 captured.append(image)
                 // The pinned SDK assigns each screenshot wireframe its actual
                 // UIWindow hash. Use this only for pacing; freshness still
