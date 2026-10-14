@@ -971,12 +971,15 @@ enum VisiblePlaceGrouping {
     }
 
     static func groupingAliases(for place: LocalPlace) -> Set<String> {
-        let identifiers = [place.id, place.localID, place.serverID]
-            .compactMap { $0 }
-            .map(normalizedIdentifier)
-            .filter { !$0.isEmpty }
-            .map { "id:\($0)" }
-        return Set(keys(for: place)).union(identifiers)
+        var aliases = Set(keys(for: place))
+        // `id` is serverID ?? localID, so the stored IDs already cover it.
+        // Build aliases directly instead of normalizing that ID twice and
+        // allocating a new collection for each normalization step.
+        for rawID in [place.localID, place.serverID].compactMap({ $0 }) {
+            let identifier = normalizedIdentifier(rawID)
+            if !identifier.isEmpty { aliases.insert("id:\(identifier)") }
+        }
+        return aliases
     }
 
     static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate) -> Bool {
@@ -1116,7 +1119,13 @@ enum VisiblePlaceGrouping {
     }
 
     private static func normalizedIdentifier(_ value: String?) -> String {
-        (value ?? "")
+        let source = value ?? ""
+        // Provider and local IDs normally contain only non-whitespace ASCII.
+        // Avoid splitting and rebuilding each ID during dense place grouping.
+        if source.utf8.allSatisfy({ $0 > 32 && $0 < 127 }) {
+            return source.lowercased()
+        }
+        return source
             .lowercased()
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")

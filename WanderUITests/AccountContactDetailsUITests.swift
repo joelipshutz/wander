@@ -72,9 +72,12 @@ import XCTest
         XCTAssertFalse(app.buttons["Done"].exists)
         XCTAssertFalse(app.buttons["accountContactDetails.skip"].exists)
         capture(app, name: "Typeahead 02 — Cleared city")
-        city.typeText("Par")
+        city.typeText("loading")
         XCTAssertTrue(app.staticTexts["Finding cities…"].waitForExistence(timeout: 2))
         capture(app, name: "Typeahead 03 — Typing")
+        app.buttons["accountContactDetails.clearCity"].tap()
+        XCTAssertTrue(app.staticTexts["Finding cities…"].waitForNonExistence(timeout: 2))
+        city.typeText("Par")
         let paris = app.buttons["accountContactDetails.cityResult.Paris.FR"]
         XCTAssertTrue(paris.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["accountContactDetails.cityResult.Paris.US"].exists)

@@ -4375,6 +4375,25 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         )
     }
 
+    func testGroupingIdentifierAliasesPreserveCaseWhitespaceAndUnicodeRules() {
+        let cases: [(String, String?, Set<String>)] = [
+            ("LOCAL_ABC-123", "SERVER_ABC-123", ["id:local_abc-123", "id:server_abc-123"]),
+            ("local_only", nil, ["id:local_only"]),
+            ("  LOCAL\tABC\n", "SERVER\u{00a0}ABC", ["id:local abc", "id:server abc"]),
+            ("CAFÉ-ID", "東京-ID", ["id:café-id", "id:東京-id"]),
+            ("  \t", "", [])
+        ]
+        for (localID, serverID, expected) in cases {
+            let place = LocalPlace(
+                localID: localID, serverID: serverID, canonicalName: "Fixture",
+                category: "coffee", latitude: 0, longitude: 0, sourceProvider: "mapkit"
+            )
+            let identifiers = VisiblePlaceGrouping.groupingAliases(for: place)
+                .filter { $0.hasPrefix("id:") }
+            XCTAssertEqual(identifiers, expected)
+        }
+    }
+
     func testGroupingASCIIFastPathMatchesLocaleAwareNormalization() {
         let samples: [String?] = [
             nil, "", "Realistic place 001", "Los Angeles", "US", "CA",
