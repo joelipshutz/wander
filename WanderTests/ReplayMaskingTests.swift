@@ -21,6 +21,7 @@ final class ReplayMaskingTests: XCTestCase {
         let window = UIWindow(windowScene: scene)
         // Fixed pixel probes require fixed typography, independent of simulator accessibility settings.
         window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture().dynamicTypeSize(.large))
+
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true
@@ -28,6 +29,23 @@ final class ReplayMaskingTests: XCTestCase {
         }
         XCTAssertTrue(scene.keyWindow === window, "The SDK must capture the fixture's key window")
         XCTAssertFalse(window.bounds.isEmpty)
+
+        // The SDK captures with afterScreenUpdates: false. Commit this newly mounted
+        // SwiftUI fixture before its first capture instead of reading an unfinished frame.
+        window.rootViewController?.view.setNeedsLayout()
+        window.rootViewController?.view.layoutIfNeeded()
+        window.setNeedsLayout()
+        window.layoutIfNeeded()
+        var baselineRendered = false
+        let baseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            baselineRendered = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let baselineAttachment = XCTAttachment(image: baseline)
+        baselineAttachment.name = "Fictional fixture before replay masking"
+        baselineAttachment.lifetime = .keepAlways
+        add(baselineAttachment)
+        XCTAssertTrue(baselineRendered, "The fixture must finish rendering before replay capture starts")
+        guard baselineRendered else { return }
 
         let frames = ReplayFrameCollector()
         let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
@@ -43,46 +61,44 @@ final class ReplayMaskingTests: XCTestCase {
         let sdk = PostHogSDK.with(config)
         defer { sdk.close() }
 
-        // Drive genuine layout notifications, which trigger the SDK screenshot recorder.
-        for attempt in 0..<60 {
+        // The pinned SDK observes UIView.layoutSublayers(of:). A plain UIView
+        // makes that exact base-class callback part of each real layout pulse,
+        // independent of UIWindow/UIHostingView layout overrides. It is clear,
+        // outside the pixel probes, and does not replace SDK capture or masking.
+        let layoutPulse = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        layoutPulse.isUserInteractionEnabled = false
+        layoutPulse.accessibilityElementsHidden = true
+        window.addSubview(layoutPulse)
+
+        // Replay is inactive until the SDK has processed the asynchronous offline
+        // remote-config response. Layouts before that point are discarded, so
+        // readiness must not consume the time allowed for a screenshot callback.
+        let clock = ContinuousClock()
+        let readinessDeadline = clock.now.advanced(by: .seconds(15))
+        while !sdk.isSessionReplayActive(), clock.now < readinessDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        guard sdk.isSessionReplayActive() else {
+            XCTFail("The SDK must activate replay after the offline config response (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window), \(frames.diagnostics))")
+            return
+        }
+
+        // Drive genuine layout notifications until an encoded SDK frame arrives.
+        // Layout throttling and image encoding run asynchronously on SDK queues;
+        // a fixed number of layout pulses does not establish capture completion.
+        let captureStarted = clock.now
+        let settledAt = captureStarted.advanced(by: .seconds(2))
+        let captureDeadline = captureStarted.advanced(by: .seconds(30))
+        repeat {
             window.rootViewController?.view.setNeedsLayout()
             window.rootViewController?.view.layoutIfNeeded()
-            // The pinned SDK observes UIView.layoutSublayers(of:).
-            window.layer.setNeedsLayout()
-            window.layer.layoutIfNeeded()
+            layoutPulse.layer.setNeedsLayout()
+            layoutPulse.layer.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(100))
-            if attempt >= 20, frames.image != nil { break }
-        }
-
-        // Stop driving layouts and allow any pending SDK capture work to finish.
-        // Keep the fixture and SDK alive, and yield the main actor during the bounded wait.
-        let driveEndDiagnostics = frames.diagnosticSummary
-        let drainStartedAt = ProcessInfo.processInfo.systemUptime
-        let drainDeadline = drainStartedAt + 30
-        while frames.image == nil {
-            let remaining = drainDeadline - ProcessInfo.processInfo.systemUptime
-            guard remaining > 0 else { break }
-            try await Task.sleep(for: .seconds(min(0.1, remaining)))
-        }
-        let drainElapsed = ProcessInfo.processInfo.systemUptime - drainStartedAt
-        let drainEndDiagnostics = frames.diagnosticSummary
-        let replayImage = frames.image
-        let captureDiagnostics = "drive end [\(driveEndDiagnostics)]; drain elapsed: \(String(format: "%.3f", drainElapsed))s; drain end [\(drainEndDiagnostics)]"
-        let diagnosticsAttachment = XCTAttachment(string: captureDiagnostics)
-        diagnosticsAttachment.name = "Replay capture aggregate timing diagnostics"
-        diagnosticsAttachment.lifetime = .keepAlways
-        add(diagnosticsAttachment)
-
-        let baseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-        }
-        let baselineAttachment = XCTAttachment(image: baseline)
-        baselineAttachment.name = "Fictional fixture before replay masking"
-        baselineAttachment.lifetime = .keepAlways
-        add(baselineAttachment)
+        } while clock.now < captureDeadline && (clock.now < settledAt || frames.image == nil)
         XCTAssertTrue(sdk.isSessionReplayActive())
-        let image = try XCTUnwrap(replayImage,
-            "The SDK must produce an actual replay frame (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window), \(captureDiagnostics))")
+        let image = try XCTUnwrap(frames.image,
+            "The SDK must produce an actual replay frame within 30 seconds after activation (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window), \(frames.diagnostics))")
         let attachment = XCTAttachment(image: image)
         attachment.name = "Offline replay — readable content and masked credentials"
         attachment.lifetime = .keepAlways
@@ -145,59 +161,38 @@ private struct ReplayPrivacyFixture: View {
 
 private final class ReplayFrameCollector: @unchecked Sendable {
     private let lock = NSLock()
-    private let startedAt = ProcessInfo.processInfo.systemUptime
     private var latest: UIImage?
-    private var snapshotEventCount = 0
-    private var wireframeCount = 0
-    private var encodedImageCount = 0
-    private var decodedImageCount = 0
-    private var firstSnapshotElapsed: TimeInterval?
-    private var firstDecodedImageElapsed: TimeInterval?
+    private var snapshotCount = 0
+    private var encodedFrameCount = 0
+    private var decodingFailureCount = 0
+    private var imageFormats: Set<String> = []
     var image: UIImage? { lock.lock(); defer { lock.unlock() }; return latest }
-    var diagnosticSummary: String {
-        lock.lock()
-        defer { lock.unlock() }
-        let firstSnapshot = firstSnapshotElapsed.map { String(format: "%.3fs", $0) } ?? "none"
-        let firstDecodedImage = firstDecodedImageElapsed.map { String(format: "%.3fs", $0) } ?? "none"
-        return "snapshot events: \(snapshotEventCount), wireframes: \(wireframeCount), encoded images: \(encodedImageCount), decoded images: \(decodedImageCount), first snapshot after: \(firstSnapshot), first decoded image after: \(firstDecodedImage)"
+    var diagnostics: String {
+        lock.lock(); defer { lock.unlock() }
+        return "snapshots: \(snapshotCount), encoded frames: \(encodedFrameCount), decode failures: \(decodingFailureCount), formats: \(imageFormats.sorted())"
     }
 
     func receive(_ event: PostHogEvent) {
-        guard event.event == "$snapshot" else { return }
+        guard event.event == "$snapshot", let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
         lock.lock()
-        snapshotEventCount += 1
-        if firstSnapshotElapsed == nil {
-            firstSnapshotElapsed = ProcessInfo.processInfo.systemUptime - startedAt
-        }
+        snapshotCount += snapshots.count
         lock.unlock()
-        var receivedWireframes = 0
-        var receivedImages = 0
-        var decodedImages = 0
-        var newestImage: UIImage?
-        defer {
-            lock.lock()
-            wireframeCount += receivedWireframes
-            encodedImageCount += receivedImages
-            decodedImageCount += decodedImages
-            if let newestImage {
-                latest = newestImage
-                if firstDecodedImageElapsed == nil {
-                    firstDecodedImageElapsed = ProcessInfo.processInfo.systemUptime - startedAt
-                }
-            }
-            lock.unlock()
-        }
-        guard let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
         for snapshot in snapshots {
             guard let data = snapshot["data"] as? [String: Any], let frames = data["wireframes"] as? [[String: Any]] else { continue }
-            receivedWireframes += frames.count
             for frame in frames {
                 guard let raw = frame["base64"] as? String else { continue }
-                receivedImages += 1
+                lock.lock()
+                encodedFrameCount += 1
+                imageFormats.insert(String(raw.prefix(while: { $0 != "," })))
+                lock.unlock()
                 guard let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
-                      let image = UIImage(data: data) else { continue }
-                decodedImages += 1
-                newestImage = image
+                      let image = UIImage(data: data) else {
+                    lock.lock()
+                    decodingFailureCount += 1
+                    lock.unlock()
+                    continue
+                }
+                lock.lock(); latest = image; lock.unlock()
             }
         }
     }

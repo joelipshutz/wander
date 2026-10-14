@@ -261,6 +261,7 @@ struct ActivityPhotoViewerAccessState {
         let activityID: String
         let viewerID: String
         let isSignedIn: Bool
+        let sessionReadiness: ActivitySessionReadiness
         let sessionRevision: Int
         let photoAccessRevision: Int
         let activityGeneration: Int
@@ -272,6 +273,7 @@ struct ActivityPhotoViewerAccessState {
         /// letting the denial repeatedly trigger another identical read.
         var refreshTrigger: Scope {
             Scope(activityID: activityID, viewerID: viewerID, isSignedIn: isSignedIn,
+                  sessionReadiness: sessionReadiness,
                   sessionRevision: sessionRevision, photoAccessRevision: photoAccessRevision,
                   activityGeneration: 0, isActive: isActive, retryID: retryID)
         }
@@ -378,6 +380,29 @@ struct ActivityEngagementMedia: Identifiable, Equatable {
                    authorAvatarURLString: nil, sourcePhotoURLString: nil, flagContentURLString: nil,
                    storageBucket: storageBucket, storagePath: storagePath, localAssetRef: localAssetRef)
     }
+}
+
+/// A retained account can be validating or offline; neither authorizes a read.
+/// Keep completed offline validation distinct from work still in progress.
+enum ActivitySessionReadiness: Hashable {
+    case validating
+    case ready
+    case unavailable
+
+    @MainActor
+    init(auth: AuthSessionStore) {
+        switch auth.state {
+        case .signedIn:
+            self = auth.isSessionValidated ? .ready : .validating
+        case .loading:
+            self = .validating
+        case .offline, .signedOut, .unavailable:
+            self = .unavailable
+        }
+    }
+
+    struct Unavailable: Error {}
+    static let unavailableMessage = "Your session couldn’t be verified. Try again."
 }
 
 struct ActivityCheckInTarget: Equatable, Hashable {

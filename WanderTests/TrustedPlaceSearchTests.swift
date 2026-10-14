@@ -1086,19 +1086,29 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertEqual(TrustedPlaceSearch.matches(query: "quiet", in: [place]).count, 1)
     }
 
-    func testSearchOneThousandMemoriesP95UnderFiftyMilliseconds() {
-        let places = (0..<1_000).map { index in
-            makeVisiblePlace(
-                id: "performance-\(index)",
-                name: "Place \(index)",
-                ownerName: "Ryan \(index)",
-                ownerHandle: "ryan\(index)",
-                category: "Coffee shop",
-                locality: "Pasadena",
-                note: "Quiet patio number \(index)",
-                attributes: [("personal_labels", #"["work"]"#)]
-            )
+    func testSearchOneThousandMemoriesReturnsEveryMatchingMemoryOnColdAndWarmReads() {
+        let places = makeOneThousandSearchMemories()
+        let query = TrustedPlaceSearchQuery("Ryan coffee Pasadena quiet")
+        let expectedIDs = places.map(\.id).sorted()
+        let expectedFields: Set<TrustedPlaceSearchField> = [.owner, .category, .area, .note]
+
+        // Every candidate has the same score and saved date, so IDs break ties.
+        // Assert the complete result and cross-field evidence before and after caching.
+        for _ in 0..<3 {
+            let matches = TrustedPlaceSearch.matches(query: query, in: places)
+            XCTAssertEqual(matches.map(\.place.id), expectedIDs)
+            XCTAssertTrue(matches.allSatisfy { $0.supportingFields == expectedFields })
+            XCTAssertTrue(matches.allSatisfy {
+                Set($0.evidence.flatMap(\.matchedTokens)) == Set(query.requiredTokens)
+            })
         }
+    }
+
+    // Run this wall-clock budget alone on the reference simulator with -jobs 1.
+    // Shared CI keeps the full-size correctness contract above without treating
+    // hosted-runner scheduling and simulator contention as search regressions.
+    func testSearchOneThousandMemoriesP95UnderFiftyMilliseconds() {
+        let places = makeOneThousandSearchMemories()
         let query = TrustedPlaceSearchQuery("Ryan coffee Pasadena quiet")
         let clock = ContinuousClock()
 
@@ -1183,6 +1193,21 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertEqual(outcome.semanticStatus, .succeeded)
         XCTAssertEqual(repository.lexicalRequestCount, 1)
         XCTAssertEqual(repository.semanticRequestCount, 1)
+    }
+
+    private func makeOneThousandSearchMemories() -> [VisiblePlace] {
+        (0..<1_000).map { index in
+            makeVisiblePlace(
+                id: "performance-\(index)",
+                name: "Place \(index)",
+                ownerName: "Ryan \(index)",
+                ownerHandle: "ryan\(index)",
+                category: "Coffee shop",
+                locality: "Pasadena",
+                note: "Quiet patio number \(index)",
+                attributes: [("personal_labels", #"["work"]"#)]
+            )
+        }
     }
 
     private static func milliseconds(_ duration: Duration) -> Double {
