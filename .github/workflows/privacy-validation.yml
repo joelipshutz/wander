@@ -9,6 +9,8 @@ on:
       - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
+      - 'WanderTests/WanderPlaceCategoryTests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
       - '.github/workflows/privacy-validation.yml'
   workflow_dispatch:
@@ -52,12 +54,26 @@ jobs:
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests
+          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=NO
+      # Keep both timing budgets mandatory, without state left by the broad test host.
+      - name: Verify performance budgets in a fresh test host
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -only-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
+          -maximum-test-execution-time-allowance 180
+          -resultBundlePath "$RUNNER_TEMP/benchmarks.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Release Pro simulator and wait for compact startup
         if: success() || failure()
         run: |
@@ -80,7 +96,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact; do
+          for device in pro compact benchmarks; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
@@ -101,6 +117,7 @@ jobs:
           path: |
             ${{ runner.temp }}/pro.xcresult
             ${{ runner.temp }}/compact.xcresult
+            ${{ runner.temp }}/benchmarks.xcresult
           retention-days: 14
       - name: Package simulator app for local review
         if: always()
