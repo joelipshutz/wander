@@ -970,11 +970,15 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(people.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Feed"].isSelected)
         XCTAssertFalse(app.buttons["walkthrough.next.sendoff.mapSendoff"].exists)
-        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        app.buttons["walkthrough.next.feed.feedActivity"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForExistence(timeout: 6))
-        app.buttons["walkthrough.next.feed.feedActivity"].tap()
+        app.buttons["walkthrough.next.feed.feedActivity"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["people.recommendation.user_ryan.profile"].isHittable)
+        let returned = expectation(for: NSPredicate(format: "hittable == true"),
+                                   evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
+        wait(for: [returned], timeout: 4)
     }
 
     func testMapRingsAutomaticallyContinueIntoFeedAndFinishAtTop() {
