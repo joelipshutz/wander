@@ -4375,6 +4375,42 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         )
     }
 
+    func testOwnerCountsDeduplicateWithinEachOwnerAndRefreshMutablePlaceAliases() {
+        let joe = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let been = visiblePlace(
+            owner: joe, name: "Shared cafe", category: "coffee", address: "42 Main St",
+            latitude: 34.05, longitude: -118.25, providerID: "shared-cafe", status: .been
+        )
+        let wanna = visiblePlace(
+            owner: joe, name: "Shared cafe", category: "coffee", address: "42 Main St",
+            latitude: 34.05, longitude: -118.25, providerID: "shared-cafe", status: .wannaGo
+        )
+        let otherOwner = VisiblePlace(
+            id: "ryan-shared", place: been.place,
+            userPlace: LocalUserPlace(
+                localID: "ryan-shared", userID: ryan.id, placeID: been.place.id,
+                status: .been, visibility: .followers, sourceType: "manual"
+            ), owner: ryan
+        )
+        let places = [been, wanna, otherOwner]
+        XCTAssertEqual(
+            VisiblePlaceGrouping.countsByOwner(from: places, currentUserID: joe.id),
+            [joe.id: 1, ryan.id: 1]
+        )
+
+        // Identity edits must not reuse keys retained from the preceding read.
+        wanna.place.canonicalName = "Another cafe"
+        wanna.place.address = "99 Other St"
+        wanna.place.latitude = 35
+        wanna.place.longitude = -117
+        wanna.place.sourceProviderPlaceID = "another-cafe"
+        XCTAssertEqual(
+            VisiblePlaceGrouping.countsByOwner(from: places, currentUserID: joe.id),
+            [joe.id: 2, ryan.id: 1]
+        )
+    }
+
     func testGroupingIdentifierAliasesPreserveCaseWhitespaceAndUnicodeRules() {
         let cases: [(String, String?, Set<String>)] = [
             ("LOCAL_ABC-123", "SERVER_ABC-123", ["id:local_abc-123", "id:server_abc-123"]),

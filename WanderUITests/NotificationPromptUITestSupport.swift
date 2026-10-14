@@ -19,11 +19,20 @@ extension XCTestCase {
         let primary = app.buttons["productUpsell.primary"]
         guard primary.waitForExistence(timeout: 8) else { return }
         XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+        func tapVisibleCenter(_ button: XCUIElement) {
+            let visible = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "hittable == true"), object: button
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
+            // SwiftUI's text button can expose an unreliable default hit point.
+            // Use the center of the actual visible control, as a person would.
+            button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
         if primary.label == "Open Settings" {
-            app.buttons["productUpsell.secondary"].tap()
+            tapVisibleCenter(app.buttons["productUpsell.secondary"])
         } else {
             XCTAssertEqual(primary.label, "Continue")
-            primary.tap()
+            tapVisibleCenter(primary)
             let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
             let deny = springboard.alerts.buttons.matching(
                 NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")

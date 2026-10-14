@@ -855,7 +855,10 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let yourMapInsightsElapsed = CFAbsoluteTimeGetCurrent() - yourMapInsightsStart
 
         print(
-            "[REC391ProfilePerformance] profile_projection_20=\(profileProjectionElapsed) "
+            "[REC391ProfilePerformance] cold_places_and_counts=\(coldProjectionElapsed) "
+                + "list_projection=\(listProjectionElapsed) "
+                + "cold_insights=\(insightsElapsed) "
+                + "profile_projection_20=\(profileProjectionElapsed) "
                 + "profile_presenters_20=\(profilePresentationElapsed) "
                 + "in_common_50=\(inCommonElapsed) "
                 + "your_map_dataset_10=\(yourMapDatasetElapsed) "

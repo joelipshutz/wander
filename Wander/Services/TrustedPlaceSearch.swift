@@ -86,6 +86,7 @@ struct TrustedPlaceSearchMatch {
 
 enum TrustedPlaceSearch {
     private static let documentCache = TrustedPlaceSearchDocumentCache(capacity: 4_096)
+    private static let evidenceFieldOrder = TrustedPlaceSearchField.allCases
 
     static func matches(
         query text: String,
@@ -138,7 +139,7 @@ enum TrustedPlaceSearch {
         // every matching memory. Keep the first token's display value and the
         // query's token order within each field.
         var evidence: [TrustedPlaceSearchEvidence] = []
-        for field in TrustedPlaceSearchField.allCases {
+        for field in evidenceFieldOrder {
             var displayValue: String?
             var tokens: [String] = []
             for case let match? in tokenMatches where match.field == field {
@@ -1129,7 +1130,13 @@ private struct TrustedPlaceSearchDocument {
     static func supportingFields(for mask: UInt8) -> Set<TrustedPlaceSearchField> {
         // Each token lookup carries both its best evidence and all supporting
         // fields, avoiding another dictionary lookup or prefix scan per token.
-        return Set(TrustedPlaceSearchField.allCases.filter { mask & Self.fieldMask($0) != 0 })
+        supportingFieldSets[Int(mask)]
+    }
+
+    // Seven fields produce only 128 combinations. Share these immutable sets
+    // instead of allocating a filtered array and a Set for every search hit.
+    private static let supportingFieldSets: [Set<TrustedPlaceSearchField>] = (0..<128).map { mask in
+        Set(TrustedPlaceSearchField.allCases.filter { UInt8(mask) & fieldMask($0) != 0 })
     }
 
     private static func isBetter(_ candidate: TokenMatch, than current: TokenMatch) -> Bool {

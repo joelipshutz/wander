@@ -829,11 +829,33 @@ enum VisiblePlaceGrouping {
         currentUserID: String,
         onKeysBuilt: (() -> Void)? = nil
     ) -> [VisiblePlaceGroup] {
+        var keysByPlace: [ObjectIdentifier: [String]] = [:]
+        keysByPlace.reserveCapacity(places.count)
+        return groups(from: places, currentUserID: currentUserID,
+                      keysByPlace: &keysByPlace, onKeysBuilt: onKeysBuilt)
+    }
+
+    static func countsByOwner(from places: [VisiblePlace], currentUserID: String) -> [String: Int] {
+        // A physical place can be saved by several owners. Its identity keys
+        // are the same for all of them, but each owner's groups stay separate.
+        // This cache lasts for this read only; mutable models are re-read next time.
+        var keysByPlace: [ObjectIdentifier: [String]] = [:]
+        keysByPlace.reserveCapacity(places.count)
+        return Dictionary(grouping: places, by: \.owner.id).mapValues { ownerPlaces in
+            groups(from: ownerPlaces, currentUserID: currentUserID,
+                   keysByPlace: &keysByPlace, onKeysBuilt: nil).count
+        }
+    }
+
+    private static func groups(
+        from places: [VisiblePlace],
+        currentUserID: String,
+        keysByPlace: inout [ObjectIdentifier: [String]],
+        onKeysBuilt: (() -> Void)?
+    ) -> [VisiblePlaceGroup] {
         // A place can participate in several saves and become the primary of
         // a merged group. Normalize it once for this invocation only: models are
         // mutable, so these keys must never survive into the next grouping pass.
-        var keysByPlace: [ObjectIdentifier: [String]] = [:]
-        keysByPlace.reserveCapacity(places.count)
         func groupingKeys(for visiblePlace: VisiblePlace) -> [String] {
             let identity = ObjectIdentifier(visiblePlace.place)
             if let cached = keysByPlace[identity] { return cached }

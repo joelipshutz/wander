@@ -5122,6 +5122,8 @@ final class WanderStore: ObservableObject {
         )
         listLookup.byUserPlaceID.reserveCapacity(userPlaces.count)
         listLookup.byPlaceID.reserveCapacity(places.count)
+        let viewerID = currentUser.id
+        var accessByOwnerID: [String: (relationship: ViewerRelationship, blocked: Bool)] = [:]
 
         for userPlace in userPlaces {
             let userPlaceID = userPlace.id
@@ -5131,11 +5133,21 @@ final class WanderStore: ObservableObject {
                   let owner = profilesByID[userPlace.userID]
             else { continue }
 
-            let relationship = relationship(to: owner.id)
-            let blocked = isBlockedBetweenCurrentUser(and: owner.id)
+            // Several memories share an owner. Evaluate the follow/block graph
+            // once per owner for this synchronous projection, never across reads.
+            let ownerID = owner.id
+            let access: (relationship: ViewerRelationship, blocked: Bool)
+            if let cached = accessByOwnerID[ownerID] {
+                access = cached
+            } else {
+                access = (relationship(to: ownerID), isBlockedBetweenCurrentUser(and: ownerID))
+                accessByOwnerID[ownerID] = access
+            }
+            let relationship = access.relationship
+            let blocked = access.blocked
             guard visibilityPolicy.canSeePlace(
-                viewerID: currentUser.id,
-                ownerID: owner.id,
+                viewerID: viewerID,
+                ownerID: ownerID,
                 visibility: userPlace.visibility,
                 relationship: relationship,
                 isBlocked: blocked
@@ -5157,7 +5169,7 @@ final class WanderStore: ObservableObject {
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { continue }
 
             if !filters.ownerScopes.isEmpty {
-                let isMine = owner.id == currentUser.id
+                let isMine = ownerID == viewerID
                 let isFriend = relationship == .mutual
                 let isFollowing = relationship == .follower || relationship == .mutual
                 let allowed = (filters.ownerScopes.contains("you") && isMine)
@@ -5327,10 +5339,9 @@ final class WanderStore: ObservableObject {
         #endif
         // A person's Been/Wanna records can refer to the same physical place.
         // Group within each owner so shared places still count for every person.
-        let placesByOwnerID = Dictionary(grouping: visiblePlaces(), by: \.owner.id)
-        let counts = placesByOwnerID.mapValues { places in
-            VisiblePlaceGrouping.groups(from: places, currentUserID: currentUser.id).count
-        }
+        let counts = VisiblePlaceGrouping.countsByOwner(
+            from: visiblePlaces(), currentUserID: currentUser.id
+        )
         visiblePlaceCountsByOwnerIDCache = counts
         return counts
     }
