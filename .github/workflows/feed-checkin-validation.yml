@@ -5,9 +5,11 @@ on:
     branches: [main]
     paths:
       - 'Wander/Features/Feed/**'
+      - 'Wander/Features/Activity/**'
       - 'Wander/Features/Add/PlaceSaveAttributePolicy.swift'
       - 'Wander/Features/Map/MapScreen.swift'
       - 'Wander/Services/FeedModels.swift'
+      - 'Wander/Services/ActivityEngagementModels.swift'
       - 'Wander/Services/WanderLocalStore.swift'
       - 'WanderTests/Feed*Tests.swift'
       - 'WanderTests/ActivityEngagementTests.swift'
@@ -15,6 +17,7 @@ on:
       - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
+      - 'WanderUITests/FeedActivityGroupingUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
 
@@ -70,6 +73,9 @@ jobs:
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testNotificationOpensPostWithArrowComposerAndBackReturnsFeed
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed
           -only-testing:WanderUITests/ForegroundEntryUITests
@@ -97,6 +103,9 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
       - name: Generic Simulator build
         if: success() || failure()

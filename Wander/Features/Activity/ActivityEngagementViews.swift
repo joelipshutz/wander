@@ -356,6 +356,8 @@ enum ActivityPostcardTypographyPolicy {
 struct ActivityPostcardView: View {
     @Environment(\.activityPostcardVisualStyle) private var visualStyle
     @Environment(\.astirBrandMode) private var astirBrandMode
+    @Environment(\.activityPresentationHandoff) private var handoff
+    @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
     let metadataIcon: String
@@ -377,6 +379,7 @@ struct ActivityPostcardView: View {
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     var activityGroup: FeedActivityGroup? = nil
     var openActivityList: ((LocalPlaceList) -> Void)? = nil
+    var openPhotos: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -393,7 +396,12 @@ struct ActivityPostcardView: View {
                     compactMetadata
                 }
 
-                actorAttribution
+                HStack(spacing: WanderTheme.spacing2) {
+                    actorAttribution
+                    if let firstPhoto = context.media.first {
+                        photoStack(firstPhoto: firstPhoto)
+                    }
+                }
 
                 if let note = context.note {
                     Text("“\(note)”")
@@ -453,6 +461,17 @@ struct ActivityPostcardView: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(postcardAccessibilityIdentifier)
+        .fullScreenCover(item: $photoViewerRoute, onDismiss: { handoff.onDidDismiss(.activityPhoto) }) { route in
+            WanderRootPresentationLifecycle(
+                surface: .activityPhoto, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
+            ) {
+                ActivityPhotoViewerScreen(context: context, initialMediaID: route.mediaID)
+            }
+        }
+        .onChange(of: handoff.resetID) { _, resetID in
+            if resetID != nil { photoViewerRoute = nil }
+        }
+        .onChange(of: context.activityID) { _, _ in photoViewerRoute = nil }
     }
 
     @ViewBuilder
@@ -519,19 +538,9 @@ struct ActivityPostcardView: View {
     }
 
     private var destinationHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
-                primaryDestinationTitle
-
-                Spacer(minLength: WanderTheme.spacing1)
-
-                ratingBadge
-            }
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                primaryDestinationTitle
-                ratingBadge
-            }
+        HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+            primaryDestinationTitle
+            ratingBadge
         }
     }
 
@@ -553,9 +562,8 @@ struct ActivityPostcardView: View {
         Text(context.placeName)
             .font(visualStyle == .astir ? AstirTypography.sectionTitle : WanderTypography.editorialTitle)
             .foregroundStyle(primaryText)
-            .lineLimit(2)
-            .minimumScaleFactor(0.82)
-            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .topLeading)
             .contentShape(Rectangle())
     }
 
@@ -659,7 +667,7 @@ struct ActivityPostcardView: View {
                     .foregroundStyle(primaryText)
                     .lineLimit(2)
 
-                Text("\(FeedPresentation.timestampText(for: context.occurredAt)) · \(actorRelationshipDetail)")
+                Text(FeedPresentation.timestampText(for: context.occurredAt))
                     .font(visualStyle == .astir ? AstirTypography.metadata : .caption.weight(.medium))
                     .foregroundStyle(secondaryText)
                     .lineLimit(2)
@@ -673,11 +681,60 @@ struct ActivityPostcardView: View {
 
     private var actorAccessibilityLabel: String {
         "\(context.actor.displayName) \(context.attributionAction), "
-            + "\(FeedPresentation.timestampText(for: context.occurredAt)), \(actorRelationshipDetail)"
+            + FeedPresentation.timestampText(for: context.occurredAt)
     }
 
-    private var actorRelationshipDetail: String {
-        context.actor.relationship == .owner ? "your activity" : "someone you follow"
+    private func photoStack(firstPhoto: ActivityEngagementMedia) -> some View {
+        Button {
+            if let openPhotos {
+                openPhotos()
+            } else {
+                photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstPhoto.id)
+            }
+        } label: {
+            ZStack {
+                if context.media.count > 1 {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(primaryText.opacity(0.16))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(primaryText.opacity(0.55), lineWidth: 1))
+                        .frame(width: 42, height: 42)
+                        .rotationEffect(.degrees(9))
+                        .offset(x: 4, y: -3)
+                }
+                ZStack {
+                    cardBackground
+                    Image(systemName: "photo").foregroundStyle(secondaryText)
+                    ActivityPostcardMediaImage(media: firstPhoto)
+                }
+                .frame(width: 46, height: 46)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, .black.opacity(0.85)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 25)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 8, weight: .semibold))
+                        Text("\(context.media.count)")
+                            .font(.custom("AvenirNext-DemiBold", size: 10))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(5)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(primaryText.opacity(0.55), lineWidth: 1))
+            }
+            .frame(width: 54, height: 54)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("View \(context.media.count == 1 ? "photo" : "photos") from \(context.actor.displayName)’s \(context.ticketKind == .checkIn ? "check-in" : "save")")
+        .accessibilityValue(context.media.count == 1 ? "1 photo" : "\(context.media.count) photos")
+        .accessibilityHint("Opens a full-screen photo viewer")
+        .accessibilityIdentifier("\(postcardAccessibilityIdentifier).photos")
     }
 
     private var primaryText: Color {
@@ -1054,13 +1111,7 @@ private struct AuthorizedActivityCommentsScreen: View {
             WanderRootPresentationLifecycle(
                 surface: .activityPhoto, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
             ) {
-                ActivityCommentsPhotoViewer(
-                    media: context.media,
-                    initialMediaID: route.mediaID,
-                    reportedUserID: context.actor.id,
-                    reportedUserName: context.actor.displayName,
-                    placeName: context.placeName
-                )
+                ActivityPhotoViewerScreen(context: context, initialMediaID: route.mediaID)
             }
         }
         .fullScreenCover(item: $sharePreviewPresentation, onDismiss: { handoff.onDidDismiss(.activityShare) }) { presentation in
@@ -1172,7 +1223,8 @@ private struct AuthorizedActivityCommentsScreen: View {
             showsCommentButton: false,
             onSharePreviewPresentation: { presentation in
                 sharePreviewPresentation = presentation
-            }
+            },
+            openPhotos: artworkAction
         )
     }
 
@@ -1367,6 +1419,96 @@ private struct ActivityCommentsPhotoViewerRoute: Identifiable {
     var id: String { mediaID }
 }
 
+/// Both Feed and comments must re-resolve the exact activity before mounting
+/// its media. A cached card is not authorization to display protected photos.
+private struct ActivityPhotoViewerScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let context: ActivityEngagementContext
+    let initialMediaID: String
+    @State private var access = ActivityPhotoViewerAccessState()
+    @State private var retryID = 0
+    @State private var attemptedScope: ActivityPhotoViewerAccessState.Scope?
+
+    private var scope: ActivityPhotoViewerAccessState.Scope {
+        .init(activityID: context.activityID, viewerID: store.currentUser.id,
+              isSignedIn: auth.isSignedIn, sessionReadiness: ActivitySessionReadiness(auth: auth),
+              sessionRevision: backend.photoSessionRevision,
+              photoAccessRevision: backend.photoAccessRevision,
+              activityGeneration: store.activityAccessGeneration(for: context.activityID),
+              isActive: scenePhase == .active, retryID: retryID)
+    }
+
+    private var wasRevoked: Bool {
+        guard let attemptedScope else { return false }
+        return attemptedScope.activityGeneration != scope.activityGeneration
+    }
+
+    var body: some View {
+        Group {
+            if let checked = access.context(for: scope), !checked.media.isEmpty {
+                ActivityCommentsPhotoViewer(
+                    media: checked.media, initialMediaID: initialMediaID,
+                    reportedUserID: checked.actor.id,
+                    reportedUserName: checked.actor.displayName, placeName: checked.placeName
+                )
+            } else {
+                ZStack(alignment: .topLeading) {
+                    Color.black.ignoresSafeArea()
+                    if access.isResolved(for: scope) || wasRevoked {
+                        ContentUnavailableView {
+                            Label("Photos unavailable", systemImage: "photo")
+                        } description: {
+                            Text("These photos are no longer available, or couldn’t be checked.")
+                        } actions: {
+                            Button("Try again") { retryID += 1 }
+                                .frame(minHeight: WanderTheme.tapMinimum)
+                        }
+                        .accessibilityIdentifier("activity.photos.unavailable")
+                    } else {
+                        ProgressView("Opening photos…")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    WanderGlassActionButton(systemImage: "chevron.left", accessibilityLabel: "Back",
+                                            tone: .darkOverlay, action: dismiss.callAsFunction)
+                        .accessibilityIdentifier("activity.photos.back")
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .padding(.top, WanderTheme.spacing3)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .blocksProductUpsells(while: true, preservesForegroundEntry: true)
+        .task(id: scope.refreshTrigger) {
+            let current = scope
+            attemptedScope = current
+            let request = access.begin(scope: current)
+            guard current.isActive else { return }
+            let checked: ActivityEngagementContext?
+            if UUID(uuidString: context.activityID) == nil {
+                checked = context
+            } else if current.isSignedIn {
+                checked = await store.activity(
+                    id: current.activityID, backend: backend, authSession: auth
+                )?.activityEngagementContext
+            } else {
+                checked = nil
+            }
+            guard !Task.isCancelled,
+                  ActivitySessionReadiness(auth: auth) != .validating || UUID(uuidString: context.activityID) == nil
+            else { return }
+            access.finish(request, context: checked, currentScope: scope)
+        }
+        .onDisappear {
+            access.invalidate()
+            attemptedScope = nil
+        }
+    }
+}
+
 private struct ActivityCommentsPhotoViewer: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -1390,7 +1532,8 @@ private struct ActivityCommentsPhotoViewer: View {
         self.reportedUserID = reportedUserID
         self.reportedUserName = reportedUserName
         self.placeName = placeName
-        _selectedMediaID = State(initialValue: initialMediaID)
+        _selectedMediaID = State(initialValue: media.contains(where: { $0.id == initialMediaID })
+            ? initialMediaID : (media.first?.id ?? initialMediaID))
     }
 
     var body: some View {
@@ -1416,6 +1559,14 @@ private struct ActivityCommentsPhotoViewer: View {
                     tone: .darkOverlay,
                     action: dismiss.callAsFunction
                 )
+                .accessibilityIdentifier("activity.photos.back")
+
+                Spacer()
+
+                Text("\((media.firstIndex(where: { $0.id == selectedMediaID }) ?? 0) + 1) of \(media.count)")
+                    .font(AstirTypography.caption)
+                    .foregroundStyle(.white)
+                    .accessibilityIdentifier("activity.photos.position")
 
                 Spacer()
 
@@ -1471,11 +1622,21 @@ private struct ActivityCommentsPhotoViewer: View {
 
 private struct ActivityCommentsFullScreenImage: View {
     let media: ActivityEngagementMedia
+    @State private var failed = false
 
     var body: some View {
-        PlaceProfilePhotoImage(photo: media.placePhoto, canonicalPlaceKey: "activity-photo:\(media.id)",
-                               placeName: media.accessibilityLabel,
-                               variant: .profile, contentMode: .fit)
+        ZStack {
+            PlaceProfilePhotoImage(photo: media.placePhoto, canonicalPlaceKey: "activity-photo:\(media.id)",
+                                   placeName: media.accessibilityLabel,
+                                   variant: .profile, contentMode: .fit,
+                                   onLoadFailure: { _ in failed = true })
+            if failed {
+                Label("Photo unavailable", systemImage: "photo")
+                    .font(AstirTypography.bodySmall)
+                    .foregroundStyle(.white)
+            }
+        }
+        .onChange(of: media) { _, _ in failed = false }
     }
 }
 

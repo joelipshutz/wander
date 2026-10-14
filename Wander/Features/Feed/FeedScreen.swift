@@ -1305,7 +1305,7 @@ private struct FeedActivityModule: View {
             actor: activity.actor,
             placeName: "Map activity",
             placeServerID: nil,
-            placeDetail: activity.actor.relationship == .owner ? "Your activity" : "From someone you follow",
+            placeDetail: "Place details unavailable",
             ticketKind: activity.resolvedTicketKind,
             occurredAt: activity.occurredAt,
             note: activity.note,
