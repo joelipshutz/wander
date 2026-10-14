@@ -1959,7 +1959,9 @@ final class WanderStore: ObservableObject {
     }
 
     @MainActor
-    func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
+    func activity(
+        id activityID: String, backend: WanderBackend?, authSession: AuthSessionStore? = nil
+    ) async -> FeedActivity? {
         let requestUserID = currentUser.id
         let accessGeneration = activityAccessGenerations[activityID, default: 0]
         let existing = followedFeedPage?.activity.first(where: {
@@ -1975,7 +1977,7 @@ final class WanderStore: ObservableObject {
         }
 
         do {
-            let activity = try await retryActivityRead {
+            let activity = try await retryActivityRead(authSession: authSession) {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.activity(id: activityID)
             }
@@ -2001,6 +2003,12 @@ final class WanderStore: ObservableObject {
             // an unrelated summary request.
             activityEngagementErrorByID[activityID] = nil
             return activity
+        } catch is ActivitySessionReadiness.Unavailable {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[activityID] = ActivitySessionReadiness.unavailableMessage
+            return nil
+        } catch is CancellationError {
+            return nil
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID,
                   accessGeneration == activityAccessGenerations[activityID, default: 0] else { return nil }
@@ -2019,7 +2027,9 @@ final class WanderStore: ObservableObject {
     /// Resolve the immutable visit before opening its post. This never fetches
     /// the whole Feed or guesses from the newest activity at the same place.
     @MainActor
-    func activity(checkIn target: ActivityCheckInTarget, backend: WanderBackend?) async -> FeedActivity? {
+    func activity(
+        checkIn target: ActivityCheckInTarget, backend: WanderBackend?, authSession: AuthSessionStore? = nil
+    ) async -> FeedActivity? {
         let requestUserID = currentUser.id
         let errorID = target.visitID
         func matchesTarget(_ match: PlaceActivityEngagementMatch) -> Bool {
@@ -2032,7 +2042,7 @@ final class WanderStore: ObservableObject {
             return nil
         }
         do {
-            let matches = try await retryActivityRead {
+            let matches = try await retryActivityRead(authSession: authSession) {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.placeActivitySummaries(userPlaceIDs: [target.userPlaceID])
             }
@@ -2046,16 +2056,22 @@ final class WanderStore: ObservableObject {
             }
             placeActivityEngagementMatches.removeAll(where: matchesTarget)
             placeActivityEngagementMatches.append(match)
-            let resolved = await activity(id: match.activityID, backend: backend)
+            let resolved = await activity(id: match.activityID, backend: backend, authSession: authSession)
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             activityEngagementErrorByID[errorID] = resolved == nil
                 ? activityEngagementErrorByID[match.activityID] : nil
             return resolved
+        } catch is ActivitySessionReadiness.Unavailable {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[errorID] = ActivitySessionReadiness.unavailableMessage
+            return nil
+        } catch is CancellationError {
+            return nil
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             if ProtectedContentCachePolicy.permitsOfflineRead(after: error),
                let cached = placeActivityEngagementMatches.first(where: matchesTarget) {
-                return await activity(id: cached.activityID, backend: backend)
+                return await activity(id: cached.activityID, backend: backend, authSession: authSession)
             }
             for cached in placeActivityEngagementMatches.filter(matchesTarget) {
                 discardCachedActivity(cached.activityID)
@@ -2382,26 +2398,63 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    // Retry only interrupted transport reads, never writes or denied/missing data.
-    // The caller still validates the account and authoritative server response.
+    // App entry keeps the signed-in surface mounted during session validation.
+    // Join that validation before a protected read; a lifecycle change during
+    // the read supersedes it instead of revoking cached content or draft state.
     private func retryActivityRead<Value>(
+        authSession: AuthSessionStore? = nil,
         _ operation: () async throws -> Value
     ) async throws -> Value {
-        try Task.checkCancellation()
+        let requestUserID = currentUser.id
+        func checkCurrentRead() throws {
+            try Task.checkCancellation()
+            guard currentUser.id == requestUserID else { throw CancellationError() }
+            if let authSession {
+                guard authSession.isSessionValidated,
+                      authSession.state.session?.userID == requestUserID
+                else { throw CancellationError() }
+            }
+        }
+        func read() async throws -> Value {
+            try Task.checkCancellation()
+            if let authSession {
+                do {
+                    try await authSession.ensureSessionValidated(for: requestUserID)
+                } catch {
+                    try Task.checkCancellation()
+                    guard currentUser.id == requestUserID,
+                          authSession.state.session?.userID == requestUserID
+                    else { throw CancellationError() }
+                    if error is CancellationError { throw error }
+                    throw ActivitySessionReadiness.Unavailable()
+                }
+            }
+            try checkCurrentRead()
+            do {
+                let value = try await operation()
+                try checkCurrentRead()
+                return value
+            } catch {
+                try checkCurrentRead()
+                throw error
+            }
+        }
         do {
-            return try await operation()
+            return try await read()
         } catch let error as URLError where [
             .timedOut, .networkConnectionLost, .cannotConnectToHost,
             .cannotFindHost, .dnsLookupFailed
         ].contains(error.code) {
+            // Retry interrupted transport once, never writes or denied data.
             try await Task.sleep(for: .milliseconds(300))
-            try Task.checkCancellation()
-            return try await operation()
+            return try await read()
         }
     }
 
     @discardableResult
-    func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
+    func refreshActivityComments(
+        activityID: String, backend: WanderBackend?, authSession: AuthSessionStore? = nil
+    ) async -> Bool {
         let requestUserID = currentUser.id
         let generation = activityCommentsGeneration
         let accessGeneration = activityAccessGeneration(for: activityID)
@@ -2412,7 +2465,7 @@ final class WanderStore: ObservableObject {
         else { return true }
 
         do {
-            let page = try await retryActivityRead {
+            let page = try await retryActivityRead(authSession: authSession) {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.comments(activityID: activityID, before: nil, limit: 50)
             }
@@ -2454,6 +2507,13 @@ final class WanderStore: ObservableObject {
             }
             activityEngagementErrorByID[activityID] = nil
             return true
+        } catch is ActivitySessionReadiness.Unavailable {
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  accessGeneration == activityAccessGeneration(for: activityID) else { return false }
+            activityEngagementErrorByID[activityID] = ActivitySessionReadiness.unavailableMessage
+            return false
+        } catch is CancellationError {
+            return false
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID,
                   generation == activityCommentsGeneration,

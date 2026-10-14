@@ -1358,6 +1358,300 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertNotNil(store.activityEngagementError(for: activity.id))
     }
 
+    func testNotificationActivityWaitsForSessionValidationWithoutEvictingItsCachedTicket() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [.success(activity), .success(activity)])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.activity(id: activity.id, backend: backend)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        let auth = AuthSessionStore(provider: provider)
+        repository.authSession = auth
+        let validationStarted = expectation(description: "Notification joins session validation")
+        provider.onRefreshStarted = { validationStarted.fulfill() }
+
+        let read = Task { @MainActor in
+            let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
+            return resolved?.id
+        }
+        await fulfillment(of: [validationStarted], timeout: 1)
+        XCTAssertFalse(auth.isSessionValidated)
+        XCTAssertEqual(repository.activityRequestCount, 1, "Only the earlier cache-seeding read may run")
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
+
+        provider.finishRefresh()
+        let resolved = await read.value
+        XCTAssertEqual(resolved, activity.id, "Validation must resume the original notification read without Try again")
+        XCTAssertEqual(repository.activityRequestCount, 2)
+        XCTAssertEqual(provider.refreshCount, 1)
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+    }
+
+    func testCheckInNotificationWaitsForValidationAndResolvesOnlyItsExactVisit() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let parent = UUID().uuidString, visit = UUID().uuidString
+        let target = ActivityCheckInTarget(userPlaceID: parent, visitID: visit)
+        let repository = ActivityEngagementRepositoryStub(placeMatches: [
+            PlaceActivityEngagementMatch(activityID: UUID().uuidString, userPlaceID: parent,
+                visitID: UUID().uuidString, kind: .placeBeen, occurredAt: .now,
+                engagement: .empty(activityID: "unrelated")),
+            PlaceActivityEngagementMatch(activityID: activity.id, userPlaceID: parent,
+                visitID: visit, kind: .placeBeen, occurredAt: .distantPast,
+                engagement: .empty(activityID: activity.id))
+        ], activityResult: activity)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        let auth = AuthSessionStore(provider: provider)
+        repository.authSession = auth
+        let validationStarted = expectation(description: "Check-in joins session validation")
+        provider.onRefreshStarted = { validationStarted.fulfill() }
+        let read = Task { @MainActor in
+            let resolved = await store.activity(checkIn: target,
+                backend: WanderBackend(activityEngagementRepository: repository), authSession: auth)
+            return resolved?.id
+        }
+        await fulfillment(of: [validationStarted], timeout: 1)
+        XCTAssertTrue(repository.placeRequests.isEmpty)
+        XCTAssertEqual(repository.activityRequestCount, 0)
+        XCTAssertNil(store.activityEngagementError(for: visit))
+
+        provider.finishRefresh()
+        let resolved = await read.value
+        XCTAssertEqual(resolved, activity.id)
+        XCTAssertEqual(repository.placeRequests, [[parent]])
+        XCTAssertEqual(repository.activityRequestCount, 1)
+        XCTAssertEqual(repository.summariesRequestCount, 0)
+        XCTAssertEqual(provider.refreshCount, 1)
+        XCTAssertNil(store.activityEngagementError(for: visit))
+    }
+
+    func testCommentsWaitForExistingForegroundValidationAndResumeWithoutAnotherRefresh() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = UUID().uuidString
+        let comment = activityComment(id: "comment", activityID: activityID,
+            authorID: store.currentUser.id, relationship: .owner)
+        let repository = ActivityEngagementRepositoryStub(commentsPage: ActivityCommentsPage(
+            comments: [comment], nextCursor: nil, engagement: .empty(activityID: activityID)))
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        let auth = AuthSessionStore(provider: provider)
+        repository.authSession = auth
+        let validationStarted = expectation(description: "Foreground validation starts")
+        provider.onRefreshStarted = { validationStarted.fulfill() }
+        let foreground = Task { await auth.refreshSession() }
+        await fulfillment(of: [validationStarted], timeout: 1)
+        let readStarted = expectation(description: "Comments read enters the shared validation")
+        let read = Task { @MainActor in
+            readStarted.fulfill()
+            return await store.refreshActivityComments(activityID: activityID,
+                backend: WanderBackend(activityEngagementRepository: repository), authSession: auth)
+        }
+        await fulfillment(of: [readStarted], timeout: 1)
+        XCTAssertEqual(repository.commentsRequestCount, 0)
+        XCTAssertNil(store.activityEngagementError(for: activityID))
+
+        provider.finishRefresh()
+        await foreground.value
+        let refreshed = await read.value
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(store.activityComments(for: activityID), [comment])
+        XCTAssertEqual(repository.commentsRequestCount, 1)
+        XCTAssertEqual(provider.refreshCount, 1)
+        XCTAssertNil(store.activityEngagementError(for: activityID))
+    }
+
+    func testNotificationReadsDoNotRunAfterCancellationSignOutOrAccountSwitchDuringValidation() async throws {
+        for readKind in NotificationReadKind.allCases {
+            for interruption in NotificationReadInterruption.allCases {
+                let store = WanderStore(fixtures: .empty())
+                let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+                let target = ActivityCheckInTarget(userPlaceID: UUID().uuidString, visitID: UUID().uuidString)
+                let repository = ActivityEngagementRepositoryStub(activityResult: activity)
+                let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+                let auth = AuthSessionStore(provider: provider)
+                repository.authSession = auth
+                let validationStarted = expectation(description: "\(readKind) waits before \(interruption)")
+                provider.onRefreshStarted = { validationStarted.fulfill() }
+                let read = Task { @MainActor in
+                    await readKind.load(store: store, activityID: activity.id, target: target,
+                        backend: WanderBackend(activityEngagementRepository: repository), auth: auth)
+                }
+                await fulfillment(of: [validationStarted], timeout: 1)
+                switch interruption {
+                case .cancel:
+                    read.cancel()
+                case .signOut:
+                    try await auth.signOut()
+                    store.apply(authState: auth.state)
+                case .switchAccount:
+                    store.apply(authState: .signedIn(AuthSession(userID: "replacement_account",
+                        displayName: "Replacement", handle: "replacement")))
+                }
+                provider.finishRefresh()
+                let succeeded = await read.value
+                XCTAssertFalse(succeeded, "\(readKind) must discard \(interruption)")
+                XCTAssertEqual(repository.activityRequestCount, 0)
+                XCTAssertTrue(repository.placeRequests.isEmpty)
+                XCTAssertEqual(repository.commentsRequestCount, 0)
+                XCTAssertNil(store.activityEngagementError(for: activity.id))
+                XCTAssertNil(store.activityEngagementError(for: target.visitID))
+                XCTAssertNil(store.followedFeedPage)
+                XCTAssertTrue(store.activityComments(for: activity.id).isEmpty)
+            }
+        }
+    }
+
+    func testOfflineSessionValidationKeepsProtectedCacheAndEndsLoadingWithRetryableError() async {
+        for readKind in NotificationReadKind.allCases {
+            let store = WanderStore(fixtures: .empty())
+            let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+            let comment = activityComment(id: "comment", activityID: activity.id,
+                authorID: store.currentUser.id, relationship: .owner)
+            let target = ActivityCheckInTarget(userPlaceID: UUID().uuidString, visitID: UUID().uuidString)
+            let repository = ActivityEngagementRepositoryStub(placeMatches: [
+                PlaceActivityEngagementMatch(activityID: activity.id, userPlaceID: target.userPlaceID,
+                    visitID: target.visitID, kind: .placeBeen, occurredAt: .now,
+                    engagement: .empty(activityID: activity.id))
+            ], commentsPage: ActivityCommentsPage(comments: [comment], nextCursor: nil,
+                engagement: .empty(activityID: activity.id)), activityResult: activity)
+            let backend = WanderBackend(activityEngagementRepository: repository)
+            _ = await store.activity(checkIn: target, backend: backend)
+            _ = await store.refreshActivityComments(activityID: activity.id, backend: backend)
+            let accessGeneration = store.activityAccessGeneration(for: activity.id)
+            let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+            let auth = AuthSessionStore(provider: provider)
+            repository.authSession = auth
+            let validationStarted = expectation(description: "\(readKind) waits for offline validation")
+            provider.onRefreshStarted = { validationStarted.fulfill() }
+            let read = Task { @MainActor in
+                await readKind.load(store: store, activityID: activity.id, target: target,
+                    backend: backend, auth: auth)
+            }
+            await fulfillment(of: [validationStarted], timeout: 1)
+            XCTAssertEqual(ActivitySessionReadiness(auth: auth), .validating)
+            provider.finishRefresh(as: .offline(AuthSession(userID: store.currentUser.id,
+                displayName: "Viewer", handle: "viewer"), message: "Connection unavailable"))
+            let succeeded = await read.value
+
+            XCTAssertFalse(succeeded)
+            XCTAssertEqual(ActivitySessionReadiness(auth: auth), .unavailable,
+                "An offline validation result must stop the loading state")
+            XCTAssertEqual(repository.activityRequestCount, 1)
+            XCTAssertEqual(repository.placeRequests.count, 1)
+            XCTAssertEqual(repository.commentsRequestCount, 1)
+            XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
+            XCTAssertEqual(store.activityComments(for: activity.id), [comment])
+            XCTAssertEqual(store.activityAccessGeneration(for: activity.id), accessGeneration)
+            let errorID: String
+            switch readKind {
+            case .activity, .comments: errorID = activity.id
+            case .checkIn: errorID = target.visitID
+            }
+            XCTAssertNotNil(store.activityEngagementError(for: errorID))
+        }
+    }
+
+    func testAuthoritativeActivityDenialAfterSessionValidationStillEvictsProtectedContent() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [
+            .success(activity), .failure(WanderRemoteError.invalidResponse("activity_not_visible"))
+        ])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.activity(id: activity.id, backend: backend)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        let auth = AuthSessionStore(provider: provider)
+        repository.authSession = auth
+        let validationStarted = expectation(description: "Validate before authoritative denial")
+        provider.onRefreshStarted = { validationStarted.fulfill() }
+        let read = Task { @MainActor in
+            let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
+            return resolved?.id
+        }
+        await fulfillment(of: [validationStarted], timeout: 1)
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
+        provider.finishRefresh()
+        let resolved = await read.value
+        XCTAssertNil(resolved)
+        XCTAssertTrue(auth.isSessionValidated)
+        XCTAssertEqual(repository.activityRequestCount, 2)
+        XCTAssertTrue(store.followedFeedPage?.activity.isEmpty == true)
+        XCTAssertNotNil(store.activityEngagementError(for: activity.id))
+    }
+
+    func testActivityValidationInvalidatedDuringReadPreservesCacheAndAllowsNextValidatedRead() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [.success(activity), .success(activity)])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.activity(id: activity.id, backend: backend)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        provider.finishRefresh()
+        let auth = AuthSessionStore(provider: provider)
+        await auth.refreshSession()
+        repository.authSession = auth
+        repository.beginSuspendingActivity()
+        let requestStarted = expectation(description: "Activity request begins with validated auth")
+        repository.onActivityRequest = { requestStarted.fulfill() }
+        let read = Task { @MainActor in
+            let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
+            return resolved?.id
+        }
+        await fulfillment(of: [requestStarted], timeout: 1)
+        auth.beginSessionValidation()
+        repository.finishActivity()
+        let interrupted = await read.value
+        XCTAssertNil(interrupted)
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+
+        repository.onActivityRequest = nil
+        let restarted = await store.activity(id: activity.id, backend: backend, authSession: auth)
+        XCTAssertEqual(restarted?.id, activity.id)
+        XCTAssertEqual(repository.activityRequestCount, 3)
+        XCTAssertTrue(auth.isSessionValidated)
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+    }
+
+    func testCommentsValidationInvalidatedDuringReadPreservesCommentsUntilRestart() async {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let comment = activityComment(id: "comment", activityID: activity.id,
+            authorID: store.currentUser.id, relationship: .owner)
+        let repository = ActivityEngagementRepositoryStub(commentsPage: ActivityCommentsPage(
+            comments: [comment], nextCursor: nil, engagement: .empty(activityID: activity.id)),
+            activityResult: activity)
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        _ = await store.activity(id: activity.id, backend: backend)
+        _ = await store.refreshActivityComments(activityID: activity.id, backend: backend)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        provider.finishRefresh()
+        let auth = AuthSessionStore(provider: provider)
+        await auth.refreshSession()
+        repository.authSession = auth
+        repository.beginSuspendingComments()
+        let requestStarted = expectation(description: "Comments request begins with validated auth")
+        repository.onCommentsRequest = { requestStarted.fulfill() }
+        let read = Task { @MainActor in
+            await store.refreshActivityComments(activityID: activity.id, backend: backend, authSession: auth)
+        }
+        await fulfillment(of: [requestStarted], timeout: 1)
+        auth.beginSessionValidation()
+        repository.finishComments()
+        let interrupted = await read.value
+        XCTAssertFalse(interrupted)
+        XCTAssertEqual(store.activityComments(for: activity.id), [comment])
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+
+        repository.onCommentsRequest = nil
+        let restarted = await store.refreshActivityComments(activityID: activity.id, backend: backend, authSession: auth)
+        XCTAssertTrue(restarted)
+        XCTAssertEqual(repository.commentsRequestCount, 3)
+        XCTAssertTrue(auth.isSessionValidated)
+        XCTAssertNil(store.activityEngagementError(for: activity.id))
+    }
+
     func testNotificationActivityRecoversInterruptedConnectionWithoutReopening() async {
         let store = WanderStore(fixtures: .empty())
         let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
@@ -1712,6 +2006,9 @@ private enum ActivityEngagementTestError: Error {
 
 @MainActor
 final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
+    var authSession: AuthSessionStore?
+    var onActivityRequest: (() -> Void)?
+    var onCommentsRequest: (() -> Void)?
     let placeMatches: [PlaceActivityEngagementMatch]
     var placeError: Error?
     var placeFailuresRemaining = 0
@@ -1768,7 +2065,9 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
 
     func activity(id: String) async throws -> FeedActivity {
         activityRequestCount += 1
+        onActivityRequest?()
         while isActivitySuspended { await Task.yield() }
+        if let authSession { _ = try await authSession.supabaseAccessToken() }
         guard !activityResponses.isEmpty else {
             throw ActivityEngagementTestError.expected
         }
@@ -1776,6 +2075,8 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
         guard activityResult.id == id else { throw ActivityEngagementTestError.expected }
         return activityResult
     }
+
+    func beginSuspendingActivity() { isActivitySuspended = true }
 
     func finishActivity() {
         isActivitySuspended = false
@@ -1796,6 +2097,7 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
         placeRequests.append(userPlaceIDs)
         while suspendPlaceRequests { await Task.yield() }
+        if let authSession { _ = try await authSession.supabaseAccessToken() }
         if let placeError { throw placeError }
         if placeFailuresRemaining > 0 {
             placeFailuresRemaining -= 1
@@ -1816,7 +2118,9 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
         let snapshot = commentsPage
         commentsRequestCount += 1
+        onCommentsRequest?()
         while areCommentsSuspended { await Task.yield() }
+        if let authSession { _ = try await authSession.supabaseAccessToken() }
         if !commentsResponses.isEmpty { return try commentsResponses.removeFirst().get() }
         return snapshot ?? ActivityCommentsPage(
             comments: [],
@@ -1869,6 +2173,72 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
         if let deleteError { throw deleteError }
         guard let deleteResult else { throw ActivityEngagementTestError.expected }
         return deleteResult
+    }
+}
+
+private enum NotificationReadInterruption: CaseIterable {
+    case cancel, signOut, switchAccount
+}
+
+private enum NotificationReadKind: CaseIterable {
+    case activity, checkIn, comments
+
+    @MainActor
+    func load(store: WanderStore, activityID: String, target: ActivityCheckInTarget,
+              backend: WanderBackend, auth: AuthSessionStore) async -> Bool {
+        switch self {
+        case .activity:
+            return await store.activity(id: activityID, backend: backend, authSession: auth) != nil
+        case .checkIn:
+            return await store.activity(checkIn: target, backend: backend, authSession: auth) != nil
+        case .comments:
+            return await store.refreshActivityComments(activityID: activityID, backend: backend, authSession: auth)
+        }
+    }
+}
+
+@MainActor
+private final class SuspendedActivityAuthProvider: AuthSessionProviding {
+    private(set) var state: AuthState
+    private(set) var refreshCount = 0
+    var onRefreshStarted: (() -> Void)?
+    private var shouldSuspendRefresh = true
+    private var refreshContinuation: CheckedContinuation<Void, Never>?
+    private let changes: AsyncStream<AuthState>
+    private let changesContinuation: AsyncStream<AuthState>.Continuation
+
+    init(userID: String) {
+        state = .signedIn(AuthSession(userID: userID, displayName: "Viewer", handle: "viewer"))
+        (changes, changesContinuation) = AsyncStream<AuthState>.makeStream()
+    }
+
+    var canPresentNativeAuth: Bool { false }
+    func sessionChanges() -> AsyncStream<AuthState> { changes }
+
+    func refreshSession() async {
+        refreshCount += 1
+        guard shouldSuspendRefresh else { return }
+        await withCheckedContinuation { continuation in
+            refreshContinuation = continuation
+            onRefreshStarted?()
+        }
+    }
+
+    func finishRefresh(as state: AuthState? = nil) {
+        if let state { self.state = state }
+        shouldSuspendRefresh = false
+        refreshContinuation?.resume()
+        refreshContinuation = nil
+    }
+
+    func signOut() async throws {
+        state = .signedOut
+        changesContinuation.yield(state)
+    }
+
+    func supabaseAccessToken() async throws -> String {
+        guard state.isSignedIn else { throw AuthSessionError.notSignedIn }
+        return "activity-test-token"
     }
 }
 

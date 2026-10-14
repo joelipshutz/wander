@@ -28,7 +28,7 @@ concurrency:
 jobs:
   native:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,7 +57,8 @@ jobs:
                   output.write(f'{key}={device["udid"]}\n')
               print('Testing on', device['name'])
           PY
-      # The search microbenchmark runs on its reference machine, not shared hosted runners.
+      # Wall-clock budgets run on a controlled reference machine. The matching
+      # deterministic search and high-data cache contracts still run below.
       - name: Unit suite and native Feed scrolling
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
@@ -65,9 +66,17 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
+          -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testNotificationOpensPostWithArrowComposerAndBackReturnsFeed
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed
+          -only-testing:WanderUITests/ForegroundEntryUITests
+          -only-testing:WanderUITests/MapPlaceCardActionInteractionUITests/testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps
+          -only-testing:WanderUITests/ShareCardMockupUITests/testExternalPlaceCanOpenNativeDestinationsFromEveryFormat
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
+          -maximum-test-execution-time-allowance 360
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
       # SDK replay capture owns process-wide observers; validate in a fresh test host.
       - name: Verify replay masking in an isolated process

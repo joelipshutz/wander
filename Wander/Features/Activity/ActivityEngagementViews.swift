@@ -889,7 +889,7 @@ struct ActivityCommentsScreen: View {
     }
 
     private var accessKey: String {
-        "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase):\(retryID)"
+        "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(ActivitySessionReadiness(auth: auth)):\(scenePhase):\(retryID)"
     }
 
     var body: some View {
@@ -930,12 +930,11 @@ struct ActivityCommentsScreen: View {
                     checkedKey = key
                     return
                 }
-                let activity = await store.activity(id: context.activityID, backend: backend)
-                guard !Task.isCancelled, key == accessKey else { return }
+                let activity = await store.activity(id: context.activityID, backend: backend, authSession: auth)
+                guard !Task.isCancelled, key == accessKey, ActivitySessionReadiness(auth: auth) != .validating else { return }
                 checkedContext = activity?.activityEngagementContext
                 checkedPlace = activity?.place
             }
-            if checkedContext == nil { composer.revokeAccess(for: composerScope) }
             checkedGeneration = store.activityAccessGeneration(for: context.activityID)
             checkedKey = key
         }
@@ -949,11 +948,10 @@ struct ActivityCommentsScreen: View {
     private func recheckAccess() async -> Bool {
         guard UUID(uuidString: context.activityID) != nil else { return true }
         let key = accessKey
-        let activity = auth.isSignedIn ? await store.activity(id: context.activityID, backend: backend) : nil
-        guard !Task.isCancelled, key == accessKey else { return false }
+        let activity = auth.isSignedIn ? await store.activity(id: context.activityID, backend: backend, authSession: auth) : nil
+        guard !Task.isCancelled, key == accessKey, ActivitySessionReadiness(auth: auth) != .validating else { return false }
         checkedContext = activity?.activityEngagementContext
         checkedPlace = activity?.place
-        if checkedContext == nil { composer.revokeAccess(for: composerScope) }
         checkedGeneration = store.activityAccessGeneration(for: context.activityID)
         return checkedContext != nil
     }
@@ -1047,7 +1045,7 @@ private struct AuthorizedActivityCommentsScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composerInput
         }
-        .task(id: "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
+        .task(id: "\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(ActivitySessionReadiness(auth: auth)):\(scenePhase)") {
             guard scenePhase == .active else { return }
             await refreshComments()
         }
@@ -1101,9 +1099,10 @@ private struct AuthorizedActivityCommentsScreen: View {
         guard await recheckAccess() else { isLoading = false; return }
         let didRefresh = await store.refreshActivityComments(
             activityID: context.activityID,
-            backend: auth.isSignedIn ? backend : nil
+            backend: auth.isSignedIn ? backend : nil,
+            authSession: auth
         )
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, ActivitySessionReadiness(auth: auth) != .validating || UUID(uuidString: context.activityID) == nil else { return }
         commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
         isLoading = false
     }
@@ -1507,7 +1506,7 @@ struct ActivityCommentsRouteScreen: View {
                 resolutionState
             }
         }
-        .task(id: "\(requestID):\(store.currentUser.id):\(auth.isSignedIn):\(scenePhase)") {
+        .task(id: "\(requestID):\(store.currentUser.id):\(auth.isSignedIn):\(ActivitySessionReadiness(auth: auth)):\(scenePhase)") {
             // Once resolved, the child rechecks source access without replacing
             // the route and losing its scoped composer during foregrounding.
             guard scenePhase == .active, currentRoute?.context == nil else { return }
@@ -1543,7 +1542,7 @@ struct ActivityCommentsRouteScreen: View {
 
     private var resolutionState: some View {
         VStack(spacing: WanderTheme.spacing4) {
-            if resolutionError == nil || isRetrying {
+            if resolutionError == nil || isRetrying || ActivitySessionReadiness(auth: auth) == .validating {
                 ProgressView("Opening activity…")
                     .tint(brandMode.accent)
                     .foregroundStyle(brandMode.secondaryText)

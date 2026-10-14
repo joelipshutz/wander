@@ -61,7 +61,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
             "-WanderMapCapture",
             "-WanderUseStorefrontFixtures",
             "-WanderAuthenticatedUITest",
-            "-WanderResetWalkthroughs",
+            "-WanderDisableWalkthroughs",
             "-WanderMapCardLocationFixture",
             "-WanderMapPlace", "Hearthline Coffee",
         ]
@@ -76,7 +76,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         XCTAssertTrue(shareButton.exists)
 
         dragAway(from: addButton, onto: card)
-        XCTAssertFalse(app.buttons["Close"].waitForExistence(timeout: 1))
+        XCTAssertFalse(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 1))
         XCTAssertTrue(card.exists)
 
         dragAway(from: shareButton, onto: card)
@@ -85,7 +85,8 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         capture("rec-293-place-action-drag-cancelled")
 
         addButton.tap()
-        let saveClose = app.buttons["Close"]
+        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 5))
+        let saveClose = app.buttons["save.close"]
         XCTAssertTrue(saveClose.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["place-profile.floating-action.checkIn"].exists)
         saveClose.tap()

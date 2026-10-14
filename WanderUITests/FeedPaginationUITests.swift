@@ -7,6 +7,10 @@ final class FeedPaginationUITests: XCTestCase {
     }
 
     func testLoadsTwentyMoreOnlyAtBottomThenStopsAtEnd() {
+        // This traverses three pages with native gestures and two deliberately
+        // delayed fetches. Shared runners need more than the default two-minute
+        // case limit; individual loading/count expectations remain bounded.
+        executionTimeAllowance = 300
         let app = XCUIApplication()
         app.launchArguments = ["-WanderMapCapture", "-WanderUseStorefrontFixtures",
             "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
