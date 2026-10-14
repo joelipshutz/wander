@@ -235,8 +235,8 @@ begin
     raise exception 'stale claim was accepted';
   end if;
   payload := public.authorize_push_notification_delivery(event_id,claim_id);
-  if payload is null or payload->>'title' <> 'New activity on Astir'
-    or payload->>'body' <> 'Open Astir to view.' or payload->'data' ? 'private_note'
+  if payload is null or payload->>'title' <> 'Private venue'
+    or payload->>'body' <> 'Private note' or payload->'data' ? 'private_note'
     or jsonb_array_length(payload->'tokens') <> 1 then
     raise exception 'authorized push did not return a fresh minimal envelope';
   end if;
@@ -256,7 +256,7 @@ begin
         'claimed',import_claim,now()+interval '5 minutes',now()+interval '1 hour',now()+interval '1 hour');
     set local role service_role;
     payload := public.authorize_push_notification_delivery(import_event,import_claim);
-    if payload is null or payload->>'body' <> 'Open Astir to view.' then
+    if payload is null or payload->>'body' <> 'Privacy smoke venue' then
       raise exception 'authorized grouped import lost its delivery contract';
     end if;
     reset role;
