@@ -36,6 +36,10 @@ begin
   insert into public.profiles(id,handle,display_name,is_private_profile) values
     (viewer,'codex_live_viewer','Live Viewer',false),(friend,'codex_live_friend','Live Friend',false),
     (followee,'codex_live_followee','Live Followee',false),(stranger,'codex_live_stranger','Live Stranger',false);
+  -- Signup defaults are production configuration, not part of this fixture's
+  -- known audience. Remove only these synthetic accounts' automatic edges.
+  delete from public.follows
+    where follower_user_id in (viewer,friend,followee,stranger) and source='signup_default';
   insert into public.follows(follower_user_id,followed_user_id,source) values
     (viewer,friend,'username'),(friend,viewer,'username'),(viewer,followee,'username');
   insert into public.places(id,canonical_name,category,latitude,longitude,source_provider,source_provider_place_id)
@@ -180,6 +184,8 @@ begin
   insert into public.profiles(id,handle,display_name,is_private_profile) values
     (viewer,'codex_live_refine_viewer','Refine Viewer',false),(actor,'codex_live_refine_actor','Refine Actor',false),
     (other_actor,'codex_live_refine_other','Refine Other',false),(stranger,'codex_live_refine_stranger','Refine Stranger',false);
+  delete from public.follows
+    where follower_user_id in (viewer,actor,other_actor,stranger) and source='signup_default';
   insert into public.follows(follower_user_id,followed_user_id,source) values
     (viewer,actor,'username'),(actor,viewer,'username'),(viewer,other_actor,'username');
   insert into public.places(id,canonical_name,category,primary_category,latitude,longitude,source_provider,source_provider_place_id)
