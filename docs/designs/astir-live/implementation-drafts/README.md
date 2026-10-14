@@ -1,6 +1,6 @@
 # REC-636 implementation drafts
 
-These SQL files are review drafts, **not installed migrations**. They remain unpackaged, undeployed and unexecuted. Native query/store integration and the approved D11 Live display lease now exist, but do not establish backend readiness. Keep the remote default `unified_live_v1` off. The delegated first rollout is internal-only after required verification.
+The SQL drafts have been packaged as an ordered migration pair through Supabase CLI 2.114.0. **The migrations are not installed and database execution remains outstanding.** Native query/store integration and the approved D11 Live display lease now exist, but do not establish backend readiness. Keep the remote default `unified_live_v1` off. The delegated first rollout is internal-only after required verification.
 
 ## Current integration
 
@@ -10,11 +10,18 @@ Committed controls install `selectLiveFeedQuery(_:)` and refresh through the exi
 
 D11 is approved and implemented as session-only, per-activity monotonic authorized-response receipts: social rows expire after 15 minutes, page loads renew only rows they authorize, and owner rows remain exempt. This does not change Profile, canonical owner data or legacy nil-query Feed cache policy. Receipts begin before media work; device suspension counts and wall-clock changes cannot extend them. Current device-location centering is not implemented; selected-city centers work.
 
-## Package and verify
+## Packaged migrations
+
+1. [Private contextual messages](../../../../supabase/migrations/20261014020218_private_contextual_messages.sql): creates the private messaging contract and dormant flag registration.
+2. [Live activity feed](../../../../supabase/migrations/20261014020238_live_activity_feed.sql): adds the filtered Live RPC, polygon validator and time index.
+
+Only the draft-status comments changed during packaging; executable SQL matches the reviewed source drafts. These migration files are the deployment source of truth. Keep the original drafts as historical review input and do not apply them separately.
+
+## Deployment procedure
 
 1. Inspect `supabase --version`, `supabase migration new --help` and `supabase db push --help`. Review the confirmed linked target and migration history before any hosted change. Do not replay old migrations or repair unrelated history as part of this feature. Use a reviewed, targeted deployment of only the new ordered pair; a CLI push is acceptable only if its dry run identifies exactly those two files.
-2. Run `supabase migration new private_contextual_messages` first. Copy reviewed [private-contextual-messages.sql](private-contextual-messages.sql) into the CLI-generated file and replace its draft-status comments. This creates the messaging contract and dormant Boolean `unified_live_v1` registry row while preserving existing keys/ranges.
-3. Run `supabase migration new live_activity_feed` second. Copy [live-feed.sql](live-feed.sql) into that CLI-generated file. It adds the complete Live query RPC, polygon validator and time index without replacing legacy Feed APIs or visibility helpers. Do not invent migration filenames or apply documentation drafts directly.
+2. The CLI-generated messaging migration is already packaged first. Review it against [private-contextual-messages.sql](private-contextual-messages.sql); it creates the messaging contract and dormant Boolean `unified_live_v1` registry row while preserving existing keys/ranges.
+3. The CLI-generated Live migration is already packaged second. Review it against [live-feed.sql](live-feed.sql); it adds the complete Live query RPC, polygon validator and time index without replacing legacy Feed APIs or visibility helpers. Do not regenerate duplicate migrations or apply documentation drafts directly.
 4. Review both generated migrations and run their rollback-only regressions. Verify radius/category/person predicates precede the limit, all filters bind the cursor, viewer taxonomy matches the native projection, and no authorized source subset broadens. Run the integrated native store/query/lease tests and appropriate regression suite.
 5. Apply through the approved migration workflow to the confirmed target, then compare local and hosted migration records, inspect function/grant metadata and run hosted smoke. If the migration tool allocates its own version, reconcile the returned version with the local filename before another deployment. Keep the global `unified_live_v1` value false. Activation remains a separate internal rollout step through the full-launch flag platform.
 
@@ -35,7 +42,8 @@ Quota boundaries and authorization during lock waits need controlled synthetic f
 - Native tests include `PrivateMessageRepositoryTests`, `PrivateMessageRPCClientTests`, `LiveFeedQueryTests`, `LiveFeedStoreTests` and `LiveFeedDisplayLeaseTests`, plus existing Feed audience/paging/navigation coverage. The [integrated validation report](../review/integrated-validation.md) is the single authority for candidate identity, executed checks, results and outstanding validation; the suite inventory here is not a pass claim.
 - SQL regressions are `supabase/tests/private_contextual_messages.sql` and `supabase/tests/live_activity_feed.sql`. Both use synthetic fixtures and roll back. Messaging covers per-account approval/revocation/restoration, global-flag non-bypass, mutual/block/source access, idempotency, quotas and read acknowledgments. Live covers 60 newer nonmatches before eligible results, every refinement, viewer taxonomy, tied pagination and cursor/account mismatches.
 - The smoke runner includes both suites in direct and linked paths. After migrations are installed, run `npm --prefix scripts ci --ignore-scripts`, then `node scripts/supabase-smoke-test.mjs` against the confirmed target. Missing RPC/schema must fail; do not skip suites to make smoke pass.
-- Offline rollback-preview generation is available: `node scripts/supabase-smoke-test.mjs --print-sql --migration-preview docs/designs/astir-live/implementation-drafts/private-contextual-messages.sql --migration-test supabase/tests/private_contextual_messages.sql`; repeat with `live-feed.sql` and `live_activity_feed.sql`. **Generation is not database execution.** Local/hosted SQL behavior and metadata verification remain outstanding.
+- Full credential-free linked smoke export is available with `node scripts/supabase-smoke-test.mjs --write-linked-sql <output.sql>`. Before installation, append both ordered migration files using repeated `--migration-preview` arguments. After installation, omit previews and run the exported file with the pinned CLI's `db query --linked --project-ref <confirmed-project> --file <output.sql>`. This export includes the additional linked suites; `--print-sql` alone does not.
+- Individual offline rollback-preview generation is available: `node scripts/supabase-smoke-test.mjs --print-sql --migration-preview docs/designs/astir-live/implementation-drafts/private-contextual-messages.sql --migration-test supabase/tests/private_contextual_messages.sql`; repeat with `live-feed.sql` and `live_activity_feed.sql`. **Generation is not database execution.** Local/hosted SQL behavior and metadata verification remain outstanding.
 
 ## Internal messaging boundary
 
