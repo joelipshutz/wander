@@ -237,6 +237,7 @@ final class ReplayMaskingTests: XCTestCase {
         let window = UIWindow(windowScene: scene)
         // Fixed pixel probes require fixed typography, independent of simulator accessibility settings.
         window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture().dynamicTypeSize(.large))
+
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true
@@ -244,6 +245,23 @@ final class ReplayMaskingTests: XCTestCase {
         }
         XCTAssertTrue(scene.keyWindow === window, "The SDK must capture the fixture's key window")
         XCTAssertFalse(window.bounds.isEmpty)
+
+        // The SDK captures with afterScreenUpdates: false. Commit this newly mounted
+        // SwiftUI fixture before its first capture instead of reading an unfinished frame.
+        window.rootViewController?.view.setNeedsLayout()
+        window.rootViewController?.view.layoutIfNeeded()
+        window.setNeedsLayout()
+        window.layoutIfNeeded()
+        var baselineRendered = false
+        let baseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            baselineRendered = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let baselineAttachment = XCTAttachment(image: baseline)
+        baselineAttachment.name = "Fictional fixture before replay masking"
+        baselineAttachment.lifetime = .keepAlways
+        add(baselineAttachment)
+        XCTAssertTrue(baselineRendered, "The fixture must finish rendering before replay capture starts")
+        guard baselineRendered else { return }
 
         let frames = ReplayFrameCollector()
         let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
@@ -261,28 +279,44 @@ final class ReplayMaskingTests: XCTestCase {
         sdk.capture(ReplayFrameCollector.probeEvent)
         XCTAssertEqual(frames.probeCallbackCount, 1, "The offline collector must receive the SDK callback probe.")
 
-        // Drive genuine layout notifications, which trigger the SDK screenshot recorder.
-        let minimumCaptureTime = ContinuousClock.now.advanced(by: .seconds(2))
-        let captureDeadline = ContinuousClock.now.advanced(by: .seconds(30))
-        while ContinuousClock.now < captureDeadline {
+        // The pinned SDK observes UIView.layoutSublayers(of:). A plain UIView
+        // makes that exact base-class callback part of each real layout pulse,
+        // independent of UIWindow/UIHostingView layout overrides. It is clear,
+        // outside the pixel probes, and does not replace SDK capture or masking.
+        let layoutPulse = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        layoutPulse.isUserInteractionEnabled = false
+        layoutPulse.accessibilityElementsHidden = true
+        window.addSubview(layoutPulse)
+
+        // Replay is inactive until the SDK has processed the asynchronous offline
+        // remote-config response. Layouts before that point are discarded, so
+        // readiness must not consume the time allowed for a screenshot callback.
+        let clock = ContinuousClock()
+        let readinessDeadline = clock.now.advanced(by: .seconds(15))
+        while !sdk.isSessionReplayActive(), clock.now < readinessDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        guard sdk.isSessionReplayActive() else {
+            XCTFail("The SDK must activate replay after the offline config response (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window), \(frames.diagnostics))")
+            return
+        }
+
+        // Drive genuine layout notifications until an encoded SDK frame arrives.
+        // Layout throttling and image encoding run asynchronously on SDK queues;
+        // a fixed number of layout pulses does not establish capture completion.
+        let captureStarted = clock.now
+        let settledAt = captureStarted.advanced(by: .seconds(2))
+        let captureDeadline = captureStarted.advanced(by: .seconds(30))
+        repeat {
             window.rootViewController?.view.setNeedsLayout()
             window.rootViewController?.view.layoutIfNeeded()
-            // The pinned SDK observes UIView.layoutSublayers(of:).
-            window.layer.setNeedsLayout()
-            window.layer.layoutIfNeeded()
+            layoutPulse.layer.setNeedsLayout()
+            layoutPulse.layer.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(100))
-            if ContinuousClock.now >= minimumCaptureTime, frames.image != nil { break }
-        }
-        let baseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-        }
-        let baselineAttachment = XCTAttachment(image: baseline)
-        baselineAttachment.name = "Fictional fixture before replay masking"
-        baselineAttachment.lifetime = .keepAlways
-        add(baselineAttachment)
+        } while clock.now < captureDeadline && (clock.now < settledAt || frames.image == nil)
         XCTAssertTrue(sdk.isSessionReplayActive())
         let image = try XCTUnwrap(frames.image,
-            "The SDK must produce an actual replay frame (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window))")
+            "The SDK must produce an actual replay frame within 30 seconds after activation (foreground: \(scene.activationState == .foregroundActive), fixture key: \(scene.keyWindow === window), \(frames.diagnostics))")
         let attachment = XCTAttachment(image: image)
         attachment.name = "Offline replay — readable content and masked credentials"
         attachment.lifetime = .keepAlways

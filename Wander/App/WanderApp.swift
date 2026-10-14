@@ -210,7 +210,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
+            if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
+                ActivityPostcardReviewRoot()
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
                 ShareCardDesignMockupRoot()
                     .environmentObject(mapCaptureBackend)
             } else if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {

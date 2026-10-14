@@ -679,7 +679,25 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     @MainActor
+    func testPerformanceFixtureExercisesARealisticHighDataAccountAndReusesCachedProjections() {
+        _ = exerciseHighDataAccount()
+    }
+
+    // Keep wall-clock limits as an isolated reference-machine benchmark. The
+    // companion test runs the same fixture and cache-work assertions on shared CI.
+    @MainActor
     func testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget() {
+        for measurement in exerciseHighDataAccount() {
+            XCTAssertLessThan(
+                measurement.elapsed,
+                measurement.budget,
+                "\(measurement.name) took \(measurement.elapsed)s"
+            )
+        }
+    }
+
+    @MainActor
+    private func exerciseHighDataAccount() -> [(elapsed: TimeInterval, budget: TimeInterval, name: String)] {
         let fixtureStart = CFAbsoluteTimeGetCurrent()
         let fixtures = WanderFixtures.performanceScale()
         let fixtureElapsed = CFAbsoluteTimeGetCurrent() - fixtureStart
@@ -742,7 +760,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(store.placeGroupingIndexBuildCount, 1)
 
         guard let suggestionList = visibleLists.first(where: { $0.name == "Realistic list 000" }) else {
-            return XCTFail("Performance fixture should include the first realistic list")
+            XCTFail("Performance fixture should include the first realistic list")
+            return []
         }
         let listSuggestionStart = CFAbsoluteTimeGetCurrent()
         let listSuggestions = store.listSuggestions(for: suggestionList, limit: 5)
@@ -869,23 +888,25 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertGreaterThan(checksum, 0)
         XCTAssertGreaterThan(visibleListItemCount, 1_500)
         XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
-        XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
-        XCTAssertLessThan(storeElapsed, 0.5, "High-data store initialization took \(storeElapsed)s")
-        XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place and owner-count projections took \(coldProjectionElapsed)s")
-        XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
-        XCTAssertLessThan(listProjectionElapsed, 0.12, "High-data list projection took \(listProjectionElapsed)s")
-        XCTAssertLessThan(warmListProjectionElapsed, 0.1, "Warm high-data list reads took \(warmListProjectionElapsed)s")
-        XCTAssertLessThan(listSuggestionElapsed, 0.75, "High-data list suggestions took \(listSuggestionElapsed)s")
-        XCTAssertLessThan(collaboratorProjectionElapsed, 0.1, "List collaborator projection took \(collaboratorProjectionElapsed)s")
-        XCTAssertLessThan(groupProjectionElapsed, 0.15, "Visible-place grouping took \(groupProjectionElapsed)s")
-        XCTAssertLessThan(warmGroupProjectionElapsed, 0.02, "Warm visible-place grouping took \(warmGroupProjectionElapsed)s")
-        XCTAssertLessThan(insightsElapsed, 0.5, "Cold Profile insights took \(insightsElapsed)s")
-        XCTAssertLessThan(warmInsightsElapsed, 0.15, "Warm Profile insight reads took \(warmInsightsElapsed)s")
-        XCTAssertLessThan(profileProjectionElapsed, 0.5, "Cached Profile projections took \(profileProjectionElapsed)s")
-        XCTAssertLessThan(profilePresentationElapsed, 0.75, "Cached Profile presentation took \(profilePresentationElapsed)s")
-        XCTAssertLessThan(inCommonElapsed, 1, "Cached In Common projection took \(inCommonElapsed)s")
-        XCTAssertLessThan(yourMapDatasetElapsed, 0.75, "Your Map dataset projection took \(yourMapDatasetElapsed)s")
-        XCTAssertLessThan(snapshotElapsed, 0.5, "Main-actor snapshot creation took \(snapshotElapsed)s")
+        return [
+            (fixtureElapsed, 2.5, "Performance fixture construction"),
+            (storeElapsed, 0.5, "High-data store initialization"),
+            (coldProjectionElapsed, 0.5, "Cold visible-place and owner-count projections"),
+            (warmProjectionElapsed, 0.1, "Warm visible-place reads"),
+            (listProjectionElapsed, 0.12, "High-data list projection"),
+            (warmListProjectionElapsed, 0.1, "Warm high-data list reads"),
+            (listSuggestionElapsed, 0.75, "High-data list suggestions"),
+            (collaboratorProjectionElapsed, 0.1, "List collaborator projection"),
+            (groupProjectionElapsed, 0.15, "Visible-place grouping"),
+            (warmGroupProjectionElapsed, 0.02, "Warm visible-place grouping"),
+            (insightsElapsed, 0.5, "Cold Profile insights"),
+            (warmInsightsElapsed, 0.15, "Warm Profile insight reads"),
+            (profileProjectionElapsed, 0.5, "Cached Profile projections"),
+            (profilePresentationElapsed, 0.75, "Cached Profile presentation"),
+            (inCommonElapsed, 1, "Cached In Common projection"),
+            (yourMapDatasetElapsed, 0.75, "Your Map dataset projection"),
+            (snapshotElapsed, 0.5, "Main-actor snapshot creation")
+        ]
     }
 
     @MainActor

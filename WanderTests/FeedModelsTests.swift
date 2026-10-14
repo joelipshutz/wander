@@ -61,6 +61,34 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(group.occurredAt, events[1].occurredAt)
     }
 
+    @MainActor
+    func testGroupedPhotoContextContainsOnlyPrimaryCheckInMedia() throws {
+        func preview(_ id: String) -> FeedMediaPreview {
+            FeedMediaPreview(id: id, storageBucket: "visit-photos",
+                             storagePath: "owner/visit/\(id).jpg", accessibilityLabel: "Photo \(id)")
+        }
+        let wanna = groupingEvent("wanna", .placeWannaGo, 0, media: [preview("wanna-photo")])
+        let visit = groupingEvent("visit", .placeBeen, 120,
+                                  media: [preview("visit-photo-1"), preview("visit-photo-2")])
+        let list = groupingEvent("list", .listItemAdded, 240, media: [preview("list-photo")])
+        let laterVisit = groupingEvent("later-visit", .placeBeen, 360, media: [preview("later-photo")])
+        let groups = FeedPresentation.groupedActivity([list, laterVisit, wanna, visit], relativeTo: groupingNow)
+        XCTAssertEqual(groups.count, 2)
+        let firstVisitGroup = try XCTUnwrap(groups.first { $0.id == wanna.id })
+        XCTAssertEqual(firstVisitGroup.activities.map(\.id), [wanna.id, visit.id, list.id])
+        XCTAssertEqual(firstVisitGroup.primaryActivity.id, visit.id)
+
+        let context = try XCTUnwrap(firstVisitGroup.primaryActivity.activityEngagementContext)
+        XCTAssertEqual(context.activityID, visit.id)
+        XCTAssertEqual(context.media, visit.media.map {
+            ActivityEngagementMedia(id: $0.id, storageBucket: $0.storageBucket,
+                                    storagePath: $0.storagePath, accessibilityLabel: $0.accessibilityLabel)
+        })
+        XCTAssertEqual(context.media.map(\.id), ["visit-photo-1", "visit-photo-2"])
+        let laterGroup = try XCTUnwrap(groups.first { $0.id == laterVisit.id })
+        XCTAssertEqual(laterGroup.primaryActivity.activityEngagementContext?.media.map(\.id), ["later-photo"])
+    }
+
     func testGroupingWindowIncludesThirtyMinutesButDoesNotSlide() {
         let events = [groupingEvent("wanna", .placeWannaGo, 0),
                       groupingEvent("list-1", .listItemAdded, 1_800),
@@ -141,7 +169,8 @@ final class FeedModelsTests: XCTestCase {
 
     private func groupingEvent(
         _ id: String, _ kind: FeedActivityKind, _ seconds: TimeInterval,
-        actorID: String = "user_maya", placeID: String = "place", list: LocalPlaceList? = nil
+        actorID: String = "user_maya", placeID: String = "place", list: LocalPlaceList? = nil,
+        media: [FeedMediaPreview] = []
     ) -> FeedActivity {
         let eventActor = ProfileShell(id: actorID, handle: "maya", displayName: "Maya Chen", avatarURL: nil, bio: nil, relationship: .follower)
         let place = LocalPlace(localID: placeID, serverID: placeID, canonicalName: "Same name", category: "coffee", latitude: 34, longitude: -118)
@@ -149,7 +178,7 @@ final class FeedModelsTests: XCTestCase {
         let owner = LocalProfile(localID: actorID, handle: "maya", displayName: "Maya Chen")
         return FeedActivity(id: id, kind: kind, actor: eventActor,
                             place: VisiblePlace(id: save.id, place: place, userPlace: save, owner: owner),
-                            list: list, occurredAt: groupingNow.addingTimeInterval(-3_600 + seconds))
+                            list: list, occurredAt: groupingNow.addingTimeInterval(-3_600 + seconds), media: media)
     }
 
     func testRefreshFreshnessExpiresAndDoesNotTrustClockRollback() {

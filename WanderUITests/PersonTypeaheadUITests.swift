@@ -36,8 +36,13 @@ final class PersonTypeaheadUITests: XCTestCase {
         // explicitly, then verify the retained mention still deletes atomically.
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         field.typeText("x")
+        // UIKit and the accessibility snapshot can settle on different turns
+        // after foregrounding. Require the exact edit before testing deletion.
+        expectation(for: NSPredicate(format: "value == %@", "With @Caitlin Cortez x"), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(field.value as? String, "With @Caitlin Cortez x")
         field.typeText(XCUIKeyboardKey.delete.rawValue)
+        waitForFieldValue("With @Caitlin Cortez ", in: field)
         XCTAssertEqual(field.value as? String, "With @Caitlin Cortez ",
                        "Deleting the caret probe must preserve the selected mention and its separator")
         XCTAssertTrue(app.keyboards.firstMatch.exists)
@@ -193,15 +198,31 @@ final class PersonTypeaheadUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
+        waitForFieldValue(remaining + mention + " ", in: field, file: file, line: line)
         XCTAssertEqual(field.value as? String, remaining + mention + " ", file: file, line: line)
         // Observe the ordinary separator deletion separately so the atomic
         // assertion starts with the caret immediately after the tagged name.
         field.typeText(XCUIKeyboardKey.delete.rawValue)
+        waitForFieldValue(remaining + mention, in: field, file: file, line: line)
         XCTAssertEqual(field.value as? String, remaining + mention,
                        "The first backspace must remove only the trailing separator", file: file, line: line)
         field.typeText(XCUIKeyboardKey.delete.rawValue)
+        waitForFieldValue(remaining, in: field, file: file, line: line)
         XCTAssertEqual(field.value as? String, remaining,
                        "One backspace must remove the entire tagged person, including @", file: file, line: line)
+    }
+
+    private func waitForFieldValue(
+        _ value: String,
+        in field: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        // Require the exact native edit before checking atomic deletion; an
+        // intermediate accessibility snapshot cannot satisfy this predicate.
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: field)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 5), .completed,
+                       "The exact native edit must reach accessibility.", file: file, line: line)
     }
 
     private func focus(_ field: XCUIElement, in app: XCUIApplication) {
