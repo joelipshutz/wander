@@ -185,6 +185,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let userPlaces: [UserPlaceRecord]
     let placeAttributes: [PlaceAttributeRecord]
     let cachedCurrentUserVisiblePlaces: [VisiblePlaceRecord]?
+    let importNotificationCommits: [ImportNotificationCommit]?
     let placeWannaSaves: [PlaceWannaSave]?
     let placeVisits: [PlaceVisitRecord]?
     let visitPhotos: [VisitPhotoRecord]?
@@ -225,6 +226,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                     && $0.userPlace.deletedAt == nil
             }
             .map(VisiblePlaceRecord.init)
+        importNotificationCommits = store.importNotificationCommits
         placeWannaSaves = store.placeWannaSaves
         placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
@@ -275,6 +277,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             userPlaces: shouldResetSavedPlaces ? [] : userPlaces.map { $0.model() },
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             cachedCurrentUserVisiblePlaces: restoredCachedCurrentUserVisiblePlaces,
+            importNotificationCommits: importNotificationCommits ?? [],
             placeWannaSaves: shouldResetSavedPlaces ? [] : placeWannaSaves ?? [],
             placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
@@ -314,6 +317,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let userPlaces: [LocalUserPlace]
         let placeAttributes: [LocalPlaceAttribute]
         let cachedCurrentUserVisiblePlaces: [VisiblePlace]
+        let importNotificationCommits: [ImportNotificationCommit]
         let placeWannaSaves: [PlaceWannaSave]
         let placeVisits: [LocalPlaceVisit]
         let visitPhotos: [LocalVisitPhoto]
@@ -534,6 +538,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     }
 
     struct UserPlaceRecord: Codable, Equatable {
+        let senderNotificationJSON: String?
         let localID: String
         let serverID: String?
         let userID: String
@@ -574,6 +579,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let deletedAt: Date?
 
         init(_ userPlace: LocalUserPlace) {
+            senderNotificationJSON = userPlace.senderNotificationJSON
             localID = userPlace.localID
             serverID = userPlace.serverID
             userID = userPlace.userID
@@ -653,7 +659,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 lastSyncError: lastSyncError,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
-                deletedAt: deletedAt
+                deletedAt: deletedAt,
+                senderNotificationJSON: senderNotificationJSON ?? (SyncState(rawValue: syncStateRaw) != .synced ? SenderNotificationPolicy.silent.persistedJSON : nil)
             )
         }
     }
@@ -732,6 +739,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     }
 
     struct PlaceVisitRecord: Codable, Equatable {
+        let senderNotificationJSON: String?
         let localID: String
         let serverID: String?
         let userPlaceID: String
@@ -751,6 +759,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let deletedAt: Date?
 
         init(_ visit: LocalPlaceVisit) {
+            senderNotificationJSON = visit.senderNotificationJSON
             localID = visit.localID
             serverID = visit.serverID
             userPlaceID = visit.userPlaceID
@@ -793,7 +802,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 attributeAnswersAreComplete: attributeAnswersAreComplete
-                    ?? (!localID.hasPrefix("remote_profile_visit_") && serverID == nil || isUnsentLocalDraft || attributeAnswersJSON != "[]")
+                    ?? (!localID.hasPrefix("remote_profile_visit_") && serverID == nil || isUnsentLocalDraft || attributeAnswersJSON != "[]"),
+                senderNotificationJSON: senderNotificationJSON ?? (SyncState(rawValue: syncStateRaw) != .synced ? SenderNotificationPolicy.silent.persistedJSON : nil)
             )
         }
     }
@@ -1072,6 +1082,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     }
 
     struct PlaceListItemRecord: Codable, Equatable {
+        let senderNotificationPolicy: SenderNotificationPolicy?
         let localID: String
         let serverID: String?
         let listID: String
@@ -1085,6 +1096,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let deletedAt: Date?
 
         init(_ item: LocalPlaceListItem) {
+            senderNotificationPolicy = item.senderNotificationPolicy
             localID = item.localID
             serverID = item.serverID
             listID = item.listID
@@ -1110,7 +1122,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
-                deletedAt: deletedAt
+                deletedAt: deletedAt,
+                senderNotificationPolicy: senderNotificationPolicy ?? (SyncState(rawValue: syncStateRaw) == .synced ? .standard : .silent)
             )
         }
     }

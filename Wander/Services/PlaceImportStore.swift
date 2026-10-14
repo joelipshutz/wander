@@ -1533,11 +1533,13 @@ final class PlaceImportStore: ObservableObject {
             seedsBySource[source, default: []].append(seed)
         }
 
+        let importID = UUID().uuidString.lowercased()
         let batches = sourceOrder.compactMap { source -> PlaceImportBatch? in
             guard let sourceSeeds = seedsBySource[source], !sourceSeeds.isEmpty else { return nil }
             let batch = PlaceImportBatch(
                 source: source,
                 sourceName: nil,
+                captureDeliveryID: "\(importID):\(source.rawValue)",
                 totalCount: sourceSeeds.count
             )
             self.batches.append(batch)

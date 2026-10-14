@@ -183,6 +183,13 @@ enum PlaceImportAutoSaveCoordinator {
                             store: store
                         )
                     var entries: [PlaceImportReceiptEntry] = []
+                    if !committableIDs.isEmpty {
+                        // Persist consumption with the save transaction so a
+                        // lost receipt cannot reopen an automatic silent import.
+                        let policy = store.beginImportNotificationCommit(batch, silent: true,
+                            selectedItemIDs: committableIDs)
+                        store.completeImportNotificationCommit(policy)
+                    }
 
                     for item in items where committableIDs.contains(item.id) {
                         guard let candidate = item.selectedCandidate else { continue }
@@ -228,7 +235,8 @@ enum PlaceImportAutoSaveCoordinator {
                         if let destination {
                             _ = store.addCurrentUserPlace(
                                 userPlaceID: result.userPlaceID,
-                                to: destination
+                                to: destination,
+                                senderNotificationPolicy: .silent
                             )
                         }
                         importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)

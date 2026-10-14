@@ -53,7 +53,8 @@ enum MapPlaceListTarget: Identifiable {
         store: WanderStore,
         backend: WanderBackend?,
         analyticsSurface: String = "map",
-        keepNewCompanionPrivate: Bool = false
+        keepNewCompanionPrivate: Bool = false,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) async -> ListPlaceAddResult {
         switch self {
         case .candidate(let candidate):
@@ -62,7 +63,8 @@ enum MapPlaceListTarget: Identifiable {
                 to: list,
                 backend: backend,
                 analyticsSurface: analyticsSurface,
-                keepNewCompanionPrivate: keepNewCompanionPrivate
+                keepNewCompanionPrivate: keepNewCompanionPrivate,
+                senderNotificationPolicy: senderNotificationPolicy
             )
         case .visiblePlace(let visiblePlace):
             await store.addVisiblePlace(
@@ -70,7 +72,8 @@ enum MapPlaceListTarget: Identifiable {
                 to: list,
                 backend: backend,
                 analyticsSurface: analyticsSurface,
-                keepNewCompanionPrivate: keepNewCompanionPrivate
+                keepNewCompanionPrivate: keepNewCompanionPrivate,
+                senderNotificationPolicy: senderNotificationPolicy
             )
         }
     }
@@ -181,6 +184,7 @@ struct MapPlaceListPickerSheet: View {
     private var targets: [MapPlaceListTarget] { [target] + additionalTargets }
     var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
+    @State private var silentNotifications = false
     @State private var selection = MapPlaceListPickerSelection(existingListIDs: [])
     @State private var didLoadMembership = false
     @State private var isApplying = false
@@ -239,7 +243,16 @@ struct MapPlaceListPickerSheet: View {
             .astirScreen()
             .tint(brandMode.accent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                applyButton
+                VStack(spacing: WanderTheme.spacing2) {
+                    if onStage == nil {
+                        SilentSaveToggle(isSilent: $silentNotifications)
+                            .disabled(isApplying)
+                            .padding(.horizontal, WanderTheme.spacing4)
+                    }
+                    applyButton
+                }
+                .padding(.top, onStage == nil ? WanderTheme.spacing2 : 0)
+                .background(brandMode.background)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -571,13 +584,15 @@ struct MapPlaceListPickerSheet: View {
             return
         }
 
+        let notificationPolicy = SenderNotificationPolicy(silent: silentNotifications)
         isApplying = true
         errorMessage = nil
         var results: [ListPlaceAddResult] = []
         for list in lists {
             for target in targets {
                 results.append(await target.add(to: list, store: store, backend: backend,
-                    analyticsSurface: analyticsSurface, keepNewCompanionPrivate: keepNewCompanionPrivate))
+                    analyticsSurface: analyticsSurface, keepNewCompanionPrivate: keepNewCompanionPrivate,
+                    senderNotificationPolicy: notificationPolicy))
             }
         }
         isApplying = false
@@ -611,11 +626,13 @@ struct MapPlaceListPickerSheet: View {
             dismiss()
             return
         }
+        let notificationPolicy = SenderNotificationPolicy(silent: silentNotifications)
         isApplying = true
         Task { @MainActor in
             var results: [ListPlaceAddResult] = []
             for target in targets {
-                results.append(await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface))
+                results.append(await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface,
+                    senderNotificationPolicy: notificationPolicy))
             }
             _ = await store.syncPendingPlaceLists(backend: backend)
             isApplying = false

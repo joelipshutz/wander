@@ -48,6 +48,17 @@ schemes:
         - AstirClipUITests
     archive:
       config: Release
+  Sender Silent Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderDisableWalkthroughs: true
+      environmentVariables:
+        WANDER_SENDER_REVIEW: gallery
   City and Phone Review:
     build:
       targets:
@@ -491,6 +502,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: WanderTests
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.tests
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Wander.app/Wander"
         BUNDLE_LOADER: "$(TEST_HOST)"
@@ -513,6 +525,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: WanderUITests
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.uitests
         TEST_TARGET_NAME: Wander
         LD_RUNPATH_SEARCH_PATHS:

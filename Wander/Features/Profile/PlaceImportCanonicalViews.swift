@@ -46,6 +46,8 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var expandedDetailItemIDs: Set<String> = []
     @State private var detailDrafts: [String: PlaceSaveDraft] = [:]
     @State private var stagedDetailSubmissions: [String: MapPlaceSaveSubmission] = [:]
+    @State private var showsNotificationChoice = false
+    @State private var notificationChoiceItemIDs: Set<String> = []
     @State private var isCommitting = false
     @State private var commitTask: Task<Void, Never>?
     @State private var showsCommitError = false
@@ -76,6 +78,11 @@ struct PlaceImportCanonicalReviewScreen: View {
                     )
                 } else {
                     if !displayItems.isEmpty { reviewHeader }
+                    if !scopedBatches.contains(where: { store.importNeedsNotificationChoice($0) }) {
+                        Text("This import keeps its first notification choice. Later selections won't notify.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("import.notificationsConsumed")
+                    }
                     if !readyItems.isEmpty {
                         importSection("Ready to add", showsBulkControls: true) {
                             ForEach(readyItems) { item in
@@ -144,6 +151,14 @@ struct PlaceImportCanonicalReviewScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
         .interactiveDismissDisabled(isCommitting)
+        .alert("Silence notifications for this import?", isPresented: $showsNotificationChoice) {
+            Button("Yes, save silently") { commit(itemIDs: notificationChoiceItemIDs, silent: true) }
+                .keyboardShortcut(.defaultAction)
+            Button("No, notify followers") { commit(itemIDs: notificationChoiceItemIDs, silent: false) }
+            Button("Cancel", role: .cancel) { notificationChoiceItemIDs = [] }
+        } message: {
+            Text("Visibility stays the same. Followers can be notified once about the check-ins you save now. Later saves won't notify again. People you invite still receive invitations.")
+        }
         .safeAreaInset(edge: .top, spacing: 0) {
             if privateDetailsWarningCount > 0 {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -198,7 +213,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                 WanderPrimaryButton(title: isCommitting ? "Saving…" : "Save",
                     isDisabled: isCommitting || pendingItemIDs.isEmpty,
                     tone: .espressoConfirmation,
-                    action: { commit(itemIDs: pendingItemIDs) })
+                    action: { requestCommit(itemIDs: pendingItemIDs) })
                     .accessibilityIdentifier("import.save")
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.vertical, WanderTheme.spacing2)
@@ -770,7 +785,21 @@ struct PlaceImportCanonicalReviewScreen: View {
         detailDrafts[itemID] = draft
     }
 
-    private func commit(itemIDs: Set<String>) {
+    private func requestCommit(itemIDs: Set<String>) {
+        guard !isCommitting, !itemIDs.isEmpty else { return }
+        guard auth.state.session?.userID == store.currentUser.id else {
+            auth.presentGate(for: .syncPlace)
+            return
+        }
+        if scopedBatches.contains(where: { store.importNeedsNotificationChoice($0) }) {
+            notificationChoiceItemIDs = itemIDs
+            showsNotificationChoice = true
+        } else {
+            commit(itemIDs: itemIDs, silent: true)
+        }
+    }
+
+    private func commit(itemIDs: Set<String>, silent: Bool) {
         guard !isCommitting else { return }
         guard !itemIDs.isEmpty else { return }
         guard let expectedUserID = auth.state.session?.userID,
@@ -783,7 +812,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         commitErrorMessage = "A place’s details could not be saved. Review its details and try again. Any places already saved are safe."
         isCommitting = true
         commitTask = Task { @MainActor in
-            let didSave = await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs)
+            let didSave = await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs, silent: silent)
             isCommitting = false
             commitTask = nil
             if didSave {
@@ -795,14 +824,33 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     @MainActor
-    private func commitScopedImports(expectedUserID: String, itemIDs: Set<String>) async -> Bool {
+    private func commitScopedImports(expectedUserID: String, itemIDs: Set<String>, silent: Bool) async -> Bool {
         guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
         var receipts: [PlaceImportReceiptEntry] = []
         var completedItems: [String: String] = [:]
         var completedReceipts: [(String, [PlaceImportReceiptEntry], String?)] = []
+        var notificationPolicies: [String: SenderNotificationPolicy] = [:]
+        defer {
+            // Even a partial attempt freezes the durable successes. Retry sync
+            // reuses those visits; later user actions cannot join the group.
+            for policy in notificationPolicies.values {
+                store.completeImportNotificationCommit(policy, completedItemIDs: itemIDs)
+            }
+        }
         for batch in scopedBatches {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
             let batchItems = importStore.items(for: batch.id).filter { !$0.isSourceRetry }
+            guard batchItems.contains(where: { itemIDs.contains($0.id) }) else { continue }
+            let relatedBatches = scopedBatches.filter { $0.notificationImportID == batch.notificationImportID }
+            let firstSelectedIDs = Set(relatedBatches.flatMap { importStore.items(for: $0.id).filter { !$0.isSourceRetry }.map(\.id) }).intersection(itemIDs)
+            let notificationPolicy: SenderNotificationPolicy
+            if let firstPolicy = notificationPolicies[batch.notificationImportID] {
+                notificationPolicy = firstPolicy
+            } else {
+                notificationPolicy = store.beginImportNotificationCommit(batch,
+                    silent: silent || relatedBatches.contains(where: \.hasPreviouslySavedSelections), selectedItemIDs: firstSelectedIDs)
+                notificationPolicies[batch.notificationImportID] = notificationPolicy
+            }
             let destination = destinationList(for: batch)
             var entries = batch.receipt?.entries ?? []
 
@@ -818,7 +866,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                         if let status, status != selection.status {
                             guard let (result, replacement) = await store.createImportedSelection(
                                 entry: entry, item: item, status: status,
-                                submission: stagedDetailSubmissions[entry.id]) else {
+                                submission: stagedDetailSubmissions[entry.id], senderNotificationPolicy: notificationPolicy) else {
                                 showsCommitError = true
                                 return false
                             }
@@ -901,7 +949,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                                 candidate,
                                 sourceType: item.source.canonicalAddSourceType,
                                 status: status
-                            ),
+                            ).withSenderNotificationPolicy(notificationPolicy),
                             sourceType: item.source.canonicalAddSourceType,
                             store: store,
                             backend: nil
@@ -920,11 +968,12 @@ struct PlaceImportCanonicalReviewScreen: View {
                             note: item.stagedNote,
                             sourceType: item.source.canonicalAddSourceType,
                             ratingScore: status == .been ? item.stagedRatingScore : nil,
-                            visitedAt: item.stagedVisitedAt ?? .now
+                            visitedAt: item.stagedVisitedAt ?? .now,
+                            senderNotificationPolicy: notificationPolicy
                         )
                     }
                     if let destination {
-                        _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination)
+                        _ = store.addCurrentUserPlace(userPlaceID: result.userPlaceID, to: destination, senderNotificationPolicy: .silent)
                     }
                     guard await addPendingLists(itemID: item.id, userPlaceID: result.userPlaceID, expectedUserID: expectedUserID) else { showsCommitError = true; return false }
                     lastUserPlaceID = result.userPlaceID
@@ -969,6 +1018,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         pendingLists = pendingLists.filter { !completedActionIDs.contains($0.key) }
         stagedDetailSubmissions = stagedDetailSubmissions.filter { !completedActionIDs.contains($0.key) }
         detailDrafts = detailDrafts.filter { !completedActionIDs.contains($0.key) }
+        for policy in notificationPolicies.values { store.completeImportNotificationCommit(policy, completedItemIDs: itemIDs) }
         store.flushPersistence()
         guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
 
@@ -989,7 +1039,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
             guard let list = store.visiblePlaceLists.first(where: { $0.id == id }),
                   let visible = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == userPlaceID || $0.userPlace.localID == userPlaceID }) else { return false }
-            let result = await MapPlaceListTarget.visiblePlace(visible).add(to: list, store: store, backend: nil, analyticsSurface: "import")
+            let result = await MapPlaceListTarget.visiblePlace(visible).add(to: list, store: store, backend: nil, analyticsSurface: "import", senderNotificationPolicy: .silent)
             guard result.outcome != .permissionDenied else { return false }
         }
         return true
