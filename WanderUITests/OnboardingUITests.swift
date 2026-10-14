@@ -2599,10 +2599,14 @@ final class OnboardingUITests: XCTestCase {
             app.launchEnvironment["WANDER_ONBOARDING_TREATMENT"] = treatment
             app.launch()
             XCTAssertTrue(app.buttons["onboarding.next"].waitForExistence(timeout: 10))
-            let email = app.textFields["auth.email"]
-            XCTAssertTrue(email.waitForExistence(timeout: 50))
-            let landed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: email)
-            XCTAssertEqual(XCTWaiter.wait(for: [landed], timeout: 5), .completed)
+            // The account field enters the accessibility tree offscreen while
+            // the carousel is still moving. Observe a fresh query until the
+            // actual control has landed, within the same autoplay budget.
+            let landed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let email = app.textFields["auth.email"].firstMatch
+                return email.exists && email.isHittable
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [landed], timeout: 50), .completed)
             XCTAssertEqual(app.state, .runningForeground)
             XCTAssertFalse(app.buttons["auth.close"].exists)
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
