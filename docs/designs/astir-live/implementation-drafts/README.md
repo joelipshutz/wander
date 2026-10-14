@@ -37,7 +37,17 @@ Offline verifier contracts run with `node --test scripts/rec636-dormant-metadata
 
 `scripts/rec636-real-client-verification.mjs` defaults to offline input validation. Explicit `--preflight` validates two supplied identities through the actual gateway and reads their inboxes; `--help` describes its stdin-only input. It discovers no credentials and reports no tokens, profile fields or message bodies. Sixteen offline tests cover its target, identity, transport and output contracts.
 
-Write mode is blocked until a privileged cleanup companion is implemented and verified. A passing preflight does not prove participant enrollment, absence of empty conversations, delivery, concurrency or native UI behavior. Use designated internal accounts and signed-in test sessions; do not put secrets in command arguments or review artifacts.
+The preflight remains read-only. A passing preflight does not prove participant enrollment, absence of empty conversations, delivery, concurrency or native UI behavior. Use designated internal accounts and signed-in test sessions; do not put secrets in command arguments or review artifacts.
+
+The separate verification components are implemented and independently reviewed:
+
+- `rec636-mutation-journal.mjs` persists minimal scoped intent and acknowledgment IDs before mutation, reserves same-UUID retries, and freezes cleanup against new writers. It stores no tokens or message bodies.
+- `rec636-cleanup-companion.mjs` requires an injected operator SQL adapter. It verifies exact contracts and account-specific rolled-back restoration, rejects existing hidden/empty conversations and shared or ordinary sources, and deletes only journal-owned message/conversation IDs. Source fixtures remain. Follow restoration preserves identity, source and creation time while retaining the database-generated revision and update timestamp.
+- `rec636-real-client-write-runner.mjs` binds writes to actual gateway identities, a branded journal and verified companion. It exercises reciprocal starts, duplicate sends, delivery/reply/read, completed-response loss and six revocation trials. Concurrent requests drain before cleanup. An uncertain dispatched write, including a failed journal annotation, retains an operator gate; it cannot infer HTTP quiescence from database locks.
+
+All **91 offline contracts pass**. The companion's metadata-only preview passes 24 exact function/trigger checks, trigger guards and client-write denials; the before/after inventory remains empty. This does not verify account-specific restoration or real delivery. `generateContractVerificationSQL()` is standalone read-only/rollback SQL; to embed it after migration previews, normalize only its outer wrapper to `begin;` for the smoke exporter, and put SERIALIZABLE on the final outer transaction. Never retain a migration COMMIT inside a preview.
+
+The runner CLI deliberately does not accept write credentials or execute trials. A reviewed programmatic operator adapter, designated signed-in accounts and a pristine synthetic fixture are still required. Fixture provisioning/deletion, controlled quota/lock-wait concurrency and native two-account journeys remain separate unfinished gates; the runner always reports `step4Complete: false`. No real-account trial has run.
 
 ## Two-account verification protocol
 
