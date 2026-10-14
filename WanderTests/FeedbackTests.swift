@@ -50,7 +50,9 @@ import UIKit
 
     func testRepeatedBackgroundTransitionsPreserveVoiceAndResumePlayback() async throws {
         let audio = FeedbackAudioRecorder()
-        let note = FeedbackAudioRecorder.silentTestRecording()
+        // Three pauses test lifecycle retention, not an eight-second deadline.
+        // Keep the real player active while a shared VM schedules the observer.
+        let note = FeedbackAudioRecorder.silentTestRecording(seconds: 60)
         audio.attachment = note
         defer { audio.close() }
 

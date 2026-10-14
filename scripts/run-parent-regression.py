@@ -27,8 +27,8 @@ REFERENCE_UI_PERFORMANCE = {
 }
 
 
-def prepare_ui_performance_products(products: Path) -> int:
-    """Keep automatic video encoding out of the isolated frame benchmark."""
+def prepare_ui_performance_products(products: Path, preserve_system_failures: bool = False) -> int:
+    """Avoid automatic video encoding; optionally retain failure diagnostics."""
     root = products.resolve()
     info = plistlib.loads((root / "Info.plist").read_bytes())
     documents = {}
@@ -51,7 +51,7 @@ def prepare_ui_performance_products(products: Path) -> int:
                 # These are Xcode's normal test-plan capture settings. Explicit
                 # test attachments, assertions and test selection are unchanged.
                 target["PreferredScreenCaptureFormat"] = "screenshots"
-                target["SystemAttachmentLifetime"] = "keepNever"
+                target["SystemAttachmentLifetime"] = "deleteOnSuccess" if preserve_system_failures else "keepNever"
                 targets_changed += 1
         documents[path] = document
     if not targets_changed:
@@ -157,9 +157,11 @@ def main() -> int:
         subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
     if args.test_products:
-        if args.suite in {"ui-performance", "ui-reference-performance"}:
-            count = prepare_ui_performance_products(Path(args.test_products))
-            print(f"Disabled automatic media capture for {count} UI benchmark target(s)", flush=True)
+        if args.suite in {"ui", "graphics", "ui-performance", "ui-reference-performance"}:
+            count = prepare_ui_performance_products(
+                Path(args.test_products), preserve_system_failures=args.suite in {"ui", "graphics"}
+            )
+            print(f"Using screenshots instead of automatic video for {count} UI target(s)", flush=True)
         command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", args.test_products]
     else:
         scheme = "AstirClip" if args.suite == "clip" else "Wander"

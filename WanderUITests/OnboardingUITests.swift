@@ -390,12 +390,11 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderImportImplementationReport"]
         app.launch()
         let saved = app.buttons["import.saved.report-place-0"]
-        for _ in 0..<5 where !saved.isHittable { app.swipeUp() }
-        XCTAssertTrue(saved.isHittable)
-        saved.tap()
+        scrollToImportControl(saved, in: app)
+        saved.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         // The report already contains this place's name. Wait for the actual
         // navigation destination before asserting that the report is gone.
-        XCTAssertTrue(app.scrollViews["place-profile.scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["place-profile.scroll"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["Maru Coffee"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["import.save"].waitForNonExistence(timeout: 5))
         keepScreenshot("Saved import — place profile")

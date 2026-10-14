@@ -296,6 +296,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             predicate: NSPredicate(format: "value BEGINSWITH %@", "completion="), object: probe
         )
         XCTAssertEqual(XCTWaiter.wait(for: [initialCamera], timeout: 15), .completed)
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let previousProbe = probe.value as? String ?? ""
         let populatedProbe = NSPredicate { _, _ in
             let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""

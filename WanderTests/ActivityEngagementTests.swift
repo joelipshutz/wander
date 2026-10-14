@@ -7,6 +7,10 @@ import XCTest
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    // These barriers order suspended mock reads; they are not product latency
+    // budgets. Allow shared runners to schedule the task before asserting state.
+    private let activityReadSynchronizationTimeout: TimeInterval = 10
+
     func testCommentComposerPreservesDraftAndMentionsThroughRepeatedAccessChecks() {
         let scope = ActivityCommentComposerState.Scope(viewerID: "viewer", activityID: "activity", isSignedIn: true)
         var composer = ActivityCommentComposerState()
@@ -1430,7 +1434,7 @@ final class ActivityEngagementTests: XCTestCase {
             let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertFalse(auth.isSessionValidated)
         XCTAssertEqual(repository.activityRequestCount, 1, "Only the earlier cache-seeding read may run")
         XCTAssertNil(store.activityEngagementError(for: activity.id))
@@ -1467,7 +1471,7 @@ final class ActivityEngagementTests: XCTestCase {
                 backend: WanderBackend(activityEngagementRepository: repository), authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertTrue(repository.placeRequests.isEmpty)
         XCTAssertEqual(repository.activityRequestCount, 0)
         XCTAssertNil(store.activityEngagementError(for: visit))
@@ -1495,14 +1499,14 @@ final class ActivityEngagementTests: XCTestCase {
         let validationStarted = expectation(description: "Foreground validation starts")
         provider.onRefreshStarted = { validationStarted.fulfill() }
         let foreground = Task { await auth.refreshSession() }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         let readStarted = expectation(description: "Comments read enters the shared validation")
         let read = Task { @MainActor in
             readStarted.fulfill()
             return await store.refreshActivityComments(activityID: activityID,
                 backend: WanderBackend(activityEngagementRepository: repository), authSession: auth)
         }
-        await fulfillment(of: [readStarted], timeout: 1)
+        await fulfillment(of: [readStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertEqual(repository.commentsRequestCount, 0)
         XCTAssertNil(store.activityEngagementError(for: activityID))
 
@@ -1532,7 +1536,7 @@ final class ActivityEngagementTests: XCTestCase {
                     await readKind.load(store: store, activityID: activity.id, target: target,
                         backend: WanderBackend(activityEngagementRepository: repository), auth: auth)
                 }
-                await fulfillment(of: [validationStarted], timeout: 1)
+                await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
                 switch interruption {
                 case .cancel:
                     read.cancel()
@@ -1583,7 +1587,7 @@ final class ActivityEngagementTests: XCTestCase {
                 await readKind.load(store: store, activityID: activity.id, target: target,
                     backend: backend, auth: auth)
             }
-            await fulfillment(of: [validationStarted], timeout: 1)
+            await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
             XCTAssertEqual(ActivitySessionReadiness(auth: auth), .validating)
             provider.finishRefresh(as: .offline(AuthSession(userID: store.currentUser.id,
                 displayName: "Viewer", handle: "viewer"), message: "Connection unavailable"))
@@ -1624,7 +1628,7 @@ final class ActivityEngagementTests: XCTestCase {
             let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
         provider.finishRefresh()
         let resolved = await read.value
@@ -1653,7 +1657,7 @@ final class ActivityEngagementTests: XCTestCase {
             let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [requestStarted], timeout: 1)
+        await fulfillment(of: [requestStarted], timeout: activityReadSynchronizationTimeout)
         auth.beginSessionValidation()
         repository.finishActivity()
         let interrupted = await read.value
@@ -1691,7 +1695,7 @@ final class ActivityEngagementTests: XCTestCase {
         let read = Task { @MainActor in
             await store.refreshActivityComments(activityID: activity.id, backend: backend, authSession: auth)
         }
-        await fulfillment(of: [requestStarted], timeout: 1)
+        await fulfillment(of: [requestStarted], timeout: activityReadSynchronizationTimeout)
         auth.beginSessionValidation()
         repository.finishComments()
         let interrupted = await read.value

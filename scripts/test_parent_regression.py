@@ -26,8 +26,8 @@ class PerformanceProductsTests(unittest.TestCase):
         self.assertEqual(Counter(ordinary + sorted(hosted) + sorted(reference)), Counter(inventory))
 
     def test_both_formats_preserve_selection_binaries_and_unit_configuration(self):
-        for version in (1, 2):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+        for version, preserve_failures in ((1, False), (2, False), (1, True), (2, True)):
+            with self.subTest(version=version, preserve_failures=preserve_failures), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 unit = {"BlueprintName": "WanderTests", "TestBundlePath": "units.xctest"}
                 ui = {"IsUITestBundle": True, "BlueprintName": "WanderUITests",
@@ -41,12 +41,12 @@ class PerformanceProductsTests(unittest.TestCase):
                 expected_ui = (expected["WanderUITests"] if version == 1 else
                                expected["TestConfigurations"][0]["TestTargets"][1])
                 expected_ui.update(PreferredScreenCaptureFormat="screenshots",
-                                   SystemAttachmentLifetime="keepNever")
+                                   SystemAttachmentLifetime="deleteOnSuccess" if preserve_failures else "keepNever")
                 (root / "Info.plist").write_bytes(plistlib.dumps({
                     "Tests": [{"xctestrun": "tests.plist"}]}))
                 configuration = root / "tests.plist"
                 configuration.write_bytes(plistlib.dumps(document))
-                self.assertEqual(regression.prepare_ui_performance_products(root), 1)
+                self.assertEqual(regression.prepare_ui_performance_products(root, preserve_failures), 1)
                 self.assertEqual(plistlib.loads(configuration.read_bytes()), expected)
 
     def test_missing_ui_target_fails_without_rewriting_configuration(self):

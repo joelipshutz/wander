@@ -724,3 +724,8 @@ latency, and the companion dense-map annotation contract. Test discovery must
 account for every UI case exactly once across ordinary, hosted-performance and
 reference-performance selections. Record reference results against the candidate
 commit in the PR and Linear release/implementation record.
+
+Ordinary CI UI runs use screenshots instead of automatic video encoding and
+retain system failure diagnostics. Explicit test attachments remain unchanged.
+This keeps long UI shards from accumulating an unrelated video-encoding workload
+while preserving screenshots and hierarchies needed to investigate failures.
