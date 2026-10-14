@@ -395,3 +395,43 @@ worktree. Live authentication and Feed loading succeeded; no account switch or
 manual save was performed. The testing guide includes simulator-sender and
 physical-phone-recipient steps. No broader full UI-suite or real-device push
 pass is claimed. This follow-up is ready for manual acceptance testing.
+
+
+## October 13 Silent styling and landing validation
+
+Inline Silent controls now match Stealth mode's separate rounded colored section,
+icon circle, title/helper fonts, padding, and switch tint, with `bell.slash.fill`.
+The save-policy binding, defaults, invitation helper, and accessibility identifiers
+are preserved. Native import and quick-save confirmations retain their interaction.
+The normal forms and list-picker footer use this single component.
+
+Main is integrated through `bc2fa4d58` (build 181). The three new main commits
+change build metadata, notification brand copy, and a picker UI test; they do not
+replace the sender controls or personalized-delivery functions. XcodeGen adds no
+project churn. No new migration or analytics change is needed. Ryan confirmed
+manual tests passed before this visual follow-up. Historical receipt retention
+is explicitly deferred and is not a blocker for the agreed sender scope.
+
+Native validation on the unchanged final app:
+
+- Full sweep: 2,692/2,694 pass (2,679/2,680 unit tests and 13/14 sender UI tests).
+- The staged-list UI runner was killed during the full sweep. Its isolated rerun
+  passes; all 14 distinct sender UI tests therefore pass across these runs.
+- All six affected compact-phone cases pass, including dark appearance,
+  accessibility text, invitation helper copy, staged lists, and standalone lists.
+- The replay-image SDK test fails because it produces no image, both in the
+  full sweep and isolated rerun. The same failure exists in the October 8 CI run
+  at `db3f9398`, before this styling change. This gap is not reported as a pass.
+- Reviewed native captures on iPhone 16 Plus and iPhone SE (3rd generation),
+  iOS 26.5; refreshed the gallery with final captures. The longer helper wraps,
+  both section styles match, and the fixed save/list buttons remain reachable.
+
+Result bundles in the shared REC-589 evidence directory:
+`SilentStyle-Large-Oct13.xcresult`, `SilentStyle-Compact-Oct13.xcresult`, and
+`SilentStyle-Isolated-Oct13.xcresult`. Original failures are retained.
+Prior hosted smoke and worker verification remain applicable: sender/backend
+implementation is unchanged by this styling follow-up. No broad UI-suite or
+fresh single-run all-green unit result is claimed.
+
+Pre-landing review: no new source-code findings. The remaining replay-image
+validation failure must be resolved or explicitly accepted before landing.

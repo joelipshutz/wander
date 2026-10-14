@@ -31,7 +31,9 @@ action below.
 The control belongs to a draft/action, not an account-wide setting. A later
 unrelated save starts from its appropriate default. Inline import detail forms
 inherit the outer import choice. The helper explains that visibility stays the
-same and explicitly selected invitees still receive invitations.
+same and explicitly selected invitees still receive invitations. Inline switches
+match Stealth mode's rounded colored section, fonts, spacing, and switch tint,
+with a crossed-out notification bell (`bell.slash.fill`).
 
 Silent off permits existing eligible announcements. It does not override the
 standalone follower producer's existing date rule: visits before the current
@@ -203,14 +205,17 @@ actual validation evidence and any unavailable OS/device coverage.
 | Independent adversarial | Engineering review | Ledger and notification failure modes | 1 | Complete | No additional verified blocker |
 | Native visual | Sender-control placement review | Real production SwiftUI scenarios | 1 | Complete | 28 states on each of two phone sizes; 14 distinct native cases pass on both |
 
-The final integration passes 2,576 unit tests and the hosted sender regression.
-Both sender migrations are deployed. The broader UI suite is not fully green:
-live-authentication launch and custom-question editing still fail in focused
-reruns. Actual APNs delivery needs the signed-device acceptance checklist.
+The October 8 integration passed 2,680 native unit tests, all 14 sender UI
+cases, 12 notification worker tests, and 15 rollback-only hosted smoke
+transactions. All three REC-589 migrations are deployed. Manual acceptance
+was confirmed before the final Silent styling change. The historical-receipt
+retention follow-up is explicitly deferred and is not part of this rollout.
+The broader native UI suite is not claimed as fully validated.
 See the [engineering review](../reviews/2026-09-23-rec589-engineering-review.md)
 for exact evidence and limits, and the [native gallery](../designs/rec589-sender-controls/index.html)
-for the 56 simulator captures.
+for the 56 simulator captures. The PR records the final styling validation.
 
-VERDICT: Engineering review complete; ready for branch review with the recorded validation limits.
+VERDICT: Engineering review complete; manual acceptance confirmed, with final
+styling and landing checks recorded in the PR.
 
 NO UNRESOLVED DECISIONS

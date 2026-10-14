@@ -14,6 +14,11 @@ For a single route, use launch arguments `-WanderSenderReview <route>`.
 
 ## Placement decisions
 
+Every inline Silent switch uses its own rounded colored section, matching Stealth
+mode's background, padding, title/helper fonts, icon circle, and switch tint.
+The icon is `bell.slash.fill`; Stealth keeps `eye.slash.fill`. Native quick-save
+and import confirmations retain their existing interaction.
+
 | Scenario / route | Actual placement and interaction |
 | --- | --- |
 | First / repeat check-in (`checkIn`, `repeatCheckIn`) | Silent switch in the final form, outside More, below optional details and above audience. Initially off. Scroll to reach it on shorter screens. Save remains in the fixed footer. |
@@ -56,3 +61,10 @@ distinct native sender tests pass on both devices across the complete and
 focused runs on iOS 26.5. Screenshots document layout; they do not prove APNs delivery.
 See the [manual device tests](../../plans/rec589-sender-notification-testing.md)
 and [engineering review](../../reviews/2026-09-23-rec589-engineering-review.md).
+
+
+October 13 refresh: inline Silent captures use the matching Stealth card styling.
+All 14 sender scenarios pass on the larger phone across the full and isolated
+runs; all six affected compact-phone cases pass. The engineering review records
+one recovered UI-runner interruption and the remaining unrelated replay-image
+unit-test failure. Unchanged compact native-confirmation captures are retained.
