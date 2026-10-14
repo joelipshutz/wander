@@ -7381,10 +7381,24 @@ final class WanderStoreTests: XCTestCase {
         let page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
         let feed = FakeFeedRepository(responses: [.success(page)], isSuspended: true)
         let profiles = FakeProfileRepository()
+        let backend = WanderBackend(
+            profileRepository: profiles,
+            contactDiscovery: ContactDiscoveryService(repository: nil,
+                provider: FakeContactProvider(seededMatches: []), activeUserID: { nil }),
+            feedRepository: feed
+        )
+        let feedStarted = expectation(description: "Feed request is stalled")
+        feed.onRequestStarted = { feedStarted.fulfill() }
+        let peopleLoaded = expectation(description: "People load before the feed resumes")
+        let observation = store.$discoverPeopleRecommendationsState
+            .filter { $0 == .loaded([]) }
+            .prefix(1)
+            .sink { _ in peopleLoaded.fulfill() }
+        defer { observation.cancel() }
         let task = Task { @MainActor in
-            await store.refreshFeedSurface(backend: WanderBackend(profileRepository: profiles, feedRepository: feed))
+            await store.refreshFeedSurface(backend: backend)
         }
-        for _ in 0..<100 { await Task.yield() }
+        await fulfillment(of: [feedStarted, peopleLoaded], timeout: 3)
         XCTAssertEqual(feed.requestCount, 1)
         XCTAssertEqual(profiles.recommendationLimits, [20])
         XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
@@ -12931,6 +12945,7 @@ final class WanderStoreTests: XCTestCase {
 
 @MainActor
 private final class FakeFeedRepository: FeedRepository {
+    var onRequestStarted: (() -> Void)?
     private var responses: [Result<FollowedFeedPage, Error>]
     private var isSuspended: Bool
     private(set) var requestCount = 0
@@ -12950,6 +12965,7 @@ private final class FakeFeedRepository: FeedRepository {
 
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
         requestCount += 1
+        onRequestStarted?()
         activeRequests += 1
         maximumConcurrentRequests = max(maximumConcurrentRequests, activeRequests)
         defer { activeRequests -= 1 }
