@@ -36,7 +36,10 @@ final class PersonTypeaheadUITests: XCTestCase {
         // explicitly, then verify the retained mention still deletes atomically.
         field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         field.typeText("x")
-        XCTAssertEqual(field.value as? String, "With @Caitlin Cortez x")
+        // UIKit and the accessibility snapshot can settle on different turns
+        // after foregrounding. Require the exact edit before testing deletion.
+        expectation(for: NSPredicate(format: "value == %@", "With @Caitlin Cortez x"), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
         field.typeText(XCUIKeyboardKey.delete.rawValue)
         assertAtomicBackspace(field, remaining: "With ")
     }
