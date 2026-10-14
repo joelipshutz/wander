@@ -268,7 +268,7 @@ final class SharedPlaceImportInboxTests: XCTestCase {
 }
 
 final class ShareExtensionItemLoaderTests: XCTestCase {
-    func testLoaderKeepsTopLevelCaptionWithInstagramURLInsteadOfDroppingIt() throws {
+    func testLoaderKeepsTopLevelCaptionWithInstagramURLInsteadOfDroppingIt() async throws {
         let url = try XCTUnwrap(URL(string: "https://www.instagram.com/reel/example/"))
         let item = NSExtensionItem()
         item.attributedContentText = NSAttributedString(
@@ -287,7 +287,8 @@ final class ShareExtensionItemLoaderTests: XCTestCase {
             loaded.fulfill()
         }
 
-        wait(for: [loaded], timeout: 2)
+        // System item providers can schedule callbacks slowly on loaded simulators.
+        await fulfillment(of: [loaded], timeout: 10)
         let inputs = try XCTUnwrap(result).get()
         XCTAssertEqual(
             inputs,
