@@ -157,6 +157,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
