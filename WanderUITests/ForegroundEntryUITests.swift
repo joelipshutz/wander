@@ -30,8 +30,14 @@ final class ForegroundEntryUITests: XCTestCase {
         let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
         if open.waitForExistence(timeout: 3) { open.tap() }
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        // This link entry can show the next notification reminder. Finish it
+        // before testing an ordinary return; an open reminder intentionally
+        // preserves its current flow across backgrounding.
+        dismissStartupNotificationPromptIfNeeded(in: app)
         assertSelected("Map", in: app)
-        XCTAssertTrue(app.textViews["map.searchField"].waitForExistence(timeout: 5))
+        let search = app.textViews["map.searchField"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertTrue(search.isHittable)
 
         backgroundApplication(app)
         app.activate()
