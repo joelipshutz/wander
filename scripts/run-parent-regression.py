@@ -15,8 +15,15 @@ import subprocess
 # These remain required tests with the same assertions and thresholds.
 ISOLATED_UI_PERFORMANCE = {
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork",
-    "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
+    "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomAndBoundsAnnotationWork",
     "WanderUITests/OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
+}
+
+# The original display-frame limit remains a required reference-machine check,
+# alongside the CPU limits. Shared CI runs the identical dense-map workload and
+# its bounded native annotation-work assertions through the companion case.
+REFERENCE_UI_PERFORMANCE = {
+    "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
 }
 
 
@@ -77,7 +84,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["clip", "unit", "replay", "performance", "ui-performance", "ui", "graphics"], required=True)
+    parser.add_argument("--suite", choices=["clip", "unit", "replay", "performance", "ui-performance", "ui-reference-performance", "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -96,13 +103,14 @@ def main() -> int:
         "WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget",
     ]
     inventory = (["AstirClipTests", "AstirClipUITests"] if args.suite == "clip" else
-                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "graphics"} else
+                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} else
                  [replay] if args.suite == "replay" else
                  performance if args.suite == "performance" else ["WanderTests"])
-    if args.suite in {"ui", "ui-performance", "graphics"} and not ISOLATED_UI_PERFORMANCE.issubset(inventory):
+    isolated_ui = ISOLATED_UI_PERFORMANCE | REFERENCE_UI_PERFORMANCE
+    if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} and not isolated_ui.issubset(inventory):
         parser.error("isolated UI performance selection no longer matches the test inventory")
     if args.suite == "graphics":
-        selected = sorted(ISOLATED_UI_PERFORMANCE | {
+        selected = sorted(isolated_ui | {
             "WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits",
             "WanderUITests/EventsComingSoonUITests/testDarkTabBarStaysDarkAcrossEventsVisits",
             "WanderUITests/EventsComingSoonUITests/testTabGlassSurvivesScrubbingAndLiveAppearanceChanges",
@@ -111,10 +119,12 @@ def main() -> int:
             parser.error("graphics diagnostic selection no longer matches the test inventory")
     elif args.suite == "ui-performance":
         selected = sorted(ISOLATED_UI_PERFORMANCE)
+    elif args.suite == "ui-reference-performance":
+        selected = sorted(REFERENCE_UI_PERFORMANCE)
     elif args.suite == "ui":
         # Preserve shard assignment/order for all remaining tests.
         selected = [test for test in inventory[args.shard::args.shard_count]
-                    if test not in ISOLATED_UI_PERFORMANCE]
+                    if test not in isolated_ui]
     else:
         selected = inventory
     # The SDK installs process-wide replay observers. Keep this required test in
@@ -124,11 +134,12 @@ def main() -> int:
     # in the unit suite, matching the main branch shared-runner policy.
     isolated = {replay: "replay", **{test: "performance" for test in performance}} if args.suite == "unit" else {}
     if args.suite == "ui":
-        isolated = {test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)}
+        isolated = {**{test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)},
+                    **{test: "ui-reference-performance" for test in sorted(REFERENCE_UI_PERFORMANCE)}}
     excluded = list(isolated)
     if not selected:
         parser.error("empty test selection")
-    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "graphics"} else None,
+    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} else None,
                  "identifiers": selected, "isolatedTestSuites": isolated}
     if args.selection_file:
         Path(args.selection_file).write_text(json.dumps(selection, indent=2) + "\n")
@@ -146,7 +157,7 @@ def main() -> int:
         subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
     if args.test_products:
-        if args.suite == "ui-performance":
+        if args.suite in {"ui-performance", "ui-reference-performance"}:
             count = prepare_ui_performance_products(Path(args.test_products))
             print(f"Disabled automatic media capture for {count} UI benchmark target(s)", flush=True)
         command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", args.test_products]

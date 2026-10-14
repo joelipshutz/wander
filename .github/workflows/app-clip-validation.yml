@@ -155,6 +155,9 @@ jobs:
           diff -u "$RUNNER_TEMP/test-products-xcode.txt" "$RUNNER_TEMP/current-xcode.txt"
       # Ad-hoc signing is required for Clerk's Keychain initialization in the
       # real startup path; this uses no Apple distribution identity or secrets.
+      # Shared CI keeps full dense-map camera and bounded annotation-work checks.
+      # Original CPU/frame timing budgets are required separately on the reference
+      # simulator, matching main's deterministic shared-runner benchmark policy.
       - name: Run complete parent suite
         env:
           TEST_SUITE: ${{ matrix.suite }}

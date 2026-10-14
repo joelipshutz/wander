@@ -705,3 +705,22 @@ does not copy or publish anything. A copied URL does not make exported artwork
 tappable: creators paste it into a Link sticker or another placement supported by
 the destination app. Existing published images and Messages caches do not change;
 resharing creates a new preview with the corrected artwork.
+
+## 2026-10-14 — Controlled simulator timing gates (REC-408)
+
+Shared macOS CI runs full-size search/cache correctness contracts and the full
+dense-map camera workload with bounded native annotation visits. Absolute CPU
+timing and dense-map display-frame limits run on the controlled reference
+simulator before landing and release. Keep the original workloads and limits;
+do not raise them to accommodate a shared virtualized display. This extends
+main's paired deterministic/reference CPU benchmark policy to the map frame
+benchmark after hosted traces showed display gaps despite bounded app work.
+
+Run `scripts/run-parent-regression.py --suite performance` for the original CPU
+budgets and `--suite ui-reference-performance` for the original 100 ms dense-map
+frame limit, with the destination, products/derived-data and result bundle
+arguments. CI's `ui-performance` suite retains selected-pin CPU work, calendar
+latency, and the companion dense-map annotation contract. Test discovery must
+account for every UI case exactly once across ordinary, hosted-performance and
+reference-performance selections. Record reference results against the candidate
+commit in the PR and Linear release/implementation record.

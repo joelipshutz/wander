@@ -345,6 +345,17 @@ final class MapFilterInteractionUITests: XCTestCase {
     }
 
     func testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins() {
+        traceDenseMapPanZoom(enforceFrameBudget: true)
+    }
+
+    func testPerformanceFixtureTracesDenseMapPanZoomAndBoundsAnnotationWork() {
+        traceDenseMapPanZoom(enforceFrameBudget: false)
+    }
+
+    // Shared virtualized displays cannot establish a phone's frame cadence.
+    // Both checks exercise the same cameras and annotation-work limits; the
+    // original frame budget remains required on the reference simulator.
+    private func traceDenseMapPanZoom(enforceFrameBudget: Bool) {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -405,11 +416,13 @@ final class MapFilterInteractionUITests: XCTestCase {
                 200,
                 "The 780-place fixture must stay viewport-buffered inside MapKit"
             )
-            XCTAssertLessThan(
-                metric("maxFrameGapMs", in: snapshot) ?? .max,
-                100,
-                "Dense-map camera animation must not freeze for a visible fraction of a second"
-            )
+            if enforceFrameBudget {
+                XCTAssertLessThan(
+                    metric("maxFrameGapMs", in: snapshot) ?? .max,
+                    100,
+                    "Dense-map camera animation must not freeze for a visible fraction of a second"
+                )
+            }
         }
 
         let zoomOut = app.buttons["map.performanceZoomOut"]

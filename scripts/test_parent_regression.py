@@ -1,4 +1,5 @@
 import copy
+from collections import Counter
 import importlib.util
 from pathlib import Path
 import plistlib
@@ -14,6 +15,16 @@ spec.loader.exec_module(regression)
 
 
 class PerformanceProductsTests(unittest.TestCase):
+    def test_ui_inventory_has_disjoint_complete_hosted_and_reference_coverage(self):
+        inventory = regression.ui_test_identifiers(Path(__file__).resolve().parents[1])
+        hosted = regression.ISOLATED_UI_PERFORMANCE
+        reference = regression.REFERENCE_UI_PERFORMANCE
+        self.assertFalse(hosted & reference)
+        self.assertTrue((hosted | reference).issubset(inventory))
+        ordinary = [test for shard in range(8) for test in inventory[shard::8]
+                    if test not in hosted | reference]
+        self.assertEqual(Counter(ordinary + sorted(hosted) + sorted(reference)), Counter(inventory))
+
     def test_both_formats_preserve_selection_binaries_and_unit_configuration(self):
         for version in (1, 2):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
