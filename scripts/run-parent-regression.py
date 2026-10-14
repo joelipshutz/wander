@@ -5,6 +5,7 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
+import plistlib
 import re
 import subprocess
 
@@ -17,6 +18,40 @@ ISOLATED_UI_PERFORMANCE = {
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
     "WanderUITests/OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
 }
+
+
+def prepare_ui_performance_products(products: Path) -> int:
+    """Keep automatic video encoding out of the isolated frame benchmark."""
+    root = products.resolve()
+    info = plistlib.loads((root / "Info.plist").read_bytes())
+    documents = {}
+    targets_changed = 0
+    for entry in info["Tests"]:
+        path = (root / entry["xctestrun"]).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError("Test configuration must stay inside the products bundle")
+        if path in documents:
+            continue
+        document = plistlib.loads(path.read_bytes())
+        if "TestConfigurations" in document:
+            targets = [target for configuration in document["TestConfigurations"]
+                       for target in configuration["TestTargets"]]
+        else:
+            targets = [target for name, target in document.items()
+                       if not name.startswith("__") and isinstance(target, dict)]
+        for target in targets:
+            if target.get("IsUITestBundle"):
+                # These are Xcode's normal test-plan capture settings. Explicit
+                # test attachments, assertions and test selection are unchanged.
+                target["PreferredScreenCaptureFormat"] = "screenshots"
+                target["SystemAttachmentLifetime"] = "keepNever"
+                targets_changed += 1
+        documents[path] = document
+    if not targets_changed:
+        raise ValueError("No UI test target found in performance test products")
+    for path, document in documents.items():
+        path.write_bytes(plistlib.dumps(document))
+    return targets_changed
 
 
 def ui_test_identifiers(root: Path) -> list[str]:
@@ -110,6 +145,9 @@ def main() -> int:
         subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
     if args.test_products:
+        if args.suite == "ui-performance":
+            count = prepare_ui_performance_products(Path(args.test_products))
+            print(f"Disabled automatic media capture for {count} UI benchmark target(s)", flush=True)
         command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", args.test_products]
     else:
         scheme = "AstirClip" if args.suite == "clip" else "Wander"
