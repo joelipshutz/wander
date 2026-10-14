@@ -310,6 +310,29 @@ struct ActivityEngagementMedia: Identifiable, Equatable {
     }
 }
 
+/// A retained account can be validating or offline; neither authorizes a read.
+/// Keep completed offline validation distinct from work still in progress.
+enum ActivitySessionReadiness: Hashable {
+    case validating
+    case ready
+    case unavailable
+
+    @MainActor
+    init(auth: AuthSessionStore) {
+        switch auth.state {
+        case .signedIn:
+            self = auth.isSessionValidated ? .ready : .validating
+        case .loading:
+            self = .validating
+        case .offline, .signedOut, .unavailable:
+            self = .unavailable
+        }
+    }
+
+    struct Unavailable: Error {}
+    static let unavailableMessage = "Your session couldn’t be verified. Try again."
+}
+
 struct ActivityCheckInTarget: Equatable, Hashable {
     let userPlaceID: String
     let visitID: String

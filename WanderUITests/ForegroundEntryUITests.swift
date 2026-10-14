@@ -88,7 +88,10 @@ final class ForegroundEntryUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
-            "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover"
+            "-WanderDisableWalkthroughs", "-WanderInitialTab", "discover",
+            // Seed the existing app-open reminder cap for this process. Reminder
+            // presentation is covered by OnboardingUITests, not entry routing.
+            "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3"
         ] + extras
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)

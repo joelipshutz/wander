@@ -81,7 +81,10 @@ final class FeedAudienceUITests: XCTestCase {
             defer { previousFrame = frame }
             return !frame.isEmpty && frame == previousFrame
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        // Each native-menu accessibility observation can take several seconds
+        // on the shared simulator. Require the same settled-frame condition
+        // while allowing enough time for two complete observations.
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
         XCTAssertTrue(option.isHittable)
         // Wait for the native menu's presentation frame to settle before
         // resolving its touch point. It becomes hittable during the animation.

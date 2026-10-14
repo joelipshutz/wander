@@ -489,6 +489,27 @@ final class WanderStore: ObservableObject {
         var tagsAndLabels: Set<String> = []
     }
 
+    /// Repeated categories, locations and tags share normalization only for one
+    /// synchronous suggestion read. Later reads always see current model values.
+    private struct ListSuggestionNormalizer {
+        private var values: [String: String] = [:]
+
+        mutating func normalized(_ value: String?) -> String? {
+            guard let value else { return nil }
+            if let cached = values[value] {
+                return cached.isEmpty ? nil : cached
+            }
+            let normalized = value
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            values[value] = normalized
+            return normalized.isEmpty ? nil : normalized
+        }
+    }
+
     private struct ListSuggestionMatch {
         let reasonValues: [String]
         let relevanceScore: Double
@@ -1959,7 +1980,9 @@ final class WanderStore: ObservableObject {
     }
 
     @MainActor
-    func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
+    func activity(
+        id activityID: String, backend: WanderBackend?, authSession: AuthSessionStore? = nil
+    ) async -> FeedActivity? {
         let requestUserID = currentUser.id
         let accessGeneration = activityAccessGenerations[activityID, default: 0]
         let existing = followedFeedPage?.activity.first(where: {
@@ -1975,7 +1998,7 @@ final class WanderStore: ObservableObject {
         }
 
         do {
-            let activity = try await retryActivityRead {
+            let activity = try await retryActivityRead(authSession: authSession) {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.activity(id: activityID)
             }
@@ -2001,6 +2024,12 @@ final class WanderStore: ObservableObject {
             // an unrelated summary request.
             activityEngagementErrorByID[activityID] = nil
             return activity
+        } catch is ActivitySessionReadiness.Unavailable {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[activityID] = ActivitySessionReadiness.unavailableMessage
+            return nil
+        } catch is CancellationError {
+            return nil
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID,
                   accessGeneration == activityAccessGenerations[activityID, default: 0] else { return nil }
@@ -2019,7 +2048,9 @@ final class WanderStore: ObservableObject {
     /// Resolve the immutable visit before opening its post. This never fetches
     /// the whole Feed or guesses from the newest activity at the same place.
     @MainActor
-    func activity(checkIn target: ActivityCheckInTarget, backend: WanderBackend?) async -> FeedActivity? {
+    func activity(
+        checkIn target: ActivityCheckInTarget, backend: WanderBackend?, authSession: AuthSessionStore? = nil
+    ) async -> FeedActivity? {
         let requestUserID = currentUser.id
         let errorID = target.visitID
         func matchesTarget(_ match: PlaceActivityEngagementMatch) -> Bool {
@@ -2032,7 +2063,7 @@ final class WanderStore: ObservableObject {
             return nil
         }
         do {
-            let matches = try await retryActivityRead {
+            let matches = try await retryActivityRead(authSession: authSession) {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.placeActivitySummaries(userPlaceIDs: [target.userPlaceID])
             }
@@ -2046,16 +2077,22 @@ final class WanderStore: ObservableObject {
             }
             placeActivityEngagementMatches.removeAll(where: matchesTarget)
             placeActivityEngagementMatches.append(match)
-            let resolved = await activity(id: match.activityID, backend: backend)
+            let resolved = await activity(id: match.activityID, backend: backend, authSession: authSession)
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             activityEngagementErrorByID[errorID] = resolved == nil
                 ? activityEngagementErrorByID[match.activityID] : nil
             return resolved
+        } catch is ActivitySessionReadiness.Unavailable {
+            guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
+            activityEngagementErrorByID[errorID] = ActivitySessionReadiness.unavailableMessage
+            return nil
+        } catch is CancellationError {
+            return nil
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID else { return nil }
             if ProtectedContentCachePolicy.permitsOfflineRead(after: error),
                let cached = placeActivityEngagementMatches.first(where: matchesTarget) {
-                return await activity(id: cached.activityID, backend: backend)
+                return await activity(id: cached.activityID, backend: backend, authSession: authSession)
             }
             for cached in placeActivityEngagementMatches.filter(matchesTarget) {
                 discardCachedActivity(cached.activityID)
@@ -2382,26 +2419,63 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    // Retry only interrupted transport reads, never writes or denied/missing data.
-    // The caller still validates the account and authoritative server response.
+    // App entry keeps the signed-in surface mounted during session validation.
+    // Join that validation before a protected read; a lifecycle change during
+    // the read supersedes it instead of revoking cached content or draft state.
     private func retryActivityRead<Value>(
+        authSession: AuthSessionStore? = nil,
         _ operation: () async throws -> Value
     ) async throws -> Value {
-        try Task.checkCancellation()
+        let requestUserID = currentUser.id
+        func checkCurrentRead() throws {
+            try Task.checkCancellation()
+            guard currentUser.id == requestUserID else { throw CancellationError() }
+            if let authSession {
+                guard authSession.isSessionValidated,
+                      authSession.state.session?.userID == requestUserID
+                else { throw CancellationError() }
+            }
+        }
+        func read() async throws -> Value {
+            try Task.checkCancellation()
+            if let authSession {
+                do {
+                    try await authSession.ensureSessionValidated(for: requestUserID)
+                } catch {
+                    try Task.checkCancellation()
+                    guard currentUser.id == requestUserID,
+                          authSession.state.session?.userID == requestUserID
+                    else { throw CancellationError() }
+                    if error is CancellationError { throw error }
+                    throw ActivitySessionReadiness.Unavailable()
+                }
+            }
+            try checkCurrentRead()
+            do {
+                let value = try await operation()
+                try checkCurrentRead()
+                return value
+            } catch {
+                try checkCurrentRead()
+                throw error
+            }
+        }
         do {
-            return try await operation()
+            return try await read()
         } catch let error as URLError where [
             .timedOut, .networkConnectionLost, .cannotConnectToHost,
             .cannotFindHost, .dnsLookupFailed
         ].contains(error.code) {
+            // Retry interrupted transport once, never writes or denied data.
             try await Task.sleep(for: .milliseconds(300))
-            try Task.checkCancellation()
-            return try await operation()
+            return try await read()
         }
     }
 
     @discardableResult
-    func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
+    func refreshActivityComments(
+        activityID: String, backend: WanderBackend?, authSession: AuthSessionStore? = nil
+    ) async -> Bool {
         let requestUserID = currentUser.id
         let generation = activityCommentsGeneration
         let accessGeneration = activityAccessGeneration(for: activityID)
@@ -2412,7 +2486,7 @@ final class WanderStore: ObservableObject {
         else { return true }
 
         do {
-            let page = try await retryActivityRead {
+            let page = try await retryActivityRead(authSession: authSession) {
                 guard self.currentUser.id == requestUserID else { throw CancellationError() }
                 return try await repository.comments(activityID: activityID, before: nil, limit: 50)
             }
@@ -2454,6 +2528,13 @@ final class WanderStore: ObservableObject {
             }
             activityEngagementErrorByID[activityID] = nil
             return true
+        } catch is ActivitySessionReadiness.Unavailable {
+            guard !Task.isCancelled, currentUser.id == requestUserID,
+                  accessGeneration == activityAccessGeneration(for: activityID) else { return false }
+            activityEngagementErrorByID[activityID] = ActivitySessionReadiness.unavailableMessage
+            return false
+        } catch is CancellationError {
+            return false
         } catch {
             guard !Task.isCancelled, currentUser.id == requestUserID,
                   generation == activityCommentsGeneration,
@@ -3223,10 +3304,11 @@ final class WanderStore: ObservableObject {
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5) -> [ListPlaceSuggestion] {
         let existingPlaces = visiblePlaces(in: list)
-        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+        var normalizer = ListSuggestionNormalizer()
+        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces, normalizer: &normalizer)
         let candidates = listSuggestionCandidates(for: list)
         let matchedCandidates = candidates.compactMap { visiblePlace -> (VisiblePlace, ListSuggestionMatch)? in
-            guard let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex) else {
+            guard let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex, normalizer: &normalizer) else {
                 return nil
             }
             return (visiblePlace, match)
@@ -3246,9 +3328,7 @@ final class WanderStore: ObservableObject {
                 if visiblePlace.owner.id == currentUser.id {
                     score += 1
                 }
-                let rawReason = "Fits: \(match.reasonValues.prefix(2).joined(separator: " + "))"
-                let reason = ListSuggestionReasonFormatter.displayText(rawReason, for: visiblePlace)
-                return ListPlaceSuggestion(visiblePlace: visiblePlace, reason: reason, score: score)
+                return (visiblePlace: visiblePlace, match: match, score: score)
             }
             .sorted {
                 if $0.score == $1.score {
@@ -3257,7 +3337,11 @@ final class WanderStore: ObservableObject {
                 return $0.score > $1.score
             }
             .prefix(limit)
-            .map { $0 }
+            .map { candidate in
+                let rawReason = "Fits: \(candidate.match.reasonValues.prefix(2).joined(separator: " + "))"
+                let reason = ListSuggestionReasonFormatter.displayText(rawReason, for: candidate.visiblePlace)
+                return ListPlaceSuggestion(visiblePlace: candidate.visiblePlace, reason: reason, score: candidate.score)
+            }
 
         return disambiguatingSameNameLocations(in: suggestions)
     }
@@ -3271,9 +3355,10 @@ final class WanderStore: ObservableObject {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
             let existingPlaces = visiblePlaces(in: list)
             let candidates = listSuggestionCandidates(for: list)
-            let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+            var normalizer = ListSuggestionNormalizer()
+            let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces, normalizer: &normalizer)
             let relevantCandidates = candidates.filter {
-                listSuggestionMatch(for: $0, against: attributeIndex) != nil
+                listSuggestionMatch(for: $0, against: attributeIndex, normalizer: &normalizer) != nil
             }
             let focusedCategory = focusedListSuggestionCategory(
                 in: existingPlaces,
@@ -3282,7 +3367,7 @@ final class WanderStore: ObservableObject {
             let candidatesByID = Dictionary(uniqueKeysWithValues: relevantCandidates.map { ($0.id, $0) })
             let remoteSuggestions = response.suggestions.compactMap { item -> ListPlaceSuggestion? in
                 guard let visiblePlace = candidatesByID[item.visiblePlaceID],
-                      let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex),
+                      let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex, normalizer: &normalizer),
                       focusedCategory == nil || visiblePlace.effectiveCategory == focusedCategory,
                       !hasPlace(visiblePlace, in: list),
                       !wasRemovedFromList(visiblePlace.place, list: list)
@@ -4746,9 +4831,10 @@ final class WanderStore: ObservableObject {
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
         let existingPlaces = visiblePlaces(in: list)
         let candidates = listSuggestionCandidates(for: list)
-        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+        var normalizer = ListSuggestionNormalizer()
+        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces, normalizer: &normalizer)
         let relevantCandidates = candidates.filter {
-            listSuggestionMatch(for: $0, against: attributeIndex) != nil
+            listSuggestionMatch(for: $0, against: attributeIndex, normalizer: &normalizer) != nil
         }
         let focusedCategory = focusedListSuggestionCategory(
             in: existingPlaces,
@@ -4773,31 +4859,33 @@ final class WanderStore: ObservableObject {
     }
 
     private func listSuggestionAttributeIndex(
-        for existingPlaces: [VisiblePlace]
+        for existingPlaces: [VisiblePlace],
+        normalizer: inout ListSuggestionNormalizer
     ) -> ListSuggestionAttributeIndex {
         existingPlaces.reduce(into: ListSuggestionAttributeIndex()) { index, visiblePlace in
-            if let category = normalizedListSuggestionValue(visiblePlace.effectiveCategory) {
+            if let category = normalizer.normalized(visiblePlace.effectiveCategory) {
                 index.categories.insert(category)
             }
-            if let subcategory = normalizedListSuggestionValue(visiblePlace.effectiveSubcategory) {
+            if let subcategory = normalizer.normalized(visiblePlace.effectiveSubcategory) {
                 index.subcategories.insert(subcategory)
             }
-            if let cuisine = normalizedListSuggestionValue(visiblePlace.restaurantCuisine) {
+            if let cuisine = normalizer.normalized(visiblePlace.restaurantCuisine) {
                 index.cuisines.insert(cuisine)
             }
-            if let locality = normalizedListSuggestionValue(visiblePlace.place.locality) {
+            if let locality = normalizer.normalized(visiblePlace.place.locality) {
                 index.localities.insert(locality)
             }
-            if let region = normalizedListSuggestionValue(visiblePlace.place.region) {
+            if let region = normalizer.normalized(visiblePlace.place.region) {
                 index.regions.insert(region)
             }
-            index.tagsAndLabels.formUnion(listSuggestionTagsAndLabels(for: visiblePlace).keys)
+            index.tagsAndLabels.formUnion(listSuggestionTagsAndLabels(for: visiblePlace, normalizer: &normalizer).keys)
         }
     }
 
     private func listSuggestionMatch(
         for visiblePlace: VisiblePlace,
-        against index: ListSuggestionAttributeIndex
+        against index: ListSuggestionAttributeIndex,
+        normalizer: inout ListSuggestionNormalizer
     ) -> ListSuggestionMatch? {
         var score = 0.0
         var reasons: [String] = []
@@ -4805,7 +4893,7 @@ final class WanderStore: ObservableObject {
 
         func addReason(_ value: String?, score additionalScore: Double) {
             guard let value,
-                  let normalizedValue = normalizedListSuggestionValue(value)
+                  let normalizedValue = normalizer.normalized(value)
             else { return }
             score += additionalScore
             if normalizedReasons.insert(normalizedValue).inserted {
@@ -4813,33 +4901,33 @@ final class WanderStore: ObservableObject {
             }
         }
 
-        if let category = normalizedListSuggestionValue(visiblePlace.effectiveCategory),
+        if let category = normalizer.normalized(visiblePlace.effectiveCategory),
            index.categories.contains(category) {
             addReason(visiblePlace.effectiveCompactType, score: 4)
         }
-        if let subcategory = normalizedListSuggestionValue(visiblePlace.effectiveSubcategory),
+        if let subcategory = normalizer.normalized(visiblePlace.effectiveSubcategory),
            index.subcategories.contains(subcategory) {
             addReason(visiblePlace.effectiveSubcategory, score: 2)
         }
-        if let cuisine = normalizedListSuggestionValue(visiblePlace.restaurantCuisine),
+        if let cuisine = normalizer.normalized(visiblePlace.restaurantCuisine),
            index.cuisines.contains(cuisine) {
             addReason(visiblePlace.restaurantCuisine, score: 2)
         }
 
-        let matchingTagsAndLabels = listSuggestionTagsAndLabels(for: visiblePlace)
+        let matchingTagsAndLabels = listSuggestionTagsAndLabels(for: visiblePlace, normalizer: &normalizer)
             .filter { index.tagsAndLabels.contains($0.key) }
             .sorted { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }
         for match in matchingTagsAndLabels.prefix(2) {
             addReason(match.value, score: 1.5)
         }
 
-        let matchesLocality = normalizedListSuggestionValue(visiblePlace.place.locality)
+        let matchesLocality = normalizer.normalized(visiblePlace.place.locality)
             .map { index.localities.contains($0) } == true
         if matchesLocality {
             addReason(visiblePlace.place.locality, score: 3)
         }
         if !matchesLocality,
-           let region = normalizedListSuggestionValue(visiblePlace.place.region),
+           let region = normalizer.normalized(visiblePlace.place.region),
            index.regions.contains(region) {
             addReason(visiblePlace.place.region, score: 1)
         }
@@ -4848,7 +4936,10 @@ final class WanderStore: ObservableObject {
         return ListSuggestionMatch(reasonValues: reasons, relevanceScore: score)
     }
 
-    private func listSuggestionTagsAndLabels(for visiblePlace: VisiblePlace) -> [String: String] {
+    private func listSuggestionTagsAndLabels(
+        for visiblePlace: VisiblePlace,
+        normalizer: inout ListSuggestionNormalizer
+    ) -> [String: String] {
         let eligibleValueTypes = Set(["multi_tag", "multi_select", "personal_label"])
         let ineligibleGenericValues = Set(["yes", "no", "true", "false", "none", "other", "maybe", "n a"])
         var valuesByNormalizedValue: [String: String] = [:]
@@ -4857,7 +4948,7 @@ final class WanderStore: ObservableObject {
         where eligibleValueTypes.contains(attribute.valueType)
             || attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels {
             for value in PlaceAttributeValuePresentation.strings(from: attribute.valueJSON) {
-                guard let normalizedValue = normalizedListSuggestionValue(value),
+                guard let normalizedValue = normalizer.normalized(value),
                       !ineligibleGenericValues.contains(normalizedValue)
                 else { continue }
                 valuesByNormalizedValue[normalizedValue] = value
@@ -4865,17 +4956,6 @@ final class WanderStore: ObservableObject {
         }
 
         return valuesByNormalizedValue
-    }
-
-    private func normalizedListSuggestionValue(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let normalized = value
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        return normalized.isEmpty ? nil : normalized
     }
 
     private func listSuggestionCandidates(for list: LocalPlaceList) -> [VisiblePlace] {

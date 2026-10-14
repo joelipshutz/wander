@@ -122,15 +122,19 @@ final class ShareCardMockupUITests: XCTestCase {
             // use the same native fallback as More. Never send to a recipient.
             let activityList = app.otherElements["ActivityListView"]
             XCTAssertTrue(activityList.waitForExistence(timeout: 10))
-            // The remote share-sheet container appears before its controls.
-            // Wait for the system UI to finish loading before interacting.
-            let close = app.buttons["Close"]
-            XCTAssertTrue(close.waitForExistence(timeout: 30))
             XCTAssertFalse(app.alerts.firstMatch.exists)
             capture("external-place-\(format)-destination")
-            close.tap()
-            XCTAssertTrue(activityList.waitForNonExistence(timeout: 10))
+            // ActivityListView spans the entire display, including its dimmed
+            // background. Drag the actual sheet grabber so image destinations
+            // dismiss the sheet instead of scrolling its content.
+            let grabber = activityList.buttons["Sheet Grabber"]
+            XCTAssertTrue(grabber.waitForExistence(timeout: 5))
+            grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)))
+            XCTAssertTrue(activityList.waitForNonExistence(timeout: 5))
             XCTAssertTrue(formats.waitForExistence(timeout: 5))
+            expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: formats)
+            waitForExpectations(timeout: 5)
         }
         app.terminate()
     }

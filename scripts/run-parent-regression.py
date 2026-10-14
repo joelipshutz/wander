@@ -119,8 +119,9 @@ def main() -> int:
         selected = inventory
     # The SDK installs process-wide replay observers. Keep this required test in
     # its own test host, matching the independently passing Feed validation job.
-    # Keep the unchanged search threshold required in a fresh process too,
-    # rather than measuring after thousands of unrelated fixtures and SDKs.
+    # Original CPU timing limits run separately with --suite performance on the
+    # controlled reference simulator. Full-size deterministic contracts remain
+    # in the unit suite, matching the main branch shared-runner policy.
     isolated = {replay: "replay", **{test: "performance" for test in performance}} if args.suite == "unit" else {}
     if args.suite == "ui":
         isolated = {test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)}

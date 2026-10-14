@@ -29,7 +29,7 @@ concurrency:
 jobs:
   native:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,7 +59,8 @@ jobs:
                   output.write(f'{key}={device["udid"]}\n')
               print('Testing on', device['name'])
           PY
-      # CPU budgets and replay observers run below in isolated test processes.
+      # Wall-clock budgets run on a controlled reference machine. The matching
+      # deterministic search and high-data cache contracts still run below.
       - name: Unit suite and native Feed scrolling
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
@@ -71,13 +72,14 @@ jobs:
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testNotificationOpensPostWithArrowComposerAndBackReturnsFeed
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed
+          -only-testing:WanderUITests/ForegroundEntryUITests
+          -only-testing:WanderUITests/MapPlaceCardActionInteractionUITests/testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps
+          -only-testing:WanderUITests/ShareCardMockupUITests/testExternalPlaceCanOpenNativeDestinationsFromEveryFormat
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
+          -maximum-test-execution-time-allowance 360
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Isolated CPU budgets
-        if: success() || failure()
-        run: >-
-          python3 scripts/run-parent-regression.py --suite performance
-          --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData"
-          --result-bundle "$RUNNER_TEMP/performance.xcresult"
       # SDK replay capture owns process-wide observers; validate in a fresh test host.
       - name: Verify replay masking in an isolated process
         if: success() || failure()
@@ -108,7 +110,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small replay performance; do
+          for size in large small replay; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -123,5 +125,4 @@ jobs:
             ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
             ${{ runner.temp }}/replay.xcresult
-            ${{ runner.temp }}/performance.xcresult
           retention-days: 14

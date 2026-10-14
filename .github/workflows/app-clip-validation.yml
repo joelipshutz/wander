@@ -93,7 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"replay privacy","suite":"replay","shard":0},{"name":"search performance","suite":"performance","shard":0},{"name":"UI performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3},{"name":"UI shard 5","suite":"ui","shard":4},{"name":"UI shard 6","suite":"ui","shard":5},{"name":"UI shard 7","suite":"ui","shard":6},{"name":"UI shard 8","suite":"ui","shard":7}]') }}
+        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"replay privacy","suite":"replay","shard":0},{"name":"UI performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3},{"name":"UI shard 5","suite":"ui","shard":4},{"name":"UI shard 6","suite":"ui","shard":5},{"name":"UI shard 7","suite":"ui","shard":6},{"name":"UI shard 8","suite":"ui","shard":7}]') }}
     steps:
       - uses: actions/checkout@v4
         with:
