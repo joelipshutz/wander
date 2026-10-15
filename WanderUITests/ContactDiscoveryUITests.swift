@@ -65,21 +65,7 @@ import XCTest
     }
     // Finish the first-visit primer before touching the underlying Feed or tabs.
     private func completeNotificationPromptIfPresented(_ app: XCUIApplication) {
-        let primary = app.buttons["productUpsell.primary"]
-        guard primary.waitForExistence(timeout: 8) else { return }
-        XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
-        if primary.label == "Open Settings" {
-            app.buttons["productUpsell.secondary"].tap()
-        } else {
-            XCTAssertEqual(primary.label, "Continue")
-            primary.tap()
-            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            let deny = springboard.alerts.buttons.matching(
-                NSPredicate(format: "label == %@ OR label == %@", "Don’t Allow", "Don't Allow")
-            ).firstMatch
-            if deny.waitForExistence(timeout: 5) { deny.tap() }
-        }
-        XCTAssertTrue(primary.waitForNonExistence(timeout: 10))
+        dismissStartupNotificationPromptIfNeeded(in: app)
     }
     private func openContactSettings(_ app: XCUIApplication) {
         app.tabBars.buttons["Profile"].tap()
@@ -138,7 +124,7 @@ import XCTest
         XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
         backToFeed(app)
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
-        XCUIDevice.shared.press(.home)
+        backgroundApplication(app)
         app.activate()
         completeNotificationPromptIfPresented(app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))

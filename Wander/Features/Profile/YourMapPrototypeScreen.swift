@@ -116,6 +116,9 @@ final class YourMapInteractionState {
 struct YourMapPrototypeScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if DEBUG
+    @Environment(\.adaptiveMapFixtureUsesPhysicalViewport) private var adaptiveFixturePhysicalViewport
+    #endif
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @StateObject private var snapshotCapture = MapSnapshotCapture()
@@ -308,31 +311,48 @@ struct YourMapPrototypeScreen: View {
         return dataset.visiblePlaceByPlaceID[selectedPlaceID]
     }
 
+    @ViewBuilder
     private var mapWorkspace: some View {
+        #if DEBUG
+        if adaptiveFixturePhysicalViewport {
+            adaptiveFixtureMapWorkspace
+        } else {
+            fullScreenMapWorkspace
+        }
+        #else
+        fullScreenMapWorkspace
+        #endif
+    }
+
+    private var nativeMapCanvas: some View {
+        NativeMapView(
+            attributionBottomClearance: 72,
+            isInteractionEnabled: mode == .map && interaction.isMapChromeVisible,
+            annotations: nativeAnnotations,
+            cameraRequest: interaction.cameraRequest,
+            nativeFeatureClearRevision: 0,
+            showsUserLocation: false,
+            isDark: brandMode.prefersDarkInterface,
+            reduceMotion: reduceMotion,
+            onAnnotationTap: { kind in
+                if case let .saved(id) = kind { interaction.select(id) }
+            },
+            onEmptyMapTap: { interaction.tapEmptyMap() },
+            onLongPress: { _ in },
+            onNativeFeatureSelection: { _ in },
+            onUserInteraction: {},
+            onCameraChange: { interaction.camera.recordCameraChange($0) },
+            onCameraInteractionEnd: { interaction.finishCameraChange($0, isUserInitiated: $1) },
+            allowsNativeFeatureSelection: false,
+            usesAdaptivePinDetail: true,
+            onCameraSnapshot: { interaction.recordCameraSnapshot($0) }
+        )
+        .overlay { MapSnapshotCaptureAnchor(capture: snapshotCapture).allowsHitTesting(false) }
+    }
+
+    private var fullScreenMapWorkspace: some View {
         ZStack(alignment: .bottom) {
-            NativeMapView(
-                attributionBottomClearance: 72,
-                isInteractionEnabled: mode == .map && interaction.isMapChromeVisible,
-                annotations: nativeAnnotations,
-                cameraRequest: interaction.cameraRequest,
-                nativeFeatureClearRevision: 0,
-                showsUserLocation: false,
-                isDark: brandMode.prefersDarkInterface,
-                reduceMotion: reduceMotion,
-                onAnnotationTap: { kind in
-                    if case let .saved(id) = kind { interaction.select(id) }
-                },
-                onEmptyMapTap: { interaction.tapEmptyMap() },
-                onLongPress: { _ in },
-                onNativeFeatureSelection: { _ in },
-                onUserInteraction: {},
-                onCameraChange: { interaction.camera.recordCameraChange($0) },
-                onCameraInteractionEnd: { interaction.finishCameraChange($0, isUserInitiated: $1) },
-                allowsNativeFeatureSelection: false,
-                usesAdaptivePinDetail: true,
-                onCameraSnapshot: { interaction.recordCameraSnapshot($0) }
-            )
-            .overlay { MapSnapshotCaptureAnchor(capture: snapshotCapture).allowsHitTesting(false) }
+            nativeMapCanvas
             .ignoresSafeArea()
             .overlay {
                 if filteredPlaces.isEmpty {
@@ -350,6 +370,25 @@ struct YourMapPrototypeScreen: View {
                 .animation(nil, value: interaction.isMapChromeVisible)
         }
     }
+
+    #if DEBUG
+    private var adaptiveFixtureMapWorkspace: some View {
+        // Give the native Map a real viewport instead of overriding its
+        // reported frame. Reuse its renderer, annotations and camera requests.
+        VStack(spacing: 12) {
+            mapHeader
+            nativeMapCanvas
+                .overlay {
+                    if filteredPlaces.isEmpty { mapEmptyState }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 12)
+            modePicker
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing4)
+        }
+    }
+    #endif
 
     private var mapControls: some View {
         ZStack(alignment: .bottom) {

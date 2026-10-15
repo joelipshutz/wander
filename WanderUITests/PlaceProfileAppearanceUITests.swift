@@ -139,12 +139,21 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         #else
         let appearancePage = settings.buttons["Display & Brightness"]
         #endif
+        func pageControlIsVisible() -> Bool {
+            guard appearancePage.isHittable else { return false }
+            let toolbar = settings.toolbars.firstMatch
+            let bottom = toolbar.exists ? toolbar.frame.minY : settings.frame.maxY
+            // Settings may report a row as hittable when only its upper edge
+            // is above the floating Search toolbar. Move the entire row clear.
+            return appearancePage.frame.minY >= settings.navigationBars.firstMatch.frame.maxY
+                && appearancePage.frame.maxY < bottom
+        }
         for _ in 0..<6 {
-            if appearancePage.isHittable { break }
+            if pageControlIsVisible() { break }
             settings.swipeUp()
         }
-        XCTAssertTrue(appearancePage.isHittable)
-        appearancePage.tap()
+        XCTAssertTrue(pageControlIsVisible())
+        appearancePage.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         try changeAppearanceInSettings(settings, to: .dark)
         let app = XCUIApplication()
         app.launchArguments = [
@@ -190,13 +199,20 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             predicate: NSPredicate(format: "isSelected == true"), object: feed)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
         app.tabBars.buttons["Map"].tap()
-        let pin = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "Dudley Market QA")
-        ).firstMatch
-        XCTAssertTrue(pin.waitForExistence(timeout: 5))
-        pin.tap()
         let card = app.buttons["map.selectedPlaceCard"]
+        // The map retains its selected place across the ordinary Feed return.
+        // Its card also includes the place name, so a broad name query can tap
+        // that card as if it were a pin, then tap through the opened profile.
+        if !card.exists {
+            let pin = app.buttons.matching(NSPredicate(
+                format: "label CONTAINS %@ AND identifier != %@",
+                "Dudley Market QA", "map.selectedPlaceCard"
+            )).firstMatch
+            XCTAssertTrue(pin.waitForExistence(timeout: 5))
+            pin.tap()
+        }
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Dudley Market QA"))
         card.tap()
         let scroll = app.scrollViews["place-profile.scroll"]
         XCTAssertTrue(scroll.waitForExistence(timeout: 5))

@@ -495,6 +495,27 @@ final class WanderStore: ObservableObject {
         var tagsAndLabels: Set<String> = []
     }
 
+    /// Repeated categories, locations and tags share normalization only for one
+    /// synchronous suggestion read. Later reads always see current model values.
+    private struct ListSuggestionNormalizer {
+        private var values: [String: String] = [:]
+
+        mutating func normalized(_ value: String?) -> String? {
+            guard let value else { return nil }
+            if let cached = values[value] {
+                return cached.isEmpty ? nil : cached
+            }
+            let normalized = value
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            values[value] = normalized
+            return normalized.isEmpty ? nil : normalized
+        }
+    }
+
     private struct ListSuggestionMatch {
         let reasonValues: [String]
         let relevanceScore: Double
@@ -3149,6 +3170,18 @@ final class WanderStore: ObservableObject {
 
         var displayActivity = activity
         #if DEBUG
+        #if targetEnvironment(simulator)
+        let liveReviewMedia = ActivityPostcardPhotoUITestFixtures.liveFeedMedia()
+        if !liveReviewMedia.isEmpty,
+           let index = displayActivity.firstIndex(where: { $0.id == "fixture-feed-maya-been-bar-nido" }) {
+            let original = displayActivity[index]
+            displayActivity[index] = FeedActivity(
+                id: original.id, kind: original.kind, actor: original.actor,
+                place: original.place, list: original.list, occurredAt: original.occurredAt,
+                note: original.note, rating: original.rating, media: liveReviewMedia
+            )
+        }
+        #endif
         if ProcessInfo.processInfo.arguments.contains("-WanderFeedPaginationUITest"),
            let source = activity.first {
             displayActivity = (0..<45).map { index in
@@ -3469,10 +3502,11 @@ final class WanderStore: ObservableObject {
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5) -> [ListPlaceSuggestion] {
         let existingPlaces = visiblePlaces(in: list)
-        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+        var normalizer = ListSuggestionNormalizer()
+        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces, normalizer: &normalizer)
         let candidates = listSuggestionCandidates(for: list)
         let matchedCandidates = candidates.compactMap { visiblePlace -> (VisiblePlace, ListSuggestionMatch)? in
-            guard let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex) else {
+            guard let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex, normalizer: &normalizer) else {
                 return nil
             }
             return (visiblePlace, match)
@@ -3492,9 +3526,7 @@ final class WanderStore: ObservableObject {
                 if visiblePlace.owner.id == currentUser.id {
                     score += 1
                 }
-                let rawReason = "Fits: \(match.reasonValues.prefix(2).joined(separator: " + "))"
-                let reason = ListSuggestionReasonFormatter.displayText(rawReason, for: visiblePlace)
-                return ListPlaceSuggestion(visiblePlace: visiblePlace, reason: reason, score: score)
+                return (visiblePlace: visiblePlace, match: match, score: score)
             }
             .sorted {
                 if $0.score == $1.score {
@@ -3503,7 +3535,11 @@ final class WanderStore: ObservableObject {
                 return $0.score > $1.score
             }
             .prefix(limit)
-            .map { $0 }
+            .map { candidate in
+                let rawReason = "Fits: \(candidate.match.reasonValues.prefix(2).joined(separator: " + "))"
+                let reason = ListSuggestionReasonFormatter.displayText(rawReason, for: candidate.visiblePlace)
+                return ListPlaceSuggestion(visiblePlace: candidate.visiblePlace, reason: reason, score: candidate.score)
+            }
 
         return disambiguatingSameNameLocations(in: suggestions)
     }
@@ -3517,9 +3553,10 @@ final class WanderStore: ObservableObject {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
             let existingPlaces = visiblePlaces(in: list)
             let candidates = listSuggestionCandidates(for: list)
-            let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+            var normalizer = ListSuggestionNormalizer()
+            let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces, normalizer: &normalizer)
             let relevantCandidates = candidates.filter {
-                listSuggestionMatch(for: $0, against: attributeIndex) != nil
+                listSuggestionMatch(for: $0, against: attributeIndex, normalizer: &normalizer) != nil
             }
             let focusedCategory = focusedListSuggestionCategory(
                 in: existingPlaces,
@@ -3528,7 +3565,7 @@ final class WanderStore: ObservableObject {
             let candidatesByID = Dictionary(uniqueKeysWithValues: relevantCandidates.map { ($0.id, $0) })
             let remoteSuggestions = response.suggestions.compactMap { item -> ListPlaceSuggestion? in
                 guard let visiblePlace = candidatesByID[item.visiblePlaceID],
-                      let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex),
+                      let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex, normalizer: &normalizer),
                       focusedCategory == nil || visiblePlace.effectiveCategory == focusedCategory,
                       !hasPlace(visiblePlace, in: list),
                       !wasRemovedFromList(visiblePlace.place, list: list)
@@ -5003,9 +5040,10 @@ final class WanderStore: ObservableObject {
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
         let existingPlaces = visiblePlaces(in: list)
         let candidates = listSuggestionCandidates(for: list)
-        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+        var normalizer = ListSuggestionNormalizer()
+        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces, normalizer: &normalizer)
         let relevantCandidates = candidates.filter {
-            listSuggestionMatch(for: $0, against: attributeIndex) != nil
+            listSuggestionMatch(for: $0, against: attributeIndex, normalizer: &normalizer) != nil
         }
         let focusedCategory = focusedListSuggestionCategory(
             in: existingPlaces,
@@ -5030,31 +5068,33 @@ final class WanderStore: ObservableObject {
     }
 
     private func listSuggestionAttributeIndex(
-        for existingPlaces: [VisiblePlace]
+        for existingPlaces: [VisiblePlace],
+        normalizer: inout ListSuggestionNormalizer
     ) -> ListSuggestionAttributeIndex {
         existingPlaces.reduce(into: ListSuggestionAttributeIndex()) { index, visiblePlace in
-            if let category = normalizedListSuggestionValue(visiblePlace.effectiveCategory) {
+            if let category = normalizer.normalized(visiblePlace.effectiveCategory) {
                 index.categories.insert(category)
             }
-            if let subcategory = normalizedListSuggestionValue(visiblePlace.effectiveSubcategory) {
+            if let subcategory = normalizer.normalized(visiblePlace.effectiveSubcategory) {
                 index.subcategories.insert(subcategory)
             }
-            if let cuisine = normalizedListSuggestionValue(visiblePlace.restaurantCuisine) {
+            if let cuisine = normalizer.normalized(visiblePlace.restaurantCuisine) {
                 index.cuisines.insert(cuisine)
             }
-            if let locality = normalizedListSuggestionValue(visiblePlace.place.locality) {
+            if let locality = normalizer.normalized(visiblePlace.place.locality) {
                 index.localities.insert(locality)
             }
-            if let region = normalizedListSuggestionValue(visiblePlace.place.region) {
+            if let region = normalizer.normalized(visiblePlace.place.region) {
                 index.regions.insert(region)
             }
-            index.tagsAndLabels.formUnion(listSuggestionTagsAndLabels(for: visiblePlace).keys)
+            index.tagsAndLabels.formUnion(listSuggestionTagsAndLabels(for: visiblePlace, normalizer: &normalizer).keys)
         }
     }
 
     private func listSuggestionMatch(
         for visiblePlace: VisiblePlace,
-        against index: ListSuggestionAttributeIndex
+        against index: ListSuggestionAttributeIndex,
+        normalizer: inout ListSuggestionNormalizer
     ) -> ListSuggestionMatch? {
         var score = 0.0
         var reasons: [String] = []
@@ -5062,7 +5102,7 @@ final class WanderStore: ObservableObject {
 
         func addReason(_ value: String?, score additionalScore: Double) {
             guard let value,
-                  let normalizedValue = normalizedListSuggestionValue(value)
+                  let normalizedValue = normalizer.normalized(value)
             else { return }
             score += additionalScore
             if normalizedReasons.insert(normalizedValue).inserted {
@@ -5070,33 +5110,33 @@ final class WanderStore: ObservableObject {
             }
         }
 
-        if let category = normalizedListSuggestionValue(visiblePlace.effectiveCategory),
+        if let category = normalizer.normalized(visiblePlace.effectiveCategory),
            index.categories.contains(category) {
             addReason(visiblePlace.effectiveCompactType, score: 4)
         }
-        if let subcategory = normalizedListSuggestionValue(visiblePlace.effectiveSubcategory),
+        if let subcategory = normalizer.normalized(visiblePlace.effectiveSubcategory),
            index.subcategories.contains(subcategory) {
             addReason(visiblePlace.effectiveSubcategory, score: 2)
         }
-        if let cuisine = normalizedListSuggestionValue(visiblePlace.restaurantCuisine),
+        if let cuisine = normalizer.normalized(visiblePlace.restaurantCuisine),
            index.cuisines.contains(cuisine) {
             addReason(visiblePlace.restaurantCuisine, score: 2)
         }
 
-        let matchingTagsAndLabels = listSuggestionTagsAndLabels(for: visiblePlace)
+        let matchingTagsAndLabels = listSuggestionTagsAndLabels(for: visiblePlace, normalizer: &normalizer)
             .filter { index.tagsAndLabels.contains($0.key) }
             .sorted { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }
         for match in matchingTagsAndLabels.prefix(2) {
             addReason(match.value, score: 1.5)
         }
 
-        let matchesLocality = normalizedListSuggestionValue(visiblePlace.place.locality)
+        let matchesLocality = normalizer.normalized(visiblePlace.place.locality)
             .map { index.localities.contains($0) } == true
         if matchesLocality {
             addReason(visiblePlace.place.locality, score: 3)
         }
         if !matchesLocality,
-           let region = normalizedListSuggestionValue(visiblePlace.place.region),
+           let region = normalizer.normalized(visiblePlace.place.region),
            index.regions.contains(region) {
             addReason(visiblePlace.place.region, score: 1)
         }
@@ -5105,7 +5145,10 @@ final class WanderStore: ObservableObject {
         return ListSuggestionMatch(reasonValues: reasons, relevanceScore: score)
     }
 
-    private func listSuggestionTagsAndLabels(for visiblePlace: VisiblePlace) -> [String: String] {
+    private func listSuggestionTagsAndLabels(
+        for visiblePlace: VisiblePlace,
+        normalizer: inout ListSuggestionNormalizer
+    ) -> [String: String] {
         let eligibleValueTypes = Set(["multi_tag", "multi_select", "personal_label"])
         let ineligibleGenericValues = Set(["yes", "no", "true", "false", "none", "other", "maybe", "n a"])
         var valuesByNormalizedValue: [String: String] = [:]
@@ -5114,7 +5157,7 @@ final class WanderStore: ObservableObject {
         where eligibleValueTypes.contains(attribute.valueType)
             || attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels {
             for value in PlaceAttributeValuePresentation.strings(from: attribute.valueJSON) {
-                guard let normalizedValue = normalizedListSuggestionValue(value),
+                guard let normalizedValue = normalizer.normalized(value),
                       !ineligibleGenericValues.contains(normalizedValue)
                 else { continue }
                 valuesByNormalizedValue[normalizedValue] = value
@@ -5122,17 +5165,6 @@ final class WanderStore: ObservableObject {
         }
 
         return valuesByNormalizedValue
-    }
-
-    private func normalizedListSuggestionValue(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let normalized = value
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        return normalized.isEmpty ? nil : normalized
     }
 
     private func listSuggestionCandidates(for list: LocalPlaceList) -> [VisiblePlace] {
@@ -5379,6 +5411,8 @@ final class WanderStore: ObservableObject {
         )
         listLookup.byUserPlaceID.reserveCapacity(userPlaces.count)
         listLookup.byPlaceID.reserveCapacity(places.count)
+        let viewerID = currentUser.id
+        var accessByOwnerID: [String: (relationship: ViewerRelationship, blocked: Bool)] = [:]
 
         for userPlace in userPlaces {
             let userPlaceID = userPlace.id
@@ -5388,11 +5422,21 @@ final class WanderStore: ObservableObject {
                   let owner = profilesByID[userPlace.userID]
             else { continue }
 
-            let relationship = relationship(to: owner.id)
-            let blocked = isBlockedBetweenCurrentUser(and: owner.id)
+            // Several memories share an owner. Evaluate the follow/block graph
+            // once per owner for this synchronous projection, never across reads.
+            let ownerID = owner.id
+            let access: (relationship: ViewerRelationship, blocked: Bool)
+            if let cached = accessByOwnerID[ownerID] {
+                access = cached
+            } else {
+                access = (relationship(to: ownerID), isBlockedBetweenCurrentUser(and: ownerID))
+                accessByOwnerID[ownerID] = access
+            }
+            let relationship = access.relationship
+            let blocked = access.blocked
             guard visibilityPolicy.canSeePlace(
-                viewerID: currentUser.id,
-                ownerID: owner.id,
+                viewerID: viewerID,
+                ownerID: ownerID,
                 visibility: userPlace.visibility,
                 relationship: relationship,
                 isBlocked: blocked
@@ -5414,7 +5458,7 @@ final class WanderStore: ObservableObject {
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { continue }
 
             if !filters.ownerScopes.isEmpty {
-                let isMine = owner.id == currentUser.id
+                let isMine = ownerID == viewerID
                 let isFriend = relationship == .mutual
                 let isFollowing = relationship == .follower || relationship == .mutual
                 let allowed = (filters.ownerScopes.contains("you") && isMine)
@@ -5584,10 +5628,9 @@ final class WanderStore: ObservableObject {
         #endif
         // A person's Been/Wanna records can refer to the same physical place.
         // Group within each owner so shared places still count for every person.
-        let placesByOwnerID = Dictionary(grouping: visiblePlaces(), by: \.owner.id)
-        let counts = placesByOwnerID.mapValues { places in
-            VisiblePlaceGrouping.groups(from: places, currentUserID: currentUser.id).count
-        }
+        let counts = VisiblePlaceGrouping.countsByOwner(
+            from: visiblePlaces(), currentUserID: currentUser.id
+        )
         visiblePlaceCountsByOwnerIDCache = counts
         return counts
     }

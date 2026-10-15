@@ -18,7 +18,8 @@ existing authorized audience and defaults to seven days. Nearby begins at 5 km
 with explicit expansion up to 25 km; it never expands social visibility. Controls use an explicitly selected public city center, category/person choices
 and 24-hour/7-day/30-day/all-time ranges. Committed fields now reach the Live
 repository through the store, with stable bounds and cursor/account fencing.
-SQL applies every predicate before pagination; hosted execution remains pending.
+SQL applies every predicate before pagination; installation and post-install
+hosted verification remain pending.
 Current-location centering and separately eligible discovery remain distinct work.
 
 Recent activity must remain the current Feed experience: the existing cards,
@@ -78,6 +79,29 @@ physical profile deletion cascades stored conversations/messages.
 
 See the [current contract](designs/astir-live/product-spec.md) and
 [remaining questions](open-questions.md#live-experience-review-rec-636).
+
+## Shared-link App Clip (REC-408)
+
+The first Clip supports native sign-in, minimal profile setup, saving a shared
+place to Wanna, and accepting a list invitation inside the Clip. Shared profile
+maps, lists and activities use the existing account-authorized read contracts.
+Published preview artwork does not grant access to private account content.
+
+The Clip shares the parent's Clerk auth adapter and opaque account identity.
+A dedicated App Group retains only a validated destination and optional account
+ID for seven days; credentials remain in Keychain. The full app consumes this
+record only after account validation and normal onboarding. Explicit incoming
+links take precedence. Signed-device Keychain migration and account continuity
+are release gates, not assumed consequences of a simulator build.
+
+Saving is idempotent and preserves an existing live save's notes, status and
+visibility. A new Wanna uses the account's default visibility, with private
+profiles forced to Self. List acceptance preserves existing server eligibility,
+block and invitation rules; it never changes a private account to public.
+
+The website advertises the Clip only after explicit rollout. Messages controls
+its native icon/action footer; OG artwork must not draw a duplicate footer.
+Physical event QR attendance remains a separate REC-408 increment.
 
 ## Sender silence and import announcements (REC-589)
 
@@ -624,6 +648,9 @@ Named map snapshots use the saved list name. Lists use a place collage for two
 or more places, one cover for one place, and an empty state for zero. Missing
 photos keep their slots. View remains visible in the link card footer.
 
+The Link footer decision is superseded by REC-598 below; Story/Post artwork
+retains its approved presentation.
+
 Check-ins use their visit date. Wanna cards use the exact event’s planned date
 when present, otherwise “On <first name>’s radar”; their action is “Let’s Go”.
 List invitations omit a repeated list-name subtitle and use “Join”. Messages and system sharing use one published card link. Instagram and TikTok
@@ -781,3 +808,46 @@ the source-privacy migration and Feed fixes are deployed from separate branches.
 ## 2026-09-25: Readable session replay and named people (REC-626)
 
 Joe explicitly requested readable future recordings and easy identification by name/username. Remove blanket masking of ordinary app text, images, and maps; preserve password/sign-in-code masking and protection for system-owned views. Use the stable auth ID for identity, with mutable `name`, `display_name`, and `username` person properties for display and search. Keep event sanitization and disabled diagnostic capture. This supersedes REC-582's layout-only replay policy. Existing masked frames are irrecoverable; named/readable capture requires an updated client and release-candidate playback verification.
+## 2026-09-22 — Native Messages captions and manual social links (REC-598)
+
+Link images contain the visual only, without a baked-in title or action footer.
+The published title carries the name and essential context for Messages' native
+caption, including the list name for invitations. The website supplies the
+canonical Astir app icon as its favicon and apple-touch-icon. Apple controls
+caption layout, truncation and icon placement; Open Graph metadata cannot add a
+custom native View button. App Clip work remains separate under REC-408.
+Ryan chose metadata-only icon support for this change; do not add an image-corner
+logo. The native app icon and View footer belong to the later App Clip work.
+
+Every explicit social share copies the exact published link as both a URL and
+plain text, including when reusing a prepared link. Instagram Story and Snapchat
+image payloads retain these representations in the same clipboard item, without
+an expiration that could remove the link during composition. Opening the preview
+does not copy or publish anything. A copied URL does not make exported artwork
+tappable: creators paste it into a Link sticker or another placement supported by
+the destination app. Existing published images and Messages caches do not change;
+resharing creates a new preview with the corrected artwork.
+
+## 2026-10-14 — Controlled simulator timing gates (REC-408)
+
+Shared macOS CI runs full-size search/cache correctness contracts and the full
+dense-map camera workload with bounded native annotation visits. Absolute CPU
+timing and dense-map display-frame limits run on the controlled reference
+simulator before landing and release. Keep the original workloads and limits;
+do not raise them to accommodate a shared virtualized display. This extends
+main's paired deterministic/reference CPU benchmark policy to the map frame
+benchmark after hosted traces showed display gaps despite bounded app work.
+
+Run `scripts/run-parent-regression.py --suite performance` for the original CPU
+budgets and `--suite ui-reference-performance` for the original 100 ms dense-map
+frame limit, with the destination, products/derived-data and result bundle
+arguments. CI's `ui-performance` suite retains selected-pin CPU work, calendar
+latency, and the companion dense-map annotation contract. Test discovery must
+account for every UI case exactly once across ordinary, hosted-performance and
+reference-performance selections. Record reference results against the candidate
+commit in the PR and Linear release/implementation record.
+
+Ordinary CI UI runs use screenshots instead of automatic video encoding and
+retain system failure diagnostics. Explicit test attachments remain unchanged.
+This keeps long UI shards from accumulating an unrelated video-encoding workload
+while preserving screenshots and hierarchies needed to investigate failures.

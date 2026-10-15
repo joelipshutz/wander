@@ -336,6 +336,7 @@ final class MapPlaceCardUITests: XCTestCase {
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
             "-WanderResetWalkthroughs",
+            "-WanderMapSearchFixtures", "rec352",
         ]
         app.launch()
 
@@ -378,6 +379,13 @@ final class MapPlaceCardUITests: XCTestCase {
             providerPhoto.swipeLeft()
         }
         let memberPhoto = app.buttons["Open place photo by Ryan full screen"]
+        // The provider image is first when both async gallery requests finish
+        // before layout. Navigate the actual pager instead of depending on the
+        // member request winning that race and mounting its lazy page first.
+        let providerPhoto = app.buttons["Open place photo of Dudley Market QA full screen"]
+        if providerPhoto.waitForExistence(timeout: 3), !memberPhoto.isHittable {
+            providerPhoto.swipeLeft()
+        }
         XCTAssertTrue(memberPhoto.waitForExistence(timeout: 6))
         XCTAssertFalse(memberPhoto.frame.isEmpty)
         XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 3))

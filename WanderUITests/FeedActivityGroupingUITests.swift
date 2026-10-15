@@ -51,7 +51,9 @@ final class FeedActivityGroupingUITests: XCTestCase {
 
         for _ in 0..<3 where !disclosure.isHittable { app.swipeDown() }
         disclosure.tap()
-        XCTAssertFalse(wanna.exists)
+        // The disclosure removes these rows with an opacity transition. Wait
+        // for that removal before another tap can reverse the same animation.
+        XCTAssertTrue(wanna.waitForNonExistence(timeout: 3))
         XCTAssertEqual(disclosure.value as? String, "Collapsed, 3 activities")
         disclosure.tap()
         for _ in 0..<3 where !wanna.isHittable { app.swipeUp() }
@@ -107,8 +109,32 @@ final class FeedActivityGroupingUITests: XCTestCase {
         XCTAssertTrue(rating.isHittable)
         XCTAssertGreaterThan(rating.frame.width, 0)
         capture("REC-564-postcard-rating")
-        let composer = app.descendants(matching: .any)["activity.comment.input"].firstMatch
-        composer.tap()
+        let composer = app.textViews["activity.comment.input"]
+        let frame = composer.frame
+        let tapOffset = CGVector(dx: 0.5, dy: 0.25)
+        let tapPoint = CGPoint(x: frame.midX, y: frame.minY + frame.height * tapOffset.dy)
+        guard composer.isHittable, !frame.isNull, !frame.isInfinite, !frame.isEmpty,
+              [frame.minX, frame.minY, frame.width, frame.height].allSatisfy({ $0.isFinite }),
+              app.frame.contains(frame), frame.contains(tapPoint) else {
+            XCTFail("Expected a visible native comment text view before the single focus tap")
+            return
+        }
+        let scrollbars = composer.descendants(matching: .other).matching(NSPredicate(
+            format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "Vertical scroll bar", "Horizontal scroll bar"))
+            .allElementsBoundByIndex
+        for scrollbar in scrollbars where scrollbar.frame.contains(tapPoint) {
+            XCTFail("The single comment focus tap must avoid native scrollbar frames")
+            return
+        }
+        let focusGeometry = XCTAttachment(string: "composerFrame=\(frame); tapPoint=\(tapPoint); scrollbarFrames=\(scrollbars.map(\.frame)); keyboardPresentBeforeTap=\(app.keyboards.firstMatch.exists)")
+        focusGeometry.name = "REC-564 single native comment focus geometry"
+        focusGeometry.lifetime = .keepAlways
+        add(focusGeometry)
+        composer.coordinate(withNormalizedOffset: tapOffset).tap()
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 5) else {
+            XCTFail("The single native comment tap must establish keyboard readiness before typing")
+            return
+        }
         composer.typeText("A place worth returning to.")
         send.tap()
         let heart = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity.comment.like.")).firstMatch

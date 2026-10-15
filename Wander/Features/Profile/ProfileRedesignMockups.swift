@@ -1,6 +1,7 @@
 #if DEBUG
 import MapKit
 import SwiftUI
+import UIKit
 
 enum ProfileRedesignMockupPage: String, CaseIterable {
     case ownerProfile
@@ -43,10 +44,24 @@ private struct AdaptiveMapDensityFixture: View {
     var body: some View {
         NavigationStack {
             YourMapPrototypeScreen(dataset: dataset)
+                .environment(\.adaptiveMapFixtureUsesPhysicalViewport, true)
         }
         .environmentObject(store)
         .environmentObject(backend)
         .astirAdaptiveBrandMode()
+    }
+}
+
+// Only the disposable density fixture uses a physically bounded Map. Other
+// Your Map screens keep the existing full-screen map and overlay controls.
+private struct AdaptiveMapFixturePhysicalViewportKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var adaptiveMapFixtureUsesPhysicalViewport: Bool {
+        get { self[AdaptiveMapFixturePhysicalViewportKey.self] }
+        set { self[AdaptiveMapFixturePhysicalViewportKey.self] = newValue }
     }
 }
 

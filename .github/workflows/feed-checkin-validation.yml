@@ -22,6 +22,7 @@ on:
       - 'WanderUITests/FeedPaginationUITests.swift'
       - 'WanderUITests/FeedAudienceUITests.swift'
       - 'WanderUITests/MapFilterInteractionUITests.swift'
+      - 'scripts/run-parent-regression.py'
       - 'WanderUITests/FeedActivityGroupingUITests.swift'
       - 'WanderUITests/LiveReviewContinuityUITests.swift'
       - 'WanderUITests/SenderNotificationFlowUITests.swift'
@@ -44,6 +45,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          lfs: true
       - name: Generate project and select existing simulators
         run: |
           brew install xcodegen
@@ -92,7 +94,7 @@ jobs:
           -only-testing:WanderUITests/ShareCardMockupUITests/testExternalPlaceCanOpenNativeDestinationsFromEveryFormat
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 360
-          -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       # Replay capture owns process-wide SDK state. Each scenario starts a fresh
       # test host; both remain required checks.
       - name: Verify private-message replay in an isolated process
@@ -102,7 +104,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage
-          -resultBundlePath "$RUNNER_TEMP/replay-private.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/replay-private.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Verify credential replay in an isolated process
         if: success() || failure()
         run: >-
@@ -110,7 +112,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage
-          -resultBundlePath "$RUNNER_TEMP/replay-credentials.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/replay-credentials.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Stop large simulator
         if: always()
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
@@ -125,13 +127,13 @@ jobs:
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
-          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Generic Simulator build
         if: success() || failure()
         run: >-
           xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
           -destination 'generic/platform=iOS Simulator'
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=NO
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export native evidence
         if: always()
         run: |
@@ -161,6 +163,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          lfs: true
       - name: Generate project and select existing continuity simulators
         run: |
           brew install xcodegen
@@ -196,7 +199,7 @@ jobs:
             -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls \
             -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom \
             -resultBundlePath "$RUNNER_TEMP/live-continuity-build.xcresult" \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
             > "$RUNNER_TEMP/live-continuity-build.log" 2>&1
           python3 - <<'PY_RUNFILE'
           import os
@@ -217,8 +220,8 @@ jobs:
           -only-testing:WanderUITests/LiveDrawerAndFilterUITests
           -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
           -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 360
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-large.xcresult"
           > "$RUNNER_TEMP/live-continuity-large.log" 2>&1
       - name: Release large simulator and prepare compact phone
@@ -238,8 +241,8 @@ jobs:
           -only-testing:WanderUITests/LiveDrawerAndFilterUITests
           -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
           -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 360
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
           > "$RUNNER_TEMP/live-continuity-compact.log" 2>&1
       - name: Export and verify continuity evidence

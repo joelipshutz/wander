@@ -50,6 +50,12 @@ jobs:
                   f.write(variable + '=' + device['udid'] + '\n')
               print('Using', name, device['udid'])
           PY
+      - name: Finish Pro simulator first-boot setup before timed async tests
+        if: ${{ !inputs.compact_only }}
+        run: |
+          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
+          xcrun simctl shutdown "$PRO_DEVICE_ID"
+          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
       - name: Feature units and native screen flows on iPhone 17 Pro
         if: ${{ !inputs.compact_only }}
         run: >-
@@ -74,6 +80,10 @@ jobs:
           if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["PRO_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
             xcrun simctl shutdown "$PRO_DEVICE_ID"
           fi
+          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
+          # Finish first-boot initialization before the live-auth cold launch.
+          # Match the second-boot setup used by the full parent regression.
+          xcrun simctl shutdown "$COMPACT_DEVICE_ID"
           xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
       - name: Repeat native screen flows on compact iPhone 16e
         if: success() || failure()

@@ -132,7 +132,12 @@ import MapKit
         .init(name: "São Paulo", countryCode: "BR", region: "São Paulo")
     ]
     func suggestions(for query: String) async throws -> [HomeCitySuggestion] {
-        if query == "Par" { try await Task.sleep(for: .seconds(2)) }
+        // Keep the loading fixture pending until the UI clears the query.
+        // A fixed delay can finish during XCTest's keyboard/idle wait, before
+        // the test gets a chance to inspect the loading presentation.
+        if query == "loading" {
+            while true { try await Task.sleep(for: .seconds(60)) }
+        }
         if query == "offline" { throw URLError(.notConnectedToInternet) }
         return Self.cities.filter { $0.name.localizedStandardContains(query) }.map(HomeCitySuggestion.init(city:))
     }

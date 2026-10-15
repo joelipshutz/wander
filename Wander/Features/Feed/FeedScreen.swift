@@ -1534,7 +1534,10 @@ private extension LocalPlaceList {
 
 private extension FeedMediaPreview {
     var activityEngagementMedia: ActivityEngagementMedia {
-        ActivityEngagementMedia(
+        #if DEBUG && targetEnvironment(simulator)
+        if let fixture = ActivityPostcardPhotoUITestFixtures.livePhoto(matching: self) { return fixture }
+        #endif
+        return ActivityEngagementMedia(
             id: id,
             urlString: urlString,
             storageBucket: storageBucket,

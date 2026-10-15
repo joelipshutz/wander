@@ -42,6 +42,15 @@ jobs:
           chosen = sorted(choices, key=lambda x: x[0])[-1][1]
           with open(os.environ['GITHUB_ENV'], 'a') as f: f.write('TEST_DEVICE_ID=' + chosen['udid'] + '\n')
           print('Testing on', chosen['name'])
+          import subprocess
+          # Match the parent regression's initialized simulator. On first boot,
+          # XCTest can keep reporting Foreground after Home is visibly open.
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', chosen['udid'], '-b'], check=True)
+          subprocess.run(['xcrun', 'simctl', 'ui', chosen['udid'], 'appearance', 'dark'], check=True)
+          subprocess.run(['xcrun', 'simctl', 'ui', chosen['udid'], 'appearance', 'light'], check=True)
+          subprocess.run(['xcrun', 'simctl', 'shutdown', chosen['udid']], check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', chosen['udid'], '-b'], check=True)
+          subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', chosen['udid']], check=True)
           PY
       - name: Feedback unit and lifecycle UI tests
         run: >-
@@ -49,7 +58,8 @@ jobs:
           -destination "platform=iOS Simulator,id=$TEST_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests/FeedbackTests -only-testing:WanderUITests/FeedbackUITests
-          -resultBundlePath "$RUNNER_TEMP/Feedback.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/Feedback.xcresult"
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Summarize native tests
         if: always()
         run: |

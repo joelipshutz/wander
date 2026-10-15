@@ -670,6 +670,8 @@ final class AuthSessionTests: XCTestCase {
     func testCompletedNativeAuthTimesOutWhenActivationStalls() async {
         let configuration = WanderBackendConfiguration.current { "$(\($0))" }
         var activationContinuation: CheckedContinuation<Void, Never>?
+        var timeoutContinuation: CheckedContinuation<Void, Never>?
+        var requestedTimeout: UInt64 = 0
         var resolutionCount = 0
         let service = ClerkAuthService(
             configuration: configuration,
@@ -685,13 +687,21 @@ final class AuthSessionTests: XCTestCase {
             nativeAuthSessionFenceStore: .disabled,
             sessionAdoptionRetryDelaysNanoseconds: [],
             sessionAdoptionTimeoutNanoseconds: 100_000_000,
+            sessionAdoptionTimeoutSleeper: { delay in
+                requestedTimeout = delay
+                await withCheckedContinuation { timeoutContinuation = $0 }
+            },
             configureClerk: { $0 }
         )
         let task = Task {
             try await service.adoptCompletedNativeAuthSession(expectedSessionID: "sess_apple")
         }
-        while activationContinuation == nil { await Task.yield() }
-        let startedAt = DispatchTime.now().uptimeNanoseconds
+        while activationContinuation == nil || timeoutContinuation == nil { await Task.yield() }
+        XCTAssertGreaterThan(requestedTimeout, 0)
+        XCTAssertLessThanOrEqual(requestedTimeout, 100_000_000)
+        // Fire the actual timeout branch while activation is still suspended.
+        // Scheduler load must not become part of this authentication contract.
+        timeoutContinuation?.resume()
 
         do {
             _ = try await task.value
@@ -699,7 +709,6 @@ final class AuthSessionTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? AuthSessionError, .sessionUnavailable)
         }
-        XCTAssertLessThan(DispatchTime.now().uptimeNanoseconds - startedAt, 500_000_000)
         activationContinuation?.resume()
         for _ in 0..<10 { await Task.yield() }
         XCTAssertEqual(resolutionCount, 0)
@@ -1067,6 +1076,8 @@ final class AuthSessionTests: XCTestCase {
             "$(\(key))"
         }
         var resolverContinuation: CheckedContinuation<ClerkAuthService.ResolvedSession?, Never>?
+        var timeoutContinuation: CheckedContinuation<Void, Never>?
+        var requestedTimeout: UInt64 = 0
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: {
@@ -1081,6 +1092,10 @@ final class AuthSessionTests: XCTestCase {
             sessionAdoptionRetryDelaysNanoseconds: [],
             sessionAdoptionTimeoutNanoseconds: 100_000_000,
             sessionAdoptionSleeper: { _ in },
+            sessionAdoptionTimeoutSleeper: { delay in
+                requestedTimeout = delay
+                await withCheckedContinuation { timeoutContinuation = $0 }
+            },
             configureClerk: { $0 }
         )
 
@@ -1089,8 +1104,10 @@ final class AuthSessionTests: XCTestCase {
                 expectedSessionID: "sess_apple"
             )
         }
-        while resolverContinuation == nil { await Task.yield() }
-        let startedAt = DispatchTime.now().uptimeNanoseconds
+        while resolverContinuation == nil || timeoutContinuation == nil { await Task.yield() }
+        XCTAssertGreaterThan(requestedTimeout, 0)
+        XCTAssertLessThanOrEqual(requestedTimeout, 100_000_000)
+        timeoutContinuation?.resume()
         do {
             _ = try await adoptionTask.value
             XCTFail("Expected stalled session adoption to time out")
@@ -1100,8 +1117,6 @@ final class AuthSessionTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
 
-        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
-        XCTAssertLessThan(elapsed, 500_000_000)
         XCTAssertEqual(service.state, .signedOut)
 
         resolverContinuation?.resume(

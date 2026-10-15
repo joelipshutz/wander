@@ -7,6 +7,7 @@ import XCTest
         let app = application()
         app.launchArguments.removeAll { $0 == "-WanderFeedbackUITest" }
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["Edit profile"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.buttons["profile.feedback"].exists)
         capture("Profile feedback disabled")
@@ -14,7 +15,9 @@ import XCTest
 
     func testProfileFeedbackAndSubmission() {
         let app = application()
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Feedback.\(UUID().uuidString)"
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let feedback = app.buttons["profile.feedback"]
         XCTAssertTrue(feedback.waitForExistence(timeout: 20))
         capture("Profile with feedback button")
@@ -47,6 +50,7 @@ import XCTest
     func testDraftRequiresExplicitDiscard() {
         let app = application()
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["profile.feedback"].waitForExistence(timeout: 20))
         app.buttons["profile.feedback"].tap()
         app.buttons["feedback.tab.text"].tap()
@@ -70,6 +74,7 @@ import XCTest
         let app = application()
         app.launchArguments.append("-WanderFeedbackVoiceUITest")
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["profile.feedback"].waitForExistence(timeout: 20))
         app.buttons["profile.feedback"].tap()
         let play = app.buttons["feedback.play"]
@@ -103,6 +108,7 @@ import XCTest
         let app = application()
         app.launchArguments.append("-WanderFeedbackVoiceUITest")
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let feedback = app.buttons["profile.feedback"]
         XCTAssertTrue(feedback.waitForExistence(timeout: 20))
         feedback.tap()
@@ -138,7 +144,9 @@ import XCTest
 
     func testEmptyVoiceFormRemainsUsableAfterBackgroundAndReopening() {
         let app = application()
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.FeedbackLifecycle.\(UUID().uuidString)"
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let feedback = app.buttons["profile.feedback"]
         XCTAssertTrue(feedback.waitForExistence(timeout: 20))
         for _ in 0..<3 {
@@ -149,6 +157,9 @@ import XCTest
             XCTAssertTrue(app.buttons["feedback.photos"].isEnabled)
             XCTAssertFalse(app.buttons["feedback.submit"].isEnabled)
             app.buttons["Close feedback"].tap()
+            // Returning can queue the app-open reminder behind this sheet.
+            // Complete that real prompt before reopening the feedback form.
+            dismissStartupNotificationPromptIfNeeded(in: app)
             XCTAssertTrue(feedback.waitForExistence(timeout: 5))
         }
     }
@@ -163,7 +174,12 @@ import XCTest
     private func application() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUsePerformanceFixtures",
-            "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile", "-WanderFeedbackUITest"]
+            "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile", "-WanderFeedbackUITest",
+            "-WanderNotificationAuthorizationDeniedFixture"]
+        // Exercise the real in-app reminder with a deterministic permission
+        // result. A pending OS permission alert from a prior test must not
+        // intercept feedback taps; native authorization has its own UI suite.
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.Feedback.\(UUID().uuidString)"
         return app
     }
     private func capture(_ name: String) {

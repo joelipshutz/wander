@@ -39,11 +39,25 @@ final class YourMapPrototypeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive close - all category pins including overlaps")
 
-        // A full-Map native gesture spreads contacts into header/footer chrome.
-        // Reacquire a fully visible native pin canvas before every zoom gesture.
-        for _ in 0..<6 {
-            let zoomTarget = try freshZoomOutTarget(in: app, pins: pins)
-            zoomTarget.twoFingerTap()
+        // Use the native Map pinch gesture for zooming out. Overlapping
+        // annotations can be point-hittable without room for two-finger taps.
+        for attempt in 0..<6 {
+            try prepareNativeZoomOut(in: app, map: map, pins: pins)
+            let reference: (leftID: String, rightID: String, separation: CGFloat)?
+            if attempt == 0 { reference = try nativeZoomReference(in: map, pins: pins) }
+            else { reference = nil }
+            map.pinch(withScale: 0.5, velocity: -1)
+            if let reference {
+                let left = pins.matching(identifier: reference.leftID).firstMatch
+                let right = pins.matching(identifier: reference.rightID).firstMatch
+                expectation(for: NSPredicate { _, _ in
+                    guard left.exists, right.exists else { return false }
+                    let separation = abs(right.frame.midX - left.frame.midX)
+                    return separation.isFinite && separation > 1 && separation < reference.separation * 0.8
+                }, evaluatedWith: app)
+                waitForExpectations(timeout: 10)
+                capture("REC-573 native viewport pinch reduces marker separation")
+            }
             if dots.count > 0 { break }
         }
         capture("REC-573 adaptive after zoom-out gesture")
@@ -57,6 +71,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
@@ -146,6 +161,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
@@ -262,6 +278,7 @@ final class YourMapPrototypeUITests: XCTestCase {
             "-WanderInitialTab", "profile",
         ]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
 
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
@@ -309,8 +326,9 @@ final class YourMapPrototypeUITests: XCTestCase {
 
     func testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderResetWalkthroughs", "-WanderInitialTab", "profile"]
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs", "-WanderInitialTab", "profile"]
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         // The combined preview can exist below the tab bar. Bring its actual
@@ -416,8 +434,8 @@ final class YourMapPrototypeUITests: XCTestCase {
         return chosen.pin.element
     }
 
-    private func freshZoomOutTarget(in app: XCUIApplication, pins: XCUIElementQuery) throws -> XCUIElement {
-        typealias Pin = (element: XCUIElement, id: String, frame: CGRect)
+    private func prepareNativeZoomOut(in app: XCUIApplication, map: XCUIElement,
+                                      pins: XCUIElementQuery) throws {
         func finiteFrame(_ frame: CGRect) -> Bool {
             !frame.isNull && !frame.isInfinite && !frame.isEmpty
                 && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
@@ -430,33 +448,48 @@ final class YourMapPrototypeUITests: XCTestCase {
         let top = try XCTUnwrap(headerFrames.map(\.maxY).max()) + 12
         let viewport = CGRect(x: app.frame.minX + 12, y: top,
                               width: app.frame.width - 24, height: modeFrame.minY - 12 - top)
-        XCTAssertTrue(finiteFrame(viewport), "Map controls must leave a usable gesture viewport")
-
-        func snapshot() -> [Pin] {
-            pins.allElementsBoundByIndex.compactMap { element -> Pin? in
-                let frame = element.frame
-                return finiteFrame(frame) ? (element: element, id: element.identifier, frame: frame) : nil
-            }.sorted {
-                if $0.frame.height != $1.frame.height { return $0.frame.height > $1.frame.height }
-                return $0.id < $1.id
-            }
-        }
-        func safe(_ pin: Pin) -> Bool {
-            pin.frame.width >= 44 && pin.frame.height >= 44
-                && viewport.contains(pin.frame.insetBy(dx: -4, dy: -4)) && pin.element.isHittable
-        }
-        // Do not tap to promote a pin: XCTest may choose an empty part of an
-        // annotation canvas and clear the existing selection. Zoom directly on
-        // a freshly resolved, finite and fully bounded native pin canvas.
-        let current = snapshot()
-        let candidate = current.first(where: safe)
-        if candidate == nil { capture("REC-573 no full native zoom-out target") }
-        let target = try XCTUnwrap(candidate, "Expected a hittable full native pin canvas inside the map controls")
-        let diagnostic = XCTAttachment(string: "id=\(target.id); frame=\(target.frame); viewport=\(viewport)")
-        diagnostic.name = "REC-573 fresh native zoom-out target"
+        let mapFrame = map.frame.intersection(app.frame)
+        XCTAssertTrue(map.exists && finiteFrame(mapFrame) && finiteFrame(viewport),
+                      "Expected the native Map and a usable content viewport before zooming")
+        let frameCenter = CGPoint(x: mapFrame.midX, y: mapFrame.midY)
+        XCTAssertTrue(viewport.contains(frameCenter), "The native Map frame center must remain below header controls and above the mode picker")
+        XCTAssertTrue(viewport.insetBy(dx: -1, dy: -1).contains(map.frame),
+                      "The fixture Map accessibility frame must fit within the measured chrome-free viewport")
+        // XCTest computes the actual two-touch paths. This records eligibility
+        // and pre-state; a frame-center check does not prove contact extent.
+        let dots = pins.matching(NSPredicate(format: "value == %@", "Map dot")).count
+        let categories = pins.matching(NSPredicate(format: "value == %@", "Category pin")).count
+        let diagnostic = XCTAttachment(string: "mapFrame=\(mapFrame); viewport=\(viewport); frameCenter=\(frameCenter); mapHittable=\(map.isHittable); pinCount=\(pins.count); dotCount=\(dots); categoryCount=\(categories); nativePinchScale=0.5; nativePinchVelocity=-1; actualContactsComputedByXCTest=true")
+        diagnostic.name = "REC-573 native Map zoom-out pre-state"
         diagnostic.lifetime = .keepAlways
         add(diagnostic)
-        return target.element
+    }
+
+    private func nativeZoomReference(in map: XCUIElement, pins: XCUIElementQuery) throws
+        -> (leftID: String, rightID: String, separation: CGFloat) {
+        var left: (id: String, x: CGFloat)?
+        var right: (id: String, x: CGFloat)?
+        var seen = Set<String>()
+        let viewport = map.frame
+        for pin in pins.allElementsBoundByIndex {
+            guard seen.insert(pin.identifier).inserted, pin.exists else { continue }
+            let frame = pin.frame
+            guard !frame.isNull, !frame.isInfinite, !frame.isEmpty,
+                  [frame.minX, frame.minY, frame.width, frame.height].allSatisfy({ $0.isFinite }),
+                  viewport.contains(frame) else { continue }
+            if left == nil || frame.midX < left!.x { left = (pin.identifier, frame.midX) }
+            if right == nil || frame.midX > right!.x { right = (pin.identifier, frame.midX) }
+        }
+        let first = try XCTUnwrap(left, "Expected a visible native annotation for a zoom reference")
+        let last = try XCTUnwrap(right, "Expected a second visible native annotation for a zoom reference")
+        XCTAssertNotEqual(first.id, last.id)
+        let separation = last.x - first.x
+        XCTAssertGreaterThanOrEqual(separation, 44, "Use separated native coordinates, not marker size, to prove real zoom-out")
+        let diagnostic = XCTAttachment(string: "leftID=\(first.id); rightID=\(last.id); beforeHorizontalSeparation=\(separation); mapAccessibilityFrame=\(viewport)")
+        diagnostic.name = "REC-573 native zoom-out reference coordinates"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        return (first.id, last.id, separation)
     }
 
     private func selectProfileFixturePin(in app: XCUIApplication) {

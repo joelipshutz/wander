@@ -108,6 +108,15 @@ struct LiveScreen: View {
                     drawingControls
                 }
             }
+            .overlay(alignment: .top) {
+                // Shield system status text from map labels without moving the
+                // Map, its camera insets, or the drawing coordinate space.
+                brand.background
+                    .frame(height: geometry.safeAreaInsets.top)
+                    .offset(y: -geometry.safeAreaInsets.top)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
         .background(brand.background)
         .sheet(isPresented: $filtersPresented, onDismiss: modalDidDismiss) { filters.modifier(modalLifecycle) }
@@ -419,8 +428,8 @@ struct LiveScreen: View {
             VStack(spacing: 8) {
                 Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
                 HStack {
-                    Text("\(activity.count) updates shown").font(AstirTypography.sectionTitle)
-                        .accessibilityLabel("\(activity.count) loaded updates")
+                    Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.sectionTitle)
+                        .accessibilityLabel(LiveActivityPresentation.loadedUpdateCount(activity.count))
                     Spacer()
                     Text(filterSummary).font(.caption).foregroundStyle(brand.secondaryText)
                         .lineLimit(2).multilineTextAlignment(.trailing)
@@ -435,7 +444,7 @@ struct LiveScreen: View {
             })
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-            .accessibilityValue("\(activity.count) loaded updates. \(filterSummary)")
+            .accessibilityValue("\(LiveActivityPresentation.loadedUpdateCount(activity.count)). \(filterSummary)")
             .accessibilityAdjustableAction { direction in
                 changeDetent(detent + (direction == .increment ? 1 : -1))
             }
@@ -823,6 +832,14 @@ struct LiveScreen: View {
 
 /// Shared copy for Live's map and selection chooser; Feed cards keep their own presentation.
 enum LiveActivityPresentation {
+    static func shownUpdateCount(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "update" : "updates") shown"
+    }
+
+    static func loadedUpdateCount(_ count: Int) -> String {
+        "\(count) loaded \(count == 1 ? "update" : "updates")"
+    }
+
     static func title(for activity: FeedActivity) -> String {
         switch activity.resolvedTicketKind {
         case .wanna: "Wanna"

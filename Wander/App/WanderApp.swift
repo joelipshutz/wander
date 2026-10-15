@@ -299,7 +299,7 @@ struct WanderApp: App {
         WanderRootView(
             initialSession: auth.state.session,
             analytics: NoopAnalyticsClient(),
-            parser: DeterministicFilterParser()
+            parser: Self.makeMapCaptureParser()
         )
             .environmentObject(auth)
             .environmentObject(mapCaptureBackend)
@@ -307,6 +307,16 @@ struct WanderApp: App {
             .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
+    }
+
+    @MainActor
+    private static func makeMapCaptureParser() -> any LLMFilterParser {
+        #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-WanderDelayedDiscoverRefinementUITest") {
+            return DelayedDiscoverRefinementUITestParser()
+        }
+        #endif
+        return DeterministicFilterParser()
     }
 
     @MainActor
@@ -335,6 +345,18 @@ struct WanderApp: App {
 }
 
 #if DEBUG
+#if targetEnvironment(simulator)
+/// Keeps a real search pending across result navigation, then changes its filters.
+private struct DelayedDiscoverRefinementUITestParser: LLMFilterParser {
+    func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        try await Task.sleep(for: .seconds(45))
+        var filters = DeterministicFilterParser.filters(query: query, schema: schema)
+        filters.opinion = .favorite
+        return filters
+    }
+}
+#endif
+
 /// Exercises identity submission locally without contacting a real account.
 @MainActor
 final class SimulatorOnboardingProfileRepository: ProfileRepository {

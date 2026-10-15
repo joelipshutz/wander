@@ -4375,6 +4375,84 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         )
     }
 
+    func testOwnerCountsDeduplicateWithinEachOwnerAndRefreshMutablePlaceAliases() {
+        let joe = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let been = visiblePlace(
+            owner: joe, name: "Shared cafe", category: "coffee", address: "42 Main St",
+            latitude: 34.05, longitude: -118.25, providerID: "shared-cafe", status: .been
+        )
+        let wanna = visiblePlace(
+            owner: joe, name: "Shared cafe", category: "coffee", address: "42 Main St",
+            latitude: 34.05, longitude: -118.25, providerID: "shared-cafe", status: .wannaGo
+        )
+        let otherOwner = VisiblePlace(
+            id: "ryan-shared", place: been.place,
+            userPlace: LocalUserPlace(
+                localID: "ryan-shared", userID: ryan.id, placeID: been.place.id,
+                status: .been, visibility: .followers, sourceType: "manual"
+            ), owner: ryan
+        )
+        let places = [been, wanna, otherOwner]
+        XCTAssertEqual(
+            VisiblePlaceGrouping.countsByOwner(from: places, currentUserID: joe.id),
+            [joe.id: 1, ryan.id: 1]
+        )
+
+        // Identity edits must not reuse keys retained from the preceding read.
+        wanna.place.canonicalName = "Another cafe"
+        wanna.place.address = "99 Other St"
+        wanna.place.latitude = 35
+        wanna.place.longitude = -117
+        wanna.place.sourceProviderPlaceID = "another-cafe"
+        XCTAssertEqual(
+            VisiblePlaceGrouping.countsByOwner(from: places, currentUserID: joe.id),
+            [joe.id: 2, ryan.id: 1]
+        )
+    }
+
+    func testGroupingIdentifierAliasesPreserveCaseWhitespaceAndUnicodeRules() {
+        let cases: [(String, String?, Set<String>)] = [
+            ("LOCAL_ABC-123", "SERVER_ABC-123", ["id:local_abc-123", "id:server_abc-123"]),
+            ("local_only", nil, ["id:local_only"]),
+            ("  LOCAL\tABC\n", "SERVER\u{00a0}ABC", ["id:local abc", "id:server abc"]),
+            ("CAFÉ-ID", "東京-ID", ["id:café-id", "id:東京-id"]),
+            ("  \t", "", [])
+        ]
+        for (localID, serverID, expected) in cases {
+            let place = LocalPlace(
+                localID: localID, serverID: serverID, canonicalName: "Fixture",
+                category: "coffee", latitude: 0, longitude: 0, sourceProvider: "mapkit"
+            )
+            let identifiers = VisiblePlaceGrouping.groupingAliases(for: place)
+                .filter { $0.hasPrefix("id:") }
+            XCTAssertEqual(identifiers, expected)
+        }
+    }
+
+    func testGroupingASCIIFastPathMatchesLocaleAwareNormalization() {
+        let samples: [String?] = [
+            nil, "", "Realistic place 001", "Los Angeles", "US", "CA",
+            "  Main St. #42\t\n", "Istanbul I IKEA", "Café Déjà-Vu!",
+            "İstanbul", "I\u{307}", "Straße", "東京", "42 Rue-de l’Été"
+        ]
+        for localeID in ["en_US", "tr_TR", "az_AZ", "lt_LT"] {
+            let locale = Locale(identifier: localeID)
+            for sample in samples {
+                let expected = (sample ?? "")
+                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: locale)
+                    .lowercased()
+                    .components(separatedBy: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789").inverted)
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+                XCTAssertEqual(
+                    VisiblePlaceGrouping.normalizedText(sample, locale: locale), expected,
+                    "Grouping must preserve existing normalization for \(localeID): \(sample ?? "nil")"
+                )
+            }
+        }
+    }
+
     func testGroupsLegacyAndCanonicalHotchkissAddressesIntoOnePin() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

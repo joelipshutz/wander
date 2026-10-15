@@ -1,11 +1,16 @@
 import Combine
 import Photos
 import UIKit
+import UniformTypeIdentifiers
 import XCTest
 @testable import Wander
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    // These barriers order suspended mock reads; they are not product latency
+    // budgets. Allow shared runners to schedule the task before asserting state.
+    private let activityReadSynchronizationTimeout: TimeInterval = 10
+
     func testPhotoViewerAccessPublishesOnlyTheExactResolvedContext() {
         let scope = photoViewerScope()
         let context = photoViewerContext()
@@ -635,6 +640,61 @@ final class ActivityEngagementTests: XCTestCase {
             XCTAssertEqual(image.cgImage?.height, Int(format.size.height * 3))
             XCTAssertNotNil(image.pngData())
         }
+    }
+
+    func testNativeLinkTitleIncludesContextForEveryShareKind() {
+        let variants: [(ShareCardContent.Kind, String)] = [
+            (.profile, "Discover Ryan’s world"),
+            (.map, "Favorites · Ryan’s saved map · 4 places"),
+            (.list, "Favorites · 4 places · Curated by Ryan"),
+            (.place, "Favorites · French restaurant"),
+            (.checkIn, "Ryan checked in · Favorites"),
+            (.wanna, "Ryan wants to go · Favorites · On Ryan’s radar"),
+            (.invitation, "Build this list with Ryan · Favorites"),
+        ]
+        for (kind, expected) in variants {
+            let card = ShareCardContent(kind: kind, name: "Favorites", ownerName: "Ryan Lieblein",
+                                        detail: "French restaurant", count: 4)
+            XCTAssertEqual(card.linkTitle, expected, kind.rawValue)
+        }
+        XCTAssertEqual(ShareCardContent(kind: .place, name: "  Cafe  ", detail: " \n").linkTitle, "Cafe")
+        let long = ShareCardContent(kind: .place, name: String(repeating: "🌎", count: 501))
+        XCTAssertEqual(long.linkTitle.utf16.count, 500)
+    }
+
+    func testLinkArtworkHasNoBakedInTitleOrFooter() throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 390, height: 238)).image {
+            UIColor.systemBlue.setFill()
+            $0.fill(CGRect(x: 0, y: 0, width: 390, height: 238))
+        }
+        let images = ShareCardImages(photos: [photo])
+        let first = try XCTUnwrap(ShareCardRenderer.render(
+            ShareCardContent(kind: .place, name: "First place", detail: "Restaurant"), images: images))
+        let second = try XCTUnwrap(ShareCardRenderer.render(
+            ShareCardContent(kind: .place, name: "Different place", detail: "Cafe"), images: images))
+        XCTAssertEqual(first.cgImage?.width, 1170)
+        XCTAssertEqual(first.cgImage?.height, 714)
+        XCTAssertEqual(first.pngData(), second.pngData(), "Messages renders the text in its native caption")
+    }
+
+    func testSocialPasteboardPreservesManualLinkAlongsideProviderImage() throws {
+        let pasteboard = UIPasteboard.withUniqueName()
+        defer { UIPasteboard.remove(withName: pasteboard.name) }
+        let url = try XCTUnwrap(URL(string: "https://getrec.me/cards/places/sample?card=abc"))
+        for key in ["com.instagram.sharedSticker.backgroundImage", "com.snapchat.creativekit.backgroundImage"] {
+            let imageData = Data([1, 2, 3])
+            ActivitySharePasteboard.copyLink(url, providerPayload: [key: imageData], to: pasteboard)
+            XCTAssertEqual(pasteboard.url, url)
+            XCTAssertEqual(pasteboard.string, url.absoluteString)
+            XCTAssertEqual(pasteboard.items.count, 1)
+            XCTAssertEqual(pasteboard.data(forPasteboardType: key), imageData)
+        }
+        // A later share replaces the previous link and provider payload together.
+        let next = try XCTUnwrap(URL(string: "https://getrec.me/profiles/user_fixture"))
+        ActivitySharePasteboard.copyLink(next, to: pasteboard)
+        XCTAssertEqual(pasteboard.url, next)
+        XCTAssertEqual(pasteboard.string, next.absoluteString)
+        XCTAssertNil(pasteboard.data(forPasteboardType: "com.snapchat.creativekit.backgroundImage"))
     }
 
     func testListCollageUsesSecondPlaceOnlyWhenAtLeastTwoPlacesExist() throws {
@@ -1575,7 +1635,7 @@ final class ActivityEngagementTests: XCTestCase {
             let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertFalse(auth.isSessionValidated)
         XCTAssertEqual(repository.activityRequestCount, 1, "Only the earlier cache-seeding read may run")
         XCTAssertNil(store.activityEngagementError(for: activity.id))
@@ -1612,7 +1672,7 @@ final class ActivityEngagementTests: XCTestCase {
                 backend: WanderBackend(activityEngagementRepository: repository), authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertTrue(repository.placeRequests.isEmpty)
         XCTAssertEqual(repository.activityRequestCount, 0)
         XCTAssertNil(store.activityEngagementError(for: visit))
@@ -1640,14 +1700,14 @@ final class ActivityEngagementTests: XCTestCase {
         let validationStarted = expectation(description: "Foreground validation starts")
         provider.onRefreshStarted = { validationStarted.fulfill() }
         let foreground = Task { await auth.refreshSession() }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         let readStarted = expectation(description: "Comments read enters the shared validation")
         let read = Task { @MainActor in
             readStarted.fulfill()
             return await store.refreshActivityComments(activityID: activityID,
                 backend: WanderBackend(activityEngagementRepository: repository), authSession: auth)
         }
-        await fulfillment(of: [readStarted], timeout: 1)
+        await fulfillment(of: [readStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertEqual(repository.commentsRequestCount, 0)
         XCTAssertNil(store.activityEngagementError(for: activityID))
 
@@ -1677,7 +1737,7 @@ final class ActivityEngagementTests: XCTestCase {
                     await readKind.load(store: store, activityID: activity.id, target: target,
                         backend: WanderBackend(activityEngagementRepository: repository), auth: auth)
                 }
-                await fulfillment(of: [validationStarted], timeout: 1)
+                await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
                 switch interruption {
                 case .cancel:
                     read.cancel()
@@ -1728,7 +1788,7 @@ final class ActivityEngagementTests: XCTestCase {
                 await readKind.load(store: store, activityID: activity.id, target: target,
                     backend: backend, auth: auth)
             }
-            await fulfillment(of: [validationStarted], timeout: 1)
+            await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
             XCTAssertEqual(ActivitySessionReadiness(auth: auth), .validating)
             provider.finishRefresh(as: .offline(AuthSession(userID: store.currentUser.id,
                 displayName: "Viewer", handle: "viewer"), message: "Connection unavailable"))
@@ -1769,7 +1829,7 @@ final class ActivityEngagementTests: XCTestCase {
             let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [validationStarted], timeout: 1)
+        await fulfillment(of: [validationStarted], timeout: activityReadSynchronizationTimeout)
         XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [activity.id])
         provider.finishRefresh()
         let resolved = await read.value
@@ -1798,7 +1858,7 @@ final class ActivityEngagementTests: XCTestCase {
             let resolved = await store.activity(id: activity.id, backend: backend, authSession: auth)
             return resolved?.id
         }
-        await fulfillment(of: [requestStarted], timeout: 1)
+        await fulfillment(of: [requestStarted], timeout: activityReadSynchronizationTimeout)
         auth.beginSessionValidation()
         repository.finishActivity()
         let interrupted = await read.value
@@ -1836,7 +1896,7 @@ final class ActivityEngagementTests: XCTestCase {
         let read = Task { @MainActor in
             await store.refreshActivityComments(activityID: activity.id, backend: backend, authSession: auth)
         }
-        await fulfillment(of: [requestStarted], timeout: 1)
+        await fulfillment(of: [requestStarted], timeout: activityReadSynchronizationTimeout)
         auth.beginSessionValidation()
         repository.finishComments()
         let interrupted = await read.value

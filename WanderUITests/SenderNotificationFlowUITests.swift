@@ -284,7 +284,8 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let validFrame = !surfaceFrame.isEmpty && !surfaceFrame.isNull
                 && surfaceFrame.minX.isFinite && surfaceFrame.minY.isFinite
                 && surfaceFrame.width.isFinite && surfaceFrame.height.isFinite
-            var viewport = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
+            let scrollBounds = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
+            var viewport = scrollBounds
             if !usesEditor { viewport = viewport.intersection(app.frame.insetBy(dx: 0, dy: 100)) }
             for identifier in ["save.submit", "import.save", "map-list-picker.apply"] {
                 let submit = app.buttons[identifier]
@@ -301,11 +302,39 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let up = frame.isEmpty ? !down : frame.midY >= viewport.midY
             if viewport.height > 80 {
                 let origin = app.coordinate(withNormalizedOffset: .zero)
-                // Save cards contain buttons across their content width. Start
-                // in the editor's trailing padding, outside those controls.
-                let touchX = usesEditor ? viewport.maxX : viewport.midX
-                let lower = origin.withOffset(CGVector(dx: touchX, dy: viewport.minY + viewport.height * 0.78))
-                let upper = origin.withOffset(CGVector(dx: touchX, dy: viewport.minY + viewport.height * 0.22))
+                // The editor pads its content by 16pt. Use the midpoint of
+                // that leading padding before viewport insets, then reject any
+                // currently exposed button spanning the native drag path.
+                let touchX = usesEditor ? scrollBounds.minX + 8 : viewport.midX
+                let lowerY = viewport.minY + viewport.height * 0.78
+                let upperY = viewport.minY + viewport.height * 0.22
+                if usesEditor {
+                    let path = CGRect(x: touchX - 1, y: upperY, width: 2, height: lowerY - upperY)
+                    var buttonFrames: [String] = []
+                    var touchesButton = false
+                    for button in editor.buttons.allElementsBoundByIndex where button.exists {
+                        let buttonFrame = button.frame
+                        let finite = !buttonFrame.isNull && !buttonFrame.isInfinite
+                            && buttonFrame.minX.isFinite && buttonFrame.minY.isFinite
+                            && buttonFrame.width.isFinite && buttonFrame.height.isFinite
+                        let intersects = finite && buttonFrame.intersects(path)
+                        buttonFrames.append("\(button.identifier):\(buttonFrame):spans=\(intersects)")
+                        touchesButton = touchesButton || intersects
+                    }
+                    let diagnostic = XCTAttachment(string: "editorFrame=\(surfaceFrame); validFrame=\(validFrame); scrollBounds=\(scrollBounds); viewport=\(viewport); target=\(element.identifier); targetFrame=\(frame); contactX=\(touchX); upperY=\(upperY); lowerY=\(lowerY); up=\(up); buttonFrames=\(buttonFrames.joined(separator: "|"))")
+                    diagnostic.name = "REC589-save-editor-scroll-geometry"
+                    diagnostic.lifetime = .keepAlways
+                    add(diagnostic)
+                    guard validFrame, scrollBounds.width > 16,
+                          touchX.isFinite, touchX > scrollBounds.minX, touchX < scrollBounds.maxX,
+                          !touchesButton else {
+                        capture("save-editor-scroll-corridor-missing")
+                        XCTFail("Expected native scroll input inside the save editor's leading padding and outside its buttons.")
+                        return
+                    }
+                }
+                let lower = origin.withOffset(CGVector(dx: touchX, dy: lowerY))
+                let upper = origin.withOffset(CGVector(dx: touchX, dy: upperY))
                 (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower, withVelocity: .slow, thenHoldForDuration: 0.2)
             } else if up { surface.swipeUp(velocity: .slow) } else { surface.swipeDown(velocity: .slow) }
         }

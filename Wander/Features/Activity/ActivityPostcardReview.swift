@@ -34,7 +34,7 @@ struct ActivityPostcardReviewRoot: View {
             occurredAt: .now,
             note: "A favorite place worth returning to. Bring a friend and take your time.",
             rating: hasLongTitle ? 4 : 5,
-            media: arguments.contains("-WanderFeedPhotoStackNoPhotos") ? [] : Self.fixturePhotos()
+            media: arguments.contains("-WanderFeedPhotoStackNoPhotos") ? [] : ActivityPostcardPhotoUITestFixtures.photos()
         )
     }
 
@@ -92,7 +92,54 @@ struct ActivityPostcardReviewRoot: View {
         var id: String { rawValue }
     }
 
-    private static func fixturePhotos() -> [ActivityEngagementMedia] {
+}
+
+/// Shared app-bundled photos for isolated native postcard reviews only.
+enum ActivityPostcardPhotoUITestFixtures {
+    private struct FixturePhoto: Sendable {
+        let id: String
+        let localAssetRef: String
+        let accessibilityLabel: String
+
+        var media: ActivityEngagementMedia {
+            ActivityEngagementMedia(id: id, localAssetRef: localAssetRef,
+                isPendingLocalCapture: true, accessibilityLabel: accessibilityLabel)
+        }
+    }
+
+    // The lazy cache holds Sendable descriptors, not UIKit images. Normal app
+    // launches never initialize it; all image bytes stay in the app sandbox.
+    private static let preparedPhotos = preparePhotos()
+
+    static func photos() -> [ActivityEngagementMedia] { preparedPhotos.map(\.media) }
+
+    static func isLiveEnabled(arguments: [String]) -> Bool {
+        #if targetEnvironment(simulator)
+        let required: Set<String> = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture", "-WanderLiveFeedPhotosUITest"]
+        let excluded: Set<String> = ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest",
+            "-WanderOnboardingUITestSignedOut", "-WanderFeedPhotoStackUITest",
+            "-WanderUseStorefrontFixtures", "-WanderUsePerformanceFixtures", "-WanderUseEphemeralEmptyFixtures"]
+        let supplied = Set(arguments)
+        return required.isSubset(of: supplied) && excluded.isDisjoint(with: supplied)
+        #else
+        return false
+        #endif
+    }
+
+    static func liveFeedMedia(arguments: [String] = ProcessInfo.processInfo.arguments) -> [FeedMediaPreview] {
+        guard isLiveEnabled(arguments: arguments) else { return [] }
+        return photos().map { FeedMediaPreview(id: $0.id, accessibilityLabel: $0.accessibilityLabel) }
+    }
+
+    static func livePhoto(matching preview: FeedMediaPreview,
+                          arguments: [String] = ProcessInfo.processInfo.arguments) -> ActivityEngagementMedia? {
+        guard isLiveEnabled(arguments: arguments), preview.urlString == nil,
+              preview.storageBucket == nil, preview.storagePath == nil else { return nil }
+        return photos().first { $0.id == preview.id && $0.accessibilityLabel == preview.accessibilityLabel }
+    }
+
+    private static func preparePhotos() -> [FixturePhoto] {
         guard let source = UIImage(named: "PlaceCarouselPhotos")?.cgImage else { return [] }
         let width = source.width / 2
         let height = source.height / 2
@@ -103,9 +150,9 @@ struct ActivityPostcardReviewRoot: View {
                   let id = UUID(uuidString: "64000000-0000-0000-0000-00000000064\(index + 1)"),
                   let localAssetRef = VisitPhotoLocalFileStore.save(data: data, id: id, contentType: "image/jpeg")
             else { return nil }
-            return ActivityEngagementMedia(
+            return FixturePhoto(
                 id: id.uuidString.lowercased(), localAssetRef: localAssetRef,
-                isPendingLocalCapture: true, accessibilityLabel: "Sample check-in photo \(index + 1)"
+                accessibilityLabel: "Sample check-in photo \(index + 1)"
             )
         }
     }

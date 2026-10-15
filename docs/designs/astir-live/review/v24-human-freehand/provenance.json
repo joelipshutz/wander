@@ -1,0 +1,109 @@
+{
+  "budget": {
+    "bytesConvention": "decimal file bytes; repository aggregate limit is5*1024*1024",
+    "existingReviewFileCount": 66,
+    "existingWorkingTreeReviewBytesAgainstFrozenMainParent": 4604874,
+    "frozenMainParent": "37b92a6e2daef1da96c266730b9391f1f2253a9f",
+    "jpegPerFileTargetBytes": 45000,
+    "plannedPackLocalBudgetBytes": 450000,
+    "plannedV25PackIncludingMetadataBudgetBytes": 385000,
+    "projectedEntireReviewChangeBytes": 5084195,
+    "projectedEntireReviewWithin5MiB": true,
+    "projectedPackExceedsCurrent450KBPlan": true,
+    "projectedV25PackPlusSupplementBytes": 479321,
+    "repositoryChangeLimitBytes": 5242880,
+    "supplementalMetadataBytes": 5158,
+    "supplementalTotalBytes": 94321,
+    "workingTreeEstimateNotFinalStagedCIGate": true
+  },
+  "drawContinuityEvidenceLevel": "Human-confirmed sequence, with separately inspected still endpoints.",
+  "files": [
+    {
+      "caption": "Historical V24 manual drawing preview \u2014 large simulator. User-drawn irregular area with Apply available; captured endpoint only, with no V25 execution or independently decoded motion claim.",
+      "contentAlteredBeyondOrdinaryResizeJPEGEncoding": false,
+      "cropApplied": false,
+      "device": "large",
+      "generation": "V24",
+      "independentOriginalAndDerivativeVisualReview": {
+        "completeScreenPreserved": true,
+        "completed": true,
+        "motionSequenceVerified": false,
+        "readableEvidence": [
+          "irregular coral area outline",
+          "Use this area? prompt",
+          "Cancel / Use visible area / Apply controls",
+          "Live / Lists / Profile tabs"
+        ]
+      },
+      "optimized": true,
+      "overlayApplied": false,
+      "progressive": true,
+      "quality": 48,
+      "resampling": "Pillow LANCZOS full-screen resize",
+      "reviewBytes": 44574,
+      "reviewDimensions": [
+        402,
+        874
+      ],
+      "reviewFile": "v24-human-large-irregular-preview.jpg",
+      "reviewSHA256": "473d0d174798edbb2e24f8a1aac785549d4bfc36bebb0f12e78ad22f89a6cdbb",
+      "sourceBytes": 1908151,
+      "sourceDimensions": [
+        1206,
+        2622
+      ],
+      "sourceFile": "v24-human-large-irregular-preview.png",
+      "sourcePreserved": true,
+      "sourceSHA256": "261e2abaa14be940301172e7aa51474ce5b19705c621b9437ff5b284b9201583",
+      "subsampling": "4:2:0"
+    },
+    {
+      "caption": "Historical V24 manual drawing preview \u2014 compact simulator. User-drawn irregular area with Apply available; captured endpoint only, with no V25 execution or independently decoded motion claim.",
+      "contentAlteredBeyondOrdinaryResizeJPEGEncoding": false,
+      "cropApplied": false,
+      "device": "compact",
+      "generation": "V24",
+      "independentOriginalAndDerivativeVisualReview": {
+        "completeScreenPreserved": true,
+        "completed": true,
+        "motionSequenceVerified": false,
+        "readableEvidence": [
+          "irregular coral area outline",
+          "Use this area? prompt",
+          "Cancel / Use visible area / Apply controls",
+          "Live / Lists / Profile tabs"
+        ]
+      },
+      "optimized": true,
+      "overlayApplied": false,
+      "progressive": true,
+      "quality": 53,
+      "resampling": "Pillow LANCZOS full-screen resize",
+      "reviewBytes": 44589,
+      "reviewDimensions": [
+        375,
+        812
+      ],
+      "reviewFile": "v24-human-compact-irregular-preview.jpg",
+      "reviewSHA256": "23d4d68b674be5312a7a5361fd5d19355c20b7065a2e582f4f3384ef4b945ea7",
+      "sourceBytes": 2488498,
+      "sourceDimensions": [
+        1080,
+        2340
+      ],
+      "sourceFile": "v24-human-compact-irregular-preview.png",
+      "sourcePreserved": true,
+      "sourceSHA256": "5fbcf35dd7a2494d5bc2cda0cb71c89121d72f0d4caab59c70fb6c4885fd471d",
+      "subsampling": "4:2:0"
+    }
+  ],
+  "generation": "Historical V24",
+  "independentVideoDecodeClaimed": false,
+  "jpegTotalBytes": 89163,
+  "originalRecordingsRemainInSharedEvidence": true,
+  "recipe": "Deterministic Pillow full-screen resize and JPEG re-encoding only; no crop, overlay or generative transformation.",
+  "schemaVersion": 1,
+  "sourceManualReviewReceipt": "v24-human-freehand-operator-review.json",
+  "sourceScope": "Synthetic simulator manual review before latest-main V25 integration.",
+  "v25ExecutionClaimed": false
+}

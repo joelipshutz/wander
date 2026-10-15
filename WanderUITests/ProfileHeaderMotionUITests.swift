@@ -9,6 +9,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
 
     func testNormalOwnerPinsIdentityAndKeepsNavigationAfterReturning() {
         let app = launch(["-WanderInitialTab", "profile"])
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let settings = app.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 15))
         let name = app.staticTexts["profile.header.name"].firstMatch

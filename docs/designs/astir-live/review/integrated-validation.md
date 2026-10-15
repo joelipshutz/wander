@@ -1,14 +1,130 @@
 # REC-636 integrated validation
 
-October 14, 2026 · Integrated `Wander` app · **Draft; Live remains off**
+October 15, 2026 · Integrated `Wander` app · **V31 targeted 20/20 Passed · fresh published-candidate CI required · Live globally Off**
 
-**Historical V15 native candidate: source commit `362f9418dd0e097d6ab0063017c79cebba34ea50`, integrated with main `bc2fa4d585ceb6fb97858e1c157a2cc43019e982` (build 181).** Current full-suite, CI and backend gate results are maintained in [PR #736](https://github.com/joelipshutz/wander/pull/736) and [REC-636](https://linear.app/recme/issue/REC-636/specify-and-prototype-the-unified-live-map-feed-and-user-journey). The V16 checks below use the frozen V15 binary. This file also preserves completed V12/V13 evidence and its limits; a newer status in the PR does not relabel these historical binaries.
+## Current V31 review gate
 
-**The frozen V13 full run completed with 3,082 of 3,092 tests passing: all 2,808 units and 274 of 284 UI tests, with ten UI failures and no skips. All ten original failures subsequently passed against the unchanged built app.** The failed full result remains part of the record; later focused passes do not replace it. All Live journeys, recovery/privacy, Map input and Feed paging cases passed within the full run. Final focused V13 checks also pass Map accessibility on both sizes, compact Feed paging and both large inbox/thread switcher captures. Actual private-message replay passed separately on both sizes. Consult the PR for the final integrated full-suite and CI results.
+V31 source manifest SHA-256 `d24b93460e9d78c1ea13ce5a6bb5d6c2796e5ee04f884ababf9085ed0ebb488f` identifies the reviewed three-file successor: an actual DEBUG fixture Map viewport between chrome and an exact native city-value assertion. The other 443 Swift files and all 150 build inputs are unchanged from V30. Signed build, bindings, compiled 3,174-case inventory and product seal Passed; prepared receipt `29650ed29098f0390b613f44309f63130dc81109cc75d413be4c307e805f95c4` binds artifact seal `cb7027e9ba1bf0c79672eeb3f46b18c43f427c65ef99ed5f0e03a579df84584f`. Preparation executed no test methods.
 
-This report records candidate provenance for the [review guide](../review-guide.md) and [capture gallery](integrated-captures.md); the linked PR carries the current review gate status. A focused pass establishes the named check, not a passing full suite or hosted readiness.
+**Passed 20/20: nine large and eleven compact, zero failures, skips, expected failures or retries. One native warning remains a warning on the Passed compact saved-search case. Completed 2026-10-15 22:51:05 UTC; terminal receipt `d8be9aa71b13b8af9c0368b6beb121d7a2811a8a4fcc1996bd8455df3c1f5245`**. Root inspected both phones’ six original adaptive screenshots and both two-touch native pinch occurrences per phone: all recorded contact points stay inside the actual Map and measured viewport. The unchanged first-pinch separation, 177-place and final mixed dot/category assertions Passed; no numeric after-separation was invented. This is targeted V31 evidence, not a fresh full V31 native-suite pass or a CI conclusion. The final published-candidate CI disposition, full inventory, ordinary-auth named case and checkout/artifact audit belong in [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and REC-636; repository docs link those current authorities.
 
-## Recovery verification — October 14
+The completed combined-filter case Passed on both phones: Apply gives one Wanna; Cancel preserves the committed values/result; Reset gives two map/Feed results while retaining Only Friends. Seven large originals and seven compact filter originals were inspected. Compact comment originals show rating 4, a sent comment and heart 0→1→0 with activity likes unchanged. Saved Circuit Coffee’s native query/Return and original three-second selected-card/name/no-error assertions Passed on compact; no explicit final Map-card screenshot is available, and no provider-performance claim follows.
+
+Root adaptive review receipts are `06afcf1e…` (large) and `f2590b80…` (compact). Selected-case peer receipts are `be9646b9…` (large filters) and `e0898409…` (compact filters/comment/search). Originals, exact payload/device/case bindings and full receipt hashes remain in shared REC-636 evidence. No ordinary-auth pass follows from these selected fixtures.
+
+The eight-image V28 gallery below retains its own source/products. Backend installation, real-account trials and actual repository storage/payload checks remain separate gates. Historical failures stay preserved and do not invalidate a later independently passing candidate.
+
+## Historical full-native baseline · V28
+
+V28 source manifest `v28-full-native/candidate.json`, SHA-256 `8d6bd5d68a4e702d7f9e791b211f08d6c65ab0f96ccb0494e2279e3f2f300922`, binds 446 Swift files and 150 public build inputs at local head `403407d0c68c8dee37e8c1a06cf468e734adfda1`, integrated main `37b92a6e2daef1da96c266730b9391f1f2253a9f`  / build 184. The manifest identifies the uncommitted tested tree; the commit alone is not candidate identity.
+
+Relative to V26, the reviewed delta is one Live app file and three UI-test files, with 442 other Swift files and all 150 build inputs unchanged. Live adds an opaque appearance-matched backdrop over the actual top safe area without allocating a map/drawer inset or changing camera, drawing coordinates, Profile tools or analytics. The isolated DEBUG embedded-Feed photos, their negative isolation unit and deterministic Plus fixture remain. No historical app byte-equivalence or carried native passes are claimed.
+
+The exact plan requires **3,249 device-case executions**: parent large 3,174 (2,863 units / 311 UI), parent compact 38, Clip large 35 and Clip compact two. Generated Xcode capture defaults, strict `<100 ms` reference, CPU/UI budgets, separate SDK hosts, production replay cadence and every-frame privacy assertions are unchanged. Structured accounting preserves warnings as warnings and every failure as Failed; accounted continuations execute only untouched phases.
+
+| Historical V28 gate | Recorded result / scope |
+| --- | --- |
+| Signed build, bindings/signatures, compiled inventory and seal | **Passed**. Parent build exit 0; product seal `019f0150ad431211ac80351dc1a4cb525985714f9484b233252471599e34723a`; plan `89595ca74b42d5dd6c2e0883c77c0e207154c7f1d4ed5a7cd1b234a0b8dd059e`; prepare receipt `2acc82c4f72db0f427a7c4c125546a2b7921a55f4cbbabcb1561eb944d19e086` |
+| Strict reference and focus | Strict **Passed 1/1**. Each phone's focus **Failed 11 Passed  / 2 Failed**, zero skips/warnings. Strict plus focus totals **23 Passed /4 Failed among 27**. City-return and adaptive native Map zoom failed on both phones; their failures remain Failed |
+| Actual status-strip visual gate | **Passed**: home Light/Dark on both phones and Wanna in a verified appearance on each. Root receipt `d334fd8955e7579cb9a4190af6141ba4f0c88937ce71c06528d7c5cd67bfb5ab` binds all six native originals to these products |
+| Other completed native phases | **Passed**: Plus 1/1 each phone; regular units 2,859/2,859; CPU 2/2; private SDK 1/1; credential SDK 1/1; UI-performance 3/3. Original thresholds and privacy assertions retained |
+| Ordinary auth | **Failed 0/1**. Both launches stayed alive on Clerk recovery UI; the underlying cause remains unresolved. SDK masking and public reachability do not supply a normal-auth pass. The final full parent/App Clip CI (`graphics_only=false`) must provide exact Passed evidence for `WanderUITests/AccountContactDetailsUITests/testNormalAppLaunchReachesLiveAuthentication` in its independent `Parent UI shard 3` under the current inventory, with zero skips/expected failures and matching artifact/device/checkout provenance. That fresh pass is sufficient current auth-entry evidence without proving or relabeling the historical cause; no extra local auth run is required |
+| Completed full V28 accounting | **Failed: 3,242 Passed /7 Failed among 3,249**, all 15 phases accounted, zero skips/expected failures. Ended **2026-10-15 21:52:21 UTC**; terminal receipt `54506736485cc62ece88d12e8a9d14cd3ce53c02ea090effb1a2304c4cc85d52`. The final compact critical 24 and Clip 35+2 all Passed. Parent UI remains **290 Passed  / 2 Failed among 292** with all three complete failure entries retained across comment keyboard and submitted Map search; the summary includes two entries. The complete run retains **21 native warning entries** as warnings (17 in this parent UI phase), counted once after root/action reconciliation |
+| Gallery | Eight inspected selected-case images, **356,119 bytes including metadata**. Both focus aggregates remain Failed; private SDK Passed 1/1. [Gallery](integrated-captures.md) and [manifest](v28/manifest.json) identify exact source/product/case/device and original/derivative hashes |
+
+## Historical targeted successors · V29–V30
+
+| Generation | Recorded result / scope |
+| --- | --- |
+| V29 targeted successor | **Failed 9 Passed  / 2 Failed among 11 on large**, zero skips; compact did not run. Source `01bb13229aeab7f23a51a1159160ba0ef95278c79a2b4738533f8fa83b5f69f0`, seal `eb6c00457fd917a6c3b259d2174acd5a10cd740b0e35f097682988995c0b84b4`, terminal `fb1c3873b84b08acc7b6146f89d0dcfc08302d0e3ede5033af59c454c5359db0`. Category row tap did not turn on its contained native Switch; adaptive fixture crashed on unsupported accessibilityFrameBlock getter before gestures. Both remain Failed. Comment hearts and saved Circuit Coffee passed on large; four inspected comment captures show rating 4, heart 0→1→0 and unchanged activity likes. No saved-Map final screenshot or compact result is claimed |
+| V30 targeted successor | **Failed 7 Passed  / 2 Failed among 9 on large**, zero skips; compact did not run. Source `801c3396c447107b6089bf293cc79f1fcc4ce6aba64ad55b347bc51f405d3030`, seal `6a68d491bcceec3521e2c7389fbe8a6712df8fbb0cbb97356f13d75fe87259b4`, terminal `85d6a92688e89dc2f93eef99e9fc68b41904173373702e1a899ce9d7c2ef4265`. Adaptive fixture failed its measured AX-frame containment assertion before pinching; changing the native accessibility property did not establish a usable XCTest target. Combined filters reached applied one-Wanna map/Feed agreement and Cancel/reopen, then failed an incorrect retained-city label assertion: native label is City center and value is Los Angeles. Reset did not execute. Fresh UI attachment retention alone changed to `keepAlways`; `screenRecording` and original thresholds/outcomes remained |
+
+The Map failure does not establish external-provider latency or cancellation as its cause: the completed event includes the query and Return, and failure AX has the exact query without the software keyboard or selected card. Production search performance is not claimed fixed. The existing deterministic fixture substitutes only external candidates; the two unchanged competing saved/provider ranking cases already Passed and remain in final full CI. The comment failure has absent keyboard and an original contact intersecting native scrollbar geometry; the actual consuming responder is unproved.
+
+Do not label the complete candidate Passed while its current gates remain open. V31 targeted/native-contact proof is complete; final full CI and the ordinary-auth gate remain required; the V28 gallery does not execute the successor DEBUG fixture. Full native validation is required before committing app implementation. Historical failed candidates remain preserved context and do not invalidate a later independently passing candidate.
+
+## Backend and real-account gates
+
+| Gate | Current proof / remaining requirement |
+| --- | --- |
+| SQL package and preinstall hosted verification | **Passed and rolled back on unchanged SQL source**: CLI 2.114.0 metadata 14 exact functions/2 private tables/9 keys/660 probes with global Live false; full smoke including App Clip passed in 56.7 s across 14 rollback transactions. Before/after baselines show zero persisted new contract objects, Live rows or reserved profiles across 64 IDs. No installation |
+| Bounded SQL execution | Use reviewed exports with 5-second lock/60-second statement bounds immediately after every outer BEGIN and before preview DDL. Require rollback and zero COMMITs; do not recommend raw unbounded generated exports |
+| Offline verification tools | Last integrated journal/companion/runner/session receipt: 101/101 (V24). V25 dormant packaging 8/8, parent-regression tooling 4/4 and smoke syntax passed. These do not establish real delivery or native validation. Classifier contracts are separate development-tool checks: warning adapter 12/12 and complete source accounting 11 unique checks |
+| Dormant installation and post-install verification | Outstanding. After required native/SQL gates, recheck confirmed target/history and exact ordered pair, then verify installed migration records/ABI/grants/global Off and complete bounded post-install full smoke |
+| Real two-account verification | Outstanding. Requires designated internal accounts with signed-in test sessions, reviewed project-bound SQL transport, a private fresh journal and pristine synthetic fixture. Delivery/reply/read, idempotency/concurrency, revocation/block/source changes and exact cleanup remain required; ambiguous writes retain an operator gate |
+| Availability | Broader reporting, retention/deletion/export and operational gates remain open. Do not merge, activate, release or message ordinary users |
+
+Hosted receipt `32998e76234906df01f2fad6af4e4963f4a5b16a5afaf5125b0faf62129a99fd`, bounded manifest `08c96fc254b0c6824f1f41740dea80645ac938e073ce81142c945da9a1d8c113` and fresh preinstall baseline `d4a89568418d4bfa14362070d741264fa8ececd9f8cae558dd44c3f146441a0f` bind the existing proof. Neither REC-636 migration is installed. Before final SQL reuse, compare the source set with integrated main: integrating REC-645/REC-646 through main `a0d53b52` changes two regression bodies and adds two prerequisite migrations. Regenerate/re-bound only full pre/post smoke, verify both prerequisite hosted states and refresh hosted proof. The four-path SQL delta changes neither the 446 Swift / 150 native-input set nor workflow definitions; bind the changed final Git/SQL tree separately. The existing baseline/14-function metadata export and REC-636 migration bodies are unchanged; their recorded proof is not a blanket pass for a changed full-smoke package. Keep global `unified_live_v1` Off; both messaging participants need explicit server account approvals. See [implementation drafts](../implementation-drafts/README.md).
+
+## Captures and hands-on scope
+
+The [eight-image app gallery](integrated-captures.md) contains both-size home, compact Wanna, retained Profile Patterns, compact embedded photo 1/3→2/3→Back and the actual offline SDK masking frame. The 10-file pack with corrected README is **356,119 bytes** (333,882 image  / 22,237 metadata), below the 385,000-byte local budget. Manifest `b408112d9d6768c4d406863870f8bc27b740f237527fb04957b6dcff1c769757` binds unchanged image/provenance bytes. Original copy plan `71587e85057b103d1fa4bde5983beb3e7afaf751bd8a58ef4b31387f051d61de` records the initial 356,092-byte pack; the current total includes only a README wording correction. The optional V26 before image is omitted; no original or historical evidence was removed. Every selected native case Passed, while both focus aggregates remain Failed. Root's separate six-original status-strip review passed. These are V28 pixels, not execution proof for the proposed later fixture candidate.
+
+Historical V24 manual evidence remains separate: 94,405 bytes including its corrected README and unchanged provenance and two irregular-preview images; six separately inspected original stills cover preview/committed/invalid endpoints. Apply, pan, tab/detail return, Cancel retention and Clear are human-reported. Recording decode failed before any frame, so no independent continuous-contact/video-motion, current freehand, spoken VoiceOver or hardware claim follows. Stills and fixtures do not establish real delivery, production paging/volume, device-location centering or offline server revalidation.
+
+Enforce actual repository limits of 1 MiB/file and 5 MiB/change against the integrated base/final tree. The gallery's local budget pass is not the repository storage-check result. Raw bundles, recordings, traces and original PNGs remain in shared issue evidence outside Git.
+
+## Remaining sequence
+
+1. Preserve the completed V28 full accounting and its seven Failed executions; do not restart unchanged phases. Use the independent final full-CI named auth case as the current auth-entry gate; do not require historical-cause proof before a valid fresh test or treat SDK/public reachability as sign-in validation.
+2. Preserve V31’s completed 20/20 targeted result and both native-contact reviews with their exact source/product identity. Earlier large-only passes and failed generations keep their original scope; targeted closure does not relabel the historical full V28 suite or replace final full CI.
+3. Finalize the review/gallery/storage/payload, publish the exact candidate and finish fresh checkout/tree-bound CI. Record latest CI conclusions in PR/Linear without an unnecessary docs-only push.
+4. Reconcile final-main SQL/hosted state, then finish authorized dormant installation, bounded post-install verification and designated signed-in internal-account trials. Keep Live globally Off. Review readiness and backend completion are separate conclusions.
+
+## Resume from receipts
+
+Read `v28-last-three-continuation/completed-status.json` and its immutable phase receipts first. The original accounting stops and all seven failures remain preserved. All 3,249 V28 executions are complete; do not restart prepare/focus or repeat unchanged phases. V29/V30 are stopped large-only targeted generations. V31 has completed 20/20 targeted cases; use its immutable terminal/phase receipts and native-contact reviews, not an unchanged rerun or old dispatch commands. Final published-candidate CI conclusions, exact checkout/artifact audit and run links belong in [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and the linked REC-636 record; the repository report links those authorities rather than freezing a queued/running CI conclusion.
+
+```sh
+# Only a completed bundle named by its receipt:
+xcrun xcresulttool get test-results summary --path "$REC636_COMPLETED_RESULT_BUNDLE"
+
+# Offline tools do not execute real trials:
+node --test scripts/rec636-dormant-metadata.test.mjs \
+  scripts/rec636-real-client-verification.test.mjs \
+  scripts/rec636-mutation-journal.test.mjs \
+  scripts/rec636-cleanup-companion.test.mjs \
+  scripts/rec636-real-client-write-runner.test.mjs \
+  scripts/rec636-real-client-session.test.mjs
+
+# After reviewed dormant installation on the confirmed target:
+supabase migration list --linked
+supabase db query --linked --project-ref "$REC636_CONFIRMED_PROJECT_REF" \
+  --file "$REC636_BOUNDED_POSTINSTALL_SMOKE_SQL"
+```
+
+## Historical candidate records
+
+These records belong to their named sources/products. They do not validate V28.
+
+### V26 stopped focus validation and V27 equivalence stop
+
+V26 manifest `d924dddfdfe0008160be130ae66f73e8f1e30e44e7984a9b0074cea35349d27e` built/sealed successfully. Strict reference passed 1/1 at 69/71/62 ms against the unchanged `<100 ms` limit. Large focus was **Failed 11/13**; compact focus **Failed 9/13**, with zero skips/expected failures. Together, only **27 planned executions completed: 21 Passed /six Failed**. The remaining 3,222 did not execute; this is not a full-suite result.
+
+| V26 failed method | Large | Compact | Concrete evidence |
+| --- | --- | --- | --- |
+| Combined filters | Failed | Failed | Native city option exists, but the helper incorrectly requires the parent list itself to be hittable |
+| Pin → Show in Feed | Failed | Failed | Selected-card reveal failed before Show in Feed; native drag corridor/geometry evidence retained |
+| Sender large-text/dark controls | Passed | Failed | Three native reveal drags entered Explore types before silent activation/save; original editor-route guard failed |
+| Adaptive Your Map | Passed | Failed | Native two-finger target resolved to an unoccluded 7×11 region and could not synthesize its gesture |
+
+The embedded Feed photo method passed on both phones, with actual decoded first/second images and Live return inspected. That closes its V26 fixture branch only. The compact accounting stop `failed_case_without_source_assertion` remains preserved separately from the actual native 9/13 result; no failure was hidden or relabeled.
+
+V27 built the three-file UI repair once (build exit 0) but stopped **before all tests** on `app_unit_extension_clip_config_or_other_non_ui_bytes_changed`. The complete 733-path inventory had 34 changed files, including 27 outside the admitted UI delta; literal product equality failed. No composition or native test execution occurred. Its stopped status `7994c9d817cd1421d8c8350b0e008819bb7b750d4900aef5fa548a982c996f8d` and metadata/binary differences remain. Unchanged source is not proof of identical products, and no causal nondeterminism exemption is used. V28 instead requires a new app build and all 3,249 executions fresh.
+
+### V25 baseline and capture-format experiment
+
+Baseline manifest `510bc948d50cd20c8414fdc0a1482900303ec97d70d7235d0fcf12eb18e828ce` completed **Failed: 3,242/3,247 passed**, zero skips/expected failures: all 2,862 units passed; large parent UI 307/311; compact parent 36/37; Clip large 35/35 and compact two/two. The five failed device-case executions are Combined filters on both sizes, large Pin→original Feed comments, strict reference frame budget (103 ms) and voluntary Plus introduction. The native picker, fixed-distance scroll and live-nearby fixture dependencies have concrete test-only repairs; V26 evaluated those attempts and retained its own failures below; none validates V28. Baseline failed bundles and both classification stops are preserved. Nonfatal runtime warnings remain warnings on their actual Passed cases (16 large and four compact entries); they are not extra failed tests.
+
+Both baseline signed builds succeeded before a broad Clip verifier lookup failed. Byte-verified product clones and exact xctestrun bindings/signatures recovered those products without rebuilding. This historical recovery does not establish V26 parent binary equality.
+
+The completed single ordered A/B pair used the same app/unit/UI/framework/resource bytes, changing only UI capture format and keeping retention. Screenshots A **Failed** with 110/145/162 ms gaps; screenRecording B **Passed** with 57/58/77 ms. Both retained strict <100 ms. B had fewer sampled frames and more flagged hitches, so its lower maximum gap is not general smoothness proof. Host cadence and offending callback cost were not measured; capture or app-renderer causation is unproven. All A assertions remain Failed. V26 explicitly preserves the fresh generated Xcode capture default; it does not choose a passing arm or change thresholds. A/B is diagnostic, not V26 signoff.
+
+### V24 signed full suite and later checks
+
+Original V24 full: **Failed, 3,146/3,148 passed** (units 2,845/2,845; UI 301/303; zero skips/expected failures). Sender dark/large controls and adaptive Your Map failed. Isolated ordinary auth/private SDK/credential SDK each passed 1/1; original compact critical checks passed 30/30. Later focused Sender checks passed 14/14 on each size. Other V24 diagnostics retain their own Failed/Passed receipts and UI-harness identities; none relabels the original full result or supplies a V25 pass.
+
+## Recovery verification — October 14 (historical)
 
 Published source was recovered after temporary local storage became unavailable. Original local V16/V17 bundles, logs and unpublished tooling are currently unavailable; their prior counts remain historical observations. Three current-head CI evidence archives were recovered with matching GitHub SHA-256 digests. They are separate from the missing local full-suite result.
 
@@ -27,17 +143,17 @@ V18 compact privacy failed because the local iPhone SE bottom swipe opened Contr
 
 An independent review found that the metadata evaluator needed a restricted catalog search path and rejection of unreviewed executable dependencies before dynamic evaluation. That guard is now in the durable verifier; its hardened rollback preview passes. Definition fingerprints from the reviewed preview supplement the ABI/grant checks before installation.
 
-## V21 current-main integration
+## V21 integration (historical)
 
-Candidate `12eaf3f1d45b52c68470a58fd2d828fb0b9152aa` integrates main `4e2b1222189fab6d2a9757cfdf808a18933e3f7e`, including REC-641 Feed ratings/attached-save photos and REC-642 notification session readiness. The frozen record covers 425 tracked Swift files and 22 build/configuration inputs. This is a new app candidate; V18/V20 passes above do not validate it.
+Candidate `12eaf3f1d45b52c68470a58fd2d828fb0b9152aa` integrates main `4e2b1222189fab6d2a9757cfdf808a18933e3f7e`, including REC-641 Feed ratings/attached-save photos and REC-642 notification session readiness. The frozen record covers 425 tracked Swift files and 22 build/configuration inputs. The V18/V20 results above did not validate that candidate.
 
-Build-for-testing passed. All **2,828 included unit tests passed**, including the unchanged search p95 and high-data performance budgets. The full large-phone UI run remains active; isolated actual-SDK private/credential replays and compact Live/Feed/privacy validation are queued in separate processes. No passing full native or fresh CI gate is claimed yet.
+Build-for-testing passed. The finalized large full suite passed **3,115/3,115**, including **2,828 units** and the unchanged performance budgets. Separate private and credential SDK replays each passed **1/1**. Compact Live/Feed/privacy completed **Failed, 21/23**, with the private-demo and Settings guide cases failing. No result is still running or queued. These historical results do not validate V25.
 
 The replay merge retains every private-frame OCR and loaded-control assertion, callback/decode diagnostics and production one-second cadence. Credential replay adopts upstream's independently rendered native baseline before SDK activation, plain-view layout pulse, separate activation/capture deadlines and original pixel checks. Typeahead preserves selection/action/deletion assertions and adds exact-value readiness. Workflow coverage is the union of upstream and Live/privacy cases.
 
 Upstream workflows exclude two hosted wall-clock benchmarks while keeping their deterministic contracts. Their original local limits remain required and passed within V21's unit suite. A future green hosted workflow does not itself prove those performance budgets.
 
-Draft PR #736 publishes native candidate `12eaf3f1d`; fresh Feed and Privacy CI are queued. The durable mutation journal, scoped cleanup companion and bounded runner now pass **91/91 offline checks**, with zero skips. Independent review confirms that ambiguous transport remains blocked even if journal annotation fails, concurrent branches drain before cleanup, and repeated cleanup verifies original logical row identities. The companion metadata preview passed all 24 exact function/trigger contracts and client-grant checks in a single rolled-back transaction; before/after baselines contain zero new contract objects, Live flag rows or reserved profiles. Account-specific rollback trials and real delivery remain unexecuted. The existing preflight remains read-only, and the new runner requires a verified programmatic adapter, designated internal accounts and signed-in sessions. No new migration is installed, and Live remains globally Off.
+The subsequently published `12eee34d18556f01f58d2809035c1db24061eba7` has preserved red [Feed CI](https://github.com/joelipshutz/wander/actions/runs/38623416809) and [Privacy CI](https://github.com/joelipshutz/wander/actions/runs/38623416814). They remain Failed, not queued current checks. At that checkpoint, the durable mutation journal, scoped cleanup companion and bounded runner passed **91/91 offline checks**, with zero skips. Independent review confirms that ambiguous transport remains blocked even if journal annotation fails, concurrent branches drain before cleanup, and repeated cleanup verifies original logical row identities. The companion metadata preview passed all 24 exact function/trigger contracts and client-grant checks in a single rolled-back transaction; before/after baselines contain zero new contract objects, Live flag rows or reserved profiles. Account-specific rollback trials and real delivery remain unexecuted. The existing preflight remains read-only, and the new runner requires a verified programmatic adapter, designated internal accounts and signed-in sessions. No new migration is installed, and Live remains globally Off.
 
 ## Historical V15/V16 evidence
 
@@ -51,7 +167,7 @@ Draft PR #736 publishes native candidate `12eaf3f1d`; fresh Feed and Privacy CI 
 - The ordered [SQL migrations](../implementation-drafts/README.md) are packaged with executable bodies matching the reviewed drafts. Both targeted rollback-only previews passed. Live initially exposed fixture contamination from automatic signup follows; isolating only the exact synthetic accounts fixed both original regression sections without changing production SQL or assertions. Independent review confirms that scope. Rollback verification found no new tables, RPCs, flag rows or fixture profiles. The first broader smoke preview failed an existing notification-copy assertion; the unchanged notification test also failed without Live. [REC-638 / PR #741](https://github.com/joelipshutz/wander/pull/741) restores already-deployed migration source and corrects three expected strings without changing security assertions. Its full existing-schema hosted smoke passes. The Live candidate includes the correction, and the complete linked Live preview also passes with both new migrations. Preview mode omits the paid-import ledger suite by the existing runner rule; that suite was included in the passing existing-schema run and remains required post-install. No new messaging tables or public inbox/Live RPCs persisted. Neither new migration is installed.
 - The additional rolled-back metadata preview passed all 14 exact function definition/security/ABI checks, two private-table RLS/grant checks, nine registered flag keys and 660 key/type/range cases. The global Live flag remained Boolean Off inside the preview. Baseline checks before and after confirm no new contract objects, Live flag rows or any of the 64 reserved fixture profiles persist. This is preview evidence; post-install verification and real-client behavior remain required.
 - Xcode handoff is verified: the isolated worktree project is open, Branch Chooser shows `codex/live-experience-review`, and the selected scheme is **Live Experience Review**. No app was launched by this handoff.
-- V14 full native was interrupted after all 2,808 units passed, during UI timeouts, and result finalization was incomplete. V14 Feed and Privacy CI failed. V15 compilation passed; final full-suite completion and current gate status remain in PR #736 and REC-636.
+- V14 full native was interrupted after all 2,808 units passed, during UI timeouts, and result finalization was incomplete. V14 Feed and Privacy CI failed. V15 compilation passed; later candidate completion belongs to its own receipts in PR #736 and REC-636.
 
 ## Historical candidate checks
 
@@ -111,7 +227,7 @@ Both final phone runs verify no hidden editor, placeholder, icon, Clear, Add or 
 
 V13 completed all scheduled tests, but its ten late UI failures keep that full result red. One appearance test, one Profile alignment test, one Profile header test, all three Profile responsiveness tests, two Share Card tests and two Your Map tests failed. Several nominally short actions took hundreds of seconds, including actions in passing neighboring tests. The adaptive Your Map test additionally reused a pin whose unobstructed gesture frame shrank after zoom. All ten passed unchanged on the same built app in the separate rechecks above. No production or test fix is claimed for these ten cases.
 
-The first recheck's 300-second command-level limit was shorter than the appearance test's earlier passing V6 baseline of 362.647 seconds. Its separate 600-second recheck passed without changing the original five-second appearance assertions. Keep that harness-limit failure distinct from the original full-run failures. The final integration candidate still needs its own full run and CI confirmation.
+The first recheck's 300-second command-level limit was shorter than the appearance test's earlier passing V6 baseline of 362.647 seconds. Its separate 600-second recheck passed without changing the original five-second appearance assertions. Keep that harness-limit failure distinct from the original full-run failures. This historical recheck did not supply a passing full-run result for that candidate.
 
 V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**. The table accounts for all eleven failures. All eleven have subsequent focused passing rechecks and also passed within V13's full run. This is not a passing full-suite result on V12 or V13.
 
@@ -130,34 +246,3 @@ V6 full completed **3,059/3,070 passed**: all **2,788 units** and **271/282 UI**
 | `PersonTypeaheadUITests/testCheckInAndWannaNotesUseTheSamePicker` | **Closed — V7 and V9 pass.** All seven people-picker checks passed V7. |
 
 Recheck bundles: `live-v7-signed-recheck.xcresult` (**2,828/2,834 passed**), `live-v9-focused.xcresult` (**49/53 passed**) and `live-v11-search-return.xcresult` (**2/2 passed**). V7's stale unit source assertion was corrected; V12 all-unit verification passes. V9 passed all 41 walkthrough units, three D9 recovery checks, thread switcher privacy, carousel, both stale-checkpoint destinations and notes. Its four failures were Map accessibility, inbox switcher capture, private-message replay and Feed back-button return; V11 closes the Feed failure.
-
-## Review gates
-
-1. **Final native/CI confirmation:** finish the frozen V21 full native run, separate private/credential replay processes and compact validation, then inspect the current CI results. Historical focused passes do not replace these gates. Preserve failed runs and investigate concrete failures before selecting a focused recheck.
-2. **Candidate record:** verify V21's 425 Swift hashes and 22 build/configuration inputs after validation. Any further native source or integration change requires a new candidate record. Documentation and verification-tool changes do not relabel earlier app binaries or captures.
-3. **Source/CI handoff:** verify the published candidate and required workflow results in the PR before calling step 1 complete.
-4. **Database:** the ordered CLI-generated messaging and Live-query migrations are packaged and their targeted rollback previews pass. Include the verified REC-638 prerequisite, reconcile target/history, install the reviewed pair and pass post-install metadata checks plus full rollback-only hosted smoke. Follow the [packaging instructions](../implementation-drafts/README.md). Missing RPC/schema must fail verification.
-5. **Real messaging:** verify delivery between two mutual accounts, both explicit server account flags, revocation/restoration, hard blocks, context access and same-ID retries before internal activation. Global/device flags cannot enroll participants. Reporting and soft-delete retention/export remain broader-rollout gates.
-6. **Handoff and device review:** the isolated project, branch chooser and **Live Experience Review** scheme are verified; complete outstanding hardware drawing, spoken VoiceOver and production-volume review before claiming those properties.
-
-D11 is settled: **15 minutes per social activity, measured from its monotonic authorized-response receipt**; owner rows are exempt and Profile/legacy cache policy is unchanged. Initial messaging rollout is **internal-only**. Current device-location centering is not implemented; selected-city centers work. Keep `unified_live_v1` default off and the PR in draft. Native fixtures do not establish hosted activation, real delivery or TestFlight readiness.
-
-## Resume commands
-
-Use the restored isolated review worktree and a durable issue evidence directory. Set `REC636_EVIDENCE_DIR` to that directory before running these commands; the former temporary paths are unavailable. Use fresh result paths and record candidate identity for every further run. Private and credential replay must run in separate processes.
-
-```sh
-xcrun xcresulttool get test-results summary \
-  --path "$REC636_EVIDENCE_DIR/v20-unit-and-failure-rechecks.xcresult"
-
-node --test scripts/rec636-dormant-metadata.test.mjs \
-  scripts/rec636-real-client-verification.test.mjs \
-  scripts/rec636-mutation-journal.test.mjs \
-  scripts/rec636-cleanup-companion.test.mjs \
-  scripts/rec636-real-client-write-runner.test.mjs
-
-# After reviewed migrations are installed on the confirmed target:
-supabase migration list --linked
-npm --prefix scripts ci --ignore-scripts
-node scripts/supabase-smoke-test.mjs
-```

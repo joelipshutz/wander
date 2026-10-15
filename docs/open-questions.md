@@ -15,8 +15,8 @@ expansion up to 25 km under existing visibility. These decisions are settled and
 are not waiting for another approval. Local selected-city 5/25 km, loaded
 category/person and 24-hour controls now exist, with fixed bounds advanced by
 Apply or explicit refresh.
-The native query is wired and SQL predicates/cursor binding are prepared; the SQL
-remains unpackaged, undeployed and unexecuted. Current device-location centering
+The native query is wired. The SQL is packaged and its rolled-back previews
+pass; dormant installation and post-install hosted verification remain pending. Current device-location centering
 is not implemented; selected-city centers work. Eligible discovery remains
 distinct work.
 Profile and all non-drawing Your Map tools remain unchanged.
@@ -45,6 +45,18 @@ The [integrated validation report](designs/astir-live/review/integrated-validati
 is the single authority for candidate-specific results and outstanding checks,
 including recovery/rollback and replay privacy. Those implementation and validation
 gates do not reopen the accepted decisions.
+
+## App Clip release evidence (REC-408)
+
+The shared-link scope is decided: native sign-in, profile setup, Save and Join
+run inside the Clip. Signed-device authentication, retained sessions, Save, Join,
+and same-account continuation into the existing full app have passed, as has the
+hosted rollback-only Save RPC validation. Fresh-install Keychain migration,
+provider-specific device-trust behavior, and the published Messages experience
+remain release evidence gaps. Verify any configured MFA/additional-verification
+requirement; the initial Clip reports that case instead of completing a
+second-factor flow.
+See [the implementation and rollout guide](app-clip.md).
 
 ## Activity privacy rollout (REC-590)
 

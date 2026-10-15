@@ -110,7 +110,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
                           identifier: "live.activityTime.fixture-feed-ryan-wanna-noodles"))])
         let selectedCardScroll = app.scrollViews.containing(.staticText,
             identifier: "live.activityTime.fixture-feed-ryan-wanna-noodles").firstMatch
-        reveal(show, in: selectedCardScroll, app: app)
+        reveal(show, in: selectedCardScroll, app: app, leadingPaddingReference: time)
         waitHittable(show)
         show.tap()
         waitDrawer("expanded", in: app)
@@ -152,7 +152,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
     }
 
     func testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn() {
-        let app = launchLive()
+        let app = launchLive(extraArguments: ["-WanderLiveFeedPhotosUITest"])
         expandDrawer(in: app)
         let feed = app.scrollViews["feed.places.scroll"]
         let invite = app.buttons["invite people to Astir"]
@@ -166,6 +166,59 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(physicallyVisible(people, in: feed, app: app))
         XCTAssertLessThan(people.frame.maxY, activity.frame.minY)
         capture("embedded-people-before-activity")
+
+        let card = app.descendants(matching: .any)["feed.activity.fixture-feed-maya-been-bar-nido.postcard"].firstMatch
+        let photos = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.postcard.photos"]
+        reveal(photos, in: feed, app: app)
+        XCTAssertEqual(photos.value as? String, "3 photos")
+        XCTAssertGreaterThanOrEqual(photos.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(photos.frame.height, 44)
+        XCTAssertTrue(card.exists)
+        XCTAssertEqual(feed.value as? String, "5 activities loaded")
+        let drawer = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        let committedDrawerValue = drawer.value as? String
+        XCTAssertNotNil(committedDrawerValue)
+        XCTAssertTrue(committedDrawerValue?.hasPrefix("5 loaded updates.") == true)
+        waitDrawer("expanded", in: app)
+        XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
+        photos.tap()
+
+        let photoBack = app.buttons["activity.photos.back"]
+        let position = app.staticTexts["activity.photos.position"]
+        XCTAssertTrue(photoBack.waitForExistence(timeout: 5))
+        XCTAssertTrue(position.waitForExistence(timeout: 5))
+        XCTAssertEqual(position.label, "1 of 3")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Photo of Sample check-in photo 1"))
+            .firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["activity.photos.unavailable"].exists)
+        XCTAssertFalse(app.staticTexts["Photo unavailable"].exists)
+        XCTAssertFalse(app.buttons["profile.back"].exists)
+        XCTAssertFalse(app.buttons["place-profile.back"].exists)
+        capture("embedded-photo-first")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).press(
+            forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        )
+        let secondPhoto = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "2 of 3"), object: position
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [secondPhoto], timeout: 5), .completed)
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Photo of Sample check-in photo 2"))
+            .firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Photo unavailable"].exists)
+        capture("embedded-photo-second")
+        photoBack.tap()
+        XCTAssertTrue(photoBack.waitForNonExistence(timeout: 5))
+        waitDrawer("expanded", in: app)
+        XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
+        XCTAssertTrue(card.exists)
+        XCTAssertEqual(feed.value as? String, "5 activities loaded")
+        XCTAssertEqual(drawer.value as? String, committedDrawerValue)
+        XCTAssertEqual(photos.value as? String, "3 photos")
+        XCTAssertTrue(physicallyVisible(photos, in: feed, app: app))
+        XCTAssertFalse(app.buttons["profile.back"].exists)
+        XCTAssertFalse(app.buttons["place-profile.back"].exists)
+        capture("embedded-photo-return-to-live")
 
         let actor = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"]
         reveal(actor, in: feed, app: app)
@@ -250,13 +303,14 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("live-after-search-notifications-add-cancel")
     }
 
-    private func launchLive() -> XCUIApplication {
+    private func launchLive(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture",
             "-WanderInitialTab", "discover",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        app.launchArguments += extraArguments
         app.launch()
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)
@@ -388,16 +442,81 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
     }
 
-    private func reveal(_ element: XCUIElement, in scroll: XCUIElement, app: XCUIApplication) {
+    private func reveal(_ element: XCUIElement, in scroll: XCUIElement, app: XCUIApplication,
+                        leadingPaddingReference: XCUIElement? = nil) {
         XCTAssertTrue(scroll.waitForExistence(timeout: 5))
         XCTAssertTrue(element.waitForExistence(timeout: 5))
-        for _ in 0..<10 {
-            if physicallyVisible(element, in: scroll, app: app) { return }
-            // Short vertical drags at the trailing edge avoid the horizontal
-            // recommendation rail, native map and bottom tab targets.
-            scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.75))
-                .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.48)))
+        for attempt in 0..<10 {
+            let exists = element.exists
+            let frame = exists ? element.frame : CGRect.null
+            let finite = !frame.isNull && !frame.isInfinite && !frame.isEmpty
+                && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
+            let hittable = exists && element.isHittable
+            let viewport = scroll.frame.intersection(app.frame)
+            let navigationBottom = app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : app.frame.minY + 60
+            let top = max(viewport.minY + 8, navigationBottom + 8)
+            let bottom = min(viewport.maxY - 8, app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY - 8 : app.frame.maxY - 44)
+            if finite, frame.minY >= top, frame.maxY <= bottom, hittable { return }
+            // A focused card can begin above or below the usable viewport.
+            // Re-sample its geometry before each bounded native drag instead
+            // of continuing upward after passing the requested action.
+            let dragDown = finite && frame.minY < top
+            guard top.isFinite, bottom.isFinite, bottom > top,
+                  viewport.minX.isFinite, viewport.width.isFinite, viewport.width > 0 else {
+                capture("invalid-continuity-scroll-viewport")
+                XCTFail("Expected a finite usable scroll viewport")
+                return
+            }
+            // A small overflow needs a small adjustment. Fixed fast drags can
+            // fling the action past the opposite edge and oscillate forever.
+            let usableHeight: CGFloat = bottom - top
+            let maximumDistance: CGFloat = usableHeight * 0.27
+            let overflow: CGFloat = finite ? (dragDown ? max(0, top - frame.minY) : max(0, frame.maxY - bottom)) : maximumDistance
+            let targetMargin: CGFloat = finite ? frame.height / 2 : 0
+            let distance: CGFloat = min(maximumDistance, overflow + targetMargin)
+            let x: CGFloat
+            if let leadingPaddingReference {
+                guard leadingPaddingReference.exists else {
+                    capture("selected-card-padding-reference-missing")
+                    XCTFail("Expected the selected card content before its native scroll")
+                    return
+                }
+                // selectedPlace has 16pt inner padding. Its timestamp marks the
+                // content edge; the midpoint of that padding avoids both the
+                // card buttons and the native trailing scroll-indicator strip.
+                x = leadingPaddingReference.frame.minX - 8
+            } else {
+                x = viewport.minX + viewport.width * 0.98
+            }
+            let startY: CGFloat = top + usableHeight * (dragDown ? 0.48 : 0.75)
+            let endY: CGFloat = startY + (dragDown ? distance : -distance)
+            if leadingPaddingReference != nil {
+                let path = CGRect(x: x - 1, y: min(startY, endY), width: 2, height: abs(endY - startY))
+                let touchesButton = scroll.buttons.allElementsBoundByIndex.contains { button in
+                    guard button.exists else { return false }
+                    let buttonFrame = button.frame
+                    return !buttonFrame.isNull && !buttonFrame.isInfinite && buttonFrame.intersects(path)
+                }
+                guard x.isFinite, x > viewport.minX, x < viewport.maxX, !touchesButton else {
+                    capture("selected-card-padding-corridor-missing")
+                    XCTFail("Expected a native drag corridor inside selected-card padding and outside its buttons")
+                    return
+                }
+            }
+            let diagnostic = XCTAttachment(string: "attempt=\(attempt + 1); exists=\(exists); hittable=\(hittable); targetFrame=\(frame); finite=\(finite); viewport=\(viewport); usableTop=\(top); usableBottom=\(bottom); direction=\(dragDown ? "down" : "up"); overflow=\(overflow); targetMargin=\(targetMargin); distance=\(distance); contactX=\(x); startY=\(startY); endY=\(endY); velocity=slow; endHold=0.1")
+            diagnostic.name = "REC-636-continuity-reveal-gesture-\(attempt + 1)"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+            // Keep both native contacts inside the usable content and release
+            // after a short stationary hold instead of ending with a flick.
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: x - app.frame.minX, dy: startY - app.frame.minY))
+            let end = origin.withOffset(CGVector(dx: x - app.frame.minX, dy: endY - app.frame.minY))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
+        // The final allowed gesture still gets its normal observation; this
+        // adds no input, delay or visibility exception.
+        if physicallyVisible(element, in: scroll, app: app) { return }
         capture("unreachable-continuity-element")
         XCTFail("Expected fixture target to enter the visible scroll content")
     }
@@ -498,10 +617,19 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app)
         let city = app.buttons["live.filter.city"]
         reveal(city, in: form, direction: .down, app: app)
+        captureCityPickerState("city-picker-before-tap", in: app, observations: [
+            "cityExists=\(city.exists); cityFrame=\(city.frame); cityHittable=\(city.isHittable)"
+        ])
         city.tap()
-        let losAngeles = app.buttons["Los Angeles"]
+        guard let losAngeles = revealNativeCityOption("Los Angeles", in: app) else { return }
         waitHittable(losAngeles)
         losAngeles.tap()
+        let cityNavigation = app.navigationBars["City center"]
+        XCTAssertTrue(cityNavigation.exists)
+        XCTAssertTrue(losAngeles.isSelected)
+        let filtersBack = cityNavigation.buttons["Filters"]
+        XCTAssertTrue(filtersBack.isHittable)
+        filtersBack.tap()
         XCTAssertTrue(app.navigationBars["Filters"].waitForExistence(timeout: 5))
         reveal(app.buttons["25 km"], in: form, direction: .down, app: app)
         app.buttons["25 km"].tap()
@@ -547,7 +675,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         reveal(app.buttons["live.filter.scope"], in: retainedForm, direction: .down, app: app)
         XCTAssertEqual(app.buttons["live.filter.scope"].label, "Scope, Nearby")
         reveal(app.buttons["live.filter.city"], in: retainedForm, direction: .down, app: app)
-        XCTAssertTrue(app.buttons["live.filter.city"].label.contains("Los Angeles"))
+        XCTAssertEqual(app.buttons["live.filter.city"].value as? String, "Los Angeles")
         reveal(app.buttons["25 km"], in: retainedForm, direction: .down, app: app)
         XCTAssertTrue(app.buttons["25 km"].isSelected)
         reveal(app.switches["live.filter.category.restaurants_food"], in: retainedForm, direction: .down, app: app)
@@ -604,7 +732,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication) {
         let handle = drawer(in: app)
-        wait(NSPredicate(format: "label == %@ AND value BEGINSWITH %@", "Activity drawer, \(state)", "\(count) loaded updates."), on: handle)
+        let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
+        wait(NSPredicate(format: "label == %@ AND value BEGINSWITH %@", "Activity drawer, \(state)", loadedCount), on: handle)
     }
 
     private func dragDrawer(_ direction: Direction, to state: String, count: Int, in app: XCUIApplication) {
@@ -675,11 +804,18 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let bottom = min(mapFrame.maxY, drawer(in: app).frame.minY) - 12
         let usable = CGRect(x: mapFrame.minX + 20, y: top, width: mapFrame.width - 40, height: bottom - top)
         XCTAssertTrue(finite(usable) && usable.width > 100 && usable.height > 88)
-        let start = CGPoint(x: usable.minX + usable.width * 0.8, y: usable.maxY - 44)
-        let end = CGPoint(x: usable.minX + usable.width * 0.65, y: start.y)
-        let path = CGRect(x: end.x, y: end.y - 6, width: start.x - end.x, height: 12)
+        let loadedPins = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex
+        let beforeFrames = loadedPins.map { (id: $0.identifier, frame: $0.frame) }
+        XCTAssertTrue(!beforeFrames.isEmpty && beforeFrames.allSatisfy { finite($0.frame) })
+        let pinBounds = beforeFrames.reduce(CGRect.null) { $0.union($1.frame) }
+        // Keep the loaded markers inside the map: a fixed leftward pan can
+        // remove the left-edge Wanna before its displacement can be observed.
+        let movesRight = pinBounds.midX < usable.midX
+        let start = CGPoint(x: usable.minX + usable.width * (movesRight ? 0.65 : 0.8), y: usable.maxY - 44)
+        let end = CGPoint(x: usable.minX + usable.width * (movesRight ? 0.8 : 0.65), y: start.y)
+        let path = CGRect(x: min(start.x, end.x), y: end.y - 6, width: abs(start.x - end.x), height: 12)
         XCTAssertTrue(usable.contains(start) && usable.contains(end))
-        for pin in app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex {
+        for pin in beforeFrames {
             XCTAssertFalse(pin.frame.intersects(path), "The one map pan must start and finish outside the loaded pin controls.")
         }
         let anchor = app.buttons["live.pin.\(anchorID)"]
@@ -687,18 +823,27 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let before = anchor.frame
         XCTAssertTrue(finite(before))
         let zero = app.coordinate(withNormalizedOffset: .zero)
+        let beforeDiagnostic = XCTAttachment(string: "anchorID=\(anchorID); before=\(before); loadedFrames=\(beforeFrames); loadedBounds=\(pinBounds); usable=\(usable); start=\(start); end=\(end)")
+        beforeDiagnostic.name = "REC-636-native-map-pan-before-geometry"
+        beforeDiagnostic.lifetime = .keepAlways
+        add(beforeDiagnostic)
         capture("native-pan-before")
         zero.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
             .press(forDuration: 0.1, thenDragTo: zero.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)))
-        wait(NSPredicate { _, _ in
+        let displacement = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard anchor.exists else { return false }
             let after = anchor.frame
             return self.finite(after) && abs(after.midX - before.midX) > 1
-        })
-        let diagnostic = XCTAttachment(string: "anchorID=\(anchorID); before=\(before); after=\(anchor.frame); usable=\(usable); start=\(start); end=\(end)")
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [displacement], timeout: 5)
+        let afterFrames = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
+            .allElementsBoundByIndex.map { (id: $0.identifier, frame: $0.frame) }
+        let diagnostic = XCTAttachment(string: "anchorID=\(anchorID); before=\(before); anchorExists=\(anchor.exists); loadedFrames=\(afterFrames); usable=\(usable); start=\(start); end=\(end); displacementResult=\(result)")
         diagnostic.name = "REC-636-native-map-pan-geometry"
         diagnostic.lifetime = .keepAlways
         add(diagnostic)
+        capture("native-pan-after")
+        XCTAssertEqual(result, .completed)
     }
 
     private func filterForm(in app: XCUIApplication) -> XCUIElement {
@@ -711,7 +856,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                             direction: Direction = .down, app: XCUIApplication) {
         reveal(picker, in: form, direction: direction, app: app)
         picker.tap()
-        let choice = app.buttons[option]
+        // Native Picker options live in the popup collection; the retained
+        // Live header can expose an identically labeled Nearby button.
+        let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
         waitHittable(choice)
         choice.tap()
     }
@@ -719,7 +866,25 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func setOn(_ toggle: XCUIElement, in form: XCUIElement, app: XCUIApplication) {
         reveal(toggle, in: form, direction: .down, app: app)
         XCTAssertEqual(toggle.value as? String, "0")
-        toggle.tap()
+        // SwiftUI exposes the labeled row as a Switch with a native switch
+        // descendant. The row's center can fall outside the actual control.
+        let nativeSwitches = toggle.switches.allElementsBoundByIndex
+        guard nativeSwitches.count == 1, let nativeSwitch = nativeSwitches.first else {
+            XCTFail("Expected one native switch inside the exact filter row")
+            return
+        }
+        let rowFrame = toggle.frame
+        let nativeFrame = nativeSwitch.frame
+        guard finite(rowFrame), finite(nativeFrame), rowFrame.contains(nativeFrame),
+              nativeSwitch.isEnabled, nativeSwitch.isHittable else {
+            XCTFail("Expected the native filter switch inside the visible row")
+            return
+        }
+        let diagnostic = XCTAttachment(string: "rowID=\(toggle.identifier); rowFrame=\(rowFrame); nativeSwitchFrame=\(nativeFrame); rowValueBefore=\(String(describing: toggle.value))")
+        diagnostic.name = "REC-636-filter-native-switch-target"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        nativeSwitch.tap()
         XCTAssertEqual(toggle.value as? String, "1")
     }
 
@@ -767,6 +932,101 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func wait(_ predicate: NSPredicate, on element: XCUIElement? = nil, timeout: TimeInterval = 5) {
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
+    }
+
+    private func revealNativeCityOption(_ name: String, in app: XCUIApplication) -> XCUIElement? {
+        let navigation = app.navigationBars["City center"]
+        guard navigation.waitForExistence(timeout: 5) else {
+            captureCityPickerState("city-picker-route-missing", in: app, observations: [])
+            XCTFail("Expected the native City center picker before choosing a city")
+            return nil
+        }
+        captureCityPickerState("city-picker-after-tap", in: app, observations: [])
+        for attempt in 0...16 {
+            guard navigation.exists else {
+                captureCityPickerState("city-picker-route-lost", in: app, observations: [])
+                XCTFail("City option reveal must remain in the native City center picker")
+                return nil
+            }
+            // Navigation can retain the offscreen Filters form. Use the unique
+            // native list with a finite on-screen viewport. Its container may
+            // be non-hittable; require the city button itself to be hittable.
+            let lists = app.collectionViews.allElementsBoundByIndex + app.tables.allElementsBoundByIndex
+            let activeLists = lists.filter { list in
+                guard list.exists else { return false }
+                let visible = list.frame.intersection(app.frame)
+                return finite(visible) && visible.width >= 44 && visible.height > 88
+            }
+            guard activeLists.count == 1 else {
+                captureCityPickerState("city-picker-list-unresolved", in: app,
+                    observations: ["activeListCount=\(activeLists.count); attempt=\(attempt + 1)"])
+                XCTFail("Expected one active native city list")
+                return nil
+            }
+            let list = activeLists[0]
+            let listFrame = list.frame.intersection(app.frame)
+            let top = max(listFrame.minY + 8, navigation.frame.maxY + 8)
+            let bottom = listFrame.maxY - 8
+            let viewport = CGRect(x: listFrame.minX, y: top, width: listFrame.width, height: max(0, bottom - top))
+            guard finite(viewport), viewport.width >= 44, viewport.height > 88 else {
+                captureCityPickerState("city-picker-viewport-invalid", in: app,
+                    observations: ["viewport=\(viewport); attempt=\(attempt + 1)"])
+                XCTFail("Expected usable native city-list content below its navigation bar")
+                return nil
+            }
+            let option = list.buttons.matching(NSPredicate(format: "label == %@", name)).element
+            let exists = option.exists
+            let frame = exists ? option.frame : CGRect.null
+            let finiteTarget = finite(frame)
+            let hittable = exists && option.isHittable
+            if finiteTarget, viewport.contains(frame), hittable { return option }
+            // Observe the final drag's outcome without sending a seventeenth.
+            guard attempt < 16 else { break }
+            let dragDown = finiteTarget && frame.minY < viewport.minY
+            let maximumDistance = viewport.height * 0.27
+            let overflow = finiteTarget
+                ? (dragDown ? max(0, viewport.minY - frame.minY) : max(0, frame.maxY - viewport.maxY))
+                : maximumDistance
+            let distance = min(maximumDistance, overflow + (finiteTarget ? frame.height / 2 : 0))
+            let x = viewport.maxX - 8
+            let startY = viewport.minY + viewport.height * (dragDown ? 0.48 : 0.75)
+            let endY = startY + (dragDown ? distance : -distance)
+            let diagnostic = XCTAttachment(string: "attempt=\(attempt + 1); city=\(name); exists=\(exists); targetFrame=\(frame); hittable=\(hittable); viewport=\(viewport); direction=\(dragDown ? "down" : "up"); distance=\(distance); contactX=\(x); startY=\(startY); endY=\(endY)")
+            diagnostic.name = "REC-636-native-city-reveal-gesture-\(attempt + 1)"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: x - app.frame.minX, dy: startY - app.frame.minY))
+            let end = origin.withOffset(CGVector(dx: x - app.frame.minX, dy: endY - app.frame.minY))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        }
+        captureCityPickerState("city-option-unreachable", in: app, observations: ["city=\(name); maxGestures=16"])
+        XCTFail("Expected the explicit city option inside the active native picker viewport")
+        return nil
+    }
+
+    private func captureCityPickerState(_ name: String, in app: XCUIApplication, observations: [String]) {
+        var state = observations + ["sampleRequestedSystemUptime=\(ProcessInfo.processInfo.systemUptime)"]
+        let queries: [(String, XCUIElementQuery)] = [
+            ("navigation-bars", app.navigationBars),
+            ("collection-views", app.collectionViews),
+            ("tables", app.tables),
+            ("Los-Angeles-any-type", app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label == %@", "Los Angeles")))
+        ]
+        for (kind, query) in queries {
+            let matches = query.allElementsBoundByIndex
+            state.append("query=\(kind); count=\(matches.count)")
+            for element in matches.prefix(8) {
+                guard element.exists else {
+                    state.append("query=\(kind); match-disappeared-before-attribute-sample")
+                    continue
+                }
+                state.append("type=\(element.elementType.rawValue); id=\(element.identifier); label=\(element.label); frame=\(element.frame); enabled=\(element.isEnabled); hittable=\(element.isHittable)")
+            }
+        }
+        state.append("hierarchyRequestedSystemUptime=\(ProcessInfo.processInfo.systemUptime)")
+        captureState(name, in: app, observations: state)
     }
 
     private func captureState(_ name: String, in app: XCUIApplication, observations: [String] = []) {

@@ -98,6 +98,15 @@ final class LiveMapPolicyTests: XCTestCase {
         XCTAssertEqual(LiveActivityPresentation.title(for: wanna), "Wanna")
     }
 
+    func testLiveDrawerCountCopyUsesSingularOnlyForOneUpdate() {
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(0), "0 updates shown")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(1), "1 update shown")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(2), "2 updates shown")
+        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(0), "0 loaded updates")
+        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(1), "1 loaded update")
+        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(2), "2 loaded updates")
+    }
+
     private func point(_ lat: Double, _ lon: Double) -> CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lon)
     }

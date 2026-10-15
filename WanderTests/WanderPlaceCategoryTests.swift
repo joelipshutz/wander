@@ -679,6 +679,22 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     @MainActor
+    func testListSuggestionLimitsPreserveRankingScoresAndReasons() throws {
+        let store = WanderStore(fixtures: WanderFixtures.performanceScale())
+        let list = try XCTUnwrap(store.visiblePlaceLists.first { $0.name == "Realistic list 000" })
+        let all = store.listSuggestions(for: list, limit: 20)
+        XCTAssertGreaterThan(all.count, 5)
+        XCTAssertEqual(Set(all.map { $0.visiblePlace.place.canonicalName }).count, all.count)
+        for limit in [0, 1, 5] {
+            let limited = store.listSuggestions(for: list, limit: limit)
+            let expected = Array(all.prefix(limit))
+            XCTAssertEqual(limited.map(\.id), expected.map(\.id))
+            XCTAssertEqual(limited.map(\.score), expected.map(\.score))
+            XCTAssertEqual(limited.map(\.reason), expected.map(\.reason))
+        }
+    }
+
+    @MainActor
     func testPerformanceFixtureExercisesARealisticHighDataAccountAndReusesCachedProjections() {
         _ = exerciseHighDataAccount()
     }
@@ -874,7 +890,11 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let yourMapInsightsElapsed = CFAbsoluteTimeGetCurrent() - yourMapInsightsStart
 
         print(
-            "[REC391ProfilePerformance] profile_projection_20=\(profileProjectionElapsed) "
+            "[REC391ProfilePerformance] cold_places_and_counts=\(coldProjectionElapsed) "
+                + "list_projection=\(listProjectionElapsed) "
+                + "list_suggestions=\(listSuggestionElapsed) "
+                + "cold_insights=\(insightsElapsed) "
+                + "profile_projection_20=\(profileProjectionElapsed) "
                 + "profile_presenters_20=\(profilePresentationElapsed) "
                 + "in_common_50=\(inCommonElapsed) "
                 + "your_map_dataset_10=\(yourMapDatasetElapsed) "

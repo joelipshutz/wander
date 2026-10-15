@@ -1,8 +1,12 @@
 # Review Astir Live
 
-REC-636 · October 11, 2026 · **Implementation in progress**
+REC-636 · October 15, 2026 · **Implementation in progress**
 
-Review the integrated `Wander` app against the accepted direction. Its map is SwiftUI `Map`/`MapReader`, its drawer embeds the existing Feed, and its pins/filters currently use authorized **loaded** Feed records. Use the [integrated validation report](review/integrated-validation.md) as the single authority for candidate identity, test results, captures and outstanding checks. This guide defines review journeys, not a completion claim; hosted contracts are packaged; installation and full hosted smoke remain outstanding.
+Review the integrated `Wander` app against the accepted direction. Its map is SwiftUI `Map`/`MapReader`, its drawer embeds the existing Feed, and its pins/filters currently use authorized **loaded** Feed records. Use the [integrated validation report](review/integrated-validation.md) as the single authority for candidate identity, test results, captures and outstanding checks. This guide defines review journeys, not a completion claim; current bounded hosted preinstall metadata/full smoke passed; installation, post-install verification and real-account trials remain outstanding.
+
+## Current review checkpoint
+
+Live combines the map with the existing Feed, preserves Profile's Your Map tools, and keeps private conversations separate from notifications. The current review also checks status-bar legibility and the embedded photo journey. The selected native gesture/filter corrections now pass on both phone sizes. Final full CI, its ordinary-auth case and backend/account gates remain; see their actual disposition in PR #736 Checks and REC-636. See the [validation report](review/integrated-validation.md) for the candidate, current results, gallery and outstanding gates.
 
 ## Run the integrated review
 
@@ -32,11 +36,11 @@ The separate `preview/rec-636-live` app, fictional records, simulated actions an
 
 | Item | Current state | Review consequence |
 |---|---|---|
-| Map/Feed | Integrated SwiftUI map and existing embedded Feed; common loaded query/lease projection | Visible count is “N updates shown”; accessibility label is “N loaded updates”. An empty filtered page retains continuation; no complete-area claim |
+| Map/Feed | Integrated SwiftUI map and existing embedded Feed; common loaded query/lease projection | Visible count uses “1 update shown” /“N updates shown”; accessibility uses “1 loaded update” /“N loaded updates”. An empty filtered page retains continuation; no complete-area claim |
 | Drawer | Peek/half/full; tabs visible at every detent; handle drag and VoiceOver adjustable action | No implemented Map pill or count-tap button. Explicitly review the earlier hidden-peek-tabs/Map-pill target against current behavior |
 | Filters | Local selected-city 5/25 km, loaded category/person facets, 24-hour/7-day/30-day/all-time ranges; staged Apply/Cancel/reset, badge and summary | Verify fixed bounds advance only on Apply/explicit refresh, Nearby starts 5 km, drawn area remains independent, tab return preserves committed selection and Reset retains audience |
-| Server-filtered paging | `LiveFeedQuery`, repository and `WanderLocalStore` integration include all accepted query dimensions; [SQL](implementation-drafts/live-feed.sql) remains packaged and rollback-preview tested, but undeployed | Require SQL execution, metadata checks and hosted smoke before hosted completeness claims. Missing RPC must fail visibly |
-| Messaging | Real client repository, ephemeral transport, memory-only state, masked UI and inactive-scene privacy cover; [SQL](implementation-drafts/private-contextual-messages.sql) undeployed draft | Focused actual replay and switcher evidence is in the [validation report](review/integrated-validation.md#focused-v13-privacy-evidence). Internal-only rollout still requires explicit account approval for both mutual participants, hosted revoke/block/context/idempotency tests and real two-account behavior; broad rollout retains operational/retention gates |
+| Server-filtered paging | `LiveFeedQuery`, repository and `WanderLocalStore` integration include all accepted query dimensions; [SQL](implementation-drafts/live-feed.sql) remains packaged and rollback-preview tested, but undeployed | Current bounded preinstall metadata/full smoke pass; installed metadata, post-install smoke and real-client query behavior remain required. Missing RPC must fail visibly |
+| Messaging | Real client repository, ephemeral transport, memory-only state, masked UI and inactive-scene privacy cover; [SQL](implementation-drafts/private-contextual-messages.sql) undeployed draft | Current replay results and historical switcher evidence are separately labeled in the [validation report](review/integrated-validation.md). Internal-only rollout still requires explicit account approval for both mutual participants, hosted revoke/block/context/idempotency tests and real two-account behavior; broad rollout retains operational/retention gates |
 | Invitations | Existing Common Ground composer/sharing/repository reused; mutual-person picker for own Wanna and targeted friend-origin resolution | Verify cold-cache recovery, viewer Been + friend Wanna, save recovery, cancellation and actual invitation result |
 | D9 teaching | Explicit fresh-orientation acknowledgements, read-only ordinary replay, archived-checkpoint Continue/Not now and root recovery routing | Review fresh-account, recovery and rollback journeys against the validation report. Guide is not an anchored spotlight tour |
 | D10 Upcoming / Events | Conditional Upcoming invitations entry and separate max-three sheet reuse the shared recipient inbox; existing eligible Events interest entry remains | Current/future dated matches from the latest 100 received invitations, not all plans/sent invitations. No Event inventory, booking, RSVP or Event-link contract is claimed |
@@ -78,11 +82,13 @@ D2/D3 are accepted decisions, not recommendations awaiting approval. Their commi
 | New account / interrupted upgrade / explicit route / rollback | Explicit intent precedes teaching; captured accounts keep their recovery bridge. Fresh acknowledgements preserve partial progress and refuse changed accounts/unreadable recovery; no real action or lesson is completed |
 | Upcoming invitations → row / View inbox | Separate sheet, max three ascending suggested dates, undated/past excluded, honest latest-100 received scope; wait for physical dismissal before existing recipient/full-inbox route, preserve guarded read transition; account/reset/failure clears or hides stale state |
 | Events entry / later Event discovery | Existing eligibility/interest semantics; no fabricated inventory or RSVP; upcoming Event dates remain separate from past activity |
-| Small/current phone, dark/light, VoiceOver, large text, Reduce Motion | Stacked accessible controls, no clipped chooser/keyboard, safe map attribution and non-drag alternatives |
+| Small/current phone, dark/light, VoiceOver, large text, Reduce Motion | Clear system status text, stacked reachable controls, no clipped chooser/keyboard, safe map attribution and non-drag alternatives |
 
 Still captures do not prove drag/scroll arbitration, routing, authorization, delivery or replay privacy. Record actual build/commit, destination, mode, interaction/command, result and unresolved gaps. Do not relabel old prototype captures as current evidence.
 
 ## Completion and release
+
+Only unmet current gates prevent the corresponding readiness claim. Historical failures stay preserved in the validation report and do not invalidate a later independently passing candidate. Review readiness, dormant installation and real-account verification remain separate conclusions.
 
 Implementation follows freehand Apply/Cancel and account-session drawing retention. Native server paging is integrated; the additive RPC is packaged and still requires reviewed deployment/verification. Production messaging requires real access/delivery/privacy and operational evidence. D9 fresh-orientation semantic acknowledgements and host recovery are integrated; review the candidate’s fresh-account/recovery/rollback results in the validation report before ordinary activation. Archive-before-clear is logical storage ordering, not a filesystem crash-durability claim. D11 is approved for the new Live display lease only; it does not authorize changing shared-cache/Profile behavior. The delegated rollout is internal-only, and current device-location centering is not implemented; selected-city centers work.
 

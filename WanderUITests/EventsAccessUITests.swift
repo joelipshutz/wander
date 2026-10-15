@@ -6,6 +6,7 @@ import XCTest
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs", "-WanderHomeMetroUITest", metro, "-WanderInitialTab", initialTab, "-WanderHomeCitySearchFixtures"]
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 20))
+        dismissStartupNotificationPromptIfNeeded(in: app)
         return app
     }
 

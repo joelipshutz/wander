@@ -32,7 +32,7 @@ final class PostHogAnalyticsClient: AnalyticsClient {
 #if canImport(PostHog)
     private let sdk: PostHogSDK
 
-    init?(configuration: PostHogAnalyticsConfiguration, sdk: PostHogSDK = .shared) {
+    init?(configuration: PostHogAnalyticsConfiguration, sdk: PostHogSDK = .shared, captureReplay: Bool = true) {
         guard let projectToken = configuration.projectToken,
               !projectToken.isEmpty
         else { return nil }
@@ -41,21 +41,22 @@ final class PostHogAnalyticsClient: AnalyticsClient {
 
         let postHogConfig = Self.sdkConfiguration(
             projectToken: projectToken,
-            host: configuration.host
+            host: configuration.host,
+            captureReplay: captureReplay
         )
         sdk.setup(postHogConfig)
     }
 
-    static func sdkConfiguration(projectToken: String, host: String) -> PostHogConfig {
+    static func sdkConfiguration(projectToken: String, host: String, captureReplay: Bool = true) -> PostHogConfig {
         let configuration = PostHogConfig(projectToken: projectToken, host: host)
         configuration.captureApplicationLifecycleEvents = false
         configuration.captureScreenViews = false
         configuration.captureElementInteractions = false
         // Replay needs swizzling even though event autocapture stays disabled.
-        configuration.enableSwizzling = true
-        configuration.sessionReplay = true
-        // Joe approved readable app content and named replay profiles (REC-626).
-        // Secure inputs remain masked by the SDK and explicit auth view masks.
+        configuration.enableSwizzling = captureReplay
+        configuration.sessionReplay = captureReplay
+        // The parent retains its approved readable replay configuration.
+        // The App Clip disables replay entirely through captureReplay.
         configuration.sessionReplayConfig.screenshotMode = true
         configuration.sessionReplayConfig.maskAllTextInputs = false
         configuration.sessionReplayConfig.maskAllImages = false
@@ -96,7 +97,7 @@ final class PostHogAnalyticsClient: AnalyticsClient {
         sdk.reset()
     }
 #else
-    init?(configuration: PostHogAnalyticsConfiguration) {
+    init?(configuration: PostHogAnalyticsConfiguration, captureReplay: Bool = true) {
         return nil
     }
 
