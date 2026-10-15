@@ -20,6 +20,22 @@ extension XCTestCase {
         guard primary.waitForExistence(timeout: 8) else { return }
         XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
         func tapVisibleCenter(_ button: XCUIElement) {
+            // A fresh simulator can expose accessibility elements while their
+            // native window still has an infinite origin and zero size. Asking
+            // isHittable in that state throws before XCTest can poll again.
+            let laidOut = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                let frame = button.frame
+                let window = app.windows.firstMatch.frame
+                return frame.minX.isFinite && frame.minY.isFinite
+                    && frame.width.isFinite && frame.height.isFinite
+                    && !frame.isEmpty && !window.isEmpty
+                    && window.minX.isFinite && window.minY.isFinite
+                    && window.contains(frame)
+            }, object: nil)
+            guard XCTWaiter.wait(for: [laidOut], timeout: 10) == .completed else {
+                XCTFail("The reminder control must finish laying out inside its native window")
+                return
+            }
             let visible = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "hittable == true"), object: button
             )
