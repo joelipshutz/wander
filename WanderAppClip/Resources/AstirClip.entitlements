@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.parent-application-identifiers</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.grayline.wander</string>
+	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>appclips:astirmovement.com</string>
+		<string>appclips:www.astirmovement.com</string>
+		<string>appclips:getrec.me</string>
+	</array>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.grayline.wander.clip</string>
+	</array>
+</dict>
+</plist>

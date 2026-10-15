@@ -290,7 +290,18 @@ final class MapFilterInteractionUITests: XCTestCase {
         )
         let probe = app.descendants(matching: .any)["map.performanceProbe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 3))
-        let populatedProbe = NSPredicate(format: "value CONTAINS %@", "camera=")
+        // The diagnostic view exists before MapKit finishes the initial camera.
+        // Wait for that completion so a gesture cannot consume startup's result.
+        let initialCamera = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "completion="), object: probe
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [initialCamera], timeout: 15), .completed)
+        dismissStartupNotificationPromptIfNeeded(in: app)
+        let previousProbe = probe.value as? String ?? ""
+        let populatedProbe = NSPredicate { _, _ in
+            let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
+            return current != previousProbe && current.contains("camera=")
+        }
         var didMeasurePan = false
         var invocationCount = 0
         let options = XCTMeasureOptions()
@@ -314,9 +325,9 @@ final class MapFilterInteractionUITests: XCTestCase {
             XCTAssertEqual(
                 XCTWaiter.wait(
                     for: [
-                        XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)
+                        XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)
                     ],
-                    timeout: 3
+                    timeout: 10
                 ),
                 .completed
             )
@@ -335,6 +346,17 @@ final class MapFilterInteractionUITests: XCTestCase {
     }
 
     func testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins() {
+        traceDenseMapPanZoom(enforceFrameBudget: true)
+    }
+
+    func testPerformanceFixtureTracesDenseMapPanZoomAndBoundsAnnotationWork() {
+        traceDenseMapPanZoom(enforceFrameBudget: false)
+    }
+
+    // Shared virtualized displays cannot establish a phone's frame cadence.
+    // Both checks exercise the same cameras and annotation-work limits; the
+    // original frame budget remains required on the reference simulator.
+    private func traceDenseMapPanZoom(enforceFrameBudget: Bool) {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -354,6 +376,12 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let probe = app.descendants(matching: .any)["map.performanceProbe"]
         XCTAssertTrue(probe.waitForExistence(timeout: 3))
+        // The diagnostic view exists before MapKit finishes the initial camera.
+        // Wait for that completion so a gesture cannot consume startup's result.
+        let initialCamera = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "completion="), object: probe
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [initialCamera], timeout: 15), .completed)
 
         func metric(_ name: String, in snapshot: String) -> Int? {
             snapshot
@@ -363,22 +391,21 @@ final class MapFilterInteractionUITests: XCTestCase {
         }
 
         func perform(_ label: String, button: XCUIElement) {
-            let previousValue = probe.value as? String ?? ""
+            let previousValue = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             XCTAssertTrue(button.isHittable)
             button.tap()
-            let populatedProbe = NSPredicate(
-                format: "value != %@ AND value CONTAINS %@",
-                previousValue,
-                "camera="
-            )
+            let populatedProbe = NSPredicate { _, _ in
+                let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
+                return current != previousValue && current.contains("camera=")
+            }
             XCTAssertEqual(
                 XCTWaiter.wait(
-                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: probe)],
-                    timeout: 3
+                    for: [XCTNSPredicateExpectation(predicate: populatedProbe, object: nil)],
+                    timeout: 10
                 ),
                 .completed
             )
-            let snapshot = probe.value as? String ?? ""
+            let snapshot = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             print("REC404_MAP_INDIVIDUAL_PIN_TRACE \(label) \(snapshot)")
             XCTAssertLessThanOrEqual(
                 metric("nativeA11yVisits", in: snapshot) ?? .max,
@@ -390,11 +417,13 @@ final class MapFilterInteractionUITests: XCTestCase {
                 200,
                 "The 780-place fixture must stay viewport-buffered inside MapKit"
             )
-            XCTAssertLessThan(
-                metric("maxFrameGapMs", in: snapshot) ?? .max,
-                100,
-                "Dense-map camera animation must not freeze for a visible fraction of a second"
-            )
+            if enforceFrameBudget {
+                XCTAssertLessThan(
+                    metric("maxFrameGapMs", in: snapshot) ?? .max,
+                    100,
+                    "Dense-map camera animation must not freeze for a visible fraction of a second"
+                )
+            }
         }
 
         let zoomOut = app.buttons["map.performanceZoomOut"]
@@ -761,6 +790,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
+        XCTAssertFalse(search.exists, "The hidden native input must leave the accessibility tree")
         XCTAssertFalse(search.isHittable)
         XCTAssertFalse(nearby.isHittable)
         XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
@@ -774,6 +804,8 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
+        XCTAssertTrue(search.waitForExistence(timeout: 2))
+        XCTAssertTrue(search.isHittable)
         XCTAssertTrue(add.waitForExistence(timeout: 2))
         XCTAssertTrue(add.isHittable)
     }

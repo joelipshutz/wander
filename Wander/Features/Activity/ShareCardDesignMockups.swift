@@ -132,7 +132,7 @@ struct ShareCardDesignMockupRoot: View {
 }
 
 @MainActor
-private final class ShareCardMockPreviewRepository: ShareCardPreviewRepository {
+final class ShareCardMockPreviewRepository: ShareCardPreviewRepository {
     private var failsNextAttempt: Bool
 
     init(failsFirstAttempt: Bool) { failsNextAttempt = failsFirstAttempt }

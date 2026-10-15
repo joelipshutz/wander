@@ -829,11 +829,33 @@ enum VisiblePlaceGrouping {
         currentUserID: String,
         onKeysBuilt: (() -> Void)? = nil
     ) -> [VisiblePlaceGroup] {
+        var keysByPlace: [ObjectIdentifier: [String]] = [:]
+        keysByPlace.reserveCapacity(places.count)
+        return groups(from: places, currentUserID: currentUserID,
+                      keysByPlace: &keysByPlace, onKeysBuilt: onKeysBuilt)
+    }
+
+    static func countsByOwner(from places: [VisiblePlace], currentUserID: String) -> [String: Int] {
+        // A physical place can be saved by several owners. Its identity keys
+        // are the same for all of them, but each owner's groups stay separate.
+        // This cache lasts for this read only; mutable models are re-read next time.
+        var keysByPlace: [ObjectIdentifier: [String]] = [:]
+        keysByPlace.reserveCapacity(places.count)
+        return Dictionary(grouping: places, by: \.owner.id).mapValues { ownerPlaces in
+            groups(from: ownerPlaces, currentUserID: currentUserID,
+                   keysByPlace: &keysByPlace, onKeysBuilt: nil).count
+        }
+    }
+
+    private static func groups(
+        from places: [VisiblePlace],
+        currentUserID: String,
+        keysByPlace: inout [ObjectIdentifier: [String]],
+        onKeysBuilt: (() -> Void)?
+    ) -> [VisiblePlaceGroup] {
         // A place can participate in several saves and become the primary of
         // a merged group. Normalize it once for this invocation only: models are
         // mutable, so these keys must never survive into the next grouping pass.
-        var keysByPlace: [ObjectIdentifier: [String]] = [:]
-        keysByPlace.reserveCapacity(places.count)
         func groupingKeys(for visiblePlace: VisiblePlace) -> [String] {
             let identity = ObjectIdentifier(visiblePlace.place)
             if let cached = keysByPlace[identity] { return cached }
@@ -971,12 +993,15 @@ enum VisiblePlaceGrouping {
     }
 
     static func groupingAliases(for place: LocalPlace) -> Set<String> {
-        let identifiers = [place.id, place.localID, place.serverID]
-            .compactMap { $0 }
-            .map(normalizedIdentifier)
-            .filter { !$0.isEmpty }
-            .map { "id:\($0)" }
-        return Set(keys(for: place)).union(identifiers)
+        var aliases = Set(keys(for: place))
+        // `id` is serverID ?? localID, so the stored IDs already cover it.
+        // Build aliases directly instead of normalizing that ID twice and
+        // allocating a new collection for each normalization step.
+        for rawID in [place.localID, place.serverID].compactMap({ $0 }) {
+            let identifier = normalizedIdentifier(rawID)
+            if !identifier.isEmpty { aliases.insert("id:\(identifier)") }
+        }
+        return aliases
     }
 
     static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate) -> Bool {
@@ -1065,9 +1090,35 @@ enum VisiblePlaceGrouping {
         return keys
     }
 
-    private static func normalizedText(_ value: String?) -> String {
-        let folded = (value ?? "")
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+    static func normalizedText(_ value: String?, locale: Locale = .current) -> String {
+        let source = value ?? ""
+        guard !source.isEmpty else { return "" }
+        // Most grouping fields are ASCII. Avoid Foundation's Unicode folding
+        // for those fields, while preserving its locale-specific dotted-I
+        // behavior and the existing normalization of international text.
+        let needsLocalizedI = source.utf8.contains(73)
+            && ["tr", "az"].contains(locale.language.languageCode?.identifier ?? "")
+        if !needsLocalizedI, source.utf8.allSatisfy({ $0 < 128 }) {
+            // Append bytes for the common ASCII path. Repeated Unicode-scalar
+            // mutations rebuild String state for every character in thousands
+            // of list grouping fields, although the output is ASCII by contract.
+            var normalized: [UInt8] = []
+            normalized.reserveCapacity(source.utf8.count)
+            var needsSeparator = false
+            for byte in source.utf8 {
+                let lower = (65...90).contains(byte) ? byte + 32 : byte
+                if (48...57).contains(lower) || (97...122).contains(lower) {
+                    if needsSeparator, !normalized.isEmpty { normalized.append(32) }
+                    normalized.append(lower)
+                    needsSeparator = false
+                } else if !normalized.isEmpty {
+                    needsSeparator = true
+                }
+            }
+            return String(decoding: normalized, as: UTF8.self)
+        }
+        let folded = source
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: locale)
             .lowercased()
         var normalized = String()
         normalized.reserveCapacity(folded.utf8.count)
@@ -1090,7 +1141,13 @@ enum VisiblePlaceGrouping {
     }
 
     private static func normalizedIdentifier(_ value: String?) -> String {
-        (value ?? "")
+        let source = value ?? ""
+        // Provider and local IDs normally contain only non-whitespace ASCII.
+        // Avoid splitting and rebuilding each ID during dense place grouping.
+        if source.utf8.allSatisfy({ $0 > 32 && $0 < 127 }) {
+            return source.lowercased()
+        }
+        return source
             .lowercased()
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")

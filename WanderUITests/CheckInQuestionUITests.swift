@@ -472,9 +472,9 @@ final class CheckInQuestionUITests: XCTestCase {
         let entry = app.descendants(matching: .any)["settings.checkInQuestions"].firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 8))
         reveal(entry, in: app)
-        entry.tap()
+        tapSettledCenter(entry)
         let search = app.textFields["questions.settings.search"]
-        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertTrue(search.waitForExistence(timeout: 20))
         search.tap()
         search.typeText("Volleyball court\n")
         let scope = app.buttons["questions.settings.scope.wellness_fitness:volleyball court"]
@@ -661,8 +661,22 @@ final class CheckInQuestionUITests: XCTestCase {
     private func openCheckIn(in app: XCUIApplication) {
         let action = app.buttons["place-profile.floating-action.checkIn"]
         XCTAssertTrue(action.waitForExistence(timeout: 10))
-        action.tap()
-        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 10))
+        tapSettledCenter(action)
+        XCTAssertTrue(app.scrollViews["save.editorScroll"].waitForExistence(timeout: 20))
+    }
+
+    private func tapSettledCenter(_ element: XCUIElement) {
+        var previousFrame = CGRect.null
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard element.exists, element.isHittable else { return false }
+            let frame = element.frame
+            defer { previousFrame = frame }
+            return !frame.isEmpty && frame == previousFrame
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
+        // The initial sheet/navigation animation may expose accessibility
+        // before the control's final touch location is ready.
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func openCustomize(in app: XCUIApplication) {

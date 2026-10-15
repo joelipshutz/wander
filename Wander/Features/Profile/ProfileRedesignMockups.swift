@@ -1,6 +1,7 @@
 #if DEBUG
 import MapKit
 import SwiftUI
+import UIKit
 
 enum ProfileRedesignMockupPage: String, CaseIterable {
     case ownerProfile
@@ -44,9 +45,43 @@ private struct AdaptiveMapDensityFixture: View {
         NavigationStack {
             YourMapPrototypeScreen(dataset: dataset)
         }
+        .overlay(alignment: .topLeading) {
+            AdaptiveMapFixtureZoomControl()
+                .frame(width: 100, height: 44)
+                .padding(.top, 80)
+                .padding(.leading, 16)
+        }
         .environmentObject(store)
         .environmentObject(backend)
         .astirAdaptiveBrandMode()
+    }
+}
+
+/// Drives the real MKMapView when dense annotation hit regions prevent XCTest
+/// from placing two simultaneous touches. This file is excluded from Release.
+private struct AdaptiveMapFixtureZoomControl: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle("Zoom out", for: .normal)
+        button.accessibilityIdentifier = "yourMap.fixture.zoomOut"
+        button.addAction(UIAction { [weak button] _ in
+            guard let window = button?.window, let map = Self.mapView(in: window) else { return }
+            var region = map.region
+            region.span.latitudeDelta *= 2
+            region.span.longitudeDelta *= 2
+            map.setRegion(region, animated: true)
+        }, for: .touchUpInside)
+        return button
+    }
+
+    func updateUIView(_ view: UIButton, context: Context) {}
+
+    private static func mapView(in view: UIView) -> MKMapView? {
+        if let map = view as? MKMapView { return map }
+        for child in view.subviews {
+            if let map = mapView(in: child) { return map }
+        }
+        return nil
     }
 }
 

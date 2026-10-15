@@ -18,8 +18,10 @@ final class ProfileAlignmentUITests: XCTestCase {
         assertFits(activity, in: screen)
         let initialFrame = activity.frame
         capture("Profile initial alignment")
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.65))
-        start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.40)))
+        // Keep the diagonal predominantly vertical so directional locking
+        // exercises scrolling rather than a near-45-degree rejected gesture.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.75))
+        start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
         assertFits(activity, in: screen)
         XCTAssertEqual(activity.frame.minX, initialFrame.minX, accuracy: 1)
         XCTAssertLessThan(activity.frame.minY, initialFrame.minY, "Vertical scrolling must still work")
@@ -28,6 +30,29 @@ final class ProfileAlignmentUITests: XCTestCase {
         assertFits(activity, in: screen)
         XCTAssertEqual(activity.frame.minX, initialFrame.minX, accuracy: 1)
         capture("Profile after reverse scroll")
+    }
+
+    func testSharedProfileLaunchSurvivesRetiredWalkthrough() {
+        let app = XCUIApplication()
+        let fixtureArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest"
+        ]
+        // Persist an unfinished journey, as a user leaving onboarding would.
+        app.launchArguments = fixtureArguments + [
+            "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs",
+            "-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapMoreFilters"
+        ]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["map.moreFilters.popover"].waitForExistence(timeout: 18))
+        app.terminate()
+
+        // Retiring that journey must not consume the incoming shared profile.
+        app.launchArguments = fixtureArguments + [
+            "-WanderDisableWalkthroughs", "-WanderOpenProfile", "user_maya"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["Back"].firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.otherElements["profile.walkthrough.activitySection"].firstMatch.waitForExistence(timeout: 5))
     }
 
     private func assertFits(_ element: XCUIElement, in screen: CGRect, file: StaticString = #filePath, line: UInt = #line) {

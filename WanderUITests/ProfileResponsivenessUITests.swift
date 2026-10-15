@@ -15,6 +15,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
         measure(metrics: [XCTOSSignpostMetric.scrollingAndDecelerationMetric], options: options) {
             app.terminate()
             app.launch()
+            dismissStartupNotificationPromptIfNeeded(in: app)
             XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 20))
             startMeasuring()
             app.swipeUp(velocity: .fast)
@@ -33,6 +34,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
     func testProfileSharePresentsAndCancelsOnColdAndWarmEntry() {
         let app = application()
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let share = app.buttons["Share profile"]
         XCTAssertTrue(share.waitForExistence(timeout: 20))
         for attempt in 0..<3 {
@@ -59,12 +61,17 @@ final class ProfileResponsivenessUITests: XCTestCase {
     func testSettingsDestinationsAndReturnToScrolledProfile() {
         let app = application()
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
         let settings = app.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 20))
         app.swipeUp()
         for round in 0..<2 {
             let started = Date()
-            settings.tap()
+            XCTAssertTrue(settings.isHittable)
+            // XCTest can choose the bounding box's corner after the pinned
+            // header scrolls. That point lies outside this circular control.
+            // Tap its visible center without retrying or extending readiness.
+            settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             let back = app.buttons["settings.back"]
             XCTAssertTrue(back.waitForExistence(timeout: 3))
             print("PROFILE_SETTINGS round=\(round) entry_seconds=\(Date().timeIntervalSince(started))")
@@ -88,7 +95,18 @@ final class ProfileResponsivenessUITests: XCTestCase {
                 let link = app.descendants(matching: .any).matching(
                     NSPredicate(format: "identifier == %@ OR label == %@", row, row)
                 ).firstMatch
-                for _ in 0..<24 where !link.isHittable { app.swipeUp(velocity: .fast) }
+                let settingsScreen = app.descendants(matching: .any)["settings.screen"].firstMatch
+                // A fast fling can skip a short row and leave it above the
+                // viewport. Scroll toward the actual row without momentum.
+                for _ in 0..<24 {
+                    if link.isHittable { break }
+                    let rowFrame = link.exists ? link.frame : .zero
+                    if !rowFrame.isEmpty, rowFrame.maxY < settingsScreen.frame.midY {
+                        settingsScreen.swipeDown(velocity: .slow)
+                    } else {
+                        settingsScreen.swipeUp(velocity: .slow)
+                    }
+                }
                 XCTAssertTrue(link.isHittable, "Missing Settings destination: \(row)")
                 let start = Date()
                 link.tap()

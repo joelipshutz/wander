@@ -11,7 +11,7 @@ import UIKit
         defer { audio.close() }
         audio.togglePlayback()
         XCTAssertTrue(audio.isPlaying)
-        try await Task.sleep(for: .milliseconds(350))
+        try await waitForPlaybackToAdvance(audio, after: 0)
         audio.togglePlayback()
         let pausedAt = audio.playbackSeconds
         XCTAssertFalse(audio.isPlaying)
@@ -19,7 +19,7 @@ import UIKit
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertEqual(audio.playbackSeconds, pausedAt, accuracy: 0.01)
         audio.togglePlayback()
-        try await Task.sleep(for: .milliseconds(350))
+        try await waitForPlaybackToAdvance(audio, after: pausedAt)
         XCTAssertGreaterThan(audio.playbackSeconds, pausedAt)
         audio.pauseForBackground()
         XCTAssertFalse(audio.isPlaying)
@@ -50,7 +50,9 @@ import UIKit
 
     func testRepeatedBackgroundTransitionsPreserveVoiceAndResumePlayback() async throws {
         let audio = FeedbackAudioRecorder()
-        let note = FeedbackAudioRecorder.silentTestRecording()
+        // Three pauses test lifecycle retention, not an eight-second deadline.
+        // Keep the real player active while a shared VM schedules the observer.
+        let note = FeedbackAudioRecorder.silentTestRecording(seconds: 60)
         audio.attachment = note
         defer { audio.close() }
 
@@ -58,7 +60,7 @@ import UIKit
             let previousPosition = audio.playbackSeconds
             audio.togglePlayback()
             XCTAssertTrue(audio.isPlaying)
-            try await Task.sleep(for: .milliseconds(350))
+            try await waitForPlaybackToAdvance(audio, after: previousPosition)
             audio.pauseForBackground()
             let pausedPosition = audio.playbackSeconds
             XCTAssertFalse(audio.isPlaying)
@@ -79,6 +81,25 @@ import UIKit
         audio.togglePlayback()
         XCTAssertTrue(audio.isPlaying)
         XCTAssertNil(audio.errorMessage)
+    }
+    // Observe real playback progress rather than assuming the simulator's audio
+    // service and main-actor progress monitor always advance within one fixed sleep.
+    private func waitForPlaybackToAdvance(
+        _ audio: FeedbackAudioRecorder,
+        after position: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let clock = ContinuousClock()
+        // Audio service reactivation can take several seconds on a fresh VM.
+        // Still require real progress, a playing player, and no error.
+        let deadline = clock.now.advanced(by: .seconds(10))
+        while audio.isPlaying, audio.playbackSeconds <= position, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(audio.isPlaying, file: file, line: line)
+        XCTAssertNil(audio.errorMessage, file: file, line: line)
+        XCTAssertGreaterThan(audio.playbackSeconds, position, file: file, line: line)
     }
     #endif
 

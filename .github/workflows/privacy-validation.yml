@@ -12,6 +12,7 @@ on:
       - 'WanderTests/WanderPlaceCategoryTests.swift'
       - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
+      - 'scripts/run-parent-regression.py'
       - '.github/workflows/privacy-validation.yml'
   workflow_dispatch:
 
@@ -25,10 +26,11 @@ concurrency:
 jobs:
   native:
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:
+          lfs: true
           persist-credentials: false
       - name: Generate project and select existing simulators
         run: |
@@ -48,6 +50,10 @@ jobs:
                   f.write(variable + '=' + device['udid'] + '\n')
               print('Using', name, device['udid'])
           PY
+      - name: Initialize Pro simulator
+        run: |
+          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$PRO_DEVICE_ID"
       # Wall-clock benchmarks use their controlled reference run; their data/cache
       # contracts still run here. Replay owns global observers and runs separately.
       - name: Unit contracts and privacy layouts on iPhone 17
@@ -64,7 +70,7 @@ jobs:
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Verify replay masking in an isolated process
         if: success() || failure()
         run: >-
@@ -74,7 +80,7 @@ jobs:
           -only-testing:WanderTests/ReplayMaskingTests
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Release Pro simulator and wait for compact startup
         if: success() || failure()
         run: |
@@ -82,6 +88,7 @@ jobs:
             xcrun simctl shutdown "$PRO_DEVICE_ID"
           fi
           xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
       - name: Repeat native screen flows on compact iPhone 16e
         if: success() || failure()
         run: >-
@@ -92,7 +99,7 @@ jobs:
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=NO
+          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export screenshots and test summaries
         if: always()
         run: |
