@@ -214,7 +214,8 @@ final class FeedActivityGroupingUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [secondPhoto], timeout: 5), .completed)
         capture("REC-641-photos-second")
         back.tap()
-        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(back.waitForNonExistence(timeout: 5), "The photo viewer must dismiss before Feed controls are used.")
+        XCTAssertTrue(photos.exists)
         XCTAssertTrue(photos.isHittable)
         XCTAssertFalse(back.exists)
 

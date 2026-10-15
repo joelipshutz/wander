@@ -27,11 +27,15 @@ Deno.test("revoked sources and stale claims never reach APNs or settlement", asy
 });
 
 Deno.test("delivery uses the reauthorized envelope instead of the earlier private claim", async () => {
-  const fresh = { ...claimed, title: "New activity on Astir", body: "Open Astir to view.", data: {} };
+  const fresh = { ...claimed, title: "Ryan checked in", body: "Coffee Place and 2 other places", data: {} };
   let deliveries = 0;
   await processEvent(claimed, null, null, async () => fresh, async (event) => {
     deliveries += 1;
     if (event !== fresh) throw new Error("Delivery used an obsolete envelope");
+    if (event.title !== "Ryan checked in" || event.body !== "Coffee Place and 2 other places") {
+      throw new Error("Authorized personalized copy was replaced before delivery");
+    }
+    if ("note" in event.data) throw new Error("Private payload was restored");
     return { event_id: event.event_id, status: "sent" };
   });
   if (deliveries !== 1) throw new Error("Authorized event was not delivered exactly once");

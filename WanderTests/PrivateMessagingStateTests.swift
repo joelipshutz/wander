@@ -415,6 +415,22 @@ final class PrivateMessagingStateTests: XCTestCase {
     }
 
     #if DEBUG && targetEnvironment(simulator)
+    func testSimulationPreservesTheSelectedParticipantIdentity() async throws {
+        let ryan = PrivateMessageParticipant(id: "user_ryan", displayName: "Ryan", handle: "ryan", avatarURL: nil)
+        let maya = PrivateMessageParticipant(id: "user_maya", displayName: "Maya", handle: "maya", avatarURL: nil)
+        let repository = try XCTUnwrap(PrivateMessageUITestFixtures.make(
+            userID: "user_joe", authenticatedUITest: true, unifiedLiveEnabled: true, participants: [ryan, maya]))
+        let context = PrivateMessageContext(kind: .activity, id: UUID().uuidString, title: "Larchmont Noodles")
+        let first = try await repository.startReply(recipientID: ryan.id, context: context)
+        let other = try await repository.startReply(recipientID: maya.id, context: context)
+        let reopened = try await repository.startReply(recipientID: ryan.id, context: context)
+        XCTAssertEqual(first.participant, ryan)
+        XCTAssertEqual(other.participant, maya)
+        XCTAssertNotEqual(first.id, other.id)
+        XCTAssertEqual(reopened.id, first.id)
+        XCTAssertEqual(reopened.participant, ryan)
+    }
+
     func testSimulationRequiresBothExplicitGatesAndRetainsIdempotency() async throws {
         XCTAssertNil(PrivateMessageUITestFixtures.make(userID: "viewer", authenticatedUITest: false, unifiedLiveEnabled: true))
         XCTAssertNil(PrivateMessageUITestFixtures.make(userID: "viewer", authenticatedUITest: true, unifiedLiveEnabled: false))

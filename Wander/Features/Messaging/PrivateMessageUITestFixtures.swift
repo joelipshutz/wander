@@ -4,9 +4,10 @@ import Foundation
 /// The host supplies its authenticated-UI-test policy and resolved Live flag.
 @MainActor
 enum PrivateMessageUITestFixtures {
-    static func make(userID: String, authenticatedUITest: Bool, unifiedLiveEnabled: Bool) -> (any PrivateMessageRepository)? {
+    static func make(userID: String, authenticatedUITest: Bool, unifiedLiveEnabled: Bool,
+                     participants: [PrivateMessageParticipant] = []) -> (any PrivateMessageRepository)? {
         guard authenticatedUITest, unifiedLiveEnabled else { return nil }
-        return PrivateMessageUITestRepository(userID: userID)
+        return PrivateMessageUITestRepository(userID: userID, participants: participants)
     }
 }
 
@@ -16,12 +17,14 @@ enum PrivateMessageUITestFixtures {
 private final class PrivateMessageUITestRepository: PrivateMessageRepository, PrivateMessageSimulationIdentifying {
     let isSimulation = true
     private let userID: String
+    private let participants: [String: PrivateMessageParticipant]
     private var summaries: [UUID: PrivateConversationSummary] = [:]
     private var history: [UUID: [PrivateMessage]] = [:]
     private let fixtureDate = Date(timeIntervalSince1970: 1_791_590_400)
 
-    init(userID: String) {
+    init(userID: String, participants: [PrivateMessageParticipant]) {
         self.userID = userID
+        self.participants = participants.reduce(into: [:]) { $0[$1.id] = $1 }
         let id = UUID(uuidString: "63600000-0000-0000-0000-000000000010")!
         let participant = PrivateMessageParticipant(id: "private-message-fixture-friend", displayName: "Maya Chen", handle: "maya.demo", avatarURL: nil)
         let body = "That little patio looks lovely. Let’s save it for a sunny afternoon."
@@ -42,7 +45,9 @@ private final class PrivateMessageUITestRepository: PrivateMessageRepository, Pr
     func startReply(recipientID: String, context: PrivateMessageContext) async throws -> PrivateConversationSummary {
         guard recipientID != userID else { throw PrivateMessageError.unavailable }
         if let existing = summaries.values.first(where: { $0.participant.id == recipientID }) { return existing }
-        let summary = PrivateConversationSummary(id: UUID(), participant: .init(id: recipientID, displayName: "Demo friend", handle: "demo.friend", avatarURL: nil),
+        let participant = participants[recipientID]
+            ?? .init(id: recipientID, displayName: "Demo friend", handle: "demo.friend", avatarURL: nil)
+        let summary = PrivateConversationSummary(id: UUID(), participant: participant,
                                                  updatedAt: fixtureDate, unreadCount: 0, lastMessageAt: nil, lastMessagePreview: nil)
         summaries[summary.id] = summary; history[summary.id] = []
         return summary

@@ -8,6 +8,7 @@ import Vision
 final class ReplayMaskingTests: XCTestCase {
     @MainActor
     func testPrivateMessageContentIsMaskedInActualReplayImage() async throws {
+        let captureTimeline = ReplayCaptureTimeline()
         var foregroundScene: UIWindowScene?
         for _ in 0..<100 {
             foregroundScene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -18,6 +19,7 @@ final class ReplayMaskingTests: XCTestCase {
         let scene = try XCTUnwrap(foregroundScene)
         let originalWindow = scene.keyWindow
         let window = ReplayProbeWindow(windowScene: scene)
+        window.captureTimeline = captureTimeline
         window.backgroundColor = .white
         // The SDK can conservatively mask the entire SwiftUI hosting surface
         // on iOS 26. A native sibling proves capture is live without weakening
@@ -39,7 +41,7 @@ final class ReplayMaskingTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true; originalWindow?.makeKeyAndVisible() }
 
-        let frames = ReplayFrameCollector()
+        let frames = ReplayFrameCollector(captureTimeline: captureTimeline)
         let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
         let session = URLSessionConfiguration.ephemeral
         session.protocolClasses = [ReplayOfflineProtocol.self]
@@ -51,18 +53,32 @@ final class ReplayMaskingTests: XCTestCase {
         XCTAssertEqual(config.sessionReplayConfig.throttleDelay, 1.0)
         config.setBeforeSend { event in frames.receive(event); return nil }
         let sdk = PostHogSDK.with(config)
+        captureTimeline.record(.sdkSetupReturned)
         defer { sdk.close() }
         sdk.capture(ReplayFrameCollector.probeEvent)
         XCTAssertEqual(frames.probeCallbackCount, 1, "The offline collector must receive the SDK callback probe.")
-        var layoutPump = ReplayLayoutPump(interval: .seconds(config.sessionReplayConfig.throttleDelay))
+        var layoutPump = ReplayLayoutPump(interval: .seconds(config.sessionReplayConfig.throttleDelay),
+                                          captureTimeline: captureTimeline)
 
         // Require the recorder to produce a frame before creating any private
         // view. Never reset the collector: first presentation is part of the proof.
         var recorderReady = false
         var observedReadyFrameCount = 0
+        var recordedReplayActivation = false
         let readyDeadline = ContinuousClock.now.advanced(by: .seconds(30))
+        captureTimeline.record(.readyGateBegan)
         while ContinuousClock.now < readyDeadline {
-            layoutPump.requestLayoutWhenReady(window: window, frames: frames)
+            // Inactive SDK layouts are discarded. Do not reserve the pump's
+            // delivery/backpressure window until the recorder can receive one.
+            if sdk.isSessionReplayActive() {
+                if !recordedReplayActivation {
+                    captureTimeline.record(.replayFirstActive)
+                    recordedReplayActivation = true
+                }
+                layoutPump.requestLayoutWhenReady(window: window, frames: frames)
+            } else {
+                captureTimeline.record(.readyInactivePoll)
+            }
             try await Task.sleep(for: .milliseconds(100))
             let available = frames.images
             // Re-running Vision on the same image competes with the SDK's
@@ -78,6 +94,7 @@ final class ReplayMaskingTests: XCTestCase {
             }
             if recorderReady { break }
         }
+        captureTimeline.record(.readyGateEnded)
         XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
         guard recorderReady else {
             let diagnostic = XCTAttachment(string: """
@@ -89,6 +106,7 @@ final class ReplayMaskingTests: XCTestCase {
             sdk_style_draws_failed=\(window.failedDraws)
             fixture_frames_delivered=\(frames.imageCount(windowID: window.hash))
             fixture_layout_requests=\(layoutPump.requestCount)
+            \(captureTimeline.diagnostics)
             \(frames.diagnostics)
             """)
             diagnostic.name = "Private replay readiness diagnostics"
@@ -185,6 +203,7 @@ final class ReplayMaskingTests: XCTestCase {
         sdk_style_draws_failed=\(window.failedDraws)
         fixture_frames_delivered=\(frames.imageCount(windowID: window.hash))
         fixture_layout_requests=\(layoutPump.requestCount)
+        \(captureTimeline.diagnostics)
         \(frames.diagnostics)
         """)
         diagnostic.name = "Private replay capture diagnostics"
@@ -377,17 +396,73 @@ private struct ReplayPrivacyFixture: View {
     }
 }
 
+/// Aggregate timings share one monotonic test origin. No event payloads,
+/// image data, view content or absolute timestamps enter these diagnostics.
+private final class ReplayCaptureTimeline: @unchecked Sendable {
+    enum Stage: String, CaseIterable {
+        case sdkSetupReturned = "sdk_setup_returned"
+        case readyGateBegan = "ready_gate_began"
+        case replayFirstActive = "replay_first_active"
+        case readyInactivePoll = "ready_inactive_poll"
+        case readyGateEnded = "ready_gate_ended"
+        case layoutRequest = "layout_request"
+        case nativeReadyDrawBegan = "native_ready_draw_began"
+        case nativeReadyDrawEnded = "native_ready_draw_ended"
+        case nativeLoadedDrawBegan = "native_loaded_draw_began"
+        case nativeLoadedDrawEnded = "native_loaded_draw_ended"
+        case nativeDrawFailed = "native_draw_failed"
+        case snapshotCallback = "snapshot_callback"
+        case decodedImage = "decoded_image"
+    }
+
+    private struct Sample {
+        var count = 0
+        var firstMilliseconds: Int64
+        var lastMilliseconds: Int64
+    }
+
+    private let origin = ContinuousClock.now
+    private let lock = NSLock()
+    private var samples: [Stage: Sample] = [:]
+
+    func record(_ stage: Stage) {
+        lock.lock(); defer { lock.unlock() }
+        let elapsed = origin.duration(to: .now).components
+        let milliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
+        var sample = samples[stage] ?? Sample(firstMilliseconds: milliseconds, lastMilliseconds: milliseconds)
+        sample.count += 1
+        sample.lastMilliseconds = milliseconds
+        samples[stage] = sample
+    }
+
+    var diagnostics: String {
+        lock.lock(); defer { lock.unlock() }
+        return (["capture_clock_origin=test_start", "capture_clock_unit=elapsed_ms"] + Stage.allCases.map { stage in
+            let sample = samples[stage]
+            return "timing_\(stage.rawValue)_count=\(sample?.count ?? 0) "
+                + "first_ms=\(sample.map { String($0.firstMilliseconds) } ?? "none") "
+                + "last_ms=\(sample.map { String($0.lastMilliseconds) } ?? "none")"
+        }).joined(separator: "\n")
+    }
+}
+
 /// Observes the actual native renderer without replacing its result or pixels.
 @MainActor
 private final class ReplayProbeWindow: UIWindow {
     var capturePhase = "ready"
+    var captureTimeline: ReplayCaptureTimeline?
     private(set) var successfulReadyDraws = 0
     private(set) var successfulLoadedDraws = 0
     private(set) var failedDraws = 0
 
     override func drawHierarchy(in rect: CGRect, afterScreenUpdates afterUpdates: Bool) -> Bool {
+        if !afterUpdates {
+            captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawBegan : .nativeReadyDrawBegan)
+        }
         let succeeded = super.drawHierarchy(in: rect, afterScreenUpdates: afterUpdates)
         if !afterUpdates {
+            captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawEnded : .nativeReadyDrawEnded)
+            if !succeeded { captureTimeline?.record(.nativeDrawFailed) }
             if !succeeded { failedDraws += 1 }
             else if capturePhase == "loaded" { successfulLoadedDraws += 1 }
             else { successfulReadyDraws += 1 }
@@ -404,12 +479,16 @@ private final class ReplayProbeWindow: UIWindow {
 @MainActor
 private struct ReplayLayoutPump {
     private let interval: Duration
+    private let captureTimeline: ReplayCaptureTimeline?
     private var nextRequestAt = ContinuousClock.now
     private var retryAt = ContinuousClock.now
     private var deliveredCountAtRequest: Int?
     private(set) var requestCount = 0
 
-    init(interval: Duration) { self.interval = interval }
+    init(interval: Duration, captureTimeline: ReplayCaptureTimeline? = nil) {
+        self.interval = interval
+        self.captureTimeline = captureTimeline
+    }
 
     mutating func requestLayoutWhenReady(window: ReplayProbeWindow, frames: ReplayFrameCollector) {
         let now = ContinuousClock.now
@@ -420,6 +499,7 @@ private struct ReplayLayoutPump {
         nextRequestAt = now.advanced(by: interval)
         retryAt = now.advanced(by: .seconds(10))
         requestCount += 1
+        captureTimeline?.record(.layoutRequest)
         window.rootViewController?.view.setNeedsLayout()
         window.rootViewController?.view.layoutIfNeeded()
         window.layer.setNeedsLayout()
@@ -443,9 +523,15 @@ private final class ReplayFrameCollector: @unchecked Sendable {
     }
 
     private let lock = NSLock()
+    private let captureTimeline: ReplayCaptureTimeline?
     private var counts = Counts()
     private var captured: [UIImage] = []
     private var windowImageCounts: [Int: Int] = [:]
+
+    init(captureTimeline: ReplayCaptureTimeline? = nil) {
+        self.captureTimeline = captureTimeline
+    }
+
     var image: UIImage? { lock.lock(); defer { lock.unlock() }; return captured.last }
     var images: [UIImage] { lock.lock(); defer { lock.unlock() }; return captured }
     var probeCallbackCount: Int { lock.lock(); defer { lock.unlock() }; return counts.probeCallbacks }
@@ -478,6 +564,7 @@ private final class ReplayFrameCollector: @unchecked Sendable {
         record { $0.callbacks += 1 }
         if event.event == Self.probeEvent { record { $0.probeCallbacks += 1 } }
         guard event.event == "$snapshot" else { return }
+        captureTimeline?.record(.snapshotCallback)
         record { $0.snapshotCallbacks += 1 }
         guard let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
         record { $0.snapshotArrays += 1 }
@@ -491,6 +578,7 @@ private final class ReplayFrameCollector: @unchecked Sendable {
                 guard let data = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")) else { continue }
                 record { $0.dataDecodes += 1 }
                 guard let image = UIImage(data: data) else { continue }
+                captureTimeline?.record(.decodedImage)
                 lock.lock()
                 counts.imageDecodes += 1
                 captured.append(image)

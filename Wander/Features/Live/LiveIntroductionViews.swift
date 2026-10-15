@@ -239,12 +239,12 @@ struct LiveIntroductionReplayView: View {
     private func recoveryMessage(_ record: LiveIntroductionMigrationRecord) -> String {
         switch record.recovery {
         case .retained(.saveFlow, _), .retained(.add, _):
-            "A valid saved form keeps its details. If no full form remains, Continue opens Add with the previous place name when available; date, notes and photos are not reconstructed. The original checkpoint remains preserved."
+            "Continue reopens your saved form when it is available. Otherwise, it starts a new save using the previous place name when available. Add the date, notes and photos again."
         case .retainedLesson(.contactInvite): "Your invitation step is optional. Continue with your previous selection; nothing is sent automatically."
         case .retainedLesson(.deviceFeaturesLesson), .retainedLesson(.awaitingDeviceFeaturesLesson): "Review the existing widget and device setup guide. No permission is requested automatically."
         case .retainedLesson(.importLesson): "Open the existing import flow when you are ready. Your imports stay unchanged."
-        case .retained(.listDetail, _), .retained(.listEditor, _): "This older checkpoint has no list ID or editor draft. Continue opens Lists so you can choose the right list; it does not claim the old editor was restored."
-        default: "Return to the existing destination. Some older checkpoints do not contain the ID needed to reopen an exact detail or editor; the recovery screen explains what is available."
+        case .retained(.listDetail, _), .retained(.listEditor, _): "Continue opens Lists so you can choose the list you want to return to."
+        default: "Continue takes you back to the relevant screen so you can pick up where you left off."
         }
     }
 }

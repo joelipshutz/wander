@@ -233,7 +233,11 @@ struct LiveScreen: View {
                 demoMessageRepository = PrivateMessageUITestFixtures.make(
                     userID: store.currentUser.id,
                     authenticatedUITest: ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
-                    unifiedLiveEnabled: ProcessInfo.processInfo.arguments.contains("-WanderUnifiedLiveUITest")
+                    unifiedLiveEnabled: ProcessInfo.processInfo.arguments.contains("-WanderUnifiedLiveUITest"),
+                    participants: store.profiles.map { profile in
+                        PrivateMessageParticipant(id: profile.id, displayName: profile.displayName,
+                                                  handle: profile.handle, avatarURL: profile.avatarURL.flatMap { URL(string: $0) })
+                    }
                 )
             }
             #endif

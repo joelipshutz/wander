@@ -17,13 +17,10 @@ final class YourMapPrototypeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive wide - all 177 places")
 
-        let dot = dots.allElementsBoundByIndex.first {
-            $0.isHittable && $0.frame.minY > 180 && $0.frame.maxY < app.frame.maxY - 180
-        }
-        XCTAssertNotNil(dot)
-        let dotID = dot!.identifier
-        let dotPosition = dot!.frame
-        dot!.tap()
+        let dot = try isolatedInitialDot(in: app, pins: pins)
+        let dotID = dot.identifier
+        let dotPosition = dot.frame
+        dot.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let promoted = pins.matching(identifier: dotID).firstMatch
         expectation(for: NSPredicate(format: "value == %@", "Category pin"), evaluatedWith: promoted)
         waitForExpectations(timeout: 5)
@@ -42,13 +39,10 @@ final class YourMapPrototypeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         capture("REC-573 adaptive close - all category pins including overlaps")
 
-        // XCTest spreads multi-touch events across the target's whole frame.
-        // Use the frontmost selected pin's larger frame so both touches reach
-        // the map and aren't obstructed by coincident pins or overlay controls.
-        let zoomTarget = try XCTUnwrap(pins.allElementsBoundByIndex.filter {
-            $0.isHittable && app.frame.contains($0.frame)
-        }.max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+        // A full-Map native gesture spreads contacts into header/footer chrome.
+        // Reacquire a fully visible native pin canvas before every zoom gesture.
         for _ in 0..<6 {
+            let zoomTarget = try freshZoomOutTarget(in: app, pins: pins)
             zoomTarget.twoFingerTap()
             if dots.count > 0 { break }
         }
@@ -180,6 +174,36 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["yourMap.prototype.countryRow.Unknown country"].exists)
         let card = app.otherElements["yourMap.prototype.citiesCountries"]
         let month = app.otherElements["yourMap.prototype.monthHeatMap"]
+        let patterns = app.scrollViews["yourMap.prototype.patterns"]
+        let picker = app.descendants(matching: .any).matching(identifier: "yourMap.prototype.mode").firstMatch
+        func revealGeographyMetrics() -> Bool {
+            func finite(_ frame: CGRect) -> Bool {
+                !frame.isNull && !frame.isInfinite && !frame.isEmpty
+                    && frame.minY.isFinite && frame.maxY.isFinite && frame.height.isFinite
+            }
+            // Expansion can move the footer and following card beneath the
+            // fixed mode picker on compact phones, even when AX says hittable.
+            for attempt in 0...5 {
+                let top = app.navigationBars.firstMatch.frame.maxY + 8
+                let bottom = picker.frame.minY - 8
+                let cardFrame = card.frame
+                let monthFrame = month.frame
+                let toggleFrame = toggle.frame
+                if finite(cardFrame), finite(monthFrame), finite(toggleFrame),
+                   monthFrame.minY < bottom, toggleFrame.minY > top,
+                   toggleFrame.maxY < bottom, toggle.isHittable {
+                    return true
+                }
+                guard attempt < 5 else { break }
+                let needsDown = finite(toggleFrame) && toggleFrame.minY <= top
+                patterns.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: needsDown ? 0.5 : 0.75))
+                    .press(forDuration: 0.1, thenDragTo: patterns.coordinate(
+                        withNormalizedOffset: CGVector(dx: 0.98, dy: needsDown ? 0.75 : 0.5)))
+            }
+            XCTFail("Geography metrics and toggle must enter usable scroll content")
+            return false
+        }
+        guard revealGeographyMetrics() else { return }
         let collapsedHeight = card.frame.height
         let collapsedGap = month.frame.minY - card.frame.maxY
         capture("REC-417 geography collapsed")
@@ -189,18 +213,20 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertEqual(cityRows.count, 10)
         XCTAssertEqual(countryRows.count, 10)
         XCTAssertEqual(toggle.value as? String, "Expanded")
+        guard revealGeographyMetrics() else { return }
         XCTAssertGreaterThan(card.frame.height, collapsedHeight + 100)
         XCTAssertEqual(month.frame.minY - card.frame.maxY, collapsedGap, accuracy: 2)
         XCTAssertFalse(app.descendants(matching: .any)["yourMap.prototype.cityRow.Berlin"].exists)
         capture("REC-417 geography expanded")
 
-        if !toggle.isHittable { app.swipeUp() }
+        guard revealGeographyMetrics() else { return }
         toggle.tap()
         let collapsed = NSPredicate(format: "value == %@", "Collapsed")
         expectation(for: collapsed, evaluatedWith: toggle)
         waitForExpectations(timeout: 3)
         XCTAssertEqual(cityRows.count, 5)
         XCTAssertEqual(countryRows.count, 5)
+        guard revealGeographyMetrics() else { return }
         XCTAssertEqual(card.frame.height, collapsedHeight, accuracy: 2)
         XCTAssertEqual(month.frame.minY - card.frame.maxY, collapsedGap, accuracy: 2)
         capture("REC-417 geography collapsed again")
@@ -332,6 +358,105 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Save changes"].exists)
         XCTAssertTrue(app.buttons["Delete List"].exists)
         capture("REC-480 Snapshot list editor without duplicate places")
+    }
+
+    private func isolatedInitialDot(in app: XCUIApplication, pins: XCUIElementQuery) throws -> XCUIElement {
+        typealias Pin = (element: XCUIElement, id: String, frame: CGRect, isDot: Bool)
+        typealias Neighbor = (id: String, distance: CGFloat)
+        typealias Candidate = (pin: Pin, nearestID: String, distance: CGFloat)
+        func finiteFrame(_ frame: CGRect) -> Bool {
+            !frame.isNull && !frame.isInfinite && !frame.isEmpty
+                && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
+        }
+        // Keep the original initial-selection bounds. The first selection has
+        // no title offset, so every native canvas center is its marker center.
+        let viewport = app.frame.insetBy(dx: 12, dy: 180)
+        let all: [Pin] = pins.allElementsBoundByIndex.map { element -> Pin in
+            (element, element.identifier, element.frame, element.value as? String == "Map dot")
+        }
+        guard !all.isEmpty, all.allSatisfy({ finiteFrame($0.frame) }) else {
+            capture("REC-573 initial dot has unresolved native geometry")
+            return try XCTUnwrap(nil as XCUIElement?, "Native pin geometry is unavailable for a safe physical dot tap")
+        }
+        var candidates: [Candidate] = []
+        for pin in all {
+            guard pin.isDot, viewport.contains(pin.frame), pin.element.isHittable else { continue }
+            let point = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
+            let others: [Pin] = all.filter { $0.id != pin.id }
+            guard !others.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(point) }) else { continue }
+            var nearest: Neighbor?
+            for other in others {
+                let dx: CGFloat = point.x - other.frame.midX
+                let dy: CGFloat = point.y - other.frame.midY
+                let distance: CGFloat = hypot(dx, dy)
+                if let previous = nearest {
+                    if distance < previous.distance || (distance == previous.distance && other.id < previous.id) {
+                        nearest = (id: other.id, distance: distance)
+                    }
+                } else {
+                    nearest = (id: other.id, distance: distance)
+                }
+            }
+            // Completed native taps pick the nearest marker within 34pt.
+            // >2pt separates the exact center from the source's 0.5pt equal-
+            // distance and 1pt colocated tolerances; 34pt nonoverlap would
+            // incorrectly reject every ordinary dot on this 13pt fixture grid.
+            guard let nearest, nearest.distance > 2 else { continue }
+            candidates.append((pin: pin, nearestID: nearest.id, distance: nearest.distance))
+        }
+        candidates.sort { lhs, rhs in
+            lhs.distance == rhs.distance ? lhs.pin.id < rhs.pin.id : lhs.distance > rhs.distance
+        }
+        if candidates.isEmpty { capture("REC-573 no isolated initial dot center") }
+        let chosen: Candidate = try XCTUnwrap(candidates.first, "Expected one bounded dot with a uniquely nearest physical center")
+        let diagnostic = XCTAttachment(string: "id=\(chosen.pin.id); frame=\(chosen.pin.frame); viewport=\(viewport); nearestID=\(chosen.nearestID); nearestCenterDistance=\(chosen.distance)")
+        diagnostic.name = "REC-573 initial physical dot target"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        return chosen.pin.element
+    }
+
+    private func freshZoomOutTarget(in app: XCUIApplication, pins: XCUIElementQuery) throws -> XCUIElement {
+        typealias Pin = (element: XCUIElement, id: String, frame: CGRect)
+        func finiteFrame(_ frame: CGRect) -> Bool {
+            !frame.isNull && !frame.isInfinite && !frame.isEmpty
+                && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
+        }
+        let headerFrames = [app.navigationBars.firstMatch.frame,
+                            app.buttons["yourMap.snapshot"].frame,
+                            app.buttons["yourMap.prototype.filters"].frame]
+        let modeFrame = app.buttons.matching(identifier: "yourMap.prototype.mode").firstMatch.frame
+        XCTAssertTrue(headerFrames.allSatisfy(finiteFrame) && finiteFrame(modeFrame))
+        let top = try XCTUnwrap(headerFrames.map(\.maxY).max()) + 12
+        let viewport = CGRect(x: app.frame.minX + 12, y: top,
+                              width: app.frame.width - 24, height: modeFrame.minY - 12 - top)
+        XCTAssertTrue(finiteFrame(viewport), "Map controls must leave a usable gesture viewport")
+
+        func snapshot() -> [Pin] {
+            pins.allElementsBoundByIndex.compactMap { element -> Pin? in
+                let frame = element.frame
+                return finiteFrame(frame) ? (element: element, id: element.identifier, frame: frame) : nil
+            }.sorted {
+                if $0.frame.height != $1.frame.height { return $0.frame.height > $1.frame.height }
+                return $0.id < $1.id
+            }
+        }
+        func safe(_ pin: Pin) -> Bool {
+            pin.frame.width >= 44 && pin.frame.height >= 44
+                && viewport.contains(pin.frame.insetBy(dx: -4, dy: -4)) && pin.element.isHittable
+        }
+        // Do not tap to promote a pin: XCTest may choose an empty part of an
+        // annotation canvas and clear the existing selection. Zoom directly on
+        // a freshly resolved, finite and fully bounded native pin canvas.
+        let current = snapshot()
+        let candidate = current.first(where: safe)
+        if candidate == nil { capture("REC-573 no full native zoom-out target") }
+        let target = try XCTUnwrap(candidate, "Expected a hittable full native pin canvas inside the map controls")
+        let diagnostic = XCTAttachment(string: "id=\(target.id); frame=\(target.frame); viewport=\(viewport)")
+        diagnostic.name = "REC-573 fresh native zoom-out target"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        return target.element
     }
 
     private func selectProfileFixturePin(in app: XCUIApplication) {

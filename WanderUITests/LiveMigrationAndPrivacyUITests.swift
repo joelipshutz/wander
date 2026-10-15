@@ -173,7 +173,10 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
     private var baseArguments: [String] {
         ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
          "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture", "-WanderInitialTab", "discover",
-         "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+         "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL",
+         // Notification education has its own UI coverage. Keep this fixture's
+         // initial launch and foreground returns scoped to migration/privacy.
+         "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3"]
     }
 
     private func launchLive(extras: [String] = []) -> XCUIApplication {
@@ -221,11 +224,6 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
     private func dismissUpsellIfPresent(in app: XCUIApplication) {
         if app.buttons["productUpsell.secondary"].waitForExistence(timeout: 3) {
             app.buttons["productUpsell.secondary"].tap()
-        } else if app.buttons["productUpsell.primary"].exists {
-            app.buttons["productUpsell.primary"].tap()
-            let deny = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons
-                .matching(NSPredicate(format: "label BEGINSWITH %@", "Don")).firstMatch
-            if deny.waitForExistence(timeout: 5) { deny.tap() }
         }
     }
 

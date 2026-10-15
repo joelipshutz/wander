@@ -152,6 +152,8 @@ final class LiveExperienceUITests: XCTestCase {
         let composer = app.textFields["messaging.composer"]
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Larchmont Noodles"].exists)
+        XCTAssertTrue(app.staticTexts["Ryan"].waitForExistence(timeout: 5), "The private reply must retain the selected activity’s recipient.")
+        XCTAssertFalse(app.staticTexts["Demo friend"].exists)
         capture("wanna-contextual-reply")
         app.navigationBars.buttons["Done"].tap()
         app.buttons["Make a plan"].firstMatch.tap()
@@ -243,18 +245,16 @@ final class LiveExperienceUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture",
-                               "-WanderInitialTab", "discover"]
+                               "-WanderInitialTab", "discover",
+                               // Isolate Live journeys from the existing app-open reminder campaign.
+                               // OnboardingUITests covers that education; privacy checks must stay in-app.
+                               "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3"]
         app.launchArguments += extraArguments
         app.launchArguments += ["-UIPreferredContentSizeCategoryName",
                                largeText ? "UICTContentSizeCategoryAccessibilityXXXL" : "UICTContentSizeCategoryL"]
         app.launch()
         if app.buttons["productUpsell.secondary"].waitForExistence(timeout: 4) {
             app.buttons["productUpsell.secondary"].tap()
-        } else if app.buttons["productUpsell.primary"].exists {
-            app.buttons["productUpsell.primary"].tap()
-            let deny = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons
-                .matching(NSPredicate(format: "label BEGINSWITH %@", "Don")).firstMatch
-            if deny.waitForExistence(timeout: 8) { deny.tap() }
         }
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.buttons["live.draw"].isHittable }, object: nil)
