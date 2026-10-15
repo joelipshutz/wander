@@ -668,7 +668,7 @@ struct LiveScreen: View {
         Section("Categories") {
             let categories = WanderPlaceCategory.allowedCategories
             ForEach(categories, id: \.self) { category in
-                Toggle(WanderPlaceCategory.display(for: category).category,
+                Toggle(WanderPlaceCategory.broadCategory(for: category),
                        isOn: Binding(get: { draftSelection.categoryIDs.contains(category) }, set: { selected in
                     if selected { draftSelection.categoryIDs.insert(category) }
                     else { draftSelection.categoryIDs.remove(category) }

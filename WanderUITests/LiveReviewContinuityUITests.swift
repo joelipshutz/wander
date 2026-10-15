@@ -635,6 +635,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.buttons["25 km"].tap()
         setOn(app.switches["live.filter.category.restaurants_food"], in: form, app: app)
         setOn(app.switches["live.filter.person.user_ryan"], in: form, app: app)
+        XCTAssertEqual(app.switches["live.filter.category.work_education"].label, "Work & Education")
+        XCTAssertEqual(app.switches["live.filter.category.civic_faith"].label, "Civic & Faith")
         capture("combined-filter-draft")
         app.buttons["live.applyFilters"].tap()
 
