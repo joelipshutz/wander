@@ -57,6 +57,8 @@ declare
   import_event uuid := gen_random_uuid();
   import_claim uuid := gen_random_uuid();
   import_key text := 'rec590-smoke-' || gen_random_uuid();
+  storage_operation text;
+  source_state text;
   fn regprocedure;
 begin
   foreach fn in array array[
@@ -299,10 +301,25 @@ begin
     or not exists(select 1 from public.get_shared_visit_context(participant_id,invitation_generation)) then
     raise exception 'authorized follower cannot read source';
   end if;
-  perform set_config('storage.operation','storage.object.sign',true);
-  if exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path) then
-    raise exception 'follower can mint a persistent signed URL';
-  end if;
+  -- REC-646: Storage performs info requests before serving existing photos.
+  -- The old policy passes authenticated GET but fails the first info request.
+  foreach storage_operation in array array[
+    'object.get_authenticated','render.image_authenticated',
+    'object.get_authenticated_info','object.head_authenticated_info'
+  ] loop
+    perform set_config('storage.operation',storage_operation,true);
+    if not exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path) then
+      raise exception 'authorized follower cannot read source during %',storage_operation;
+    end if;
+  end loop;
+  foreach storage_operation in array array[
+    'object.sign','object.sign_many','object.list','object.list_v2','object.unknown',''
+  ] loop
+    perform set_config('storage.operation',storage_operation,true);
+    if exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path) then
+      raise exception 'follower can access source during forbidden operation %',storage_operation;
+    end if;
+  end loop;
   reset role;
   update public.user_places set visibility='self' where id=source_save;
   set local role authenticated;
@@ -533,6 +550,60 @@ begin
     raise exception 'source authorization did not recover before deletion test';
   end if;
   reset role;
+
+  -- Use a follower who owns neither source nor copy: owner-management metadata
+  -- access must not mask a missing source check on either info operation.
+  insert into public.follows(follower_user_id,followed_user_id,source)
+    values(stranger_id,owner_id,'profile'),(stranger_id,viewer_id,'profile');
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',stranger_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',stranger_id,true);
+  foreach source_state in array array[
+    'readable','self','private_profile','owner_block','viewer_block',
+    'deleted_visit','deleted_photo','missing_lineage','cyclic_lineage'
+  ] loop
+    case source_state
+      when 'self' then update public.user_places set visibility='self' where id=source_save;
+      when 'private_profile' then update public.profiles set is_private_profile=true where id=owner_id;
+      when 'owner_block' then insert into public.blocks(blocker_user_id,blocked_user_id) values(owner_id,stranger_id);
+      when 'viewer_block' then insert into public.blocks(blocker_user_id,blocked_user_id) values(stranger_id,owner_id);
+      when 'deleted_visit' then update public.place_visits set deleted_at=now() where id=source_visit;
+      when 'deleted_photo' then update public.visit_photos set deleted_at=now() where id=source_photo;
+      when 'missing_lineage' then update app.visit_photo_sources set source_photo_id=gen_random_uuid() where photo_id=copied_photo;
+      when 'cyclic_lineage' then insert into app.visit_photo_sources(photo_id,source_photo_id) values(source_photo,copied_photo);
+      else null;
+    end case;
+    set local role authenticated;
+    foreach storage_operation in array array[
+      'object.get_authenticated','render.image_authenticated',
+      'object.get_authenticated_info','object.head_authenticated_info'
+    ] loop
+      perform set_config('storage.operation',storage_operation,true);
+      if (exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path))
+          is distinct from (source_state in ('readable','missing_lineage'))
+        or (exists(select 1 from storage.objects where bucket_id='visit-photos' and name=copied_path))
+          is distinct from (source_state='readable')
+        or not exists(select 1 from storage.objects where bucket_id='visit-photos' and name=own_path) then
+        raise exception 'Storage source isolation failed for % during %',source_state,storage_operation;
+      end if;
+    end loop;
+    reset role;
+    case source_state
+      when 'self' then update public.user_places set visibility='followers' where id=source_save;
+      when 'private_profile' then
+        update public.profiles set is_private_profile=false where id=owner_id;
+        update public.user_places set visibility='followers' where id=source_save;
+      when 'owner_block' then delete from public.blocks where blocker_user_id=owner_id and blocked_user_id=stranger_id;
+      when 'viewer_block' then delete from public.blocks where blocker_user_id=stranger_id and blocked_user_id=owner_id;
+      when 'deleted_visit' then update public.place_visits set deleted_at=null where id=source_visit;
+      when 'deleted_photo' then update public.visit_photos set deleted_at=null where id=source_photo;
+      when 'missing_lineage' then update app.visit_photo_sources set source_photo_id=source_photo where photo_id=copied_photo;
+      when 'cyclic_lineage' then delete from app.visit_photo_sources where photo_id=source_photo;
+      else null;
+    end case;
+  end loop;
+  delete from public.follows where follower_user_id=stranger_id and followed_user_id in (owner_id,viewer_id);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',viewer_id,true);
 
   -- A readable destination cannot bypass an invalid private source chain.
   -- Missing source metadata and cycles must fail closed for metadata and bytes.
