@@ -17,8 +17,16 @@ declare
   source_photo uuid := gen_random_uuid();
   own_photo uuid := gen_random_uuid();
   pending_photo uuid := gen_random_uuid();
+  fresh_upsert_photo uuid := gen_random_uuid();
+  rejected_photo uuid := gen_random_uuid();
+  deleted_visit uuid := gen_random_uuid();
+  missing_visit uuid := gen_random_uuid();
+  candidate_visit uuid;
+  candidate_path text;
+  returned_photo public.visit_photos%rowtype;
   copied_photo uuid;
   copied_visit uuid := gen_random_uuid();
+  independent_visit uuid := gen_random_uuid();
   copied_save uuid := gen_random_uuid();
   operation_id uuid := gen_random_uuid();
   participant_id uuid;
@@ -28,6 +36,7 @@ declare
   copied_path text;
   own_path text;
   pending_path text;
+  fresh_upsert_path text;
   saved jsonb;
   accepted jsonb;
   payload jsonb;
@@ -48,6 +57,8 @@ declare
   import_event uuid := gen_random_uuid();
   import_claim uuid := gen_random_uuid();
   import_key text := 'rec590-smoke-' || gen_random_uuid();
+  storage_operation text;
+  source_state text;
   fn regprocedure;
 begin
   foreach fn in array array[
@@ -85,6 +96,8 @@ begin
   values(source_save,owner_id,venue_id,'been','followers','manual');
   insert into public.place_visits(id,user_place_id,note,rating_score)
   values(source_visit,source_save,'Source note',4);
+  insert into public.place_visits(id,user_place_id,deleted_at)
+  values(deleted_visit,source_save,now());
   source_path := owner_id || '/' || source_visit || '/' || source_photo || '.jpg';
   insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
   values(source_photo,source_visit,source_path,'image/jpeg','uploaded');
@@ -93,10 +106,82 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
   perform set_config('request.jwt.claim.sub',owner_id,true);
   set local role authenticated;
-  -- Owner upload retries need metadata access, but must never grant signing.
+  -- REC-645: SELECT policy checks must authorize the new tuple before a STABLE
+  -- helper can see it in the table. Keep this before the new helper assertions
+  -- so the old schema fails on the actual authenticated INSERT RETURNING.
   pending_path := owner_id || '/' || source_visit || '/' || pending_photo || '.jpg';
   insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
-    values(pending_photo,source_visit,pending_path,'image/jpeg','pending_upload');
+    values(pending_photo,source_visit,pending_path,'image/jpeg','pending_upload')
+    returning * into strict returned_photo;
+  if returned_photo.id is distinct from pending_photo
+    or returned_photo.visit_id is distinct from source_visit
+    or returned_photo.storage_path is distinct from pending_path
+    or returned_photo.upload_state is distinct from 'pending_upload'
+    or returned_photo.deleted_at is not null then
+    raise exception 'fresh owner INSERT RETURNING lost pending photo identity or state';
+  end if;
+  fresh_upsert_path := owner_id || '/' || source_visit || '/' || fresh_upsert_photo || '.jpg';
+  insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
+    values(fresh_upsert_photo,source_visit,fresh_upsert_path,'image/jpeg','pending_upload')
+    on conflict (id) do update set storage_path=excluded.storage_path,
+      upload_state=excluded.upload_state
+    returning * into strict returned_photo;
+  if returned_photo.id is distinct from fresh_upsert_photo
+    or returned_photo.visit_id is distinct from source_visit
+    or returned_photo.storage_path is distinct from fresh_upsert_path
+    or returned_photo.upload_state is distinct from 'pending_upload' then
+    raise exception 'fresh owner UPSERT RETURNING lost pending photo identity or state';
+  end if;
+  insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state,sort_order)
+    values(pending_photo,source_visit,pending_path,'image/jpeg','pending_upload',1)
+    on conflict (id) do update set upload_state=excluded.upload_state,
+      sort_order=excluded.sort_order
+    returning * into strict returned_photo;
+  if returned_photo.id is distinct from pending_photo
+    or returned_photo.visit_id is distinct from source_visit
+    or returned_photo.storage_path is distinct from pending_path
+    or returned_photo.upload_state is distinct from 'pending_upload'
+    or returned_photo.sort_order is distinct from 1 then
+    raise exception 'owner pending UPSERT retry did not return the updated metadata';
+  end if;
+
+  -- Valid owner metadata never waives owner/visit/photo path matching or a live
+  -- parent. Every rejected statement rolls back in its exception subtransaction.
+  foreach candidate_path in array array[
+    viewer_id || '/' || source_visit || '/' || rejected_photo || '.jpg',
+    owner_id || '/' || missing_visit || '/' || rejected_photo || '.jpg',
+    owner_id || '/' || source_visit || '/' || gen_random_uuid() || '.jpg'
+  ] loop
+    begin
+      insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
+        values(rejected_photo,source_visit,candidate_path,'image/jpeg','pending_upload')
+        returning * into strict returned_photo;
+      raise exception 'owner INSERT RETURNING accepted a mismatched photo path';
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  foreach candidate_visit in array array[missing_visit,deleted_visit] loop
+    begin
+      insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
+        values(rejected_photo,candidate_visit,
+          owner_id || '/' || candidate_visit || '/' || rejected_photo || '.jpg',
+          'image/jpeg','pending_upload')
+        returning * into strict returned_photo;
+      raise exception 'owner INSERT RETURNING accepted a missing or deleted parent';
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  begin
+    insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state,deleted_at)
+      values(rejected_photo,source_visit,
+        owner_id || '/' || source_visit || '/' || rejected_photo || '.jpg',
+        'image/jpeg','pending_upload',now())
+      returning * into strict returned_photo;
+    raise exception 'owner INSERT RETURNING exposed a deleted candidate photo';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- Owner upload retries need metadata access, but must never grant signing.
   perform set_config('storage.operation','storage.object.upload',true);
   insert into storage.objects(bucket_id,name) values('visit-photos',pending_path);
   perform set_config('storage.operation','storage.object.upload_update',true);
@@ -109,6 +194,9 @@ begin
   if exists(select 1 from storage.objects where bucket_id='visit-photos' and name=pending_path) then
     raise exception 'owner management policy permits signed URLs';
   end if;
+  if public.can_read_visit_photo('visit-photos',pending_path) then
+    raise exception 'pending metadata authorizes photo download before upload completion';
+  end if;
   perform set_config('storage.operation','storage.object.delete',true);
   -- Storage rejects direct SQL deletion even for synthetic metadata. Leave the
   -- row for transaction rollback; verify the owner-delete policy and its SELECT
@@ -119,7 +207,84 @@ begin
       and roles @> array['authenticated']::name[] and qual like '%owns_place_visit%') then
     raise exception 'owner delete policy or metadata access is missing';
   end if;
+  insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state,byte_size,width,height)
+    values(pending_photo,source_visit,pending_path,'image/jpeg','uploaded',1024,64,64)
+    on conflict (id) do update set upload_state=excluded.upload_state,
+      byte_size=excluded.byte_size,width=excluded.width,height=excluded.height
+    returning * into strict returned_photo;
+  if returned_photo.id is distinct from pending_photo
+    or returned_photo.visit_id is distinct from source_visit
+    or returned_photo.storage_path is distinct from pending_path
+    or returned_photo.upload_state is distinct from 'uploaded'
+    or returned_photo.byte_size is distinct from 1024
+    or returned_photo.width is distinct from 64
+    or returned_photo.height is distinct from 64
+    or not public.can_read_visit_photo('visit-photos',pending_path) then
+    raise exception 'owner finalization did not return uploaded metadata or enable download';
+  end if;
   perform public.create_shared_visit_invites(source_visit,array[viewer_id]);
+  reset role;
+
+  foreach fn in array array[
+    'app.can_read_own_photo_request(uuid)'::regprocedure,
+    'app.can_read_own_photo_request(uuid,uuid)'::regprocedure
+  ] loop
+    if not exists(select 1 from pg_proc where oid=fn and prosecdef and provolatile='s'
+        and proconfig @> array['search_path=pg_catalog, public, app'])
+      or not has_function_privilege('authenticated',fn,'execute')
+      or has_function_privilege('anon',fn,'execute')
+      or exists(select 1 from pg_proc p,
+          lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) privilege
+        where p.oid=fn and privilege.grantee=0 and privilege.privilege_type='EXECUTE') then
+      raise exception 'photo request helper security posture or grants mismatch: %',fn;
+    end if;
+  end loop;
+  if has_function_privilege('authenticated','app.can_read_visit_source(text,uuid)','execute')
+    or has_function_privilege('anon','app.can_read_visit_source(text,uuid)','execute')
+    or has_function_privilege('authenticated','app.can_read_photo_source(text,uuid)','execute')
+    or has_table_privilege('authenticated','app.visit_photo_sources','select,insert,update,delete')
+    or has_table_privilege('anon','app.visit_photo_sources','select,insert,update,delete') then
+    raise exception 'photo metadata fix exposed internal source helpers or provenance';
+  end if;
+  update public.visit_photos set deleted_at=now() where id=fresh_upsert_photo;
+  set local role authenticated;
+  if exists(select 1 from public.visit_photos where id=fresh_upsert_photo) then
+    raise exception 'owner metadata SELECT exposed a deleted independent photo';
+  end if;
+  reset role;
+
+  -- An authenticated follower can read the parent but cannot create its photos.
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',viewer_id,true);
+  set local role authenticated;
+  begin
+    insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
+      values(rejected_photo,source_visit,
+        viewer_id || '/' || source_visit || '/' || rejected_photo || '.jpg',
+        'image/jpeg','pending_upload')
+      on conflict (id) do update set upload_state=excluded.upload_state
+      returning * into strict returned_photo;
+    raise exception 'follower UPSERT RETURNING wrote another owner parent';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims','{"role":"anon"}',true);
+  perform set_config('request.jwt.claim.sub','',true);
+  set local role anon;
+  begin
+    perform app.can_read_own_photo_request(pending_photo,source_visit);
+    raise exception 'anonymous caller executed the photo request helper';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
+      values(rejected_photo,source_visit,
+        owner_id || '/' || source_visit || '/' || rejected_photo || '.jpg',
+        'image/jpeg','pending_upload')
+      returning * into strict returned_photo;
+    raise exception 'anonymous INSERT RETURNING created photo metadata';
+  exception when insufficient_privilege then null;
+  end;
   reset role;
   select p.id,p.invitation_generation,p.snapshot_revision
   into participant_id,invitation_generation,snapshot_revision
@@ -136,10 +301,25 @@ begin
     or not exists(select 1 from public.get_shared_visit_context(participant_id,invitation_generation)) then
     raise exception 'authorized follower cannot read source';
   end if;
-  perform set_config('storage.operation','storage.object.sign',true);
-  if exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path) then
-    raise exception 'follower can mint a persistent signed URL';
-  end if;
+  -- REC-646: Storage performs info requests before serving existing photos.
+  -- The old policy passes authenticated GET but fails the first info request.
+  foreach storage_operation in array array[
+    'object.get_authenticated','render.image_authenticated',
+    'object.get_authenticated_info','object.head_authenticated_info'
+  ] loop
+    perform set_config('storage.operation',storage_operation,true);
+    if not exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path) then
+      raise exception 'authorized follower cannot read source during %',storage_operation;
+    end if;
+  end loop;
+  foreach storage_operation in array array[
+    'object.sign','object.sign_many','object.list','object.list_v2','object.unknown',''
+  ] loop
+    perform set_config('storage.operation',storage_operation,true);
+    if exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path) then
+      raise exception 'follower can access source during forbidden operation %',storage_operation;
+    end if;
+  end loop;
   reset role;
   update public.user_places set visibility='self' where id=source_save;
   set local role authenticated;
@@ -174,6 +354,7 @@ begin
     raise exception 'accepted photo lost its immutable provenance';
   end if;
   update public.visit_photos set upload_state='uploaded' where id=copied_photo;
+  insert into public.place_visits(id,user_place_id) values(independent_visit,copied_save);
   own_path := viewer_id || '/' || copied_visit || '/' || own_photo || '.jpg';
   insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
   values(own_photo,copied_visit,own_path,'image/jpeg','uploaded');
@@ -185,16 +366,34 @@ begin
     raise exception 'copied photo survives revoked source access';
   end if;
   if not public.can_read_visit_photo('visit-photos',own_path)
+    or not exists(select 1 from public.visit_photos where id=own_photo)
     or not exists(select 1 from public.place_visits where id=copied_visit
       and note='Recipient independent note' and rating_score=5) then
     raise exception 'source revocation removed independent recipient content';
   end if;
+  foreach candidate_visit in array array[copied_visit,independent_visit] loop
+    begin
+      insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state)
+        values(copied_photo,candidate_visit,
+          viewer_id || '/' || candidate_visit || '/' || copied_photo || '.jpg',
+          'image/jpeg','uploaded')
+        on conflict (id) do update set visit_id=excluded.visit_id,
+          storage_path=excluded.storage_path,upload_state=excluded.upload_state
+        returning * into strict returned_photo;
+      raise exception 'copied photo retry or reparent bypassed revoked source authorization';
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
   payload := public.accept_shared_visit(participant_id,invitation_generation,snapshot_revision,
     operation_id,copied_save,copied_visit,'{}','{}','[]',array[source_photo]);
   if jsonb_array_length(payload->'photo_copies') <> 0 then
     raise exception 'idempotent acceptance leaked a revoked copy manifest';
   end if;
   reset role;
+  if not exists(select 1 from public.visit_photos where id=copied_photo
+      and visit_id=copied_visit and storage_path=copied_path and upload_state='uploaded') then
+    raise exception 'rejected copied photo retry or reparent changed persisted metadata';
+  end if;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',stranger_id,'role','authenticated')::text,true);
   perform set_config('request.jwt.claim.sub',stranger_id,true);
   set local role authenticated;
@@ -324,7 +523,8 @@ begin
   -- A private account and either-direction block revoke inherited photo access.
   update public.profiles set is_private_profile=true where id=owner_id;
   set local role authenticated;
-  if public.can_read_visit_photo('visit-photos',copied_path) then
+  if public.can_read_visit_photo('visit-photos',copied_path)
+    or exists(select 1 from public.visit_photos where id=copied_photo) then
     raise exception 'private source profile left its copied photo readable';
   end if;
   reset role;
@@ -336,6 +536,7 @@ begin
   set local role authenticated;
   if public.can_read_visit_photo('visit-photos',source_path)
     or public.can_read_visit_photo('visit-photos',copied_path)
+    or exists(select 1 from public.visit_photos where id in (source_photo,copied_photo))
     or not public.can_read_visit_photo('visit-photos',own_path) then
     raise exception 'block did not revoke only source-derived photos';
   end if;
@@ -344,8 +545,99 @@ begin
   insert into public.follows(follower_user_id,followed_user_id,source)
     values(viewer_id,owner_id,'profile') on conflict do nothing;
   set local role authenticated;
-  if not public.can_read_visit_photo('visit-photos',copied_path) then
+  if not public.can_read_visit_photo('visit-photos',copied_path)
+    or not exists(select 1 from public.visit_photos where id=copied_photo) then
     raise exception 'source authorization did not recover before deletion test';
+  end if;
+  reset role;
+
+  -- Use a follower who owns neither source nor copy: owner-management metadata
+  -- access must not mask a missing source check on either info operation.
+  insert into public.follows(follower_user_id,followed_user_id,source)
+    values(stranger_id,owner_id,'profile'),(stranger_id,viewer_id,'profile');
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',stranger_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',stranger_id,true);
+  foreach source_state in array array[
+    'readable','self','private_profile','owner_block','viewer_block',
+    'deleted_visit','deleted_photo','missing_lineage','cyclic_lineage'
+  ] loop
+    case source_state
+      when 'self' then update public.user_places set visibility='self' where id=source_save;
+      when 'private_profile' then update public.profiles set is_private_profile=true where id=owner_id;
+      when 'owner_block' then insert into public.blocks(blocker_user_id,blocked_user_id) values(owner_id,stranger_id);
+      when 'viewer_block' then insert into public.blocks(blocker_user_id,blocked_user_id) values(stranger_id,owner_id);
+      when 'deleted_visit' then update public.place_visits set deleted_at=now() where id=source_visit;
+      when 'deleted_photo' then update public.visit_photos set deleted_at=now() where id=source_photo;
+      when 'missing_lineage' then update app.visit_photo_sources set source_photo_id=gen_random_uuid() where photo_id=copied_photo;
+      when 'cyclic_lineage' then insert into app.visit_photo_sources(photo_id,source_photo_id) values(source_photo,copied_photo);
+      else null;
+    end case;
+    set local role authenticated;
+    foreach storage_operation in array array[
+      'object.get_authenticated','render.image_authenticated',
+      'object.get_authenticated_info','object.head_authenticated_info'
+    ] loop
+      perform set_config('storage.operation',storage_operation,true);
+      if (exists(select 1 from storage.objects where bucket_id='visit-photos' and name=source_path))
+          is distinct from (source_state in ('readable','missing_lineage'))
+        or (exists(select 1 from storage.objects where bucket_id='visit-photos' and name=copied_path))
+          is distinct from (source_state='readable')
+        or not exists(select 1 from storage.objects where bucket_id='visit-photos' and name=own_path) then
+        raise exception 'Storage source isolation failed for % during %',source_state,storage_operation;
+      end if;
+    end loop;
+    reset role;
+    case source_state
+      when 'self' then update public.user_places set visibility='followers' where id=source_save;
+      when 'private_profile' then
+        update public.profiles set is_private_profile=false where id=owner_id;
+        update public.user_places set visibility='followers' where id=source_save;
+      when 'owner_block' then delete from public.blocks where blocker_user_id=owner_id and blocked_user_id=stranger_id;
+      when 'viewer_block' then delete from public.blocks where blocker_user_id=stranger_id and blocked_user_id=owner_id;
+      when 'deleted_visit' then update public.place_visits set deleted_at=null where id=source_visit;
+      when 'deleted_photo' then update public.visit_photos set deleted_at=null where id=source_photo;
+      when 'missing_lineage' then update app.visit_photo_sources set source_photo_id=source_photo where photo_id=copied_photo;
+      when 'cyclic_lineage' then delete from app.visit_photo_sources where photo_id=source_photo;
+      else null;
+    end case;
+  end loop;
+  delete from public.follows where follower_user_id=stranger_id and followed_user_id in (owner_id,viewer_id);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer_id,'role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub',viewer_id,true);
+
+  -- A readable destination cannot bypass an invalid private source chain.
+  -- Missing source metadata and cycles must fail closed for metadata and bytes.
+  update app.visit_photo_sources set source_photo_id=gen_random_uuid() where photo_id=copied_photo;
+  set local role authenticated;
+  if public.can_read_visit_photo('visit-photos',copied_path)
+    or exists(select 1 from public.visit_photos where id=copied_photo)
+    or not exists(select 1 from public.visit_photos where id=own_photo) then
+    raise exception 'missing photo lineage did not hide only source-derived metadata';
+  end if;
+  reset role;
+  update app.visit_photo_sources set source_photo_id=source_photo where photo_id=copied_photo;
+  insert into app.visit_photo_sources(photo_id,source_photo_id) values(source_photo,copied_photo);
+  set local role authenticated;
+  if public.can_read_visit_photo('visit-photos',copied_path)
+    or exists(select 1 from public.visit_photos where id in (source_photo,copied_photo))
+    or not exists(select 1 from public.visit_photos where id=own_photo) then
+    raise exception 'cyclic photo lineage did not hide only source-derived metadata';
+  end if;
+  reset role;
+  delete from app.visit_photo_sources where photo_id=source_photo;
+  update public.visit_photos set deleted_at=now() where id=source_photo;
+  set local role authenticated;
+  if public.can_read_visit_photo('visit-photos',copied_path)
+    or exists(select 1 from public.visit_photos where id in (source_photo,copied_photo))
+    or not exists(select 1 from public.visit_photos where id=own_photo) then
+    raise exception 'soft-deleted photo source did not revoke only source-derived metadata';
+  end if;
+  reset role;
+  update public.visit_photos set deleted_at=null where id=source_photo;
+  set local role authenticated;
+  if not public.can_read_visit_photo('visit-photos',copied_path)
+    or not exists(select 1 from public.visit_photos where id=copied_photo) then
+    raise exception 'restored photo lineage did not recover metadata access';
   end if;
   reset role;
 
@@ -353,6 +645,8 @@ begin
   delete from public.visit_photos where id=source_photo;
   set local role authenticated;
   if public.can_read_visit_photo('visit-photos',copied_path)
+    or exists(select 1 from public.visit_photos where id=copied_photo)
+    or not exists(select 1 from public.visit_photos where id=own_photo)
     or not public.can_read_visit_photo('visit-photos',own_path) then
     raise exception 'deleted source photo did not revoke only its copies';
   end if;
@@ -404,7 +698,7 @@ begin
 end;
 $test$;
 
-select pass('source authorization, copied photos, notification claims, and companion provenance');
+select pass('photo upload returning, source authorization, copied photos, notification claims, and companion provenance');
 select * from finish();
 rollback to savepoint rec590_source_authorization;
 release savepoint rec590_source_authorization;

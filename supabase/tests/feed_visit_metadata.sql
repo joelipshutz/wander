@@ -114,6 +114,137 @@ insert into visit_feed_results select is((public.activity_detail(event_id)->>'ra
 from visit_feed_fixture where sequence>1;
 reset role;
 
+-- A pre-visit-ID original event must resolve only its exact compatibility visit.
+-- This positive case fails against the old activity_media(event.visit_id) join.
+select set_config('app.explicit_check_in','off',true);
+create temporary table legacy_media_fixture(
+  parent_id uuid, visit_id uuid, event_id uuid, alias_id uuid default gen_random_uuid(),
+  photo_id uuid default gen_random_uuid(), late_photo_id uuid default gen_random_uuid(),
+  repeat_visit_id uuid default gen_random_uuid(), empty_visit_id uuid default gen_random_uuid(),
+  repeat_photo_id uuid default gen_random_uuid(), repeat_event_id uuid, empty_event_id uuid,
+  event_before jsonb, detail_before jsonb, engagement_before jsonb
+) on commit drop;
+grant select, update on legacy_media_fixture to authenticated;
+insert into public.places(id,canonical_name,category,latitude,longitude,source_provider,source_provider_place_id)
+values ('a6460000-0000-0000-0000-000000000030','Historical Media Fixture','coffee',0,0,'manual','rec646-historical-media');
+insert into public.user_places(id,user_id,place_id,status,visibility,source_type,saved_at,note,rating_score)
+values ('a6460000-0000-0000-0000-000000000031','rec614_visit_owner','a6460000-0000-0000-0000-000000000030',
+  'been','followers','manual','2026-07-13T17:28:01Z','Original post metadata',4);
+insert into legacy_media_fixture(parent_id,visit_id,event_id)
+select parent.id,visit.id,event.id from public.user_places parent
+join public.place_visits visit on visit.user_place_id=parent.id and visit.backfilled_from_user_place
+join public.feed_events event on event.user_place_id=parent.id and event.visit_id is null and event.event_type='place_been'
+where parent.id='a6460000-0000-0000-0000-000000000031';
+insert into visit_feed_results select is((select count(*)::integer from legacy_media_fixture),1,'legacy original has one compatibility visit and event');
+insert into app.activity_event_aliases(alias_id,activity_id) select alias_id,event_id from legacy_media_fixture;
+insert into public.place_visits(id,user_place_id,visited_at,backfilled_from_user_place)
+select repeat_visit_id,parent_id,'2026-07-14T17:28:01Z'::timestamptz,false from legacy_media_fixture union all
+select empty_visit_id,parent_id,'2026-07-15T17:28:01Z'::timestamptz,false from legacy_media_fixture;
+update legacy_media_fixture f set repeat_event_id=event.id from public.feed_events event where event.visit_id=f.repeat_visit_id;
+update legacy_media_fixture f set empty_event_id=event.id from public.feed_events event where event.visit_id=f.empty_visit_id;
+insert into public.visit_photos(id,visit_id,storage_path,content_type,upload_state,sort_order)
+select photo_id,visit_id,'rec614_visit_owner/' || visit_id || '/original.jpg','image/jpeg','uploaded',0 from legacy_media_fixture union all
+select late_photo_id,visit_id,'rec614_visit_owner/' || visit_id || '/late.jpg','image/jpeg','pending_upload',1 from legacy_media_fixture union all
+select repeat_photo_id,repeat_visit_id,'rec614_visit_owner/' || repeat_visit_id || '/repeat.jpg','image/jpeg','uploaded',0 from legacy_media_fixture;
+update legacy_media_fixture f set event_before=to_jsonb(event) from public.feed_events event where event.id=f.event_id;
+set local role authenticated;
+select public.set_activity_like(event_id,true) from legacy_media_fixture;
+select public.add_activity_comment(event_id,'Historical fixture comment') from legacy_media_fixture;
+update legacy_media_fixture set detail_before=public.activity_detail(event_id),
+  engagement_before=public.activity_engagement_summaries(array[event_id]);
+insert into visit_feed_results select is((select media->0->>'id' from public.activity_media(array[event_id])),photo_id::text,
+  'legacy original exposes its uploaded compatibility photo') from legacy_media_fixture;
+insert into visit_feed_results select is((select jsonb_array_length(media) from public.activity_media(array[event_id])),1,
+  'pending upload is not counted as legacy media') from legacy_media_fixture;
+insert into visit_feed_results select is((select activity_id from public.activity_media(array[alias_id])),alias_id,
+  'legacy photo alias retains the requested cache key') from legacy_media_fixture;
+insert into visit_feed_results select is((select media from public.activity_media(array[alias_id])),
+  (select media from public.activity_media(array[event_id])),'legacy photo alias resolves the same original media') from legacy_media_fixture;
+reset role;
+update public.visit_photos set upload_state='uploaded' where id=(select late_photo_id from legacy_media_fixture);
+set local role authenticated;
+insert into visit_feed_results select is((select jsonb_agg(photo->>'id' order by position)
+  from public.activity_media(array[event_id]) cross join lateral jsonb_array_elements(media) with ordinality p(photo,position)),
+  jsonb_build_array(photo_id::text,late_photo_id::text),'late upload appears on the historical post in photo order') from legacy_media_fixture;
+insert into visit_feed_results select is((select media->0->>'id' from public.activity_media(array[repeat_event_id])),repeat_photo_id::text,
+  'explicit repeat still exposes only its own photo') from legacy_media_fixture;
+insert into visit_feed_results select is((select jsonb_array_length(media) from public.activity_media(array[repeat_event_id])),1,
+  'explicit repeat does not merge historical photos') from legacy_media_fixture;
+insert into visit_feed_results select is((select media from public.activity_media(array[empty_event_id])),'[]'::jsonb,
+  'empty explicit repeat never falls back to historical photos') from legacy_media_fixture;
+insert into visit_feed_results select is(public.activity_detail(event_id),detail_before,
+  'legacy media and late upload preserve post metadata') from legacy_media_fixture;
+insert into visit_feed_results select is(public.activity_engagement_summaries(array[event_id]),engagement_before,
+  'legacy media and late upload preserve likes and comments') from legacy_media_fixture;
+reset role;
+insert into visit_feed_results select is(to_jsonb(event),f.event_before,'legacy media never rewrites the original event')
+from legacy_media_fixture f join public.feed_events event on event.id=f.event_id;
+
+-- A copied historical photo must retain its source privacy gate; independent
+-- attachments on the same compatibility visit remain readable.
+insert into app.visit_photo_sources(photo_id,source_photo_id)
+select f.photo_id,photo.id from legacy_media_fixture f join visit_feed_fixture source on source.sequence=1
+join public.visit_photos photo on photo.visit_id=source.visit_id;
+update public.user_places set visibility='self' where id=(select parent_id from visit_feed_fixture limit 1);
+set local role authenticated;
+insert into visit_feed_results select is((select jsonb_agg(photo->>'id')
+  from public.activity_media(array[event_id]) cross join lateral jsonb_array_elements(media) p(photo)),
+  jsonb_build_array(late_photo_id::text),'private copied source hides only its historical attachment') from legacy_media_fixture;
+reset role;
+update public.user_places set visibility='followers' where id=(select parent_id from visit_feed_fixture limit 1);
+delete from app.visit_photo_sources where photo_id=(select photo_id from legacy_media_fixture);
+
+-- Deliberately malformed/ambiguous historical events must fail closed. Restore
+-- each field before the next case, so every assertion isolates one predicate.
+do $legacy_mismatches$
+declare f record; original public.feed_events; changed_id uuid;
+begin
+  select * into f from legacy_media_fixture;
+  select * into original from public.feed_events where id=f.event_id;
+  update public.feed_events set occurred_at=original.occurred_at+interval '1 second' where id=f.event_id;
+  insert into visit_feed_results select is((select media from public.activity_media(array[f.event_id])),'[]'::jsonb,'legacy media rejects a mismatched visit date');
+  update public.feed_events set occurred_at=original.occurred_at,actor_user_id='rec614_visit_viewer' where id=f.event_id;
+  insert into visit_feed_results select is((select media from public.activity_media(array[f.event_id])),'[]'::jsonb,'legacy media rejects a mismatched actor');
+  update public.feed_events set actor_user_id=original.actor_user_id,
+    place_id=(select place_id from public.user_places where id=(select parent_id from visit_feed_fixture limit 1)) where id=f.event_id;
+  insert into visit_feed_results select is((select media from public.activity_media(array[f.event_id])),'[]'::jsonb,'legacy media rejects a mismatched place');
+  update public.feed_events set place_id=original.place_id,event_type='place_saved' where id=f.event_id;
+  insert into visit_feed_results select is((select media from public.activity_media(array[f.event_id])),'[]'::jsonb,'non-check-in legacy events cannot borrow visit media');
+  update public.feed_events set event_type=original.event_type where id=f.event_id;
+  insert into public.feed_events(actor_user_id,event_type,user_place_id,place_id,occurred_at)
+    values(original.actor_user_id,original.event_type,original.user_place_id,original.place_id,original.occurred_at) returning id into changed_id;
+  insert into visit_feed_results select is((select media from public.activity_media(array[f.event_id])),'[]'::jsonb,'competing original events prevent an ambiguous photo match');
+  delete from public.feed_events where id=changed_id;
+  insert into public.feed_events(actor_user_id,event_type,user_place_id,place_id,occurred_at,visit_id)
+    values(original.actor_user_id,original.event_type,original.user_place_id,original.place_id,original.occurred_at,f.visit_id) returning id into changed_id;
+  insert into visit_feed_results select is((select media from public.activity_media(array[f.event_id])),'[]'::jsonb,'legacy event cannot borrow a visit with its own canonical event');
+  delete from public.feed_events where id=changed_id;
+end;
+$legacy_mismatches$;
+update public.place_visits set deleted_at=now() where id=(select visit_id from legacy_media_fixture);
+set local role authenticated;
+insert into visit_feed_results select is((select media from public.activity_media(array[event_id])),'[]'::jsonb,
+  'deleted compatibility visit cannot supply historical media') from legacy_media_fixture;
+reset role;
+update public.place_visits set deleted_at=null where id=(select visit_id from legacy_media_fixture);
+update public.user_places set visibility='self' where id=(select parent_id from legacy_media_fixture);
+set local role authenticated;
+insert into visit_feed_results select is((select count(*)::integer from public.activity_media(array[event_id,alias_id])),0,
+  'private historical save hides original and alias photos') from legacy_media_fixture;
+reset role;
+update public.user_places set visibility='followers' where id=(select parent_id from legacy_media_fixture);
+update public.profiles set is_private_profile=true where id='rec614_visit_owner';
+set local role authenticated;
+insert into visit_feed_results select is((select count(*)::integer from public.activity_media(array[event_id,alias_id])),0,
+  'private historical account hides original and alias photos') from legacy_media_fixture;
+reset role;
+update public.profiles set is_private_profile=false where id='rec614_visit_owner';
+update public.user_places set deleted_at=now() where id=(select parent_id from legacy_media_fixture);
+set local role authenticated;
+insert into visit_feed_results select is((select count(*)::integer from public.activity_media(array[event_id,alias_id])),0,
+  'deleted historical parent hides original and alias photos') from legacy_media_fixture;
+reset role;
+
 -- Existing source visibility gates remain authoritative for all entry points.
 select set_config('request.jwt.claim.sub','rec614_visit_stranger',true);
 select set_config('request.jwt.claims','{"sub":"rec614_visit_stranger","role":"authenticated"}',true);
