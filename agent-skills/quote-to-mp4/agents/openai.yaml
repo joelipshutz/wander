@@ -1,0 +1,4 @@
+interface:
+  display_name: "Quote to MP4"
+  short_description: "Make verified quote soundbites into downloadable MP4s"
+  default_prompt: "Use $quote-to-mp4 to find the original recording of this quote and create a downloadable MP4 with the full clip transcript."
