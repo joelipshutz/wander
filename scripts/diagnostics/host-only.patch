@@ -1,0 +1,90 @@
+--- a/Wander/App/WanderApp.swift
++++ b/Wander/App/WanderApp.swift
+@@ -4,6 +4,40 @@
+ #if DEBUG
+ import UIKit
+ #endif
++// REC636-DORMANT-ROOT-DIAGNOSTIC-BEGIN
++#if DEBUG && targetEnvironment(simulator)
++/// Launch-only comparison of root work; services keep their normal initialization.
++@MainActor
++enum ReplayHostDiagnostic {
++    enum Mode: String { case normal, dormant }
++    static let argument = "-WanderReplayHostDiagnostic"
++    static let requestedMode: Mode? = {
++        let arguments = ProcessInfo.processInfo.arguments
++        let matches = arguments.indices.filter { arguments[$0] == argument }
++        guard matches.count == 1, let index = matches.first,
++              arguments.indices.contains(index + 1) else { return nil }
++        return Mode(rawValue: arguments[index + 1])
++    }()
++    static let hasTestConfiguration = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"]?.isEmpty == false
++    static let isExpectedHost = Bundle.main.bundleIdentifier == "com.grayline.wander"
++    // Informational only: XCTest classes can load after the first app body.
++    static var hasTestRuntime: Bool { NSClassFromString("XCTestCase") != nil }
++    static let isEnabled = requestedMode != nil && hasTestConfiguration && isExpectedHost
++    static let usesDormantRoot = isEnabled && requestedMode == .dormant
++    static private(set) var ordinaryRootMounted = false
++    static private(set) var dormantRootMounted = false
++
++    static func recordOrdinaryRootMounted() {
++        guard isEnabled else { return }
++        ordinaryRootMounted = true
++    }
++    static func recordDormantRootMounted() {
++        guard isEnabled else { return }
++        dormantRootMounted = true
++    }
++}
++#endif
++// REC636-DORMANT-ROOT-DIAGNOSTIC-END
+ 
+ enum SimulatorTestSessionPolicy {
+     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
+@@ -210,6 +244,16 @@
+     var body: some Scene {
+         WindowGroup {
+             #if DEBUG
++            // REC636-DORMANT-ROOT-DIAGNOSTIC-BEGIN
++            if usesDormantReplayDiagnosticRoot {
++                Color.clear
++                    .onAppear {
++                        #if targetEnvironment(simulator)
++                        ReplayHostDiagnostic.recordDormantRootMounted()
++                        #endif
++                    }
++            } else
++            // REC636-DORMANT-ROOT-DIAGNOSTIC-END
+             if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
+                 ActivityPostcardReviewRoot()
+             } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
+@@ -272,6 +316,11 @@
+                 CategoryTaxonomyMockupRoot(page: mockupPage)
+             } else {
+                 appRoot
++                    // REC636-DORMANT-ROOT-DIAGNOSTIC-BEGIN
++                    #if targetEnvironment(simulator)
++                    .onAppear { ReplayHostDiagnostic.recordOrdinaryRootMounted() }
++                    #endif
++                    // REC636-DORMANT-ROOT-DIAGNOSTIC-END
+             }
+             #else
+             appRoot
+@@ -279,6 +328,17 @@
+         }
+     }
+ 
++    // REC636-DORMANT-ROOT-DIAGNOSTIC-BEGIN
++    #if DEBUG
++    private var usesDormantReplayDiagnosticRoot: Bool {
++        #if targetEnvironment(simulator)
++        ReplayHostDiagnostic.usesDormantRoot
++        #else
++        false
++        #endif
++    }
++    #endif
++    // REC636-DORMANT-ROOT-DIAGNOSTIC-END
+     private var appRoot: some View {
+         AppEntryView(
+             coordinator: entryCoordinator,

@@ -267,7 +267,7 @@ jobs:
 
   replay-private:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics && !inputs.native_followup }}
-    name: Instrumented private replay once
+    name: Compare normal and dormant Replay roots once
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -333,7 +333,7 @@ jobs:
               assert actual==row['originalSHA256'], 'Original diagnostic input differs'
               rows.append({'role':row['role'],'path':row['path'],'originalSHA256':actual,'proposedSHA256':row['proposedSHA256']})
           (out/'original-source-fingerprints.json').write_text(json.dumps({'SDKRevision':proof['SDKRevision'],'files':rows},indent=2)+'\n')
-          for directory,name in [(sdk,'sdk-only.patch'),(root,'test-only.patch')]:
+          for directory,name in [(sdk,'sdk-only.patch'),(root,'host-only.patch'),(root,'test-only.patch')]:
               patch=root/'scripts/diagnostics'/name
               subprocess.run(['git','-C',str(directory),'apply','--check',str(patch)],check=True)
               subprocess.run(['git','-C',str(directory),'apply',str(patch)],check=True)
@@ -363,24 +363,18 @@ jobs:
           files={str(p.relative_to(products)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(products.rglob('*')) if p.is_file() and not p.is_symlink()}
           (out/'diagnostic-build-fingerprints.json').write_text(json.dumps({'sourceHashesStillMatch':True,'productFiles':files},indent=2)+'\n')
           PY
-      - name: Run original private replay selection once
+      - name: Compare original private Replay with normal and dormant roots
         run: |
           set -euo pipefail
-          set +e
-          python3 scripts/run-parent-regression.py --suite replay-private \
-            --test-products "$DIAG/Parent.xctestproducts" --destination "$DEVICE_ID" \
-            --result-bundle "$DIAG/ParentReplayPrivate.xcresult" --selection-file "$DIAG/selection.json"
-          code=$?
-          set -e
-          printf '{"nativeExitCode":%s,"retries":0}\n' "$code" > "$DIAG/native-process.json"
-          exit "$code"
+          python3 scripts/diagnostics/replay-host-comparison.py \
+            --out "$DIAG" --products "$DIAG/Parent.xctestproducts" --device "$DEVICE_ID"
       - name: Record generated phlibwebp compilation arguments
         if: always()
         run: |
           set -euo pipefail
           python3 scripts/diagnostics/collect-c-flags.py \
             --derived-data "$DIAG/DerivedData" --output "$DIAG/phlibwebp-c-flags.json"
-      - name: Retain actual result metadata and aggregate diagnostics
+      - name: Retain final observed source identities
         if: always()
         run: |
           set -euo pipefail
@@ -395,29 +389,15 @@ jobs:
                   p=(sdk if row['role']=='sdk' else root)/row['path']
                   rows.append({'role':row['role'],'path':row['path'],'exists':p.is_file(),'sha256':hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None})
           (out/'final-source-fingerprints.json').write_text(json.dumps({'files':rows,'diagnosticOnly':True,'releaseAcceptance':False},indent=2)+'\n')
-          bundle=out/'ParentReplayPrivate.xcresult';exports=[]
-          if (bundle/'Info.plist').is_file():
-              before=hashlib.sha256((bundle/'Info.plist').read_bytes()).hexdigest()
-              for kind in ['summary','tests']:
-                  with (out/(kind+'.json')).open('wb') as f:
-                      result=subprocess.run(['xcrun','xcresulttool','get','test-results',kind,'--path',str(bundle),'--compact'],stdout=f,timeout=120)
-                  exports.append({'kind':kind,'exitCode':result.returncode})
-              result=subprocess.run(['xcrun','xcresulttool','export','attachments','--path',str(bundle),'--output-path',str(out/'attachments')],timeout=120)
-              exports.append({'kind':'attachments','exitCode':result.returncode})
-              after=hashlib.sha256((bundle/'Info.plist').read_bytes()).hexdigest()
-              (out/'export-receipt.json').write_text(json.dumps({'exports':exports,'InfoBeforeSHA256':before,'InfoAfterSHA256':after,'InfoUnchanged':before==after,'noRerun':True},indent=2)+'\n')
-              assert before==after and all(r['exitCode']==0 for r in exports), 'Retained export incomplete'
-          else:
-              (out/'export-receipt.json').write_text(json.dumps({'state':'no-completed-bundle','exports':exports,'noRerun':True},indent=2)+'\n')
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rec636-v37-replay-stage-diagnostic
+          name: rec636-v40-replay-host-cpu-comparison
           path: |
             ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/*.json
-            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/attachments
-            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/ParentReplayPrivate.xcresult
+            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/normal
+            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/dormant
           if-no-files-found: warn
           retention-days: 7
 

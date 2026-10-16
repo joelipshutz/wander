@@ -1,60 +1,129 @@
 {
-  "state": "uncompiled-diagnostic-only-V38-original-fixture",
-  "baseHead": "22e7c6d9efd4ac0957ed25cd60e8cc26a05bc7f7",
+  "CPUProbe": {
+    "DeltaValidMeaning": "Arithmetic validity only; requires separate open-span/end/overlap/context interpretation.",
+    "MachRightsMaximum": 1,
+    "QueueQoSConfigurationCodecFixtureGatesChanged": false,
+    "ThreadInfoQueriesMaximum": 2,
+    "endAndOverlapFlags": true,
+    "endWorkerIdentity": "borrowed pthread_mach_thread_np port equality; no added send right or serialized identity",
+    "endpointKernelReadWithoutDiagnosticLock": true,
+    "endpointReadStillInProgressIsObservationGap": true,
+    "firstQuery": "first C-encode-began observer callback, non-main worker only",
+    "identifiersAddressesOrStacksRecorded": false,
+    "onlyFirstEndWorkerComparison": true,
+    "queryFlavor": "THREAD_BASIC_INFO",
+    "readyGateCheckpointOnBothOutcomes": true,
+    "rightCleanup": "idempotent close before final attachment; deinit fallback; actual kernel outcome recorded",
+    "secondQuery": "first C-end callback OR original readyGateEnded checkpoint on either outcome; one winner via lock",
+    "threadIdentifierFlavorUsed": false
+  },
+  "CPUProposalSHA256": "71cb4070539d6166cb0a1746bdc97f9e7840e3922417eb345eb0a6e4db911a3c",
+  "SDKExecuted": false,
+  "SDKPatchUnchangedFromV38": true,
   "SDKRevision": "ee5b5705b0038f0c44646cde5fe972bb65387596",
   "SDKVersion": "3.61.0",
+  "V38SourceProofSHA256": "aed4ad1307d4d92a691aa502f886bc1635f9336352b16779c587eb1ec6f583bc",
+  "V38toV40ChangedPaths": [
+    "WanderTests/ReplayMaskingTests.swift"
+  ],
+  "aggregateKeyLimit": 128,
+  "armBIncluded": true,
+  "baseHead": "5bb397b1fabe6911fa3d2b8b5c7ba8371b422b0b",
   "files": [
     {
-      "path": "PostHog/PostHogSDK.swift",
-      "role": "sdk",
-      "originalSHA256": "ceeeaf0bf964cc3ca2ba7f6f99067eda375a6802c488d67f64164dce9a1f84b3",
-      "proposedSHA256": "997f7ff9254d0ae8eb6f4ccae6e0000dbb6e742e5399daaafc4d5dbcbdd137c5",
       "diagnosticBlocks": 9,
+      "originalSHA256": "ceeeaf0bf964cc3ca2ba7f6f99067eda375a6802c488d67f64164dce9a1f84b3",
+      "path": "PostHog/PostHogSDK.swift",
+      "proposedSHA256": "997f7ff9254d0ae8eb6f4ccae6e0000dbb6e742e5399daaafc4d5dbcbdd137c5",
+      "role": "sdk",
       "stripRestoresCanonicalBytes": true
     },
     {
-      "path": "PostHog/Replay/PostHogReplayIntegration.swift",
-      "role": "sdk",
-      "originalSHA256": "5da5f38816fce2582bddc5cfef80f4ae7e6f51b55b48c268e60b03b69f517d2b",
-      "proposedSHA256": "37f09f3ecee857dd0893af07af3dbf508cb9c5acba36f2becf7dfadc7b8b8dff",
       "diagnosticBlocks": 21,
+      "originalSHA256": "5da5f38816fce2582bddc5cfef80f4ae7e6f51b55b48c268e60b03b69f517d2b",
+      "path": "PostHog/Replay/PostHogReplayIntegration.swift",
+      "proposedSHA256": "37f09f3ecee857dd0893af07af3dbf508cb9c5acba36f2becf7dfadc7b8b8dff",
+      "role": "sdk",
       "stripRestoresCanonicalBytes": true
     },
     {
-      "path": "PostHog/Replay/RRWireframe.swift",
-      "role": "sdk",
-      "originalSHA256": "f8066ccf8e2b58dda09978d303d1c4ece7df44e0c97f069f411fbbea9a25d704",
-      "proposedSHA256": "fda8d0f123c5165092890f39cf7fd8c82a4fcd7aa7a5b888cb9aac85f01fa8b6",
       "diagnosticBlocks": 1,
+      "originalSHA256": "f8066ccf8e2b58dda09978d303d1c4ece7df44e0c97f069f411fbbea9a25d704",
+      "path": "PostHog/Replay/RRWireframe.swift",
+      "proposedSHA256": "fda8d0f123c5165092890f39cf7fd8c82a4fcd7aa7a5b888cb9aac85f01fa8b6",
+      "role": "sdk",
       "stripRestoresCanonicalBytes": true
     },
     {
-      "path": "PostHog/Replay/PostHogGraphicsImageRenderer.swift",
-      "role": "sdk",
-      "originalSHA256": "5e82a7e8d528ae0384471c967a4af79b45b81c7c4be19726c930b2d8609bae78",
-      "proposedSHA256": "72a589f5f308b4b5f0fa9877694c64a725c34319c3d9710ae2185be6d175266e",
       "diagnosticBlocks": 6,
-      "stripRestoresCanonicalBytes": true
-    },
-    {
-      "path": "PostHog/Utils/UIImage+WebP.swift",
+      "originalSHA256": "5e82a7e8d528ae0384471c967a4af79b45b81c7c4be19726c930b2d8609bae78",
+      "path": "PostHog/Replay/PostHogGraphicsImageRenderer.swift",
+      "proposedSHA256": "72a589f5f308b4b5f0fa9877694c64a725c34319c3d9710ae2185be6d175266e",
       "role": "sdk",
-      "originalSHA256": "fac7c87eaa4c0ffd0096881a1495c4bc31457f95e78d887909486146e2cf4876",
-      "proposedSHA256": "83fa6db1879df68502bd580b9edc7f542cdafbbf90afea9936420b7072a0688e",
-      "diagnosticBlocks": 15,
       "stripRestoresCanonicalBytes": true
     },
     {
-      "path": "WanderTests/ReplayMaskingTests.swift",
-      "role": "test",
-      "originalSHA256": "e20df909d2100f01ff761b5e356b1e2ae51d1e51a1843ed0c44ca59f661b9681",
-      "proposedSHA256": "92e66f794ef51748152e616dfdcea989f46391933124b89415ac88119c6eb14d",
+      "diagnosticBlocks": 15,
+      "originalSHA256": "fac7c87eaa4c0ffd0096881a1495c4bc31457f95e78d887909486146e2cf4876",
+      "path": "PostHog/Utils/UIImage+WebP.swift",
+      "proposedSHA256": "83fa6db1879df68502bd580b9edc7f542cdafbbf90afea9936420b7072a0688e",
+      "role": "sdk",
+      "stripRestoresCanonicalBytes": true
+    },
+    {
+      "CPUDiagnosticBlocks": 7,
       "diagnosticBlocks": 8,
+      "hostDiagnosticBlocks": 2,
+      "orderedStripPatterns": [
+        "REC636_REPLAY_HOST_DIAGNOSTIC_BEGIN/END",
+        "REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN/END",
+        "REC636_REPLAY_DIAGNOSTIC_BEGIN/END"
+      ],
+      "originalSHA256": "e20df909d2100f01ff761b5e356b1e2ae51d1e51a1843ed0c44ca59f661b9681",
+      "path": "WanderTests/ReplayMaskingTests.swift",
+      "proposedSHA256": "dc9f99206adf53693231b31fad7843bf3bd45d100209018169de8618a939f675",
+      "role": "test",
+      "stripRestoresCanonicalBytes": true
+    },
+    {
+      "diagnosticBlocks": 4,
+      "initializerByteIdentical": true,
+      "originalSHA256": "57c1964ea064f7d2c45007415c3d9efaa6366708e2828f13051f16e1ace2779d",
+      "path": "Wander/App/WanderApp.swift",
+      "proposedSHA256": "3d09e7aa44aa86d3665e9883abd81623602c53e4bdf91324245a742da2a99787",
+      "role": "host",
       "stripRestoresCanonicalBytes": true
     }
   ],
+  "gatesCadenceMarkersAndAssertionsByteIdenticalAfterStripping": true,
+  "hostDiagnostic": {
+    "XCTestClassPresence": "Observation only, not eligibility gate",
+    "comparison": "Ordinary root work versus no mounted ordinary root; not full-process quiescence",
+    "fixtureSDKAndPrivateGatesChanged": false,
+    "hostRequestedAndMountedMismatchInvalidatesComparison": true,
+    "launchModePair": [
+      "-WanderReplayHostDiagnostic",
+      "normal|dormant"
+    ],
+    "observationPoint": "After original readyGateEnded and CPU checkpoint, before original ready assertion/private presentation",
+    "observedBooleans": 9,
+    "sameProductForBothArmsRequired": true,
+    "sameServiceInitializers": true
+  },
+  "hostPatchSHA256": "909939d51836510b7740985ae3d30ddbd61d5349a8669ce18f391435310874f8",
+  "nativeMethodsAdded": 0,
+  "nativeTestsExecuted": 0,
+  "newStageNames": [],
+  "observerValues": [
+    "duration_ns",
+    "pixel_width",
+    "pixel_height",
+    "mask_count",
+    "encoded_bytes",
+    "channels"
+  ],
+  "optimizationChanged": false,
   "sdkPatchSHA256": "647076a48bc756e75deb562193c0632c78c47a876f50dcb2232d6644a1de7915",
-  "testPatchSHA256": "53f63d1a0245b65bddab0c6a64466a578e24d4d0707f302a3b932d684ab742bb",
   "stageNames": [
     "capture_admitted",
     "capture_metadata_or_activity_drop",
@@ -113,40 +182,8 @@
     "wireframe_encode_began",
     "wireframe_encode_ended"
   ],
-  "aggregateKeyLimit": 128,
-  "traceEventLimit": 512,
-  "observerValues": [
-    "duration_ns",
-    "pixel_width",
-    "pixel_height",
-    "mask_count",
-    "encoded_bytes",
-    "channels"
-  ],
-  "armBIncluded": false,
+  "state": "unapplied-uncompiled-CPU-plus-dormant-root-composition",
   "stripSeparatorExceptions": [],
-  "gatesCadenceMarkersAndAssertionsByteIdenticalAfterStripping": true,
-  "nativeMethodsAdded": 0,
-  "SDKExecuted": false,
-  "nativeTestsExecuted": 0,
-  "V37sourceProofSHA256": "28e0011cd9be74c60faad832159505ec6bcebf3fbb1a0bcd3cfc3ad8234530d8",
-  "V37toV38ChangedPaths": [
-    "PostHog/Utils/UIImage+WebP.swift",
-    "WanderTests/ReplayMaskingTests.swift"
-  ],
-  "newStageNames": [
-    "webp_c_cleanup_began",
-    "webp_c_cleanup_ended",
-    "webp_c_encode_began",
-    "webp_c_encode_ended",
-    "webp_output_copy_began",
-    "webp_output_copy_ended",
-    "webp_pixel_import_began",
-    "webp_pixel_import_ended",
-    "webp_vimage_buffer_began",
-    "webp_vimage_buffer_ended",
-    "webp_vimage_cleanup_began",
-    "webp_vimage_cleanup_ended"
-  ],
-  "optimizationChanged": false
+  "testPatchSHA256": "e5e2a411f35f1e4690a884883acdf70cf8dd973c92feb6369edef2356fe4b8a8",
+  "traceEventLimit": 512
 }

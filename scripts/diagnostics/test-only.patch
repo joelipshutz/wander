@@ -1,6 +1,6 @@
 --- a/WanderTests/ReplayMaskingTests.swift
 +++ b/WanderTests/ReplayMaskingTests.swift
-@@ -9,6 +9,21 @@
+@@ -9,6 +9,24 @@
      @MainActor
      func testPrivateMessageContentIsMaskedInActualReplayImage() async throws {
          let captureTimeline = ReplayCaptureTimeline()
@@ -12,6 +12,9 @@
 +        }
 +        defer {
 +            PostHogReplayDiagnostic.setObserver(nil)
++            // REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++            pipeline.closeEncoderThreadCPUObservation()
++            // REC636_REPLAY_CPU_DIAGNOSTIC_END
 +            let attachment = XCTAttachment(string: pipeline.diagnostics)
 +            attachment.name = "Replay SDK pipeline diagnostics"
 +            attachment.lifetime = .keepAlways
@@ -22,7 +25,7 @@
          var foregroundScene: UIWindowScene?
          for _ in 0..<100 {
              foregroundScene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-@@ -19,6 +34,12 @@
+@@ -19,6 +37,12 @@
          let scene = try XCTUnwrap(foregroundScene)
          let originalWindow = scene.keyWindow
          let window = ReplayProbeWindow(windowScene: scene)
@@ -35,7 +38,7 @@
          window.captureTimeline = captureTimeline
          window.backgroundColor = .white
          // The SDK can conservatively mask the entire SwiftUI hosting surface
-@@ -60,6 +81,11 @@
+@@ -60,6 +84,11 @@
          XCTAssertEqual(config.sessionReplayConfig.throttleDelay, 1.0)
          config.setBeforeSend { event in frames.receive(event); return nil }
          let sdk = PostHogSDK.with(config)
@@ -47,7 +50,52 @@
          captureTimeline.record(.sdkSetupReturned)
          defer { sdk.close() }
          sdk.capture(ReplayFrameCollector.probeEvent)
-@@ -450,6 +476,14 @@
+@@ -105,6 +134,16 @@
+             if recorderReady { break }
+         }
+         captureTimeline.record(.readyGateEnded)
++        // REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        pipeline.sampleEncoderThreadAtReadyGate(passed: recorderReady)
++        // REC636_REPLAY_HOST_DIAGNOSTIC_BEGIN
++        #if targetEnvironment(simulator)
++        captureReplayHostRootDiagnostic()
++        #endif
++        // REC636_REPLAY_HOST_DIAGNOSTIC_END
++        #endif
++        // REC636_REPLAY_CPU_DIAGNOSTIC_END
+         XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
+         guard recorderReady else {
+             let diagnostic = XCTAttachment(string: """
+@@ -268,6 +307,27 @@
+         }.value
+     }
+ 
++    // REC636_REPLAY_HOST_DIAGNOSTIC_BEGIN
++    #if DEBUG && targetEnvironment(simulator)
++    @MainActor
++    private func captureReplayHostRootDiagnostic() {
++        let attachment = XCTAttachment(string: """
++        host_diagnostic_enabled=\(ReplayHostDiagnostic.isEnabled)
++        host_requested_normal=\(ReplayHostDiagnostic.requestedMode == .normal)
++        host_requested_dormant=\(ReplayHostDiagnostic.requestedMode == .dormant)
++        host_test_configuration_present=\(ReplayHostDiagnostic.hasTestConfiguration)
++        host_expected_bundle=\(ReplayHostDiagnostic.isExpectedHost)
++        host_xctest_class_present=\(ReplayHostDiagnostic.hasTestRuntime)
++        host_uses_dormant_root=\(ReplayHostDiagnostic.usesDormantRoot)
++        host_ordinary_root_mounted=\(ReplayHostDiagnostic.ordinaryRootMounted)
++        host_dormant_root_mounted=\(ReplayHostDiagnostic.dormantRootMounted)
++        """)
++        attachment.name = "Replay host root diagnostic"
++        attachment.lifetime = .keepAlways
++        add(attachment)
++    }
++    #endif
++    // REC636_REPLAY_HOST_DIAGNOSTIC_END
+     @MainActor
+     func testReadableContentAndCredentialMaskingInActualReplayImage() async throws {
+         // Match the SDK's capture precondition; connected scenes can still be inactive at launch.
+@@ -450,6 +510,14 @@
      }
  
      private let origin = ContinuousClock.now
@@ -62,7 +110,7 @@
      private let lock = NSLock()
      private var samples: [Stage: Sample] = [:]
  
-@@ -479,6 +513,11 @@
+@@ -479,6 +547,11 @@
  private final class ReplayProbeWindow: UIWindow {
      var capturePhase = "ready"
      var captureTimeline: ReplayCaptureTimeline?
@@ -74,7 +122,7 @@
      private(set) var successfulReadyDraws = 0
      private(set) var successfulLoadedDraws = 0
      private(set) var failedDraws = 0
-@@ -487,7 +526,21 @@
+@@ -487,7 +560,21 @@
          if !afterUpdates {
              captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawBegan : .nativeReadyDrawBegan)
          }
@@ -96,12 +144,164 @@
          if !afterUpdates {
              captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawEnded : .nativeReadyDrawEnded)
              if !succeeded { captureTimeline?.record(.nativeDrawFailed) }
-@@ -639,3 +692,149 @@
+@@ -639,3 +726,318 @@
      }
      override func stopLoading() {}
  }
 +// REC636_REPLAY_DIAGNOSTIC_BEGIN
 +#if DEBUG
++// REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++import Darwin
++
++/// Diagnostic-only first encoder worker observation. Mach names never leave memory.
++private final class ReplayEncoderThreadCPUProbe: @unchecked Sendable {
++    private struct Snapshot {
++        let userUS: Int64, systemUS: Int64, state: Int32, sampledNS: UInt64
++    }
++    private struct Reading {
++        let result: kern_return_t, countValid: Bool, snapshot: Snapshot?
++    }
++    private enum Endpoint: String { case cEnd = "c_end", readyGate = "ready_gate" }
++    private let lock = NSLock()
++    private var port: mach_port_t?
++    private var began = false, endpointClaimed = false, closed = false
++    private var beginOnMain = false, beganAfterCheckpoint = false
++    private var ended = false, overlappingBegin = false
++    private var endBeforeEndpointRead = false, endAfterEndpointRead = false
++    private var endpointReadInProgress = false
++    private var entry: Reading?, endpoint: Reading?
++    private var endpointTrigger: Endpoint?
++    private var gateCheckpointSeen = false, gatePassed = false
++    private var endWorkerMatches: Bool?
++    private var releaseResult: kern_return_t?
++
++    func observeBegin() {
++        lock.lock(); defer { lock.unlock() }
++        guard !closed else { return }
++        if began { if !ended { overlappingBegin = true }; return }
++        began = true
++        beginOnMain = Thread.isMainThread
++        beganAfterCheckpoint = endpointClaimed
++        guard !beginOnMain, !beganAfterCheckpoint else { return }
++        let current = mach_thread_self()
++        guard current != 0 else { return }
++        port = current // One task-local send right; close/deinit balances it once.
++        entry = Self.read(current)
++    }
++
++    func observeEnd() { sampleEndpoint(.cEnd, gateOutcome: nil) }
++    func sampleAtReadyGate(passed: Bool) { sampleEndpoint(.readyGate, gateOutcome: passed) }
++
++    private func sampleEndpoint(_ trigger: Endpoint, gateOutcome: Bool?) {
++        lock.lock()
++        guard !closed else { lock.unlock(); return }
++        if trigger == .cEnd {
++            guard began else { lock.unlock(); return }
++            if !ended {
++                ended = true
++                // Borrowed current-thread port: no second Mach send right acquired.
++                endWorkerMatches = port.map { pthread_mach_thread_np(pthread_self()) == $0 }
++            }
++        } else {
++            gateCheckpointSeen = true
++            gatePassed = gateOutcome ?? false
++        }
++        guard !endpointClaimed else { lock.unlock(); return }
++        endpointClaimed = true
++        endpointTrigger = trigger
++        endBeforeEndpointRead = ended
++        let current = port
++        endpointReadInProgress = true
++        lock.unlock()
++        // No diagnostic lock is held: an encoder end callback must not wait
++        // behind this kernel query and manufacture a waiting-state observation.
++        let observed = current.map(Self.read)
++        lock.lock()
++        endpoint = observed
++        endAfterEndpointRead = ended
++        endpointReadInProgress = false
++        if closed { releasePortLocked() }
++        lock.unlock()
++    }
++
++    func close() {
++        lock.lock(); defer { lock.unlock() }
++        closed = true
++        if !endpointReadInProgress { releasePortLocked() }
++    }
++
++    deinit { close() }
++
++    private func releasePortLocked() {
++        guard let current = port else { return }
++        port = nil
++        releaseResult = mach_port_deallocate(mach_task_self_, current)
++    }
++
++    private static func read(_ current: mach_port_t) -> Reading {
++        var info = thread_basic_info_data_t()
++        let expected = mach_msg_type_number_t(MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
++        var count = expected
++        let result = withUnsafeMutablePointer(to: &info) { pointer in
++            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(expected)) {
++                thread_info(current, thread_flavor_t(THREAD_BASIC_INFO), $0, &count)
++            }
++        }
++        let sampled = DispatchTime.now().uptimeNanoseconds
++        let countValid = count == expected
++        guard result == KERN_SUCCESS, countValid,
++              info.user_time.seconds >= 0, info.system_time.seconds >= 0,
++              (0..<1_000_000).contains(info.user_time.microseconds),
++              (0..<1_000_000).contains(info.system_time.microseconds) else {
++            return Reading(result: result, countValid: countValid, snapshot: nil)
++        }
++        return Reading(result: result, countValid: countValid, snapshot: .init(
++            userUS: Int64(info.user_time.seconds) * 1_000_000 + Int64(info.user_time.microseconds),
++            systemUS: Int64(info.system_time.seconds) * 1_000_000 + Int64(info.system_time.microseconds),
++            state: info.run_state, sampledNS: sampled))
++    }
++
++    var diagnostics: String {
++        lock.lock(); defer { lock.unlock() }
++        func reading(_ prefix: String, _ value: Reading?) -> [String] {
++            ["encoder_cpu_\(prefix)_queried=\(value != nil)",
++             "encoder_cpu_\(prefix)_kern_result=\(value.map { Int64($0.result) } ?? -1)",
++             "encoder_cpu_\(prefix)_count_valid=\(value?.countValid ?? false)",
++             "encoder_cpu_\(prefix)_snapshot_valid=\(value?.snapshot != nil)",
++             "encoder_cpu_\(prefix)_user_us=\(value?.snapshot?.userUS ?? -1)",
++             "encoder_cpu_\(prefix)_system_us=\(value?.snapshot?.systemUS ?? -1)",
++             "encoder_cpu_\(prefix)_run_state=\(Int64(value?.snapshot?.state ?? -1))"]
++        }
++        var lines = ["encoder_cpu_schema=1", "encoder_cpu_unit=microseconds",
++            "encoder_cpu_begin_observed=\(began)", "encoder_cpu_begin_on_main=\(beginOnMain)",
++            "encoder_cpu_begin_after_checkpoint=\(beganAfterCheckpoint)",
++            "encoder_cpu_endpoint_claimed=\(endpointClaimed)",
++            "encoder_cpu_endpoint_trigger=\(endpointTrigger?.rawValue ?? "none")",
++            "encoder_cpu_gate_checkpoint_seen=\(gateCheckpointSeen)",
++            "encoder_cpu_gate_passed=\(gatePassed)",
++            "encoder_cpu_end_worker_match_known=\(endWorkerMatches != nil)",
++            "encoder_cpu_end_worker_matches_entry=\(endWorkerMatches ?? false)",
++            "encoder_cpu_first_encode_end_observed=\(ended)",
++            "encoder_cpu_overlapping_begin_observed=\(overlappingBegin)",
++            "encoder_cpu_end_before_endpoint_read=\(endBeforeEndpointRead)",
++            "encoder_cpu_end_after_endpoint_read=\(endAfterEndpointRead)",
++            "encoder_cpu_endpoint_read_in_progress=\(endpointReadInProgress)",
++            "encoder_cpu_closed=\(closed)",
++            "encoder_cpu_release_attempted=\(releaseResult != nil)",
++            "encoder_cpu_release_kern_result=\(releaseResult.map { Int64($0) } ?? -1)"]
++        lines += reading("entry", entry) + reading("endpoint", endpoint)
++        if let first = entry?.snapshot, let last = endpoint?.snapshot,
++           last.userUS >= first.userUS, last.systemUS >= first.systemUS,
++           last.sampledNS >= first.sampledNS {
++            lines += ["encoder_cpu_delta_valid=true",
++                "encoder_cpu_delta_user_us=\(last.userUS - first.userUS)",
++                "encoder_cpu_delta_system_us=\(last.systemUS - first.systemUS)",
++                "encoder_cpu_delta_wall_us=\((last.sampledNS - first.sampledNS) / 1_000)"]
++        } else { lines += ["encoder_cpu_delta_valid=false"] }
++        return lines.joined(separator: "\n")
++    }
++}
++// REC636_REPLAY_CPU_DIAGNOSTIC_END
 +/// Diagnostic-only bounded aggregates and trace. Identities remain in memory.
 +private final class ReplaySDKPipelineDiagnostics: @unchecked Sendable {
 +    private struct Key: Hashable {
@@ -180,6 +380,9 @@
 +    ]
 +    private static let allowedValues: Set<String> = ["duration_ns", "pixel_width", "pixel_height", "mask_count", "encoded_bytes", "channels"]
 +    private let lock = NSLock()
++    // REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++    private let encoderThreadCPU = ReplayEncoderThreadCPUProbe()
++    // REC636_REPLAY_CPU_DIAGNOSTIC_END
 +    private let captureTimeline: ReplayCaptureTimeline
 +    private var expectedSDK: ObjectIdentifier?
 +    private var expectedWindow: ObjectIdentifier?
@@ -193,6 +396,10 @@
 +        let end = DispatchTime.now().uptimeNanoseconds
 +        return Int64(min(end >= start ? end - start : 0, UInt64(Int64.max)))
 +    }
++    // REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++    func sampleEncoderThreadAtReadyGate(passed: Bool) { encoderThreadCPU.sampleAtReadyGate(passed: passed) }
++    func closeEncoderThreadCPUObservation() { encoderThreadCPU.close() }
++    // REC636_REPLAY_CPU_DIAGNOSTIC_END
 +    func bindSDK(_ sdk: PostHogSDK) {
 +        lock.lock(); defer { lock.unlock() }
 +        expectedSDK = ObjectIdentifier(sdk)
@@ -202,6 +409,13 @@
 +        expectedWindow = ObjectIdentifier(window)
 +    }
 +    func record(_ stage: String, owner: ObjectIdentifier?, window: ObjectIdentifier?, outcome: Bool?, values: [String: Int64]) {
++        // REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++        if (stage == "webp_c_encode_began" || stage == "webp_c_encode_ended"),
++           Set(values.keys).isSubset(of: Self.allowedValues) {
++            if stage == "webp_c_encode_began" { encoderThreadCPU.observeBegin() }
++            else { encoderThreadCPU.observeEnd() }
++        }
++        // REC636_REPLAY_CPU_DIAGNOSTIC_END
 +        let now = captureTimeline.elapsedMilliseconds()
 +        lock.lock(); defer { lock.unlock() }
 +        guard Self.allowedStages.contains(stage), Set(values.keys).isSubset(of: Self.allowedValues) else {
@@ -241,6 +455,9 @@
 +            let values = entry.values.keys.sorted().map { "\($0)=\(entry.values[$0]!)" }.joined(separator: " ")
 +            return "pipeline_event index=\(index) elapsed_ms=\(entry.milliseconds) \(labels(entry.key)) \(values)"
 +        }
++        // REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN
++        lines.append(encoderThreadCPU.diagnostics)
++        // REC636_REPLAY_CPU_DIAGNOSTIC_END
 +        return lines.joined(separator: "\n")
 +    }
 +}
