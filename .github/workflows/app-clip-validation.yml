@@ -20,6 +20,10 @@ on:
         description: In observed diagnostics mode run only the instrumented private Replay job
         type: boolean
         default: false
+      native_followup:
+        description: In observed diagnostics mode run only the four changed native UI observations
+        type: boolean
+        default: false
       graphics_only:
         description: Run focused native appearance and map frame diagnostics
         type: boolean
@@ -262,7 +266,7 @@ jobs:
           retention-days: 14
 
   replay-private:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics && !inputs.native_followup }}
     name: Instrumented private replay once
     runs-on: macos-26
     timeout-minutes: 60
@@ -463,10 +467,10 @@ jobs:
             --out "$RUNNER_TEMP/native-input-evidence" \
             --products "$RUNNER_TEMP/NativeDiagnostic.xctestproducts" \
             --packages "$RUNNER_TEMP/CanonicalPackages"
-      - name: Run six large diagnostic cases once each
+      - name: Run selected large diagnostic cases once each
         if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: |
-          python3 scripts/diagnostics/native-input-diagnostic.py run --role large \
+          python3 scripts/diagnostics/native-input-diagnostic.py run --role large ${{ inputs.native_followup && '--followup' || '' }} \
             --out "$RUNNER_TEMP/native-input-evidence" \
             --products "$RUNNER_TEMP/NativeDiagnostic.xctestproducts"
       - name: Prepare exact compact phone
@@ -477,10 +481,10 @@ jobs:
           xcrun simctl shutdown "$DIAG_LARGE"
           xcrun simctl bootstatus "$DIAG_COMPACT" -b
           open -a Simulator --args -CurrentDeviceUDID "$DIAG_COMPACT"
-      - name: Run three compact diagnostic cases once each
+      - name: Run selected compact diagnostic cases once each
         if: ${{ !cancelled() && steps.native_build.outcome == 'success' && steps.compact_ready.outcome == 'success' }}
         run: |
-          python3 scripts/diagnostics/native-input-diagnostic.py run --role compact \
+          python3 scripts/diagnostics/native-input-diagnostic.py run --role compact ${{ inputs.native_followup && '--followup' || '' }} \
             --out "$RUNNER_TEMP/native-input-evidence" \
             --products "$RUNNER_TEMP/NativeDiagnostic.xctestproducts"
       - uses: actions/upload-artifact@v4

@@ -750,7 +750,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func drawer(in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        app.staticTexts["live.drawerHandle"]
     }
 
     private func summary(in app: XCUIApplication) -> XCUIElement {
@@ -761,13 +761,41 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                               postInputCapture: String? = nil) {
         let handle = drawer(in: app)
         let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
-        let predicate = NSPredicate(format: "label == %@ AND value BEGINSWITH %@", "Activity drawer, \(state)", loadedCount)
+        // Diagnostic observation experiment: read both attributes from one
+        // native snapshot inside the same absolute five-second budget.
+        let observationStart = ProcessInfo.processInfo.systemUptime
+        let observationDeadline = observationStart + 5
+        var evaluationCount = 0
+        var evaluationTimings: [String] = []
+        let predicate = NSPredicate { _, _ in
+            let started = ProcessInfo.processInfo.systemUptime
+            var snapshotSucceeded = false
+            var matchedExactCondition = false
+            if started <= observationDeadline, let snapshot = try? handle.snapshot() {
+                snapshotSucceeded = true
+                matchedExactCondition = snapshot.label == "Activity drawer, \(state)"
+                    && (snapshot.value as? String)?.hasPrefix(loadedCount) == true
+            }
+            let finished = ProcessInfo.processInfo.systemUptime
+            let withinFiveSeconds = started <= observationDeadline && finished <= observationDeadline
+            evaluationCount += 1
+            if evaluationTimings.count == 16 { evaluationTimings.removeFirst() }
+            evaluationTimings.append("evaluation=\(evaluationCount); startedUptime=\(started); finishedUptime=\(finished); snapshotSucceeded=\(snapshotSucceeded); matchedExactCondition=\(matchedExactCondition); withinFiveSeconds=\(withinFiveSeconds)")
+            return withinFiveSeconds && matchedExactCondition
+                && ProcessInfo.processInfo.systemUptime <= observationDeadline
+        }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: handle)
         let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        let timing = XCTAttachment(string: ([
+            "evaluationCount=\(evaluationCount); retainedCount=\(evaluationTimings.count); startedUptime=\(observationStart); deadlineUptime=\(observationDeadline); finishedUptime=\(ProcessInfo.processInfo.systemUptime); waitResult=\(result.rawValue)"
+        ] + evaluationTimings).joined(separator: "\n"))
+        timing.name = "REC-636-drawer-predicate-timing"
+        timing.lifetime = .keepAlways
+        add(timing)
         if let postInputCapture {
             captureState(postInputCapture, in: app, observations: [
                 "expectedState=\(state); expectedLoadedCount=\(loadedCount); waitResult=\(result)",
-                "postWaitSystemUptime=\(ProcessInfo.processInfo.systemUptime)"
+                "postWaitSystemUptime=\(ProcessInfo.processInfo.systemUptime); observationDeadlineSystemUptime=\(observationDeadline)"
             ])
         }
         XCTAssertEqual(result, .completed)
@@ -872,10 +900,11 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         beforeDiagnostic.lifetime = .keepAlways
         add(beforeDiagnostic)
         capture("native-pan-before")
-        // Use deliberate native input for the existing single-pan displacement check.
+        // Diagnostic input experiment: preserve this path while requesting
+        // slower native movement; the retained touch stream remains the proof.
         zero.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
             .press(forDuration: 0.1, thenDragTo: zero.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)),
-                   withVelocity: .slow, thenHoldForDuration: 0.1)
+                   withVelocity: XCUIGestureVelocity(rawValue: 60), thenHoldForDuration: 0.1)
         let displacement = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard anchor.exists else { return false }
             let after = anchor.frame

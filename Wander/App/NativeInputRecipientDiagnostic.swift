@@ -10,8 +10,37 @@ enum NativeInputRecipientDiagnostic {
     enum Stage: String {
         case searchActionEntered, searchSurfaceRequested, searchDestinationAppeared
         case mapSourceEntered, mapSourceSelected, mapSourceReturned
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        case liveDrawerChangeEntered, liveDrawerChangeApplied
+        case livePersonFilterSetEntered, livePersonFilterSetApplied
+        case livePersonFilterEnabled, livePersonFilterDisabled
+        // REC636-WARM-DIAGNOSTIC-END
     }
 
+    // REC636-WARM-DIAGNOSTIC-BEGIN
+    enum WarmPhase: String, Codable, Sendable {
+        case projectionLookup, projectionRecentHit, projectionLRUHit, projectionBuild
+        case nativeUpdate, nativeAnnotationSync, nativeViewCreation, nativeViewsAdded
+        case nativeVisibleRefresh, nativeAccessibilityRefresh
+        case renderWillStart, renderFinishedFull, renderFinishedPartial, pinEntranceScheduled
+    }
+    struct WarmToken: Sendable {
+        let cycle: Int, phase: WarmPhase, startedUptime: Double
+    }
+
+    static func beginWarm(_ phase: WarmPhase) -> WarmToken? {
+        guard fixture == "map-performance" else { return nil }
+        return NativeRecipientRecorder.shared.beginWarm(phase)
+    }
+    static func endWarm(_ token: WarmToken?) {
+        guard let token else { return }
+        NativeRecipientRecorder.shared.endWarm(token)
+    }
+    static func recordWarm(_ phase: WarmPhase, duration: TimeInterval = 0, items: Int = 0) {
+        guard fixture == "map-performance" else { return }
+        NativeRecipientRecorder.shared.recordWarm(phase, duration: duration, items: items)
+    }
+    // REC636-WARM-DIAGNOSTIC-END
     static let fixture: String? = {
         let arguments = Set(ProcessInfo.processInfo.arguments)
         let required: Set<String> = ["-WanderNativeRecipientDiagnostic", "-WanderAuthenticatedUITest"]
@@ -141,10 +170,24 @@ private struct NativeDiagnosticInstallation: Codable, Sendable {
     let observedUptime: Double, attached: Bool, keyWindow: Bool
     let window: NativeDiagnosticView?, maps: [NativeDiagnosticMap], mapScanTruncated: Bool
 }
+// REC636-WARM-DIAGNOSTIC-BEGIN
+private struct NativeWarmAggregate: Codable, Sendable {
+    let cycle: Int, phase: String
+    var starts = 0, completions = 0, itemsTotal = 0, itemsMaximum = 0
+    var firstStartUptime: Double, lastStartUptime: Double
+    var lastEndUptime: Double? = nil
+    var totalDuration = 0.0, maximumDuration = 0.0
+}
+// REC636-WARM-DIAGNOSTIC-END
 private struct NativeDiagnosticTrace: Codable, Sendable {
     let schema: Int, launchID: String, fixture: String
     let startedUnixSeconds: Double, startedUptime: Double
     var generation = 0
+    // REC636-WARM-DIAGNOSTIC-BEGIN
+    var warmSchema = 1, warmCycleCount = 0, droppedWarmCycles = 0
+    var droppedWarmMeasurements = 0, droppedWarmPersistenceRequests = 0
+    var warm: [NativeWarmAggregate] = []
+    // REC636-WARM-DIAGNOSTIC-END
     var droppedSamples = 0, droppedStages = 0, droppedTouches = 0, droppedInstallations = 0, droppedLaterObservations = 0
     var installations: [NativeDiagnosticInstallation] = []
     var stages: [NativeDiagnosticStage] = []
@@ -159,6 +202,10 @@ private final class NativeRecipientRecorder {
         fixture: NativeInputRecipientDiagnostic.fixture ?? "disabled",
         startedUnixSeconds: Date().timeIntervalSince1970, startedUptime: ProcessInfo.processInfo.systemUptime)
     private let writer = NativeDiagnosticWriter()
+    // REC636-WARM-DIAGNOSTIC-BEGIN
+    private var warmCycle = 0
+    private var warmPersistenceRequests = 0
+    // REC636-WARM-DIAGNOSTIC-END
     private weak var window: UIWindow?
     private var nextOrdinal = 0
     private var active: [ObjectIdentifier: Int] = [:]
@@ -186,11 +233,80 @@ private final class NativeRecipientRecorder {
     }
 
     func record(_ stage: NativeInputRecipientDiagnostic.Stage) {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        if stage == .mapSourceEntered, NativeInputRecipientDiagnostic.fixture == "map-performance" {
+            warmCycle += 1
+            if warmCycle <= 4 { trace.warmCycleCount = warmCycle }
+            else { trace.droppedWarmCycles += 1 }
+        }
+        // REC636-WARM-DIAGNOSTIC-END
         if trace.stages.count == 128 { trace.stages.removeFirst(); trace.droppedStages += 1 }
         trace.stages.append(.init(stage: stage.rawValue, observedUptime: ProcessInfo.processInfo.systemUptime))
         flush()
     }
 
+    // REC636-WARM-DIAGNOSTIC-BEGIN
+    func beginWarm(_ phase: NativeInputRecipientDiagnostic.WarmPhase) -> NativeInputRecipientDiagnostic.WarmToken? {
+        guard let index = warmIndex(phase, started: ProcessInfo.processInfo.systemUptime) else { return nil }
+        let started = trace.warm[index].lastStartUptime
+        return .init(cycle: warmCycle, phase: phase, startedUptime: started)
+    }
+
+    func endWarm(_ token: NativeInputRecipientDiagnostic.WarmToken) {
+        let ended = ProcessInfo.processInfo.systemUptime
+        guard let index = trace.warm.firstIndex(where: { $0.cycle == token.cycle && $0.phase == token.phase.rawValue }) else { return }
+        finishWarm(index, ended: ended, duration: ended - token.startedUptime, items: 0)
+        persistWarmBoundary(token.phase)
+    }
+
+    func recordWarm(_ phase: NativeInputRecipientDiagnostic.WarmPhase, duration: TimeInterval, items: Int) {
+        let ended = ProcessInfo.processInfo.systemUptime
+        guard duration.isFinite, duration >= 0, items >= 0,
+              let index = warmIndex(phase, started: ended - duration) else { return }
+        finishWarm(index, ended: ended, duration: duration, items: items)
+        persistWarmBoundary(phase)
+    }
+
+    private func warmIndex(_ phase: NativeInputRecipientDiagnostic.WarmPhase, started: Double) -> Int? {
+        guard (1...4).contains(warmCycle), started.isFinite else { return nil }
+        if let index = trace.warm.firstIndex(where: { $0.cycle == warmCycle && $0.phase == phase.rawValue }) {
+            guard trace.warm[index].starts < 100_000 else { trace.droppedWarmMeasurements += 1; return nil }
+            trace.warm[index].starts += 1
+            trace.warm[index].lastStartUptime = started
+            return index
+        }
+        guard trace.warm.count < 64 else { trace.droppedWarmMeasurements += 1; return nil }
+        trace.warm.append(.init(cycle: warmCycle, phase: phase.rawValue,
+            starts: 1, firstStartUptime: started, lastStartUptime: started))
+        return trace.warm.count - 1
+    }
+
+    private func finishWarm(_ index: Int, ended: Double, duration: TimeInterval, items: Int) {
+        guard ended.isFinite, duration.isFinite, duration >= 0,
+              (trace.warm[index].totalDuration + duration).isFinite,
+              items <= 1_000_000, trace.warm[index].itemsTotal <= 100_000_000 - items else {
+            trace.droppedWarmMeasurements += 1; return
+        }
+        trace.warm[index].completions += 1
+        trace.warm[index].lastEndUptime = ended
+        trace.warm[index].totalDuration += duration
+        trace.warm[index].maximumDuration = max(trace.warm[index].maximumDuration, duration)
+        trace.warm[index].itemsTotal += items
+        trace.warm[index].itemsMaximum = max(trace.warm[index].itemsMaximum, items)
+    }
+
+    private func persistWarmBoundary(_ phase: NativeInputRecipientDiagnostic.WarmPhase) {
+        // Never flush for each pin/cache read. Existing touch/source boundaries also
+        // persist aggregates. This caps additional coalesced async writer requests.
+        switch phase {
+        case .projectionBuild, .nativeUpdate, .renderWillStart, .renderFinishedFull, .renderFinishedPartial:
+            guard warmPersistenceRequests < 128 else { trace.droppedWarmPersistenceRequests += 1; return }
+            warmPersistenceRequests += 1
+            flush()
+        default: break
+        }
+    }
+    // REC636-WARM-DIAGNOSTIC-END
     func observe(_ touches: Set<UITouch>, event: UIEvent, phase: String) {
         // Refresh weak identities once at touch start, never scan the view tree
         // on a moved event. Frame reads below do not request layout or hit-test.

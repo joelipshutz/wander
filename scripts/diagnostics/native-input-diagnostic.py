@@ -117,10 +117,12 @@ def export_case(bundle, case, target):
     return before == after and all(r["exitCode"] == 0 for r in receipts)
 
 
-def run_cases(out, products, role):
+def run_cases(out, products, role, followup=False):
     admitted = json.loads((out / "admission.json").read_text())
     device = admitted[role]["udid"]
     labels = list(CASES) if role == "large" else ["drawer", "combined", "search"]
+    if followup:
+        labels = ["combined", "warm"] if role == "large" else ["drawer", "combined"]
     rows = []
     for label in labels:
         target = out / (role + "-" + label)
@@ -159,6 +161,7 @@ def run_cases(out, products, role):
         row = {"case": "WanderUITests/" + CASES[label], "device": device,
             "nativeExitCode": native.returncode, "startedUnix": started, "endedUnix": time.time(),
             "retryCount": 0, "diagnosticOnly": True, "releaseAcceptance": False,
+            "selectionMode": "native-followup" if followup else "original-observations",
             "captureConfiguration": capture_configuration}
         # Read only the explicit synthetic-fixture trace files, after native input ends.
         lookup = subprocess.run(["xcrun", "simctl", "get_app_container", device, "com.grayline.wander", "data"],
@@ -191,6 +194,7 @@ def main():
     parser.add_argument("--products", type=Path)
     parser.add_argument("--packages", type=Path)
     parser.add_argument("--role", choices=("large", "compact"))
+    parser.add_argument("--followup", action="store_true", help="Run only the four changed native follow-up observations")
     args = parser.parse_args()
     if args.action == "admit":
         admit(args.out)
@@ -199,7 +203,7 @@ def main():
         verify_build(args.out, args.products, args.packages)
     else:
         assert args.products and args.role
-        return run_cases(args.out, args.products, args.role)
+        return run_cases(args.out, args.products, args.role, args.followup)
     return 0
 
 

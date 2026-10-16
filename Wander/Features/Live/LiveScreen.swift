@@ -697,8 +697,19 @@ struct LiveScreen: View {
             let people = [store.currentUser] + store.following(of: store.currentUser.id)
             ForEach(people) { person in
                 Toggle(person.displayName, isOn: Binding(get: { draftSelection.personIDs.contains(person.id) }, set: { selected in
+                    // REC636-V39-LIVE-DIAGNOSTIC-BEGIN
+                    #if DEBUG && targetEnvironment(simulator)
+                    NativeInputRecipientDiagnostic.record(.livePersonFilterSetEntered)
+                    #endif
+                    // REC636-V39-LIVE-DIAGNOSTIC-END
                     if selected { draftSelection.personIDs.insert(person.id) }
                     else { draftSelection.personIDs.remove(person.id) }
+                    // REC636-V39-LIVE-DIAGNOSTIC-BEGIN
+                    #if DEBUG && targetEnvironment(simulator)
+                    NativeInputRecipientDiagnostic.record(selected ? .livePersonFilterEnabled : .livePersonFilterDisabled)
+                    NativeInputRecipientDiagnostic.record(.livePersonFilterSetApplied)
+                    #endif
+                    // REC636-V39-LIVE-DIAGNOSTIC-END
                 })).accessibilityIdentifier("live.filter.person.\(person.id)")
             }
             if !draftSelection.personIDs.isEmpty {
@@ -791,7 +802,17 @@ struct LiveScreen: View {
         switch detent { case 0: 70; case 2: max(70, available - 8); default: max(70, available * 0.48) }
     }
     private func changeDetent(_ value: Int) {
+        // REC636-V39-LIVE-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.record(.liveDrawerChangeEntered)
+        #endif
+        // REC636-V39-LIVE-DIAGNOSTIC-END
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { detent = min(2, max(0, value)) }
+        // REC636-V39-LIVE-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.record(.liveDrawerChangeApplied)
+        #endif
+        // REC636-V39-LIVE-DIAGNOSTIC-END
     }
     private func startDrawing() {
         guard let viewport, viewport.span.longitudeDelta < 180 else { areaNotice = true; return }

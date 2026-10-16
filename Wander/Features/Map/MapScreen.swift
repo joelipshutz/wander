@@ -55,9 +55,19 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
         partition: String = "default",
         build: () -> Value
     ) -> Value {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.projectionLookup)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         // Pin rendering repeatedly reads the same projection. A stable hit
         // must not copy the LRU array or mutate its dictionary for every pin.
         if let recent = mostRecentEntry, recent.partition == partition, recent.key == key {
+            // REC636-WARM-DIAGNOSTIC-BEGIN
+            #if DEBUG && targetEnvironment(simulator)
+            NativeInputRecipientDiagnostic.recordWarm(.projectionRecentHit)
+            #endif
+            // REC636-WARM-DIAGNOSTIC-END
             return recent.value
         }
         var entries = entriesByPartition[partition] ?? []
@@ -66,10 +76,25 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
             entries.append(entry)
             entriesByPartition[partition] = entries
             mostRecentEntry = (partition, key, entry.value)
+            // REC636-WARM-DIAGNOSTIC-BEGIN
+            #if DEBUG && targetEnvironment(simulator)
+            NativeInputRecipientDiagnostic.recordWarm(.projectionLRUHit)
+            #endif
+            // REC636-WARM-DIAGNOSTIC-END
             return entry.value
         }
 
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        let warmProjectionToken = NativeInputRecipientDiagnostic.beginWarm(.projectionBuild)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         let value = build()
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.endWarm(warmProjectionToken)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         entries.append((key, value))
         if entries.count > capacityPerPartition {
             entries.removeFirst(entries.count - capacityPerPartition)
@@ -6854,6 +6879,12 @@ struct NativeMapView: UIViewRepresentable {
         }
 
         func update(parent: NativeMapView, mapView: MKMapView) {
+            // REC636-WARM-DIAGNOSTIC-BEGIN
+            #if DEBUG && targetEnvironment(simulator)
+            let warmUpdateToken = NativeInputRecipientDiagnostic.beginWarm(.nativeUpdate)
+            defer { NativeInputRecipientDiagnostic.endWarm(warmUpdateToken) }
+            #endif
+            // REC636-WARM-DIAGNOSTIC-END
             let detailModeChanged = parent.usesAdaptivePinDetail != self.parent.usesAdaptivePinDetail
             mapView.isUserInteractionEnabled = parent.isInteractionEnabled
             mapView.accessibilityElementsHidden = !parent.isInteractionEnabled
@@ -6958,6 +6989,17 @@ struct NativeMapView: UIViewRepresentable {
             }
         }
 
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        func mapViewWillStartRenderingMap(_ mapView: MKMapView) {
+            NativeInputRecipientDiagnostic.recordWarm(.renderWillStart)
+        }
+
+        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
+            NativeInputRecipientDiagnostic.recordWarm(fullyRendered ? .renderFinishedFull : .renderFinishedPartial)
+        }
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             parent.onCameraChange(mapView.region)
             scheduleAdaptivePinDetailRefresh(in: mapView)
@@ -7447,6 +7489,11 @@ final class NativeMapPinAnnotationView: MKAnnotationView {
             return
         }
 
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.pinEntranceScheduled)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         alpha = 0
         transform = CGAffineTransform(
             translationX: 0,
@@ -8373,6 +8420,11 @@ private enum MapPerformanceProbe {
     }
 
     static func recordNativeAnnotationViewsAdded(_ viewCount: Int) {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.nativeViewsAdded, items: viewCount)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         guard isEnabled, isCameraInteractionActive else { return }
         nativeDidAddCount += 1
         nativeDidAddViewCount += viewCount
@@ -8382,6 +8434,11 @@ private enum MapPerformanceProbe {
         annotationCount: Int,
         duration: TimeInterval
     ) {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.nativeAccessibilityRefresh, duration: duration, items: annotationCount)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         guard isEnabled, isCameraInteractionActive else { return }
         nativeAccessibilityRefreshCount += 1
         nativeAccessibilityVisitCount += annotationCount
@@ -8392,6 +8449,11 @@ private enum MapPerformanceProbe {
         annotationCount: Int,
         duration: TimeInterval
     ) {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.nativeAnnotationSync, duration: duration, items: annotationCount)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         guard isEnabled, isCameraInteractionActive else { return }
         nativeSynchronizationCount += 1
         nativeSynchronizationVisitCount += annotationCount
@@ -8402,6 +8464,11 @@ private enum MapPerformanceProbe {
         annotationCount: Int,
         duration: TimeInterval
     ) {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.nativeVisibleRefresh, duration: duration, items: annotationCount)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         guard isEnabled, isCameraInteractionActive else { return }
         nativeVisibleRefreshCount += 1
         nativeVisibleRefreshVisitCount += annotationCount
@@ -8409,6 +8476,11 @@ private enum MapPerformanceProbe {
     }
 
     static func recordNativeViewCreation(duration: TimeInterval) {
+        // REC636-WARM-DIAGNOSTIC-BEGIN
+        #if targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.recordWarm(.nativeViewCreation, duration: duration)
+        #endif
+        // REC636-WARM-DIAGNOSTIC-END
         guard isEnabled, isCameraInteractionActive else { return }
         nativeViewCreationCount += 1
         nativeViewCreationDuration += duration
