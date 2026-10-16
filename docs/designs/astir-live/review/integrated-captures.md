@@ -1,8 +1,40 @@
 # Integrated Live review captures
 
-REC-636 · Selected app review evidence · Historical galleries retained
+## Current selected evidence · V33
 
-## Current app review evidence · V28
+Eight finished images from current V33 Passed cases were visually approved by root. The pack is **386,432 bytes across ten files**, including its manifest and README. Seven JPEGs preserve complete screens at 450 px width; the actual SDK PNG is byte-identical. No crop, overlay, recoloring or repaint was used. Original PNGs, recordings and result bundles remain outside Git. The manifest binds source, sealed products, exact native case/device and original/derivative hashes.
+
+Current local validation is 3,248/3,248 Passed; final published-head CI and ordinary-auth acceptance remain separate. Consult the [validation report](integrated-validation.md), [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and [REC-636](https://linear.app/recme/issue/REC-636) for the latest disposition.
+
+Compact Light and large Dark Live home retain distinct Wanna/check-in styling, the existing Feed and three tabs:
+
+![Compact Light Live home](v33/compact-live-home.jpg)
+![Large Dark Live home](v33/large-live-home.jpg)
+
+The compact reply explicitly identifies its fictional demo context; Profile Patterns retains the existing personal-map journey:
+
+![Compact simulated Wanna reply](v33/compact-wanna-reply.jpg)
+![Profile Patterns after the integrated route](v33/profile-patterns.jpg)
+
+The explicit DEBUG embedded-photo fixture displays two distinct decoded pages and returns to the original Live card:
+
+![Embedded Live photo page 1 of 3](v33/compact-embedded-first.jpg)
+![Embedded Live photo page 2 of 3](v33/compact-embedded-second.jpg)
+![Back to the original Live activity](v33/compact-embedded-return.jpg)
+
+An actual offline SDK frame retains the public loaded control while the private region is masked:
+
+![Actual SDK private-content masking frame](v33/private-actual-sdk-masked.png)
+
+These are named fixture endpoints, not proof of real delivery, production-media paging, every replay frame, continuous freehand, spoken VoiceOver, hardware behavior or per-point pinch contacts. Current large home/Wanna evidence is Dark and compact home/reply is Light; opposite-theme home captures on both phones remain incomplete pending Mac unlock. Full local validation retained 18 parent and four compact runtime warnings.
+
+The M1–M8 review blocks and their source-scoped limits remain in the validation report. Current automated drawing checks passed using the visible-area alternative. Preserve historical V24 human freehand and all earlier gallery sections unchanged under their own source identity; do not relabel them as current motion proof. Preserve old `4fe71f0e` CI failures and its missing infrastructure coverage. The separate replay host-isolation A/B assertions passed 4/4. That diagnostic adds no unique coverage, proves no historical cause and justifies no test/workflow change by itself; no additional A/B pixel-review claim is made here.
+
+The reviewed pack is stored in [v33](v33/README.md); whole-change storage is checked separately at publication. Live stays globally Off; this gallery grants no merge, activation or release approval.
+
+## Historical app review evidence · V28
+
+The eight earlier review images remain available through immutable links below and in shared issue evidence. Their source-bound manifest is retained here; replacing duplicate image copies keeps the final review change within its storage limit.
 
 These eight full-frame images come from exact Passed cases of the V28 app-source candidate (`8d6bd5d68a4e702d7f9e791b211f08d6c65ab0f96ccb0494e2279e3f2f300922`). Both thirteen-case focus phases remain **Failed: 11 Passed / 2 Failed**, zero skips. The isolated private SDK case Passed 1/1. The completed V28 full suite remains Failed: 3,242 Passed / 7 Failed among 3,249. These images do not validate V29/V30 targeted successors or V31; follow the [validation report](integrated-validation.md) for exact generation and method/device scope.
 
@@ -12,35 +44,35 @@ The complete pack is **356,119 bytes**, including all eight JPEGs, unchanged man
 
 ### Live home · compact Light
 
-![Live home · compact Light](v28/compact-live-home.jpg)
+[Live home · compact Light (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/compact-live-home.jpg)
 
 ### Live home · large Dark
 
-![Live home · large Dark](v28/large-live-home.jpg)
+[Live home · large Dark (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/large-live-home.jpg)
 
 ### Wanna → contextual private reply · compact
 
-![Wanna → contextual private reply · compact](v28/compact-wanna-ryan.jpg)
+[Wanna → contextual private reply · compact (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/compact-wanna-ryan.jpg)
 
 ### Profile Patterns retained after Live
 
-![Profile Patterns retained after Live](v28/integrated-your-map-tools.jpg)
+[Profile Patterns retained after Live (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/integrated-your-map-tools.jpg)
 
 ### Embedded Feed photo ·1of3
 
-![Embedded Feed photo ·1of3](v28/compact-embedded-first.jpg)
+[Embedded Feed photo ·1of3 (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/compact-embedded-first.jpg)
 
 ### Embedded Feed photo ·2of3
 
-![Embedded Feed photo ·2of3](v28/compact-embedded-second.jpg)
+[Embedded Feed photo ·2of3 (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/compact-embedded-second.jpg)
 
 ### Back to embedded Live
 
-![Back to embedded Live](v28/compact-embedded-return.jpg)
+[Back to embedded Live (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/compact-embedded-return.jpg)
 
 ### Actual offline SDK · private surface masked
 
-![Actual offline SDK · private surface masked](v28/private-actual-sdk-masked.jpg)
+[Actual offline SDK · private surface masked (historical image)](https://github.com/joelipshutz/wander/blob/4fe71f0e604757b60ebd4dc3f1afe893679052b6/docs/designs/astir-live/review/v28/private-actual-sdk-masked.jpg)
 
 ## Historical V24 human drawing review
 

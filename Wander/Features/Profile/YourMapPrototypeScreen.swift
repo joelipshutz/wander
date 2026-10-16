@@ -116,9 +116,6 @@ final class YourMapInteractionState {
 struct YourMapPrototypeScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    #if DEBUG
-    @Environment(\.adaptiveMapFixtureUsesPhysicalViewport) private var adaptiveFixturePhysicalViewport
-    #endif
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @StateObject private var snapshotCapture = MapSnapshotCapture()
@@ -311,17 +308,15 @@ struct YourMapPrototypeScreen: View {
         return dataset.visiblePlaceByPlaceID[selectedPlaceID]
     }
 
-    @ViewBuilder
     private var mapWorkspace: some View {
-        #if DEBUG
-        if adaptiveFixturePhysicalViewport {
-            adaptiveFixtureMapWorkspace
-        } else {
-            fullScreenMapWorkspace
-        }
-        #else
-        fullScreenMapWorkspace
-        #endif
+        YourMapWorkspace(
+            fullScreen: { fullScreenMapWorkspace },
+            header: { mapHeader },
+            mapCanvas: { nativeMapCanvas },
+            showsEmptyState: { filteredPlaces.isEmpty },
+            emptyState: { mapEmptyState },
+            footer: { modePicker }
+        )
     }
 
     private var nativeMapCanvas: some View {
@@ -370,25 +365,6 @@ struct YourMapPrototypeScreen: View {
                 .animation(nil, value: interaction.isMapChromeVisible)
         }
     }
-
-    #if DEBUG
-    private var adaptiveFixtureMapWorkspace: some View {
-        // Give the native Map a real viewport instead of overriding its
-        // reported frame. Reuse its renderer, annotations and camera requests.
-        VStack(spacing: 12) {
-            mapHeader
-            nativeMapCanvas
-                .overlay {
-                    if filteredPlaces.isEmpty { mapEmptyState }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 12)
-            modePicker
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing4)
-        }
-    }
-    #endif
 
     private var mapControls: some View {
         ZStack(alignment: .bottom) {

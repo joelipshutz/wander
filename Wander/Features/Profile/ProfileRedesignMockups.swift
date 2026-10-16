@@ -52,19 +52,6 @@ private struct AdaptiveMapDensityFixture: View {
     }
 }
 
-// Only the disposable density fixture uses a physically bounded Map. Other
-// Your Map screens keep the existing full-screen map and overlay controls.
-private struct AdaptiveMapFixturePhysicalViewportKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var adaptiveMapFixtureUsesPhysicalViewport: Bool {
-        get { self[AdaptiveMapFixturePhysicalViewportKey.self] }
-        set { self[AdaptiveMapFixturePhysicalViewportKey.self] = newValue }
-    }
-}
-
 struct ProfileRedesignMockupRoot: View {
     let page: ProfileRedesignMockupPage
 
