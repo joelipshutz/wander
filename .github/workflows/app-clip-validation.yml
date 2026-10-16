@@ -15,8 +15,6 @@ jobs:
     name: Instrumented private replay once
     runs-on: macos-26
     timeout-minutes: 60
-    env:
-      DIAG: ${{ runner.temp }}/rec636-replay-private-diagnostic
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,6 +24,8 @@ jobs:
       - name: Admit exact checkout, toolchain and simulator
         run: |
           set -euo pipefail
+          export DIAG="$RUNNER_TEMP/rec636-replay-private-diagnostic"
+          printf 'DIAG=%s\n' "$DIAG" >> "$GITHUB_ENV"
           mkdir "$DIAG"
           python3 - <<'PY'
           import hashlib, json, os, subprocess
