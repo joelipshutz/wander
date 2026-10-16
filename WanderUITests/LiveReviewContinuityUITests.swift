@@ -611,10 +611,18 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.buttons["Filters"].tap()
         let form = filterForm(in: app)
         captureState("filters-initial-before-controls", in: app)
-        selectMenu(app.buttons["live.filter.people"], option: "Only Friends", form: form, app: app)
-        selectMenu(form.buttons["Activity, Everything"], option: "Wannas", form: form, app: app)
-        selectMenu(app.buttons["live.filter.time"], option: "Past 24 hours", form: form, app: app)
-        selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app)
+        selectMenu(app.buttons["live.filter.people"], option: "Only Friends", form: form, app: app, selected: {
+            app.buttons["live.filter.people"].exists && app.buttons["live.filter.people"].value as? String == "Only Friends"
+        })
+        selectMenu(form.buttons["Activity, Everything"], option: "Wannas", form: form, app: app, selected: {
+            form.buttons["Activity, Wannas"].exists && form.buttons["Activity, Wannas"].label == "Activity, Wannas"
+        })
+        selectMenu(app.buttons["live.filter.time"], option: "Past 24 hours", form: form, app: app, selected: {
+            app.buttons["live.filter.time"].exists && app.buttons["live.filter.time"].label == "When, Past 24 hours"
+        })
+        selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app, selected: {
+            app.buttons["live.filter.scope"].exists && app.buttons["live.filter.scope"].label == "Scope, Nearby"
+        })
         let city = app.buttons["live.filter.city"]
         reveal(city, in: form, direction: .down, app: app)
         captureCityPickerState("city-picker-before-tap", in: app, observations: [
@@ -635,8 +643,12 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.buttons["25 km"].tap()
         setOn(app.switches["live.filter.category.restaurants_food"], in: form, app: app)
         setOn(app.switches["live.filter.person.user_ryan"], in: form, app: app)
-        XCTAssertEqual(app.switches["live.filter.category.work_education"].label, "Work & Education")
-        XCTAssertEqual(app.switches["live.filter.category.civic_faith"].label, "Civic & Faith")
+        let workEducation = app.switches["live.filter.category.work_education"]
+        reveal(workEducation, in: form, direction: .up, app: app)
+        XCTAssertEqual(workEducation.label, "Work & Education")
+        let civicFaith = app.switches["live.filter.category.civic_faith"]
+        reveal(civicFaith, in: form, direction: .down, app: app)
+        XCTAssertEqual(civicFaith.label, "Civic & Faith")
         capture("combined-filter-draft")
         app.buttons["live.applyFilters"].tap()
 
@@ -663,8 +675,11 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let cancelledForm = filterForm(in: app)
         reveal(app.buttons["live.filter.reset"], in: cancelledForm, direction: .down, app: app)
         app.buttons["live.filter.reset"].tap()
-        selectMenu(app.buttons["live.filter.people"], option: "Everyone", form: cancelledForm, direction: .up, app: app)
+        selectMenu(app.buttons["live.filter.people"], option: "Everyone", form: cancelledForm, direction: .up, app: app, selected: {
+            app.buttons["live.filter.people"].exists && app.buttons["live.filter.people"].value as? String == "Everyone"
+        })
         app.navigationBars["Filters"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Filters"].waitForNonExistence(timeout: 5))
         assertCombinedResult(in: app)
         capture("combined-filter-cancel-preserves-result")
 
@@ -732,19 +747,36 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.staticTexts["live.filter.summary"]
     }
 
-    private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication) {
+    private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
+                              postInputCapture: String? = nil) {
         let handle = drawer(in: app)
         let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
-        wait(NSPredicate(format: "label == %@ AND value BEGINSWITH %@", "Activity drawer, \(state)", loadedCount), on: handle)
+        let predicate = NSPredicate(format: "label == %@ AND value BEGINSWITH %@", "Activity drawer, \(state)", loadedCount)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: handle)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if let postInputCapture {
+            captureState(postInputCapture, in: app, observations: [
+                "expectedState=\(state); expectedLoadedCount=\(loadedCount); waitResult=\(result)",
+                "postWaitSystemUptime=\(ProcessInfo.processInfo.systemUptime)"
+            ])
+        }
+        XCTAssertEqual(result, .completed)
     }
 
     private func dragDrawer(_ direction: Direction, to state: String, count: Int, in app: XCUIApplication) {
         let handle = drawer(in: app)
         waitHittable(handle)
         let endY: CGFloat = direction == .up ? 0.12 : 0.85
+        captureState("drawer-before-native-drag", in: app, observations: [
+            "expectedState=\(state); expectedLoadedCount=\(count); endNormalizedY=\(endY)",
+            "handleFrame=\(handle.frame); handleLabel=\(handle.label); handleValue=\(String(describing: handle.value)); handleHittable=\(handle.isHittable)",
+            "preDragSystemUptime=\(ProcessInfo.processInfo.systemUptime)"
+        ])
+        // Use deliberate native input for the existing single drawer transition.
         handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY)))
-        assertDrawer(state, count: count, in: app)
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY)),
+                   withVelocity: .slow, thenHoldForDuration: 0.1)
+        assertDrawer(state, count: count, in: app, postInputCapture: "drawer-after-native-drag")
     }
 
     private func assertTabs(in app: XCUIApplication) {
@@ -830,8 +862,10 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         beforeDiagnostic.lifetime = .keepAlways
         add(beforeDiagnostic)
         capture("native-pan-before")
+        // Use deliberate native input for the existing single-pan displacement check.
         zero.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
-            .press(forDuration: 0.1, thenDragTo: zero.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)))
+            .press(forDuration: 0.1, thenDragTo: zero.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)),
+                   withVelocity: .slow, thenHoldForDuration: 0.1)
         let displacement = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard anchor.exists else { return false }
             let after = anchor.frame
@@ -855,14 +889,15 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func selectMenu(_ picker: XCUIElement, option: String, form: XCUIElement,
-                            direction: Direction = .down, app: XCUIApplication) {
+                            direction: Direction = .down, app: XCUIApplication, selected: @escaping () -> Bool) {
         reveal(picker, in: form, direction: direction, app: app)
         picker.tap()
         // Native Picker options live in the popup collection; the retained
         // Live header can expose an identically labeled Nearby button.
         let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
         waitHittable(choice)
-        choice.tap()
+        choice.press(forDuration: 0.2)
+        wait(NSPredicate { _, _ in !choice.exists && selected() })
     }
 
     private func setOn(_ toggle: XCUIElement, in form: XCUIElement, app: XCUIApplication) {

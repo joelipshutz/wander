@@ -26,6 +26,44 @@ REFERENCE_UI_PERFORMANCE = {
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
 }
 
+REPLAY_METHODS = {
+    "replay-private": "WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
+    "replay-credentials": "WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage",
+}
+
+
+def validate_replay_result(suite: str, summary: dict, tests: dict, device_id: str) -> None:
+    """Require the named real-image proof once; warnings do not change its result."""
+    if suite not in REPLAY_METHODS:
+        raise ValueError("Unknown single-method Replay suite")
+    expected = {"result": "Passed", "totalTestCount": 1, "passedTests": 1,
+                "failedTests": 0, "skippedTests": 0, "expectedFailures": 0}
+    if not isinstance(summary, dict) or any(summary.get(k) != v for k, v in expected.items()):
+        raise ValueError("Required Replay method did not pass exactly once")
+    configurations = summary.get("devicesAndConfigurations")
+    if (not isinstance(configurations, list) or len(configurations) != 1
+            or configurations[0].get("device", {}).get("deviceId") != device_id
+            or configurations[0].get("device", {}).get("platform") != "iOS Simulator"):
+        raise ValueError("Required Replay result has the wrong device")
+    cases = []
+
+    def visit(value):
+        if isinstance(value, dict):
+            if value.get("nodeType") == "Test Case":
+                cases.append(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(tests)
+    identifier = REPLAY_METHODS[suite]
+    if (len(cases) != 1 or cases[0].get("result") != "Passed"
+            or cases[0].get("nodeIdentifier", "").removesuffix("()") != identifier.split("/", 1)[1]
+            or cases[0].get("nodeIdentifierURL") != "test://com.apple.xcode/Wander/" + identifier):
+        raise ValueError("Required Replay case identity or outcome does not match")
+
 
 def prepare_ui_performance_products(products: Path, preserve_system_failures: bool = False) -> int:
     """Avoid automatic video encoding; optionally retain failure diagnostics."""
@@ -84,7 +122,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["clip", "unit", "replay", "performance", "ui-performance", "ui-reference-performance", "ui", "graphics"], required=True)
+    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", "ui-performance", "ui-reference-performance", "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -104,6 +142,7 @@ def main() -> int:
     ]
     inventory = (["AstirClipTests", "AstirClipUITests"] if args.suite == "clip" else
                  ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} else
+                 [REPLAY_METHODS[args.suite]] if args.suite in REPLAY_METHODS else
                  [replay] if args.suite == "replay" else
                  performance if args.suite == "performance" else ["WanderTests"])
     isolated_ui = ISOLATED_UI_PERFORMANCE | REFERENCE_UI_PERFORMANCE
@@ -127,8 +166,10 @@ def main() -> int:
                     if test not in isolated_ui]
     else:
         selected = inventory
-    # The SDK installs process-wide replay observers. Keep this required test in
-    # its own test host, matching the independently passing Feed validation job.
+    # The SDK installs process-wide replay observers. CI runs each required
+    # image proof in its own host, as Feed/Privacy do. The combined replay mode
+    # remains available for local lifecycle diagnostics; isolation does not
+    # establish the cause of a failed combined invocation.
     # Original CPU timing limits run separately with --suite performance on the
     # controlled reference simulator. Full-size deterministic contracts remain
     # in the unit suite, matching the main branch shared-runner policy.

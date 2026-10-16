@@ -1,5 +1,15 @@
 # REC-636 integrated validation
 
+## Test-only successor · V35
+
+V35 source manifest `a3dafb91119a807d2184c3108d2f9d89be6ad7bf0e6152588461967fc7a68963` changes no production Swift implementation. Three UI-test files refine native input and exact outcome readiness; the CI tooling requires the two original replay methods in separate processes while preserving the combined local mode. Original behavior assertions, privacy checks and performance budgets remain. The 447-file Swift roster and all 150 build inputs are unchanged from V34.
+
+The seven-case focused local selection is **7/7 Passed, with zero failures, skips, expected failures, retries or official warnings**, bound by completed receipt `717ec6f3efc89dbb2a0415604556086917aafd533916ebf14bf484132ca1d91a` and independent metadata/original-pixel review `0eb6f4a716ca6366a89d6e82f6b7d96848df51a12a07a48424bfcf0278b38da4`. This is focused successor validation, not a new full-suite pass. V33’s 3,248 local passes retain their original source/product identity (`a91d3321…`); V34’s six focused passes retain their separate `dfdd8574…` identity. Neither is relabeled as V35 execution.
+
+Published predecessor `6b0f1a9e` has known CI failures, which remain Failed. Final published-head CI, exact ordinary-auth execution and checkout/product/artifact acceptance remain required. The authoritative latest disposition is [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and [REC-636](https://linear.app/recme/issue/REC-636); later CI results do not require a documentation-only push. Live remains globally Off, with no merge, activation, release or real-account delivery acceptance implied.
+
+## Preserved V33 local validation
+
 **V33’s planned local validation passed 3,248/3,248 executions across 14 phases, with zero failures, skips, expected failures or retries. Final published-head CI acceptance remains a separate gate. Live stays globally Off.**
 
 The source fingerprint binds 447 Swift files and 150 build inputs. Signed Debug and actual Release builds succeeded, including the unchanged Your Map Release-compilation contract. The current parent inventory has 3,174 methods and Clip has 35. Local execution covered 3,173 parent methods and all 35 Clip methods, plus 40 second-phone executions, without duplicate device/case pairs. The sole method intentionally left to independent final CI is `AccountContactDetailsUITests/testNormalAppLaunchReachesLiveAuthentication`. This is a local 3,248 pass, not a local 3,249 pass or a signed-in account trial.
@@ -22,8 +32,10 @@ The eight review blocks retain distinct evidence limits:
 | M4 Filters | Combined Apply/Cancel/Reset, exact canonical category labels, loaded pin/Feed agreement and pan-without-refilter assertions passed on both phones. |
 | M5 Existing Feed | Invite → People → Activity order, embedded three-photo fixture paging 1/3 → 2/3 → Back and actor return passed; production-media paging remains separate. |
 | M6 Entry/return | Search, Notifications and Add cancellation/return passed in the named fixture journey. |
-| M7 Visual/accessibility | Current large home/Wanna evidence is Dark and compact is Light. Opposite-theme home captures on both phones remain incomplete pending Mac unlock. Spoken VoiceOver and hardware behavior are not claimed. |
+| M7 Visual/accessibility | V33 large Dark and compact Light home/Wanna evidence is supplemented by inspected large Light and compact Dark home originals. Both phones’ home appearance endpoints are complete; theme-propagation timing, spoken VoiceOver and hardware behavior are not claimed. |
 | M8 Drawing | The unchanged current automated `testDrawingRequiresApplyAndCanBeCleared` and `testAccessibleDrawingControlsRemainReachable` passed on the same V33 app. They use the visible-area alternative. Historical V24 human freehand evidence remains source-bound and unchanged; it is not current continuous-gesture proof. |
+
+V33 opposite-theme review `c9d11c6f…` binds the two additional home stills to source `a91d3321…` and the installed Debug executables. Post-publication Xcode handoff `d78a57ee…` verifies the isolated project, `codex/live-experience-review` in Branch Chooser and **Live Experience Review** scheme, without pressing Run. These complete those V33 review tasks; they do not execute V35 or establish interactive theme-transition behavior.
 
 Adaptive-map cases passed the initial 177-place, selected-dot promotion, close density, first-pinch same-ID separation and final mixed-mode assertions. Reported gesture rectangles fit the measured viewport; current success-retained results lack per-point synthesized touch paths. Historical V31 contacts do not substitute for those missing current payloads.
 
@@ -43,7 +55,7 @@ After native, fresh CI and SQL acceptance, recheck the confirmed target, exact h
 
 ## Current continuation
 
-Finish large Light and compact Dark home inspection after desktop unlock, keeping their capture provenance separate from the automated suite. Publish this validated source checkpoint and audit one fresh full CI set, including exact ordinary-auth execution and checkout/product/artifact identity. CI and later theme results belong in PR #736 and REC-636 without a documentation-only successor build. Preserve every previous failure and do not repeat completed native phases. Backend installation follows its gates; global Live remains Off.
+Publish the validated test-only V35 candidate and audit a fresh final published-head CI set, including exact ordinary-auth execution and checkout/product/artifact identity. The V33 opposite-theme home review and Xcode handoff are already complete within their recorded source scope. Later CI disposition belongs in PR #736 and REC-636 without a documentation-only push. Preserve previous failures and completed native identities. Backend installation follows its separate gates; global Live remains Off.
 
 ## Historical checkpoint before V33
 

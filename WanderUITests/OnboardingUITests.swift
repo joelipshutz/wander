@@ -1139,7 +1139,7 @@ final class OnboardingUITests: XCTestCase {
         let headingY = app.staticTexts["Activity"].frame.minY
         // Use the visible center of the capsule for both manual transitions.
         app.buttons["walkthrough.next.feed.feedActivity"]
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
@@ -1148,7 +1148,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(recent.label, "Keep up with their moments")
         XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
         app.buttons["walkthrough.next.feed.feedActivity"]
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
         let returned = expectation(for: NSPredicate(format: "hittable == true"),
                                    evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])

@@ -676,7 +676,7 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
         // The initial sheet/navigation animation may expose accessibility
         // before the control's final touch location is ready.
-        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
     }
 
     private func openCustomize(in app: XCUIApplication) {
