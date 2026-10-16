@@ -284,8 +284,21 @@ def host_observation(folder):
     expected = {"host_diagnostic_enabled", "host_requested_normal", "host_requested_dormant", "host_test_configuration_present", "host_expected_bundle", "host_xctest_class_present", "host_uses_dormant_root", "host_ordinary_root_mounted", "host_dormant_root_mounted"}
     need(len(keys) == len(set(keys)) == 9 and set(keys) == expected and all(v in {"true", "false"} for _, v in pairs), "unknown_host_observation")
     flags = {k: v == "true" for k, v in pairs}; dormant = folder.name == "dormant"
-    need(flags["host_diagnostic_enabled"] and flags["host_test_configuration_present"] and flags["host_expected_bundle"] and flags["host_requested_dormant"] == dormant and flags["host_requested_normal"] != dormant and flags["host_uses_dormant_root"] == dormant and flags["host_dormant_root_mounted"] == dormant and flags["host_ordinary_root_mounted"] != dormant, "requested_effective_root_mismatch")
-    return {"hostObserved": flags, "hostAttachmentSHA256": sha(path)}
+    need(flags["host_diagnostic_enabled"] and flags["host_expected_bundle"] and flags["host_requested_dormant"] == dormant and flags["host_requested_normal"] != dormant and flags["host_uses_dormant_root"] == dormant and flags["host_dormant_root_mounted"] == dormant and flags["host_ordinary_root_mounted"] != dormant, "requested_effective_root_mismatch")
+    admissions = [a for row in manifest for a in row.get("attachments", []) if a.get("suggestedHumanReadableName", "").startswith("Replay host root admission timing")]
+    need(len(admissions) == 1, "root_admission_missing_or_duplicate")
+    admission_name = admissions[0]["exportedFileName"]; need(Path(admission_name).name == admission_name, "attachment_path_escape")
+    admission_path = folder / "attachments" / admission_name
+    need(admission_path.is_file() and not admission_path.is_symlink() and admission_path.stat().st_size <= 4096, "invalid_root_admission")
+    admission_pairs = [line.split("=", 1) for line in admission_path.read_text().splitlines()]
+    admission_keys = [x[0] for x in admission_pairs]
+    expected_admission = {"diagnostic_root_admission_passed", "diagnostic_root_admission_elapsed_ms", "diagnostic_root_admission_limit_ms", "fixture_created", "sdk_setup_started"}
+    need(len(admission_keys) == len(set(admission_keys)) == 5 and set(admission_keys) == expected_admission and all(len(x) == 2 for x in admission_pairs), "unknown_root_admission")
+    admission = dict(admission_pairs)
+    need(admission["diagnostic_root_admission_passed"] == "true" and admission["diagnostic_root_admission_limit_ms"] == "10000" and admission["fixture_created"] == "false" and admission["sdk_setup_started"] == "false", "root_admission_failed_or_scope_mismatch")
+    elapsed = admission["diagnostic_root_admission_elapsed_ms"]
+    need(re.fullmatch(r"(?:0|[1-9][0-9]{0,4})", elapsed) and int(elapsed) <= 10000, "root_admission_late_or_invalid")
+    return {"hostObserved": flags, "hostAttachmentSHA256": sha(path), "rootAdmission": {"passed": True, "elapsedMilliseconds": int(elapsed), "limitMilliseconds": 10000, "attachmentSHA256": sha(admission_path)}}
 
 def export_arm(folder, device, source, rc, source_sha256):
     bundle = folder / "result.xcresult"; info = bundle / "Info.plist"; need(info.is_file(), "incomplete_result")

@@ -28,7 +28,7 @@
   ],
   "aggregateKeyLimit": 128,
   "armBIncluded": true,
-  "baseHead": "5bb397b1fabe6911fa3d2b8b5c7ba8371b422b0b",
+  "baseHead": "378c552a9ca87687221e70f84a4ba3699c9288a3",
   "files": [
     {
       "diagnosticBlocks": 9,
@@ -75,22 +75,25 @@
       "diagnosticBlocks": 8,
       "hostDiagnosticBlocks": 2,
       "orderedStripPatterns": [
+        "REC636_REPLAY_ROOT_ADMISSION_DIAGNOSTIC_BEGIN/END",
         "REC636_REPLAY_HOST_DIAGNOSTIC_BEGIN/END",
         "REC636_REPLAY_CPU_DIAGNOSTIC_BEGIN/END",
         "REC636_REPLAY_DIAGNOSTIC_BEGIN/END"
       ],
       "originalSHA256": "e20df909d2100f01ff761b5e356b1e2ae51d1e51a1843ed0c44ca59f661b9681",
       "path": "WanderTests/ReplayMaskingTests.swift",
-      "proposedSHA256": "dc9f99206adf53693231b31fad7843bf3bd45d100209018169de8618a939f675",
+      "proposedSHA256": "2e6a73657b8331363bec4f8dd1c2df7489d5db9264d209d72902289498060707",
       "role": "test",
-      "stripRestoresCanonicalBytes": true
+      "stripRestoresCanonicalBytes": true,
+      "rootAdmissionDiagnosticBlocks": 2,
+      "observerInstallBlockRelocatedAfterRootAdmission": true
     },
     {
       "diagnosticBlocks": 4,
       "initializerByteIdentical": true,
       "originalSHA256": "57c1964ea064f7d2c45007415c3d9efaa6366708e2828f13051f16e1ace2779d",
       "path": "Wander/App/WanderApp.swift",
-      "proposedSHA256": "3d09e7aa44aa86d3665e9883abd81623602c53e4bdf91324245a742da2a99787",
+      "proposedSHA256": "927cff6fe20d96460ca5d5882e3b34242e05ff6869220c856dd238f9459f4c6d",
       "role": "host",
       "stripRestoresCanonicalBytes": true
     }
@@ -105,12 +108,18 @@
       "-WanderReplayHostDiagnostic",
       "normal|dormant"
     ],
-    "observationPoint": "After original readyGateEnded and CPU checkpoint, before original ready assertion/private presentation",
+    "observationPoint": "Symmetric10-second pre-fixture actual-root admission with scalar timing, plus original readyGateEnded/CPU checkpoint host flags",
     "observedBooleans": 9,
     "sameProductForBothArmsRequired": true,
-    "sameServiceInitializers": true
+    "sameServiceInitializers": true,
+    "testConfigurationPresence": "Informational only, not eligibility gate",
+    "enabledPolicy": "DEBUG Simulator, exact single validated normal/dormant launch pair and exact host bundle",
+    "rootAdmissionRequiredByReader": true,
+    "rootAdmissionLimitSeconds": 10,
+    "observerInstalledAfterSuccessfulAdmission": true,
+    "fullProcessQuiescenceClaimed": false
   },
-  "hostPatchSHA256": "909939d51836510b7740985ae3d30ddbd61d5349a8669ce18f391435310874f8",
+  "hostPatchSHA256": "72f82c23ea990139d906ba985b780c8981ce69c30136934cb1451aa4864c53eb",
   "nativeMethodsAdded": 0,
   "nativeTestsExecuted": 0,
   "newStageNames": [],
@@ -182,8 +191,10 @@
     "wireframe_encode_began",
     "wireframe_encode_ended"
   ],
-  "state": "unapplied-uncompiled-CPU-plus-dormant-root-composition",
+  "state": "unapplied-uncompiled-explicit-root-admission-correction",
   "stripSeparatorExceptions": [],
-  "testPatchSHA256": "e5e2a411f35f1e4690a884883acdf70cf8dd973c92feb6369edef2356fe4b8a8",
-  "traceEventLimit": 512
+  "testPatchSHA256": "505b57cfd1ed6f742f68b0ae780535820778c645be09fe4725bbea1a26649476",
+  "traceEventLimit": 512,
+  "priorCompositionBaseHead": "5bb397b1fabe6911fa3d2b8b5c7ba8371b422b0b",
+  "runnerSHA256": "bd7bb9f84f57068f6641aef2b2cd188fb91e85a1e7a7f8da92facaaa5327fb41"
 }

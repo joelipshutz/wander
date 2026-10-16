@@ -322,7 +322,7 @@ jobs:
           assert os.environ.get('GITHUB_ACTIONS')=='true' and Path.cwd().resolve()==root, 'parser_preflight_CI_scope_required'
           assert out.is_dir() and out.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve()), 'parser_preflight_output_scope_required'
           script=root/'scripts/diagnostics/replay-host-comparison.py'
-          expected='e208f86b4dda3cece0ee263d63f3c5309e6eb474d0c8132d3a0073433b78e7c2'
+          expected='bd7bb9f84f57068f6641aef2b2cd188fb91e85a1e7a7f8da92facaaa5327fb41'
           assert script.is_file() and not script.is_symlink() and hashlib.sha256(script.read_bytes()).hexdigest()==expected, 'parser_preflight_reader_drift'
           admission=json.loads((out/'admission.json').read_text())
           assert admission['diagnosticOnly'] is True and admission['releaseAcceptance'] is False and admission['dispatchSHA']==os.environ['GITHUB_SHA'], 'parser_preflight_admission_mismatch'
@@ -436,7 +436,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rec636-v42-replay-host-cpu-comparison
+          name: rec636-v43-replay-host-cpu-comparison
           path: |
             ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/*.json
             ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/normal

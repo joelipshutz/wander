@@ -1,6 +1,6 @@
 --- a/Wander/App/WanderApp.swift
 +++ b/Wander/App/WanderApp.swift
-@@ -4,6 +4,40 @@
+@@ -4,6 +4,41 @@
  #if DEBUG
  import UIKit
  #endif
@@ -22,7 +22,8 @@
 +    static let isExpectedHost = Bundle.main.bundleIdentifier == "com.grayline.wander"
 +    // Informational only: XCTest classes can load after the first app body.
 +    static var hasTestRuntime: Bool { NSClassFromString("XCTestCase") != nil }
-+    static let isEnabled = requestedMode != nil && hasTestConfiguration && isExpectedHost
++    // The exact diagnostic mode pair is explicit; XCTest environment timing is informational.
++    static let isEnabled = requestedMode != nil && isExpectedHost
 +    static let usesDormantRoot = isEnabled && requestedMode == .dormant
 +    static private(set) var ordinaryRootMounted = false
 +    static private(set) var dormantRootMounted = false
@@ -41,7 +42,7 @@
  
  enum SimulatorTestSessionPolicy {
      static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
-@@ -210,6 +244,16 @@
+@@ -210,6 +245,16 @@
      var body: some Scene {
          WindowGroup {
              #if DEBUG
@@ -58,7 +59,7 @@
              if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
                  ActivityPostcardReviewRoot()
              } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
-@@ -272,6 +316,11 @@
+@@ -272,6 +317,11 @@
                  CategoryTaxonomyMockupRoot(page: mockupPage)
              } else {
                  appRoot
@@ -70,7 +71,7 @@
              }
              #else
              appRoot
-@@ -279,6 +328,17 @@
+@@ -279,6 +329,17 @@
          }
      }
  

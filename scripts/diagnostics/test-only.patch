@@ -1,9 +1,14 @@
 --- a/WanderTests/ReplayMaskingTests.swift
 +++ b/WanderTests/ReplayMaskingTests.swift
-@@ -9,6 +9,24 @@
-     @MainActor
-     func testPrivateMessageContentIsMaskedInActualReplayImage() async throws {
-         let captureTimeline = ReplayCaptureTimeline()
+@@ -17,8 +17,37 @@
+             try await Task.sleep(for: .milliseconds(100))
+         }
+         let scene = try XCTUnwrap(foregroundScene)
++        // REC636_REPLAY_ROOT_ADMISSION_DIAGNOSTIC_BEGIN
++        #if DEBUG && targetEnvironment(simulator)
++        guard try await admitRequestedReplayDiagnosticRoot() else { return }
++        #endif
++        // REC636_REPLAY_ROOT_ADMISSION_DIAGNOSTIC_END
 +        // REC636_REPLAY_DIAGNOSTIC_BEGIN
 +        #if DEBUG
 +        let pipeline = ReplaySDKPipelineDiagnostics(captureTimeline: captureTimeline)
@@ -22,11 +27,6 @@
 +        }
 +        #endif
 +        // REC636_REPLAY_DIAGNOSTIC_END
-         var foregroundScene: UIWindowScene?
-         for _ in 0..<100 {
-             foregroundScene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-@@ -19,6 +37,12 @@
-         let scene = try XCTUnwrap(foregroundScene)
          let originalWindow = scene.keyWindow
          let window = ReplayProbeWindow(windowScene: scene)
 +        // REC636_REPLAY_DIAGNOSTIC_BEGIN
@@ -38,7 +38,7 @@
          window.captureTimeline = captureTimeline
          window.backgroundColor = .white
          // The SDK can conservatively mask the entire SwiftUI hosting surface
-@@ -60,6 +84,11 @@
+@@ -60,6 +89,11 @@
          XCTAssertEqual(config.sessionReplayConfig.throttleDelay, 1.0)
          config.setBeforeSend { event in frames.receive(event); return nil }
          let sdk = PostHogSDK.with(config)
@@ -50,7 +50,7 @@
          captureTimeline.record(.sdkSetupReturned)
          defer { sdk.close() }
          sdk.capture(ReplayFrameCollector.probeEvent)
-@@ -105,6 +134,16 @@
+@@ -105,6 +139,16 @@
              if recorderReady { break }
          }
          captureTimeline.record(.readyGateEnded)
@@ -67,10 +67,51 @@
          XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
          guard recorderReady else {
              let diagnostic = XCTAttachment(string: """
-@@ -268,6 +307,27 @@
+@@ -268,6 +312,68 @@
          }.value
      }
  
++    // REC636_REPLAY_ROOT_ADMISSION_DIAGNOSTIC_BEGIN
++    #if DEBUG && targetEnvironment(simulator)
++    @MainActor
++    private func admitRequestedReplayDiagnosticRoot() async throws -> Bool {
++        // Observe actual host mounting before fixture takeover; capture deadlines start later.
++        @MainActor
++        func requestedRootIsMounted() -> Bool {
++            ReplayHostDiagnostic.isEnabled && (
++                (ReplayHostDiagnostic.requestedMode == .normal && ReplayHostDiagnostic.ordinaryRootMounted && !ReplayHostDiagnostic.dormantRootMounted) ||
++                (ReplayHostDiagnostic.requestedMode == .dormant && ReplayHostDiagnostic.dormantRootMounted && !ReplayHostDiagnostic.ordinaryRootMounted)
++            )
++        }
++        let began = ContinuousClock.now
++        let deadline = began.advanced(by: .seconds(10))
++        var mounted = requestedRootIsMounted()
++        while !mounted && ContinuousClock.now < deadline {
++            try await Task.sleep(for: .milliseconds(100))
++            mounted = requestedRootIsMounted()
++        }
++        let admitted = mounted && ContinuousClock.now <= deadline
++        let elapsed = began.duration(to: .now).components
++        let elapsedMilliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
++        let timing = XCTAttachment(string: """
++        diagnostic_root_admission_passed=\(admitted)
++        diagnostic_root_admission_elapsed_ms=\(elapsedMilliseconds)
++        diagnostic_root_admission_limit_ms=10000
++        fixture_created=false
++        sdk_setup_started=false
++        """)
++        timing.name = "Replay host root admission timing"
++        timing.lifetime = .keepAlways
++        add(timing)
++        guard admitted else {
++            captureReplayHostRootDiagnostic()
++            XCTFail("Diagnostic host root must mount before Replay fixture creation.")
++            return false
++        }
++        return true
++    }
++    #endif
++    // REC636_REPLAY_ROOT_ADMISSION_DIAGNOSTIC_END
 +    // REC636_REPLAY_HOST_DIAGNOSTIC_BEGIN
 +    #if DEBUG && targetEnvironment(simulator)
 +    @MainActor
@@ -95,7 +136,7 @@
      @MainActor
      func testReadableContentAndCredentialMaskingInActualReplayImage() async throws {
          // Match the SDK's capture precondition; connected scenes can still be inactive at launch.
-@@ -450,6 +510,14 @@
+@@ -450,6 +556,14 @@
      }
  
      private let origin = ContinuousClock.now
@@ -110,7 +151,7 @@
      private let lock = NSLock()
      private var samples: [Stage: Sample] = [:]
  
-@@ -479,6 +547,11 @@
+@@ -479,6 +593,11 @@
  private final class ReplayProbeWindow: UIWindow {
      var capturePhase = "ready"
      var captureTimeline: ReplayCaptureTimeline?
@@ -122,7 +163,7 @@
      private(set) var successfulReadyDraws = 0
      private(set) var successfulLoadedDraws = 0
      private(set) var failedDraws = 0
-@@ -487,7 +560,21 @@
+@@ -487,7 +606,21 @@
          if !afterUpdates {
              captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawBegan : .nativeReadyDrawBegan)
          }
@@ -144,7 +185,7 @@
          if !afterUpdates {
              captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawEnded : .nativeReadyDrawEnded)
              if !succeeded { captureTimeline?.record(.nativeDrawFailed) }
-@@ -639,3 +726,318 @@
+@@ -639,3 +772,318 @@
      }
      override func stopLoading() {}
  }

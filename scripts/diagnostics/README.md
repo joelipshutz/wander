@@ -19,6 +19,25 @@ launch-mode argument differs. The dormant root omits ordinary root mounting,
 not all process or service work. Actual requested, enabled and mounted-root
 observations must agree before comparing the arms.
 
+V42 ran the normal private method and failed its public-frame gate. Its
+nonempty test-configuration-path eligibility check was false, disabling the
+root markers; their false values did not identify the mounted root. The driver
+stopped before dormant, preserving the failure and invalidating the A/B
+comparison. This does not establish the cause of the public-frame failure.
+
+V43 uses the exact explicit mode pair and expected host identity within the
+DEBUG simulator build. Test-configuration and runtime-class presence are
+informational. Both arms have the same separate, bounded 10-second admission
+of the requested root's actual onAppear before creating the Replay fixture or
+SDK. A failed admission records fixed root flags and fails before capture.
+The runner requires successful pre-fixture admission and matching final root
+observations. The diagnostic pipeline and CPU observer install only after
+successful root admission; pre-admission events are excluded, and later
+events still require owner/window interpretation. This separate startup
+admission may add up to 10 seconds before fixture
+creation; both original 30-second capture gates remain unchanged. No SDK,
+queue QoS, resolution or codec quality is changed.
+
 The original public fixture, 30-second gates, private-image assertions,
 resolution, SDK queue, codec configuration and capture cadence are unchanged.
 Bounded scalar observations locate pipeline stages. One encoder-thread right
