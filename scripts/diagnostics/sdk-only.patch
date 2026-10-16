@@ -1,0 +1,329 @@
+--- a/PostHog/PostHogSDK.swift
++++ b/PostHog/PostHogSDK.swift
+@@ -8,6 +8,36 @@
+ //
+ 
+ import Foundation
++// REC636_REPLAY_DIAGNOSTIC_BEGIN
++#if DEBUG
++/// Temporary DEBUG-only stage probe. Never emits event/view/session content.
++public enum PostHogReplayDiagnostic {
++    public typealias Observer = @Sendable (String, ObjectIdentifier?, ObjectIdentifier?, Bool?) -> Void
++    private final class State: @unchecked Sendable {
++        let lock = NSLock()
++        var observer: Observer?
++    }
++    private static let state = State()
++    public static func setObserver(_ observer: Observer?) {
++        state.lock.lock()
++        state.observer = observer
++        state.lock.unlock()
++    }
++    static func record(_ stage: String, owner: AnyObject?, window: AnyObject? = nil, outcome: Bool? = nil) {
++        state.lock.lock()
++        let observer = state.observer
++        state.lock.unlock()
++        observer?(stage, owner.map(ObjectIdentifier.init), window.map(ObjectIdentifier.init), outcome)
++    }
++    static func record(_ stage: String, owner: AnyObject?, windowID: ObjectIdentifier, outcome: Bool? = nil) {
++        state.lock.lock()
++        let observer = state.observer
++        state.lock.unlock()
++        observer?(stage, owner.map(ObjectIdentifier.init), windowID, outcome)
++    }
++}
++#endif
++// REC636_REPLAY_DIAGNOSTIC_END
+ 
+ #if os(iOS) || os(tvOS)
+     import UIKit
+@@ -1216,15 +1246,35 @@
+         timestamp: Date? = nil,
+         skipBuildProperties: Bool = false
+     ) {
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        if event == "$snapshot" { PostHogReplayDiagnostic.record("sdk_capture_entered", owner: self) }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         if !isEnabled() {
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            if event == "$snapshot" { PostHogReplayDiagnostic.record("sdk_disabled_drop", owner: self) }
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             return
+         }
+ 
+         if isOptOutState() {
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            if event == "$snapshot" { PostHogReplayDiagnostic.record("sdk_optout_drop", owner: self) }
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             return
+         }
+ 
+         guard let queue else {
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            if event == "$snapshot" { PostHogReplayDiagnostic.record("sdk_queue_missing_drop", owner: self) }
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             return
+         }
+ 
+@@ -1243,6 +1293,11 @@
+         }
+ 
+         var finalProperties: [String: Any]
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        if event == "$snapshot" { PostHogReplayDiagnostic.record("sdk_properties_began", owner: self) }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         if skipBuildProperties {
+             // Use properties as-is (already built at crash time)
+             finalProperties = properties ?? [:]
+@@ -1258,6 +1313,11 @@
+             )
+         }
+ 
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        if event == "$snapshot" { PostHogReplayDiagnostic.record("sdk_properties_ended", owner: self) }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         // Attach the session-scoped step buffer to a `$exception` unless the caller provided their own.
+         // The buffer is left intact; recording is synchronous, so a step added just before this capture
+         // on the same thread is already present.
+@@ -1559,7 +1619,17 @@
+             timestamp: timestamp
+         )
+ 
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        if eventName == "$snapshot" { PostHogReplayDiagnostic.record("sdk_before_send_began", owner: self) }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         let resultEvent = config.runBeforeSend(event)
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        if eventName == "$snapshot" { PostHogReplayDiagnostic.record("sdk_before_send_ended", owner: self, outcome: resultEvent != nil) }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+ 
+         if resultEvent == nil {
+             let originalMessage = "PostHog event \(eventName) was dropped"
+--- a/PostHog/Replay/PostHogReplayIntegration.swift
++++ b/PostHog/Replay/PostHogReplayIntegration.swift
+@@ -146,6 +146,11 @@
+         func install(_ postHog: PostHogSDK) -> PostHogIntegrationInstallResult {
+             installIfNeeded(using: Self.integrationInstallState) {
+                 self.postHog = postHog
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("integration_install_owned", owner: postHog)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 replayQueue = postHog.replayQueue
+ 
+                 // Wire up as buffer delegate for the replay queue
+@@ -580,13 +585,44 @@
+ 
+             // TODO: IncrementalSnapshot, type=2
+ 
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            let diagnosticWindow = ObjectIdentifier(window)
++            PostHogReplayDiagnostic.record("encode_queue_enqueued", owner: postHog, window: window)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             PostHogReplayIntegration.dispatchQueue.async {
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("encode_queue_started", owner: postHog, windowID: diagnosticWindow)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 // always make sure we have a fresh session id at correct timestamp
+                 guard let sessionId = postHog.sessionManager.getSessionId(at: timestampDate) else {
+-                    return
+-                }
+-
++                    // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                    #if DEBUG
++                    PostHogReplayDiagnostic.record("encode_session_missing", owner: postHog, windowID: diagnosticWindow)
++                    #endif
++                    // REC636_REPLAY_DIAGNOSTIC_END
++                    return
++                }
++
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("encode_session_present", owner: postHog, windowID: diagnosticWindow)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("wireframe_encode_began", owner: postHog, windowID: diagnosticWindow)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 let wireframeDict = autoreleasepool { wireframe.toDict() }
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("wireframe_encode_ended", owner: postHog, windowID: diagnosticWindow, outcome: wireframeDict["base64"] != nil)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 wireframe.image = nil
+                 wireframe.maskableWidgets = nil
+ 
+@@ -597,6 +633,11 @@
+                 let snapshotData: [String: Any] = ["type": 2, "data": data, "timestamp": timestamp]
+                 snapshotsData.append(snapshotData)
+ 
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("snapshot_capture_will_call", owner: postHog, windowID: diagnosticWindow)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 postHog.capture(
+                     "$snapshot",
+                     properties: [
+@@ -606,6 +647,11 @@
+                     ],
+                     timestamp: timestampDate
+                 )
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("snapshot_capture_returned", owner: postHog, windowID: diagnosticWindow)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+             }
+         }
+ 
+@@ -856,8 +902,18 @@
+         }
+ 
+         private func prepareScreenshotWireframe(_ window: UIWindow) -> RRWireframe? {
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("metadata_entered", owner: self.postHog, window: window)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             // this will bail on view controller animations (interactive or not)
+             if !window.isVisible() || isAnimatingTransition(window) {
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("metadata_not_visible_or_transition", owner: self.postHog, window: window)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 return nil
+             }
+ 
+@@ -869,6 +925,11 @@
+             let wireframe = createBasicWireframe(window)
+             wireframe.maskableWidgets = maskableWidgets
+             wireframe.type = "screenshot"
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("metadata_accepted", owner: self.postHog, window: window)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             return wireframe
+         }
+ 
+@@ -891,8 +952,21 @@
+             postHog: PostHogSDK,
+             timestampDate: Date
+         ) {
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            var diagnosticValidImage = false
++            PostHogReplayDiagnostic.record("outer_image_began", owner: postHog, window: window)
++            defer { PostHogReplayDiagnostic.record("outer_image_ended", owner: postHog, window: window, outcome: diagnosticValidImage) }
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             autoreleasepool {
+                 if let image = window.toImage(), image.size.hasSize() {
++                    // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                    #if DEBUG
++                    diagnosticValidImage = true
++                    PostHogReplayDiagnostic.record("outer_image_valid", owner: postHog, window: window)
++                    #endif
++                    // REC636_REPLAY_DIAGNOSTIC_END
+                     wireframe.image = image
+                     captureSnapshot(
+                         wireframe,
+@@ -921,9 +995,19 @@
+             }
+ 
+             guard let screenshotCapture, postHog.isSessionReplayActive() else {
+-                return
+-            }
+-
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("capture_metadata_or_activity_drop", owner: postHog, window: window)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
++                return
++            }
++
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("capture_admitted", owner: postHog, window: window)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             renderAndEnqueueScreenshot(
+                 screenshotCapture.wireframe,
+                 window: window,
+@@ -1177,14 +1261,34 @@
+         }
+ 
+         @objc private func snapshot() {
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("snapshot_entered", owner: self.postHog)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             guard let postHog, postHog.isSessionReplayActive() else {
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("snapshot_inactive_or_owner_missing", owner: self.postHog)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 return
+             }
+ 
+             guard let window = UIApplication.getCurrentWindow() else {
+-                return
+-            }
+-
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("snapshot_window_missing", owner: postHog)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
++                return
++            }
++
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("snapshot_window_found", owner: postHog, window: window)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             var screenName: String?
+ 
+             if let controller = window.rootViewController {
+@@ -1200,6 +1304,11 @@
+ 
+             if postHog.config.sessionReplayConfig.screenshotMode {
+                 guard tryStartScreenshotRender() else {
++                    // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                    #if DEBUG
++                    PostHogReplayDiagnostic.record("render_busy_drop", owner: postHog, window: window)
++                    #endif
++                    // REC636_REPLAY_DIAGNOSTIC_END
+                     return
+                 }
+ 

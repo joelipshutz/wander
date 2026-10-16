@@ -1,0 +1,33 @@
+{
+  "state": "proposal-uncompiled-unexecuted",
+  "files": [
+    {
+      "path": "PostHog/PostHogSDK.swift",
+      "role": "sdk",
+      "originalSHA256": "ceeeaf0bf964cc3ca2ba7f6f99067eda375a6802c488d67f64164dce9a1f84b3",
+      "proposedSHA256": "144490cde4987182eec43f75d376d51f7cb3305a2d6a71c5450b8be9c6ff9c6b",
+      "diagnosticBlocks": 9,
+      "stripRestoresOriginalBytes": true
+    },
+    {
+      "path": "PostHog/Replay/PostHogReplayIntegration.swift",
+      "role": "sdk",
+      "originalSHA256": "5da5f38816fce2582bddc5cfef80f4ae7e6f51b55b48c268e60b03b69f517d2b",
+      "proposedSHA256": "953ead91794780990294d7306296b847b5173f76dcc6a24ae873334e5b07ccaa",
+      "diagnosticBlocks": 21,
+      "stripRestoresOriginalBytes": true
+    },
+    {
+      "path": "WanderTests/ReplayMaskingTests.swift",
+      "role": "test",
+      "originalSHA256": "73d1acc2fbfab08e5ccadef7e8ab29962f6120c4cc48a99a374bc9d89bf1516c",
+      "proposedSHA256": "9c7090a26edb502e68e71289d82b903238404d70f646637f672a510c22720619",
+      "diagnosticBlocks": 5,
+      "stripRestoresOriginalBytes": true
+    }
+  ],
+  "patchSHA256": "2d753e8f73144e811fad99309ecb1a1b95b79970f2b81f89818b881f48d692c2",
+  "SDKRevision": "ee5b5705b0038f0c44646cde5fe972bb65387596",
+  "noWorktreeOrSDKCheckoutEdits": true,
+  "stripProofSeparatorExceptions": []
+}
