@@ -18,6 +18,8 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let scene = try XCTUnwrap(foregroundScene)
         let originalWindow = scene.keyWindow
+        let originalWindowWasHidden = originalWindow?.isHidden
+        let originalWindowWasKey = originalWindow?.isKeyWindow ?? false
         let window = ReplayProbeWindow(windowScene: scene)
         window.captureTimeline = captureTimeline
         window.backgroundColor = .white
@@ -39,7 +41,23 @@ final class ReplayMaskingTests: XCTestCase {
         ])
         window.rootViewController = container
         window.makeKeyAndVisible()
-        defer { window.isHidden = true; originalWindow?.makeKeyAndVisible() }
+        defer {
+            window.isHidden = true
+            if let originalWindow, let originalWindowWasHidden {
+                originalWindow.isHidden = originalWindowWasHidden
+                if originalWindowWasKey {
+                    originalWindow.makeKey()
+                } else if originalWindow.isKeyWindow {
+                    originalWindow.resignKey()
+                }
+                XCTAssertEqual(originalWindow.isHidden, originalWindowWasHidden, "Replay cleanup must restore the host window's prior visibility.")
+                XCTAssertEqual(originalWindow.isKeyWindow, originalWindowWasKey, "Replay cleanup must restore the host window's prior key status.")
+            }
+        }
+        // The real SDK captures this fixture window; unrelated host rendering is outside the fixture.
+        originalWindow?.isHidden = true
+        XCTAssertTrue(scene.keyWindow === window, "The Replay fixture must remain key after isolating the host window.")
+        XCTAssertTrue(originalWindow?.isHidden ?? true, "The unrelated original window must stay hidden during the Replay proof.")
         container.view.layoutIfNeeded()
         window.layoutIfNeeded()
         let markerFrame = control.convert(control.bounds, to: window)
@@ -281,6 +299,8 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let scene = try XCTUnwrap(foregroundScene, "Replay capture requires a foreground-active scene")
         let originalWindow = scene.keyWindow
+        let originalWindowWasHidden = originalWindow?.isHidden
+        let originalWindowWasKey = originalWindow?.isKeyWindow ?? false
         let window = UIWindow(windowScene: scene)
         // Fixed pixel probes require fixed typography, independent of simulator accessibility settings.
         window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture().dynamicTypeSize(.large))
@@ -288,8 +308,21 @@ final class ReplayMaskingTests: XCTestCase {
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true
-            originalWindow?.makeKeyAndVisible()
+            if let originalWindow, let originalWindowWasHidden {
+                originalWindow.isHidden = originalWindowWasHidden
+                if originalWindowWasKey {
+                    originalWindow.makeKey()
+                } else if originalWindow.isKeyWindow {
+                    originalWindow.resignKey()
+                }
+                XCTAssertEqual(originalWindow.isHidden, originalWindowWasHidden, "Replay cleanup must restore the host window's prior visibility.")
+                XCTAssertEqual(originalWindow.isKeyWindow, originalWindowWasKey, "Replay cleanup must restore the host window's prior key status.")
+            }
         }
+        // The real SDK captures this fixture window; unrelated host rendering is outside the fixture.
+        originalWindow?.isHidden = true
+        XCTAssertTrue(scene.keyWindow === window, "The Replay fixture must remain key after isolating the host window.")
+        XCTAssertTrue(originalWindow?.isHidden ?? true, "The unrelated original window must stay hidden during the Replay proof.")
         XCTAssertTrue(scene.keyWindow === window, "The SDK must capture the fixture's key window")
         XCTAssertFalse(window.bounds.isEmpty)
 
