@@ -1,0 +1,236 @@
+--- a/WanderTests/ReplayMaskingTests.swift
++++ b/WanderTests/ReplayMaskingTests.swift
+@@ -9,6 +9,21 @@
+     @MainActor
+     func testPrivateMessageContentIsMaskedInActualReplayImage() async throws {
+         let captureTimeline = ReplayCaptureTimeline()
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        let pipeline = ReplaySDKPipelineDiagnostics(captureTimeline: captureTimeline)
++        PostHogReplayDiagnostic.setObserver { [weak pipeline] stage, owner, window, outcome, values in
++            pipeline?.record(stage, owner: owner, window: window, outcome: outcome, values: values)
++        }
++        defer {
++            PostHogReplayDiagnostic.setObserver(nil)
++            let attachment = XCTAttachment(string: pipeline.diagnostics)
++            attachment.name = "Replay SDK pipeline diagnostics"
++            attachment.lifetime = .keepAlways
++            add(attachment)
++        }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         var foregroundScene: UIWindowScene?
+         for _ in 0..<100 {
+             foregroundScene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+@@ -19,6 +34,12 @@
+         let scene = try XCTUnwrap(foregroundScene)
+         let originalWindow = scene.keyWindow
+         let window = ReplayProbeWindow(windowScene: scene)
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        pipeline.bindWindow(window)
++        window.diagnosticPipeline = pipeline
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         window.captureTimeline = captureTimeline
+         window.backgroundColor = .white
+         // The SDK can conservatively mask the entire SwiftUI hosting surface
+@@ -60,6 +81,11 @@
+         XCTAssertEqual(config.sessionReplayConfig.throttleDelay, 1.0)
+         config.setBeforeSend { event in frames.receive(event); return nil }
+         let sdk = PostHogSDK.with(config)
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        pipeline.bindSDK(sdk)
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         captureTimeline.record(.sdkSetupReturned)
+         defer { sdk.close() }
+         sdk.capture(ReplayFrameCollector.probeEvent)
+@@ -450,6 +476,14 @@
+     }
+ 
+     private let origin = ContinuousClock.now
++    // REC636_REPLAY_DIAGNOSTIC_BEGIN
++    #if DEBUG
++    func elapsedMilliseconds() -> Int64 {
++        let elapsed = origin.duration(to: .now).components
++        return elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
++    }
++    #endif
++    // REC636_REPLAY_DIAGNOSTIC_END
+     private let lock = NSLock()
+     private var samples: [Stage: Sample] = [:]
+ 
+@@ -479,6 +513,11 @@
+ private final class ReplayProbeWindow: UIWindow {
+     var capturePhase = "ready"
+     var captureTimeline: ReplayCaptureTimeline?
++    // REC636_REPLAY_DIAGNOSTIC_BEGIN
++    #if DEBUG
++    weak var diagnosticPipeline: ReplaySDKPipelineDiagnostics?
++    #endif
++    // REC636_REPLAY_DIAGNOSTIC_END
+     private(set) var successfulReadyDraws = 0
+     private(set) var successfulLoadedDraws = 0
+     private(set) var failedDraws = 0
+@@ -487,7 +526,21 @@
+         if !afterUpdates {
+             captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawBegan : .nativeReadyDrawBegan)
+         }
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        let diagnosticDrawStarted = DispatchTime.now().uptimeNanoseconds
++        if !afterUpdates { diagnosticPipeline?.record("inner_draw_began", owner: nil, window: ObjectIdentifier(self), outcome: nil, values: [:]) }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         let succeeded = super.drawHierarchy(in: rect, afterScreenUpdates: afterUpdates)
++        // REC636_REPLAY_DIAGNOSTIC_BEGIN
++        #if DEBUG
++        if !afterUpdates {
++            diagnosticPipeline?.record("inner_draw_ended", owner: nil, window: ObjectIdentifier(self), outcome: succeeded,
++                                       values: ["duration_ns": ReplaySDKPipelineDiagnostics.elapsedNanoseconds(since: diagnosticDrawStarted)])
++        }
++        #endif
++        // REC636_REPLAY_DIAGNOSTIC_END
+         if !afterUpdates {
+             captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawEnded : .nativeReadyDrawEnded)
+             if !succeeded { captureTimeline?.record(.nativeDrawFailed) }
+@@ -639,3 +692,137 @@
+     }
+     override func stopLoading() {}
+ }
++// REC636_REPLAY_DIAGNOSTIC_BEGIN
++#if DEBUG
++/// Diagnostic-only bounded aggregates and trace. Identities remain in memory.
++private final class ReplaySDKPipelineDiagnostics: @unchecked Sendable {
++    private struct Key: Hashable {
++        let stage: String
++        let owner: ObjectIdentifier?
++        let window: ObjectIdentifier?
++        let outcome: Bool?
++    }
++    private struct Sample {
++        var count: Int
++        var first: Int64
++        var last: Int64
++        var durationCount = 0
++        var durationTotal: Int64 = 0
++        var durationMin = Int64.max
++        var durationMax: Int64 = 0
++    }
++    private struct Entry { let key: Key; let milliseconds: Int64; let values: [String: Int64] }
++    private static let allowedStages: Set<String> = [
++        "capture_admitted",
++        "capture_metadata_or_activity_drop",
++        "encode_queue_enqueued",
++        "encode_queue_started",
++        "encode_session_missing",
++        "encode_session_present",
++        "inner_draw_began",
++        "inner_draw_ended",
++        "integration_install_owned",
++        "mask_image_began",
++        "mask_image_ended",
++        "metadata_accepted",
++        "metadata_entered",
++        "metadata_not_visible_or_transition",
++        "outer_image_began",
++        "outer_image_ended",
++        "outer_image_valid",
++        "render_busy_drop",
++        "renderer_allocation_drop",
++        "renderer_began",
++        "renderer_context_drop",
++        "renderer_ended",
++        "renderer_image_valid",
++        "renderer_invalid_dimensions_drop",
++        "renderer_make_image_drop",
++        "sdk_before_send_began",
++        "sdk_before_send_ended",
++        "sdk_capture_entered",
++        "sdk_disabled_drop",
++        "sdk_optout_drop",
++        "sdk_properties_began",
++        "sdk_properties_ended",
++        "sdk_queue_missing_drop",
++        "snapshot_capture_returned",
++        "snapshot_capture_will_call",
++        "snapshot_entered",
++        "snapshot_inactive_or_owner_missing",
++        "snapshot_window_found",
++        "snapshot_window_missing",
++        "webp_began",
++        "webp_ended",
++        "webp_input_dimensions",
++        "wireframe_encode_began",
++        "wireframe_encode_ended",
++    ]
++    private static let allowedValues: Set<String> = ["duration_ns", "pixel_width", "pixel_height", "mask_count", "encoded_bytes"]
++    private let lock = NSLock()
++    private let captureTimeline: ReplayCaptureTimeline
++    private var expectedSDK: ObjectIdentifier?
++    private var expectedWindow: ObjectIdentifier?
++    private var samples: [Key: Sample] = [:]
++    private var trace: [Entry] = []
++    private var droppedNewKeys = 0
++    private var droppedTraceEvents = 0
++    private var rejectedObservations = 0
++    init(captureTimeline: ReplayCaptureTimeline) { self.captureTimeline = captureTimeline }
++    static func elapsedNanoseconds(since start: UInt64) -> Int64 {
++        let end = DispatchTime.now().uptimeNanoseconds
++        return Int64(min(end >= start ? end - start : 0, UInt64(Int64.max)))
++    }
++    func bindSDK(_ sdk: PostHogSDK) {
++        lock.lock(); defer { lock.unlock() }
++        expectedSDK = ObjectIdentifier(sdk)
++    }
++    func bindWindow(_ window: UIWindow) {
++        lock.lock(); defer { lock.unlock() }
++        expectedWindow = ObjectIdentifier(window)
++    }
++    func record(_ stage: String, owner: ObjectIdentifier?, window: ObjectIdentifier?, outcome: Bool?, values: [String: Int64]) {
++        let now = captureTimeline.elapsedMilliseconds()
++        lock.lock(); defer { lock.unlock() }
++        guard Self.allowedStages.contains(stage), Set(values.keys).isSubset(of: Self.allowedValues) else {
++            rejectedObservations += 1; return
++        }
++        let key = Key(stage: stage, owner: owner, window: window, outcome: outcome)
++        guard samples[key] != nil || samples.count < 128 else { droppedNewKeys += 1; return }
++        var sample = samples[key] ?? Sample(count: 0, first: now, last: now)
++        sample.count += 1; sample.last = now
++        if let duration = values["duration_ns"], duration >= 0 {
++            sample.durationCount += 1
++            let (sum, overflow) = sample.durationTotal.addingReportingOverflow(duration)
++            sample.durationTotal = overflow ? Int64.max : sum
++            sample.durationMin = min(sample.durationMin, duration)
++            sample.durationMax = max(sample.durationMax, duration)
++        }
++        samples[key] = sample
++        if trace.count < 512 { trace.append(Entry(key: key, milliseconds: now, values: values)) }
++        else { droppedTraceEvents += 1 }
++    }
++    var diagnostics: String {
++        lock.lock(); defer { lock.unlock() }
++        func labels(_ key: Key) -> String {
++            let owner = key.owner == nil ? "none" : (expectedSDK == nil ? "unbound" : (key.owner == expectedSDK ? "local" : "other"))
++            let window = key.window == nil ? "none" : (expectedWindow == nil ? "unbound" : (key.window == expectedWindow ? "fixture" : "other"))
++            let outcome = key.outcome.map { $0 ? "true" : "false" } ?? "none"
++            return "stage=\(key.stage) owner=\(owner) window=\(window) outcome=\(outcome)"
++        }
++        var lines = ["pipeline_clock_origin=test_start", "pipeline_clock_unit=elapsed_ms",
++                     "pipeline_duration_unit=ns", "pipeline_aggregate_key_limit=128", "pipeline_trace_event_limit=512",
++                     "pipeline_dropped_new_keys=\(droppedNewKeys)", "pipeline_dropped_trace_events=\(droppedTraceEvents)",
++                     "pipeline_rejected_observations=\(rejectedObservations)"]
++        lines += samples.map { key, sample in
++            "pipeline_aggregate \(labels(key)) count=\(sample.count) first_ms=\(sample.first) last_ms=\(sample.last) duration_count=\(sample.durationCount) duration_total_ns=\(sample.durationTotal) duration_min_ns=\(sample.durationCount == 0 ? -1 : sample.durationMin) duration_max_ns=\(sample.durationMax)"
++        }.sorted()
++        lines += trace.enumerated().map { index, entry in
++            let values = entry.values.keys.sorted().map { "\($0)=\(entry.values[$0]!)" }.joined(separator: " ")
++            return "pipeline_event index=\(index) elapsed_ms=\(entry.milliseconds) \(labels(entry.key)) \(values)"
++        }
++        return lines.joined(separator: "\n")
++    }
++}
++#endif
++// REC636_REPLAY_DIAGNOSTIC_END

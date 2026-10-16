@@ -149,21 +149,57 @@ struct LoggedOutCarouselView: View {
         }
         .preference(key: OnboardingMotionPreferenceKey.self, value: motionIsPlaying)
         .onAppear { trackViewed() }
+        // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+        #if DEBUG
+        .onAppear { timingDiagnostic(.carouselAppeared) }
+        .onDisappear { timingDiagnostic(.carouselDisappeared) }
+        .onChange(of: scenePhase) { _, _ in timingDiagnostic(.sceneChanged) }
+        .onChange(of: motionIsPlaying) { _, _ in timingDiagnostic(.motionChanged) }
+        .onChange(of: isPlaying) { _, _ in timingDiagnostic(.playingChanged) }
+        .onChange(of: isPaused) { _, _ in timingDiagnostic(.pauseChanged) }
+        .onChange(of: selection) { _, _ in timingDiagnostic(.selectionChanged) }
+        #endif
+        // REC636_ONBOARDING_DIAGNOSTIC_END
         .onChange(of: selection) { _, _ in autoAdvanceGeneration += 1; trackViewed() }
         .task(id: slideGeneration) {
+            // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+            #if DEBUG
+            let timingGeneration = slideGeneration
+            timingDiagnostic(.slideTaskEntered, generation: timingGeneration)
+            defer {
+                timingDiagnostic(Task.isCancelled ? .slideCancelled : .slideTaskExited,
+                                 generation: timingGeneration, taskCancelled: Task.isCancelled)
+            }
+            #endif
+            // REC636_ONBOARDING_DIAGNOSTIC_END
             guard previousSelection != nil else { return }
             let generation = slideGeneration
             do {
                 try await Task.sleep(for: .milliseconds(16))
+                // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+                #if DEBUG
+                timingDiagnostic(.slideDelayWoke, generation: generation, taskCancelled: Task.isCancelled)
+                #endif
+                // REC636_ONBOARDING_DIAGNOSTIC_END
                 guard !Task.isCancelled else { return }
                 // Retain the outgoing view until rendering actually finishes.
                 // A wall-clock delay can expire before a busy Map has slid out.
+                // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+                #if DEBUG
+                timingDiagnostic(.slideAnimationStarted, generation: generation)
+                #endif
+                // REC636_ONBOARDING_DIAGNOSTIC_END
                 withAnimation(
                     reduceMotion ? nil : OnboardingCarouselTiming.slideAnimation,
                     completionCriteria: .removed
                 ) {
                     slideProgress = 1
                 } completion: {
+                    // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+                    #if DEBUG
+                    timingDiagnostic(.slideAnimationCompleted, generation: generation)
+                    #endif
+                    // REC636_ONBOARDING_DIAGNOSTIC_END
                     guard slideGeneration == generation else { return }
                     previousSelection = nil
                     if let destination = queuedSwipeSelection {
@@ -177,9 +213,30 @@ struct LoggedOutCarouselView: View {
             } catch { }
         }
         .task(id: AutoAdvanceID(generation: autoAdvanceGeneration, selection: selection, isPlaying: isPlaying)) {
+            // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+            #if DEBUG
+            let timingGeneration = autoAdvanceGeneration
+            timingDiagnostic(.timerTaskEntered, generation: timingGeneration)
+            defer {
+                timingDiagnostic(Task.isCancelled ? .timerCancelled : .timerTaskExited,
+                                 generation: timingGeneration, taskCancelled: Task.isCancelled)
+            }
+            #endif
+            // REC636_ONBOARDING_DIAGNOSTIC_END
             guard isPlaying else { return }
             do {
+                // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+                #if DEBUG
+                timingDiagnostic(.timerStarted, generation: timingGeneration,
+                                 waitSeconds: configuration.seconds(for: step))
+                #endif
+                // REC636_ONBOARDING_DIAGNOSTIC_END
                 try await Task.sleep(for: .seconds(configuration.seconds(for: step)))
+                // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+                #if DEBUG
+                timingDiagnostic(.timerWoke, generation: timingGeneration, taskCancelled: Task.isCancelled)
+                #endif
+                // REC636_ONBOARDING_DIAGNOSTIC_END
                 guard !Task.isCancelled, isPlaying else { return }
                 advance(source: "timer")
             } catch { }
@@ -231,14 +288,40 @@ struct LoggedOutCarouselView: View {
         else { startAuth(mode: .signUp) }
     }
     private func startAuth(mode: NativeAuthMode) {
+        // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+        #if DEBUG
+        timingDiagnostic(.startAuthRequested, signUp: mode == .signUp)
+        #endif
+        // REC636_ONBOARDING_DIAGNOSTIC_END
         guard !didFinish else { return }
         didFinish = true
         queuedAdvances = 0
         queuedSwipeSelection = nil
         analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingAuthStarted,
             properties: ["mode": mode == .signUp ? "sign_up" : "sign_in"]))
+        // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+        #if DEBUG
+        timingDiagnostic(.authRequestDispatched, signUp: mode == .signUp)
+        #endif
+        // REC636_ONBOARDING_DIAGNOSTIC_END
         if mode == .signUp { getStarted() } else { logIn() }
     }
+    // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+    #if DEBUG
+    private func timingDiagnostic(_ event: OnboardingTimingDiagnostic.Event, generation: Int? = nil,
+                                  waitSeconds: Double? = nil, taskCancelled: Bool? = nil,
+                                  signUp: Bool? = nil) {
+        OnboardingTimingDiagnostic.record(event, state: .init(
+            selection: selection, previousSelection: previousSelection,
+            generation: generation, slideGeneration: slideGeneration,
+            autoAdvanceGeneration: autoAdvanceGeneration, sceneActive: scenePhase == .active,
+            reduceMotion: reduceMotion, voiceOver: voiceOverEnabled, paused: isPaused,
+            finished: didFinish, playing: isPlaying, motionPlaying: motionIsPlaying,
+            waitSeconds: waitSeconds, taskCancelled: taskCancelled, signUp: signUp
+        ))
+    }
+    #endif
+    // REC636_ONBOARDING_DIAGNOSTIC_END
     private func trackViewed() {
         analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCarouselViewed, properties: ["slide": String(selection)]))
     }

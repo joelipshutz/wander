@@ -179,6 +179,11 @@ struct FeedScreen: View {
                     .environmentObject(walkthroughs)
                     .transition(.opacity)
                     .zIndex(2)
+                    // REC636-NATIVE-DIAGNOSTIC-BEGIN
+                    #if DEBUG && targetEnvironment(simulator)
+                    .onAppear { NativeInputRecipientDiagnostic.record(.searchDestinationAppeared) }
+                    #endif
+                    // REC636-NATIVE-DIAGNOSTIC-END
                 }
             }
             .background(astirBrandMode.background.ignoresSafeArea())

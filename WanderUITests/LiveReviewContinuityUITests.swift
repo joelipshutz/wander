@@ -239,7 +239,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
 
     func testLiveSearchNotificationsAndAddCancelReturnToSameSurface() {
         let diagnosticStart = ProcessInfo.processInfo.systemUptime
-        let app = launchLive()
+        let app = launchLive(extraArguments: ["-WanderNativeRecipientDiagnostic"])
         let searchMatches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
         let search = readySearch(in: app, startedAt: diagnosticStart)
         captureRouteDiagnostics("search-before-single-tap", in: app, startedAt: diagnosticStart,
@@ -738,6 +738,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture",
+            "-WanderNativeRecipientDiagnostic",
             "-WanderInitialTab", "discover",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]

@@ -616,6 +616,18 @@ struct WanderRootView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+        // REC636-NATIVE-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        .background {
+            if NativeInputRecipientDiagnostic.fixture != nil {
+                NativeInputRecipientDiagnosticInstaller()
+                    .frame(width: 0, height: 0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        #endif
+        // REC636-NATIVE-DIAGNOSTIC-END
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(

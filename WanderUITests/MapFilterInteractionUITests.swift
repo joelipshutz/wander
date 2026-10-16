@@ -119,6 +119,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             "-WanderMapCapture",
             "-WanderUsePerformanceFixtures",
             "-WanderAuthenticatedUITest",
+            "-WanderNativeRecipientDiagnostic",
             "-WanderDisableWalkthroughs"
         ]
         app.launch()
@@ -271,6 +272,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             "-WanderMapCapture",
             "-WanderUsePerformanceFixtures",
             "-WanderAuthenticatedUITest",
+            "-WanderNativeRecipientDiagnostic",
             "-WanderDisableWalkthroughs",
             "-WanderMapCaptureMode", "friends",
             "-WanderMapPerformanceProbe",

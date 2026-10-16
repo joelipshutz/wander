@@ -417,7 +417,19 @@ struct LiveScreen: View {
 
     private var appControls: some View {
         HStack(spacing: 8) {
-            control("Search", symbol: "magnifyingglass") { changeDetent(2); surfaceRequest = .init(target: .search) }
+            control("Search", symbol: "magnifyingglass") {
+                // REC636-NATIVE-DIAGNOSTIC-BEGIN
+                #if DEBUG && targetEnvironment(simulator)
+                NativeInputRecipientDiagnostic.record(.searchActionEntered)
+                #endif
+                // REC636-NATIVE-DIAGNOSTIC-END
+                changeDetent(2); surfaceRequest = .init(target: .search)
+                // REC636-NATIVE-DIAGNOSTIC-BEGIN
+                #if DEBUG && targetEnvironment(simulator)
+                NativeInputRecipientDiagnostic.record(.searchSurfaceRequested)
+                #endif
+                // REC636-NATIVE-DIAGNOSTIC-END
+            }
             control("Notifications", symbol: "bell") { changeDetent(2); surfaceRequest = .init(target: .notifications) }
             control("Messages", symbol: "bubble.left.and.bubble.right") { showsMessages = true }
         }

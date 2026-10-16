@@ -12,6 +12,10 @@ on:
       - 'scripts/test_parent_regression.py'
   workflow_dispatch:
     inputs:
+      observed_diagnostics:
+        description: Run the bounded REC-636 diagnostic observations only
+        type: boolean
+        default: false
       graphics_only:
         description: Run focused native appearance and map frame diagnostics
         type: boolean
@@ -33,6 +37,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ !inputs.observed_diagnostics }}
     name: Parent test build
     runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 60
@@ -86,6 +91,7 @@ jobs:
           retention-days: 2
 
   parent:
+    if: ${{ !inputs.observed_diagnostics }}
     needs: build
     name: ${{ matrix.suite == 'clip' && 'App Clip suite' || format('Parent {0}', matrix.name) }}
     runs-on: ${{ inputs.runner || 'macos-26' }}
@@ -250,3 +256,227 @@ jobs:
             ${{ runner.temp }}/replay-credentials-tests.json
             ${{ runner.temp }}/replay-credentials-selection.json
           retention-days: 14
+
+  replay-private:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics }}
+    name: Instrumented private replay once
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          lfs: true
+          persist-credentials: false
+      - name: Admit exact checkout, toolchain and simulator
+        run: |
+          set -euo pipefail
+          export DIAG="$RUNNER_TEMP/rec636-v37-replay-private-diagnostic"
+          printf 'DIAG=%s\n' "$DIAG" >> "$GITHUB_ENV"
+          mkdir "$DIAG"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          out=Path(os.environ['DIAG'])
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert head==os.environ['GITHUB_SHA'], 'Checkout differs from dispatch SHA'
+          xcode=subprocess.check_output(['xcodebuild','-version'],text=True).strip()
+          assert xcode=='Xcode 26.6\nBuild version 17F113', 'Diagnostic toolchain differs'
+          runtimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','--json'],text=True))['runtimes']
+          admitted=[r for r in runtimes if r.get('isAvailable') and r['identifier']=='com.apple.CoreSimulator.SimRuntime.iOS-26-5']
+          assert len(admitted)==1 and admitted[0]['buildversion']=='23F77', 'Diagnostic runtime differs'
+          devices=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
+          choices=[d for runtime, rows in devices.items() if runtime=='com.apple.CoreSimulator.SimRuntime.iOS-26-5'
+                   for d in rows if d['name']=='iPhone 17 Pro' and d.get('isAvailable')]
+          assert len(choices)==1, 'Require one existing iPhone 17 Pro iOS26.5'
+          device=choices[0]
+          (out/'device-id.txt').write_text(device['udid']+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as f: f.write('DEVICE_ID='+device['udid']+'\n')
+          (out/'admission.json').write_text(json.dumps({'dispatchSHA':head,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'xcode':xcode,'deviceID':device['udid'],'deviceModel':'iPhone 17 Pro','runtime':'iOS26.5','runtimeBuild':'23F77','retries':0,'diagnosticOnly':True,'releaseAcceptance':False,'priorFullUnitSequenceReproduced':False},indent=2)+'\n')
+          PY
+          DEVICE_ID="$(cat "$DIAG/device-id.txt")"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl ui "$DEVICE_ID" appearance dark
+          xcrun simctl ui "$DEVICE_ID" appearance light
+          xcrun simctl shutdown "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$DEVICE_ID"
+          xcrun simctl ui "$DEVICE_ID" appearance
+      - name: Resolve canonical pinned packages in the job-owned cache
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -resolvePackageDependencies -project Wander.xcodeproj -scheme Wander \
+            -clonedSourcePackagesDirPath "$DIAG/SourcePackages" -onlyUsePackageVersionsFromResolvedFile
+      - name: Verify originals and apply only diagnostic patches
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          out=Path(os.environ['DIAG']);root=Path(os.environ['GITHUB_WORKSPACE']);sdk=out/'SourcePackages/checkouts/posthog-ios'
+          proof=json.loads((root/'scripts/diagnostics/source-proof.json').read_text())
+          assert subprocess.check_output(['git','-C',str(sdk),'rev-parse','HEAD'],text=True).strip()==proof['SDKRevision']
+          rows=[]
+          for row in proof['files']:
+              path=(sdk if row['role']=='sdk' else root)/row['path']
+              actual=hashlib.sha256(path.read_bytes()).hexdigest()
+              assert actual==row['originalSHA256'], 'Original diagnostic input differs'
+              rows.append({'role':row['role'],'path':row['path'],'originalSHA256':actual,'proposedSHA256':row['proposedSHA256']})
+          (out/'original-source-fingerprints.json').write_text(json.dumps({'SDKRevision':proof['SDKRevision'],'files':rows},indent=2)+'\n')
+          for directory,name in [(sdk,'sdk-only.patch'),(root,'test-only.patch')]:
+              patch=root/'scripts/diagnostics'/name
+              subprocess.run(['git','-C',str(directory),'apply','--check',str(patch)],check=True)
+              subprocess.run(['git','-C',str(directory),'apply',str(patch)],check=True)
+          for row in rows:
+              path=(sdk if row['role']=='sdk' else root)/row['path']
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==row['proposedSHA256'], 'Proposed source differs'
+          (out/'applied-source-fingerprints.json').write_text(json.dumps({'files':rows,'originalsVerified':True,'proposalsVerified':True,'sharedCachesModified':False},indent=2)+'\n')
+          PY
+      - name: Build diagnostic parent products once
+        run: |
+          set -euo pipefail
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath "$DIAG/DerivedData" -clonedSourcePackagesDirPath "$DIAG/SourcePackages" \
+            -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -jobs 2 \
+            -testProductsPath "$DIAG/Parent.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          out=Path(os.environ['DIAG']);root=Path(os.environ['GITHUB_WORKSPACE']);sdk=out/'SourcePackages/checkouts/posthog-ios'
+          rows=json.loads((out/'applied-source-fingerprints.json').read_text())['files']
+          for row in rows:
+              path=(sdk if row['role']=='sdk' else root)/row['path']
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==row['proposedSHA256'], 'Build changed patched source'
+          products=out/'Parent.xctestproducts';assert (products/'Info.plist').is_file()
+          files={str(p.relative_to(products)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(products.rglob('*')) if p.is_file() and not p.is_symlink()}
+          (out/'diagnostic-build-fingerprints.json').write_text(json.dumps({'sourceHashesStillMatch':True,'productFiles':files},indent=2)+'\n')
+          PY
+      - name: Run original private replay selection once
+        run: |
+          set -euo pipefail
+          set +e
+          python3 scripts/run-parent-regression.py --suite replay-private \
+            --test-products "$DIAG/Parent.xctestproducts" --destination "$DEVICE_ID" \
+            --result-bundle "$DIAG/ParentReplayPrivate.xcresult" --selection-file "$DIAG/selection.json"
+          code=$?
+          set -e
+          printf '{"nativeExitCode":%s,"retries":0}\n' "$code" > "$DIAG/native-process.json"
+          exit "$code"
+      - name: Retain actual result metadata and aggregate diagnostics
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          out=Path(os.environ['DIAG']);out.mkdir(exist_ok=True)
+          root=Path(os.environ['GITHUB_WORKSPACE']);sdk=out/'SourcePackages/checkouts/posthog-ios';rows=[]
+          proof=root/'scripts/diagnostics/source-proof.json'
+          if proof.is_file():
+              for row in json.loads(proof.read_text())['files']:
+                  p=(sdk if row['role']=='sdk' else root)/row['path']
+                  rows.append({'role':row['role'],'path':row['path'],'exists':p.is_file(),'sha256':hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None})
+          (out/'final-source-fingerprints.json').write_text(json.dumps({'files':rows,'diagnosticOnly':True,'releaseAcceptance':False},indent=2)+'\n')
+          bundle=out/'ParentReplayPrivate.xcresult';exports=[]
+          if (bundle/'Info.plist').is_file():
+              before=hashlib.sha256((bundle/'Info.plist').read_bytes()).hexdigest()
+              for kind in ['summary','tests']:
+                  with (out/(kind+'.json')).open('wb') as f:
+                      result=subprocess.run(['xcrun','xcresulttool','get','test-results',kind,'--path',str(bundle),'--compact'],stdout=f,timeout=120)
+                  exports.append({'kind':kind,'exitCode':result.returncode})
+              result=subprocess.run(['xcrun','xcresulttool','export','attachments','--path',str(bundle),'--output-path',str(out/'attachments')],timeout=120)
+              exports.append({'kind':'attachments','exitCode':result.returncode})
+              after=hashlib.sha256((bundle/'Info.plist').read_bytes()).hexdigest()
+              (out/'export-receipt.json').write_text(json.dumps({'exports':exports,'InfoBeforeSHA256':before,'InfoAfterSHA256':after,'InfoUnchanged':before==after,'noRerun':True},indent=2)+'\n')
+              assert before==after and all(r['exitCode']==0 for r in exports), 'Retained export incomplete'
+          else:
+              (out/'export-receipt.json').write_text(json.dumps({'state':'no-completed-bundle','exports':exports,'noRerun':True},indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rec636-v37-replay-stage-diagnostic
+          path: |
+            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/*.json
+            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/attachments
+            ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/ParentReplayPrivate.xcresult
+          if-no-files-found: warn
+          retention-days: 7
+
+  native-inputs:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics }}
+    name: Observe native input and onboarding once
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          lfs: true
+          persist-credentials: false
+      - name: Admit source, toolchain and existing devices
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnostics/native-input-diagnostic.py admit --out "$RUNNER_TEMP/native-input-evidence"
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -resolvePackageDependencies -project Wander.xcodeproj -scheme Wander \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/CanonicalPackages" \
+            -onlyUsePackageVersionsFromResolvedFile
+      - name: Initialize exact large diagnostic phone
+        run: |
+          set -euo pipefail
+          xcrun simctl bootstatus "$DIAG_LARGE" -b
+          xcrun simctl ui "$DIAG_LARGE" appearance dark
+          xcrun simctl ui "$DIAG_LARGE" appearance light
+          xcrun simctl shutdown "$DIAG_LARGE"
+          xcrun simctl bootstatus "$DIAG_LARGE" -b
+          open -a Simulator --args -CurrentDeviceUDID "$DIAG_LARGE"
+      - name: Build canonical SDK and observed app once
+        id: native_build
+        run: |
+          set -euo pipefail
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$DIAG_LARGE" \
+            -derivedDataPath "$RUNNER_TEMP/NativeDiagnosticDerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/CanonicalPackages" \
+            -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -jobs 2 \
+            -testProductsPath "$RUNNER_TEMP/NativeDiagnostic.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
+            > "$RUNNER_TEMP/native-input-evidence/build.log" 2>&1
+          python3 scripts/diagnostics/native-input-diagnostic.py verify-build \
+            --out "$RUNNER_TEMP/native-input-evidence" \
+            --products "$RUNNER_TEMP/NativeDiagnostic.xctestproducts" \
+            --packages "$RUNNER_TEMP/CanonicalPackages"
+      - name: Run six large diagnostic cases once each
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
+        run: |
+          python3 scripts/diagnostics/native-input-diagnostic.py run --role large \
+            --out "$RUNNER_TEMP/native-input-evidence" \
+            --products "$RUNNER_TEMP/NativeDiagnostic.xctestproducts"
+      - name: Prepare exact compact phone
+        id: compact_ready
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          xcrun simctl shutdown "$DIAG_LARGE"
+          xcrun simctl bootstatus "$DIAG_COMPACT" -b
+          open -a Simulator --args -CurrentDeviceUDID "$DIAG_COMPACT"
+      - name: Run three compact diagnostic cases once each
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' && steps.compact_ready.outcome == 'success' }}
+        run: |
+          python3 scripts/diagnostics/native-input-diagnostic.py run --role compact \
+            --out "$RUNNER_TEMP/native-input-evidence" \
+            --products "$RUNNER_TEMP/NativeDiagnostic.xctestproducts"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rec636-v37-native-input-diagnostic
+          path: ${{ runner.temp }}/native-input-evidence
+          if-no-files-found: warn
+          retention-days: 7

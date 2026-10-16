@@ -2655,7 +2655,7 @@ final class OnboardingUITests: XCTestCase {
     func testFilmExplorationsAutoAdvanceToInteractiveAccount() {
         for treatment in ["film", "film-type"] {
             let app = XCUIApplication()
-            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut"]
+            app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestSignedOut", "-WanderOnboardingTimingDiagnostic"]
             app.launchEnvironment["WANDER_ONBOARDING_TREATMENT"] = treatment
             app.launch()
             XCTAssertTrue(app.buttons["onboarding.next"].waitForExistence(timeout: 10))

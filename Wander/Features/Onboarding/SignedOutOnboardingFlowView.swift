@@ -36,6 +36,16 @@ struct SignedOutOnboardingFlowView: View {
                     onLogIn: { auth.beginSignIn(mode: .signIn) }
                 )
                 .id(auth.activeNativeAuthMode)
+                // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+                #if DEBUG
+                .onAppear {
+                    OnboardingTimingDiagnostic.record(.nativeAuthViewAppeared, state: .init(
+                        reduceMotion: reduceMotion, signUp: auth.activeNativeAuthMode == .signUp,
+                        nativeAuthPresented: auth.isPresentingNativeAuth
+                    ))
+                }
+                #endif
+                // REC636_ONBOARDING_DIAGNOSTIC_END
                 .transition(reduceMotion ? .opacity : .move(edge: .trailing))
                 .zIndex(2)
             } else {
@@ -59,6 +69,21 @@ struct SignedOutOnboardingFlowView: View {
         .preferredColorScheme(treatment.isFilm ? .dark : nil)
         .onPreferenceChange(OnboardingMotionPreferenceKey.self) { filmIsPlaying = $0 }
         .overlay(alignment: .topTrailing) { reviewMenu }
+        // REC636_ONBOARDING_DIAGNOSTIC_BEGIN
+        #if DEBUG
+        .onAppear {
+            OnboardingTimingDiagnostic.record(.flowAppeared, state: .init(
+                reduceMotion: reduceMotion, nativeAuthPresented: auth.isPresentingNativeAuth
+            ))
+        }
+        .onChange(of: auth.isPresentingNativeAuth) { _, presented in
+            OnboardingTimingDiagnostic.record(.nativeAuthPresentationChanged, state: .init(
+                reduceMotion: reduceMotion, signUp: auth.activeNativeAuthMode == .signUp,
+                nativeAuthPresented: presented
+            ))
+        }
+        #endif
+        // REC636_ONBOARDING_DIAGNOSTIC_END
         .animation(
             reduceMotion ? nil : OnboardingCarouselTiming.slideAnimation,
             value: auth.isPresentingNativeAuth

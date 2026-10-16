@@ -2884,9 +2884,20 @@ struct MapScreen: View {
     }
 
     private func selectMapSource(_ source: MapSource) {
+        // REC636-NATIVE-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.record(.mapSourceEntered)
+        defer { NativeInputRecipientDiagnostic.record(.mapSourceReturned) }
+        #endif
+        // REC636-NATIVE-DIAGNOSTIC-END
         dismissMoreFilters()
         let previousState = mapFilterState
         mapFilterState.selectSource(source)
+        // REC636-NATIVE-DIAGNOSTIC-BEGIN
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.record(.mapSourceSelected)
+        #endif
+        // REC636-NATIVE-DIAGNOSTIC-END
         guard mapFilterState != previousState else { return }
         if Self.normalized(mapQuery).isEmpty {
             routedVisiblePlace = nil
