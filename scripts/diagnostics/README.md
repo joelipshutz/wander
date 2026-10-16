@@ -34,10 +34,16 @@ or reset keychain or system settings. This symmetric app reset can still leave
 system-cache and execution-order differences between arms.
 
 Before package resolution or compilation, the job checks the same bounded
-inventory decoder against the admitted simulator. JSON is read directly;
-native plist formats use Apple's converter through an in-memory input pipe.
-Only process hashes and scalar receipts are retained. A decoding failure stops
-before the build, without resetting the app or changing its configuration.
+inventory decoder with a fixed fictional OpenStep fixture. Real simulator
+inventory and ownership checks remain after build at their original limit.
+JSON is read directly; native plist formats use Apple's converter through an
+in-memory input pipe. Only process hashes and scalar receipts are retained.
+A format failure stops before build without touching the app configuration.
+
+Process-group checks first reap the runner's known direct child. An initiating
+failure is recorded before cleanup, and any cleanup failure is retained
+separately with an unverified outcome. A permission error never means the group
+is gone and stops further group probes or signals.
 
 Each native result, selection, original attachment, issue summary and process
 receipt is retained. A completed assertion failure allows the planned second

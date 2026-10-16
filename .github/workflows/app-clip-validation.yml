@@ -310,50 +310,49 @@ jobs:
           xcrun simctl bootstatus "$DEVICE_ID" -b
           open -a Simulator --args -CurrentDeviceUDID "$DEVICE_ID"
           xcrun simctl ui "$DEVICE_ID" appearance
-      - name: Preflight admitted app inventory format before building
+      - name: Preflight a fixed fictional OpenStep parser fixture before building
         timeout-minutes: 1
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, os, re, runpy, signal, time
+          python3 - <<'PYCODE'
+          import hashlib, json, os, runpy, signal, time
           from pathlib import Path
           root=Path(os.environ['GITHUB_WORKSPACE']).resolve()
           out=Path(os.environ['DIAG']).resolve()
-          assert os.environ.get('GITHUB_ACTIONS')=='true' and Path.cwd().resolve()==root, 'inventory_preflight_CI_scope_required'
-          assert out.is_dir() and out.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve()), 'inventory_preflight_output_scope_required'
+          assert os.environ.get('GITHUB_ACTIONS')=='true' and Path.cwd().resolve()==root, 'parser_preflight_CI_scope_required'
+          assert out.is_dir() and out.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve()), 'parser_preflight_output_scope_required'
           script=root/'scripts/diagnostics/replay-host-comparison.py'
-          expected='463a83e5657328a89bd184eb915c5da00eacd40380a0d788c3e6874f5ae8aeae'
-          assert script.is_file() and not script.is_symlink() and hashlib.sha256(script.read_bytes()).hexdigest()==expected, 'inventory_preflight_reader_drift'
+          expected='e208f86b4dda3cece0ee263d63f3c5309e6eb474d0c8132d3a0073433b78e7c2'
+          assert script.is_file() and not script.is_symlink() and hashlib.sha256(script.read_bytes()).hexdigest()==expected, 'parser_preflight_reader_drift'
           admission=json.loads((out/'admission.json').read_text())
-          assert admission['diagnosticOnly'] is True and admission['releaseAcceptance'] is False, 'inventory_preflight_admission_scope_required'
-          assert admission['dispatchSHA']==os.environ['GITHUB_SHA'] and admission['deviceID']==os.environ['DEVICE_ID'], 'inventory_preflight_identity_mismatch'
-          assert re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}',admission['deviceID']), 'inventory_preflight_invalid_device'
-          assert not (out/'inventory-preflight.json').exists(), 'inventory_preflight_no_retry'
+          assert admission['diagnosticOnly'] is True and admission['releaseAcceptance'] is False and admission['dispatchSHA']==os.environ['GITHUB_SHA'], 'parser_preflight_admission_mismatch'
+          assert not (out/'inventory-format-preflight.json').exists(), 'parser_preflight_no_retry'
           started=time.monotonic()
-          module=runpy.run_path(str(script),run_name='rec636_inventory_preflight')
+          module=runpy.run_path(str(script),run_name='rec636_fictional_parser_preflight')
           globals_=module['command'].__globals__
-          assert module['checked'].__globals__ is globals_ and module['parse_listapps'].__globals__ is globals_, 'inventory_preflight_reader_globals_mismatch'
-          assert globals_['ROOT']==root and globals_['OUT'] is None, 'inventory_preflight_reader_scope_mismatch'
+          assert module['parse_listapps'].__globals__ is globals_, 'parser_preflight_reader_globals_mismatch'
+          assert globals_['ROOT']==root and globals_['OUT'] is None, 'parser_preflight_reader_scope_mismatch'
           globals_['OVERALL_DEADLINE']=started+30
-          receipt={'state':'started','diagnosticOnly':True,'releaseAcceptance':False,'head':admission['dispatchSHA'],'deviceID':admission['deviceID'],'admissionSHA256':hashlib.sha256((out/'admission.json').read_bytes()).hexdigest(),'runnerSHA256':expected,'overallDeadlineSeconds':30,'retries':0,'resetCalled':False,'nativeTestExecuted':False,'configurationOrProductsTouched':False,'rawInventoryPersisted':False}
+          fixture=b'{ "com.example.rec636-parser-fixture" = { CFBundleIdentifier = "com.example.rec636-parser-fixture"; ApplicationType = User; }; }'
+          expected_rows={'com.example.rec636-parser-fixture':{'CFBundleIdentifier':'com.example.rec636-parser-fixture','ApplicationType':'User'}}
+          receipt={'state':'started','diagnosticOnly':True,'releaseAcceptance':False,'head':admission['dispatchSHA'],'admissionSHA256':hashlib.sha256((out/'admission.json').read_bytes()).hexdigest(),'runnerSHA256':expected,'overallDeadlineSeconds':30,'retries':0,'fictionalFixtureOnly':True,'fixtureSHA256':hashlib.sha256(fixture).hexdigest(),'simulatorInventoryQueried':False,'resetCalled':False,'nativeTestExecuted':False,'configurationOrProductsTouched':False,'rawInventoryPersisted':False}
           def interrupted(_signal,_frame):
-              raise InterruptedError('inventory_preflight_interrupted')
+              raise InterruptedError('parser_preflight_interrupted')
           previous=signal.signal(signal.SIGTERM,interrupted)
           try:
-              raw=module['checked'](['xcrun','simctl','listapps',admission['deviceID']],out,'inventory-preflight-listapps',timeout=15)
-              rows=module['parse_listapps'](raw,out,'inventory-preflight-listapps')
-              assert time.monotonic()<=globals_['OVERALL_DEADLINE'], 'inventory_preflight_deadline_exceeded'
-              assert hashlib.sha256(script.read_bytes()).hexdigest()==expected, 'inventory_preflight_reader_drift'
-              receipt.update(state='Passed',parsedDictionary=isinstance(rows,dict),inputBytes=len(raw),inputSHA256=hashlib.sha256(raw).hexdigest(),fixedSyntheticAppPresent=globals_['BUNDLE_ID'] in rows,ownershipAndProductChecks='Remain required in comparison main after build.')
+              rows=module['parse_listapps'](fixture,out,'inventory-format-preflight-fictional')
+              assert rows==expected_rows, 'parser_preflight_fixture_dictionary_mismatch'
+              assert time.monotonic()<=globals_['OVERALL_DEADLINE'], 'parser_preflight_deadline_exceeded'
+              assert hashlib.sha256(script.read_bytes()).hexdigest()==expected, 'parser_preflight_reader_drift'
+              receipt.update(state='Passed',fixedDictionaryValidated=True,actualInventoryAndOwnershipChecks='Remain required in comparison main after build; this fixture proves no Simulator readiness or ownership.')
           except BaseException as error:
-              category=str(error) if isinstance(error,RuntimeError) and re.fullmatch(r'[a-z_]+',str(error)) else type(error).__name__
-              receipt.update(state='Failed',category=category)
+              receipt.update(state='Failed',category=type(error).__name__)
               raise
           finally:
               signal.signal(signal.SIGTERM,previous)
               receipt['elapsedSeconds']=time.monotonic()-started
-              module['save'](out/'inventory-preflight.json',receipt)
-          PY
+              module['save'](out/'inventory-format-preflight.json',receipt)
+          PYCODE
       - name: Resolve canonical pinned packages in the job-owned cache
         run: |
           set -euo pipefail
@@ -437,7 +436,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rec636-v41-replay-host-cpu-comparison
+          name: rec636-v42-replay-host-cpu-comparison
           path: |
             ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/*.json
             ${{ runner.temp }}/rec636-v37-replay-private-diagnostic/normal

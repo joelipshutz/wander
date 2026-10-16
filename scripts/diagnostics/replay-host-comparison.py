@@ -34,20 +34,20 @@ def unwrap(value):
     if isinstance(value, list): return [unwrap(x) for x in value]
     return value
 
-def group_exists(pid):
-    try: os.killpg(pid, 0); return True
+def group_exists(process):
+    process.poll()  # Reap only our direct child before inspecting its group.
+    try: os.killpg(process.pid, 0); return True
     except ProcessLookupError: return False
-def cleanup(process):
-    facts = {"ownedGroup": process.pid, "term": False, "kill": False}
-    if group_exists(process.pid): os.killpg(process.pid, signal.SIGTERM); facts["term"] = True
+def cleanup(process, facts):
+    if group_exists(process): os.killpg(process.pid, signal.SIGTERM); facts["term"] = True
     deadline = time.monotonic() + 10
-    while group_exists(process.pid) and time.monotonic() < deadline: process.poll(); time.sleep(.1)
-    if group_exists(process.pid): os.killpg(process.pid, signal.SIGKILL); facts["kill"] = True
+    while group_exists(process) and time.monotonic() < deadline: process.poll(); time.sleep(.1)
+    if group_exists(process): os.killpg(process.pid, signal.SIGKILL); facts["kill"] = True
     process.wait(timeout=5)
     deadline = time.monotonic() + 5
-    while group_exists(process.pid) and time.monotonic() < deadline: time.sleep(.1)
-    need(not group_exists(process.pid), "owned_group_cleanup_unconfirmed")
-    return {**facts, "groupGone": True, "leaderExit": process.returncode}
+    while group_exists(process) and time.monotonic() < deadline: time.sleep(.1)
+    need(not group_exists(process), "owned_group_cleanup_unconfirmed")
+    return {**facts, "cleanupConfirmed": True, "groupGone": True, "leaderExit": process.returncode}
 
 def command(argv, folder, operation, timeout=120, collect=True, input_data=None):
     """Bounded owned group; raw command/environment/stderr are never persisted."""
@@ -82,15 +82,28 @@ def command(argv, folder, operation, timeout=120, collect=True, input_data=None)
                 denial |= any(s in lower for s in [b"permission to save", b"permission denied", b"operation not permitted"])
                 if collect and name == "stdout": data.extend(chunk)
         process.wait(timeout=max(.1, deadline - time.monotonic()))
-        need(not group_exists(process.pid), "owned_group_still_active")
+        need(not group_exists(process), "owned_group_still_active")
     except BaseException as error:
-        facts = cleanup(process)
-        save(folder / (operation + "-cleanup.json"), facts)
         save(folder / (operation + "-process.json"), {"operation": operation,
              "exitCode": process.returncode, "completed": False,
              "category": str(error) if isinstance(error, RuntimeError) else type(error).__name__,
+             "errno": getattr(error, "errno", None),
              "elapsedSeconds": time.monotonic() - began, "rawOutputPersisted": False,
              "outputBytes": dict(sizes), "outputSHA256": {k: v.hexdigest() for k, v in hashes.items()}, **input_facts})
+        facts = {"ownedGroup": process.pid, "term": False, "kill": False}
+        if isinstance(error, PermissionError):
+            save(folder / (operation + "-cleanup.json"), {**facts, "cleanupAttempted": False,
+                 "cleanupConfirmed": False, "groupGone": None, "leaderExit": process.returncode,
+                 "category": "PermissionError", "errno": error.errno})
+            raise  # No additional signal or group probe after an observed denial.
+        try: facts = cleanup(process, facts)
+        except BaseException as cleanup_error:
+            save(folder / (operation + "-cleanup.json"), {**facts, "cleanupAttempted": True,
+                 "cleanupConfirmed": False, "groupGone": None, "leaderExit": process.returncode,
+                 "category": str(cleanup_error) if isinstance(cleanup_error, RuntimeError) else type(cleanup_error).__name__,
+                 "errno": getattr(cleanup_error, "errno", None)})
+            raise
+        save(folder / (operation + "-cleanup.json"), {**facts, "cleanupAttempted": True})
         raise
     finally:
         selector.close()
