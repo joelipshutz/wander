@@ -33,6 +33,12 @@ any installed app matches the current product. It does not erase the device
 or reset keychain or system settings. This symmetric app reset can still leave
 system-cache and execution-order differences between arms.
 
+Before package resolution or compilation, the job checks the same bounded
+inventory decoder against the admitted simulator. JSON is read directly;
+native plist formats use Apple's converter through an in-memory input pipe.
+Only process hashes and scalar receipts are retained. A decoding failure stops
+before the build, without resetting the app or changing its configuration.
+
 Each native result, selection, original attachment, issue summary and process
 receipt is retained. A completed assertion failure allows the planned second
 arm. A non-boundary metadata-export failure stays Unverified and retains other

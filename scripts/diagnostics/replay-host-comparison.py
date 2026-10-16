@@ -49,20 +49,30 @@ def cleanup(process):
     need(not group_exists(process.pid), "owned_group_cleanup_unconfirmed")
     return {**facts, "groupGone": True, "leaderExit": process.returncode}
 
-def command(argv, folder, operation, timeout=120, collect=True):
+def command(argv, folder, operation, timeout=120, collect=True, input_data=None):
     """Bounded owned group; raw command/environment/stderr are never persisted."""
+    need(input_data is None or isinstance(input_data, bytes) and 0 < len(input_data) <= 1024 * 1024, "process_input_bound_exceeded")
     process = subprocess.Popen(argv, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               start_new_session=True)
+                               start_new_session=True, **({"stdin": subprocess.PIPE} if input_data is not None else {}))
     began = time.monotonic(); deadline = min(began + timeout, OVERALL_DEADLINE)
     selector = selectors.DefaultSelector()
     for stream, name in [(process.stdout, "stdout"), (process.stderr, "stderr")]:
         os.set_blocking(stream.fileno(), False); selector.register(stream, selectors.EVENT_READ, name)
+    input_offset = 0
+    if input_data is not None:
+        os.set_blocking(process.stdin.fileno(), False); selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+    input_facts = {} if input_data is None else {"inputBytes": len(input_data), "inputSHA256": hashlib.sha256(input_data).hexdigest()}
     hashes = {k: hashlib.sha256() for k in ["stdout", "stderr"]}
     sizes = Counter(); data = bytearray(); tail = b""; infra = False; denial = False
     try:
         while selector.get_map():
             need(time.monotonic() <= deadline, "owned_process_watchdog_timeout")
             for key, _ in selector.select(min(.5, max(0, deadline - time.monotonic()))):
+                if key.data == "stdin":
+                    try: input_offset += os.write(key.fileobj.fileno(), input_data[input_offset:input_offset + 65536])
+                    except BrokenPipeError: raise RuntimeError("process_input_rejected") from None
+                    if input_offset == len(input_data): selector.unregister(key.fileobj); key.fileobj.close()
+                    continue
                 chunk = os.read(key.fileobj.fileno(), 65536)
                 if not chunk: selector.unregister(key.fileobj); continue
                 name = key.data; hashes[name].update(chunk); sizes[name] += len(chunk)
@@ -80,16 +90,17 @@ def command(argv, folder, operation, timeout=120, collect=True):
              "exitCode": process.returncode, "completed": False,
              "category": str(error) if isinstance(error, RuntimeError) else type(error).__name__,
              "elapsedSeconds": time.monotonic() - began, "rawOutputPersisted": False,
-             "outputBytes": dict(sizes), "outputSHA256": {k: v.hexdigest() for k, v in hashes.items()}})
+             "outputBytes": dict(sizes), "outputSHA256": {k: v.hexdigest() for k, v in hashes.items()}, **input_facts})
         raise
     finally:
         selector.close()
+        if process.stdin is not None and not process.stdin.closed: process.stdin.close()
         process.stdout.close(); process.stderr.close()
     receipt = {"operation": operation, "exitCode": process.returncode,
                "elapsedSeconds": time.monotonic() - began, "outputBytes": dict(sizes),
                "outputSHA256": {k: v.hexdigest() for k, v in hashes.items()},
                "rawOutputPersisted": False, "infrastructureMarker": infra,
-               "permissionDenialMarker": denial}
+               "permissionDenialMarker": denial, **input_facts}
     save(folder / (operation + "-process.json"), receipt)
     need(not denial, "process_permission_denial")
     return process.returncode, bytes(data), receipt
@@ -111,12 +122,24 @@ def source_guard(out, proof):
         path = (sdk if row["role"] == "sdk" else ROOT) / row["path"]
         need(path.is_file() and not path.is_symlink() and sha(path) == row["proposedSHA256"], "source_drift")
 
+def parse_listapps(raw, folder, operation):
+    """Normalize simctl's JSON or native plist in memory; never persist inventory."""
+    need(isinstance(raw, bytes) and 0 < len(raw) <= 1024 * 1024, "listapps_input_bound_exceeded")
+    try: rows = json.loads(raw)
+    except (ValueError, UnicodeError):
+        rc, converted, _ = command(["/usr/bin/plutil", "-convert", "json", "-o", "-", "--", "-"],
+                                   folder, operation + "-plist-conversion", timeout=15, input_data=raw)
+        need(rc == 0, "listapps_plist_conversion_failed")
+        need(0 < len(converted) <= 4 * 1024 * 1024, "listapps_converted_output_bound_exceeded")
+        try: rows = json.loads(converted)
+        except (ValueError, UnicodeError): raise RuntimeError("unrecognized_listapps_shape") from None
+    need(isinstance(rows, dict), "unrecognized_listapps_shape")
+    return rows
+
 def reset_owned_app(device, products, folder):
     def installed(op):
         raw = checked(["xcrun", "simctl", "listapps", device], folder, op)
-        try: rows = json.loads(raw)
-        except (ValueError, UnicodeError): rows = plistlib.loads(raw)
-        need(isinstance(rows, dict), "unrecognized_listapps_shape")
+        rows = parse_listapps(raw, folder, op)
         return rows.get(BUNDLE_ID)
     app = installed("listapps-before")
     if app is not None:
