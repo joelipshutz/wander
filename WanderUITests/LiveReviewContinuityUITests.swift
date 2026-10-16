@@ -629,9 +629,18 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             "cityExists=\(city.exists); cityFrame=\(city.frame); cityHittable=\(city.isHittable)"
         ])
         city.tap()
-        guard let losAngeles = revealNativeCityOption("Los Angeles", in: app) else { return }
-        waitHittable(losAngeles)
-        losAngeles.tap()
+        guard let cityTarget = revealNativeCityOption("Los Angeles", in: app) else { return }
+        let losAngeles = cityTarget.element
+        let contact = CGPoint(x: cityTarget.frame.midX, y: cityTarget.frame.midY)
+        let diagnostic = XCTAttachment(string: "city=Los Angeles; verifiedFrame=\(cityTarget.frame); verifiedViewport=\(cityTarget.viewport); verifiedEnabled=true; verifiedHittable=true; contact=\(contact); pressDuration=0.2")
+        diagnostic.name = "REC-636-native-city-option-physical-target"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        // Use the row center just verified inside the city list; avoid a second
+        // native activation-point lookup before the one explicit city choice.
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        origin.withOffset(CGVector(dx: contact.x - app.frame.minX, dy: contact.y - app.frame.minY))
+            .press(forDuration: 0.2)
         let cityNavigation = app.navigationBars["City center"]
         XCTAssertTrue(cityNavigation.exists)
         XCTAssertTrue(losAngeles.isSelected)
@@ -971,7 +980,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
     }
 
-    private func revealNativeCityOption(_ name: String, in app: XCUIApplication) -> XCUIElement? {
+    private func revealNativeCityOption(_ name: String, in app: XCUIApplication)
+        -> (element: XCUIElement, frame: CGRect, viewport: CGRect)? {
         let navigation = app.navigationBars["City center"]
         guard navigation.waitForExistence(timeout: 5) else {
             captureCityPickerState("city-picker-route-missing", in: app, observations: [])
@@ -1015,8 +1025,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             let exists = option.exists
             let frame = exists ? option.frame : CGRect.null
             let finiteTarget = finite(frame)
+            let enabled = exists && option.isEnabled
             let hittable = exists && option.isHittable
-            if finiteTarget, viewport.contains(frame), hittable { return option }
+            if finiteTarget, viewport.contains(frame), enabled, hittable { return (option, frame, viewport) }
             // Observe the final drag's outcome without sending a seventeenth.
             guard attempt < 16 else { break }
             let dragDown = finiteTarget && frame.minY < viewport.minY

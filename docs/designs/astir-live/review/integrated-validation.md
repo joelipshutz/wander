@@ -1,6 +1,16 @@
 # REC-636 integrated validation
 
-## Test-only successor · V35
+## Current test-only successor · V36
+
+V36 source manifest `7ec8e1868e6b7a6fc1332d05bc34643bb77a448cee2810ed8b6364677ff584dc` changes no production Swift. The replay test uses distinct public color markers for readiness/freshness while retaining the original 30-second gates, every-frame private-content OCR, selected-frame label checks, SDK capture cadence and credential assertions. No SDK or host-window isolation change is included. The roster has 448 Swift files; fresh parent enumeration is exactly the prior 3,174 methods plus one new marker test, **3,175 total**. All 262 application/extension Swift files match both published `fc52038d` and the recorded V33 source bytes; this is source equivalence, not binary identity or a repeated full suite.
+
+Fresh V36 native checks **Passed 3/3**, with zero failures, skips, expected failures, retries or official warnings: marker probes, private-message replay and credential replay, each in its own process. Independent review `ffae6a45…` and root original-pixel review `0e71c97f…` bind candidate, products, device and originals. Actual SDK pixels show the magenta loaded marker with the private surface blacked out, and readable public content with password/code masked. This local pass does not establish the cause of earlier CI delays. The 12 tooling checks passed. Separate earlier local evidence remains distinct: selected-pin performance and Combined Filters **2/2 Passed** on `a86f59de…`, followed by seeded profile-photo **1/1 Passed** using those same original products; none is relabeled V36 execution.
+
+Published `fc52038d` full CI is closed and **Failed: 8,967 Passed / 6 Failed among 8,973 executions**, zero skipped/expected failures, across 23 bundles and 16 verified artifact archives (`db4eebbf…`). The six failures and 28 runtime warning events remain preserved; later focused passes do not turn that candidate green. The separate canonical-SDK diagnostic CI passed all three selected executions: selected-pin performance and Combined Filters on both large and compact phones. Each native exit was zero, with exact result/device metadata and original captures retained in artifact `12038082662` (SHA `9ae8bda4…`). This diagnostic source includes extra test attachments and is not the final published candidate; its overall run remains Failed because the separate instrumented replay diagnostic failed.
+
+Fresh V36 final published-head CI, exact ordinary-auth execution and checkout/source-tree/product/artifact acceptance remain pending. Latest results belong in [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and [REC-636](https://linear.app/recme/issue/REC-636), without a later documentation-only push. Backend installation and designated real-account trials remain separate gates. Live remains globally Off; no merge, activation or release is implied.
+
+## Historical test-only successor · V35
 
 V35 source manifest `a3dafb91119a807d2184c3108d2f9d89be6ad7bf0e6152588461967fc7a68963` changes no production Swift implementation. Three UI-test files refine native input and exact outcome readiness; the CI tooling requires the two original replay methods in separate processes while preserving the combined local mode. Original behavior assertions, privacy checks and performance budgets remain. The 447-file Swift roster and all 150 build inputs are unchanged from V34.
 
@@ -55,11 +65,11 @@ After native, fresh CI and SQL acceptance, recheck the confirmed target, exact h
 
 ## Current continuation
 
-Publish the validated test-only V35 candidate and audit a fresh final published-head CI set, including exact ordinary-auth execution and checkout/product/artifact identity. The V33 opposite-theme home review and Xcode handoff are already complete within their recorded source scope. Later CI disposition belongs in PR #736 and REC-636 without a documentation-only push. Preserve previous failures and completed native identities. Backend installation follows its separate gates; global Live remains Off.
+Publish the validated test-only V36 successor with its exact source-tree mapping, then audit one fresh final published-head CI set, including exact ordinary-auth execution, all required checks and checkout/product/artifact provenance. Preserve the closed Failed `fc52038d` result and all earlier local/native identities; the separate V33 full local, V35 input/photo and V36 replay checks keep their recorded scopes. The V33 opposite-theme home review and Xcode handoff remain complete within that source scope. Later CI disposition belongs in PR #736 and REC-636 without a documentation-only push. Dormant backend installation and designated internal-account trials follow their separate gates; global Live remains Off.
 
 ## Historical checkpoint before V33
 
-The following is preserved historical evidence and earlier restart guidance. Its references to “current”, “remaining” or “next” apply to that older checkpoint; use the V33 continuation above and the linked PR/issue for present work.
+The following is preserved historical evidence and earlier restart guidance. Its references to “current”, “remaining” or “next” apply to that older checkpoint; use the current continuation above and the linked PR/issue for present work.
 
 October 15, 2026 · Integrated `Wander` app · **V32 category-label 2/2 Passed · V31 targeted 20/20 Passed · final CI required · Live globally Off**
 

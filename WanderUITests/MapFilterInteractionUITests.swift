@@ -302,6 +302,15 @@ final class MapFilterInteractionUITests: XCTestCase {
             let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             return current != previousProbe && current.contains("camera=")
         }
+        let beforePanFrame = map.frame
+        let beforePan = XCTAttachment(string:
+            "probe=\(previousProbe)\nmapFrame=\(beforePanFrame)\n"
+                + "normalizedStart=(0.72,0.42); normalizedEnd=(0.28,0.56); velocity=slow"
+        )
+        beforePan.name = "REC-404 selected-pin pan before probe and geometry"
+        beforePan.lifetime = .keepAlways
+        add(beforePan)
+
         var didMeasurePan = false
         var invocationCount = 0
         let options = XCTMeasureOptions()
@@ -319,7 +328,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             dragStart.press(
                 forDuration: 0.08,
                 thenDragTo: dragEnd,
-                withVelocity: .fast,
+                withVelocity: .slow,
                 thenHoldForDuration: 0.08
             )
             XCTAssertEqual(
@@ -338,6 +347,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         let snapshot = String(describing: probe.value)
         print("REC404_MAP_PERFORMANCE_PROBE \(snapshot)")
         add(XCTAttachment(string: snapshot))
+
+        let afterPanFrame = map.frame
+        let afterPan = XCTAttachment(string: "probe=\(snapshot)\nmapFrame=\(afterPanFrame)")
+        afterPan.name = "REC-404 selected-pin pan after probe and geometry"
+        afterPan.lifetime = .keepAlways
+        add(afterPan)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-404 dense map after selected-pin pan"

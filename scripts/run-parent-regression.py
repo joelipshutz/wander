@@ -189,7 +189,10 @@ def main() -> int:
         return 0
     if not all([args.destination, args.result_bundle]) or not (args.derived_data or args.test_products):
         parser.error("destination, result-bundle and either derived-data or test-products are required to run tests")
-    if "WanderUITests/NativeOnboardingFlowUITests/testProfilePreviewUpdatesWithOptionalPhoto" in selected:
+    if any(identifier in selected for identifier in (
+        "WanderUITests/NativeOnboardingFlowUITests/testProfilePreviewUpdatesWithOptionalPhoto",
+        "WanderUITests/NativeAccountSetupUITests/testProfilePhotoPickerCropAndValidation",
+    )):
         # The real PhotoKit picker needs an actual library item on a fresh CI
         # simulator. Use the same public bundled artwork as the review fixture;
         # do not depend on photos left behind by another test or recording run.

@@ -158,6 +158,61 @@ class ReplayIsolationTests(unittest.TestCase):
                 self.assertTrue((root / "replay-credentials-tests.json").is_file())
 
 
+class PhotoFixturePreparationTests(unittest.TestCase):
+    def dispatch(self, identifier, *, fail_seed=False):
+        calls = []
+
+        def native(command, **kwargs):
+            calls.append((command, kwargs))
+            if fail_seed and command[:3] == ["xcrun", "simctl", "addmedia"]:
+                raise subprocess.CalledProcessError(1, command)
+            return SimpleNamespace(returncode=65 if command[0] == "xcodebuild" else 0)
+
+        with mock.patch("sys.argv", ["run-parent-regression.py", "--suite", "ui", "--shard", "0",
+                                    "--shard-count", "1", "--destination", "fixture-device",
+                                    "--test-products", "prepared.xctestproducts", "--result-bundle", "photo.xcresult"]), \
+                mock.patch.object(regression, "ui_test_identifiers", return_value=sorted({identifier} | regression.ISOLATED_UI_PERFORMANCE | regression.REFERENCE_UI_PERFORMANCE)), \
+                mock.patch.object(regression, "prepare_ui_performance_products", return_value=1), \
+                mock.patch.object(regression.subprocess, "run", side_effect=native), \
+                contextlib.redirect_stdout(io.StringIO()):
+            if fail_seed:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    regression.main()
+                return calls
+            self.assertEqual(regression.main(), 65, "Preserve the actual native failure exit.")
+        return calls
+
+    def test_each_photo_journey_seeds_the_same_owned_asset_before_native_execution(self):
+        for identifier in [
+            "WanderUITests/NativeOnboardingFlowUITests/testProfilePreviewUpdatesWithOptionalPhoto",
+            "WanderUITests/NativeAccountSetupUITests/testProfilePhotoPickerCropAndValidation",
+        ]:
+            with self.subTest(identifier=identifier):
+                calls = self.dispatch(identifier)
+                asset = Path(regression.__file__).resolve().parents[1] / "Wander/Resources/Assets.xcassets/PlaceCarouselAvatars.imageset/place-carousel-avatars.png"
+                self.assertEqual(calls[0], (["xcrun", "simctl", "bootstatus", "fixture-device", "-b"], {"check": True}))
+                self.assertEqual(calls[1], (["xcrun", "simctl", "addmedia", "fixture-device", str(asset)], {"check": True}))
+                self.assertEqual(len(calls), 3)
+                command = calls[2][0]
+                self.assertEqual(command[:3], ["xcodebuild", "test-without-building", "-quiet"])
+                self.assertEqual([x for x in command if x.startswith("-only-testing:")], ["-only-testing:" + identifier])
+                for flag, value in [("-default-test-execution-time-allowance", "600"),
+                                    ("-maximum-test-execution-time-allowance", "900"),
+                                    ("-parallel-testing-enabled", "NO")]:
+                    self.assertEqual(command[command.index(flag) + 1], value)
+                self.assertNotIn("-retry-tests-on-failure", command)
+
+    def test_unrelated_ui_case_does_not_seed_or_boot_a_photo_fixture(self):
+        calls = self.dispatch("WanderUITests/NativeAccountSetupUITests/testProfilePreviewRetainsIdentityAcrossBackground")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0][0], "xcodebuild")
+
+    def test_failed_photo_import_stops_before_native_execution(self):
+        calls = self.dispatch("WanderUITests/NativeAccountSetupUITests/testProfilePhotoPickerCropAndValidation", fail_seed=True)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(any(command[0] == "xcodebuild" for command, _ in calls))
+
+
 class PerformanceProductsTests(unittest.TestCase):
     def test_ui_inventory_has_disjoint_complete_hosted_and_reference_coverage(self):
         inventory = regression.ui_test_identifiers(Path(__file__).resolve().parents[1])

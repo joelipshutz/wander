@@ -40,6 +40,13 @@ final class ReplayMaskingTests: XCTestCase {
         window.rootViewController = container
         window.makeKeyAndVisible()
         defer { window.isHidden = true; originalWindow?.makeKeyAndVisible() }
+        container.view.layoutIfNeeded()
+        window.layoutIfNeeded()
+        let markerFrame = control.convert(control.bounds, to: window)
+        guard ReplayPublicMarkerProbe.validMarker(markerFrame, in: window.bounds) else {
+            XCTFail("The public marker must have a complete native frame inside the fixture window.")
+            return
+        }
 
         let frames = ReplayFrameCollector(captureTimeline: captureTimeline)
         let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
@@ -63,6 +70,7 @@ final class ReplayMaskingTests: XCTestCase {
         // Require the recorder to produce a frame before creating any private
         // view. Never reset the collector: first presentation is part of the proof.
         var recorderReady = false
+        var readyFrame: UIImage?
         var observedReadyFrameCount = 0
         var recordedReplayActivation = false
         let readyDeadline = ContinuousClock.now.advanced(by: .seconds(30))
@@ -80,14 +88,16 @@ final class ReplayMaskingTests: XCTestCase {
                 captureTimeline.record(.readyInactivePoll)
             }
             try await Task.sleep(for: .milliseconds(100))
-            let available = frames.images
-            // Re-running Vision on the same image competes with the SDK's
-            // serial image encoder without adding freshness evidence.
+            let available = frames.images(windowID: window.hash)
+            // Read one public native marker in the actual SDK image. Defer full
+            // OCR until capture gates finish so Vision does not delay hydration.
             while observedReadyFrameCount < available.count, ContinuousClock.now < readyDeadline {
                 let frame = available[observedReadyFrameCount]
-                let text = try await Self.recognizedText(frame)
                 observedReadyFrameCount += 1
-                if sdk.isSessionReplayActive(), text.contains("replay ready") {
+                if sdk.isSessionReplayActive(), scene.activationState == .foregroundActive, scene.keyWindow === window,
+                   ReplayPublicMarkerProbe.matches(frame, marker: markerFrame, window: window.bounds, phase: .ready),
+                   ContinuousClock.now < readyDeadline {
+                    readyFrame = frame
                     recorderReady = true
                     break
                 }
@@ -159,8 +169,12 @@ final class ReplayMaskingTests: XCTestCase {
         // A distinct post-hydration control rules out passing on only an old
         // public frame or a loading placeholder from the transition.
         let preLoadedControlFrameCount = frames.images.count
+        let preLoadedFixtureFrameCount = frames.images(windowID: window.hash).count
         window.capturePhase = "loaded"
         control.text = "Replay loaded"
+        control.backgroundColor = .magenta
+        XCTAssertEqual(control.convert(control.bounds, to: window), markerFrame,
+                       "The public marker must stay in the same native rectangle after private hydration.")
         // Independently verify the updated native fixture before waiting for
         // the SDK's own screenshot and encoding pipeline to deliver it.
         let loadedBaseline = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
@@ -169,18 +183,21 @@ final class ReplayMaskingTests: XCTestCase {
         let loadedBaselineText = try await Self.recognizedText(loadedBaseline)
         XCTAssertTrue(loadedBaselineText.contains("replay loaded"),
                       "The native post-load control must be rendered before observing SDK frames.")
+        XCTAssertTrue(ReplayPublicMarkerProbe.matches(loadedBaseline, marker: markerFrame, window: window.bounds, phase: .loaded),
+                      "The native post-load public marker color must be rendered before observing SDK frames.")
         var replay: UIImage?
-        var observedLoadedFrameCount = preLoadedControlFrameCount
+        var observedLoadedFrameCount = preLoadedFixtureFrameCount
         let loadedDeadline = ContinuousClock.now.advanced(by: .seconds(30))
         while ContinuousClock.now < loadedDeadline {
             layoutPump.requestLayoutWhenReady(window: window, frames: frames)
             try await Task.sleep(for: .milliseconds(100))
-            let available = frames.images
+            let available = frames.images(windowID: window.hash)
             while observedLoadedFrameCount < available.count, ContinuousClock.now < loadedDeadline {
                 let frame = available[observedLoadedFrameCount]
-                let text = try await Self.recognizedText(frame)
                 observedLoadedFrameCount += 1
-                if text.contains("replay loaded") {
+                if sdk.isSessionReplayActive(), scene.activationState == .foregroundActive, scene.keyWindow === window,
+                   ReplayPublicMarkerProbe.matches(frame, marker: markerFrame, window: window.bounds, phase: .loaded),
+                   ContinuousClock.now < loadedDeadline {
                     replay = frame
                     break
                 }
@@ -193,6 +210,9 @@ final class ReplayMaskingTests: XCTestCase {
         let diagnostic = XCTAttachment(string: """
         ready_frame_count=\(readyFrameCount)
         pre_loaded_control_frame_count=\(preLoadedControlFrameCount)
+        pre_loaded_fixture_frame_count=\(preLoadedFixtureFrameCount)
+        public_marker_frame=\(markerFrame)
+        public_marker_window_bounds=\(window.bounds)
         final_frame_count=\(capturedFrames.count)
         replay_active=\(sdk.isSessionReplayActive())
         foreground_active=\(scene.activationState == .foregroundActive)
@@ -215,11 +235,19 @@ final class ReplayMaskingTests: XCTestCase {
             latestAttachment.lifetime = .keepAlways
             add(latestAttachment)
         }
+        var readyLabelVerified = false
+        var loadedLabelVerified = false
         for frame in capturedFrames {
             let text = try await Self.recognizedText(frame)
+            if let readyFrame, frame === readyFrame { readyLabelVerified = text.contains("replay ready") }
+            if let replay, frame === replay { loadedLabelVerified = text.contains("replay loaded") }
             for privateToken in ["maya", "chen", "patio", "lovely", "sunny", "afternoon"] {
                 XCTAssertFalse(text.contains(privateToken), "Private content must not appear in any captured frame, including startup.")
             }
+        }
+        XCTAssertTrue(readyLabelVerified, "The selected actual public SDK frame must contain the ready label.")
+        if replay != nil {
+            XCTAssertTrue(loadedLabelVerified, "The selected actual post-load SDK frame must contain the loaded label.")
         }
         XCTAssertTrue(sdk.isSessionReplayActive())
         let loadedReplay = try XCTUnwrap(replay, "Pinned SDK must supply a frame after private content has loaded.")
@@ -526,6 +554,7 @@ private final class ReplayFrameCollector: @unchecked Sendable {
     private let captureTimeline: ReplayCaptureTimeline?
     private var counts = Counts()
     private var captured: [UIImage] = []
+    private var windowImages: [Int: [UIImage]] = [:]
     private var windowImageCounts: [Int: Int] = [:]
 
     init(captureTimeline: ReplayCaptureTimeline? = nil) {
@@ -534,6 +563,10 @@ private final class ReplayFrameCollector: @unchecked Sendable {
 
     var image: UIImage? { lock.lock(); defer { lock.unlock() }; return captured.last }
     var images: [UIImage] { lock.lock(); defer { lock.unlock() }; return captured }
+    func images(windowID: Int) -> [UIImage] {
+        lock.lock(); defer { lock.unlock() }
+        return windowImages[windowID, default: []]
+    }
     var probeCallbackCount: Int { lock.lock(); defer { lock.unlock() }; return counts.probeCallbacks }
     var diagnostics: String {
         lock.lock(); defer { lock.unlock() }
@@ -585,7 +618,10 @@ private final class ReplayFrameCollector: @unchecked Sendable {
                 // The pinned SDK assigns each screenshot wireframe its actual
                 // UIWindow hash. Use this only for pacing; freshness still
                 // requires the visible post-hydration sentinel in SDK pixels.
-                if let windowID = frame["id"] as? Int { windowImageCounts[windowID, default: 0] += 1 }
+                if let windowID = frame["id"] as? Int {
+                    windowImageCounts[windowID, default: 0] += 1
+                    windowImages[windowID, default: []].append(image)
+                }
                 lock.unlock()
             }
         }
