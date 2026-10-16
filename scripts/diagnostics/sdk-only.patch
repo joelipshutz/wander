@@ -456,14 +456,136 @@
  
              guard width > 0, width <= WEBP_MAX_DIMENSION, height > 0, height <= WEBP_MAX_DIMENSION else {
                  return nil
-@@ -124,6 +138,12 @@
+@@ -66,11 +80,44 @@
                  return nil
              }
  
 +            // REC636_REPLAY_DIAGNOSTIC_BEGIN
 +            #if DEBUG
++            let diagnosticBufferStarted = PostHogReplayDiagnostic.timestampNanoseconds()
++            PostHogReplayDiagnostic.record("webp_vimage_buffer_began", owner: nil)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             guard let dest = try? vImage_Buffer(cgImage: cgImage, format: destFormat, flags: .noFlags) else {
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("webp_vimage_buffer_ended", owner: nil, outcome: false,
++                    values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticBufferStarted)])
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 hedgeLog("Error initializing WebP image buffer")
+                 return nil
+             }
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("webp_vimage_buffer_ended", owner: nil, outcome: true,
++                values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticBufferStarted)])
++            var diagnosticBufferCleanupStarted: UInt64 = 0
++            // LIFO: this diagnostic defer runs after the original buffer cleanup below.
++            defer {
++                PostHogReplayDiagnostic.record("webp_vimage_cleanup_ended", owner: nil,
++                    values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticBufferCleanupStarted)])
++            }
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             defer { dest.data?.deallocate() }
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            // LIFO: this diagnostic defer runs before the original buffer cleanup above.
++            defer {
++                diagnosticBufferCleanupStarted = PostHogReplayDiagnostic.timestampNanoseconds()
++                PostHogReplayDiagnostic.record("webp_vimage_cleanup_began", owner: nil)
++            }
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+ 
+             guard let rgba = dest.data else { // byte array
+                 hedgeLog("Could not get rgba byte array from destination format")
+@@ -101,10 +148,28 @@
+             PHWebPMemoryWriterInit(&writer)
+ 
+             defer {
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                let diagnosticCleanupStarted = PostHogReplayDiagnostic.timestampNanoseconds()
++                PostHogReplayDiagnostic.record("webp_c_cleanup_began", owner: nil)
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 PHWebPMemoryWriterClear(&writer)
+                 PHWebPPictureFree(&picture)
+-            }
+-
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("webp_c_cleanup_ended", owner: nil,
++                    values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticCleanupStarted)])
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
++            }
++
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            let diagnosticImportStarted = PostHogReplayDiagnostic.timestampNanoseconds()
++            PostHogReplayDiagnostic.record("webp_pixel_import_began", owner: nil, values: ["channels": hasAlpha ? 4 : 3])
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             let result: Int32
+             if hasAlpha {
+                 // RGBA8888 - 4 channels
+@@ -114,16 +179,58 @@
+                 result = PHWebPPictureImportRGB(&picture, rgba.bindMemory(to: UInt8.self, capacity: 3), Int32(bytesPerRow))
+             }
+ 
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("webp_pixel_import_ended", owner: nil, outcome: result != 0,
++                values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticImportStarted), "channels": hasAlpha ? 4 : 3])
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             if result == 0 {
+                 hedgeLog("Could not read WebPPicture")
+                 return nil
+             }
+ 
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            let diagnosticCEncodeStarted = PostHogReplayDiagnostic.timestampNanoseconds()
++            PostHogReplayDiagnostic.record("webp_c_encode_began", owner: nil)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
+             if PHWebPEncode(&config, &picture) == 0 {
++                // REC636_REPLAY_DIAGNOSTIC_BEGIN
++                #if DEBUG
++                PostHogReplayDiagnostic.record("webp_c_encode_ended", owner: nil, outcome: false,
++                    values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticCEncodeStarted), "encoded_bytes": Int64(clamping: writer.size)])
++                #endif
++                // REC636_REPLAY_DIAGNOSTIC_END
+                 hedgeLog("Could not encode WebP image")
+                 return nil
+             }
+ 
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            PostHogReplayDiagnostic.record("webp_c_encode_ended", owner: nil, outcome: true,
++                values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticCEncodeStarted), "encoded_bytes": Int64(clamping: writer.size)])
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
 +            diagnosticWebPSucceeded = true
 +            diagnosticWebPBytes = Int64(clamping: writer.size)
++            #endif
++            // REC636_REPLAY_DIAGNOSTIC_END
++            // REC636_REPLAY_DIAGNOSTIC_BEGIN
++            #if DEBUG
++            let diagnosticCopyStarted = PostHogReplayDiagnostic.timestampNanoseconds()
++            PostHogReplayDiagnostic.record("webp_output_copy_began", owner: nil, values: ["encoded_bytes": Int64(clamping: writer.size)])
++            // Return-value evaluation precedes defer; this is registered last and runs
++            // before the original C cleanup, so it excludes writer/picture deallocation.
++            defer {
++                PostHogReplayDiagnostic.record("webp_output_copy_ended", owner: nil, outcome: true,
++                    values: ["duration_ns": PostHogReplayDiagnostic.elapsedNanoseconds(since: diagnosticCopyStarted)])
++            }
 +            #endif
 +            // REC636_REPLAY_DIAGNOSTIC_END
              return Data(bytes: writer.mem, count: writer.size)

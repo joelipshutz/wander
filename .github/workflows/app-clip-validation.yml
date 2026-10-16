@@ -16,6 +16,10 @@ on:
         description: Run the bounded REC-636 diagnostic observations only
         type: boolean
         default: false
+      replay_only:
+        description: In observed diagnostics mode run only the instrumented private Replay job
+        type: boolean
+        default: false
       graphics_only:
         description: Run focused native appearance and map frame diagnostics
         type: boolean
@@ -366,6 +370,12 @@ jobs:
           set -e
           printf '{"nativeExitCode":%s,"retries":0}\n' "$code" > "$DIAG/native-process.json"
           exit "$code"
+      - name: Record generated phlibwebp compilation arguments
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnostics/collect-c-flags.py \
+            --derived-data "$DIAG/DerivedData" --output "$DIAG/phlibwebp-c-flags.json"
       - name: Retain actual result metadata and aggregate diagnostics
         if: always()
         run: |
@@ -408,7 +418,7 @@ jobs:
           retention-days: 7
 
   native-inputs:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.observed_diagnostics && !inputs.replay_only }}
     name: Observe native input and onboarding once
     runs-on: macos-26
     timeout-minutes: 75

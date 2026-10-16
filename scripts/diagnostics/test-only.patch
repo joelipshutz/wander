@@ -96,7 +96,7 @@
          if !afterUpdates {
              captureTimeline?.record(capturePhase == "loaded" ? .nativeLoadedDrawEnded : .nativeReadyDrawEnded)
              if !succeeded { captureTimeline?.record(.nativeDrawFailed) }
-@@ -639,3 +692,137 @@
+@@ -639,3 +692,149 @@
      }
      override func stopLoading() {}
  }
@@ -121,6 +121,18 @@
 +    }
 +    private struct Entry { let key: Key; let milliseconds: Int64; let values: [String: Int64] }
 +    private static let allowedStages: Set<String> = [
++        "webp_c_cleanup_began",
++        "webp_c_cleanup_ended",
++        "webp_c_encode_began",
++        "webp_c_encode_ended",
++        "webp_output_copy_began",
++        "webp_output_copy_ended",
++        "webp_pixel_import_began",
++        "webp_pixel_import_ended",
++        "webp_vimage_buffer_began",
++        "webp_vimage_buffer_ended",
++        "webp_vimage_cleanup_began",
++        "webp_vimage_cleanup_ended",
 +        "capture_admitted",
 +        "capture_metadata_or_activity_drop",
 +        "encode_queue_enqueued",
@@ -166,7 +178,7 @@
 +        "wireframe_encode_began",
 +        "wireframe_encode_ended",
 +    ]
-+    private static let allowedValues: Set<String> = ["duration_ns", "pixel_width", "pixel_height", "mask_count", "encoded_bytes"]
++    private static let allowedValues: Set<String> = ["duration_ns", "pixel_width", "pixel_height", "mask_count", "encoded_bytes", "channels"]
 +    private let lock = NSLock()
 +    private let captureTimeline: ReplayCaptureTimeline
 +    private var expectedSDK: ObjectIdentifier?

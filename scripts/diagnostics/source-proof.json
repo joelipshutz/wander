@@ -1,5 +1,5 @@
 {
-  "state": "uncompiled-diagnostic-only-ArmA",
+  "state": "uncompiled-diagnostic-only-V38-original-fixture",
   "baseHead": "22e7c6d9efd4ac0957ed25cd60e8cc26a05bc7f7",
   "SDKRevision": "ee5b5705b0038f0c44646cde5fe972bb65387596",
   "SDKVersion": "3.61.0",
@@ -40,21 +40,21 @@
       "path": "PostHog/Utils/UIImage+WebP.swift",
       "role": "sdk",
       "originalSHA256": "fac7c87eaa4c0ffd0096881a1495c4bc31457f95e78d887909486146e2cf4876",
-      "proposedSHA256": "e6f8d25389077c019e7d6fae319840c9494f035ef8c5acc66e19684521284a24",
-      "diagnosticBlocks": 3,
+      "proposedSHA256": "83fa6db1879df68502bd580b9edc7f542cdafbbf90afea9936420b7072a0688e",
+      "diagnosticBlocks": 15,
       "stripRestoresCanonicalBytes": true
     },
     {
       "path": "WanderTests/ReplayMaskingTests.swift",
       "role": "test",
       "originalSHA256": "e20df909d2100f01ff761b5e356b1e2ae51d1e51a1843ed0c44ca59f661b9681",
-      "proposedSHA256": "49cef1d9a26982b7ca8da7b5030e632d30fe7ee9a552c0bd3426889f4642ad9f",
+      "proposedSHA256": "92e66f794ef51748152e616dfdcea989f46391933124b89415ac88119c6eb14d",
       "diagnosticBlocks": 8,
       "stripRestoresCanonicalBytes": true
     }
   ],
-  "sdkPatchSHA256": "ca9cda9dcc2cb64bd90031b444725292d61650ed4b7cf5bc167bc4b775f3815b",
-  "testPatchSHA256": "8c3bf254beee684f50db08e6661b05b1b7a5ac6d263e972a64f0f8976270a9b9",
+  "sdkPatchSHA256": "647076a48bc756e75deb562193c0632c78c47a876f50dcb2232d6644a1de7915",
+  "testPatchSHA256": "53f63d1a0245b65bddab0c6a64466a578e24d4d0707f302a3b932d684ab742bb",
   "stageNames": [
     "capture_admitted",
     "capture_metadata_or_activity_drop",
@@ -96,8 +96,20 @@
     "snapshot_window_found",
     "snapshot_window_missing",
     "webp_began",
+    "webp_c_cleanup_began",
+    "webp_c_cleanup_ended",
+    "webp_c_encode_began",
+    "webp_c_encode_ended",
     "webp_ended",
     "webp_input_dimensions",
+    "webp_output_copy_began",
+    "webp_output_copy_ended",
+    "webp_pixel_import_began",
+    "webp_pixel_import_ended",
+    "webp_vimage_buffer_began",
+    "webp_vimage_buffer_ended",
+    "webp_vimage_cleanup_began",
+    "webp_vimage_cleanup_ended",
     "wireframe_encode_began",
     "wireframe_encode_ended"
   ],
@@ -108,12 +120,33 @@
     "pixel_width",
     "pixel_height",
     "mask_count",
-    "encoded_bytes"
+    "encoded_bytes",
+    "channels"
   ],
   "armBIncluded": false,
   "stripSeparatorExceptions": [],
   "gatesCadenceMarkersAndAssertionsByteIdenticalAfterStripping": true,
   "nativeMethodsAdded": 0,
   "SDKExecuted": false,
-  "nativeTestsExecuted": 0
+  "nativeTestsExecuted": 0,
+  "V37sourceProofSHA256": "28e0011cd9be74c60faad832159505ec6bcebf3fbb1a0bcd3cfc3ad8234530d8",
+  "V37toV38ChangedPaths": [
+    "PostHog/Utils/UIImage+WebP.swift",
+    "WanderTests/ReplayMaskingTests.swift"
+  ],
+  "newStageNames": [
+    "webp_c_cleanup_began",
+    "webp_c_cleanup_ended",
+    "webp_c_encode_began",
+    "webp_c_encode_ended",
+    "webp_output_copy_began",
+    "webp_output_copy_ended",
+    "webp_pixel_import_began",
+    "webp_pixel_import_ended",
+    "webp_vimage_buffer_began",
+    "webp_vimage_buffer_ended",
+    "webp_vimage_cleanup_began",
+    "webp_vimage_cleanup_ended"
+  ],
+  "optimizationChanged": false
 }
