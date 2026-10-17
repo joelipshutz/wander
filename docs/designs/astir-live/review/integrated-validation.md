@@ -1,5 +1,17 @@
 # REC-636 integrated validation
 
+## Replay startup pacing repair
+
+The latest test-only repair keeps requesting a genuine layout at the SDK's existing one-second cadence until the fixture observes its first completed native draw. Previously, merely requesting a layout reserved a ten-second encoding wait, even when no draw had happened. After any completed draw, including a failed draw that the SDK may still encode, the original delivery-progress/ten-second backpressure applies. Four deterministic regressions cover startup, cadence, delivery and timeout behavior. Both original privacy test bodies, 30-second capture gates, SDK settings and every-frame image assertions remain unchanged.
+
+V47 `37170753` remains **Failed: 8,970 Passed / 9 Failed**, zero skipped or expected, across 23 audited bundles and 15 digest-verified archives. All 102 build and 26 runtime warnings remain recorded. The five launch failures involved late system Developer-testing assertion replies after the apps reached foreground. The pan input reached its app window late; the compact picker and onboarding failures lack exact receiving-view/handler observations. These findings do not establish app defects or justify weaker checks.
+
+V48's three original diagnostic cases passed, V49's original onboarding case passed, and V50's original Replay case passed. V48/V50 observation gaps remain separate from those native results. They neither clear V47 nor explain its post-render delay. The startup repair requires its own native checks and fresh complete CI; [PR #736](https://github.com/joelipshutz/wander/pull/736) and [REC-636](https://linear.app/recme/issue/REC-636) record the exact published source and terminal results without a documentation-only validation loop.
+
+The corrected local build passed, followed by **2,865 ordinary unit tests and both original actual-image Replay tests**, with zero failures, skips or expected failures. The first build's initializer-visibility failure is retained separately. The test-source SHA-256 is `80df366480648684a88923b4b2a954206507943465f3a0c02b52f1186be2afa4`; production Swift remains byte-identical to V47. Fresh complete CI remains required and its terminal result belongs to the linked PR/issue.
+
+The review audit verified all eight approved image hashes, both themes on both phone sizes, and source continuity for the completed human freehand journey. These checks need no repeated user drawing. Spoken VoiceOver task completion remains an explicit limitation of spec R15; simulator accessibility assertions do not establish it. Designated signed-in internal accounts remain required for real messaging trials after dormant backend verification. Live stays globally Off.
+
 ## Publication checkpoint · exact-commit CI required
 
 Published V36 `22e7c6d9` is fully accounted **Failed: 8,966 Passed / 10 Failed among 8,976 executions**, with zero skips or expected failures across 23 bundles. Accounting `2c4b30c1…` preserves all failures, 26 runtime warnings and 158 overlapping build-warning events. The 15 result/evidence archives are digest-verified; the parent-product archive remains remotely retained without a local binary audit. Its exact ordinary-auth case passed, which establishes neither an actual sign-in nor real-account delivery.

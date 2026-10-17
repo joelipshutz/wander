@@ -594,37 +594,96 @@ private final class ReplayProbeWindow: UIWindow {
 
 /// Pace only the test's extra layout requests, never the recorder or native UI.
 /// The SDK's render guard ends before its serial mask/WebP encoding completes.
-/// Wait for delivery progress before requesting another layout. A renderer or
+/// Before the first draw, keep requesting at the production cadence: an active
+/// SDK does not prove that it observed the first layout. Once any draw completes,
+/// wait for delivery progress before requesting another layout. A renderer or
 /// encoder can drop a frame, so retry after ten seconds rather than requiring
 /// native draw and delivered image counts to match forever.
 @MainActor
 private struct ReplayLayoutPump {
-    private let interval: Duration
     private let captureTimeline: ReplayCaptureTimeline?
-    private var nextRequestAt = ContinuousClock.now
-    private var retryAt = ContinuousClock.now
-    private var deliveredCountAtRequest: Int?
+    private var pacing: ReplayLayoutPacing
     private(set) var requestCount = 0
 
     init(interval: Duration, captureTimeline: ReplayCaptureTimeline? = nil) {
-        self.interval = interval
+        self.pacing = ReplayLayoutPacing(interval: interval)
         self.captureTimeline = captureTimeline
     }
 
     mutating func requestLayoutWhenReady(window: ReplayProbeWindow, frames: ReplayFrameCollector) {
-        let now = ContinuousClock.now
         let delivered = frames.imageCount(windowID: window.hash)
-        let deliveryAdvanced = deliveredCountAtRequest.map { delivered > $0 } ?? true
-        guard now >= nextRequestAt, deliveryAdvanced || now >= retryAt else { return }
-        deliveredCountAtRequest = delivered
-        nextRequestAt = now.advanced(by: interval)
-        retryAt = now.advanced(by: .seconds(10))
+        // The SDK can encode even when drawHierarchy returns false, so failed
+        // draws also end startup pacing and reserve the existing delivery wait.
+        let completedDraws = window.successfulReadyDraws + window.successfulLoadedDraws + window.failedDraws
+        guard pacing.request(at: .now, delivered: delivered, completedDraws: completedDraws) else { return }
         requestCount += 1
         captureTimeline?.record(.layoutRequest)
         window.rootViewController?.view.setNeedsLayout()
         window.rootViewController?.view.layoutIfNeeded()
         window.layer.setNeedsLayout()
         window.layer.layoutIfNeeded()
+    }
+}
+
+/// Deterministic fixture pacing; it never changes SDK cadence or capture gates.
+private struct ReplayLayoutPacing {
+    let interval: Duration
+    private var nextRequestAt: ContinuousClock.Instant?
+    private var retryAt: ContinuousClock.Instant?
+    private var deliveredCountAtRequest: Int?
+
+    init(interval: Duration) {
+        self.interval = interval
+    }
+
+    mutating func request(at now: ContinuousClock.Instant, delivered: Int, completedDraws: Int) -> Bool {
+        let cadenceReady = nextRequestAt.map { now >= $0 } ?? true
+        let deliveryAdvanced = deliveredCountAtRequest.map { delivered > $0 } ?? true
+        let retryReady = retryAt.map { now >= $0 } ?? true
+        guard cadenceReady, completedDraws == 0 || deliveryAdvanced || retryReady else { return false }
+        deliveredCountAtRequest = delivered
+        nextRequestAt = now.advanced(by: interval)
+        retryAt = now.advanced(by: .seconds(10))
+        return true
+    }
+}
+
+final class ReplayLayoutPacingTests: XCTestCase {
+    func testUnobservedStartupLayoutDoesNotReserveEncodingWait() {
+        let start = ContinuousClock.now
+        var pacing = ReplayLayoutPacing(interval: .seconds(1))
+        XCTAssertTrue(pacing.request(at: start, delivered: 0, completedDraws: 0))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .milliseconds(999)), delivered: 0, completedDraws: 0))
+        XCTAssertTrue(pacing.request(at: start.advanced(by: .seconds(1)), delivered: 0, completedDraws: 0))
+        XCTAssertTrue(pacing.request(at: start.advanced(by: .seconds(2)), delivered: 0, completedDraws: 0))
+    }
+
+    func testAnyCompletedDrawPreservesTenSecondDeliveryBackpressure() {
+        let start = ContinuousClock.now
+        var pacing = ReplayLayoutPacing(interval: .seconds(1))
+        XCTAssertTrue(pacing.request(at: start, delivered: 0, completedDraws: 0))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .seconds(1)), delivered: 0, completedDraws: 1))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .milliseconds(9_999)), delivered: 0, completedDraws: 1))
+        XCTAssertTrue(pacing.request(at: start.advanced(by: .seconds(10)), delivered: 0, completedDraws: 1))
+    }
+
+    func testDeliveryProgressStillRespectsProductionCadence() {
+        let start = ContinuousClock.now
+        var pacing = ReplayLayoutPacing(interval: .seconds(1))
+        XCTAssertTrue(pacing.request(at: start, delivered: 0, completedDraws: 0))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .milliseconds(500)), delivered: 1, completedDraws: 1))
+        XCTAssertTrue(pacing.request(at: start.advanced(by: .seconds(1)), delivered: 1, completedDraws: 1))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .seconds(2)), delivered: 1, completedDraws: 2))
+    }
+
+    func testFirstDrawAfterStartupPulsesStopsFurtherPulsesUntilDeliveryOrTimeout() {
+        let start = ContinuousClock.now
+        var pacing = ReplayLayoutPacing(interval: .seconds(1))
+        XCTAssertTrue(pacing.request(at: start, delivered: 0, completedDraws: 0))
+        XCTAssertTrue(pacing.request(at: start.advanced(by: .seconds(1)), delivered: 0, completedDraws: 0))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .seconds(2)), delivered: 0, completedDraws: 1))
+        XCTAssertFalse(pacing.request(at: start.advanced(by: .milliseconds(10_999)), delivered: 0, completedDraws: 1))
+        XCTAssertTrue(pacing.request(at: start.advanced(by: .seconds(11)), delivered: 0, completedDraws: 1))
     }
 }
 
