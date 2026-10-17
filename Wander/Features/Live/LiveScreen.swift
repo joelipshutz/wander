@@ -636,6 +636,12 @@ struct LiveScreen: View {
                 }
             }
             .accessibilityIdentifier("live.filters.form")
+#if DEBUG && targetEnvironment(simulator)
+            .onChange(of: draftSelection.radius, initial: true) { _, radius in
+                guard filtersPresented else { return }
+                NativeInputRecipientDiagnostic.liveRadiusObserved(radius)
+            }
+#endif
             .navigationTitle("Filters").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { filtersPresented = false } }

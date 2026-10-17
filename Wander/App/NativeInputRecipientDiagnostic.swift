@@ -13,6 +13,7 @@ enum NativeInputRecipientDiagnostic {
         case mapSourceEntered, mapSourceSelected, mapSourceReturned
         case liveCameraEnded, liveCameraInitialEnd, liveCameraCenterChanged, liveCameraSpanChanged, liveCameraPositionedByUser
         case liveDrawerCollapsed, liveDrawerHalf, liveDrawerExpanded, liveInitialFrameApplied
+        case liveRadiusFiveKilometers, liveRadiusTwentyFiveKilometers
     }
 
     enum EventsSelectionStage: String {
@@ -64,6 +65,14 @@ enum NativeInputRecipientDiagnostic {
         if spanChanged { stages.append(.liveCameraSpanChanged) }
         if userPosition { stages.append(.liveCameraPositionedByUser) }
         NativeRecipientRecorder.shared.record(stages)
+    }
+
+    static func liveRadiusObserved(_ radius: LiveBrowseSelection.Radius) {
+        guard fixture == "live-demo" else { return }
+        switch radius {
+        case .fiveKilometers: NativeRecipientRecorder.shared.record(.liveRadiusFiveKilometers)
+        case .twentyFiveKilometers: NativeRecipientRecorder.shared.record(.liveRadiusTwentyFiveKilometers)
+        }
     }
 
     static func camera(_ event: CameraEvent, in map: MKMapView) {

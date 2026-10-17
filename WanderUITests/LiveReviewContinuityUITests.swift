@@ -650,6 +650,13 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Filters"].waitForExistence(timeout: 5))
         reveal(app.buttons["25 km"], in: form, direction: .down, app: app)
         app.buttons["25 km"].tap()
+        let radiusSelected = app.buttons["25 km"].isSelected
+        REC636PredicateObservation.attachNativeTrace(to: self, app: app,
+            name: "REC636-radius-after-original-tap", expectedFixture: "live-demo", selected: radiusSelected)
+        guard radiusSelected else {
+            XCTFail("Diagnostic setup stopped: the original radius tap did not select 25 km.")
+            return
+        }
         setOn(app.switches["live.filter.category.restaurants_food"], in: form, app: app)
         setOn(app.switches["live.filter.person.user_ryan"], in: form, app: app)
         let workEducation = app.switches["live.filter.category.work_education"]
@@ -1278,7 +1285,27 @@ final class REC636PredicateObservation: @unchecked Sendable {
         immediateVerdict.name = name + "-wait-verdict"
         immediateVerdict.lifetime = .keepAlways
         test.add(immediateVerdict)
+        attachBoundedNativeTrace(to: test, app: app, name: name, expectedFixture: expectedFixture)
+    }
 
+    @MainActor static func attachNativeTrace(to test: XCTestCase, app: XCUIApplication,
+                                            name: String, expectedFixture: String, selected: Bool) {
+        // This is the immediate native selection result, not a synthesized wait result.
+        // Save it before the one diagnostic AX read can fail or abort.
+        let verdict: [String: Any] = [
+            "schema": 3, "fixture": expectedFixture, "selected": selected
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: verdict, options: [.sortedKeys]))
+            ?? Data("{\"schema\":3,\"status\":\"Gap\",\"reason\":\"selection_verdict_encoding\"}".utf8)
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = name + "-selection-verdict"
+        attachment.lifetime = .keepAlways
+        test.add(attachment)
+        attachBoundedNativeTrace(to: test, app: app, name: name, expectedFixture: expectedFixture)
+    }
+
+    @MainActor private static func attachBoundedNativeTrace(to test: XCTestCase, app: XCUIApplication,
+                                                           name: String, expectedFixture: String) {
         // O4 established that direct value retains this bounded diagnostic while
         // immutable snapshot.value can return a truncated, invalid JSON string.
         let rawValue = app.staticTexts["rec636.nativeInputDiagnostic"].value
