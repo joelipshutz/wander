@@ -749,7 +749,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func drawer(in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        app.staticTexts["live.drawerHandle"]
     }
 
     private func summary(in app: XCUIApplication) -> XCUIElement {
@@ -760,7 +760,21 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                               postInputCapture: String? = nil) {
         let handle = drawer(in: app)
         let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
-        let predicate = NSPredicate(format: "label == %@ AND value BEGINSWITH %@", "Activity drawer, \(state)", loadedCount)
+        // Read both attributes from one native snapshot within the original budget.
+        let observationStart = ProcessInfo.processInfo.systemUptime
+        let observationDeadline = observationStart + 5
+        let predicate = NSPredicate { _, _ in
+            let started = ProcessInfo.processInfo.systemUptime
+            var matchedExactCondition = false
+            if started <= observationDeadline, let snapshot = try? handle.snapshot() {
+                matchedExactCondition = snapshot.label == "Activity drawer, \(state)"
+                    && (snapshot.value as? String)?.hasPrefix(loadedCount) == true
+            }
+            let finished = ProcessInfo.processInfo.systemUptime
+            let withinFiveSeconds = started <= observationDeadline && finished <= observationDeadline
+            return withinFiveSeconds && matchedExactCondition
+                && ProcessInfo.processInfo.systemUptime <= observationDeadline
+        }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: handle)
         let result = XCTWaiter.wait(for: [expectation], timeout: 5)
         if let postInputCapture {
@@ -874,7 +888,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         // Use deliberate native input for the existing single-pan displacement check.
         zero.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
             .press(forDuration: 0.1, thenDragTo: zero.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)),
-                   withVelocity: .slow, thenHoldForDuration: 0.1)
+                   withVelocity: XCUIGestureVelocity(rawValue: 60), thenHoldForDuration: 0.1)
         let displacement = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard anchor.exists else { return false }
             let after = anchor.frame
