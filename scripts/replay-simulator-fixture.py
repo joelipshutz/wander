@@ -200,31 +200,99 @@ def native_command(argv, timeout):
 
 def product_fingerprint(products):
     require(products.is_dir() and not products.is_symlink(), "invalid_products_root")
+    # Portable Xcode products use relative Tests/ aliases into Binaries/. Inventory
+    # real entries first, without stat/open through an alias, then validate every
+    # target against that inventory before reading any product file contents.
+    entries, links, ordered_files = {(): 'directory'}, {}, []
+    pending = [products]
+    total = 0
+    while pending:
+        directory = pending.pop()
+        children = []
+        with os.scandir(directory) as scan:
+            rows = sorted(scan, key=lambda x: x.name)
+        for row in rows:
+            path = Path(row.path)
+            relative = path.relative_to(products).parts
+            info = row.stat(follow_symlinks=False)
+            require(len(entries) < 20000, 'products_entry_limit')
+            if stat.S_ISLNK(info.st_mode):
+                target = os.readlink(path)
+                require(0 < len(os.fsencode(target)) <= 4096 and not os.path.isabs(target),
+                        'invalid_product_link_target')
+                require(len(links) < 256, 'products_link_limit')
+                entries[relative] = 'link'
+                links[relative] = target
+            elif stat.S_ISDIR(info.st_mode):
+                entries[relative] = 'directory'
+                children.append(path)
+            else:
+                require(stat.S_ISREG(info.st_mode) and info.st_size <= 2 * 1024**3,
+                        'invalid_product_file')
+                entries[relative] = 'file'
+                ordered_files.append(path)
+                total += info.st_size
+                require(total <= 4 * 1024**3, 'products_size_limit')
+        pending.extend(reversed(children))
+
+    directory_edges = {path: [] for path, kind in entries.items() if kind == 'directory'}
+    for path in directory_edges:
+        if path:
+            directory_edges[path[:-1]].append(path)
+    for link, target in links.items():
+        resolved, remaining, visited = list(link[:-1]), target.split('/'), {link}
+        while remaining:
+            component, *remaining = remaining
+            if component in ('', '.'):
+                continue
+            if component == '..':
+                require(resolved, 'product_link_escape')
+                resolved.pop()
+                continue
+            candidate = tuple(resolved + [component])
+            require(candidate in entries, 'product_link_dangling')
+            kind = entries[candidate]
+            if kind == 'link':
+                require(candidate not in visited, 'product_link_cycle')
+                require(len(visited) < 64, 'product_link_depth_limit')
+                visited.add(candidate)
+                remaining = links[candidate].split('/') + remaining
+            else:
+                require(not remaining or kind == 'directory', 'invalid_product_link_target')
+                resolved.append(component)
+        if entries[tuple(resolved)] == 'directory':
+            directory_edges[link[:-1]].append(tuple(resolved))
+    # Also reject directory-alias cycles (including an alias to an ancestor),
+    # even though hashing never traverses aliases.
+    active, complete, pending = set(), set(), [((), False)]
+    while pending:
+        path, leaving = pending.pop()
+        if leaving:
+            active.remove(path)
+            complete.add(path)
+        elif path not in complete:
+            require(path not in active, 'product_link_cycle')
+            active.add(path)
+            pending.append((path, True))
+            pending.extend((child, False) for child in directory_edges[path])
+
     digest = hashlib.sha256()
-    files, total, configurations = 0, 0, {}
-    for directory, dirs, names in os.walk(products, followlinks=False):
-        dirs.sort()
-        for name in dirs:
-            require(not (Path(directory)/name).is_symlink(), "product_directory_symlink")
-        for name in sorted(names):
-            path = Path(directory)/name
-            info = path.lstat()
-            require(stat.S_ISREG(info.st_mode) and info.st_size <= 2 * 1024**3, "invalid_product_file")
-            files += 1
-            total += info.st_size
-            require(files <= 20000 and total <= 4 * 1024**3, "products_size_limit")
-            h = hashlib.sha256()
-            with path.open('rb') as stream:
-                for data in iter(lambda: stream.read(1024*1024), b''):
-                    h.update(data)
-            rel = str(path.relative_to(products))
-            value = h.hexdigest()
-            digest.update((rel+'\0'+value+'\n').encode())
-            if rel == 'Info.plist' or path.suffix == '.xctestrun':
-                configurations[rel] = value
+    configurations = {}
+    for path in ordered_files:
+        h = hashlib.sha256()
+        with path.open('rb') as stream:
+            for data in iter(lambda: stream.read(1024*1024), b''):
+                h.update(data)
+        rel = str(path.relative_to(products))
+        value = h.hexdigest()
+        digest.update((rel+'\0'+value+'\n').encode())
+        if rel == 'Info.plist' or path.suffix == '.xctestrun':
+            configurations[rel] = value
+    for relative, target in sorted(links.items()):
+        digest.update(('\0symlink\0'+json.dumps([str(Path(*relative)), target])+'\n').encode())
     require('Info.plist' in configurations and any(x.endswith('.xctestrun') for x in configurations),
             "products_configuration_missing")
-    return {"fileCount": files, "bytes": total, "filesSHA256": digest.hexdigest(),
+    return {"fileCount": len(ordered_files), "bytes": total, "filesSHA256": digest.hexdigest(),
             "configurationSHA256": configurations}
 
 

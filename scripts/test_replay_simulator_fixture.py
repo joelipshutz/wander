@@ -3,8 +3,10 @@ from pathlib import Path
 import copy
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location('fixture', Path(__file__).with_name('replay-simulator-fixture.py'))
 F = importlib.util.module_from_spec(SPEC)
@@ -188,13 +190,116 @@ class ReplaySimulatorFixtureTests(unittest.TestCase):
             with self.subTest(result=result), self.assertRaises(F.FixtureError):
                 F.checkout_provenance(lambda *_:result,Path(F.__file__))
 
-    def test_product_fingerprint_changes_and_rejects_symlinks(self):
+    def test_product_fingerprint_changes_and_rejects_absolute_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory);(p/'Info.plist').write_text('fixture');(p/'test.xctestrun').write_text('fixture')
             before=F.product_fingerprint(p);(p/'test.xctestrun').write_text('changed')
             self.assertNotEqual(before,F.product_fingerprint(p))
             (p/'link').symlink_to(p/'Info.plist')
             with self.assertRaises(F.FixtureError):F.product_fingerprint(p)
+
+
+class PortableProductFingerprintTests(unittest.TestCase):
+    def product(self, root):
+        (root/'Info.plist').write_bytes(b'portable product')
+        (root/'Tests/0').mkdir(parents=True)
+        (root/'Tests/0/Wander.xctestrun').write_bytes(b'unchanged configuration')
+        binary=root/'Binaries/0/Debug-iphonesimulator/Wander.app/Wander'
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b'unchanged native binary')
+        alias=root/'Tests/0/Debug-iphonesimulator'
+        alias.symlink_to('../../Binaries/0/Debug-iphonesimulator')
+        return alias,binary
+
+    def test_xcode_portable_directory_alias_is_admitted_without_following_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);alias,binary=self.product(root)
+            # This real Xcode layout was rejected as product_directory_symlink
+            # before the compatibility repair. Only the three real files count.
+            original=Path.open;opened=[]
+            def record(path,*args,**kwargs):
+                opened.append(path)
+                return original(path,*args,**kwargs)
+            with mock.patch.object(Path,'open',record):result=F.product_fingerprint(root)
+            self.assertEqual(result['fileCount'],3)
+            self.assertEqual(result['bytes'],sum(path.stat().st_size for path in opened))
+            self.assertEqual(len(opened),len(set(opened)))
+            self.assertEqual(set(opened),{root/'Info.plist',root/'Tests/0/Wander.xctestrun',binary})
+            self.assertEqual(set(result['configurationSHA256']),{'Info.plist','Tests/0/Wander.xctestrun'})
+            self.assertTrue(alias.is_symlink())
+
+    def test_link_identity_and_target_bytes_both_affect_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);alias,binary=self.product(root)
+            first=F.product_fingerprint(root)
+            alias.unlink();alias.symlink_to('../../Binaries/0/./Debug-iphonesimulator')
+            second=F.product_fingerprint(root)
+            self.assertNotEqual(first['filesSHA256'],second['filesSHA256'])
+            self.assertEqual(first['bytes'],second['bytes'])
+            binary.write_bytes(b'changed native binary')
+            self.assertNotEqual(second['filesSHA256'],F.product_fingerprint(root)['filesSHA256'])
+
+    def test_fingerprint_is_relocation_independent(self):
+        with tempfile.TemporaryDirectory() as left,tempfile.TemporaryDirectory() as right:
+            self.product(Path(left));self.product(Path(right))
+            self.assertEqual(F.product_fingerprint(Path(left)),F.product_fingerprint(Path(right)))
+
+    def test_bounded_internal_file_and_directory_link_chains_are_supported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.product(root)
+            (root/'binary-alias').symlink_to('Tests/0/Debug-iphonesimulator/Wander.app/Wander')
+            (root/'chained-alias').symlink_to('binary-alias')
+            self.assertEqual(F.product_fingerprint(root)['fileCount'],3)
+
+    def test_invalid_links_fail_before_any_file_content_read(self):
+        cases={
+            'escape':('../outside', 'product_link_escape'),
+            'absolute':('/outside', 'invalid_product_link_target'),
+            'dangling':('missing', 'product_link_dangling'),
+            'file_as_directory':('Info.plist/child', 'invalid_product_link_target'),
+            'self_cycle':('bad-link', 'product_link_cycle'),
+            'ancestor_cycle':('.', 'product_link_cycle'),
+        }
+        for name,(target,category) in cases.items():
+            with self.subTest(name=name),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);self.product(root);(root/'bad-link').symlink_to(target)
+                with mock.patch.object(Path,'open',side_effect=AssertionError('content read before admission')):
+                    with self.assertRaisesRegex(F.FixtureError,'^'+category+'$'):
+                        F.product_fingerprint(root)
+
+    def test_nested_escape_and_multi_link_cycles_are_rejected_before_reads(self):
+        for cycle in [False,True]:
+            with self.subTest(cycle=cycle),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);self.product(root)
+                (root/'first').symlink_to('second')
+                (root/'second').symlink_to('first' if cycle else '../outside')
+                with mock.patch.object(Path,'open',side_effect=AssertionError('foreign content read')):
+                    with self.assertRaisesRegex(F.FixtureError,'product_link_cycle' if cycle else 'product_link_escape'):
+                        F.product_fingerprint(root)
+
+    def test_cross_directory_alias_cycle_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.product(root)
+            (root/'A').mkdir();(root/'B').mkdir()
+            (root/'A/to-b').symlink_to('../B');(root/'B/to-a').symlink_to('../A')
+            with mock.patch.object(Path,'open',side_effect=AssertionError('content read before admission')):
+                with self.assertRaisesRegex(F.FixtureError,'product_link_cycle'):F.product_fingerprint(root)
+
+    def test_nonregular_link_target_is_rejected_before_any_content_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.product(root)
+            os.mkfifo(root/'fifo');(root/'bad-link').symlink_to('fifo')
+            with mock.patch.object(Path,'open',side_effect=AssertionError('nonregular content read')):
+                with self.assertRaisesRegex(F.FixtureError,'invalid_product_file'):F.product_fingerprint(root)
+
+    def test_link_count_and_resolution_depth_are_bounded(self):
+        for count,chain,category in [(257,False,'products_link_limit'),(65,True,'product_link_depth_limit')]:
+            with self.subTest(category=category),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);self.product(root)
+                for i in range(count):
+                    target='link%03d'%(i+1) if chain and i+1<count else 'Info.plist'
+                    (root/('link%03d'%i)).symlink_to(target)
+                with self.assertRaisesRegex(F.FixtureError,category):F.product_fingerprint(root)
 
 
 if __name__=='__main__':unittest.main()
