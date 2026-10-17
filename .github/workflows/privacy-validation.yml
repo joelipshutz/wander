@@ -1,167 +1,217 @@
-name: Privacy native validation
+name: REC-636 first-capture profile diagnostic
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'Wander/DesignSystem/PlaceRatingExplanation.swift'
-      - 'Wander/DesignSystem/PersonMentionField.swift'
-      - 'Wander/Features/Activity/ActivityEngagementViews.swift'
-      - 'Wander/Features/Live/LiveScreen.swift'
-      - 'Wander/Features/Messaging/**'
-      - 'Wander/Models/PrivateMessageModels.swift'
-      - 'Wander/Services/Remote/PrivateMessage*.swift'
-      - 'Wander/Services/PostHogAnalyticsClient.swift'
-      - 'WanderTests/PrivateMessag*Tests.swift'
-      - 'WanderTests/ReplayMaskingTests.swift'
-      - 'WanderUITests/LiveMigrationAndPrivacyUITests.swift'
-      - 'WanderUITests/PersonTypeaheadUITests.swift'
-      - 'Wander/Services/TrustedPlaceSearch.swift'
-      - 'WanderTests/TrustedPlaceSearchTests.swift'
-      - 'WanderTests/WanderPlaceCategoryTests.swift'
-      - 'WanderUITests/MapPlaceCardUITests.swift'
-      - 'scripts/run-parent-regression.py'
-      - '.github/workflows/privacy-validation.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: privacy-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  native:
+  replay-first-capture-profile:
+    name: Profile one original private Replay first-capture gate
     runs-on: macos-26
-    timeout-minutes: 100
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           lfs: true
           persist-credentials: false
-      - name: Generate project and select existing simulators
+      - name: Admit canonical carrier, toolchain and existing simulator
         run: |
-          brew install xcodegen
-          xcodegen generate
-          xcodebuild -version
-          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
-          python3 - <<'PY'
-          import json, os, re
+          set -euo pipefail
+          export DIAG="$RUNNER_TEMP/rec636-v45-first-capture-profile"
+          printf 'DIAG=%s\n' "$DIAG" >> "$GITHUB_ENV"
+          mkdir "$DIAG"
+          python3 - <<'PYCODE'
+          import hashlib,json,os,subprocess
           from pathlib import Path
-          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
-          for name, variable in [('iPhone 17', 'PRO_DEVICE_ID'), ('iPhone 16e', 'COMPACT_DEVICE_ID')]:
-              choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == name]
-              assert choices, f'No existing {name} simulator'
-              _, device = sorted(choices, key=lambda item: item[0])[-1]
-              with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write(variable + '=' + device['udid'] + '\n')
-              print('Using', name, device['udid'])
-          PY
-      - name: Initialize Pro simulator
+          root=Path.cwd().resolve();out=Path(os.environ['DIAG'])
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert head==os.environ['GITHUB_SHA'], 'carrier_checkout_mismatch'
+          proofpath=root/'scripts/diagnostics/first-capture-profile-source-proof.json'
+          assert hashlib.sha256(proofpath.read_bytes()).hexdigest()=='88a7e3b59601638ce86d8c204dfa39f858f130250c929eb3710e4810db85f4ac', 'canonical_proof_changed'
+          proof=json.loads(proofpath.read_text());base=proof['baseHead']
+          assert base=='22e7c6d9efd4ac0957ed25cd60e8cc26a05bc7f7', 'canonical_base_changed'
+          allowed={'WanderTests/ReplayMaskingTests.swift','.github/workflows/privacy-validation.yml','scripts/diagnostics/run-replay-first-capture-profile.py','scripts/diagnostics/first-capture-profile-source-proof.json','scripts/diagnostics/README.md','scripts/diagnostics/sample-first-capture.py'}
+          changed=set(subprocess.check_output(['git','diff','--name-only',base,head],text=True).splitlines())
+          assert changed==allowed, 'canonical_carrier_delta_changed'
+          original=subprocess.check_output(['git','cat-file','blob',base+':WanderTests/ReplayMaskingTests.swift'])
+          actual=subprocess.check_output(['git','cat-file','blob',head+':WanderTests/ReplayMaskingTests.swift'])
+          assert hashlib.sha256(original).hexdigest()=='e20df909d2100f01ff761b5e356b1e2ae51d1e51a1843ed0c44ca59f661b9681', 'canonical_replay_base_changed'
+          assert hashlib.sha256(actual).hexdigest()=='d7ddd82f2f64b3d25fe75dce286240921580e09893601c50a8509bc0132ca4f9', 'tracked_window_trial_changed'
+          maps=proof['sourceMaps'];assert [len(maps[k]) for k in ['swift','buildInputs','tooling']]==[448,150,2]
+          assert proof['profileHelperPath']=='scripts/diagnostics/sample-first-capture.py' and proof['profileHelperSHA256']=='cb19e89bdd77f139deaf9d986da7d21da986f2c155a9578cfefed0a46f437c26', 'profile_helper_proof_changed'
+          helper=root/proof['profileHelperPath'];committed_helper=subprocess.check_output(['git','cat-file','blob',head+':'+proof['profileHelperPath']])
+          assert helper.is_file() and not helper.is_symlink() and hashlib.sha256(helper.read_bytes()).hexdigest()==proof['profileHelperSHA256'] and hashlib.sha256(committed_helper).hexdigest()==proof['profileHelperSHA256'], 'profile_helper_identity_changed'
+          tracked=set(subprocess.check_output(['git','ls-files','*.swift'],text=True).splitlines())
+          assert tracked==set(maps['swift']), 'canonical_swift_roster_changed'
+          for group in maps.values():
+              for relative,expected in group.items():
+                  path=root/relative
+                  assert path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest()==expected, 'canonical_carrier_input_changed'
+          xcode=subprocess.check_output(['xcodebuild','-version'],text=True).strip()
+          assert xcode=='Xcode 26.6\nBuild version 17F113', 'canonical_trial_toolchain_changed'
+          runtimes=json.loads(subprocess.check_output(['xcrun','simctl','list','runtimes','--json'],text=True))['runtimes']
+          admitted=[r for r in runtimes if r.get('isAvailable') and r['identifier']=='com.apple.CoreSimulator.SimRuntime.iOS-26-5']
+          assert len(admitted)==1 and admitted[0]['buildversion']=='23F77', 'canonical_trial_runtime_changed'
+          devices=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
+          choices=[d for runtime,rows in devices.items() if runtime=='com.apple.CoreSimulator.SimRuntime.iOS-26-5' for d in rows if d['name']=='iPhone 17 Pro' and d.get('isAvailable')]
+          assert len(choices)==1, 'unique_existing_canonical_trial_device_required'
+          device=choices[0]
+          (out/'device-id.txt').write_text(device['udid']+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('DEVICE_ID='+device['udid']+'\n')
+          record={'dispatchSHA':head,'tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'xcode':xcode,'deviceID':device['udid'],'deviceModel':'iPhone 17 Pro','runtime':'iOS26.5','runtimeBuild':'23F77','retries':0,'diagnosticOnly':True,'releaseAcceptance':False,'priorFullUnitSequenceReproduced':False,'selectedMethodCount':1,'profileAttemptLimit':1,'credentialMethodSelected':False,'canonicalBase':base,'sourceProofSHA256':hashlib.sha256(proofpath.read_bytes()).hexdigest(),'allowedChangedPaths':sorted(allowed),'sourceInputCounts':[448,150,2]}
+          (out/'admission.json').write_text(json.dumps(record,indent=2)+'\n')
+          PYCODE
+          DEVICE_ID="$(cat "$DIAG/device-id.txt")"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl ui "$DEVICE_ID" appearance dark
+          xcrun simctl ui "$DEVICE_ID" appearance light
+          xcrun simctl shutdown "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$DEVICE_ID"
+          xcrun simctl ui "$DEVICE_ID" appearance
+      - name: Check fixed fictional inventory format before building
+        timeout-minutes: 1
         run: |
-          xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
-          open -a Simulator --args -CurrentDeviceUDID "$PRO_DEVICE_ID"
-      # Wall-clock benchmarks use their controlled reference run; their data/cache
-      # contracts still run here. Replay owns global observers and runs separately.
-      - name: Unit contracts and privacy layouts on iPhone 17
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests
-          -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
-          -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
-          -skip-testing:WanderTests/ReplayMaskingTests
-          -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
-          -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
-          -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
-          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
-          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      # Replay owns process-wide SDK state; each scenario starts a fresh host.
-      - name: Verify private-message replay in an isolated process
-        if: success() || failure()
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/replay-private.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Verify credential replay in an isolated process
-        if: success() || failure()
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/replay-credentials.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Release Pro simulator and wait for compact startup
-        if: success() || failure()
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import hashlib,json,os,runpy,signal,time
+          from pathlib import Path
+          root=Path(os.environ['GITHUB_WORKSPACE']).resolve();out=Path(os.environ['DIAG']).resolve()
+          assert os.environ.get('GITHUB_ACTIONS')=='true' and Path.cwd().resolve()==root
+          assert out.is_dir() and out.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve())
+          script=root/'scripts/diagnostics/run-replay-first-capture-profile.py'
+          expected='f9e76c48eae83b55303736fffee3c387ee23b980509676074ad752d1bfc9f11a'
+          assert script.is_file() and not script.is_symlink() and hashlib.sha256(script.read_bytes()).hexdigest()==expected, 'canonical_parser_reader_changed'
+          started=time.monotonic();module=runpy.run_path(str(script),run_name='rec636_canonical_inventory_preflight')
+          globals_=module['command'].__globals__
+          assert module['parse_listapps'].__globals__ is globals_ and globals_['ROOT']==root and globals_['OUT'] is None
+          globals_['OVERALL_DEADLINE']=started+30
+          fixture=b'{ "com.example.rec636-parser-fixture" = { CFBundleIdentifier = "com.example.rec636-parser-fixture"; ApplicationType = User; }; }'
+          expected_rows={'com.example.rec636-parser-fixture':{'CFBundleIdentifier':'com.example.rec636-parser-fixture','ApplicationType':'User'}}
+          assert not (out/'inventory-format-preflight.json').exists(), 'canonical_parser_no_retry'
+          receipt={'state':'started','fictionalFixtureOnly':True,'diagnosticOnly':True,'releaseAcceptance':False,'runnerSHA256':expected,'overallDeadlineSeconds':30,'retries':0,'simulatorInventoryQueried':False,'resetCalled':False,'nativeTestExecuted':False,'rawInventoryPersisted':False}
+          def interrupted(_signal,_frame):raise InterruptedError('canonical_parser_preflight_interrupted')
+          previous=signal.signal(signal.SIGTERM,interrupted)
+          try:
+              assert module['parse_listapps'](fixture,out,'inventory-format-preflight-fictional')==expected_rows
+              assert time.monotonic()<=globals_['OVERALL_DEADLINE'] and hashlib.sha256(script.read_bytes()).hexdigest()==expected
+              receipt.update(state='Passed',fixedDictionaryValidated=True)
+          except BaseException as error:
+              receipt.update(state='Failed',category=type(error).__name__)
+              raise
+          finally:
+              signal.signal(signal.SIGTERM,previous)
+              receipt['elapsedSeconds']=time.monotonic()-started
+              module['save'](out/'inventory-format-preflight.json',receipt)
+          PYCODE
+      - name: Resolve only pinned canonical packages in the job-owned cache
         run: |
-          if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["PRO_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
-            xcrun simctl shutdown "$PRO_DEVICE_ID"
-          fi
-          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
-          open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
-      - name: Repeat native screen flows on compact iPhone 16e
-        if: success() || failure()
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$COMPACT_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
-          -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
-          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
-          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Export screenshots and test summaries
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies -project Wander.xcodeproj -scheme Wander \
+            -clonedSourcePackagesDirPath "$DIAG/SourcePackages" -onlyUsePackageVersionsFromResolvedFile
+      - name: Verify canonical SDK and tracked trial source before one build
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          root=Path(os.environ['GITHUB_WORKSPACE']);out=Path(os.environ['DIAG']);sdk=out/'SourcePackages/checkouts/posthog-ios'
+          proofpath=root/'scripts/diagnostics/first-capture-profile-source-proof.json';proof=json.loads(proofpath.read_text())
+          assert hashlib.sha256(proofpath.read_bytes()).hexdigest()=='88a7e3b59601638ce86d8c204dfa39f858f130250c929eb3710e4810db85f4ac'
+          assert subprocess.check_output(['git','-C',str(sdk),'rev-parse','HEAD'],text=True).strip()==proof['SDKRevision']
+          assert subprocess.check_output(['git','-C',str(sdk),'status','--porcelain'])==b'', 'canonical_SDK_not_clean'
+          rows=[]
+          for row in proof['files']:
+              path=(sdk if row['role']=='sdk' else root)/row['path'];actual=hashlib.sha256(path.read_bytes()).hexdigest()
+              assert actual==row['proposedSHA256'], 'canonical_trial_source_changed'
+              if row['role']!='test':assert row['originalSHA256']==row['proposedSHA256']
+              rows.append({'role':row['role'],'path':row['path'],'sha256':actual})
+          (out/'canonical-source-fingerprints.json').write_text(json.dumps({'SDKRevision':proof['SDKRevision'],'SDKClean':True,'runtimePatchApplied':False,'files':rows,'sourceMaps':proof['sourceMaps'],'sourceProofSHA256':hashlib.sha256(proofpath.read_bytes()).hexdigest()},indent=2)+'\n')
+          PYCODE
+      - name: Build canonical parent test products once
+        run: |
+          set -euo pipefail
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath "$DIAG/DerivedData" -clonedSourcePackagesDirPath "$DIAG/SourcePackages" \
+            -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -jobs 2 \
+            -testProductsPath "$DIAG/Parent.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          python3 - <<'PYCODE'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          root=Path(os.environ['GITHUB_WORKSPACE']);out=Path(os.environ['DIAG']);sdk=out/'SourcePackages/checkouts/posthog-ios'
+          proofpath=root/'scripts/diagnostics/first-capture-profile-source-proof.json';proof=json.loads(proofpath.read_text())
+          assert subprocess.check_output(['git','-C',str(sdk),'rev-parse','HEAD'],text=True).strip()==proof['SDKRevision']
+          assert subprocess.check_output(['git','-C',str(sdk),'status','--porcelain'])==b''
+          for row in proof['files']:
+              path=(sdk if row['role']=='sdk' else root)/row['path']
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==row['proposedSHA256']
+          for group in proof['sourceMaps'].values():
+              for relative,expected in group.items():assert hashlib.sha256((root/relative).read_bytes()).hexdigest()==expected
+          products=out/'Parent.xctestproducts';assert (products/'Info.plist').is_file()
+          files={str(p.relative_to(products)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(products.rglob('*')) if p.is_file() and not p.is_symlink()}
+          record={'sourceHashesStillMatch':True,'productFiles':files,'SDKRevision':proof['SDKRevision'],'SDKClean':True,'sourceProofSHA256':hashlib.sha256(proofpath.read_bytes()).hexdigest(),'sourceMaps':proof['sourceMaps']}
+          (out/'diagnostic-build-fingerprints.json').write_text(json.dumps(record,indent=2)+'\n')
+          PYCODE
+      - name: Run the original private Replay method once with one bounded first-capture sample
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnostics/run-replay-first-capture-profile.py \
+            --out "$DIAG" --products "$DIAG/Parent.xctestproducts" --device "$DEVICE_ID"
+      - name: Publish authored diagnostic summary without raw sampler output
         if: always()
         run: |
-          mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact replay-private replay-credentials; do
-            if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
-              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
-              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
-            fi
-          done
-      - name: Save native screenshots
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import json,os
+          from pathlib import Path
+          path=Path(os.environ['DIAG'])/'profile-summary.json'
+          if not path.exists():
+              print('first_capture_profile_summary_unavailable; native acceptance remains unverified')
+          else:
+              assert path.is_file() and not path.is_symlink() and path.stat().st_size<=8192, 'profile_summary_file_invalid'
+              record=json.loads(path.read_bytes())
+              keys={'schema','diagnosticOnly','head','sourceProofSHA256','case','nativeExitCode','nativeResult','counts','failureLines','officialWarningCount','markerStatus','gate','sample','profileOverlapValid','pidIdentityVerified','processCPUSeconds','processCPUValid','topSymbols','hashes','exportComplete','diagnosticStatus','acceptanceClaimed'}
+              assert isinstance(record,dict) and set(record)==keys and record['schema']==1 and record['diagnosticOnly'] is True and record['acceptanceClaimed'] is False, 'profile_summary_schema_invalid'
+              assert record['head']==os.environ['GITHUB_SHA'] and record['sourceProofSHA256']=='88a7e3b59601638ce86d8c204dfa39f858f130250c929eb3710e4810db85f4ac', 'profile_summary_identity_invalid'
+              symbols=record['topSymbols'];assert symbols is None or isinstance(symbols,list) and len(symbols)<=8, 'profile_summary_symbol_limit'
+              body=json.dumps(record,separators=(',',':'),sort_keys=True,ensure_ascii=True)
+              assert len(body.encode())<=8192, 'profile_summary_serialized_limit'
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as summary:
+                  summary.write('### REC-636 first-capture profile diagnostic\n\nSaved authored summary; not final native acceptance.\n\n```json\n'+body+'\n```\n')
+          PYCODE
+      - name: Retain final canonical source identities
         if: always()
-        uses: actions/upload-artifact@v4
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          root=Path(os.environ['GITHUB_WORKSPACE']);out=Path(os.environ['DIAG']);out.mkdir(exist_ok=True)
+          proofpath=root/'scripts/diagnostics/first-capture-profile-source-proof.json';proof=json.loads(proofpath.read_text());sdk=out/'SourcePackages/checkouts/posthog-ios'
+          rows=[]
+          for row in proof['files']:
+              p=(sdk if row['role']=='sdk' else root)/row['path']
+              rows.append({'role':row['role'],'path':row['path'],'exists':p.is_file(),'sha256':hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None})
+          ready=sdk.is_dir();sdkhead=subprocess.check_output(['git','-C',str(sdk),'rev-parse','HEAD'],text=True).strip() if ready else None
+          clean=subprocess.check_output(['git','-C',str(sdk),'status','--porcelain'])==b'' if ready else None
+          (out/'final-source-fingerprints.json').write_text(json.dumps({'files':rows,'SDKRevision':sdkhead,'SDKClean':clean,'diagnosticOnly':True,'releaseAcceptance':False},indent=2)+'\n')
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: privacy-screens
-          path: ${{ runner.temp }}/screens
-          retention-days: 14
-      - name: Save full native test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: privacy-results
+          name: rec636-v45-first-capture-profile
           path: |
-            ${{ runner.temp }}/pro.xcresult
-            ${{ runner.temp }}/compact.xcresult
-            ${{ runner.temp }}/replay-private.xcresult
-            ${{ runner.temp }}/replay-credentials.xcresult
-          retention-days: 14
-      - name: Package simulator app for local review
-        if: always()
-        run: |
-          if [ -d "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" "$RUNNER_TEMP/Wander-simulator.zip"
-          fi
-      - name: Save simulator app
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: privacy-simulator-app
-          path: ${{ runner.temp }}/Wander-simulator.zip
-          if-no-files-found: ignore
+            ${{ runner.temp }}/rec636-v45-first-capture-profile/*.json
+            ${{ runner.temp }}/rec636-v45-first-capture-profile/private
+            ${{ runner.temp }}/rec636-v45-first-capture-profile/source-before
+            ${{ runner.temp }}/rec636-v45-first-capture-profile/source-after
+            ${{ runner.temp }}/rec636-v45-first-capture-profile/private-source-before
+            ${{ runner.temp }}/rec636-v45-first-capture-profile/private-source-after
+          if-no-files-found: warn
           retention-days: 7

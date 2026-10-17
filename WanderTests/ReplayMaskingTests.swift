@@ -18,6 +18,8 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let scene = try XCTUnwrap(foregroundScene)
         let originalWindow = scene.keyWindow
+        let originalWindowWasHidden = originalWindow?.isHidden
+        let originalWindowWasKey = originalWindow?.isKeyWindow ?? false
         let window = ReplayProbeWindow(windowScene: scene)
         window.captureTimeline = captureTimeline
         window.backgroundColor = .white
@@ -39,7 +41,23 @@ final class ReplayMaskingTests: XCTestCase {
         ])
         window.rootViewController = container
         window.makeKeyAndVisible()
-        defer { window.isHidden = true; originalWindow?.makeKeyAndVisible() }
+        defer {
+            window.isHidden = true
+            if let originalWindow, let originalWindowWasHidden {
+                originalWindow.isHidden = originalWindowWasHidden
+                if originalWindowWasKey {
+                    originalWindow.makeKey()
+                } else if originalWindow.isKeyWindow {
+                    originalWindow.resignKey()
+                }
+                XCTAssertEqual(originalWindow.isHidden, originalWindowWasHidden, "Replay cleanup must restore the host window's prior visibility.")
+                XCTAssertEqual(originalWindow.isKeyWindow, originalWindowWasKey, "Replay cleanup must restore the host window's prior key status.")
+            }
+        }
+        // The real SDK captures this fixture window; unrelated host rendering is outside the fixture.
+        originalWindow?.isHidden = true
+        XCTAssertTrue(scene.keyWindow === window, "The Replay fixture must remain key after isolating the host window.")
+        XCTAssertTrue(originalWindow?.isHidden ?? true, "The unrelated original window must stay hidden during the Replay proof.")
         container.view.layoutIfNeeded()
         window.layoutIfNeeded()
         let markerFrame = control.convert(control.bounds, to: window)
@@ -75,6 +93,9 @@ final class ReplayMaskingTests: XCTestCase {
         var recordedReplayActivation = false
         let readyDeadline = ContinuousClock.now.advanced(by: .seconds(30))
         captureTimeline.record(.readyGateBegan)
+        // REC636_FIRST_CAPTURE_PROFILE_BEGIN ready-began
+        recordFirstCaptureProfileMarker(.readyBegan)
+        // REC636_FIRST_CAPTURE_PROFILE_END ready-began
         while ContinuousClock.now < readyDeadline {
             // Inactive SDK layouts are discarded. Do not reserve the pump's
             // delivery/backpressure window until the recorder can receive one.
@@ -105,6 +126,9 @@ final class ReplayMaskingTests: XCTestCase {
             if recorderReady { break }
         }
         captureTimeline.record(.readyGateEnded)
+        // REC636_FIRST_CAPTURE_PROFILE_BEGIN ready-ended
+        recordFirstCaptureProfileMarker(.readyEnded)
+        // REC636_FIRST_CAPTURE_PROFILE_END ready-ended
         XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
         guard recorderReady else {
             let diagnostic = XCTAttachment(string: """
@@ -255,6 +279,48 @@ final class ReplayMaskingTests: XCTestCase {
         attachment.name = "Private thread — actual offline SDK replay"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
+    // REC636_FIRST_CAPTURE_PROFILE_BEGIN helper
+    private enum FirstCaptureProfileMarkerPhase: String {
+        case readyBegan = "ready-began"
+        case readyEnded = "ready-ended"
+    }
+
+    @MainActor
+    private func recordFirstCaptureProfileMarker(_ phase: FirstCaptureProfileMarkerPhase) {
+        var markerWritten = false
+        defer {
+            if !markerWritten {
+                let gap = XCTAttachment(string: "first_capture_profile_marker_unavailable")
+                gap.name = "First capture profile marker diagnostic gap"
+                gap.lifetime = .keepAlways
+                add(gap)
+            }
+        }
+        do {
+            let marker: [String: Any] = [
+                "schema": 1,
+                "phase": phase.rawValue,
+                "pid": ProcessInfo.processInfo.processIdentifier,
+                "systemUptime": ProcessInfo.processInfo.systemUptime,
+                "epoch": Date().timeIntervalSince1970
+            ]
+            let data = try JSONSerialization.data(withJSONObject: marker, options: [.sortedKeys])
+            guard data.count <= 512 else { return }
+            let manager = FileManager.default
+            let directory = manager.temporaryDirectory.appendingPathComponent("REC636-FirstCaptureProfile", isDirectory: true)
+            if !manager.fileExists(atPath: directory.path) {
+                try manager.createDirectory(at: directory, withIntermediateDirectories: false)
+            }
+            let properties = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard properties.isDirectory == true, properties.isSymbolicLink != true else { return }
+            let file = directory.appendingPathComponent(phase.rawValue + ".json", isDirectory: false)
+            guard !manager.fileExists(atPath: file.path) else { return }
+            markerWritten = (data as NSData).write(to: file, atomically: true)
+        } catch {
+            // The marker is observational: preserve the original native test outcome.
+        }
+    }
+    // REC636_FIRST_CAPTURE_PROFILE_END helper
     private nonisolated static func recognizedText(_ image: UIImage) async throws -> String {
         // Vision can take seconds on a hosted simulator. Keep UIKit's main
         // queue available for the SDK's genuine screenshot rendering while
@@ -281,6 +347,8 @@ final class ReplayMaskingTests: XCTestCase {
         }
         let scene = try XCTUnwrap(foregroundScene, "Replay capture requires a foreground-active scene")
         let originalWindow = scene.keyWindow
+        let originalWindowWasHidden = originalWindow?.isHidden
+        let originalWindowWasKey = originalWindow?.isKeyWindow ?? false
         let window = UIWindow(windowScene: scene)
         // Fixed pixel probes require fixed typography, independent of simulator accessibility settings.
         window.rootViewController = UIHostingController(rootView: ReplayPrivacyFixture().dynamicTypeSize(.large))
@@ -288,8 +356,21 @@ final class ReplayMaskingTests: XCTestCase {
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true
-            originalWindow?.makeKeyAndVisible()
+            if let originalWindow, let originalWindowWasHidden {
+                originalWindow.isHidden = originalWindowWasHidden
+                if originalWindowWasKey {
+                    originalWindow.makeKey()
+                } else if originalWindow.isKeyWindow {
+                    originalWindow.resignKey()
+                }
+                XCTAssertEqual(originalWindow.isHidden, originalWindowWasHidden, "Replay cleanup must restore the host window's prior visibility.")
+                XCTAssertEqual(originalWindow.isKeyWindow, originalWindowWasKey, "Replay cleanup must restore the host window's prior key status.")
+            }
         }
+        // The real SDK captures this fixture window; unrelated host rendering is outside the fixture.
+        originalWindow?.isHidden = true
+        XCTAssertTrue(scene.keyWindow === window, "The Replay fixture must remain key after isolating the host window.")
+        XCTAssertTrue(originalWindow?.isHidden ?? true, "The unrelated original window must stay hidden during the Replay proof.")
         XCTAssertTrue(scene.keyWindow === window, "The SDK must capture the fixture's key window")
         XCTAssertFalse(window.bounds.isEmpty)
 
