@@ -35,7 +35,7 @@ on:
       mode:
         description: Acceptance suites or isolated REC-636 radius diagnostic
         type: choice
-        options: [acceptance, rec636-radius-v56]
+        options: [acceptance, rec636-radius-v56, rec636-original-control-v56]
         default: acceptance
       expected_commit:
         description: Required full reviewed diagnostic commit SHA for diagnostic mode
@@ -50,8 +50,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: feed-checkin-${{ github.ref }}${{ inputs.mode == 'rec636-radius-v56' && format('-diagnostic-{0}', github.run_id) || '' }}
-  cancel-in-progress: ${{ inputs.mode != 'rec636-radius-v56' }}
+  group: feed-checkin-${{ github.ref }}${{ (inputs.mode == 'rec636-radius-v56' || inputs.mode == 'rec636-original-control-v56') && format('-diagnostic-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ inputs.mode != 'rec636-radius-v56' && inputs.mode != 'rec636-original-control-v56' }}
 
 jobs:
   native:
@@ -587,5 +587,226 @@ jobs:
         with:
           name: rec636-radius-diagnostic-${{ github.sha }}
           path: ${{ runner.temp }}/rec636-radius
+          retention-days: 14
+          if-no-files-found: error
+
+  rec636-original-control:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-original-control-v56' }}
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: false
+      - name: Admit reviewed control workflow identity
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          python3 - <<'PY_WORKFLOW'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          def command(*args):
+              return subprocess.check_output(args, text=True, timeout=30).strip()
+          def require(value, message):
+              if not value: raise SystemExit(message)
+          require(os.environ['GITHUB_REF'] == 'refs/heads/codex/rec636-v56-input-diagnostic', 'Control workflow branch mismatch')
+          require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'One original control attempt only')
+          head, tree = command('git','rev-parse','HEAD'), command('git','rev-parse','HEAD^{tree}')
+          require(re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_COMMIT']) and re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_TREE']), 'Full reviewed workflow commit/tree required')
+          require(head == os.environ['EXPECTED_COMMIT'] == os.environ['GITHUB_SHA'] and tree == os.environ['EXPECTED_TREE'], 'Control workflow source mismatch')
+          require(not command('git','status','--porcelain'), 'Unexpected workflow checkout changes')
+          path = '.github/workflows/feed-checkin-validation.yml'
+          out = Path(os.environ['RUNNER_TEMP'])/'rec636-original-control'
+          out.mkdir()
+          receipt = {'scope':'uninstrumented_original_control_not_acceptance','diagnosticMode':'rec636-original-control-v56','head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'workflowPath':path,'workflowSHA256':hashlib.sha256(Path(path).read_bytes()).hexdigest()}
+          (out/'workflow-source.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          PY_WORKFLOW
+      - name: Checkout exact original V56 candidate separately
+        uses: actions/checkout@v4
+        with:
+          ref: efcccb48b8586c7c62c016fe5ba07aae5e13b003
+          path: original-v56
+          fetch-depth: 1
+          persist-credentials: false
+          lfs: true
+      - name: Admit exact original V56 source, toolchain and simulator pair
+        working-directory: original-v56
+        run: |
+          python3 - <<'PY_ADMIT'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          def command(*args):
+              return subprocess.check_output(args, text=True, timeout=30).strip()
+          def require(value, message):
+              if not value: raise SystemExit(message)
+          out = Path(os.environ['RUNNER_TEMP']) / 'rec636-original-control'
+          out.mkdir(exist_ok=True)
+          head, tree = command('git','rev-parse','HEAD'), command('git','rev-parse','HEAD^{tree}')
+          require(head == 'efcccb48b8586c7c62c016fe5ba07aae5e13b003' and tree == '764620a1b702edc3c5ce43acba63b3af4ea1dba7', 'Original V56 source mismatch')
+          require(not command('git','status','--porcelain'), 'Unexpected original candidate changes')
+          workflow_path = out/'workflow-source.json'
+          workflow = json.loads(workflow_path.read_text())
+          require(workflow['head'] == os.environ['GITHUB_SHA'] and workflow['runId'] == os.environ['GITHUB_RUN_ID'] and workflow['attempt'] == 1, 'Workflow admission mismatch')
+          version = command('xcodebuild','-version').splitlines()
+          require(version == ['Xcode 26.6','Build version 17F113'], 'Reference Xcode unavailable; no fallback')
+          runtime_id = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'
+          runtimes = json.loads(command('xcrun','simctl','list','runtimes','--json'))['runtimes']
+          matches = [x for x in runtimes if x.get('identifier') == runtime_id and x.get('isAvailable')]
+          require(len(matches) == 1 and matches[0].get('version') == '26.5' and matches[0].get('buildversion') == '23F77', 'Reference runtime unavailable; no fallback')
+          devices = json.loads(command('xcrun','simctl','list','devices','available','--json'))['devices'].get(runtime_id, [])
+          selected = {}
+          for label, name in [('large','iPhone 17 Pro'),('compact','iPhone 17e')]:
+              choices = [x for x in devices if x.get('name') == name and x.get('isAvailable')]
+              require(len(choices) == 1, 'Exact unique reference phone required')
+              selected[label] = {'name':name,'udid':choices[0]['udid'],'runtime':runtime_id,'runtimeBuild':'23F77'}
+          sources = ['Wander/Features/Live/LiveBrowseSelection.swift', 'Wander/App/WanderApp.swift', 'Wander/Features/Live/LiveScreen.swift', 'Wander/Features/Map/MapScreen.swift', 'Wander/Features/Settings/SenderNotificationReviewHost.swift', 'WanderUITests/LiveReviewContinuityUITests.swift', 'WanderUITests/SenderNotificationFlowUITests.swift', 'Wander.xcodeproj/project.pbxproj', 'project.yml', 'Wander/App/WanderRootView.swift', 'WanderUITests/EventsComingSoonUITests.swift', 'WanderTests/ReplayMaskingTests.swift', 'Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Wander/Resources/FoundersWelcome/founders-welcome.mp4', '.github/workflows/feed-checkin-validation.yml']
+          hashes = {p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sources}
+          receipt = {'scope':'uninstrumented_original_control_not_acceptance','diagnosticMode':'rec636-original-control-v56','workflowSourceReceiptSHA256':hashlib.sha256(workflow_path.read_bytes()).hexdigest(),'head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'devices':selected,'sourceSHA256':hashes,'methodExecutions':5,'retryEnabled':False}
+          (out/'source-toolchain.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+              env.write('DIAGNOSTIC_LARGE='+selected['large']['udid']+'\nDIAGNOSTIC_COMPACT='+selected['compact']['udid']+'\n')
+          PY_ADMIT
+      - name: Build exact original V56 committed harness once
+        id: input-build
+        working-directory: original-v56
+        run: |
+          # Compile original committed bytes without injecting diagnostic code.
+          # The workflow checkout remains separate from this candidate checkout.
+          git diff --exit-code -- project.yml Wander.xcodeproj/project.pbxproj
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" \
+            -derivedDataPath "$RUNNER_TEMP/REC636OriginalV56DerivedData" -jobs 2 -parallel-testing-enabled NO \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity \
+            -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement \
+            -only-testing:WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits \
+            -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls \
+            -resultBundlePath "$RUNNER_TEMP/rec636-original-control/build.xcresult" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          python3 - <<'PY_PRODUCTS'
+          import os
+          from pathlib import Path
+          files = list((Path(os.environ['RUNNER_TEMP'])/'REC636OriginalV56DerivedData/Build/Products').glob('Wander_iphonesimulator*-arm64.xctestrun'))
+          if len(files) != 1: raise SystemExit('Expected one exact xctestrun')
+          with open(os.environ['GITHUB_ENV'],'a') as out: out.write('DIAGNOSTIC_XCTESTRUN='+str(files[0])+'\n')
+          PY_PRODUCTS
+      - name: Observe three original large-phone cases once
+        working-directory: original-v56
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
+          -only-testing:WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/rec636-original-control/large.xcresult"
+      - name: Release large phone and prepare compact phone
+        working-directory: original-v56
+        id: input-compact
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' }}
+        run: |
+          python3 - <<'PY_COMPACT'
+          import json, os, subprocess
+          inventory = subprocess.check_output(['xcrun','simctl','list','devices','booted','--json'],text=True,timeout=30)
+          if any(d['udid'] == os.environ['DIAGNOSTIC_LARGE'] for rows in json.loads(inventory)['devices'].values() for d in rows):
+              subprocess.run(['xcrun','simctl','shutdown',os.environ['DIAGNOSTIC_LARGE']],check=True,timeout=60)
+          subprocess.run(['xcrun','simctl','bootstatus',os.environ['DIAGNOSTIC_COMPACT'],'-b'],check=True,timeout=180)
+          PY_COMPACT
+      - name: Observe two original compact-phone cases once
+        working-directory: original-v56
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' && steps.input-compact.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$DIAGNOSTIC_COMPACT" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity
+          -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/rec636-original-control/compact.xcresult"
+      - name: Preserve original native outcomes and verify selected coverage
+        if: always()
+        run: |
+          python3 - <<'PY_RESULTS'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'rec636-original-control'
+          out.mkdir(exist_ok=True)
+          problems=[]
+          admitted={}
+          candidate=Path(os.environ['GITHUB_WORKSPACE'])/'original-v56'
+          try:
+              admitted=json.loads((out/'source-toolchain.json').read_text())
+              same={p:hashlib.sha256((candidate/p).read_bytes()).hexdigest()==sha for p,sha in admitted['sourceSHA256'].items()}
+              candidate_head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=candidate,text=True,timeout=30).strip()
+              candidate_tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=candidate,text=True,timeout=30).strip()
+              candidate_clean=not subprocess.check_output(['git','status','--porcelain'],cwd=candidate,text=True,timeout=30).strip()
+              identity_same=candidate_head==admitted['head']=='efcccb48b8586c7c62c016fe5ba07aae5e13b003' and candidate_tree==admitted['tree']=='764620a1b702edc3c5ce43acba63b3af4ea1dba7'
+              (out/'source-postflight.json').write_text(json.dumps({'unchanged':same,'candidateIdentityUnchanged':identity_same,'candidateClean':candidate_clean},indent=2)+'\n')
+              if not all(same.values()) or not identity_same or not candidate_clean: problems.append('source_drift')
+          except (subprocess.SubprocessError,OSError,ValueError,KeyError): problems.append('source_admission_or_postflight_unavailable')
+          try:
+              root=Path(os.environ['GITHUB_WORKSPACE'])
+              workflow=json.loads((out/'workflow-source.json').read_text())
+              workflow_same=hashlib.sha256((root/workflow['workflowPath']).read_bytes()).hexdigest()==workflow['workflowSHA256']
+              workflow_head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True,timeout=30).strip()
+              workflow_tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=root,text=True,timeout=30).strip()
+              workflow_identity_same=workflow_head==workflow['head']==os.environ['GITHUB_SHA'] and workflow_tree==workflow['tree']
+              (out/'workflow-postflight.json').write_text(json.dumps({'workflowBytesUnchanged':workflow_same,'workflowIdentityUnchanged':workflow_identity_same},indent=2)+'\n')
+              if not workflow_same or not workflow_identity_same: problems.append('workflow_source_drift')
+          except (subprocess.SubprocessError,OSError,ValueError,KeyError): problems.append('workflow_admission_or_postflight_unavailable')
+          expected={
+              'large':['LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()','LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()','EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits()'],
+              'compact':['LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()','SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()']}
+          def nodes(value):
+              if isinstance(value,dict):
+                  yield value
+                  for child in value.values(): yield from nodes(child)
+              elif isinstance(value,list):
+                  for child in value: yield from nodes(child)
+          records={}
+          for size, methods in expected.items():
+              bundle=out/(size+'.xcresult')
+              if not bundle.is_dir():
+                  records[size]={'status':'missing','required':methods}; problems.append(size+'_missing'); continue
+              exports={}
+              for kind in ['summary','tests']:
+                  try:
+                      raw=subprocess.check_output(['xcrun','xcresulttool','get','test-results',kind,'--path',str(bundle),'--compact'],timeout=90)
+                      exports[kind]=json.loads(raw)
+                      (out/(size+'-'+kind+'.json')).write_bytes(raw)
+                  except (subprocess.SubprocessError,OSError,ValueError): problems.append(size+'_'+kind+'_export')
+              if set(exports)!= {'summary','tests'}: continue
+              cases=[x for x in nodes(exports['tests']) if x.get('nodeType')=='Test Case']
+              actual=[{'method':'/'.join(str(x.get('nodeIdentifier','')).split('/')[-2:]),'result':x.get('result')} for x in cases]
+              summary=exports['summary']
+              exact=sorted(x['method'] for x in actual)==sorted(methods) and len(cases)==summary.get('totalTestCount')
+              selected=admitted.get('devices',{}).get(size,{})
+              model={'large':'iPhone 17 Pro','compact':'iPhone 17e'}[size]
+              expected_device={'architecture':'arm64','deviceId':selected.get('udid'),
+                  'deviceName':model,'modelName':model,'osBuildNumber':'23F77',
+                  'osVersion':'26.5','platform':'iOS Simulator'}
+              configurations=summary.get('devicesAndConfigurations',[])
+              device_matches=bool(selected.get('udid')) and selected.get('name')==model and selected.get('runtime')=='com.apple.CoreSimulator.SimRuntime.iOS-26-5' and selected.get('runtimeBuild')=='23F77' and exports['tests'].get('devices')==[expected_device] and len(configurations)==1 and configurations[0].get('device')==expected_device
+              count_keys={'Passed':'passedTests','Failed':'failedTests','Skipped':'skippedTests','Expected Failure':'expectedFailures'}
+              counts_match=all(x['result'] in count_keys for x in actual) and all(summary.get(key)==sum(x['result']==status for x in actual) for status,key in count_keys.items())
+              device_counts_match=len(configurations)==1 and all(configurations[0].get(key)==summary.get(key) for key in count_keys.values())
+              if not device_matches: problems.append(size+'_device_identity_gap')
+              if not counts_match or not device_counts_match: problems.append(size+'_native_count_gap')
+              passed=exact and device_matches and counts_match and device_counts_match and all(x['result']=='Passed' for x in actual) and summary.get('result')=='Passed' and summary.get('passedTests')==len(methods) and all(summary.get(k)==0 for k in ['failedTests','skippedTests','expectedFailures'])
+              records[size]={'required':methods,'actual':actual,'exactCoverage':exact,'deviceMatchesAdmission':device_matches,'nativeCountsMatchTreeAndDevice':counts_match and device_counts_match,'allPassed':passed,'summarySHA256':hashlib.sha256((out/(size+'-summary.json')).read_bytes()).hexdigest(),'testsSHA256':hashlib.sha256((out/(size+'-tests.json')).read_bytes()).hexdigest()}
+              if not passed: problems.append(size+'_native_failed_or_incomplete')
+          (out/'diagnostic-accounting.json').write_text(json.dumps({'scope':'uninstrumented_original_control_not_acceptance','diagnosticMode':'rec636-original-control-v56','nativeOutcomesUnchanged':True,'expectedExecutions':5,'devices':records,'gaps':problems},indent=2)+'\n')
+          if problems: raise SystemExit('Diagnostic failure or gap: '+','.join(problems))
+          PY_RESULTS
+      - name: Retain original diagnostic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rec636-original-control-${{ github.sha }}
+          path: ${{ runner.temp }}/rec636-original-control
           retention-days: 14
           if-no-files-found: error
