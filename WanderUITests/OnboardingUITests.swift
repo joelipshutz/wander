@@ -12,13 +12,16 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Share test link"].tap()
         // The system may use the host's ASTIR name or the extension's
         // Save to Astir title. Both are exact branded destinations.
-        let activity = app.cells.matching(NSPredicate(
+        let activityTitle = NSPredicate(
             format: "label ==[c] %@ OR label ==[c] %@", "Astir", "Save to Astir"
-        )).firstMatch
-        if !activity.waitForExistence(timeout: 5) {
-            let more = app.cells.matching(NSPredicate(format: "label == %@", "More")).firstMatch
-            if more.exists { more.tap() }
-        }
+        )
+        let more = app.cells.matching(NSPredicate(format: "label == %@", "More")).firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 5))
+        more.tap()
+        // Exercise the Apps route, whose sheet covers the original labeled
+        // share cells and exposes each visible row's title in a child label.
+        let activity = app.otherElements["ShareSheet.EditAppsView"]
+            .tables["tableView"].cells.containing(activityTitle).firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         activity.tap()
         let countdownAvailable = app.buttons["share-extension-start-import"].waitForExistence(timeout: 5)
