@@ -12,7 +12,8 @@ import time
 
 def main():
     key, name = os.environ["TRACE_DEVICE_KEY"], os.environ["TRACE_NAME"]
-    if (key, name) not in {("LARGE_DEVICE_ID", "map-pan"), ("SMALL_DEVICE_ID", "compact-filter")}:
+    if (key, name) not in {("LARGE_DEVICE_ID", "map-pan"), ("SMALL_DEVICE_ID", "compact-filter"),
+                          ("LARGE_DEVICE_ID", "onboarding-overview")}:
         raise ValueError("Unexpected diagnostic case")
     device = os.environ[key]
     if re.fullmatch(r"[0-9A-Fa-f-]{36}", device) is None:
@@ -46,7 +47,8 @@ def main():
         os.close(fd)
     value = json.loads(data)
     trace = value.get("trace", {})
-    expected = "map-performance" if name == "map-pan" else "live-demo"
+    expected = {"map-pan": "map-performance", "compact-filter": "live-demo",
+                "onboarding-overview": "onboarding-map-overview"}[name]
     if trace.get("schema") != 2 or trace.get("fixture") != expected:
         raise ValueError("Trace is not the requested synthetic fixture")
     started = float((target.parent / (name + "-start.txt")).read_text())

@@ -951,6 +951,18 @@ final class OnboardingUITests: XCTestCase {
     func testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving() {
         let app = XCUIApplication()
         app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderNUXFeedFixture"]
+        // REC-636 onboarding diagnostic begin
+        app.launchArguments += ["-WanderNativeRecipientDiagnostic", "-WanderOnboardingNextDiagnostic"]
+        addTeardownBlock { @MainActor in
+            let readout = app.descendants(matching: .any)
+                .matching(identifier: "rec636.nativeInputDiagnostic").firstMatch
+            let value = readout.exists ? readout.value as? String : nil
+            let attachment = XCTAttachment(string: value ?? "native_input_diagnostic_unavailable")
+            attachment.name = "REC-636 onboarding Next native input diagnostic"
+            attachment.lifetime = .keepAlways
+            self.add(attachment)
+        }
+        // REC-636 onboarding diagnostic end
         app.launch()
         for target in ["mapFeatured", "mapFriends", "mapMoreFilters", "mapSearch", "mapAdd", "mapPinLegend"] {
             let coach = app.descendants(matching: .any)["walkthrough.map.\(target)"]

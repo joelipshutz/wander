@@ -1,4 +1,4 @@
-name: REC-636 runtime failure diagnostics
+name: REC-636 onboarding input diagnostic
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rec636-runtime-diagnostic-${{ github.ref }}
+  group: rec636-onboarding-diagnostic-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -20,29 +20,28 @@ jobs:
           ref: ${{ github.sha }}
           lfs: true
           persist-credentials: false
-      - name: Prepare the exact diagnostic source and simulators
+      - name: Prepare exact source and original Parent display conditions
         run: |
           brew install xcodegen
           xcodegen generate
           python3 -B -m unittest discover -s scripts/diagnostics -p 'test_*.py'
-          python3 - <<'PY'
+          python3 - <<'PY_SETUP'
           import json, os, re, subprocess
           from pathlib import Path
-          rows = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
-          selected = {}
-          for key, names in [('LARGE_DEVICE_ID',['iPhone 17 Pro']),('SMALL_DEVICE_ID',['iPhone 17e','iPhone 16e','iPhone SE (3rd generation)'])]:
-              for name in names:
-                  choices = [(tuple(map(int,re.findall(r'\d+',runtime))), d) for runtime, devices in rows.items() if 'iOS' in runtime for d in devices if d['name'] == name]
-                  if choices:
-                      selected[key] = max(choices,key=lambda x:x[0])[1]['udid']
-                      break
-              else: raise RuntimeError('Required existing simulator missing')
-          with open(os.environ['GITHUB_ENV'],'a') as f:
-              for key,value in selected.items(): f.write(key+'='+value+'\n')
+          rows=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
+          choices=[(tuple(map(int,re.findall(r'\d+',runtime))),d) for runtime,devices in rows.items() if 'iOS' in runtime for d in devices if d['name']=='iPhone 17 Pro']
+          if not choices: raise RuntimeError('Required existing simulator missing')
+          device=max(choices,key=lambda x:x[0])[1]['udid']
+          with open(os.environ['GITHUB_ENV'],'a') as f: f.write('LARGE_DEVICE_ID='+device+'\n')
           out=Path(os.environ['RUNNER_TEMP'])/'rec636-diagnostic';out.mkdir()
-          (out/'source.json').write_text(json.dumps({'head':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'devices':selected,'scope':'diagnostic-only; no final acceptance'},indent=2))
-          subprocess.run(['xcrun','simctl','bootstatus',selected['LARGE_DEVICE_ID'],'-b'],check=True)
-          PY
+          (out/'source.json').write_text(json.dumps({'head':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'device':device,'method':'WanderUITests/OnboardingUITests/testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving','scope':'diagnostic-only; no final acceptance'},indent=2))
+          subprocess.run(['xcrun','simctl','bootstatus',device,'-b'],check=True)
+          subprocess.run(['xcrun','simctl','ui',device,'appearance','dark'],check=True)
+          subprocess.run(['xcrun','simctl','ui',device,'appearance','light'],check=True)
+          subprocess.run(['xcrun','simctl','shutdown',device],check=True)
+          subprocess.run(['xcrun','simctl','bootstatus',device,'-b'],check=True)
+          subprocess.run(['open','-a','Simulator','--args','-CurrentDeviceUDID',device],check=True)
+          PY_SETUP
       - name: Build diagnostic products once
         id: products
         run: |
@@ -53,93 +52,48 @@ jobs:
             -testProductsPath "$RUNNER_TEMP/Diagnostic.xctestproducts" \
             -resultBundlePath "$RUNNER_TEMP/rec636-diagnostic/build.xcresult" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      # Match Feed's headless display setup; only observational instrumentation differs.
-      - name: Observe the private Replay capture pipeline once
+      - name: Observe the original map to feed onboarding journey once
         if: ${{ !cancelled() && steps.products.outcome == 'success' }}
         run: |
-          python3 -B scripts/diagnostics/replay-capture-diagnostic.py \
-            --products "$RUNNER_TEMP/Diagnostic.xctestproducts" \
-            --device "$LARGE_DEVICE_ID" \
-            --result "$RUNNER_TEMP/rec636-diagnostic/replay.xcresult" \
-            --output "$RUNNER_TEMP/rec636-diagnostic/replay-observation" \
-            --expected-head "$GITHUB_SHA" \
-            --sdk-checkout "$RUNNER_TEMP/DerivedData/SourcePackages/checkouts/posthog-ios" \
-            --expected-sdk ee5b5705b0038f0c44646cde5fe972bb65387596
-      - name: Prepare the compact diagnostic device
-        id: compact-prepare
-        if: ${{ !cancelled() && steps.products.outcome == 'success' }}
-        run: |
-          xcrun simctl shutdown "$LARGE_DEVICE_ID"
-          xcrun simctl bootstatus "$SMALL_DEVICE_ID" -b
-      - name: Observe compact filter input once
-        if: ${{ !cancelled() && steps.compact-prepare.outcome == 'success' }}
-        run: |
-          python3 -c 'import os,time; from pathlib import Path; (Path(os.environ["RUNNER_TEMP"])/"rec636-diagnostic/compact-filter-start.txt").write_text(str(time.time()))'
-          xcodebuild test-without-building -quiet \
-            -testProductsPath "$RUNNER_TEMP/Diagnostic.xctestproducts" \
-            -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID" \
-            -jobs 1 -parallel-testing-enabled NO \
-            -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
-            -maximum-test-execution-time-allowance 900 \
-            -resultBundlePath "$RUNNER_TEMP/rec636-diagnostic/compact-filter.xcresult"
-      - name: Retain the compact synthetic native-input trace
-        if: ${{ !cancelled() && steps.compact-prepare.outcome == 'success' }}
-        env:
-          TRACE_DEVICE_KEY: SMALL_DEVICE_ID
-          TRACE_NAME: compact-filter
-        run: python3 -B scripts/diagnostics/export-native-input-trace.py
-      - name: Prepare the original Parent performance display conditions
-        id: pan-prepare
-        if: ${{ !cancelled() && steps.products.outcome == 'success' }}
-        run: |
-          xcrun simctl shutdown "$SMALL_DEVICE_ID"
-          xcrun simctl bootstatus "$LARGE_DEVICE_ID" -b
-          xcrun simctl ui "$LARGE_DEVICE_ID" appearance dark
-          xcrun simctl ui "$LARGE_DEVICE_ID" appearance light
-          xcrun simctl shutdown "$LARGE_DEVICE_ID"
-          xcrun simctl bootstatus "$LARGE_DEVICE_ID" -b
-          open -a Simulator --args -CurrentDeviceUDID "$LARGE_DEVICE_ID"
-      - name: Observe the original selected-pin pan once
-        if: ${{ !cancelled() && steps.pan-prepare.outcome == 'success' }}
-        run: |
-          python3 - <<'PY'
+          python3 - <<'PY_NATIVE'
           import hashlib, json, os, plistlib, runpy, subprocess, time
           from pathlib import Path
-          root=Path(os.environ['RUNNER_TEMP']); products=root/'Diagnostic.xctestproducts'; out=root/'rec636-diagnostic'
+          root=Path(os.environ['RUNNER_TEMP']);products=root/'Diagnostic.xctestproducts';out=root/'rec636-diagnostic'
           entries=plistlib.loads((products/'Info.plist').read_bytes())['Tests']
-          paths={(products/e['xctestrun']).resolve() for e in entries}
-          assert all(p.is_relative_to(products.resolve()) and not p.is_symlink() for p in paths)
-          originals={p:p.read_bytes() for p in paths}
-          (out/'map-pan-start.txt').write_text(str(time.time()))
-          code=2
+          paths=set()
+          for entry in entries:
+              candidate=products/entry['xctestrun'];path=candidate.resolve()
+              assert not candidate.is_symlink() and path.is_relative_to(products.resolve())
+              paths.add(path)
+          originals={p:p.read_bytes() for p in paths};code=2
+          (out/'onboarding-overview-start.txt').write_text(str(time.time()))
           try:
               runner=runpy.run_path('scripts/run-parent-regression.py')
-              runner['prepare_ui_performance_products'](products,preserve_system_failures=False)
+              runner['prepare_ui_performance_products'](products,preserve_system_failures=True)
               code=subprocess.run(['xcodebuild','test-without-building','-quiet','-testProductsPath',str(products),
                   '-destination','platform=iOS Simulator,id='+os.environ['LARGE_DEVICE_ID'],
                   '-jobs','2','-parallel-testing-enabled','NO',
-                  '-only-testing:WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork',
+                  '-only-testing:WanderUITests/OnboardingUITests/testNativeMapOverviewUsesRealControlsAndEndsWithoutSaving',
                   '-test-timeouts-enabled','YES','-default-test-execution-time-allowance','600',
                   '-maximum-test-execution-time-allowance','900',
-                  '-resultBundlePath',str(out/'map-pan.xcresult')]).returncode
+                  '-resultBundlePath',str(out/'onboarding-overview.xcresult')]).returncode
           finally:
               for path,data in originals.items(): path.write_bytes(data)
               assert all(p.read_bytes()==data for p,data in originals.items())
-              (out/'map-pan-configuration.json').write_text(json.dumps({'restored':True,'nativeExitCode':code,
+              (out/'onboarding-configuration.json').write_text(json.dumps({'restored':True,'nativeExitCode':code,
                   'originalSHA256':{str(p.relative_to(products)):hashlib.sha256(data).hexdigest() for p,data in originals.items()}}))
           raise SystemExit(code)
-          PY
-      - name: Retain only the synthetic native-input trace
-        if: ${{ !cancelled() && steps.pan-prepare.outcome == 'success' }}
+          PY_NATIVE
+      - name: Retain only the synthetic onboarding input and fixed stage trace
+        if: ${{ !cancelled() && steps.products.outcome == 'success' }}
         env:
           TRACE_DEVICE_KEY: LARGE_DEVICE_ID
-          TRACE_NAME: map-pan
+          TRACE_NAME: onboarding-overview
         run: python3 -B scripts/diagnostics/export-native-input-trace.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rec636-runtime-diagnostic
+          name: rec636-onboarding-diagnostic
           path: ${{ runner.temp }}/rec636-diagnostic
           retention-days: 7
           if-no-files-found: error

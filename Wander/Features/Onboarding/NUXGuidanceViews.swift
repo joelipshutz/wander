@@ -204,6 +204,15 @@ struct NUXFeedIntroduction: View {
                 annotation(focus, frame: frame)
                     .allowsHitTesting(false)
                 Button("Next", systemImage: "arrow.right") {
+                    // REC-636 onboarding diagnostic begin
+                    #if DEBUG && targetEnvironment(simulator)
+                    switch phase {
+                    case .circle: NativeInputRecipientDiagnostic.onboarding(.onboardingNextCircleEntered)
+                    case .recent: NativeInputRecipientDiagnostic.onboarding(.onboardingNextRecentEntered)
+                    default: NativeInputRecipientDiagnostic.onboarding(.onboardingNextOtherEntered)
+                    }
+                    #endif
+                    // REC-636 onboarding diagnostic end
                     move(to: phase == .circle ? .centering : .returning)
                 }
                 .font(.system(.subheadline, weight: .semibold))
@@ -220,11 +229,28 @@ struct NUXFeedIntroduction: View {
         .onChange(of: targets, initial: true) { _, value in latestTargets = value }
         .task(id: "\(phase.rawValue)-\(scenePhase)") {
             guard scenePhase == .active else {
+                // REC-636 onboarding diagnostic begin
+                #if DEBUG && targetEnvironment(simulator)
+                NativeInputRecipientDiagnostic.onboarding(.onboardingSceneInactive)
+                #endif
+                // REC-636 onboarding diagnostic end
                 if hasStarted { scroll(nil); finish() }
                 return
             }
             hasStarted = true
             let runningPhase = phase
+            // REC-636 onboarding diagnostic begin
+            #if DEBUG && targetEnvironment(simulator)
+            switch runningPhase {
+            case .arriving: NativeInputRecipientDiagnostic.onboarding(.onboardingArrivingTaskEntered)
+            case .circle: NativeInputRecipientDiagnostic.onboarding(.onboardingCircleTaskEntered)
+            case .centering: NativeInputRecipientDiagnostic.onboarding(.onboardingCenteringTaskEntered)
+            case .recent: NativeInputRecipientDiagnostic.onboarding(.onboardingRecentTaskEntered)
+            case .returning: NativeInputRecipientDiagnostic.onboarding(.onboardingReturningTaskEntered)
+            case .finished: NativeInputRecipientDiagnostic.onboarding(.onboardingFinishedTaskEntered)
+            }
+            #endif
+            // REC-636 onboarding diagnostic end
             do {
                 switch runningPhase {
                 case .arriving:
@@ -248,8 +274,19 @@ struct NUXFeedIntroduction: View {
                 case .centering:
                     try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.clearMilliseconds))
                     scroll(.recent)
+                    // REC-636 onboarding diagnostic begin
+                    #if DEBUG && targetEnvironment(simulator)
+                    NativeInputRecipientDiagnostic.onboarding(.onboardingCenteringScrollRequested)
+                    #endif
+                    // REC-636 onboarding diagnostic end
                     try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.scrollMilliseconds))
                     try await waitForTarget(.recent)
+                    // REC-636 onboarding diagnostic begin
+                    #if DEBUG && targetEnvironment(simulator)
+                    NativeInputRecipientDiagnostic.onboarding(frame(for: .recent) == nil
+                        ? .onboardingCenteringTargetUnavailable : .onboardingCenteringTargetReady)
+                    #endif
+                    // REC-636 onboarding diagnostic end
                     move(to: frame(for: .recent) == nil ? .returning : .recent)
                 case .returning:
                     try await Task.sleep(for: .milliseconds(NUXFeedIntroductionTiming.clearMilliseconds))
@@ -277,6 +314,18 @@ struct NUXFeedIntroduction: View {
     }
 
     private func move(to value: Phase) {
+        // REC-636 onboarding diagnostic begin
+        #if DEBUG && targetEnvironment(simulator)
+        switch value {
+        case .arriving: NativeInputRecipientDiagnostic.onboarding(.onboardingArrivingRequested)
+        case .circle: NativeInputRecipientDiagnostic.onboarding(.onboardingCircleRequested)
+        case .centering: NativeInputRecipientDiagnostic.onboarding(.onboardingCenteringRequested)
+        case .recent: NativeInputRecipientDiagnostic.onboarding(.onboardingRecentRequested)
+        case .returning: NativeInputRecipientDiagnostic.onboarding(.onboardingReturningRequested)
+        case .finished: NativeInputRecipientDiagnostic.onboarding(.onboardingFinishedRequested)
+        }
+        #endif
+        // REC-636 onboarding diagnostic end
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) { phase = value }
     }
 

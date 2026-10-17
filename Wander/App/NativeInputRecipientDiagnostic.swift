@@ -11,6 +11,13 @@ enum NativeInputRecipientDiagnostic {
     enum Stage: String {
         case searchActionEntered, searchSurfaceRequested, searchDestinationAppeared
         case mapSourceEntered, mapSourceSelected, mapSourceReturned
+        case onboardingNextCircleEntered, onboardingNextRecentEntered, onboardingNextOtherEntered
+        case onboardingArrivingRequested, onboardingCircleRequested, onboardingCenteringRequested
+        case onboardingRecentRequested, onboardingReturningRequested, onboardingFinishedRequested
+        case onboardingArrivingTaskEntered, onboardingCircleTaskEntered, onboardingCenteringTaskEntered
+        case onboardingRecentTaskEntered, onboardingReturningTaskEntered, onboardingFinishedTaskEntered
+        case onboardingSceneInactive, onboardingCenteringScrollRequested
+        case onboardingCenteringTargetReady, onboardingCenteringTargetUnavailable
     }
 
     static let fixture: String? = {
@@ -21,6 +28,18 @@ enum NativeInputRecipientDiagnostic {
         guard Bundle.main.bundleIdentifier == "com.grayline.wander",
               required.isSubset(of: arguments), excluded.isDisjoint(with: arguments),
               !ReplayFixtureHostPolicy.hasRequest else { return nil }
+        if arguments.contains("-WanderOnboardingNextDiagnostic") {
+            let onboarding: Set<String> = [
+                "-WanderNativeRecipientDiagnostic", "-WanderOnboardingNextDiagnostic",
+                "-WanderAuthenticatedUITest", "-WanderMapCapture", "-WanderUseDemoFixtures",
+                "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs",
+                "-WanderHoldWalkthroughStep", "-WanderNUXFeedFixture"
+            ]
+            // One synthetic case only. Additional app flags, including other
+            // fixture/auth/live modes, cannot fall through to another admission.
+            guard Set(arguments.filter { $0.hasPrefix("-Wander") }) == onboarding else { return nil }
+            return "onboarding-map-overview"
+        }
         if LivePlanDemoPolicy.isEnabled(), arguments.contains("-WanderNUXFeedFixture") { return "live-demo" }
         let performance: Set<String> = ["-WanderMapCapture", "-WanderUsePerformanceFixtures"]
         if performance.isSubset(of: arguments), !arguments.contains("-WanderUseDemoFixtures") {
@@ -31,6 +50,11 @@ enum NativeInputRecipientDiagnostic {
 
     static func record(_ stage: Stage) {
         guard fixture != nil else { return }
+        NativeRecipientRecorder.shared.record(stage)
+    }
+
+    static func onboarding(_ stage: Stage) {
+        guard fixture == "onboarding-map-overview" else { return }
         NativeRecipientRecorder.shared.record(stage)
     }
 
@@ -236,6 +260,8 @@ private final class NativeRecipientRecorder {
             livenessStarted = true
             // A bounded liveness record distinguishes a live observer with no
             // delivered touches from an old or detached trace. Diagnostic only.
+            // After 180 ticks, touch/stage writes continue; later silence alone
+            // cannot establish that the observer or main thread stopped.
             Task { @MainActor [weak self] in
                 for _ in 0..<180 {
                     do { try await Task.sleep(for: .seconds(1)) } catch { return }
