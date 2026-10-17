@@ -1,8 +1,12 @@
 import importlib.util
+from contextlib import contextmanager
 import json
 from pathlib import Path
 import plistlib
+import os
+import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +15,92 @@ m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 
 
 class StageTests(unittest.TestCase):
+    def sdk_fixture(self, root):
+        sdk=root/'ReplayPackages/checkouts/posthog-ios'
+        originals={p:('original-'+str(i)).encode() for i,p in enumerate(m.FILES)}
+        for name,data in originals.items():
+            path=sdk/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+        return sdk, originals, {p:b'patched-'+data for p,data in originals.items()}
+
+    @contextmanager
+    def simulated_modes(self, initial=0o444):
+        # These tests NEVER call chmod/fchmod or change actual filesystem modes.
+        real_fstat=os.fstat; modes={}; calls=[]
+        def fstat(fd):
+            value=real_fstat(fd); key=(value.st_dev,value.st_ino)
+            mode=modes.setdefault(key,initial)
+            return SimpleNamespace(st_dev=value.st_dev,st_ino=value.st_ino,st_uid=value.st_uid,
+                st_nlink=value.st_nlink,st_mode=stat.S_IFMT(value.st_mode)|mode)
+        def fchmod(fd, mode):
+            value=real_fstat(fd);key=(value.st_dev,value.st_ino)
+            calls.append((key,mode));modes[key]=mode
+        with patch.object(m.os,'fstat',side_effect=fstat), patch.object(m.os,'fchmod',side_effect=fchmod):
+            yield calls,modes
+
+    def test_only_owner_write_is_temporary_and_original_modes_restored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();sdk,before,after=self.sdk_fixture(root)
+            actual={p:stat.S_IMODE((sdk/p).stat().st_mode) for p in before}
+            m.admit_patch_paths(sdk,root);record={}
+            with self.simulated_modes() as (calls,modes):
+                m.apply_source_patch(sdk,before,after,record)
+            self.assertEqual([mode for _,mode in calls],[0o644,0o644,0o444,0o444])
+            self.assertTrue(all(value==0o444 for value in modes.values()))
+            self.assertTrue(all(value['restored'] for value in record['sourceModes'].values()))
+            self.assertEqual(actual,{p:stat.S_IMODE((sdk/p).stat().st_mode) for p in before})
+            self.assertEqual({p:(sdk/p).read_bytes() for p in before},after)
+
+    def test_write_failure_restores_modes_and_preserves_original_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sdk,before,after=self.sdk_fixture(Path(tmp).resolve());record={};real_write=os.write;count=0
+            def write(fd,data):
+                nonlocal count
+                count+=1
+                if count==2: raise PermissionError('synthetic write denial')
+                return real_write(fd,data)
+            with self.simulated_modes() as (calls,modes), patch.object(m.os,'write',side_effect=write):
+                with self.assertRaisesRegex(PermissionError,'synthetic'):
+                    m.apply_source_patch(sdk,before,after,record)
+            self.assertEqual([mode for _,mode in calls],[0o644,0o644,0o444,0o444])
+            self.assertTrue(all(value==0o444 for value in modes.values()))
+            self.assertEqual(record['modeRestorationFailed'],[])
+
+    def test_existing_owner_write_needs_no_permission_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sdk,before,after=self.sdk_fixture(Path(tmp).resolve())
+            with self.simulated_modes(0o640) as (calls,modes):m.apply_source_patch(sdk,before,after,{})
+            self.assertEqual(calls,[]);self.assertEqual(set(modes.values()),{0o640})
+
+    def test_permission_denial_stops_without_retry_or_source_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sdk,before,after=self.sdk_fixture(Path(tmp).resolve())
+            with self.simulated_modes(), patch.object(m.os,'fchmod',side_effect=PermissionError('synthetic')) as change:
+                with self.assertRaises(PermissionError):m.apply_source_patch(sdk,before,after,{})
+            self.assertEqual(change.call_count,1)
+            self.assertEqual({p:(sdk/p).read_bytes() for p in before},before)
+
+    def test_changed_bytes_fail_before_any_permission_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sdk,before,after=self.sdk_fixture(Path(tmp).resolve());(sdk/list(before)[1]).write_bytes(b'drift')
+            with self.simulated_modes() as (calls,_):
+                with self.assertRaisesRegex(ValueError,'changed_before'):m.apply_source_patch(sdk,before,after,{})
+            self.assertEqual(calls,[])
+
+    def test_wrong_scope_symlink_and_foreign_owner_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();sdk,before,_=self.sdk_fixture(root)
+            with self.assertRaisesRegex(ValueError,'exact_disposable'):m.admit_patch_paths(sdk,root/'wrong')
+            path=sdk/list(before)[0];path.unlink();path.symlink_to(sdk/list(before)[1])
+            with self.assertRaisesRegex(ValueError,'source_type'):m.admit_patch_paths(sdk,root)
+            path.unlink();path.write_bytes(before[list(before)[0]])
+            real_lstat=Path.lstat
+            def lstat(p):
+                value=real_lstat(p)
+                if p==path:return SimpleNamespace(st_mode=value.st_mode,st_uid=os.getuid()+1,st_nlink=value.st_nlink)
+                return value
+            with patch.object(Path,'lstat',lstat):
+                with self.assertRaisesRegex(ValueError,'source_type'):m.admit_patch_paths(sdk,root)
+
     def test_patch_rejects_wrong_pinned_bytes(self):
         with self.assertRaisesRegex(ValueError, 'hash'):
             m.patched_sources({p:b'wrong' for p in m.FILES}, '')

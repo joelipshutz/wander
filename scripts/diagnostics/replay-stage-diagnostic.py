@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import stat
 import subprocess
 import sys
 import uuid
@@ -89,19 +90,99 @@ def sdk_identity(sdk):
     need(read_command(['git', '-C', str(sdk), 'rev-parse', 'HEAD']).decode().strip() == SDK, 'SDK_revision_mismatch')
 
 
+def admit_patch_paths(sdk, temporary):
+    """Only the two files in this fresh CI checkout; no aliases or shared inodes."""
+    expected = temporary / 'ReplayPackages/checkouts/posthog-ios'
+    need(sdk == expected and sdk.is_absolute(), 'exact_disposable_checkout_required')
+    for relative in FILES:
+        target = sdk / relative
+        for path in [temporary, *target.relative_to(temporary).parents]:
+            # Relative parents are inspected below through the actual temporary root.
+            if path == temporary: candidate = path
+            elif str(path) == '.': continue
+            else: candidate = temporary / path
+            value = candidate.lstat()
+            need(stat.S_ISDIR(value.st_mode) and value.st_uid == os.getuid(), 'checkout_directory_type_or_owner')
+        value = target.lstat()
+        need(stat.S_ISREG(value.st_mode) and value.st_uid == os.getuid() and value.st_nlink == 1,
+             'SDK_source_type_owner_or_links')
+    return [sdk / relative for relative in FILES]
+
+
+def apply_source_patch(sdk, originals, changes, record):
+    """Temporarily add only owner-write, then restore exact original modes."""
+    need(set(originals) == set(changes) == set(FILES), 'SDK_patch_roster')
+    opened = []
+    record['sourceModes'] = {}
+    try:
+        # Admit both files and bytes before changing either mode or source.
+        for relative in FILES:
+            path = sdk / relative
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            value = os.fstat(fd)
+            opened.append((relative, fd, value))
+            need(stat.S_ISREG(value.st_mode) and value.st_uid == os.getuid() and value.st_nlink == 1,
+                 'SDK_opened_source_type_owner_or_links')
+            need(os.read(fd, len(originals[relative]) + 1) == originals[relative], 'SDK_source_changed_before_patch')
+            record['sourceModes'][relative] = {'before': stat.S_IMODE(value.st_mode), 'restored': False}
+        for relative, fd, before in opened:
+            original_mode = stat.S_IMODE(before.st_mode)
+            if not original_mode & stat.S_IWUSR:
+                os.fchmod(fd, original_mode | stat.S_IWUSR)
+            writer = os.open(sdk / relative, os.O_WRONLY | os.O_NOFOLLOW)
+            try:
+                actual = os.fstat(writer)
+                need((actual.st_dev, actual.st_ino, actual.st_uid) == (before.st_dev, before.st_ino, before.st_uid), 'SDK_source_identity_drift')
+                os.ftruncate(writer, 0)
+                remaining = memoryview(changes[relative])
+                while remaining:
+                    count = os.write(writer, remaining)
+                    need(count > 0, 'SDK_source_short_write')
+                    remaining = remaining[count:]
+            finally:
+                os.close(writer)
+    finally:
+        restoration_errors = []
+        for relative, fd, before in reversed(opened):
+            try:
+                original_mode = stat.S_IMODE(before.st_mode)
+                if stat.S_IMODE(os.fstat(fd).st_mode) != original_mode:
+                    os.fchmod(fd, original_mode)
+                matched = stat.S_IMODE(os.fstat(fd).st_mode) == original_mode
+                if relative in record['sourceModes']:
+                    record['sourceModes'][relative].update(after=stat.S_IMODE(os.fstat(fd).st_mode), restored=matched)
+                if not matched: restoration_errors.append(relative)
+            except OSError:
+                restoration_errors.append(relative)
+            finally:
+                os.close(fd)
+        record['modeRestorationFailed'] = restoration_errors
+        # Preserve an original patch error; restoration failure remains separately visible.
+        if restoration_errors and sys.exc_info()[0] is None:
+            raise ValueError('SDK_mode_restoration_failed')
+
+
 def patch(args):
     sdk = owned(args.sdk); receipt = owned(args.receipt)
     need(sdk.name == 'posthog-ios' and not receipt.exists(), 'disposable_checkout_or_new_receipt_required')
+    need(args.sdk.absolute() == sdk, 'SDK_checkout_alias')
+    admit_patch_paths(sdk, Path(os.environ['RUNNER_TEMP']).resolve())
     sdk_identity(sdk)
     need(not read_command(['git', '-C', str(sdk), 'status', '--porcelain']), 'SDK_not_clean')
     originals = {p: (sdk / p).read_bytes() for p in FILES}
     helper = (Path(__file__).with_name('ReplayStageProbe.swift')).read_text()
     changes = patched_sources(originals, helper)
-    for p, data in changes.items():
-        (sdk / p).write_bytes(data)
-    save(receipt, {'sdkRevision': SDK, 'before': FILES,
-        'after': {p: sha(data) for p, data in changes.items()}, 'helperSHA256': sha(helper.encode()),
-        'diagnosticOnly': True, 'dependencyPinChanged': False})
+    record = {'sdkRevision': SDK, 'before': FILES, 'helperSHA256': sha(helper.encode()),
+              'diagnosticOnly': True, 'dependencyPinChanged': False, 'status': 'Prepared'}
+    try:
+        apply_source_patch(sdk, originals, changes, record)
+        need(all((sdk/p).read_bytes() == data for p,data in changes.items()), 'patched_source_bytes_mismatch')
+        record.update(status='Applied', after={p: sha(data) for p, data in changes.items()})
+    except BaseException as error:
+        record.update(status='Failed', errorType=type(error).__name__)
+        raise
+    finally:
+        save(receipt, record)
 
 
 def targets(document):
