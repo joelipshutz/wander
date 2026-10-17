@@ -3,7 +3,7 @@
 from pathlib import Path
 from contextlib import contextmanager
 import argparse, copy, hashlib, json, math, os, plistlib, re, runpy, signal
-import subprocess, sys, tempfile, threading, time, uuid
+import selectors, subprocess, sys, tempfile, threading, time, uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 SUPPORT = runpy.run_path(str(Path(__file__).with_name('replay-diagnostic-support.py')))
@@ -182,6 +182,69 @@ def process_identity(pid, installed_app, earliest, marker_epoch):
     return hashlib.sha256(f'{pid}:{info.uid}:{info.start_sec}:{info.start_usec}'.encode()).hexdigest()
 
 
+class SamplePipes:
+    """Nonblocking drains prevent report output from filling a child pipe."""
+    def __init__(self, proc):
+        self.selector = selectors.DefaultSelector()
+        for name in ('stdout', 'stderr'):
+            pipe = getattr(proc, name)
+            os.set_blocking(pipe.fileno(), False)
+            self.selector.register(pipe, selectors.EVENT_READ, name)
+
+    def __enter__(self): return self
+    def __exit__(self, *_): self.selector.close()
+    def active(self): return bool(self.selector.get_map())
+
+    def read(self, timeout):
+        rows = []
+        for key, _ in self.selector.select(timeout):
+            try: data = os.read(key.fileobj.fileno(), 65536)
+            except BlockingIOError: continue
+            observed = time.monotonic()
+            rows.append((key.data, data, observed))
+            if not data: self.selector.unregister(key.fileobj)
+        return rows
+
+
+def collect_sample(proc, scratch, started, markers, native_ended, record):
+    """One launched sample may finish its report after a Replay/native boundary.
+
+    Neither that boundary nor the requested two seconds proves acquisition has
+    finished. Only a recognized progress phase supplies a conservative upper
+    bound. The original native process is never stopped or waited on here.
+    """
+    output = SUPPORT['SampleOutput']()
+    record.update(startUptime=started, requestedSeconds=2, intervalMilliseconds=10,
+                  watchdogSeconds=15, interruption=None,
+                  nativeEndedObservedUptime=None, boundaryObservedUptime=None)
+    try:
+        with SamplePipes(proc) as pipes:
+            while True:
+                if time.monotonic() - started >= 15:
+                    raise SUPPORT['Gap']('sample_watchdog')
+                marks = markers()
+                if record['boundaryObservedUptime'] is None and (marks['first-snapshot'] or marks['ready-ended']):
+                    record['boundaryObservedUptime'] = time.monotonic()
+                if record['nativeEndedObservedUptime'] is None and native_ended():
+                    record['nativeEndedObservedUptime'] = time.monotonic()
+                if scratch.exists(): need(scratch.stat().st_size <= SUPPORT['MAX_PROFILE'], 'profile_size')
+                for channel, data, observed in pipes.read(.05):
+                    if data: output.feed(channel, data, observed)
+                    else: output.eof(channel, observed)
+                # Drain through EOF even after the child exits; do not lose its
+                # final progress line or block in communicate() on full pipes.
+                if proc.poll() is not None and not pipes.active(): break
+    except BaseException as error:
+        record['interruption'] = str(error) if isinstance(error, (SUPPORT['Gap'], PermissionError)) else type(error).__name__
+        raise
+    finally:
+        try:
+            # A leader can exit while its owned group still holds a pipe open.
+            if record['interruption'] is not None or proc.poll() is None: stop_owned(proc)
+        finally:
+            record.update(endUptime=time.monotonic(), exitCode=proc.returncode, output=output.receipt())
+
+
 class Observer:
     def __init__(self, output, device, nonce):
         self.output, self.device, self.nonce = output, device, nonce
@@ -248,37 +311,37 @@ class Observer:
             need(marks['first-snapshot'] is None and marks['ready-ended'] is None, 'capture_completed_before_sample')
             with tempfile.TemporaryDirectory(prefix='rec636-replay-sample-') as tmp:
                 scratch = Path(tmp) / 'sample.txt'
-                started = time.monotonic(); self.report['sampleAttempts'] = 1
+                started = time.monotonic()
+                need(started <= draw['systemUptime'] + 2, 'sample_trigger_late')
+                self.report['sampleAttempts'] = 1
                 proc = subprocess.Popen(['/usr/bin/sample', str(draw['pid']), '2', '10', '-mayDie', '-file', str(scratch)],
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-                interruption = None
                 try:
-                    while proc.poll() is None:
-                        marks = self.markers()
-                        if marks['first-snapshot'] or marks['ready-ended'] or self.stop.is_set():
-                            interruption = 'capture_or_native_ended_during_sample'; break
-                        if time.monotonic() - started > 15:
-                            interruption = 'sample_watchdog'; break
-                        if scratch.exists(): need(scratch.stat().st_size <= SUPPORT['MAX_PROFILE'], 'profile_size')
-                        self.stop.wait(.05)
-                    if interruption: stop_owned(proc)
-                    stdout, stderr = proc.communicate(timeout=2)
-                    need(len(stdout) + len(stderr) <= 1024 * 1024, 'sample_output_bound')
-                    denied = any(x in (stdout + stderr).lower() for x in
-                                 (b'permission denied', b'operation not permitted', b'cannot examine process'))
-                    if denied: raise PermissionError('sample_permission_denied')
-                    ended = time.monotonic()
-                    self.report['sample'] = {'startUptime': started, 'endUptime': ended, 'requestedSeconds': 2,
-                        'intervalMilliseconds': 10, 'exitCode': proc.returncode, 'interruption': interruption}
-                    need(scratch.is_file(), 'sample_profile_missing')
-                    profile = curate(bounded_bytes(scratch, SUPPORT['MAX_PROFILE']))
-                    save(self.output / 'static-profile.json', profile)
-                    self.report['profileSHA256'] = sha(self.output / 'static-profile.json')
-                    need(profile['retainedStaticRows'] > 0, 'no_static_stack_rows')
+                    self.report['sample'] = {}
+                    collection_error = None
+                    try:
+                        collect_sample(proc, scratch, started, self.markers, self.stop.is_set, self.report['sample'])
+                    except PermissionError:
+                        raise  # No further profile/identity reads across this boundary.
+                    except BaseException as error:
+                        collection_error = error
+                    try:
+                        need(scratch.is_file(), 'sample_profile_missing')
+                        profile = curate(bounded_bytes(scratch, SUPPORT['MAX_PROFILE']))
+                        save(self.output / 'static-profile.json', profile)
+                        self.report['profileSHA256'] = sha(self.output / 'static-profile.json')
+                        need(profile['retainedStaticRows'] > 0, 'no_static_stack_rows')
+                    except PermissionError:
+                        raise
+                    except BaseException as error:
+                        self.report['profileRetentionGap'] = {'category': type(error).__name__,
+                            'reason': str(error) if isinstance(error, SUPPORT['Gap']) else type(error).__name__}
+                        if collection_error is None: raise
+                    if collection_error is not None: raise collection_error
                     after = process_identity(draw['pid'], self.installed_app, self.earliest, draw['epoch'])
                     need(before == after, 'pid_identity_changed')
                     self.report['pidIdentitySHA256'] = before
-                    need(not interruption and proc.returncode == 0, 'sample_partial_or_failed')
+                    need(proc.returncode == 0, 'sample_partial_or_failed')
                 finally:
                     if proc.poll() is None: stop_owned(proc)
                     proc.stdout.close(); proc.stderr.close()
@@ -293,13 +356,13 @@ class Observer:
         need(not self.thread.is_alive(), 'sampler_thread_cleanup_unconfirmed')
         try:
             marks = self.markers(); self.report['markers'] = marks
-            sample = self.report.get('sample'); begin, draw = marks['ready-began'], marks['first-ready-draw']
-            ends = [m['systemUptime'] for m in (marks['first-snapshot'], marks['ready-ended']) if m]
-            valid = bool(sample and begin and draw and ends and
-                         begin['systemUptime'] <= draw['systemUptime'] <= sample['startUptime'] <= sample['endUptime'] <= min(ends))
+            interval = SUPPORT['sample_interval'](self.report.get('sample'), marks)
+            self.report['samplingInterval'] = interval
+            valid = interval['verified']
             self.report['intervalVerifiedBeforeFirstSnapshotAndGateEnd'] = valid
             if self.report['status'] == 'SampledAwaitingGateEnd':
                 self.report['status'] = 'SampledPendingProductVerification' if valid else 'Gap'
+                if not valid: self.report['reason'] = interval['reason']
         except (OSError, ValueError, SUPPORT['Gap']) as error:
             self.report.update(status='Gap', category=type(error).__name__,
                 reason=str(error) if isinstance(error, SUPPORT['Gap']) else type(error).__name__)

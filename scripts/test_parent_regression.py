@@ -23,6 +23,65 @@ regression = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(regression)
 
 
+def xctest_method_names(source, class_name):
+    """Mirror the runner's class partitions; compiled inventory remains authoritative."""
+    classes = list(re.finditer(r"\bclass\s+(\w+)\s*:\s*XCTestCase\b", source))
+    if sum(match.group(1) == class_name for match in classes) != 1:
+        raise ValueError("Expected exactly one named XCTestCase declaration")
+    assigned = []
+    selected = []
+    for index, match in enumerate(classes):
+        end = classes[index + 1].start() if index + 1 < len(classes) else len(source)
+        methods = re.findall(r"\bfunc\s+(test\w*)\s*\(", source[match.end():end])
+        assigned.extend(methods)
+        if match.group(1) == class_name:
+            selected = methods
+    if Counter(assigned) != Counter(re.findall(r"\bfunc\s+(test\w*)\s*\(", source)):
+        raise ValueError("Unassigned XCTest methods; update discovery before checking isolation")
+    return selected
+
+
+class ReplaySourceAttributionTests(unittest.TestCase):
+    def test_sibling_classes_do_not_enter_replay_selection(self):
+        source = """
+        final class EarlierTests: XCTestCase { func testSharedName() {} }
+        final class ReplayMaskingTests: XCTestCase {
+            func testSharedName() { if true { let braces = "}" } }
+            func testOtherReplayCase() { /* { } */ }
+        }
+        final class ReplayLayoutPacingTests: XCTestCase {
+            func testSharedName() {}
+            func testStartupPacing() {}
+        }
+        """
+        self.assertEqual(xctest_method_names(source, "ReplayMaskingTests"),
+                         ["testSharedName", "testOtherReplayCase"])
+
+    def test_missing_or_duplicate_named_class_is_rejected(self):
+        declaration = "class ReplayMaskingTests: XCTestCase { func testExample() {} }"
+        for source in ["class OtherTests: XCTestCase {}", declaration + declaration]:
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                xctest_method_names(source, "ReplayMaskingTests")
+
+    def test_unassigned_method_is_rejected_instead_of_silently_dropped(self):
+        source = """
+        func testOutsideSupportedClass() {}
+        class ReplayMaskingTests: XCTestCase { func testExample() {} }
+        """
+        with self.assertRaises(ValueError):
+            xctest_method_names(source, "ReplayMaskingTests")
+
+    def test_method_counts_are_preserved_for_exact_counter_comparison(self):
+        source = """
+        class ReplayMaskingTests: XCTestCase {
+            func testDuplicate() {}
+            func testDuplicate() {}
+        }
+        """
+        self.assertEqual(xctest_method_names(source, "ReplayMaskingTests"),
+                         ["testDuplicate", "testDuplicate"])
+
+
 class ReplayIsolationTests(unittest.TestCase):
     def selection(self, suite):
         output = io.StringIO()
@@ -36,7 +95,7 @@ class ReplayIsolationTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         source = (root / "WanderTests/ReplayMaskingTests.swift").read_text()
         original = ["WanderTests/ReplayMaskingTests/" + name
-                    for name in re.findall(r"\bfunc\s+(test\w*)\s*\(", source)]
+                    for name in xctest_method_names(source, "ReplayMaskingTests")]
         selected = [identifier for suite in regression.REPLAY_METHODS
                     for identifier in self.selection(suite)["identifiers"]]
         self.assertEqual(Counter(selected), Counter(original))

@@ -3,6 +3,83 @@ from pathlib import Path
 from collections import Counter
 import ctypes, errno, hashlib, json, os, re, stat, time
 MAX_PROFILE = 16 * 1024 * 1024
+MAX_SAMPLE_OUTPUT = 1024 * 1024
+MAX_SAMPLE_LINE = 4096
+
+
+class SampleOutput:
+    """Consume bounded output; retain only counts, hashes and one fixed phase."""
+    COMPLETED = b'Sampling completed, processing symbols...'
+    DENIALS = (b'permission denied', b'operation not permitted',
+               b'cannot examine process', b'not permitted to sample')
+
+    def __init__(self):
+        self.counts = dict.fromkeys(('stdout', 'stderr'), 0)
+        self.hashes = {k: hashlib.sha256() for k in self.counts}
+        self.pending = {k: bytearray() for k in self.counts}
+        self.tails = {k: b'' for k in self.counts}
+        self.completed_at = None
+        self.completed_lines = 0
+        self.other_lines = 0
+
+    def line(self, channel, line, observed):
+        if channel == 'stderr' and line.rstrip(b'\r') == self.COMPLETED:
+            self.completed_lines += 1
+            if self.completed_at is None: self.completed_at = observed
+        else:
+            self.other_lines += 1
+
+    def feed(self, channel, data, observed):
+        need(channel in self.counts and isinstance(data, bytes), 'sample_output_type')
+        need(sum(self.counts.values()) + len(data) <= MAX_SAMPLE_OUTPUT, 'sample_output_bound')
+        self.counts[channel] += len(data); self.hashes[channel].update(data)
+        lower = self.tails[channel] + data.lower()
+        if any(term in lower for term in self.DENIALS):
+            raise PermissionError('sample_permission_denied')
+        self.tails[channel] = lower[-(max(map(len, self.DENIALS)) - 1):]
+        pieces = data.split(b'\n')
+        for index, piece in enumerate(pieces):
+            need(len(self.pending[channel]) + len(piece) <= MAX_SAMPLE_LINE, 'sample_line_bound')
+            self.pending[channel].extend(piece)
+            if index < len(pieces) - 1:
+                self.line(channel, bytes(self.pending[channel]), observed)
+                self.pending[channel].clear()
+
+    def eof(self, channel, observed):
+        if self.pending[channel]:
+            self.line(channel, bytes(self.pending[channel]), observed)
+            self.pending[channel].clear()
+
+    def receipt(self):
+        return {'stdoutBytes': self.counts['stdout'], 'stderrBytes': self.counts['stderr'],
+                'stdoutSHA256': self.hashes['stdout'].hexdigest(),
+                'stderrSHA256': self.hashes['stderr'].hexdigest(),
+                'recognizedCompletionLines': self.completed_lines,
+                'samplingCompletedObservedUptime': self.completed_at,
+                'otherLines': self.other_lines, 'rawOutputSaved': False}
+
+
+def sample_interval(sample, markers):
+    """The observed phase is an upper bound, never an inferred sample duration."""
+    begin, draw = markers.get('ready-began'), markers.get('first-ready-draw')
+    gate, snapshot = markers.get('ready-ended'), markers.get('first-snapshot')
+    output = (sample or {}).get('output', {})
+    completed = output.get('samplingCompletedObservedUptime')
+    reason = 'sampling_completion_phase_unverified'
+    verified = False
+    if sample and completed is not None and output.get('recognizedCompletionLines') == 1:
+        reason = 'readiness_boundary_unverified'
+        if begin and draw and gate:
+            end = min(m['systemUptime'] for m in (gate, snapshot) if m)
+            verified = (begin['systemUptime'] <= draw['systemUptime'] <= sample['startUptime']
+                        <= completed <= end)
+            reason = 'verified_observed_upper_bound' if verified else 'sampling_completion_not_before_boundary'
+    return {'verified': verified, 'reason': reason,
+            'acquisitionStartLowerBoundUptime': (sample or {}).get('startUptime'),
+            'acquisitionEndUpperBoundUptime': completed,
+            'boundSource': 'observed exact stderr completion line',
+            'requestedDurationUsedAsEvidence': False,
+            'reportCompletionUsedAsAcquisitionEnd': False}
 
 class Gap(RuntimeError):
     pass

@@ -295,6 +295,158 @@ class CuratorTests(unittest.TestCase):
         self.assertFalse(result['completeCallTreeClaimed'])
 
 
+class SampleCompletionTests(unittest.TestCase):
+    completed = b'Sampling completed, processing symbols...\n'
+
+    def marks(self, end=1003, snapshot=1002.5):
+        return {'ready-began': {'systemUptime': 999}, 'first-ready-draw': {'systemUptime': 999.9},
+                'ready-ended': {'systemUptime': end} if end is not None else None,
+                'first-snapshot': {'systemUptime': snapshot} if snapshot is not None else None}
+
+    def interval(self, output, **kwargs):
+        return diagnostic.SUPPORT['sample_interval'](
+            {'startUptime': 1000, 'endUptime': 1009, 'requestedSeconds': 2, 'output': output.receipt()},
+            self.marks(**kwargs))
+
+    def test_split_completion_uses_observation_time_and_not_report_end(self):
+        output = diagnostic.SUPPORT['SampleOutput']()
+        output.feed('stderr', self.completed[:12], 1001)
+        output.feed('stderr', self.completed[12:], 1002.1)
+        result = self.interval(output)
+        self.assertTrue(result['verified'])
+        self.assertEqual(result['acquisitionEndUpperBoundUptime'], 1002.1)
+        self.assertFalse(result['requestedDurationUsedAsEvidence'])
+        self.assertFalse(result['reportCompletionUsedAsAcquisitionEnd'])
+
+    def test_missing_unknown_stdout_or_duplicate_phase_cannot_prove_interval(self):
+        for channel, line in (('stderr', b'unknown phase\n'), ('stdout', self.completed),
+                              ('stderr', self.completed * 2), ('stderr', b'')):
+            output = diagnostic.SUPPORT['SampleOutput'](); output.feed(channel, line, 1002)
+            self.assertFalse(self.interval(output)['verified'])
+
+    def test_late_phase_or_missing_gate_keeps_timing_unverified(self):
+        output = diagnostic.SUPPORT['SampleOutput'](); output.feed('stderr', self.completed, 1002.8)
+        self.assertFalse(self.interval(output)['verified'])
+        self.assertFalse(self.interval(output, end=None)['verified'])
+        self.assertTrue(self.interval(output, snapshot=None)['verified'])
+
+    def test_denial_split_across_chunks_is_terminal_on_either_pipe(self):
+        for channel in ('stdout', 'stderr'):
+            output = diagnostic.SUPPORT['SampleOutput']()
+            output.feed(channel, b'Operation not ', 1000)
+            with self.assertRaises(PermissionError): output.feed(channel, b'permitted\n', 1001)
+
+    def test_output_and_partial_line_are_bounded_without_raw_retention(self):
+        output = diagnostic.SUPPORT['SampleOutput']()
+        with self.assertRaisesRegex(RuntimeError, 'sample_line_bound'):
+            output.feed('stderr', b'x' * 4097, 1000)
+        output = diagnostic.SUPPORT['SampleOutput']()
+        for _ in range(16): output.feed('stdout', b'x\n' * 32768, 1000)
+        with self.assertRaisesRegex(RuntimeError, 'sample_output_bound'):
+            output.feed('stderr', b'x', 1000)
+        self.assertFalse(output.receipt()['rawOutputSaved'])
+        self.assertNotIn('xxx', json.dumps(output.receipt()))
+
+    def run_collector(self, events, native_at=None, failure=None):
+        clock = FakeClock(); proc = Mock(); proc.returncode = None
+        proc.poll.side_effect = lambda: proc.returncode
+        state = {'active': True}; record = {}
+        class Pipes:
+            def __init__(self, _): self.events = iter(events)
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def active(self): return state['active']
+            def read(self, _):
+                seconds, data, exit_code = next(self.events)
+                clock.advance(seconds)
+                if exit_code is not None:
+                    proc.returncode = exit_code; state['active'] = False
+                return [('stderr', data, clock.now)]
+        def marks():
+            return {'first-snapshot': {'systemUptime': 1003} if clock.now >= 1003 else None,
+                    'ready-ended': {'systemUptime': 1004} if clock.now >= 1004 else None}
+        def stop(_): proc.returncode = -15
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(diagnostic, 'SamplePipes', Pipes), \
+             patch.object(diagnostic.time, 'monotonic', clock.monotonic), \
+             patch.object(diagnostic, 'stop_owned', side_effect=stop) as stopper:
+            action = lambda: diagnostic.collect_sample(proc, Path(tmp) / 'absent', 1000, marks,
+                        lambda: native_at is not None and clock.now >= native_at, record)
+            if failure:
+                with self.assertRaisesRegex(failure[0], failure[1]): action()
+            else: action()
+        return record, stopper
+
+    def test_snapshot_and_native_completion_do_not_kill_delayed_report(self):
+        record, stopper = self.run_collector([
+            (2.1, self.completed, None), (1.5, b'reporting\n', None), (2, b'', 0)], native_at=1003)
+        stopper.assert_not_called()
+        self.assertEqual(record['exitCode'], 0)
+        self.assertEqual(record['output']['samplingCompletedObservedUptime'], 1002.1)
+        self.assertGreater(record['endUptime'], 1004)
+        self.assertIsNotNone(record['nativeEndedObservedUptime'])
+        self.assertIsNotNone(record['boundaryObservedUptime'])
+
+    def test_watchdog_denial_and_output_overflow_stop_owned_process_once(self):
+        cases = [([(1, b'progress\n', None)] * 16, RuntimeError, 'sample_watchdog'),
+                 ([(.1, b'permission denied\n', None)], PermissionError, 'sample_permission_denied'),
+                 ([(.1, b'x' * 4097, None)], RuntimeError, 'sample_line_bound')]
+        for events, error, code in cases:
+            record, stopper = self.run_collector(events, failure=(error, code))
+            stopper.assert_called_once()
+            self.assertEqual(record['exitCode'], -15)
+            self.assertEqual(record['interruption'], code)
+
+    def test_nonzero_sampler_is_retained_without_native_result_reclassification(self):
+        record, stopper = self.run_collector([(2.1, self.completed, None), (.1, b'', 1)])
+        stopper.assert_not_called()
+        self.assertEqual(record['exitCode'], 1)
+        self.assertNotIn('nativeResult', record)
+
+    def test_profiles_retained_for_timing_gaps_and_partial_failure_but_never_after_denial(self):
+        cases = [(None, None), (1002.1, None), (1003.5, None),
+                 (None, diagnostic.SUPPORT['Gap']('sample_watchdog')),
+                 (None, PermissionError('sample_permission_denied'))]
+        for phase_at, error in cases:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); clock = FakeClock()
+                observer = diagnostic.Observer(root, 'owned-device', NONCE)
+                observer.bind = Mock(); observer.installed_app = root / 'Wander.app'
+                observer.directory = root; observer.thread = Mock(); observer.thread.is_alive.return_value = False
+                draw = {'systemUptime': 999.9, 'pid': 12345, 'epoch': 1}
+                def marks():
+                    return {'ready-began': {'systemUptime': 999}, 'first-ready-draw': draw,
+                            'first-snapshot': {'systemUptime': 1003} if clock.now >= 1003 else None,
+                            'ready-ended': {'systemUptime': 1004} if clock.now >= 1004 else None}
+                observer.markers = marks
+                proc = Mock(); proc.returncode = 0; proc.poll.return_value = 0
+                def launch(argv, **_):
+                    Path(argv[-1]).write_bytes(b'Call graph:\n  2 PHWebPEncode (in phlibwebp) + 1\n')
+                    return proc
+                def collect(_, scratch, started, __, ___, record):
+                    output = diagnostic.SUPPORT['SampleOutput']()
+                    if phase_at is not None: output.feed('stderr', self.completed, phase_at)
+                    record.update(startUptime=started, endUptime=1006, output=output.receipt(), exitCode=0)
+                    clock.now = 1006
+                    if error is not None: raise error
+                with patch.object(diagnostic.time, 'monotonic', clock.monotonic), \
+                     patch.object(diagnostic, 'process_identity', return_value='same') as identity, \
+                     patch.object(diagnostic.subprocess, 'Popen', side_effect=launch) as launch_mock, \
+                     patch.object(diagnostic, 'bounded_bytes', wraps=diagnostic.bounded_bytes) as reads, \
+                     patch.object(diagnostic, 'collect_sample', side_effect=collect):
+                    observer.watch(); result = observer.finish()
+                denied = isinstance(error, PermissionError)
+                self.assertEqual((root / 'static-profile.json').is_file(), not denied)
+                self.assertEqual(reads.call_count, 0 if denied else 1)
+                self.assertEqual(identity.call_count, 2 if error is None else 1)
+                launch_mock.assert_called_once()
+                self.assertEqual(launch_mock.call_args.args[0][:5], ['/usr/bin/sample', '12345', '2', '10', '-mayDie'])
+                self.assertEqual(result['intervalVerifiedBeforeFirstSnapshotAndGateEnd'], phase_at == 1002.1)
+                self.assertEqual(result['status'], 'SampledPendingProductVerification' if phase_at == 1002.1 else 'Gap')
+                self.assertFalse(result['acceptanceClaimed'])
+                if error is not None: self.assertEqual(result['reason'], str(error))
+
+
 class NativeAccountingTests(unittest.TestCase):
     def fixture(self, native=0):
         result = 'Passed' if native == 0 else 'Failed'
