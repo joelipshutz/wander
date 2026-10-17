@@ -14,6 +14,10 @@ BUNDLE = 'com.grayline.wander'
 SDK = 'ee5b5705b0038f0c44646cde5fe972bb65387596'
 PHASES = ('ready-began', 'first-ready-draw', 'first-snapshot', 'ready-ended')
 MARKER_PREFIX = 'REC636-ReplayDiagnostic-'
+BIND_TOTAL_SECONDS = 120
+LOOKUP_MAX_SECONDS = 10
+LOOKUP_CLEANUP_SECONDS = 15  # stop_owned: at most 10s TERM grace plus 5s reap.
+UNBOUND_POLL_SECONDS = 1
 
 
 def marker_basename(nonce):
@@ -185,25 +189,34 @@ class Observer:
         self.earliest = time.time(); self.stop = threading.Event(); self.thread = None
         self.report = {'status': 'Pending', 'sampleAttempts': 0, 'acceptanceClaimed': False}
 
-    def lookup(self, kind, attempt):
-        return current_container(self.device, kind, self.output, f'rebind-{kind}-{attempt:03d}')
+    def lookup(self, kind, attempt, timeout):
+        return current_container(self.device, kind, self.output, f'rebind-{kind}-{attempt:03d}', timeout=timeout)
 
     def bind(self):
         """Only successful unchanged state is polled; failed lookups stop sampling."""
-        started = time.monotonic(); deadline = started + 120
+        started = time.monotonic(); deadline = started + BIND_TOTAL_SECONDS
+        self.report['bindingPolicy'] = {'totalSeconds': BIND_TOTAL_SECONDS, 'lookupMaximumSeconds': LOOKUP_MAX_SECONDS,
+            'cleanupReserveSeconds': LOOKUP_CLEANUP_SECONDS, 'successfulUnboundPollSeconds': UNBOUND_POLL_SECONDS}
+        def lookup(kind, attempt):
+            # A single synchronous call owns its process through completion or cleanup.
+            # Do not start another call when its cleanup cannot fit in the admission budget.
+            timeout = min(LOOKUP_MAX_SECONDS, deadline - time.monotonic() - LOOKUP_CLEANUP_SECONDS)
+            need(not self.stop.is_set() and timeout > 0, 'native_ended_or_rebind_deadline')
+            if kind == 'data': self.report['dataContainerQueries'] = attempt
+            return self.lookup(kind, attempt, timeout=timeout)
         for attempt in range(1, 121):
-            need(not self.stop.is_set() and time.monotonic() < deadline, 'native_ended_or_rebind_deadline')
-            self.report['dataContainerQueries'] = attempt
-            container = self.lookup('data', attempt)
+            container = lookup('data', attempt)
             directory = marker_directory(container, self.nonce)
             if directory.is_dir():
-                installed = self.lookup('app', attempt)
+                installed = lookup('app', attempt)
                 self.directory, self.installed_app = directory, installed
                 self.report['binding'] = {'beganUptime': started, 'endedUptime': time.monotonic(),
                     'dataPathSHA256': hashlib.sha256(str(container).encode()).hexdigest(),
                     'appPathSHA256': hashlib.sha256(str(installed).encode()).hexdigest()}
                 return
-            self.stop.wait(.25)
+            remaining = deadline - time.monotonic() - LOOKUP_CLEANUP_SECONDS
+            need(remaining > 0, 'native_ended_or_rebind_deadline')
+            self.stop.wait(min(UNBOUND_POLL_SECONDS, remaining))
         raise SUPPORT['Gap']('marker_container_not_bound')
 
     def markers(self):

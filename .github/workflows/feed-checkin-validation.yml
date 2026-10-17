@@ -1,4 +1,4 @@
-name: REC-636 runtime failure diagnostics
+name: REC-636 Replay collector diagnostic
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rec636-runtime-diagnostic-${{ github.ref }}
+  group: rec636-replay-collector-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
           ref: ${{ github.sha }}
           lfs: true
           persist-credentials: false
-      - name: Prepare the exact diagnostic source and simulators
+      - name: Prepare exact diagnostic source and headless Simulator
         run: |
           brew install xcodegen
           xcodegen generate
@@ -30,7 +30,7 @@ jobs:
           from pathlib import Path
           rows = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
           selected = {}
-          for key, names in [('LARGE_DEVICE_ID',['iPhone 17 Pro']),('SMALL_DEVICE_ID',['iPhone 17e','iPhone 16e','iPhone SE (3rd generation)'])]:
+          for key, names in [('LARGE_DEVICE_ID',['iPhone 17 Pro'])]:
               for name in names:
                   choices = [(tuple(map(int,re.findall(r'\d+',runtime))), d) for runtime, devices in rows.items() if 'iOS' in runtime for d in devices if d['name'] == name]
                   if choices:
@@ -65,81 +65,10 @@ jobs:
             --expected-head "$GITHUB_SHA" \
             --sdk-checkout "$RUNNER_TEMP/DerivedData/SourcePackages/checkouts/posthog-ios" \
             --expected-sdk ee5b5705b0038f0c44646cde5fe972bb65387596
-      - name: Prepare the compact diagnostic device
-        id: compact-prepare
-        if: ${{ !cancelled() && steps.products.outcome == 'success' }}
-        run: |
-          xcrun simctl shutdown "$LARGE_DEVICE_ID"
-          xcrun simctl bootstatus "$SMALL_DEVICE_ID" -b
-      - name: Observe compact filter input once
-        if: ${{ !cancelled() && steps.compact-prepare.outcome == 'success' }}
-        run: |
-          python3 -c 'import os,time; from pathlib import Path; (Path(os.environ["RUNNER_TEMP"])/"rec636-diagnostic/compact-filter-start.txt").write_text(str(time.time()))'
-          xcodebuild test-without-building -quiet \
-            -testProductsPath "$RUNNER_TEMP/Diagnostic.xctestproducts" \
-            -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID" \
-            -jobs 1 -parallel-testing-enabled NO \
-            -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
-            -maximum-test-execution-time-allowance 900 \
-            -resultBundlePath "$RUNNER_TEMP/rec636-diagnostic/compact-filter.xcresult"
-      - name: Retain the compact synthetic native-input trace
-        if: ${{ !cancelled() && steps.compact-prepare.outcome == 'success' }}
-        env:
-          TRACE_DEVICE_KEY: SMALL_DEVICE_ID
-          TRACE_NAME: compact-filter
-        run: python3 -B scripts/diagnostics/export-native-input-trace.py
-      - name: Prepare the original Parent performance display conditions
-        id: pan-prepare
-        if: ${{ !cancelled() && steps.products.outcome == 'success' }}
-        run: |
-          xcrun simctl shutdown "$SMALL_DEVICE_ID"
-          xcrun simctl bootstatus "$LARGE_DEVICE_ID" -b
-          xcrun simctl ui "$LARGE_DEVICE_ID" appearance dark
-          xcrun simctl ui "$LARGE_DEVICE_ID" appearance light
-          xcrun simctl shutdown "$LARGE_DEVICE_ID"
-          xcrun simctl bootstatus "$LARGE_DEVICE_ID" -b
-          open -a Simulator --args -CurrentDeviceUDID "$LARGE_DEVICE_ID"
-      - name: Observe the original selected-pin pan once
-        if: ${{ !cancelled() && steps.pan-prepare.outcome == 'success' }}
-        run: |
-          python3 - <<'PY'
-          import hashlib, json, os, plistlib, runpy, subprocess, time
-          from pathlib import Path
-          root=Path(os.environ['RUNNER_TEMP']); products=root/'Diagnostic.xctestproducts'; out=root/'rec636-diagnostic'
-          entries=plistlib.loads((products/'Info.plist').read_bytes())['Tests']
-          paths={(products/e['xctestrun']).resolve() for e in entries}
-          assert all(p.is_relative_to(products.resolve()) and not p.is_symlink() for p in paths)
-          originals={p:p.read_bytes() for p in paths}
-          (out/'map-pan-start.txt').write_text(str(time.time()))
-          code=2
-          try:
-              runner=runpy.run_path('scripts/run-parent-regression.py')
-              runner['prepare_ui_performance_products'](products,preserve_system_failures=False)
-              code=subprocess.run(['xcodebuild','test-without-building','-quiet','-testProductsPath',str(products),
-                  '-destination','platform=iOS Simulator,id='+os.environ['LARGE_DEVICE_ID'],
-                  '-jobs','2','-parallel-testing-enabled','NO',
-                  '-only-testing:WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork',
-                  '-test-timeouts-enabled','YES','-default-test-execution-time-allowance','600',
-                  '-maximum-test-execution-time-allowance','900',
-                  '-resultBundlePath',str(out/'map-pan.xcresult')]).returncode
-          finally:
-              for path,data in originals.items(): path.write_bytes(data)
-              assert all(p.read_bytes()==data for p,data in originals.items())
-              (out/'map-pan-configuration.json').write_text(json.dumps({'restored':True,'nativeExitCode':code,
-                  'originalSHA256':{str(p.relative_to(products)):hashlib.sha256(data).hexdigest() for p,data in originals.items()}}))
-          raise SystemExit(code)
-          PY
-      - name: Retain only the synthetic native-input trace
-        if: ${{ !cancelled() && steps.pan-prepare.outcome == 'success' }}
-        env:
-          TRACE_DEVICE_KEY: LARGE_DEVICE_ID
-          TRACE_NAME: map-pan
-        run: python3 -B scripts/diagnostics/export-native-input-trace.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rec636-runtime-diagnostic
+          name: rec636-replay-collector-diagnostic
           path: ${{ runner.temp }}/rec636-diagnostic
           retention-days: 7
           if-no-files-found: error

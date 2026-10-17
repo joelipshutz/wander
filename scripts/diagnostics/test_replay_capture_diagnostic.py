@@ -1,13 +1,20 @@
 """Pure contracts; never invokes Simulator, xcodebuild, libproc, or sample."""
 from pathlib import Path
 import copy, importlib.util, json, os, plistlib, re, runpy, tempfile, time, unittest, uuid
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('replay_diagnostic', HERE / 'replay-capture-diagnostic.py')
 diagnostic = importlib.util.module_from_spec(spec); spec.loader.exec_module(diagnostic)
 NONCE = '801556D6-F35A-4E9B-B1CE-AF19FECC01C2'
 MARKER = diagnostic.marker_basename(NONCE)
+
+
+class FakeClock:
+    def __init__(self): self.now, self.waits = 1000.0, []
+    def monotonic(self): return self.now
+    def advance(self, seconds): self.now += seconds
+    def wait(self, seconds): self.waits.append(seconds); self.advance(seconds); return False
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -106,7 +113,8 @@ class ContainerBindingTests(unittest.TestCase):
             observer = self.observer(root, [old, new, app]); observer.bind()
             self.assertEqual(observer.directory, new / 'tmp' / MARKER)
             self.assertEqual(observer.installed_app, app)
-            self.assertEqual(observer.lookup.call_args_list, [(('data', 1),), (('data', 2),), (('app', 2),)])
+            self.assertEqual(observer.lookup.call_args_list,
+                [call('data', 1, timeout=10), call('data', 2, timeout=10), call('app', 2, timeout=10)])
             self.assertFalse((old / 'tmp' / MARKER).exists())
 
     def test_unchanged_container_is_admitted_without_waiting_for_relocation(self):
@@ -138,8 +146,85 @@ class ContainerBindingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve(); container = self.container(root, 'data')
             observer = self.observer(root, [container] * 120)
-            with self.assertRaisesRegex(RuntimeError, 'marker_container_not_bound'): observer.bind()
-            self.assertEqual(observer.lookup.call_count, 120)
+            clock = FakeClock(); observer.stop.wait = clock.wait
+            with patch.object(diagnostic.time, 'monotonic', clock.monotonic):
+                with self.assertRaisesRegex(RuntimeError, 'native_ended_or_rebind_deadline'): observer.bind()
+            self.assertEqual(observer.lookup.call_count, 105)
+            self.assertEqual(clock.waits, [1] * 105)
+            self.assertEqual(clock.now, 1105)
+            self.assertEqual(observer.report['dataContainerQueries'], 105)
+
+    def test_slow_successful_lookup_is_admitted_with_sequential_one_second_spacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); old = self.container(root, 'old'); new = self.container(root, 'new', marker=True)
+            app = root / 'new-app/Wander.app'; clock = FakeClock(); active = 0; maximum = 0; calls = []
+            responses = iter([(5.43, old), (.3, new), (.1, app)])
+            def lookup(kind, attempt, timeout):
+                nonlocal active, maximum
+                active += 1; maximum = max(maximum, active)
+                try:
+                    elapsed, result = next(responses); self.assertLessEqual(elapsed, timeout)
+                    calls.append((kind, attempt, clock.now, timeout)); clock.advance(elapsed)
+                    return result
+                finally: active -= 1
+            observer = self.observer(root, []); observer.lookup = lookup; observer.stop.wait = clock.wait
+            with patch.object(diagnostic.time, 'monotonic', clock.monotonic): observer.bind()
+            self.assertEqual(maximum, 1); self.assertEqual(active, 0)
+            self.assertEqual(clock.waits, [1]); self.assertAlmostEqual(calls[1][2] - calls[0][2], 6.43)
+            self.assertEqual([row[3] for row in calls], [10, 10, 10])
+            self.assertEqual(observer.installed_app, app)
+
+    def test_timeout_budget_reserves_cleanup_inside_total_admission_and_never_retries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); old = self.container(root, 'old'); clock = FakeClock(); budgets = []
+            def lookup(kind, attempt, timeout):
+                budgets.append(timeout); clock.advance(timeout)
+                if attempt == 10:
+                    clock.advance(15)  # Worst-case owned-process TERM grace and reap.
+                    raise TimeoutError('simulated lookup timeout')
+                return old
+            observer = self.observer(root, []); observer.lookup = Mock(side_effect=lookup); observer.stop.wait = clock.wait
+            with patch.object(diagnostic.time, 'monotonic', clock.monotonic):
+                with self.assertRaises(TimeoutError): observer.bind()
+            self.assertEqual(budgets, [10] * 9 + [6])
+            self.assertEqual(observer.lookup.call_count, 10); self.assertEqual(clock.now, 1120)
+            self.assertEqual(clock.waits, [1] * 9); self.assertIsNone(observer.directory)
+
+    def test_app_lookup_shares_the_same_remaining_budget_and_cleanup_reserve(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); old = self.container(root, 'old'); new = self.container(root, 'new', marker=True)
+            clock = FakeClock(); calls = []
+            def lookup(kind, attempt, timeout):
+                calls.append((kind, attempt, timeout))
+                if kind == 'app':
+                    clock.advance(timeout + 15); raise TimeoutError('simulated app lookup timeout')
+                clock.advance(10 if attempt < 10 else 4)
+                return old if attempt < 10 else new
+            observer = self.observer(root, []); observer.lookup = lookup; observer.stop.wait = clock.wait
+            with patch.object(diagnostic.time, 'monotonic', clock.monotonic):
+                with self.assertRaises(TimeoutError): observer.bind()
+            self.assertEqual(calls[-2:], [('data', 10, 6), ('app', 10, 2)])
+            self.assertEqual(len(calls), 11); self.assertEqual(clock.now, 1120)
+            self.assertIsNone(observer.directory); self.assertIsNone(observer.installed_app)
+
+    def test_failed_lookup_has_no_success_spacing_or_additional_app_lookup(self):
+        for error in (PermissionError('denied'), diagnostic.SUPPORT['Gap']('lookup_failed'), TimeoutError()):
+            observer = self.observer(Path('/unused'), [error]); clock = FakeClock(); observer.stop.wait = clock.wait
+            with patch.object(diagnostic.time, 'monotonic', clock.monotonic):
+                with self.assertRaises(type(error)): observer.bind()
+            self.assertEqual(observer.lookup.call_args_list, [call('data', 1, timeout=10)])
+            self.assertEqual(clock.waits, [])
+
+    def test_late_first_draw_still_cannot_start_sampler(self):
+        observer = self.observer(Path('/unused'), []); observer.bind = Mock()
+        observer.markers = Mock(return_value={'ready-began': {'systemUptime': 90},
+            'first-ready-draw': {'systemUptime': 97}, 'first-snapshot': None, 'ready-ended': None})
+        with patch.object(diagnostic.time, 'monotonic', return_value=100), \
+             patch.object(diagnostic, 'process_identity') as identity, patch.object(diagnostic.subprocess, 'Popen') as process:
+            observer.watch()
+            identity.assert_not_called(); process.assert_not_called()
+        self.assertEqual(observer.report['reason'], 'sample_trigger_late')
+        self.assertEqual(observer.report['sampleAttempts'], 0)
 
     def test_post_native_verification_does_not_retry_denied_or_unbound_lookup(self):
         for denied in (True, False):
