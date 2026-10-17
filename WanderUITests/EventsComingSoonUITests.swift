@@ -89,10 +89,14 @@ import UIKit
         XCUIDevice.shared.appearance = isLight ? .light : .dark
         XCTAssertEqual(XCUIDevice.shared.appearance, isLight ? .light : .dark)
         let mode = isLight ? "Light" : "Dark"
+        let observesFirstEventsSelection = isLight
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
         configureNotificationReminderFixture(in: app)
+        if observesFirstEventsSelection {
+            app.launchArguments += ["-WanderNativeRecipientDiagnostic", "-WanderEventsInputDiagnostic"]
+        }
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
         let tabs = app.tabBars.firstMatch
@@ -112,7 +116,24 @@ import UIKit
                        "Requested \(mode), device \(XCUIDevice.shared.appearance), rendered luminance \(initialPixels.luminance); \(app.tabBars.firstMatch.value as? String ?? "no appearance probe")")
         for (index, label) in ["Events", "Feed", "Events", "Lists", "Events", "Profile", "Events", "Map"].enumerated() {
             tabs.buttons[label].tap()
-            XCTAssertTrue(tabs.buttons[label].isSelected)
+            if observesFirstEventsSelection && index == 0 {
+                // Evaluate the original immediate verdict once, before the
+                // diagnostic AX read. No wait, retry or second selection query.
+                let selected = tabs.buttons[label].isSelected
+                let decidedAt = ProcessInfo.processInfo.systemUptime
+                // Retain the original verdict before any diagnostic AX access,
+                // including a probe query that could itself abort the test.
+                let verdictJSON = "{\"schema\":1,\"stage\":\"firstEventsSelectionVerdict\",\"immediateSelectionVerdict\":\(selected),\"decisionUptime\":\(decidedAt)}"
+                let verdict = XCTAttachment(data: Data(verdictJSON.utf8), uniformTypeIdentifier: "public.json")
+                verdict.name = "REC636-first-events-immediate-verdict"
+                verdict.lifetime = .keepAlways
+                add(verdict)
+                let traceAvailable = attachFirstEventsSelection(in: app, selected: selected, decidedAt: decidedAt)
+                XCTAssertTrue(selected)
+                XCTAssertTrue(traceAvailable, "The diagnostic trace must be readable; this does not replace the selection verdict.")
+            } else {
+                XCTAssertTrue(tabs.buttons[label].isSelected)
+            }
             if label == "Events" {
                 let artwork = app.descendants(matching: .any)["events.comingSoon"].firstMatch
                 XCTAssertGreaterThanOrEqual(artwork.frame.maxY, app.windows.firstMatch.frame.maxY - 1,
@@ -284,6 +305,34 @@ import UIKit
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func attachFirstEventsSelection(in app: XCUIApplication, selected: Bool, decidedAt: Double) -> Bool {
+        var payload: [String: Any] = ["schema": 1, "stage": "firstEventsSelection",
+            "immediateSelectionVerdict": selected, "decisionUptime": decidedAt, "traceStatus": "Gap"]
+        let probe = app.staticTexts["rec636.nativeInputDiagnostic"]
+        if probe.exists, let raw = probe.value as? String,
+           let data = raw.data(using: .utf8), data.count <= 65_536,
+           let trace = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           trace["schema"] as? Int == 3, trace["fixture"] as? String == "events-map",
+           trace["attached"] as? Bool == true {
+            payload["traceStatus"] = "Captured"
+            payload["nativeTrace"] = trace
+        }
+        var data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        if data == nil || data!.count > 65_536 {
+            payload.removeValue(forKey: "nativeTrace")
+            payload["traceStatus"] = "Gap"
+            payload["reason"] = "attachment_size_or_encoding"
+            data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        }
+        if let data {
+            let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+            attachment.name = "REC636-first-events-selection"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        return payload["traceStatus"] as? String == "Captured"
     }
 
     private func configureNotificationReminderFixture(in app: XCUIApplication) {

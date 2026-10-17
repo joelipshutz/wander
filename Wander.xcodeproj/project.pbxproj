@@ -286,6 +286,7 @@
 		802B6E19ED265CAD0AE34C82 /* SyncStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4A6B29FC1235EFF60DA19D /* SyncStateMachineTests.swift */; };
 		80F420A73A50234D404C2E3A /* CheckInQuestionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C55F70820CC2A62CA24D1BC /* CheckInQuestionUITests.swift */; };
 		812F84570207D139A528319C /* DiscoverScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0322598C99E44A8C80A90F4E /* DiscoverScreen.swift */; };
+		81BDB0FC3FB4664BDD1DF0CD /* NativeInputRecipientDiagnostic.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C4EB1ECBB2A3F68A34A56D /* NativeInputRecipientDiagnostic.swift */; };
 		838432284A234609CEAF9E64 /* ProfileAlignmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81E46FA8A9698B8D338A19F /* ProfileAlignmentUITests.swift */; };
 		83882725B1B0F79C773EE744 /* rec-195-test-streak-control-visible-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */; };
 		83E1B3A403BBF16CE319CA21 /* CommonGroundInvitationDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA7107F97AB4EBA21217D1D6 /* CommonGroundInvitationDraft.swift */; };
@@ -995,6 +996,7 @@
 		AEA406C00A5D6B89E58C8ED5 /* rec-161-profile-ratings-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-161-profile-ratings-pre.json"; sourceTree = "<group>"; };
 		AED328375152E3181B06DC6E /* WanderPlaceEmojiResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceEmojiResolver.swift; sourceTree = "<group>"; };
 		AEFE0C041379DF5F5E0E2E0C /* NativeAuthFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAuthFlowView.swift; sourceTree = "<group>"; };
+		B0C4EB1ECBB2A3F68A34A56D /* NativeInputRecipientDiagnostic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeInputRecipientDiagnostic.swift; sourceTree = "<group>"; };
 		B1D0D6F2A428D44F582D3E4B /* WanderNearbyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WanderNearbyWidgets.entitlements; sourceTree = "<group>"; };
 		B28AE098B922FF49B3F875B4 /* OnboardingPlacePhotoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPlacePhotoTests.swift; sourceTree = "<group>"; };
 		B2A8B8950E99A02E74DD90DE /* LiveIntroductionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveIntroductionViews.swift; sourceTree = "<group>"; };
@@ -1885,6 +1887,7 @@
 				73F1E08A489F203F67F25F17 /* AppBrand.swift */,
 				55E1982754D8F9C0128D97CB /* AppEntryView.swift */,
 				FA04222274EEE469DC168630 /* FeatureFlags.swift */,
+				B0C4EB1ECBB2A3F68A34A56D /* NativeInputRecipientDiagnostic.swift */,
 				0078639327C81EA5F98400B4 /* WanderApp.swift */,
 				E850341A28B18117631F62F5 /* WanderBackend.swift */,
 				DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */,
@@ -2570,6 +2573,7 @@
 				131A06FC05C1B798F66EAFF5 /* NUXMapDemonstration.swift in Sources */,
 				C9767E94D131A8D5893C786E /* NUXReviewControls.swift in Sources */,
 				EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */,
+				81BDB0FC3FB4664BDD1DF0CD /* NativeInputRecipientDiagnostic.swift in Sources */,
 				4DE46077B342944F4CF476BB /* NativeOnboardingReviewHost.swift in Sources */,
 				204D9B90F72330685BF13A84 /* NotificationBadgeStore.swift in Sources */,
 				A5F7FF927ECBBA132550152A /* NotificationInboxHost.swift in Sources */,

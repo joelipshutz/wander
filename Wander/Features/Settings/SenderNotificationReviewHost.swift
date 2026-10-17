@@ -185,6 +185,24 @@ struct SenderNotificationReviewHost: View {
                         return await persistAddPlaceSaveSubmission(submission, store: store, backend: nil)
                     }, onRemove: { _ in false }, onClose: { showsForm = false },
                     onSaveCompleted: { _ in showsForm = false })
+                    #if DEBUG && targetEnvironment(simulator)
+                    .overlay(alignment: .topLeading) {
+                        if NativeInputRecipientDiagnostic.fixture == "sender-review" {
+                            ZStack(alignment: .topLeading) {
+                                NativeInputRecipientDiagnosticInstaller()
+                                    .frame(width: 0, height: 0)
+                                    .allowsHitTesting(false)
+                                    .accessibilityHidden(true)
+                                NativeInputRecipientDiagnosticReadout()
+                                    .frame(width: 1, height: 1)
+                                    .allowsHitTesting(false)
+                            }
+                            .padding(.leading, 16)
+                            .padding(.top, 16)
+                            .allowsHitTesting(false)
+                        }
+                    }
+                    #endif
                 }
             }
         }

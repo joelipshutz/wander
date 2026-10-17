@@ -255,6 +255,7 @@ struct WanderApp: App {
 
     var body: some Scene {
         WindowGroup {
+            Group {
             #if DEBUG
             if ReplayFixtureHostPolicy.usesInertRoot {
                 Color.clear
@@ -325,6 +326,26 @@ struct WanderApp: App {
             }
             #else
             appRoot
+            #endif
+            }
+            #if DEBUG && targetEnvironment(simulator)
+            .overlay(alignment: .topLeading) {
+                if NativeInputRecipientDiagnostic.fixture == "live-demo"
+                    || NativeInputRecipientDiagnostic.fixture == "events-map" {
+                    ZStack(alignment: .topLeading) {
+                        NativeInputRecipientDiagnosticInstaller()
+                            .frame(width: 0, height: 0)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                        NativeInputRecipientDiagnosticReadout()
+                            .frame(width: 1, height: 1)
+                            .allowsHitTesting(false)
+                    }
+                    .padding(.leading, 16)
+                    .padding(.top, 16)
+                    .allowsHitTesting(false)
+                }
+            }
             #endif
         }
     }

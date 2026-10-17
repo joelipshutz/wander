@@ -327,8 +327,15 @@ struct LiveScreen: View {
                     controls.padding(.top, 8).padding(.bottom, 8)
                 }
             }
-            .onMapCameraChange(frequency: .onEnd) {
-                viewport = $0.region
+            .onMapCameraChange(frequency: .onEnd) { context in
+                #if DEBUG && targetEnvironment(simulator)
+                NativeInputRecipientDiagnostic.liveCameraEnded(
+                    initial: viewport == nil,
+                    centerChanged: viewport.map { $0.center.latitude != context.region.center.latitude || $0.center.longitude != context.region.center.longitude } ?? false,
+                    spanChanged: viewport.map { $0.span.latitudeDelta != context.region.span.latitudeDelta || $0.span.longitudeDelta != context.region.span.longitudeDelta } ?? false,
+                    userPosition: camera.positionedByUser)
+                #endif
+                viewport = context.region
                 if camera.positionedByUser { didFrame = true }
             }
             .overlay {
@@ -780,6 +787,9 @@ struct LiveScreen: View {
     }
     private func changeDetent(_ value: Int) {
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { detent = min(2, max(0, value)) }
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.record([.liveDrawerCollapsed, .liveDrawerHalf, .liveDrawerExpanded][detent])
+        #endif
     }
     private func startDrawing() {
         guard let viewport, viewport.span.longitudeDelta < 180 else { areaNotice = true; return }
@@ -802,6 +812,9 @@ struct LiveScreen: View {
               let region = LiveMapCameraPolicy.region(coordinates: pins.map { coordinate($0.place) },
                                                       anchor: homeAnchor ?? activity.compactMap(\.place).first.map(coordinate)) else { return }
         camera = .region(region); didFrame = true
+        #if DEBUG && targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.record(.liveInitialFrameApplied)
+        #endif
     }
     private func planPlace(for event: FeedActivity) -> CommonGroundMockPlace? {
         guard let place = event.place, event.actor.id != store.currentUser.id else { return nil }

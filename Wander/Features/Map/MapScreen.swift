@@ -14259,7 +14259,16 @@ struct MapPlaceSaveEditor: View {
 
             if offersSilentControl {
                 SilentSaveToggle(isSilent: Binding(get: { effectiveSilentNotifications },
-                    set: { silentNotifications = $0 }), hasInvitations: !selectedInviteeUserIDs.isEmpty)
+                    set: { requested in
+                        #if DEBUG && targetEnvironment(simulator)
+                        NativeInputRecipientDiagnostic.silentSetterEntered(requested)
+                        #endif
+                        silentNotifications = requested
+                        #if DEBUG && targetEnvironment(simulator)
+                        NativeInputRecipientDiagnostic.silentSetterApplied(stored: silentNotifications,
+                                                                          effective: effectiveSilentNotifications)
+                        #endif
+                    }), hasInvitations: !selectedInviteeUserIDs.isEmpty)
             }
 
             visibilitySection

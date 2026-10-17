@@ -741,10 +741,25 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             "-WanderInitialTab", "discover",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        app.launchArguments.append("-WanderNativeRecipientDiagnostic")
         app.launch()
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
+        guard let value = app.staticTexts["rec636.nativeInputDiagnostic"].value as? String,
+              let data = value.data(using: .utf8), data.count <= 65_536,
+              let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              state["schema"] as? Int == 3,
+              state["fixture"] as? String == "live-demo",
+              state["attached"] as? Bool == true else {
+            capture("native-readout-preflight-gap")
+            XCTFail("The fixture diagnostic must be readable and attached before testing input.")
+            return app
+        }
+        let preflight = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        preflight.name = "REC636-native-input-preflight"
+        preflight.lifetime = .keepAlways
+        add(preflight)
         return app
     }
 
@@ -763,20 +778,38 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         // Read both attributes from one native snapshot within the original budget.
         let observationStart = ProcessInfo.processInfo.systemUptime
         let observationDeadline = observationStart + 5
+        let diagnosticObservations = REC636PredicateObservation()
         let predicate = NSPredicate { _, _ in
             let started = ProcessInfo.processInfo.systemUptime
             var matchedExactCondition = false
+            var snapshotAvailable = false
+            var observedSnapshot: XCUIElementSnapshot?
             if started <= observationDeadline, let snapshot = try? handle.snapshot() {
+                snapshotAvailable = true
                 matchedExactCondition = snapshot.label == "Activity drawer, \(state)"
                     && (snapshot.value as? String)?.hasPrefix(loadedCount) == true
+                observedSnapshot = snapshot
             }
             let finished = ProcessInfo.processInfo.systemUptime
             let withinFiveSeconds = started <= observationDeadline && finished <= observationDeadline
-            return withinFiveSeconds && matchedExactCondition
+            let accepted = withinFiveSeconds && matchedExactCondition
                 && ProcessInfo.processInfo.systemUptime <= observationDeadline
+            // Inspect immutable snapshot metadata only after the original decision.
+            diagnosticObservations.record(started: started, finished: finished,
+                available: snapshotAvailable, condition: matchedExactCondition, accepted: accepted,
+                role: observedSnapshot.map { Int($0.elementType.rawValue) },
+                identifierMatched: observedSnapshot.map { $0.identifier == "live.drawerHandle" },
+                knownState: observedSnapshot.map { ["Activity drawer, collapsed", "Activity drawer, half expanded", "Activity drawer, expanded"].firstIndex(of: $0.label) ?? -1 },
+                valueMatched: observedSnapshot.map { ($0.value as? String)?.hasPrefix(loadedCount) == true })
+            return accepted
         }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: handle)
         let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        diagnosticObservations.attach(to: self, name: "REC636-drawer-predicate-scalars")
+        if postInputCapture != nil {
+            REC636PredicateObservation.attachNativeTrace(to: self, app: app,
+                name: "REC636-drawer-input-scalars", expectedFixture: "live-demo", result: result)
+        }
         if let postInputCapture {
             captureState(postInputCapture, in: app, observations: [
                 "expectedState=\(state); expectedLoadedCount=\(loadedCount); waitResult=\(result)",
@@ -889,12 +922,24 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         zero.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
             .press(forDuration: 0.1, thenDragTo: zero.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)),
                    withVelocity: XCUIGestureVelocity(rawValue: 60), thenHoldForDuration: 0.1)
+        let diagnosticObservations = REC636PredicateObservation()
         let displacement = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard anchor.exists else { return false }
+            let started = ProcessInfo.processInfo.systemUptime
+            guard anchor.exists else {
+                diagnosticObservations.record(started: started, finished: ProcessInfo.processInfo.systemUptime,
+                    available: false, condition: false, accepted: false)
+                return false
+            }
             let after = anchor.frame
-            return self.finite(after) && abs(after.midX - before.midX) > 1
+            let accepted = self.finite(after) && abs(after.midX - before.midX) > 1
+            diagnosticObservations.record(started: started, finished: ProcessInfo.processInfo.systemUptime,
+                available: true, condition: accepted, accepted: accepted)
+            return accepted
         }, object: nil)
         let result = XCTWaiter.wait(for: [displacement], timeout: 5)
+        diagnosticObservations.attach(to: self, name: "REC636-pan-predicate-scalars")
+        REC636PredicateObservation.attachNativeTrace(to: self, app: app,
+            name: "REC636-pan-input-scalars", expectedFixture: "live-demo", result: result)
         let afterFrames = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
             .allElementsBoundByIndex.map { (id: $0.identifier, frame: $0.frame) }
         let diagnostic = XCTAttachment(string: "anchorID=\(anchorID); before=\(before); anchorExists=\(anchor.exists); loadedFrames=\(afterFrames); usable=\(usable); start=\(start); end=\(end); displacementResult=\(result)")
@@ -1185,4 +1230,95 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+}
+
+/// Diagnostic-only scalar observations. No extra AX query, wait, gesture, or
+/// value/label content; original predicates decide their result before recording.
+final class REC636PredicateObservation: @unchecked Sendable {
+    private struct Row: Codable {
+        let started: Double, finished: Double
+        let available: Bool, condition: Bool, accepted: Bool
+        let role: Int?, identifierMatched: Bool?, knownState: Int?, valueMatched: Bool?
+    }
+    private struct Payload: Codable { let rows: [Row]; let dropped: Int }
+    private let lock = NSLock()
+    private var rows: [Row] = []
+    private var dropped = 0
+    func record(started: Double, finished: Double, available: Bool, condition: Bool, accepted: Bool,
+                role: Int? = nil, identifierMatched: Bool? = nil, knownState: Int? = nil, valueMatched: Bool? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        guard rows.count < 16 else { dropped += 1; return }
+        rows.append(.init(started: started, finished: finished,
+                          available: available, condition: condition, accepted: accepted,
+                          role: role, identifierMatched: identifierMatched, knownState: knownState, valueMatched: valueMatched))
+    }
+    @MainActor func attach(to test: XCTestCase, name: String) {
+        lock.lock()
+        let payload = Payload(rows: rows, dropped: dropped)
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(payload), data.count <= 8_192 else {
+            let gap = XCTAttachment(string: "{\"status\":\"Gap\",\"reason\":\"predicate_encoding\"}")
+            gap.name = name; gap.lifetime = .keepAlways; test.add(gap)
+            return
+        }
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = name; attachment.lifetime = .keepAlways
+        test.add(attachment)
+    }
+    @MainActor static func attachNativeTrace(to test: XCTestCase, app: XCUIApplication,
+                                            name: String, expectedFixture: String, result: XCTWaiter.Result) {
+        // Persist the original decision before AX resolution can fail or abort.
+        let verdict: [String: Any] = [
+            "schema": 3, "fixture": expectedFixture,
+            "waitResultRaw": result.rawValue, "completed": result == .completed
+        ]
+        let verdictData = (try? JSONSerialization.data(withJSONObject: verdict, options: [.sortedKeys]))
+            ?? Data("{\"schema\":3,\"status\":\"Gap\",\"reason\":\"verdict_encoding\"}".utf8)
+        let immediateVerdict = XCTAttachment(data: verdictData, uniformTypeIdentifier: "public.json")
+        immediateVerdict.name = name + "-wait-verdict"
+        immediateVerdict.lifetime = .keepAlways
+        test.add(immediateVerdict)
+
+        // O4 established that direct value retains this bounded diagnostic while
+        // immutable snapshot.value can return a truncated, invalid JSON string.
+        let rawValue = app.staticTexts["rec636.nativeInputDiagnostic"].value
+        let value = rawValue as? String
+        let data = value?.data(using: .utf8)
+        let object = data.flatMap { bytes -> [String: Any]? in
+            guard bytes.count <= 65_536 else { return nil }
+            return (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
+        }
+        let safe: Data
+        if let data, data.count <= 65_536,
+           object?["schema"] as? Int == 3,
+           object?["fixture"] as? String == expectedFixture,
+           object?["attached"] as? Bool == true {
+            safe = data
+        } else {
+            // Preserve scalar transport facts; never attach an unexpected value.
+            let reason: String
+            if value == nil { reason = "value_not_string" }
+            else if data == nil { reason = "utf8_unavailable" }
+            else if data!.count > 65_536 { reason = "value_exceeds_bound" }
+            else if object == nil { reason = "json_object_unavailable" }
+            else if object?["schema"] as? Int != 3 { reason = "schema_mismatch" }
+            else if object?["fixture"] as? String != expectedFixture { reason = "fixture_mismatch" }
+            else { reason = "observer_not_attached" }
+            let gap: [String: Any] = [
+                "schema": 3, "status": "Gap", "reason": reason,
+                "fixture": expectedFixture,
+                "valuePresent": rawValue != nil, "valueIsString": value != nil,
+                "utf8Bytes": data?.count ?? -1, "jsonObjectDecoded": object != nil,
+                "schemaMatched": object?["schema"] as? Int == 3,
+                "fixtureMatched": object?["fixture"] as? String == expectedFixture,
+                "observerAttached": object?["attached"] as? Bool == true
+            ]
+            safe = (try? JSONSerialization.data(withJSONObject: gap, options: [.sortedKeys]))
+                ?? Data("{\"schema\":3,\"status\":\"Gap\",\"reason\":\"transport_facts_encoding\"}".utf8)
+        }
+        let attachment = XCTAttachment(data: safe, uniformTypeIdentifier: "public.json")
+        attachment.name = name; attachment.lifetime = .keepAlways
+        test.add(attachment)
+    }
+
 }

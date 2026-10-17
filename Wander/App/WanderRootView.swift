@@ -656,6 +656,9 @@ struct WanderRootView: View {
             }
         }
         .onChange(of: selectedTab, initial: true) { _, tab in
+            #if DEBUG && targetEnvironment(simulator)
+            recordEventsSelection(.selectionChanged, current: tab)
+            #endif
             guard unifiedLiveEnabled else { return }
             if tab == .map {
                 // Existing place/search payloads keep their canonical renderer.
@@ -1373,6 +1376,9 @@ struct WanderRootView: View {
             eventsAccess.cachedSelectionDidChange(userID: changedUserID)
         }
         .onChange(of: eventsAreAvailable) { _, available in
+            #if DEBUG && targetEnvironment(simulator)
+            recordEventsSelection(.eligibilityChanged)
+            #endif
             if !available, selectedTab == .events { selectedTab = .discover }
         }
         .onChange(of: blocksProductUpsellPresentation) { _, isBlocked in
@@ -1386,6 +1392,9 @@ struct WanderRootView: View {
             presentDeferredProductUpsellIfPossible()
         }
         .onChange(of: productUpsells.activePresentation?.id) { _, presentationID in
+            #if DEBUG && targetEnvironment(simulator)
+            recordEventsSelection(.presentationChanged)
+            #endif
             if presentationID == nil {
                 presentDeferredProductUpsellIfPossible()
             } else {
@@ -1427,7 +1436,15 @@ struct WanderRootView: View {
         Binding {
             unifiedLiveEnabled ? LiveNavigationPolicy.tab(for: selectedTab) : EventsAccessPolicy.resolvedTab(selectedTab, metroID: currentHomeMetro)
         } set: { newTab in
-            guard newTab != .events || eventsAreAvailable else { return }
+            #if DEBUG && targetEnvironment(simulator)
+            recordEventsSelection(.setterEntered, requested: newTab)
+            #endif
+            guard newTab != .events || eventsAreAvailable else {
+                #if DEBUG && targetEnvironment(simulator)
+                recordEventsSelection(.eligibilityRejected, requested: newTab)
+                #endif
+                return
+            }
             preserveExplicitEntryDestination()
             guard newTab != selectedTab || newTab == .add else { return }
             if newTab == .add {
@@ -1440,11 +1457,24 @@ struct WanderRootView: View {
                 withTransaction(Transaction(animation: nil)) {
                     selectedTab = newTab
                 }
+                #if DEBUG && targetEnvironment(simulator)
+                recordEventsSelection(.selectionApplied, requested: newTab)
+                #endif
                 presentLaunchLessonIfAppropriate()
                 walkthroughs.activate(walkthroughSurface(for: newTab))
             }
         }
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    private func recordEventsSelection(_ stage: NativeInputRecipientDiagnostic.EventsSelectionStage,
+                                       requested: WanderTab? = nil, current: WanderTab? = nil) {
+        guard NativeInputRecipientDiagnostic.fixture == "events-map" else { return }
+        NativeInputRecipientDiagnostic.eventsSelection(stage, requested: requested,
+            current: current ?? selectedTab, eligible: eventsAreAvailable,
+            activePresentation: productUpsells.activePresentation != nil)
+    }
+    #endif
 
     private var currentHomeMetro: String? { eventsAccess.homeMetro(for: auth.state.session?.userID) }
     private var eventsAreAvailable: Bool { EventsAccessPolicy.isEligible(metroID: currentHomeMetro) }

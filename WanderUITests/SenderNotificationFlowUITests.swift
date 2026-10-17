@@ -5,6 +5,21 @@ import UIKit
 final class SenderNotificationFlowUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    // Diagnostic branch only. No observation query runs before the original input.
+    private var activationDiagnosticApp: XCUIApplication?
+    private var activationWaitStarted = false
+    private var activationFailureCountBefore: Int?
+
+    override func tearDown() async throws {
+        // With continueAfterFailure=false, XCTest can stop the method at its
+        // original wait failure. Teardown observes that already-recorded verdict.
+        // A terminated test runner may omit teardown; that remains missing evidence.
+        if activationDiagnosticApp != nil {
+            attachOriginalActivationObservation(waitReturned: false)
+        }
+        try await super.tearDown()
+    }
+
     func testGalleryCanOpenAndReturnFromNativeScenario() {
         let app = launch("gallery")
         let first = app.buttons["First check-in"]
@@ -180,10 +195,12 @@ final class SenderNotificationFlowUITests: XCTestCase {
     }
 
     func testLargeTextAndDarkNativeControls() {
-        let app = launch("checkIn", extra: ["-WanderSenderDark", "-UIPreferredContentSizeCategoryName", UIContentSizeCategory.accessibilityExtraLarge.rawValue])
+        let app = launch("checkIn", extra: ["-WanderSenderDark", "-UIPreferredContentSizeCategoryName", UIContentSizeCategory.accessibilityExtraLarge.rawValue, "-WanderNativeRecipientDiagnostic"])
         let silent = app.switches["save.silent"]
         reveal(silent, app: app)
         XCTAssertTrue(silent.isHittable)
+        activationDiagnosticApp = app
+        activationFailureCountBefore = testRun?.failureCount
         activate(silent)
         reveal(app.staticTexts["save.silentHelp"], app: app)
         XCTAssertTrue(app.buttons["save.submit"].isHittable)
@@ -392,7 +409,60 @@ final class SenderNotificationFlowUITests: XCTestCase {
         trailing.withOffset(CGVector(dx: -38, dy: 0))
             .press(forDuration: 0.2, thenDragTo: trailing.withOffset(CGVector(dx: -14, dy: 0)))
         let expected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: element)
+        activationWaitStarted = activationDiagnosticApp != nil
         wait(for: [expected], timeout: 5)
+        if activationDiagnosticApp != nil {
+            attachOriginalActivationObservation(waitReturned: true)
+        }
+    }
+
+    private func attachOriginalActivationObservation(waitReturned: Bool) {
+        guard let app = activationDiagnosticApp else { return }
+        // Clear before any attachment or AX access: never observe twice/re-enter.
+        activationDiagnosticApp = nil
+        let after = testRun?.failureCount
+        let failuresAdded = activationFailureCountBefore.flatMap { before in
+            after.map { $0 - before }
+        }
+        let decision: String
+        if !activationWaitStarted { decision = "Gap_original_wait_not_started" }
+        else if let failuresAdded, failuresAdded > 0 { decision = "original_failure_recorded" }
+        else if waitReturned, failuresAdded == 0 { decision = "original_wait_returned_without_failure" }
+        else { decision = "Gap_original_verdict_unavailable" }
+        let verdict: [String: Any] = [
+            "schema": 3, "fixture": "sender-review", "decision": decision,
+            "waitReturned": waitReturned, "waitStarted": activationWaitStarted,
+            "recordedFailuresAdded": failuresAdded ?? -1,
+            "capturePhase": waitReturned ? "after_original_wait" : "test_teardown"
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: verdict, options: [.sortedKeys]))
+            ?? Data("{\"schema\":3,\"status\":\"Gap\",\"reason\":\"verdict_encoding\"}".utf8)
+        let verdictAttachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        verdictAttachment.name = "REC636-original-sender-activation-verdict"
+        verdictAttachment.lifetime = .keepAlways
+        add(verdictAttachment)
+        // The original XCTest verdict is retained before this single AX query.
+        // Do not infer a timeout enum from XCTestCase.wait, which returns Void.
+        guard !decision.hasPrefix("Gap_") else { return }
+        let raw = app.staticTexts["rec636.nativeInputDiagnostic"].value as? String
+        let bytes = raw?.data(using: .utf8)
+        let object = bytes.flatMap { value -> [String: Any]? in
+            guard value.count <= 65_536 else { return nil }
+            return (try? JSONSerialization.jsonObject(with: value)) as? [String: Any]
+        }
+        let trace: Data
+        if let bytes, bytes.count <= 65_536,
+           object?["schema"] as? Int == 3,
+           object?["fixture"] as? String == "sender-review",
+           object?["attached"] as? Bool == true {
+            trace = bytes
+        } else {
+            trace = Data("{\"schema\":3,\"fixture\":\"sender-review\",\"status\":\"Gap\",\"reason\":\"bounded_direct_trace_unavailable\"}".utf8)
+        }
+        let attachment = XCTAttachment(data: trace, uniformTypeIdentifier: "public.json")
+        attachment.name = "REC636-original-sender-activation-trace"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
     private func expectState(_ app: XCUIApplication, contains value: String) {
         let state = app.staticTexts["sender-review.state"]

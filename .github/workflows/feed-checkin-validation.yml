@@ -31,16 +31,31 @@ on:
       - 'WanderUITests/YourMapPrototypeUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Acceptance suites or isolated REC-636 diagnostic
+        type: choice
+        options: [acceptance, rec636-input-v56]
+        default: acceptance
+      expected_commit:
+        description: Required full reviewed diagnostic commit SHA for diagnostic mode
+        type: string
+        default: ''
+      expected_tree:
+        description: Required full reviewed diagnostic tree SHA for diagnostic mode
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: feed-checkin-${{ github.ref }}
-  cancel-in-progress: true
+  group: feed-checkin-${{ github.ref }}${{ inputs.mode == 'rec636-input-v56' && format('-diagnostic-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ inputs.mode != 'rec636-input-v56' }}
 
 jobs:
   native:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'rec636-input-v56' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -233,6 +248,7 @@ jobs:
           retention-days: 14
 
   live-continuity:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'rec636-input-v56' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -428,3 +444,163 @@ jobs:
             ${{ runner.temp }}/live-continuity-compact.xcresult
             ${{ runner.temp }}/live-continuity-*.log
           retention-days: 14
+
+  rec636-input-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-input-v56' }}
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          lfs: true
+      - name: Admit exact diagnostic source, toolchain and simulator pair
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          python3 - <<'PY_ADMIT'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          def command(*args):
+              return subprocess.check_output(args, text=True, timeout=30).strip()
+          def require(value, message):
+              if not value: raise SystemExit(message)
+          out = Path(os.environ['RUNNER_TEMP']) / 'rec636-input'
+          out.mkdir()
+          require(os.environ['GITHUB_REF'] == 'refs/heads/codex/rec636-v56-input-diagnostic', 'Diagnostic branch mismatch')
+          require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'One original diagnostic attempt only')
+          head, tree = command('git','rev-parse','HEAD'), command('git','rev-parse','HEAD^{tree}')
+          require(re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_COMMIT']) and re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_TREE']), 'Full reviewed commit/tree required')
+          require(head == os.environ['EXPECTED_COMMIT'] == os.environ['GITHUB_SHA'] and tree == os.environ['EXPECTED_TREE'], 'Diagnostic source mismatch')
+          require(not command('git','status','--porcelain'), 'Unexpected checkout changes')
+          subprocess.run(['git','merge-base','--is-ancestor','efcccb48b8586c7c62c016fe5ba07aae5e13b003',head], check=True, timeout=30)
+          version = command('xcodebuild','-version').splitlines()
+          require(version == ['Xcode 26.6','Build version 17F113'], 'Reference Xcode unavailable; no fallback')
+          runtime_id = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'
+          runtimes = json.loads(command('xcrun','simctl','list','runtimes','--json'))['runtimes']
+          matches = [x for x in runtimes if x.get('identifier') == runtime_id and x.get('isAvailable')]
+          require(len(matches) == 1 and matches[0].get('version') == '26.5' and matches[0].get('buildversion') == '23F77', 'Reference runtime unavailable; no fallback')
+          devices = json.loads(command('xcrun','simctl','list','devices','available','--json'))['devices'].get(runtime_id, [])
+          selected = {}
+          for label, name in [('large','iPhone 17 Pro'),('compact','iPhone 17e')]:
+              choices = [x for x in devices if x.get('name') == name and x.get('isAvailable')]
+              require(len(choices) == 1, 'Exact unique reference phone required')
+              selected[label] = {'name':name,'udid':choices[0]['udid'],'runtime':runtime_id,'runtimeBuild':'23F77'}
+          sources = ['Wander/App/NativeInputRecipientDiagnostic.swift', 'Wander/App/WanderApp.swift', 'Wander/Features/Live/LiveScreen.swift', 'Wander/Features/Map/MapScreen.swift', 'Wander/Features/Settings/SenderNotificationReviewHost.swift', 'WanderUITests/LiveReviewContinuityUITests.swift', 'WanderUITests/SenderNotificationFlowUITests.swift', 'Wander.xcodeproj/project.pbxproj', 'project.yml', 'Wander/App/WanderRootView.swift', 'WanderUITests/EventsComingSoonUITests.swift', 'WanderTests/ReplayMaskingTests.swift', 'Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Wander/Resources/FoundersWelcome/founders-welcome.mp4', '.github/workflows/feed-checkin-validation.yml']
+          hashes = {p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sources}
+          receipt = {'scope':'diagnostic_only_not_acceptance','baseCommit':'efcccb48b8586c7c62c016fe5ba07aae5e13b003','head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'devices':selected,'sourceSHA256':hashes,'methodExecutions':5,'retryEnabled':False}
+          (out/'source-toolchain.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+              env.write('DIAGNOSTIC_LARGE='+selected['large']['udid']+'\nDIAGNOSTIC_COMPACT='+selected['compact']['udid']+'\n')
+          PY_ADMIT
+      - name: Generate and build the exact diagnostic harness once
+        id: input-build
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          git diff --exit-code -- project.yml Wander.xcodeproj/project.pbxproj
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" \
+            -derivedDataPath "$RUNNER_TEMP/REC636InputDerivedData" -jobs 2 -parallel-testing-enabled NO \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity \
+            -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement \
+            -only-testing:WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits \
+            -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls \
+            -resultBundlePath "$RUNNER_TEMP/rec636-input/build.xcresult" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          python3 - <<'PY_PRODUCTS'
+          import os
+          from pathlib import Path
+          files = list((Path(os.environ['RUNNER_TEMP'])/'REC636InputDerivedData/Build/Products').glob('Wander_iphonesimulator*-arm64.xctestrun'))
+          if len(files) != 1: raise SystemExit('Expected one exact xctestrun')
+          with open(os.environ['GITHUB_ENV'],'a') as out: out.write('DIAGNOSTIC_XCTESTRUN='+str(files[0])+'\n')
+          PY_PRODUCTS
+      - name: Observe three original large-phone cases once
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
+          -only-testing:WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/rec636-input/large.xcresult"
+      - name: Release large phone and prepare compact phone
+        id: input-compact
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' }}
+        run: |
+          python3 - <<'PY_COMPACT'
+          import json, os, subprocess
+          inventory = subprocess.check_output(['xcrun','simctl','list','devices','booted','--json'],text=True,timeout=30)
+          if any(d['udid'] == os.environ['DIAGNOSTIC_LARGE'] for rows in json.loads(inventory)['devices'].values() for d in rows):
+              subprocess.run(['xcrun','simctl','shutdown',os.environ['DIAGNOSTIC_LARGE']],check=True,timeout=60)
+          subprocess.run(['xcrun','simctl','bootstatus',os.environ['DIAGNOSTIC_COMPACT'],'-b'],check=True,timeout=180)
+          PY_COMPACT
+      - name: Observe two original compact-phone cases once
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' && steps.input-compact.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$DIAGNOSTIC_COMPACT" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity
+          -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/rec636-input/compact.xcresult"
+      - name: Preserve original native outcomes and verify selected coverage
+        if: always()
+        run: |
+          python3 - <<'PY_RESULTS'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'rec636-input'
+          out.mkdir(exist_ok=True)
+          problems=[]
+          try:
+              admitted=json.loads((out/'source-toolchain.json').read_text())
+              same={p:hashlib.sha256(Path(p).read_bytes()).hexdigest()==sha for p,sha in admitted['sourceSHA256'].items()}
+              (out/'source-postflight.json').write_text(json.dumps({'unchanged':same},indent=2)+'\n')
+              if not all(same.values()): problems.append('source_drift')
+          except (OSError,ValueError,KeyError): problems.append('source_admission_or_postflight_unavailable')
+          expected={
+              'large':['LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()','LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()','EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits()'],
+              'compact':['LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()','SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()']}
+          def nodes(value):
+              if isinstance(value,dict):
+                  yield value
+                  for child in value.values(): yield from nodes(child)
+              elif isinstance(value,list):
+                  for child in value: yield from nodes(child)
+          records={}
+          for size, methods in expected.items():
+              bundle=out/(size+'.xcresult')
+              if not bundle.is_dir():
+                  records[size]={'status':'missing','required':methods}; problems.append(size+'_missing'); continue
+              exports={}
+              for kind in ['summary','tests']:
+                  try:
+                      raw=subprocess.check_output(['xcrun','xcresulttool','get','test-results',kind,'--path',str(bundle),'--compact'],timeout=90)
+                      (out/(size+'-'+kind+'.json')).write_bytes(raw)
+                      exports[kind]=json.loads(raw)
+                  except (subprocess.SubprocessError,OSError,ValueError): problems.append(size+'_'+kind+'_export')
+              if set(exports)!= {'summary','tests'}: continue
+              cases=[x for x in nodes(exports['tests']) if x.get('nodeType')=='Test Case']
+              actual=[{'method':'/'.join(str(x.get('nodeIdentifier','')).split('/')[-2:]),'result':x.get('result')} for x in cases]
+              summary=exports['summary']
+              exact=sorted(x['method'] for x in actual)==sorted(methods) and len(cases)==summary.get('totalTestCount')
+              passed=exact and all(x['result']=='Passed' for x in actual) and summary.get('result')=='Passed' and summary.get('passedTests')==len(methods) and all(summary.get(k)==0 for k in ['failedTests','skippedTests','expectedFailures'])
+              records[size]={'required':methods,'actual':actual,'exactCoverage':exact,'allPassed':passed,'summarySHA256':hashlib.sha256((out/(size+'-summary.json')).read_bytes()).hexdigest(),'testsSHA256':hashlib.sha256((out/(size+'-tests.json')).read_bytes()).hexdigest()}
+              if not passed: problems.append(size+'_native_failed_or_incomplete')
+          (out/'diagnostic-accounting.json').write_text(json.dumps({'scope':'diagnostic_only_not_acceptance','nativeOutcomesUnchanged':True,'expectedExecutions':5,'devices':records,'gaps':problems},indent=2)+'\n')
+          if problems: raise SystemExit('Diagnostic failure or gap: '+','.join(problems))
+          PY_RESULTS
+      - name: Retain original diagnostic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rec636-input-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/rec636-input
+          retention-days: 14
+          if-no-files-found: error
