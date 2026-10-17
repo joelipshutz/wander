@@ -612,16 +612,16 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let form = filterForm(in: app)
         captureState("filters-initial-before-controls", in: app)
         selectMenu(app.buttons["live.filter.people"], option: "Only Friends", form: form, app: app, selected: {
-            app.buttons["live.filter.people"].exists && app.buttons["live.filter.people"].value as? String == "Only Friends"
+            $0.identifier == "live.filter.people" && $0.value as? String == "Only Friends"
         })
         selectMenu(form.buttons["Activity, Everything"], option: "Wannas", form: form, app: app, selected: {
-            form.buttons["Activity, Wannas"].exists && form.buttons["Activity, Wannas"].label == "Activity, Wannas"
+            $0.label == "Activity, Wannas"
         })
         selectMenu(app.buttons["live.filter.time"], option: "Past 24 hours", form: form, app: app, selected: {
-            app.buttons["live.filter.time"].exists && app.buttons["live.filter.time"].label == "When, Past 24 hours"
+            $0.identifier == "live.filter.time" && $0.label == "When, Past 24 hours"
         })
         selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app, selected: {
-            app.buttons["live.filter.scope"].exists && app.buttons["live.filter.scope"].label == "Scope, Nearby"
+            $0.identifier == "live.filter.scope" && $0.label == "Scope, Nearby"
         })
         let city = app.buttons["live.filter.city"]
         reveal(city, in: form, direction: .down, app: app)
@@ -685,7 +685,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         reveal(app.buttons["live.filter.reset"], in: cancelledForm, direction: .down, app: app)
         app.buttons["live.filter.reset"].tap()
         selectMenu(app.buttons["live.filter.people"], option: "Everyone", form: cancelledForm, direction: .up, app: app, selected: {
-            app.buttons["live.filter.people"].exists && app.buttons["live.filter.people"].value as? String == "Everyone"
+            $0.identifier == "live.filter.people" && $0.value as? String == "Everyone"
         })
         app.navigationBars["Filters"].buttons["Cancel"].tap()
         XCTAssertTrue(app.navigationBars["Filters"].waitForNonExistence(timeout: 5))
@@ -912,7 +912,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func selectMenu(_ picker: XCUIElement, option: String, form: XCUIElement,
-                            direction: Direction = .down, app: XCUIApplication, selected: @escaping () -> Bool) {
+                            direction: Direction = .down, app: XCUIApplication,
+                            selected: @escaping (XCUIElementSnapshot) -> Bool) {
         reveal(picker, in: form, direction: direction, app: app)
         picker.tap()
         // Native Picker options live in the popup collection; the retained
@@ -920,7 +921,28 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
         waitHittable(choice)
         choice.press(forDuration: 0.2)
-        wait(NSPredicate { _, _ in !choice.exists && selected() })
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        wait(NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline,
+                  let snapshot = try? app.snapshot() else { return false }
+            // Resolve once, then observe popup absence and the exact selected
+            // field in the same native tree within the original five seconds.
+            var popupChoicePresent = false
+            var selectedPickerCount = 0
+            @MainActor
+            func visit(_ node: XCUIElementSnapshot, inCollection: Bool, inForm: Bool) {
+                let collection = inCollection || node.elementType == .collectionView
+                let form = inForm || node.identifier == "live.filters.form"
+                if node.elementType == .button {
+                    if collection && node.label == option { popupChoicePresent = true }
+                    if form && selected(node) { selectedPickerCount += 1 }
+                }
+                for child in node.children { visit(child, inCollection: collection, inForm: form) }
+            }
+            visit(snapshot, inCollection: false, inForm: false)
+            return !popupChoicePresent && selectedPickerCount == 1
+                && ProcessInfo.processInfo.systemUptime <= deadline
+        })
     }
 
     private func setOn(_ toggle: XCUIElement, in form: XCUIElement, app: XCUIApplication) {
@@ -986,7 +1008,16 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10) {
-        wait(NSPredicate { _, _ in element.exists && element.isEnabled && element.isHittable }, timeout: timeout)
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        wait(NSPredicate { _, _ in
+            // A successful snapshot resolves existence and enabled state together;
+            // hittability still comes from the genuine native element query.
+            guard ProcessInfo.processInfo.systemUptime <= deadline,
+                  let snapshot = try? element.snapshot(), snapshot.isEnabled,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            let hittable = element.isHittable
+            return hittable && ProcessInfo.processInfo.systemUptime <= deadline
+        }, timeout: timeout)
     }
 
     private func wait(_ predicate: NSPredicate, on element: XCUIElement? = nil, timeout: TimeInterval = 5) {

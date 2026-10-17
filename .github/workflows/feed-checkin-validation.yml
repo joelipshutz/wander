@@ -95,24 +95,64 @@ jobs:
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 360
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Prepare isolated Replay test products once
+        id: replay-products
+        if: success() || failure()
+        run: >-
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
+          -only-testing:WanderTests/ReplayMaskingTests
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       # Replay capture owns process-wide SDK state. Each scenario starts a fresh
       # test host; both remain required checks.
       - name: Verify private-message replay in an isolated process
-        if: success() || failure()
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage
-          -resultBundlePath "$RUNNER_TEMP/replay-private.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-private"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["LARGE_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
       - name: Verify credential replay in an isolated process
-        if: success() || failure()
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage
-          -resultBundlePath "$RUNNER_TEMP/replay-credentials.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-credentials"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["LARGE_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
       - name: Stop large simulator
         if: always()
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
@@ -154,6 +194,10 @@ jobs:
             ${{ runner.temp }}/small.xcresult
             ${{ runner.temp }}/replay-private.xcresult
             ${{ runner.temp }}/replay-credentials.xcresult
+            ${{ runner.temp }}/replay-private-host.json
+            ${{ runner.temp }}/replay-private-host
+            ${{ runner.temp }}/replay-credentials-host.json
+            ${{ runner.temp }}/replay-credentials-host
           retention-days: 14
 
   live-continuity:

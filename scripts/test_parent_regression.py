@@ -269,5 +269,287 @@ class PerformanceProductsTests(unittest.TestCase):
                 regression.prepare_ui_performance_products(root)
 
 
+class ReplayFixtureHostTests(unittest.TestCase):
+    @staticmethod
+    def admission():
+        return {"schema": 1, "requested": True, "mode": "inert", "expected_host": True,
+                "inert_root_mounted": True, "ordinary_root_mounted": False,
+                "admitted": True, "elapsed_ms": 12, "limit_ms": 10000}
+
+    @contextlib.contextmanager
+    def products(self, version=1, arguments=None, extra_unit=False):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            unit = {"BlueprintName": "WanderTests", "ProductModuleName": "WanderTests",
+                    "TestBundlePath": "__TESTROOT__/Wander.app/PlugIns/WanderTests.xctest",
+                    "TestHostPath": "__TESTROOT__/Wander.app/Wander",
+                    "CommandLineArguments": list(arguments or []),
+                    "EnvironmentVariables": {"FICTIONAL_UNRELATED_SETTING": "retained"},
+                    "OnlyTestIdentifiers": ["ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage"],
+                    "UserAttachmentLifetime": "keepAlways"}
+            ui = {"BlueprintName": "WanderUITests", "IsUITestBundle": True,
+                  "CommandLineArguments": ["-UnrelatedUITestArgument"],
+                  "TestBundlePath": "__TESTROOT__/WanderUITests.xctest"}
+            targets = [unit, ui] + ([copy.deepcopy(unit)] if extra_unit else [])
+            document = ({"WanderTests": unit, "WanderUITests": ui,
+                         **({"DuplicateUnit": targets[-1]} if extra_unit else {})} if version == 1 else
+                        {"TestConfigurations": [{"TestTargets": targets}]})
+            info = root / "Info.plist"
+            info.write_bytes(plistlib.dumps({"Tests": [{"xctestrun": "tests.xctestrun"}]}))
+            path = root / "tests.xctestrun"
+            original = plistlib.dumps(document, fmt=plistlib.FMT_XML, sort_keys=False)
+            path.write_bytes(original)
+            binary = root / "fictional-product-bytes"
+            binary.write_bytes(b"No executable code: preserve these bytes")
+            yield root, path, original, document, binary
+
+    def test_admission_accepts_only_actual_exclusive_inert_mount(self):
+        regression.validate_replay_host_admission(self.admission())
+        for field, value in [("requested", False), ("mode", "ordinary"), ("mode", "unknown"),
+                             ("expected_host", False), ("inert_root_mounted", False),
+                             ("ordinary_root_mounted", True), ("admitted", False),
+                             ("elapsed_ms", -1), ("elapsed_ms", 10000),
+                             ("elapsed_ms", 10001), ("limit_ms", 10001)]:
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                regression.validate_replay_host_admission({**self.admission(), field: value})
+
+    def test_admission_rejects_missing_extra_and_coerced_field_types(self):
+        for field in self.admission():
+            value = self.admission()
+            del value[field]
+            with self.subTest(missing=field), self.assertRaises(ValueError):
+                regression.validate_replay_host_admission(value)
+        for field, value in [("schema", True), ("requested", 1), ("expected_host", "true"),
+                             ("inert_root_mounted", 1), ("ordinary_root_mounted", 0),
+                             ("admitted", 1), ("elapsed_ms", True), ("elapsed_ms", 1.5),
+                             ("limit_ms", 10000.0)]:
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                regression.validate_replay_host_admission({**self.admission(), field: value})
+        with self.assertRaises(ValueError):
+            regression.validate_replay_host_admission({**self.admission(), "unrecognized": True})
+
+    def test_context_changes_only_exact_unit_arguments_in_both_formats_then_restores_bytes(self):
+        for version in [1, 2]:
+            with self.subTest(version=version), self.products(version, ["-RetainedArgument"]) as fixture:
+                products, path, original, document, binary = fixture
+                binary_before = binary.read_bytes()
+                expected = copy.deepcopy(document)
+                unit = expected["WanderTests"] if version == 1 else expected["TestConfigurations"][0]["TestTargets"][0]
+                unit["CommandLineArguments"] += ["-WanderReplayFixtureHost", "inert"]
+                with regression.replay_fixture_host(products) as receipt:
+                    self.assertIsInstance(receipt, dict)
+                    self.assertEqual(plistlib.loads(path.read_bytes()), expected)
+                    self.assertEqual(binary.read_bytes(), binary_before)
+                self.assertEqual(path.read_bytes(), original)
+                self.assertEqual(binary.read_bytes(), binary_before)
+
+    def test_context_restores_exact_bytes_when_native_body_fails(self):
+        with self.products() as fixture:
+            products, path, original, _, _ = fixture
+            with self.assertRaisesRegex(RuntimeError, "fictional native failure"):
+                with regression.replay_fixture_host(products):
+                    raise RuntimeError("fictional native failure")
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_context_restores_partial_preparation_write_before_yield(self):
+        with self.products() as fixture:
+            products, path, original, _, _ = fixture
+            write_bytes = Path.write_bytes
+            failed = False
+            entered = False
+            def write(target, data):
+                nonlocal failed
+                if target.resolve() == path.resolve() and data != original and not failed:
+                    failed = True
+                    write_bytes(target, b"fictional interrupted write")
+                    raise OSError("fictional preparation failure")
+                return write_bytes(target, data)
+            with mock.patch.object(Path, "write_bytes", write), self.assertRaises(OSError):
+                with regression.replay_fixture_host(products):
+                    entered = True
+            self.assertTrue(failed)
+            self.assertFalse(entered)
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_context_rejects_duplicate_targets_and_conflicting_launch_arguments_without_writes(self):
+        for arguments, extra in [([], True), (["-WanderReplayFixtureHost"], False),
+                                 (["-WanderReplayFixtureHost", "inert"], False),
+                                 (["-WanderReplayFixtureHost=ordinary"], False)]:
+            with self.subTest(arguments=arguments, duplicate=extra), self.products(arguments=arguments, extra_unit=extra) as fixture:
+                products, path, original, _, _ = fixture
+                with self.assertRaises(ValueError):
+                    with regression.replay_fixture_host(products):
+                        self.fail("Invalid preparation must not yield")
+                self.assertEqual(path.read_bytes(), original)
+
+    def test_context_rejects_missing_unit_and_escaping_configuration_without_writes(self):
+        with self.products() as fixture:
+            products, path, _, document, _ = fixture
+            del document["WanderTests"]
+            path.write_bytes(plistlib.dumps(document))
+            original = path.read_bytes()
+            with self.assertRaises(ValueError):
+                with regression.replay_fixture_host(products):
+                    self.fail("Missing unit target must not yield")
+            self.assertEqual(path.read_bytes(), original)
+            (products / "Info.plist").write_bytes(plistlib.dumps({"Tests": [{"xctestrun": "../outside.xctestrun"}]}))
+            with self.assertRaises(ValueError):
+                with regression.replay_fixture_host(products):
+                    self.fail("Escaping configuration must not yield")
+
+    def test_parent_opt_in_delegates_only_the_two_exact_methods_with_original_timeouts(self):
+        for suite, identifier in regression.REPLAY_METHODS.items():
+            with self.subTest(suite=suite), mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
+                    "--destination", "fixture-device", "--test-products", "prepared.xctestproducts",
+                    "--result-bundle", suite + ".xcresult", "--replay-fixture-host", "inert",
+                    "--replay-host-receipt", suite + ".json"]), \
+                    mock.patch.object(regression, "run_isolated_replay", return_value=65) as isolated, \
+                    mock.patch.object(regression.subprocess, "run", side_effect=AssertionError("No native execution")), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(regression.main(), 65)
+                self.assertEqual(isolated.call_count, 1)
+                keywords = isolated.call_args.kwargs
+                self.assertEqual(keywords["suite"], suite)
+                command = keywords["command"]
+                self.assertEqual([x for x in command if x.startswith("-only-testing:")], ["-only-testing:" + identifier])
+                for flag, value in [("-test-timeouts-enabled", "YES"),
+                                    ("-default-test-execution-time-allowance", "600"),
+                                    ("-maximum-test-execution-time-allowance", "900")]:
+                    self.assertEqual(command[command.index(flag) + 1], value)
+
+    def test_parent_rejects_inert_opt_in_for_combined_and_ordinary_suites(self):
+        for suite in ["replay", "unit", "clip"]:
+            with self.subTest(suite=suite), mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
+                    "--destination", "fixture-device", "--test-products", "prepared.xctestproducts",
+                    "--result-bundle", "result.xcresult", "--replay-fixture-host", "inert",
+                    "--replay-host-receipt", "receipt.json"]), \
+                    mock.patch.object(regression, "run_isolated_replay", side_effect=AssertionError("No isolated dispatch")), \
+                    mock.patch.object(regression.subprocess, "run", side_effect=AssertionError("No native execution")), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                regression.main()
+
+
+    def dispatch_isolated(self, *, native_exit=0, admission_change=None, manifest_change=None,
+                          malformed_json=False, export_exit=0, mutate_info=False, timeout_policy=()):
+        with self.products() as fixture:
+            products, path, original, _, _ = fixture
+            result = products / "result.xcresult"
+            receipt = products / "host-receipt.json"
+            identifier = regression.REPLAY_METHODS["replay-private"]
+            url = "test://com.apple.xcode/Wander/" + identifier
+            command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+                       "-destination", "platform=iOS Simulator,id=fixture-device",
+                       "-only-testing:" + identifier, *timeout_policy, "-resultBundlePath", str(result)]
+            calls = []
+            def run(argv, **kwargs):
+                calls.append((argv, kwargs))
+                if argv[0] == "xcodebuild":
+                    self.assertEqual(argv, command, "Do not change the caller's timeout policy or native selection.")
+                    effective = plistlib.loads(path.read_bytes())
+                    self.assertEqual(effective["WanderTests"]["CommandLineArguments"],
+                                     ["-WanderReplayFixtureHost", "inert"])
+                    result.mkdir()
+                    (result / "Info.plist").write_bytes(b"fictional immutable result identity")
+                    return SimpleNamespace(returncode=native_exit)
+                self.assertEqual(argv[:4], ["xcrun", "xcresulttool", "export", "attachments"])
+                self.assertEqual(argv[argv.index("--test-id") + 1], url)
+                self.assertEqual(path.read_bytes(), original, "Restore host configuration before exporting evidence.")
+                self.assertEqual(kwargs.get("timeout"), 120)
+                output = Path(argv[argv.index("--output-path") + 1])
+                output.mkdir()
+                value = self.admission()
+                if admission_change:
+                    value.update(admission_change)
+                (output / "admission.json").write_bytes(b"{" if malformed_json else json.dumps(value).encode())
+                manifest = [{"testIdentifierURL": url, "attachments": [{
+                    "suggestedHumanReadableName": "Replay host admission_0_00000000-0000-0000-0000-000000000001.txt",
+                    "deviceId": "fixture-device", "exportedFileName": "admission.json"}]}]
+                if manifest_change:
+                    manifest_change(manifest)
+                (output / "manifest.json").write_text(json.dumps(manifest))
+                if mutate_info:
+                    (result / "Info.plist").write_bytes(b"fictional changed result identity")
+                return SimpleNamespace(returncode=export_exit)
+            with mock.patch.object(regression.subprocess, "run", side_effect=run):
+                code = regression.run_isolated_replay(suite="replay-private", products=products,
+                    device_id="fixture-device", result_bundle=result, command=command, receipt=receipt)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(sum(argv[0] == "xcodebuild" for argv, _ in calls), 1)
+            self.assertEqual(sum(argv[0] == "xcrun" for argv, _ in calls), 1)
+            return code, json.loads(receipt.read_text()), calls
+
+    def test_isolated_api_preserves_native_failure_and_all_three_timeout_policies(self):
+        policies = [(), ("-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+                         "-maximum-test-execution-time-allowance", "180"),
+                    ("-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
+                     "-maximum-test-execution-time-allowance", "900")]
+        for policy in policies:
+            with self.subTest(policy=policy):
+                code, receipt, _ = self.dispatch_isolated(native_exit=65, timeout_policy=policy)
+                self.assertEqual(code, 65, "Valid host admission must never clear a native failure.")
+                self.assertTrue(receipt["hostAdmissionVerified"])
+                self.assertTrue(receipt["configuration"]["restored"])
+                self.assertEqual(receipt["nativeExitCode"], 65)
+
+    def test_isolated_api_requires_actual_unique_timely_admission_after_native_pass(self):
+        changes = [
+            {"admission_change": {"requested": False, "mode": "ordinary"}},
+            {"admission_change": {"elapsed_ms": 10000}},
+            {"admission_change": {"ordinary_root_mounted": True}},
+            {"malformed_json": True},
+            {"manifest_change": lambda rows: rows[0].update(attachments=[])},
+            {"manifest_change": lambda rows: rows[0]["attachments"].append(copy.deepcopy(rows[0]["attachments"][0]))},
+            {"manifest_change": lambda rows: rows[0].update(testIdentifierURL="test://com.apple.xcode/Wander/OtherTests/testOther")},
+            {"manifest_change": lambda rows: rows[0]["attachments"][0].update(deviceId="other-device")},
+            {"export_exit": 64}, {"mutate_info": True},
+        ]
+        for index, arguments in enumerate(changes):
+            with self.subTest(index=index):
+                code, receipt, _ = self.dispatch_isolated(**arguments)
+                self.assertNotEqual(code, 0)
+                self.assertFalse(receipt["hostAdmissionVerified"])
+                self.assertEqual(receipt["nativeExitCode"], 0)
+                self.assertTrue(receipt["configuration"]["restored"])
+
+    def test_isolated_api_accepts_native_pass_only_with_actual_admission_and_restoration(self):
+        code, receipt, _ = self.dispatch_isolated()
+        self.assertEqual(code, 0)
+        self.assertTrue(receipt["hostAdmissionVerified"])
+        self.assertTrue(receipt["configuration"]["restored"])
+        self.assertEqual(receipt["identifier"], regression.REPLAY_METHODS["replay-private"])
+        self.assertEqual(receipt["admission"], self.admission())
+
+    def test_isolated_api_rejects_wrong_selector_and_retries_before_native_execution(self):
+        with self.products() as fixture:
+            products, _, _, _, _ = fixture
+            result = products / "result.xcresult"
+            receipt = products / "host.json"
+            command = ["xcodebuild", "test-without-building", "-testProductsPath", str(products),
+                       "-destination", "platform=iOS Simulator,id=fixture-device",
+                       "-only-testing:" + regression.REPLAY_METHODS["replay-private"],
+                       "-resultBundlePath", str(result)]
+            variants = [command + ["-retry-tests-on-failure"],
+                        command + ["-only-testing:" + regression.REPLAY_METHODS["replay-credentials"]],
+                        [x.replace("platform=iOS Simulator,id=fixture-device", "platform=iOS Simulator,id=other-device") for x in command]]
+            for variant in variants:
+                with self.subTest(command=variant), self.assertRaises(ValueError), \
+                        mock.patch.object(regression.subprocess, "run", side_effect=AssertionError("No native execution")):
+                    regression.run_isolated_replay(suite="replay-private", products=products,
+                        device_id="fixture-device", result_bundle=result, command=variant, receipt=receipt)
+            self.assertFalse(receipt.exists())
+
+    def test_context_rejects_configuration_file_symlink_even_inside_products(self):
+        with self.products() as fixture:
+            products, path, original, _, _ = fixture
+            target = products / "real.xctestrun"
+            path.rename(target)
+            path.symlink_to(target.name)
+            with self.assertRaises(ValueError):
+                with regression.replay_fixture_host(products):
+                    self.fail("A configuration-file symlink must not yield")
+            self.assertEqual(target.read_bytes(), original)
+
+
 if __name__ == "__main__":
     unittest.main()

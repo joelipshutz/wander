@@ -5,6 +5,52 @@ import SwiftData
 import UIKit
 #endif
 
+#if DEBUG
+/// Launch-only input isolation for the hosted Replay component tests.
+@MainActor
+enum ReplayFixtureHostPolicy {
+    enum Mode: Equatable { case ordinary, inert, invalid }
+    static let argument = "-WanderReplayFixtureHost"
+    static func hasRequest(in arguments: [String]) -> Bool {
+        arguments.contains { $0 == argument || $0.hasPrefix(argument + "=") }
+    }
+    static func resolve(arguments: [String], bundleIdentifier: String?, isSimulator: Bool) -> Mode {
+        guard hasRequest(in: arguments) else { return .ordinary }
+        let matches = arguments.indices.filter { arguments[$0] == argument }
+        guard isSimulator, bundleIdentifier == "com.grayline.wander",
+              matches.count == 1, let index = matches.first,
+              arguments.indices.contains(index + 1), arguments[index + 1] == "inert",
+              !arguments.contains(where: { $0.hasPrefix(argument + "=") }) else { return .invalid }
+        return .inert
+    }
+    private static var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+    static let hasRequest = hasRequest(in: ProcessInfo.processInfo.arguments)
+    static let isExpectedHost = Bundle.main.bundleIdentifier == "com.grayline.wander"
+    static let mode = resolve(arguments: ProcessInfo.processInfo.arguments,
+                              bundleIdentifier: Bundle.main.bundleIdentifier, isSimulator: isSimulator)
+    static var usesInertRoot: Bool {
+        #if targetEnvironment(simulator)
+        mode == .inert
+        #else
+        false
+        #endif
+    }
+    static private(set) var inertRootMounted = false
+    static private(set) var ordinaryRootMounted = false
+    static func recordInertRootMounted() { inertRootMounted = true }
+    static func recordOrdinaryRootMounted() {
+        guard hasRequest else { return }
+        ordinaryRootMounted = true
+    }
+}
+#endif
+
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
     static let resetAuthenticatedFixtureArgument = "-WanderResetAuthenticatedUITest"
@@ -210,7 +256,11 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
+            if ReplayFixtureHostPolicy.usesInertRoot {
+                Color.clear
+                    .accessibilityHidden(true)
+                    .onAppear { ReplayFixtureHostPolicy.recordInertRootMounted() }
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
                 ActivityPostcardReviewRoot()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
                 ShareCardDesignMockupRoot()
@@ -292,6 +342,9 @@ struct WanderApp: App {
             .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
+            #if DEBUG
+            .onAppear { ReplayFixtureHostPolicy.recordOrdinaryRootMounted() }
+            #endif
     }
 
     #if DEBUG

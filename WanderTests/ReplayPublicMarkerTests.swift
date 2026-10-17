@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+@testable import Wander
 
 /// Test-only public marker reader. All probes come from the same real SDK image.
 enum ReplayPublicMarkerProbe {
@@ -69,6 +70,26 @@ enum ReplayPublicMarkerProbe {
 }
 
 final class ReplayPublicMarkerTests: XCTestCase {
+    #if DEBUG
+    @MainActor
+    func testReplayFixtureHostRequiresExplicitValidModeBundleAndSimulator() {
+        let flag = "-WanderReplayFixtureHost"
+        let host = "com.grayline.wander"
+        // Ordinary local tests remain ordinary, even without a simulator host.
+        XCTAssertEqual(ReplayFixtureHostPolicy.resolve(arguments: ["Wander"], bundleIdentifier: nil, isSimulator: false), .ordinary)
+        XCTAssertEqual(ReplayFixtureHostPolicy.resolve(arguments: ["Wander", flag, "inert"], bundleIdentifier: host, isSimulator: true), .inert)
+        for arguments in [["Wander", flag], ["Wander", flag, "unknown"],
+                          ["Wander", flag, "inert", flag, "inert"],
+                          ["Wander", flag + "=inert"],
+                          ["Wander", flag, "inert", flag + "=inert"]] {
+            XCTAssertEqual(ReplayFixtureHostPolicy.resolve(arguments: arguments, bundleIdentifier: host, isSimulator: true), .invalid)
+        }
+        XCTAssertEqual(ReplayFixtureHostPolicy.resolve(arguments: ["Wander", flag, "inert"], bundleIdentifier: "example.other", isSimulator: true), .invalid)
+        XCTAssertEqual(ReplayFixtureHostPolicy.resolve(arguments: ["Wander", flag, "inert"], bundleIdentifier: nil, isSimulator: true), .invalid)
+        XCTAssertEqual(ReplayFixtureHostPolicy.resolve(arguments: ["Wander", flag, "inert"], bundleIdentifier: host, isSimulator: false), .invalid)
+    }
+    #endif
+
     @MainActor
     func testPublicMarkerGatesRejectStaleBlankMaskedWrongColorAndMapScaledImages() throws {
         let window = CGRect(x: 0, y: 0, width: 402, height: 874)

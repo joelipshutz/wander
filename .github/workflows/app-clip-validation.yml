@@ -180,6 +180,7 @@ jobs:
           --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
           --result-bundle "$RUNNER_TEMP/ParentReplayPrivate.xcresult"
           --selection-file "$RUNNER_TEMP/replay-private-selection.json"
+          --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayPrivate.host-admission.json"
       - name: Run credential replay proof after parent units
         if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
         run: >-
@@ -187,6 +188,7 @@ jobs:
           --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
           --result-bundle "$RUNNER_TEMP/ParentReplayCredentials.xcresult"
           --selection-file "$RUNNER_TEMP/replay-credentials-selection.json"
+          --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayCredentials.host-admission.json"
       - name: Summarize test result
         if: always()
         run: |
@@ -249,4 +251,8 @@ jobs:
             ${{ runner.temp }}/replay-credentials-summary.json
             ${{ runner.temp }}/replay-credentials-tests.json
             ${{ runner.temp }}/replay-credentials-selection.json
+            ${{ runner.temp }}/ParentReplayPrivate.host-admission.json
+            ${{ runner.temp }}/ParentReplayPrivate.host-admission
+            ${{ runner.temp }}/ParentReplayCredentials.host-admission.json
+            ${{ runner.temp }}/ParentReplayCredentials.host-admission
           retention-days: 14
