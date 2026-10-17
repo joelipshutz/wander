@@ -23,6 +23,8 @@ on:
       - 'WanderUITests/FeedAudienceUITests.swift'
       - 'WanderUITests/MapFilterInteractionUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/replay-simulator-fixture.py'
+      - 'scripts/test_replay_simulator_fixture.py'
       - 'WanderUITests/FeedActivityGroupingUITests.swift'
       - 'WanderUITests/LiveReviewContinuityUITests.swift'
       - 'WanderUITests/SenderNotificationFlowUITests.swift'
@@ -72,6 +74,9 @@ jobs:
           PY
       # Wall-clock budgets run on a controlled reference machine. The matching
       # deterministic search and high-data cache contracts still run below.
+      # Functional UI tests use the same execution allowance as Parent and Live
+      # continuity: XCTest's animation-idle waits count toward this allowance.
+      # Element assertions and measured performance budgets remain unchanged.
       - name: Unit suite and native Feed scrolling
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
@@ -92,8 +97,8 @@ jobs:
           -only-testing:WanderUITests/ForegroundEntryUITests
           -only-testing:WanderUITests/MapPlaceCardActionInteractionUITests/testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps
           -only-testing:WanderUITests/ShareCardMockupUITests/testExternalPlaceCanOpenNativeDestinationsFromEveryFormat
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 360
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Prepare isolated Replay test products once
         id: replay-products
@@ -105,10 +110,16 @@ jobs:
           -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
           -only-testing:WanderTests/ReplayMaskingTests
           CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      # Replay capture owns process-wide SDK state. Each scenario starts a fresh
-      # test host; both remain required checks.
-      - name: Verify private-message replay in an isolated process
+      - name: Prepare fresh same-model Replay simulator
+        id: replay-fixture
         if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 -B scripts/test_replay_simulator_fixture.py
+          python3 -B scripts/replay-simulator-fixture.py prepare --source-device "$LARGE_DEVICE_ID"
+      # Replay capture owns process-wide SDK state. Each scenario starts a fresh
+      # test host on one dedicated same-model/runtime simulator; both remain required.
+      - name: Verify private-message replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
         run: |
           python3 - <<'PY'
           import importlib.util, os
@@ -119,7 +130,7 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           suite = "replay-private"
           products = root / "Replay.xctestproducts"
-          device = os.environ["LARGE_DEVICE_ID"]
+          device = os.environ["REPLAY_DEVICE_ID"]
           bundle = root / (suite + ".xcresult")
           command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
               "-destination", "platform=iOS Simulator,id=" + device,
@@ -131,7 +142,7 @@ jobs:
               command=command, receipt=root / (suite + "-host.json")))
           PY
       - name: Verify credential replay in an isolated process
-        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
         run: |
           python3 - <<'PY'
           import importlib.util, os
@@ -142,7 +153,7 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           suite = "replay-credentials"
           products = root / "Replay.xctestproducts"
-          device = os.environ["LARGE_DEVICE_ID"]
+          device = os.environ["REPLAY_DEVICE_ID"]
           bundle = root / (suite + ".xcresult")
           command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
               "-destination", "platform=iOS Simulator,id=" + device,
@@ -153,8 +164,28 @@ jobs:
               suite=suite, products=products, device_id=device, result_bundle=bundle,
               command=command, receipt=root / (suite + "-host.json")))
           PY
+      - name: Export Replay evidence before fixture cleanup
+        id: replay-evidence
+        if: ${{ always() && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          status=0
+          for device in replay-private replay-credentials; do
+            if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
+              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" > "$RUNNER_TEMP/evidence/$device-summary.json" || status=1
+              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/evidence/$device" || status=1
+            else
+              status=1
+            fi
+          done
+          exit "$status"
+      - name: Clean up owned Replay simulator
+        if: ${{ always() && steps.replay-fixture.outcome != 'skipped' }}
+        env:
+          REPLAY_EVIDENCE_EXPORTED: ${{ steps.replay-evidence.outcome == 'success' }}
+        run: python3 -B scripts/replay-simulator-fixture.py cleanup
       - name: Stop large simulator
-        if: always()
+        if: ${{ always() && steps.replay-fixture.outcome == 'skipped' }}
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
       - name: Verify scrolling on a compact phone
         if: success() || failure()
@@ -178,7 +209,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small replay-private replay-credentials; do
+          for size in large small; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -198,6 +229,7 @@ jobs:
             ${{ runner.temp }}/replay-private-host
             ${{ runner.temp }}/replay-credentials-host.json
             ${{ runner.temp }}/replay-credentials-host
+            ${{ runner.temp }}/replay-simulator-fixture
           retention-days: 14
 
   live-continuity:
