@@ -919,7 +919,43 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         // Native Picker options live in the popup collection; the retained
         // Live header can expose an identically labeled Nearby button.
         let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
-        waitHittable(choice)
+        waitHittable(choice, diagnosticFailure: { snapshotError in
+            // Observe the failed wait once, before its original assertion aborts
+            // the test. These reads neither retry the tap nor extend its gate.
+            self.capture("popup-option-wait-failed")
+            var observations = ["option=\(option)", "postFailureSnapshotRequestedUptime=\(ProcessInfo.processInfo.systemUptime)"]
+            if let snapshotError {
+                observations.append("lastChoiceSnapshotError=\(String(describing: snapshotError))")
+            } else {
+                observations.append("lastChoiceSnapshotError=none")
+            }
+            do {
+                let snapshot = try app.snapshot()
+                var choiceCount = 0
+                @MainActor
+                func visit(_ node: XCUIElementSnapshot, inCollection: Bool) {
+                    let collection = inCollection || node.elementType == .collectionView
+                    if collection && node.elementType == .button && node.label == option {
+                        choiceCount += 1
+                    }
+                    for child in node.children { visit(child, inCollection: collection) }
+                }
+                visit(snapshot, inCollection: false)
+                observations.append("choiceCountFromPostFailureSnapshot=\(choiceCount)")
+                let hierarchy = XCTAttachment(string: String(describing: snapshot.dictionaryRepresentation))
+                hierarchy.name = "REC-636-popup-option-wait-failed-snapshot"
+                hierarchy.lifetime = .keepAlways
+                self.add(hierarchy)
+            } catch {
+                observations.append("choiceCountFromPostFailureSnapshot=unavailable")
+                observations.append("postFailureAppSnapshotError=\(String(describing: error))")
+            }
+            observations.append("postFailureSnapshotFinishedUptime=\(ProcessInfo.processInfo.systemUptime)")
+            let diagnostic = XCTAttachment(string: observations.joined(separator: "\n"))
+            diagnostic.name = "REC-636-popup-option-wait-failed-observations"
+            diagnostic.lifetime = .keepAlways
+            self.add(diagnostic)
+        })
         choice.press(forDuration: 0.2)
         let deadline = ProcessInfo.processInfo.systemUptime + 5
         wait(NSPredicate { _, _ in
@@ -1007,17 +1043,29 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
     }
 
-    private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10) {
+    private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10,
+                              diagnosticFailure: ((Error?) -> Void)? = nil) {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
-        wait(NSPredicate { _, _ in
+        var lastSnapshotError: Error?
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             // A successful snapshot resolves existence and enabled state together;
             // hittability still comes from the genuine native element query.
-            guard ProcessInfo.processInfo.systemUptime <= deadline,
-                  let snapshot = try? element.snapshot(), snapshot.isEnabled,
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            let snapshot: XCUIElementSnapshot
+            do {
+                snapshot = try element.snapshot()
+            } catch {
+                lastSnapshotError = error
+                return false
+            }
+            guard snapshot.isEnabled,
                   ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             let hittable = element.isHittable
             return hittable && ProcessInfo.processInfo.systemUptime <= deadline
-        }, timeout: timeout)
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        if result != .completed { diagnosticFailure?(lastSnapshotError) }
+        XCTAssertEqual(result, .completed)
     }
 
     private func wait(_ predicate: NSPredicate, on element: XCUIElement? = nil, timeout: TimeInterval = 5) {
