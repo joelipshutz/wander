@@ -9,6 +9,9 @@ final class ReplayMaskingTests: XCTestCase {
     @MainActor
     func testPrivateMessageContentIsMaskedInActualReplayImage() async throws {
         guard await admitReplayFixtureHostIfRequested() else { return }
+        // REC636_REPLAY_DIAGNOSTIC_BEGIN setup
+        let captureDiagnostic = ReplayCaptureDiagnostic.resolve()
+        // REC636_REPLAY_DIAGNOSTIC_END setup
         let captureTimeline = ReplayCaptureTimeline()
         var foregroundScene: UIWindowScene?
         for _ in 0..<100 {
@@ -25,6 +28,9 @@ final class ReplayMaskingTests: XCTestCase {
         let originalWindowWasKey = originalWindow?.isKeyWindow ?? false
         let window = ReplayProbeWindow(windowScene: scene)
         window.captureTimeline = captureTimeline
+        // REC636_REPLAY_DIAGNOSTIC_BEGIN window
+        window.diagnostic = captureDiagnostic
+        // REC636_REPLAY_DIAGNOSTIC_END window
         window.backgroundColor = .white
         // The SDK can conservatively mask the entire SwiftUI hosting surface
         // on iOS 26. A native sibling proves capture is live without weakening
@@ -74,6 +80,9 @@ final class ReplayMaskingTests: XCTestCase {
         }
 
         let frames = ReplayFrameCollector(captureTimeline: captureTimeline)
+        // REC636_REPLAY_DIAGNOSTIC_BEGIN collector
+        frames.diagnostic = captureDiagnostic
+        // REC636_REPLAY_DIAGNOSTIC_END collector
         let config = PostHogAnalyticsClient.sdkConfiguration(projectToken: "replay_fixture_\(UUID().uuidString)", host: "https://replay.invalid")
         let session = URLSessionConfiguration.ephemeral
         session.protocolClasses = [ReplayOfflineProtocol.self]
@@ -100,6 +109,9 @@ final class ReplayMaskingTests: XCTestCase {
         var recordedReplayActivation = false
         let readyDeadline = ContinuousClock.now.advanced(by: .seconds(30))
         captureTimeline.record(.readyGateBegan)
+        // REC636_REPLAY_DIAGNOSTIC_BEGIN gate-began
+        captureDiagnostic?.record(.readyBegan)
+        // REC636_REPLAY_DIAGNOSTIC_END gate-began
         while ContinuousClock.now < readyDeadline {
             // Inactive SDK layouts are discarded. Do not reserve the pump's
             // delivery/backpressure window until the recorder can receive one.
@@ -130,6 +142,9 @@ final class ReplayMaskingTests: XCTestCase {
             if recorderReady { break }
         }
         captureTimeline.record(.readyGateEnded)
+        // REC636_REPLAY_DIAGNOSTIC_BEGIN gate-ended
+        captureDiagnostic?.record(.readyEnded)
+        // REC636_REPLAY_DIAGNOSTIC_END gate-ended
         XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
         guard recorderReady else {
             let diagnostic = XCTAttachment(string: """
@@ -572,6 +587,9 @@ private final class ReplayCaptureTimeline: @unchecked Sendable {
 private final class ReplayProbeWindow: UIWindow {
     var capturePhase = "ready"
     var captureTimeline: ReplayCaptureTimeline?
+    // REC636_REPLAY_DIAGNOSTIC_BEGIN window-property
+    var diagnostic: ReplayCaptureDiagnostic?
+    // REC636_REPLAY_DIAGNOSTIC_END window-property
     private(set) var successfulReadyDraws = 0
     private(set) var successfulLoadedDraws = 0
     private(set) var failedDraws = 0
@@ -587,6 +605,11 @@ private final class ReplayProbeWindow: UIWindow {
             if !succeeded { failedDraws += 1 }
             else if capturePhase == "loaded" { successfulLoadedDraws += 1 }
             else { successfulReadyDraws += 1 }
+            // REC636_REPLAY_DIAGNOSTIC_BEGIN first-draw
+            if succeeded, capturePhase == "ready", successfulReadyDraws == 1 {
+                diagnostic?.record(.firstReadyDraw)
+            }
+            // REC636_REPLAY_DIAGNOSTIC_END first-draw
         }
         return succeeded
     }
@@ -645,6 +668,9 @@ private final class ReplayFrameCollector: @unchecked Sendable {
 
     private let lock = NSLock()
     private let captureTimeline: ReplayCaptureTimeline?
+    // REC636_REPLAY_DIAGNOSTIC_BEGIN collector-property
+    var diagnostic: ReplayCaptureDiagnostic?
+    // REC636_REPLAY_DIAGNOSTIC_END collector-property
     private var counts = Counts()
     private var captured: [UIImage] = []
     private var windowImages: [Int: [UIImage]] = [:]
@@ -690,6 +716,9 @@ private final class ReplayFrameCollector: @unchecked Sendable {
         record { $0.callbacks += 1 }
         if event.event == Self.probeEvent { record { $0.probeCallbacks += 1 } }
         guard event.event == "$snapshot" else { return }
+        // REC636_REPLAY_DIAGNOSTIC_BEGIN first-snapshot
+        diagnostic?.record(.firstSnapshot)
+        // REC636_REPLAY_DIAGNOSTIC_END first-snapshot
         captureTimeline?.record(.snapshotCallback)
         record { $0.snapshotCallbacks += 1 }
         guard let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
@@ -732,3 +761,63 @@ private final class ReplayOfflineProtocol: URLProtocol, @unchecked Sendable {
     }
     override func stopLoading() {}
 }
+
+// REC636_REPLAY_DIAGNOSTIC_BEGIN helper
+/// Optional scalar markers. Invalid diagnostic input leaves the native test unchanged.
+private final class ReplayCaptureDiagnostic: @unchecked Sendable {
+    enum Phase: String {
+        case readyBegan = "ready-began", readyEnded = "ready-ended"
+        case firstReadyDraw = "first-ready-draw", firstSnapshot = "first-snapshot"
+    }
+    private let directory: URL
+    private let nonce: String
+    private let lock = NSLock()
+    private var recorded: Set<String> = []
+
+    private init(directory: URL, nonce: String) { self.directory = directory; self.nonce = nonce }
+
+    static func resolve() -> ReplayCaptureDiagnostic? {
+        let flag = "-REC636ReplayDiagnosticDirectory"
+        let args = ProcessInfo.processInfo.arguments
+        let positions = args.indices.filter { args[$0] == flag }
+        guard positions.count == 1, let index = positions.first,
+              args.indices.contains(index + 1),
+              !args.contains(where: { $0.hasPrefix(flag + "=") }) else { return nil }
+        let name = args[index + 1]
+        let prefix = "REC636-ReplayDiagnostic-"
+        guard name.hasPrefix(prefix),
+              let uuid = UUID(uuidString: String(name.dropFirst(prefix.count))),
+              name == prefix + uuid.uuidString else { return nil }
+        // XCTest can relocate the container when it installs the host. Resolve
+        // this fresh basename inside the running host rather than trusting a preinstall URL.
+        let temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().standardizedFileURL
+        let requested = temporary.appendingPathComponent(name, isDirectory: true).standardizedFileURL
+        guard requested.deletingLastPathComponent().path == temporary.path,
+              !FileManager.default.fileExists(atPath: requested.path) else { return nil }
+        do {
+            try FileManager.default.createDirectory(at: requested, withIntermediateDirectories: false)
+        } catch { return nil }
+        let resolved = requested.resolvingSymlinksInPath().standardizedFileURL
+        guard requested.path == resolved.path,
+              resolved.deletingLastPathComponent().path == temporary.path,
+              let values = try? resolved.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+              values.isDirectory == true, values.isSymbolicLink != true else { return nil }
+        return ReplayCaptureDiagnostic(directory: resolved, nonce: uuid.uuidString)
+    }
+
+    func record(_ phase: Phase) {
+        lock.lock(); defer { lock.unlock() }
+        guard !recorded.contains(phase.rawValue) else { return }
+        if phase == .firstReadyDraw, recorded.contains(Phase.firstSnapshot.rawValue) { return }
+        recorded.insert(phase.rawValue)
+        let value: [String: Any] = ["schema": 1, "phase": phase.rawValue,
+            "nonce": nonce, "pid": ProcessInfo.processInfo.processIdentifier,
+            "systemUptime": ProcessInfo.processInfo.systemUptime, "epoch": Date().timeIntervalSince1970]
+        guard let bytes = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+              bytes.count <= 512 else { return }
+        let destination = directory.appendingPathComponent(phase.rawValue + ".json")
+        guard !FileManager.default.fileExists(atPath: destination.path) else { return }
+        _ = (bytes as NSData).write(to: destination, atomically: true)
+    }
+}
+// REC636_REPLAY_DIAGNOSTIC_END helper

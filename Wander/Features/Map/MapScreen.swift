@@ -3309,6 +3309,9 @@ struct MapScreen: View {
         }
         #if DEBUG
         mapPerformanceProbeSnapshot = MapPerformanceProbe.finishCameraInteraction()
+        #if targetEnvironment(simulator)
+        NativeInputRecipientDiagnostic.probePublished()
+        #endif
         #endif
     }
 
@@ -6948,6 +6951,9 @@ struct NativeMapView: UIViewRepresentable {
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            #if DEBUG && targetEnvironment(simulator)
+            NativeInputRecipientDiagnostic.camera(.changed, in: mapView)
+            #endif
             parent.onCameraChange(mapView.region)
             scheduleAdaptivePinDetailRefresh(in: mapView)
         }
@@ -6959,9 +6965,21 @@ struct NativeMapView: UIViewRepresentable {
             adaptiveDetailRefresh?.cancel()
             adaptiveDetailRefresh = nil
             refreshAdaptivePinDetail(in: mapView)
+            #if DEBUG && targetEnvironment(simulator)
+            NativeInputRecipientDiagnostic.camera(.finished, in: mapView)
+            #endif
             parent.onCameraSnapshot?(mapView.camera.copy() as! MKMapCamera)
             parent.onCameraInteractionEnd(mapView.region, isUserInitiated)
+            #if DEBUG && targetEnvironment(simulator)
+            NativeInputRecipientDiagnostic.camera(.parentReturned, in: mapView)
+            #endif
         }
+
+        #if DEBUG && targetEnvironment(simulator)
+        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
+            if fullyRendered { NativeInputRecipientDiagnostic.camera(.fullyRendered, in: mapView) }
+        }
+        #endif
 
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,

@@ -607,7 +607,16 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     func testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement() {
-        let app = launchLive()
+        let app = launchLive(extraArguments: ["-WanderNativeRecipientDiagnostic"])
+        addTeardownBlock { @MainActor in
+            let readout = app.descendants(matching: .any)
+                .matching(identifier: "rec636.nativeInputDiagnostic").firstMatch
+            let value = readout.exists ? readout.value as? String : nil
+            let attachment = XCTAttachment(string: value ?? "native_input_diagnostic_unavailable")
+            attachment.name = "REC-636 compact filter native input diagnostic"
+            attachment.lifetime = .keepAlways
+            self.add(attachment)
+        }
         app.buttons["Filters"].tap()
         let form = filterForm(in: app)
         captureState("filters-initial-before-controls", in: app)
@@ -734,13 +743,13 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private enum Direction { case up, down }
 
-    private func launchLive() -> XCUIApplication {
+    private func launchLive(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture",
             "-WanderInitialTab", "discover",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"] + extraArguments
         app.launch()
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)

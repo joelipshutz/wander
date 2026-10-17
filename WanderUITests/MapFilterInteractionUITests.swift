@@ -267,6 +267,16 @@ final class MapFilterInteractionUITests: XCTestCase {
 
     func testPerformanceFixtureMeasuresSelectedPinPanCPUAndAnnotationWork() {
         let app = XCUIApplication()
+        defer {
+            let readout = app.descendants(matching: .any)
+                .matching(identifier: "rec636.nativeInputDiagnostic").firstMatch
+            let attachment = XCTAttachment(string: readout.exists
+                ? (readout.value as? String ?? "diagnostic-value-unavailable")
+                : "diagnostic-element-unavailable")
+            attachment.name = "REC-636 native input diagnostic final readout"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUsePerformanceFixtures",
@@ -274,7 +284,8 @@ final class MapFilterInteractionUITests: XCTestCase {
             "-WanderDisableWalkthroughs",
             "-WanderMapCaptureMode", "friends",
             "-WanderMapPerformanceProbe",
-            "-WanderMapPerformanceSelectedPin"
+            "-WanderMapPerformanceSelectedPin",
+            "-WanderNativeRecipientDiagnostic"
         ]
         app.launch()
 
