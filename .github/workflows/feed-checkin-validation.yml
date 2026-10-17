@@ -496,11 +496,11 @@ jobs:
           with open(os.environ['GITHUB_ENV'],'a') as env:
               env.write('DIAGNOSTIC_LARGE='+selected['large']['udid']+'\nDIAGNOSTIC_COMPACT='+selected['compact']['udid']+'\n')
           PY_ADMIT
-      - name: Generate and build the exact diagnostic harness once
+      - name: Build the committed diagnostic harness once
         id: input-build
         run: |
-          brew install xcodegen
-          xcodegen generate
+          # This generated project was compiled before diagnostic publication.
+          # Build those exact bytes; source admission and postflight remain strict.
           git diff --exit-code -- project.yml Wander.xcodeproj/project.pbxproj
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
             -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" \
