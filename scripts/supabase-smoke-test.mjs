@@ -146,6 +146,18 @@ async function main() {
         await client.query("rollback to savepoint follow_inbox_smoke");
         await client.query("release savepoint follow_inbox_smoke");
         console.log("ok - follow inbox survives disabled push and enforces recipient and actor privacy");
+        await client.query("savepoint private_messages_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/private_contextual_messages.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint private_messages_smoke");
+        await client.query("release savepoint private_messages_smoke");
+        console.log("ok - private messages enforce mutuals, context revocation, idempotency, quotas, pagination and receipts");
+        await client.query("savepoint live_feed_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint live_feed_smoke");
+        await client.query("release savepoint live_feed_smoke");
+        console.log("ok - Live filters precede pagination and cursors remain account/query scoped without widening visibility");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -2777,6 +2789,14 @@ savepoint follow_inbox_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/follow_notification_inbox.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint follow_inbox_smoke;
 release savepoint follow_inbox_smoke;
+savepoint private_messages_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/private_contextual_messages.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint private_messages_smoke;
+release savepoint private_messages_smoke;
+savepoint live_feed_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint live_feed_smoke;
+release savepoint live_feed_smoke;
 savepoint repeat_wanna_smoke;
 savepoint sender_notifications_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/sender_notification_controls.sql", import.meta.url), "utf8"), "rollback")}

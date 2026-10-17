@@ -317,6 +317,11 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
     private var syncingWannaIDs = Set<String>()
     @Published private(set) var feedAudience: FeedAudience = .everyone
+    @Published private(set) var liveFeedQuery: LiveFeedQuery?
+    @Published private(set) var liveFeedSocialExpired = false
+    private var liveFeedDisplayLease = LiveFeedDisplayLease()
+    private var liveFeedLeaseTask: Task<Void, Never>?
+    private let liveFeedClock: () -> ContinuousClock.Instant
     @Published private(set) var followedFeedPage: FollowedFeedPage? {
         didSet { groupedFeedActivity = feedGroups(in: followedFeedPage) }
     }
@@ -642,12 +647,14 @@ final class WanderStore: ObservableObject {
         placeResolver: PlaceCandidateResolving = MapKitPlaceResolver(),
         parser: any LLMFilterParser = DeterministicFilterParser(),
         analytics: AnalyticsClient = NoopAnalyticsClient(),
-        persistence: WanderStorePersistence? = nil
+        persistence: WanderStorePersistence? = nil,
+        liveFeedClock: @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }
     ) {
         self.placeResolver = placeResolver
         self.parser = parser
         self.analytics = analytics
         self.persistence = persistence
+        self.liveFeedClock = liveFeedClock
 
         var shouldPersistAfterRestore = false
         var didRestoreSnapshot = false
@@ -1386,6 +1393,7 @@ final class WanderStore: ObservableObject {
             || feedRefreshTask != nil
             || followedFeedPage != nil
             || feedAudience != .everyone
+            || liveFeedQuery != nil
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
             || !activityEngagementByID.isEmpty
@@ -1416,6 +1424,8 @@ final class WanderStore: ObservableObject {
             feedRefreshCompletedAt = nil
             feedRefreshCompletedRevision = nil
             feedAudience = .everyone
+            liveFeedQuery = nil
+            clearLiveFeedLease()
             followedFeedPage = nil
             feedLoadState = .idle
             lastFeedRefreshAt = nil
@@ -1722,6 +1732,8 @@ final class WanderStore: ObservableObject {
         feedRefreshCompletedAt = nil
         feedRefreshCompletedRevision = nil
         feedAudience = .everyone
+        liveFeedQuery = nil
+        clearLiveFeedLease()
         followedFeedPage = nil
         feedLoadState = .idle
         lastFeedRefreshAt = nil
@@ -1864,6 +1876,23 @@ final class WanderStore: ObservableObject {
         feedLoadState = .idle
         lastFeedRefreshAt = nil
         feedAudience = audience
+        clearLiveFeedLease()
+    }
+
+    /// A committed Live query is session-only and independent of Profile data.
+    /// Cancel before replacement; explicit nil restores the legacy Feed API.
+    func selectLiveFeedQuery(_ query: LiveFeedQuery?) {
+        guard liveFeedQuery != query else { return }
+        resetFeedPagination()
+        feedRefreshTask?.task.cancel()
+        feedRefreshTask = nil
+        feedRefreshCompletedAt = nil
+        feedRefreshCompletedRevision = nil
+        followedFeedPage = nil
+        feedLoadState = .idle
+        lastFeedRefreshAt = nil
+        liveFeedQuery = query
+        clearLiveFeedLease()
     }
 
     /// Recommendations can publish while posts are waiting on the network, and
@@ -1946,19 +1975,26 @@ final class WanderStore: ObservableObject {
         if followedFeedPage == nil { feedLoadState = .loading }
 
         let audience = feedAudience
+        let query = liveFeedQuery
+        guard query?.isValid != false else { feedLoadState = .failed; return false }
         if let backend, let repository = backend.feedRepository {
             do {
-                let page = try await loadFollowedFeed(from: repository, audience: audience) { [weak self] content in
+                var authorizedAt: ContinuousClock.Instant?
+                let page = try await loadFollowedFeed(from: repository, audience: audience, query: query) { [weak self] content in
                     guard let self, !Task.isCancelled,
                           self.currentUser.id == requestUserID,
-                          self.feedRefreshTask?.id == requestID,
-                          self.followedFeedPage == nil
+                          self.feedAudience == audience, self.liveFeedQuery == query,
+                          self.feedRefreshTask?.id == requestID
                     else { return }
+                    authorizedAt = self.liveFeedClock()
+                    guard self.followedFeedPage == nil else { return }
+                    self.acceptLiveFeedAuthorization(content, at: authorizedAt!, replacing: true)
                     self.followedFeedPage = self.displayableFeedPage(content)
                     self.feedLoadState = .loaded
                     self.lastFeedRefreshAt = content.fetchedAt
                 }
                 guard !Task.isCancelled, currentUser.id == requestUserID,
+                      feedAudience == audience, liveFeedQuery == query,
                       feedRefreshTask?.id == requestID else { return false }
                 let resolvedPage = await mergingPinnedActivity(
                     into: displayableFeedPage(page),
@@ -1966,8 +2002,10 @@ final class WanderStore: ObservableObject {
                     backend: backend
                 )
                 guard !Task.isCancelled, currentUser.id == requestUserID,
+                      feedAudience == audience, liveFeedQuery == query,
                       feedRefreshTask?.id == requestID else { return false }
                 followedFeedPage = resolvedPage
+                acceptLiveFeedAuthorization(resolvedPage, at: authorizedAt ?? liveFeedClock(), replacing: true)
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil
@@ -1978,6 +2016,7 @@ final class WanderStore: ObservableObject {
                 return true
             } catch {
                 guard !Task.isCancelled, currentUser.id == requestUserID,
+                      feedAudience == audience, liveFeedQuery == query,
                       feedRefreshTask?.id == requestID else { return false }
                 lastRemoteError = remoteErrorMessage(error)
                 feedLoadState = followedFeedPage == nil ? .failed : .stale
@@ -1991,6 +2030,7 @@ final class WanderStore: ObservableObject {
             activity: fixture.activity.filter {
                 audience.includes(actorID: $0.actor.id, currentUserID: currentUser.id,
                                   relationship: relationship(to: $0.actor.id))
+                    && (query?.includes($0) ?? true)
             },
             featuredPlaces: fixture.featuredPlaces, nextCursor: nil, fetchedAt: fixture.fetchedAt
         )
@@ -2002,6 +2042,7 @@ final class WanderStore: ObservableObject {
         guard !Task.isCancelled, currentUser.id == requestUserID,
               feedRefreshTask?.id == requestID else { return false }
         followedFeedPage = resolvedPage
+        acceptLiveFeedAuthorization(resolvedPage, at: liveFeedClock(), replacing: true)
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
         seedFixtureActivityEngagement(for: page.activity)
@@ -2042,7 +2083,8 @@ final class WanderStore: ObservableObject {
             return refreshedPage
         }
         guard feedAudience.includes(actorID: validatedActivity.actor.id, currentUserID: currentUser.id,
-                                    relationship: validatedActivity.actor.relationship) else { return refreshedPage }
+                                    relationship: validatedActivity.actor.relationship),
+              liveFeedQuery?.includes(validatedActivity) ?? true else { return refreshedPage }
 
         return FollowedFeedPage(
             activity: FeedPresentation.newestFirst(refreshedPage.activity + [validatedActivity]),
@@ -2091,12 +2133,12 @@ final class WanderStore: ObservableObject {
             let mergedActivity = FeedPresentation.newestFirst(
                 [activity] + (currentPage?.activity ?? []).filter { $0.id != activity.id }
             )
-            followedFeedPage = FollowedFeedPage(
+            followedFeedPage = displayableFeedPage(FollowedFeedPage(
                 activity: mergedActivity,
                 featuredPlaces: currentPage?.featuredPlaces ?? [],
                 nextCursor: currentPage?.nextCursor,
                 fetchedAt: currentPage?.fetchedAt ?? .now
-            )
+            ))
             // Comments supply engagement themselves; do not delay navigation on
             // an unrelated summary request.
             activityEngagementErrorByID[activityID] = nil
@@ -2189,7 +2231,7 @@ final class WanderStore: ObservableObject {
 
     private func displayableFeedPage(_ page: FollowedFeedPage) -> FollowedFeedPage {
         FollowedFeedPage(
-            activity: page.activity.filter(canDisplayActivity),
+            activity: page.activity.filter { canDisplayActivity($0) && (liveFeedQuery?.includes($0) ?? true) },
             featuredPlaces: page.featuredPlaces.filter { canDisplayRemotePlace($0.visiblePlace) },
             nextCursor: page.nextCursor,
             fetchedAt: page.fetchedAt
@@ -2818,7 +2860,47 @@ final class WanderStore: ObservableObject {
     }
 
     var visibleFeedActivityGroups: [FeedActivityGroup] {
-        Array(groupedFeedActivity.prefix(feedVisibleTileLimit))
+        guard liveFeedQuery != nil else { return Array(groupedFeedActivity.prefix(feedVisibleTileLimit)) }
+        let now = liveFeedClock()
+        let allowed = groupedFeedActivity.flatMap(\.activities).filter {
+            liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: now)
+        }
+        return Array(FeedPresentation.groupedActivity(allowed).prefix(feedVisibleTileLimit))
+    }
+
+    private func clearLiveFeedLease() {
+        liveFeedLeaseTask?.cancel()
+        liveFeedLeaseTask = nil
+        liveFeedDisplayLease = LiveFeedDisplayLease()
+        liveFeedSocialExpired = false
+    }
+
+    private func acceptLiveFeedAuthorization(_ page: FollowedFeedPage, at now: ContinuousClock.Instant, replacing: Bool) {
+        guard liveFeedQuery != nil else { return }
+        liveFeedDisplayLease.accept(activityIDs: page.activity.filter { $0.actor.id != currentUser.id }.map(\.id),
+                                    at: now, replacing: replacing)
+        refreshLiveFeedDisplayLease()
+    }
+
+    /// Called on foreground entry too: a suspended expiry task cannot leave
+    /// protected rows visible in the first active frame.
+    func refreshLiveFeedDisplayLease() {
+        guard liveFeedQuery != nil else { return }
+        let now = liveFeedClock()
+        objectWillChange.send()
+        liveFeedSocialExpired = (followedFeedPage?.activity ?? []).contains {
+            !liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: now)
+        }
+        liveFeedLeaseTask?.cancel()
+        liveFeedLeaseTask = nil
+        if let expiry = liveFeedDisplayLease.nextExpiry(after: now) {
+            liveFeedLeaseTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: now.duration(to: expiry)) }
+                catch { return }
+                guard !Task.isCancelled else { return }
+                self?.refreshLiveFeedDisplayLease()
+            }
+        }
     }
 
     var hasMoreFeed: Bool {
@@ -2855,6 +2937,7 @@ final class WanderStore: ObservableObject {
         let requestID = UUID()
         let userID = currentUser.id
         let audience = feedAudience
+        let query = liveFeedQuery
         let targetCount = feedVisibleTileLimit + FeedPagination.pageSize
         isLoadingMoreFeed = true
         feedPaginationFailed = false
@@ -2867,13 +2950,20 @@ final class WanderStore: ObservableObject {
                 }
                 #endif
                 var page = currentPage
+                var authorizedAt: ContinuousClock.Instant?
                 if let repository = backend?.feedRepository {
                     page = try await self.fillFeedPage(
-                        page, through: targetCount, from: repository, audience: audience
-                    )
+                        page, through: targetCount, from: repository, audience: audience, query: query
+                    ) { _ in
+                        guard !Task.isCancelled, self.currentUser.id == userID,
+                              self.feedAudience == audience, self.liveFeedQuery == query,
+                              self.feedPageTask?.id == requestID else { return }
+                        authorizedAt = self.liveFeedClock()
+                    }
                 }
                 try Task.checkCancellation()
                 guard self.currentUser.id == userID, self.feedAudience == audience,
+                      self.liveFeedQuery == query,
                       self.feedPageTask?.id == requestID else { return false }
                 // Keep edits/removals made while the request was suspended.
                 // Only previously unseen events come from this older snapshot.
@@ -2884,16 +2974,17 @@ final class WanderStore: ObservableObject {
                 )
                 let latest = self.followedFeedPage ?? currentPage
                 self.followedFeedPage = self.displayableFeedPage(FeedPagination.appending(appended, to: latest))
+                self.acceptLiveFeedAuthorization(appended, at: authorizedAt ?? self.liveFeedClock(), replacing: false)
                 self.feedVisibleTileLimit = targetCount
                 await self.refreshActivityEngagement(
                     activityIDs: page.activity.map(\.id).filter { !previousIDs.contains($0) },
                     backend: backend
                 )
                 return !Task.isCancelled && self.currentUser.id == userID
-                    && self.feedAudience == audience && self.feedPageTask?.id == requestID
+                    && self.feedAudience == audience && self.liveFeedQuery == query && self.feedPageTask?.id == requestID
             } catch {
                 guard !Task.isCancelled, self.currentUser.id == userID,
-                      self.feedAudience == audience, self.feedPageTask?.id == requestID
+                      self.feedAudience == audience, self.liveFeedQuery == query, self.feedPageTask?.id == requestID
                 else { return false }
                 self.feedPaginationFailed = true
                 return false
@@ -2911,18 +3002,28 @@ final class WanderStore: ObservableObject {
     private func loadFollowedFeed(
         from repository: any FeedRepository,
         audience: FeedAudience,
+        query: LiveFeedQuery?,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
-        let first = try await requestFeedPage(from: repository, audience: audience, before: nil,
+        let first = try await requestFeedPage(from: repository, audience: audience, query: query, before: nil,
                                               onContent: onContent)
+        if query != nil { return first }
         return try await fillFeedPage(first, through: FeedPagination.pageSize,
-                                      from: repository, audience: audience)
+                                      from: repository, audience: audience, query: nil)
     }
 
     private func fillFeedPage(
         _ initial: FollowedFeedPage, through tileCount: Int,
-        from repository: any FeedRepository, audience: FeedAudience
+        from repository: any FeedRepository, audience: FeedAudience, query: LiveFeedQuery?,
+        onContent: @MainActor (FollowedFeedPage) -> Void = { _ in }
     ) async throws -> FollowedFeedPage {
+        if let query {
+            // One explicit Load more fetches one server page in either Live mode.
+            guard let cursor = initial.nextCursor else { return initial }
+            let next = try await requestFeedPage(from: repository, audience: audience, query: query, before: cursor,
+                                                 onContent: onContent)
+            return FeedPagination.appending(next, to: initial)
+        }
         var page = initial
         var cursors = Set<String>()
         while feedGroups(in: displayableFeedPage(page)).count < tileCount,
@@ -2930,7 +3031,7 @@ final class WanderStore: ObservableObject {
             try Task.checkCancellation()
             // A broken/repeated cursor is retryable, never an unbounded request loop.
             guard cursors.insert(cursor).inserted else { throw URLError(.badServerResponse) }
-            let next = try await requestFeedPage(from: repository, audience: audience, before: cursor)
+            let next = try await requestFeedPage(from: repository, audience: audience, query: nil, before: cursor)
             try Task.checkCancellation()
             page = FeedPagination.appending(next, to: page)
         }
@@ -2941,15 +3042,23 @@ final class WanderStore: ObservableObject {
     /// Supabase bearer token is available. Retry that narrow startup race once;
     /// ordinary transport and server failures remain visible to the caller.
     private func requestFeedPage(
-        from repository: any FeedRepository, audience: FeedAudience, before: String?,
+        from repository: any FeedRepository, audience: FeedAudience, query: LiveFeedQuery?, before: String?,
         onContent: @MainActor (FollowedFeedPage) -> Void = { _ in }
     ) async throws -> FollowedFeedPage {
         do {
+            if let query {
+                return try await repository.liveFeed(audience: audience, query: query, before: before,
+                                                     limit: FeedPagination.pageSize, onContent: onContent)
+            }
             return try await repository.activityFeed(audience: audience, before: before,
                                                      limit: FeedPagination.pageSize, onContent: onContent)
         } catch {
             guard Self.shouldRetryFollowedFeed(after: error) else { throw error }
             try await Task.sleep(for: .milliseconds(300))
+            if let query {
+                return try await repository.liveFeed(audience: audience, query: query, before: before,
+                                                     limit: FeedPagination.pageSize, onContent: onContent)
+            }
             return try await repository.activityFeed(audience: audience, before: before,
                                                      limit: FeedPagination.pageSize, onContent: onContent)
         }
@@ -3061,6 +3170,18 @@ final class WanderStore: ObservableObject {
 
         var displayActivity = activity
         #if DEBUG
+        #if targetEnvironment(simulator)
+        let liveReviewMedia = ActivityPostcardPhotoUITestFixtures.liveFeedMedia()
+        if !liveReviewMedia.isEmpty,
+           let index = displayActivity.firstIndex(where: { $0.id == "fixture-feed-maya-been-bar-nido" }) {
+            let original = displayActivity[index]
+            displayActivity[index] = FeedActivity(
+                id: original.id, kind: original.kind, actor: original.actor,
+                place: original.place, list: original.list, occurredAt: original.occurredAt,
+                note: original.note, rating: original.rating, media: liveReviewMedia
+            )
+        }
+        #endif
         if ProcessInfo.processInfo.arguments.contains("-WanderFeedPaginationUITest"),
            let source = activity.first {
             displayActivity = (0..<45).map { index in

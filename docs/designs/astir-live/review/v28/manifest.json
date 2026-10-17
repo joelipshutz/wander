@@ -1,0 +1,455 @@
+{
+  "schema": 1,
+  "generation": "V28",
+  "status": "Selected-case review evidence; full candidate completion not claimed",
+  "candidateManifestSHA256": "8d6bd5d68a4e702d7f9e791b211f08d6c65ab0f96ccb0494e2279e3f2f300922",
+  "artifactSealSHA256": "019f0150ad431211ac80351dc1a4cb525985714f9484b233252471599e34723a",
+  "executionPlanSHA256": "89595ca74b42d5dd6c2e0883c77c0e207154c7f1d4ed5a7cd1b234a0b8dd059e",
+  "sourceInventory": {
+    "swiftFiles": 446,
+    "publicBuildInputs": 150,
+    "allMatchedAtCompletedExtraction": true
+  },
+  "executables": {
+    "Binaries/0/Debug-iphonesimulator/Wander.app/Wander": "a5d2258994ad3e127f7944e3e117db231350503d5958bfec52681e62832faf42",
+    "Binaries/0/Debug-iphonesimulator/Wander.app/Wander.debug.dylib": "c7a906fd81a4d4b47aa73593839383d5777706e780c3cf5dfd3a2794a2113eaa",
+    "Binaries/0/Debug-iphonesimulator/Wander.app/PlugIns/WanderTests.xctest/WanderTests": "d93340ddabf386911fd81127c4d8c64bad46ce5c7b646f5c8f727065a4f2126b",
+    "Binaries/0/Debug-iphonesimulator/WanderUITests-Runner.app/PlugIns/WanderUITests.xctest/WanderUITests": "325a98b85d6b6adfbb213fb2643b2822651bf1d8c4f034dd98c142623685c8f4"
+  },
+  "bundleInfo": {
+    "Binaries/0/Debug-iphonesimulator/Wander.app/Info.plist": "c263c7342f2bec41a3066c7444f354ba482cbb196a7d3badb4ee5fac9dcb88fd",
+    "Binaries/0/Debug-iphonesimulator/Wander.app/PlugIns/WanderTests.xctest/Info.plist": "a6225b1ed164eb54b03f27c040d332f842580e1f39d753f6ecc8c2a306398904",
+    "Binaries/0/Debug-iphonesimulator/WanderUITests-Runner.app/Info.plist": "99d15418bda2a995f1efe7da7aff988482c2e4535c5af90654a9b3e8d3c3de80",
+    "Binaries/0/Debug-iphonesimulator/WanderUITests-Runner.app/PlugIns/WanderUITests.xctest/Info.plist": "38dd9972506dc49f9e441ceb716fec5209c1a3be0b7e4e73263b57855802c073"
+  },
+  "phaseEvidence": {
+    "focused-thirteen-large": {
+      "bundle": "v28-full-native/focused-thirteen-large.xcresult",
+      "resultInfoSHA256": "5256a5442cf1bbf3a3d7755341bda0d191783997d8b2bbb6a28becee4932cab4",
+      "summarySHA256": "4d12ae68d26b0478a2f05228014157f1d22cb26b629f86665f61b19ca30415ae",
+      "testsSHA256": "567dbc1e822152def737beecb7e91c42ffbbd22cdfc69b6303eb7254534f8b5c",
+      "phaseReceiptSHA256": "5f23f87fff1691981ea79f76a2275b9d02b3957e927cdd2aadf5c480380df442",
+      "counts": {
+        "totalTestCount": 13,
+        "passedTests": 11,
+        "failedTests": 2,
+        "skippedTests": 0,
+        "expectedFailures": 0,
+        "result": "Failed"
+      },
+      "phaseReceiptFile": "v28-full-native/focused-thirteen-large-receipt.json"
+    },
+    "focused-thirteen-compact": {
+      "bundle": "v28-full-native/focused-thirteen-compact.xcresult",
+      "resultInfoSHA256": "bbdea1dc7d2b49b78e61c52c3e2638f6e4199b0ca22a7323c6934a4a32250eb2",
+      "summarySHA256": "1d5e1def1b9dc88c7ceefb298050ef4f34bd3ef9990f453cf9b6e1fa7db62b85",
+      "testsSHA256": "5cd8b990e3b4d85e13a98856be559a29af0e648d8e850badb723f228ed999f87",
+      "phaseReceiptSHA256": "ea30573c1345e84cde490c1d25fa2aba2a8e81e6f8ea8222da46395d2435f2d0",
+      "counts": {
+        "totalTestCount": 13,
+        "passedTests": 11,
+        "failedTests": 2,
+        "skippedTests": 0,
+        "expectedFailures": 0,
+        "result": "Failed"
+      },
+      "phaseReceiptFile": "v28-full-native/focused-thirteen-compact-receipt.json"
+    },
+    "isolated-sdk-1": {
+      "bundle": "v28-full-native/isolated-sdk-1.xcresult",
+      "resultInfoSHA256": "c9df632321c0291d0183eca21c6008aa13857b95ad37983bdc76d8edd31a064e",
+      "summarySHA256": "39b50705b81ddcf5514ef899541ea2276aa48def3e9f3374d181284c73a1ea4c",
+      "testsSHA256": "c84bde9634f42383cd5f922db74283895c31f020ae57892ffc935bdf675c235c",
+      "phaseReceiptSHA256": "2f70531d104be8b082bed062a6c713a22886b93279b4911ef36eaef04e75abd0",
+      "counts": {
+        "totalTestCount": 1,
+        "passedTests": 1,
+        "failedTests": 0,
+        "skippedTests": 0,
+        "expectedFailures": 0,
+        "result": "Passed"
+      },
+      "phaseReceiptFile": "v28-full-native/isolated-sdk-1-accounted-result.json"
+    }
+  },
+  "images": [
+    {
+      "file": "compact-live-home.jpg",
+      "caption": "Live home on compact phone; clear status strip.",
+      "case": "WanderUITests/LiveExperienceUITests/testThreeTabsAndProfileContinuity",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "2E80CB0A-FD30-4854-BF32-966DB1BBFFC7",
+        "deviceName": "REC636 Live Compact Gesture",
+        "modelName": "iPhone 13 mini",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Light",
+      "phase": "focused-thirteen-compact",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveExperienceUITests/testThreeTabsAndProfileContinuity",
+      "activitiesSHA256": "dfdabd2ceba129d541df7b4a3b09883bfee1ab219fc692813b7bac8a0ef107c7",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-live-home_0_5762DD37-76C7-43D0-98C5-D1FDB07344AA.png",
+        "payloadId": "0~71WSz8MpElYHf7z5X3JQRVUo34BGzfAD718Dc__sAu4zQ3ATp_-Yo7G16nbexQt-gvVqjcTTfo1luch9PnZzPQ==",
+        "timestamp": 1792087802.833,
+        "uuid": "7B6799FC-1493-4443-98A4-6B532B0CF64E"
+      },
+      "original": {
+        "file": "v28-compact-status-captures/compact-live-home.png",
+        "sha256": "c001c816683de2db9219420ad67adc17152634b715c56735ea8b75a4565b366e",
+        "bytes": 1240398,
+        "dimensions": [
+          1124,
+          2436
+        ]
+      },
+      "sha256": "166ea10c95b2ae883e4cc614636d99b3fc7fee79c25f247193bed78f8791d057",
+      "bytes": 58740,
+      "dimensions": [
+        450,
+        975
+      ],
+      "jpegQuality": 70,
+      "originalReexported": false
+    },
+    {
+      "file": "large-live-home.jpg",
+      "caption": "Live home on large phone; clear status strip.",
+      "case": "WanderUITests/LiveExperienceUITests/testThreeTabsAndProfileContinuity",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "21FFD105-FF94-44D6-82F0-2DF1DF4A6724",
+        "deviceName": "REC636 Live Large",
+        "modelName": "iPhone 17 Pro",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Dark",
+      "phase": "focused-thirteen-large",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveExperienceUITests/testThreeTabsAndProfileContinuity",
+      "activitiesSHA256": "8110390d3d89cb828a1e41a73724e7d9f0b01b5d70bc51f70ee3ae1a6c3a7b75",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-live-home_0_BB573C12-AE69-4C7B-9C2B-76CB94373744.png",
+        "payloadId": "0~a3-xuSRtj8iQUYi8tMx_bzLfePLsb8o71SvJN3Go-4z2QevPsTqYXAhiA9pKO0q8A0kmgAq8tNupGz_QrLigDg==",
+        "timestamp": 1792086208.084,
+        "uuid": "0BEF032C-1AA6-4BFC-A750-E6B13902B76F"
+      },
+      "original": {
+        "file": "v28-large-status-captures/large-live-home.png",
+        "sha256": "f1e1092bbbc8d7e3fe4d3b74c6224815b3107dad6b15ae2e61c8c42d3fac12ec",
+        "bytes": 984074,
+        "dimensions": [
+          1206,
+          2622
+        ]
+      },
+      "sha256": "5d3bf8eaf25c3b750b16c40df76f00b7f4713793da1db2a66920efc460037cdb",
+      "bytes": 56701,
+      "dimensions": [
+        450,
+        978
+      ],
+      "jpegQuality": 70,
+      "originalReexported": false
+    },
+    {
+      "file": "compact-wanna-ryan.jpg",
+      "caption": "Contextual private reply opened from Wanna; fixture explicitly says nothing is delivered.",
+      "case": "WanderUITests/LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "2E80CB0A-FD30-4854-BF32-966DB1BBFFC7",
+        "deviceName": "REC636 Live Compact Gesture",
+        "modelName": "iPhone 13 mini",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Light",
+      "phase": "focused-thirteen-compact",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery",
+      "activitiesSHA256": "f42318b52d4baf40a2015ea3f6da7cb51fb4498d28755d0ba62a328255c32606",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-wanna-contextual-reply_0_E1D19660-217D-4B0A-874A-A51468A8BB48.png",
+        "payloadId": "0~sN8kDyfqvS1FE_RfCtYsS26XrfxhmsYJC68MDY7HoMjLe1lraUAX9nfAMEgeanWOi6926xJuimQKrQpWHIH45A==",
+        "timestamp": 1792087826.797,
+        "uuid": "ADDDCB3A-BD76-455F-B048-E3A5A4949E07"
+      },
+      "original": {
+        "file": "v28-compact-status-captures/compact-wanna-ryan.png",
+        "sha256": "b2d8c7e0707b7e0fb4d1cc1c592007ddf11d2ad941a7ed99834904dcba53a851",
+        "bytes": 216715,
+        "dimensions": [
+          1124,
+          2436
+        ]
+      },
+      "sha256": "c2185c4bbd4f94008b702fc54855be172dfeb03fa1a814e39c191d444c1923b5",
+      "bytes": 31914,
+      "dimensions": [
+        450,
+        975
+      ],
+      "jpegQuality": 82,
+      "originalReexported": false
+    },
+    {
+      "file": "integrated-your-map-tools.jpg",
+      "caption": "Profile Patterns reached from Live; other Your Map tools remain in Profile.",
+      "case": "WanderUITests/LiveReviewContinuityUITests/testLiveFilterSurvivesProfileYourMapSavedPlaceAndPatternsReturn",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "2E80CB0A-FD30-4854-BF32-966DB1BBFFC7",
+        "deviceName": "REC636 Live Compact Gesture",
+        "modelName": "iPhone 13 mini",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Light",
+      "phase": "focused-thirteen-compact",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveReviewContinuityUITests/testLiveFilterSurvivesProfileYourMapSavedPlaceAndPatternsReturn",
+      "activitiesSHA256": "f3cb7019da2e7f61ee2937d6ef568909fe88fa2057d8ae5f8dea88a31a16eb1a",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-continuity-profile-patterns-from-live_0_9EEC50B3-FE89-436B-8DF1-FAA95256D3C6.png",
+        "payloadId": "0~55jM2jYjE3gImscncYbR3acOkNslmUr97v_64m_XIJYqRmdiJVKobgGk4XKlkHo7anfolH8408dXxfEDPtZiIA==",
+        "timestamp": 1792087928.498,
+        "uuid": "85011832-5CD6-4FE9-BBFD-F455ECC2C676"
+      },
+      "original": {
+        "file": "v28-focus-gallery-prepared/originals/integrated-your-map-tools.png",
+        "sha256": "5bf6d32ca51a60a4eb68c6db8f330629fcfc8566774227f31b18570fb6ee8887",
+        "bytes": 308310,
+        "dimensions": [
+          1124,
+          2436
+        ]
+      },
+      "sha256": "67a887fd69cbe5a7ce06383596ec197dfdfcf03f978fb38f5c941a8d6260ba94",
+      "bytes": 37298,
+      "dimensions": [
+        450,
+        975
+      ],
+      "jpegQuality": 70,
+      "originalReexported": false
+    },
+    {
+      "file": "compact-embedded-first.jpg",
+      "caption": "Existing Feed photo viewer opened from Live; decoded first photo,1of3.",
+      "case": "WanderUITests/LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "2E80CB0A-FD30-4854-BF32-966DB1BBFFC7",
+        "deviceName": "REC636 Live Compact Gesture",
+        "modelName": "iPhone 13 mini",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Native black photo viewer",
+      "phase": "focused-thirteen-compact",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn",
+      "activitiesSHA256": "366019a09d03309b6a13f69158f4b8bb7bde0e1b8ccc0ba8f8253ec6b67de38a",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-continuity-embedded-photo-first_0_557DD3BA-C531-4D84-A40A-5315AC933A7F.png",
+        "payloadId": "0~3RKitTor_kHgcsoJNBvVTMvWiMQebUGf_RO7gJ1ft7RtvvI52WXsbgx9n13K0KOEYEM-KndmjJbT5gp3K3w5Kw==",
+        "timestamp": 1792087870.781,
+        "uuid": "6252B977-23B0-483E-98A1-16263A2F0A80"
+      },
+      "original": {
+        "file": "v28-focus-gallery-prepared/originals/compact-embedded-first.png",
+        "sha256": "d88c04d01eab56cf51545e3165b4c51a706ac6383c0462aa870bc362a827497a",
+        "bytes": 1945833,
+        "dimensions": [
+          1124,
+          2436
+        ]
+      },
+      "sha256": "c206a2d023ad31b1e0814eb67b29148871c4354a42f3a06dc37f4bdb6aa1e2e4",
+      "bytes": 49201,
+      "dimensions": [
+        450,
+        975
+      ],
+      "jpegQuality": 70,
+      "originalReexported": false
+    },
+    {
+      "file": "compact-embedded-second.jpg",
+      "caption": "Same viewer after native paging; distinct decoded second photo,2of3.",
+      "case": "WanderUITests/LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "2E80CB0A-FD30-4854-BF32-966DB1BBFFC7",
+        "deviceName": "REC636 Live Compact Gesture",
+        "modelName": "iPhone 13 mini",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Native black photo viewer",
+      "phase": "focused-thirteen-compact",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn",
+      "activitiesSHA256": "366019a09d03309b6a13f69158f4b8bb7bde0e1b8ccc0ba8f8253ec6b67de38a",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-continuity-embedded-photo-second_0_FB880074-1197-4E2D-B534-FD244E70F76D.png",
+        "payloadId": "0~Kev_eZ4ipxZHRAD6smWHNbi9JOZMrEKblmgXYMPWAEZaetl1VUXqwmHZmzZl5_odbgBOw8hyhsaxBHwp5tsS2w==",
+        "timestamp": 1792087874.341,
+        "uuid": "B0169A2C-572F-4877-8439-A57B0C140E4C"
+      },
+      "original": {
+        "file": "v28-focus-gallery-prepared/originals/compact-embedded-second.png",
+        "sha256": "4eedb5e1f455ff79ca10411db1677e6802e559423d2c4ee1f185118b850fd9af",
+        "bytes": 1557270,
+        "dimensions": [
+          1124,
+          2436
+        ]
+      },
+      "sha256": "d1304a71e538197823116f93a80896d6999c0677f3033a25933aacb5cb10b0b3",
+      "bytes": 38381,
+      "dimensions": [
+        450,
+        975
+      ],
+      "jpegQuality": 70,
+      "originalReexported": false
+    },
+    {
+      "file": "compact-embedded-return.jpg",
+      "caption": "Back returns to embedded Live with5updates, retained Following/Past7days and original photo stack.",
+      "case": "WanderUITests/LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "2E80CB0A-FD30-4854-BF32-966DB1BBFFC7",
+        "deviceName": "REC636 Live Compact Gesture",
+        "modelName": "iPhone 13 mini",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Light",
+      "phase": "focused-thirteen-compact",
+      "caseNodeIdentifierURL": "test://com.apple.xcode/Wander/WanderUITests/LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn",
+      "activitiesSHA256": "366019a09d03309b6a13f69158f4b8bb7bde0e1b8ccc0ba8f8253ec6b67de38a",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "REC-636-continuity-embedded-photo-return-to-live_0_B7323B15-6B28-4641-AC55-0FF0F2C2A5C1.png",
+        "payloadId": "0~WoeL1doqmrg3C1wnpz08JS5PwAUIfjKrfgTJ7oZYEnKgtkCqUiv7pmXdZnDW7LublbsV3cFVgv54cULaWJnErw==",
+        "timestamp": 1792087878.383,
+        "uuid": "C3A5A6DC-CBEB-4D52-BA8A-F63912F5FBE6"
+      },
+      "original": {
+        "file": "v28-focus-gallery-prepared/originals/compact-embedded-return.png",
+        "sha256": "a78078d3ea3e1e0069a6d284118b5c9c86f2f63a001c78edf43617949b2e4e64",
+        "bytes": 1254724,
+        "dimensions": [
+          1124,
+          2436
+        ]
+      },
+      "sha256": "3feefb57e4b00c4bf01d7a89b2201952d9c7d4e46af368b708665165ae7cbfb1",
+      "bytes": 54304,
+      "dimensions": [
+        450,
+        975
+      ],
+      "jpegQuality": 76,
+      "originalReexported": false
+    },
+    {
+      "file": "private-actual-sdk-masked.jpg",
+      "caption": "Actual offline SDK replay: green loaded marker outside black private mask; one selected frame from the Passed isolated privacy test.",
+      "case": "WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
+      "caseResult": "Passed",
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "21FFD105-FF94-44D6-82F0-2DF1DF4A6724",
+        "deviceName": "REC636 Live Large",
+        "modelName": "iPhone 17 Pro",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "appearance": "Actual SDK fixture output",
+      "phase": "isolated-sdk-1",
+      "activitiesSHA256": "198f5951bafcc53e33a87fc0a4acb86b485d2568bf01cfcabc88a613b8e2fc33",
+      "attachment": {
+        "lifetime": "keepAlways",
+        "name": "Private thread \u2014 actual offline SDK replay_0_3CC7186D-8CBE-4B63-A79D-89D6F0729BC9.png",
+        "payloadId": "0~bFYSMleIPvCNH9PZxQI8V4svQPIbOA5wPE8hd0tMj6VlApJ95kYqUBpL77YqtbPwcNm-XLQd8924voxbsOGBbg==",
+        "timestamp": 1792088985.447,
+        "uuid": "4D97EC4A-0C56-4F14-8068-C2F29E72F514"
+      },
+      "original": {
+        "file": "v28-actual-sdk-gallery-prepared/private-actual-sdk-masked.png",
+        "sha256": "562bdcf37e32d0b718ba8f0c9d92eac2148af85b3a4f74b288050b68636902a7",
+        "bytes": 22620,
+        "dimensions": [
+          402,
+          874
+        ]
+      },
+      "sha256": "de1a46608654fa8d3c0b14ed6d5c551fe18ec72a126455c891939eaa000925f0",
+      "bytes": 7343,
+      "dimensions": [
+        450,
+        978
+      ],
+      "jpegQuality": 82,
+      "originalReexported": false
+    }
+  ],
+  "evidenceReceiptsSHA256": {
+    "v28-gallery-selection-plan.json": "19e3a2b60256781f965185bf43ead5b1773d645a3a9a5560cfff6916c0b5a207",
+    "v28-focus-root-six-capture-review.json": "d334fd8955e7579cb9a4190af6141ba4f0c88937ce71c06528d7c5cd67bfb5ab",
+    "v28-large-status-captures/extraction-receipt.json": "3933c373e885e86a42667b5ac511a8c5b9014a7030da3ff33e16dd8438d410db",
+    "v28-compact-status-captures/extraction-receipt.json": "2e829317634a4c55eb041a8a9c3cdd2af341d872019f2ed2cfe4588069ab198b",
+    "v28-focus-gallery-prepared/extraction-receipt.json": "648169c3e0162580a2f5beaedcb8ff6a7dd3c7d18ba73627dc4f0bb469245207",
+    "v28-actual-sdk-gallery-prepared/provenance.json": "41ed95f7986d4caf5f45e0eb9ade3f5471c699c4be6f7ad9a91fc82a3fb47da5",
+    "v28-new-five-gallery-visual-review.json": "b1491cecc339c2eb3315c80a2cfc175ff419f6f40d3a4f2232afc040bb88ad88"
+  },
+  "reproduction": {
+    "originalFilesRelativeToSharedIssueEvidence": true,
+    "pillowVersion": "12.3.0",
+    "imageTransform": "Entire frame, RGB, LANCZOS resize to450px wide preserving aspect ratio; progressiveJPEG4:2:0",
+    "qualitySelection": "First quality in82,76,70,64,58,52 within each reviewed slot budget; actual quality is recorded per image. Existing five derivatives copied byte-for-byte.",
+    "cropOverlayOrRepaint": false,
+    "assemblyScriptSHA256": "ae914e95e9aa45ad972efeda91772a6c04f351d399b25339cf50bda7227d9723"
+  },
+  "packBudgetBytes": 385000,
+  "optionalHistoricalBeforeIncluded": false,
+  "originalsOrHistoricalEvidenceDeleted": false,
+  "overallCandidatePassed": false,
+  "fullNativeResult": "See current validation report; selected Passed cases do not relabel Failed focus aggregates.",
+  "freshDEBUGFixtureCandidateValidatedByThisPack": false,
+  "limits": [
+    "Fixture messages do not prove delivery or real-account authorization.",
+    "A selected SDK image does not independently prove every frame; exact isolated test assertions remain required.",
+    "No hardware, spoken VoiceOver, current freehand/manual or production paging claim.",
+    "V28 evidence does not become execution evidence for a future DEBUG fixture candidate."
+  ],
+  "visualReview": {
+    "originalsAndAllEightFullFrameDerivativesInspected": true,
+    "fiveOriginalAndDerivativeReviewSHA256": "b1491cecc339c2eb3315c80a2cfc175ff419f6f40d3a4f2232afc040bb88ad88",
+    "rootSixCaptureStatusReviewSHA256": "d334fd8955e7579cb9a4190af6141ba4f0c88937ce71c06528d7c5cd67bfb5ab",
+    "newThreeDerivatives": "Full-frame fidelity/status text and fixture disclosure inspected independently; no new interaction claim."
+  }
+}

@@ -268,8 +268,14 @@ final class SenderNotificationFlowUITests: XCTestCase {
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication, down: Bool = false) {
         _ = element.waitForExistence(timeout: 5)
+        let requiresSaveEditor = app.scrollViews["save.editorScroll"].exists && element.identifier.hasPrefix("save.")
         for _ in 0..<16 {
             let editor = app.scrollViews["save.editorScroll"]
+            if requiresSaveEditor && (!editor.exists || !editor.isHittable) {
+                capture("save-editor-route-lost")
+                XCTFail("The original save editor must remain visible while scrolling its control.")
+                return
+            }
             let usesEditor = editor.exists && editor.isHittable && element.identifier.hasPrefix("save.")
             let surface = usesEditor ? editor : (app.scrollViews.allElementsBoundByIndex.max { $0.frame.height < $1.frame.height } ?? app.scrollViews.firstMatch)
             let surfaceFrame = surface.exists ? surface.frame : .null
@@ -278,7 +284,8 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let validFrame = !surfaceFrame.isEmpty && !surfaceFrame.isNull
                 && surfaceFrame.minX.isFinite && surfaceFrame.minY.isFinite
                 && surfaceFrame.width.isFinite && surfaceFrame.height.isFinite
-            var viewport = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
+            let scrollBounds = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
+            var viewport = scrollBounds
             if !usesEditor { viewport = viewport.intersection(app.frame.insetBy(dx: 0, dy: 100)) }
             for identifier in ["save.submit", "import.save", "map-list-picker.apply"] {
                 let submit = app.buttons[identifier]
@@ -295,12 +302,82 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let up = frame.isEmpty ? !down : frame.midY >= viewport.midY
             if viewport.height > 80 {
                 let origin = app.coordinate(withNormalizedOffset: .zero)
-                let lower = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.78))
-                let upper = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.22))
-                (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+                if usesEditor {
+                    // AX rectangles are not a guarantee of the complete hit target.
+                    // Keep both endpoints 22pt away as a conservative test margin;
+                    // the recognized scroll may cross controls between endpoints.
+                    let margin: CGFloat = 22
+                    let controlTypes: [XCUIElement.ElementType] = [
+                        .button, .switch, .textField, .secureTextField, .textView,
+                        .slider, .segmentedControl, .picker, .pickerWheel, .datePicker, .link
+                    ]
+                    guard let snapshot = try? editor.snapshot() else {
+                        capture("save-editor-scroll-snapshot-missing")
+                        XCTFail("Expected one native save-editor snapshot to plan safe scroll input.")
+                        return
+                    }
+                    var controls: [CGRect] = []
+                    var controlDescriptions: [String] = []
+                    func collectControls(_ node: any XCUIElementSnapshot) {
+                        if controlTypes.contains(node.elementType) {
+                            let rect = node.frame
+                            let finite = !rect.isNull && !rect.isInfinite
+                                && rect.minX.isFinite && rect.minY.isFinite
+                                && rect.width.isFinite && rect.height.isFinite
+                            if finite && !rect.isEmpty { controls.append(rect) }
+                            controlDescriptions.append("\(node.identifier):\(rect)")
+                        }
+                        for child in node.children { collectControls(child) }
+                    }
+                    collectControls(snapshot)
+                    let endpoints = validFrame
+                        ? editorScrollEndpoints(in: viewport, avoiding: controls, margin: margin) : nil
+                    let diagnostic = XCTAttachment(string: "editorFrame=\(surfaceFrame); validFrame=\(validFrame); viewport=\(viewport); target=\(element.identifier); targetFrame=\(frame); margin=\(margin); endpoints=\(String(describing: endpoints)); up=\(up); controls=\(controlDescriptions.joined(separator: "|"))")
+                    diagnostic.name = "REC589-save-editor-scroll-geometry"
+                    diagnostic.lifetime = .keepAlways
+                    add(diagnostic)
+                    guard let endpoints else {
+                        capture("save-editor-scroll-corridor-missing")
+                        XCTFail("Expected native scroll endpoints inside the save editor and at least 22pt clear of its controls.")
+                        return
+                    }
+                    let lower = origin.withOffset(CGVector(dx: endpoints.lower.x, dy: endpoints.lower.y))
+                    let upper = origin.withOffset(CGVector(dx: endpoints.upper.x, dy: endpoints.upper.y))
+                    (up ? lower : upper).press(forDuration: 0, thenDragTo: up ? upper : lower, withVelocity: .default, thenHoldForDuration: 0)
+                } else {
+                    let lower = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.78))
+                    let upper = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.22))
+                    (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+                }
             } else if up { surface.swipeUp(velocity: .slow) } else { surface.swipeDown(velocity: .slow) }
         }
+        let editor = app.scrollViews["save.editorScroll"]
+        if requiresSaveEditor && (!editor.exists || !editor.isHittable) {
+            capture("save-editor-route-lost")
+            XCTFail("The original save editor must remain visible while scrolling its control.")
+            return
+        }
         XCTAssertTrue(element.isHittable, "Control must be reachable: \(element.identifier)")
+    }
+    private func editorScrollEndpoints(in viewport: CGRect, avoiding controls: [CGRect], margin: CGFloat) -> (lower: CGPoint, upper: CGPoint)? {
+        let bounds = viewport.insetBy(dx: 2, dy: 2)
+        guard !bounds.isEmpty, !bounds.isNull, !bounds.isInfinite else { return nil }
+        let excluded = controls.map { $0.insetBy(dx: -margin, dy: -margin) }
+        // Include obstacle boundaries so a valid short drag cannot fall between grid samples.
+        let candidateYs = ([bounds.minY, bounds.maxY]
+            + excluded.flatMap { [$0.minY - 1, $0.maxY + 1] })
+            .filter { $0 >= bounds.minY && $0 <= bounds.maxY }.sorted()
+        var best: (lower: CGPoint, upper: CGPoint)?
+        for x in [bounds.midX, bounds.minX, bounds.maxX] {
+            let safe = candidateYs.map { CGPoint(x: x, y: $0) }
+                .filter { point in !excluded.contains { $0.contains(point) } }
+            guard let upper = safe.first, let lower = safe.last,
+                  lower.y - upper.y >= 44 else { continue }
+            if best == nil || lower.y - upper.y > best!.lower.y - best!.upper.y {
+                best = (lower, upper)
+            }
+        }
+        return best
     }
     private func stateField(_ key: String, app: XCUIApplication) -> String {
         let value = app.staticTexts["sender-review.state"].value as? String ?? ""

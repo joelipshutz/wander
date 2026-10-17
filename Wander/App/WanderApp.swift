@@ -5,6 +5,52 @@ import SwiftData
 import UIKit
 #endif
 
+#if DEBUG
+/// Launch-only input isolation for the hosted Replay component tests.
+@MainActor
+enum ReplayFixtureHostPolicy {
+    enum Mode: Equatable { case ordinary, inert, invalid }
+    static let argument = "-WanderReplayFixtureHost"
+    static func hasRequest(in arguments: [String]) -> Bool {
+        arguments.contains { $0 == argument || $0.hasPrefix(argument + "=") }
+    }
+    static func resolve(arguments: [String], bundleIdentifier: String?, isSimulator: Bool) -> Mode {
+        guard hasRequest(in: arguments) else { return .ordinary }
+        let matches = arguments.indices.filter { arguments[$0] == argument }
+        guard isSimulator, bundleIdentifier == "com.grayline.wander",
+              matches.count == 1, let index = matches.first,
+              arguments.indices.contains(index + 1), arguments[index + 1] == "inert",
+              !arguments.contains(where: { $0.hasPrefix(argument + "=") }) else { return .invalid }
+        return .inert
+    }
+    private static var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+    static let hasRequest = hasRequest(in: ProcessInfo.processInfo.arguments)
+    static let isExpectedHost = Bundle.main.bundleIdentifier == "com.grayline.wander"
+    static let mode = resolve(arguments: ProcessInfo.processInfo.arguments,
+                              bundleIdentifier: Bundle.main.bundleIdentifier, isSimulator: isSimulator)
+    static var usesInertRoot: Bool {
+        #if targetEnvironment(simulator)
+        mode == .inert
+        #else
+        false
+        #endif
+    }
+    static private(set) var inertRootMounted = false
+    static private(set) var ordinaryRootMounted = false
+    static func recordInertRootMounted() { inertRootMounted = true }
+    static func recordOrdinaryRootMounted() {
+        guard hasRequest else { return }
+        ordinaryRootMounted = true
+    }
+}
+#endif
+
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
     static let resetAuthenticatedFixtureArgument = "-WanderResetAuthenticatedUITest"
@@ -152,6 +198,7 @@ struct WanderApp: App {
             #endif
         }
         #if DEBUG && targetEnvironment(simulator)
+        LiveIntroductionUITestFixtures.prepare(authenticatedUserID: authStore.state.session?.userID)
         let fixtureMetro = forcedOnboardingStep == nil ? EventsAccessPolicy.fixtureMetroID() : nil
         let simulatorContactDetails = SimulatorAccountContactDetailsRepository(details: fixtureMetro.map {
             AccountContactDetails(metroID: $0, homeCountryCode: HomeMetro.find($0)?.country, phoneCountryCode: "US", phoneE164: nil)
@@ -175,7 +222,9 @@ struct WanderApp: App {
                     includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderFollowNotificationUITest")
                 ),
                 placePlanInvitationRepository: SimulatorPlacePlanInvitationRepository(
-                    includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest")
+                    includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest"),
+                    suggestedAt: ProcessInfo.processInfo.arguments.contains("-WanderLiveUpcomingUITest")
+                        ? Calendar.current.date(byAdding: .day, value: 1, to: .now) : nil
                 ),
                 eventsInterestRepository: SimulatorEventsInterestRepository(),
                 accountContactDetailsRepository: simulatorContactDetails,
@@ -207,7 +256,11 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
+            if ReplayFixtureHostPolicy.usesInertRoot {
+                Color.clear
+                    .accessibilityHidden(true)
+                    .onAppear { ReplayFixtureHostPolicy.recordInertRootMounted() }
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
                 ActivityPostcardReviewRoot()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
                 ShareCardDesignMockupRoot()
@@ -289,6 +342,9 @@ struct WanderApp: App {
             .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
+            #if DEBUG
+            .onAppear { ReplayFixtureHostPolicy.recordOrdinaryRootMounted() }
+            #endif
     }
 
     #if DEBUG
@@ -431,20 +487,51 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     private static var croppedImageCache: [Int: UIImage] = [:]
     private static var encodedImageCache: [Int: Data] = [:]
 
-    func validateAccess(to photo: PlacePhoto) async throws {
-        // This DEBUG repository serves only bundled screenshot assets. Keep
-        // the new protected-photo contract explicit and reject real media.
-        guard let url = photo.photoURL,
-              url.scheme == "capture", url.host == "place-carousel",
-              let tile = Int(url.lastPathComponent), (0..<Self.tileCount).contains(tile)
-        else { throw WanderRemoteError.notConfigured }
+    private let enablesREC386PhotoFixture: Bool
+
+    init(launchArguments: [String] = ProcessInfo.processInfo.arguments) {
+        enablesREC386PhotoFixture = Set([
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderREC386PhotoFixture"
+        ]).isSubset(of: Set(launchArguments))
+        if launchArguments.contains("-WanderUsePerformanceFixtures") {
+            Self.prewarmTileCache()
+        }
     }
 
-    init() {
-        guard ProcessInfo.processInfo.arguments.contains("-WanderUsePerformanceFixtures") else {
+    func validateAccess(to photo: PlacePhoto) async throws {
+        guard photo.requiresAccessCheck else { return }
+        guard photo.provider == "visit_photo" else {
+            throw WanderRemoteError.notConfigured
+        }
+        // Authorize only bundled resources synthesized by this DEBUG repository.
+        // Production protected-media authorization remains fail-closed.
+        let isCaptureTile = (0..<Self.tileCount).contains { index in
+            photo.providerPlaceID == "capture-visit-\(index)"
+                && photo.photoURLString == "capture://place-carousel/\(index)"
+        }
+        if isCaptureTile,
+           photo.storageBucket == nil,
+           photo.storagePath == nil,
+           photo.localAssetRef == nil {
             return
         }
-        Self.prewarmTileCache()
+        let isREC386Gallery = photo.photoURLString == "capture://place-carousel/3"
+            && photo.localAssetRef == nil
+        let isREC386CheckIn = photo.photoURLString.isEmpty
+            && photo.localAssetRef == "local_file:55000000-0000-0000-0000-000000000386.png"
+        if enablesREC386PhotoFixture,
+           photo.providerPlaceID == "55000000-0000-0000-0000-000000000386",
+           photo.storageBucket == "visit-photos",
+           photo.storagePath == "user_ryan/54000000-0000-0000-0000-000000000386/photo.png",
+           isREC386Gallery || isREC386CheckIn {
+            // The gallery uses a capture URL; the same check-in's LocalVisitPhoto
+            // has no remote URL. Both resolve to the bundled tile in imageData.
+            return
+        }
+        throw WanderRemoteError.notConfigured
     }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -471,7 +558,7 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage {
-        if ProcessInfo.processInfo.arguments.contains("-WanderREC386PhotoFixture"),
+        if enablesREC386PhotoFixture,
            cursor == nil,
            placeIDs.contains("50000000-0000-0000-0000-000000000386") {
             let photo = PlacePhoto(

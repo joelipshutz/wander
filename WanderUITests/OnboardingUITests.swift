@@ -10,11 +10,18 @@ final class ImportFormRefinementUITests: XCTestCase {
         app.buttons["Clear test captures"].tap()
         defer { if app.buttons["Clear test captures"].isHittable { app.buttons["Clear test captures"].tap() } }
         app.buttons["Share test link"].tap()
-        let activity = app.cells.matching(NSPredicate(format: "label ==[c] %@", "Astir")).firstMatch
-        if !activity.waitForExistence(timeout: 5) {
-            let more = app.cells["More"].firstMatch
-            if more.exists { more.tap() }
-        }
+        // The system may use the host's ASTIR name or the extension's
+        // Save to Astir title. Both are exact branded destinations.
+        let activityTitle = NSPredicate(
+            format: "label ==[c] %@ OR label ==[c] %@", "Astir", "Save to Astir"
+        )
+        let more = app.cells.matching(NSPredicate(format: "label == %@", "More")).firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 5))
+        more.tap()
+        // Exercise the Apps route, whose sheet covers the original labeled
+        // share cells and exposes each visible row's title in a child label.
+        let activity = app.otherElements["ShareSheet.EditAppsView"]
+            .tables["tableView"].cells.containing(activityTitle).firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         activity.tap()
         let countdownAvailable = app.buttons["share-extension-start-import"].waitForExistence(timeout: 5)
@@ -1056,7 +1063,7 @@ final class OnboardingUITests: XCTestCase {
 
     func testPlusRemainsVoluntaryAndDoesNotStartForcedSave() {
         let app = XCUIApplication()
-        app.launchArguments = nativeOverviewArguments + ["-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapAdd"]
+        app.launchArguments = nativeOverviewArguments + ["-WanderUseStorefrontFixtures", "-WanderHoldWalkthroughStep", "-WanderWalkthroughTarget", "mapAdd"]
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["walkthrough.map.mapAdd"].waitForExistence(timeout: 18))
         app.buttons["map.headerAdd"].tap()
@@ -1135,7 +1142,7 @@ final class OnboardingUITests: XCTestCase {
         let headingY = app.staticTexts["Activity"].frame.minY
         // Use the visible center of the capsule for both manual transitions.
         app.buttons["walkthrough.next.feed.feedActivity"]
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         XCTAssertTrue(recent.waitForExistence(timeout: 6))
         XCTAssertFalse(circle.exists)
         captureNUX("C02-recent")
@@ -1144,7 +1151,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(recent.label, "Keep up with their moments")
         XCTAssertTrue(app.buttons["walkthrough.next.feed.feedActivity"].exists)
         app.buttons["walkthrough.next.feed.feedActivity"]
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
         let returned = expectation(for: NSPredicate(format: "hittable == true"),
                                    evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
@@ -1394,6 +1401,7 @@ final class OnboardingUITests: XCTestCase {
 
     func testReturningUserColdStartAndOrdinaryForegroundOpenFeed() {
         let app = XCUIApplication()
+        guard seedStalePrimaryCheckpoint(in: app) else { return }
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs"]
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
@@ -1417,6 +1425,35 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(feedTab.waitForExistence(timeout: 8))
         XCTAssertTrue(feedTab.isSelected)
+    }
+
+    func testReturningUserExplicitProfileDestinationSurvivesStaleCheckpointCleanup() {
+        let app = XCUIApplication()
+        guard seedStalePrimaryCheckpoint(in: app) else { return }
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+                               "-WanderInitialTab", "profile"]
+        app.launch()
+
+        let profileTab = app.buttons["Profile"]
+        XCTAssertTrue(profileTab.waitForExistence(timeout: 8))
+        XCTAssertTrue(profileTab.isSelected)
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["Map"].isSelected)
+    }
+
+    private func seedStalePrimaryCheckpoint(in app: XCUIApplication) -> Bool {
+        // Clear only the known fictional account's teaching state using the
+        // existing authenticated/demo fixture, then leave a real checkpoint.
+        app.launchArguments = nativeOverviewArguments + [
+            "-WanderHoldWalkthroughStep", "-WanderLiveIntroductionUITest", "cleanup",
+            "-WanderLiveIntroductionUITestRun", UUID().uuidString
+        ]
+        app.launch()
+        let checkpoint = app.descendants(matching: .any)["walkthrough.map.mapFeatured"]
+        let didSeed = checkpoint.waitForExistence(timeout: 18)
+        XCTAssertTrue(didSeed, "The regression must start with a held primary checkpoint.")
+        app.terminate()
+        return didSeed
     }
 
     func testPrimaryTabTapNavigatesToFeed() {
@@ -1859,8 +1896,11 @@ final class OnboardingUITests: XCTestCase {
         let restoredNote = app.textViews["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         XCTAssertTrue(restoredNote.isHittable)
-        // The native mention editor exposes its text, not its UILabel placeholder.
-        XCTAssertEqual(restoredNote.value as? String, "")
+        XCTAssertEqual(
+            restoredNote.value as? String,
+            "",
+            "A reopened Wanna must not restore the cancelled note. Placeholder copy is not input text."
+        )
         XCTAssertEqual(restoredNote.label, "What made you save this?")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1877,7 +1917,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         let preservedNote = app.textViews["save.note"]
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
-        XCTAssertEqual(preservedNote.value as? String, "")
+        XCTAssertEqual(
+            preservedNote.value as? String,
+            "",
+            "Switching to Check-in must not reuse the cancelled Wanna note."
+        )
         XCTAssertEqual(preservedNote.label, "Check-in note")
     }
 
@@ -1897,7 +1941,15 @@ final class OnboardingUITests: XCTestCase {
 
         let wanna = app.buttons["place-profile.floating-action.wanna"]
         XCTAssertTrue(wanna.waitForExistence(timeout: 5))
-        XCTAssertTrue(wanna.isHittable)
+        // The place profile can enter accessibility before the startup overlay
+        // and presentation transition finish. Count the single physical tap
+        // only after its actual action is reachable.
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: wanna
+        )
+        let readiness = XCTWaiter.wait(for: [ready], timeout: 10)
+        XCTAssertEqual(readiness, .completed)
+        guard readiness == .completed else { return }
         wanna.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         let attachedTray = app.otherElements["place-profile.attached-wanna"].firstMatch
@@ -2293,6 +2345,14 @@ final class OnboardingUITests: XCTestCase {
     }
 
     func testFeedInlineSearchCoversEntryEmptyResultsNavigationAndBack() {
+        exerciseFeedInlineSearchReturn(usesEdgeGesture: true)
+    }
+
+    func testFeedInlineSearchBackButtonCoversEntryEmptyResultsNavigationAndBack() {
+        exerciseFeedInlineSearchReturn(usesEdgeGesture: false)
+    }
+
+    private func exerciseFeedInlineSearchReturn(usesEdgeGesture: Bool) {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -2347,9 +2407,13 @@ final class OnboardingUITests: XCTestCase {
 
         let placeBackButton = app.buttons["place-profile.back"]
         XCTAssertTrue(placeBackButton.waitForExistence(timeout: 4))
-        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5))
-        leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
+        if usesEdgeGesture {
+            let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+            let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5))
+            leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
+        } else {
+            placeBackButton.tap()
+        }
         XCTAssertTrue(placeBackButton.waitForNonExistence(timeout: 3))
         XCTAssertTrue(searchField.waitForExistence(timeout: 3))
         XCTAssertEqual(searchField.value as? String, "coffee")

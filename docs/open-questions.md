@@ -1,8 +1,50 @@
 # Open Questions
 
-Last updated: 2026-10-06
+Last updated: 2026-10-11
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## Live experience review (REC-636)
+
+The [current contract](designs/astir-live/product-spec.md) records the accepted
+Live / Lists / Profile shell, exact Feed preservation, drawing-only Your Map
+reuse, production mutual-only messaging, existing invitation reuse, D9 migration
+and D10 Upcoming separation. D2/D3 query presets/defaults are also explicitly
+accepted: Following defaults to seven days; Nearby starts at 5 km with explicit
+expansion up to 25 km under existing visibility. These decisions are settled and
+are not waiting for another approval. Local selected-city 5/25 km, loaded
+category/person and 24-hour controls now exist, with fixed bounds advanced by
+Apply or explicit refresh.
+The native query is wired. The SQL is packaged and its rolled-back previews
+pass; dormant installation and post-install hosted verification remain pending. Current device-location centering
+is not implemented; selected-city centers work. Eligible discovery remains
+distinct work.
+Profile and all non-drawing Your Map tools remain unchanged.
+
+D11 is resolved: other people's Live rows receive a 15-minute display lease
+from per-row monotonic authorized-response receipts captured before media work.
+Suspension counts; wall-clock changes cannot extend access. Profile history is
+unchanged. Drawing uses freehand Apply/Cancel and account-session retention. The first messaging rollout
+is internal-only with both participants explicitly enabled server-side.
+
+| Deferred question | Current boundary | Gate |
+|---|---|---|
+| What reporting and soft-delete retention/export policy should broader messaging use? | Internal testers only; soft deletion denies access, physical profile deletion cascades messages. No automatic purge period or message-report workflow is introduced. | Decide and implement before broader availability; does not block internal review. |
+
+Complete server-side geography/time filtering and real messaging access/delivery
+validation are implementation work, not evidence already supplied by the earlier
+prototype. The integrated query uses authorized loaded Live rows; “N updates
+shown” / accessibility “N loaded updates” is not a server total. D2/D3 are
+accepted implementation work, not unresolved product recommendations. Their
+acceptance does not establish a complete query or broaden social visibility.
+
+Current drawer tabs remain visible at all detents, with handle drag/VoiceOver
+adjustment as the escape; the earlier hidden-peek-tabs/Map-pill target is not
+implemented. D9 recovery and messaging's inactive-scene cover are integrated.
+The [integrated validation report](designs/astir-live/review/integrated-validation.md)
+is the single authority for candidate-specific results and outstanding checks,
+including recovery/rollback and replay privacy. Those implementation and validation
+gates do not reopen the accepted decisions.
 
 ## App Clip release evidence (REC-408)
 

@@ -16,6 +16,8 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case activityShare
     case activityReport
     case activitySave
+    case liveModal
+    case legacyMapDestination
 }
 
 struct WanderDeepLinkPresentationToken: Hashable, Sendable {
@@ -320,6 +322,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var productUpsells: ProductUpsellCoordinator
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
     @State private var nuxFeedEntranceProgress: CGFloat = 0
+    @State private var showsLegacyMapDestination = false
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
@@ -333,6 +336,14 @@ struct WanderRootView: View {
     @State private var profileCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     @State private var presentationResetRequest: WanderPresentationResetRequest?
     @State private var deepLinkHandoffTask: Task<Void, Never>?
+    @State private var notificationAfterHandoff: (request: NotificationNavigationRequest, userID: String)?
+    @StateObject private var liveRecoveryCenter = LiveIntroductionRecoveryCenter.shared
+    @State private var liveMigrationOffer: LiveIntroductionMigrationRecord?
+    @State private var liveMigrationGuide: LiveIntroductionMigrationRecord?
+    @State private var liveMigrationContacts: LiveIntroductionMigrationRecord?
+    @State private var liveMigrationDeviceGuide: LiveIntroductionMigrationRecord?
+    @State private var liveMigrationAfterHandoff: LiveIntroductionRecoveryRequest?
+    @State private var liveExperienceLaunch = LiveExperienceLaunchPolicy()
     @State private var deepLinkHandoff = WanderDeepLinkHandoffCoordinator()
     @State private var foregroundEntryPolicy = WanderForegroundEntryPolicy()
     @State private var deepLinkPresentations = WanderDeepLinkPresentationRegistry()
@@ -516,6 +527,25 @@ struct WanderRootView: View {
     private var tabRoot: some View {
         TabView(selection: tabSelection) {
             Group {
+                if unifiedLiveEnabled {
+                    LiveScreen(
+                        isActive: selectedTab == .discover,
+                        eventsAvailable: eventsAreAvailable,
+                        homeMetroID: currentHomeMetro,
+                        introductionContext: liveIntroductionContext,
+                        migrationRecord: liveMigrationOffer,
+                        onContinueMigration: { liveMigrationGuide = liveMigrationOffer; liveMigrationOffer = nil },
+                        onDeferMigration: { markLiveMigrationOffered(); liveMigrationOffer = nil },
+                        onMigrationPresented: markLiveMigrationOffered,
+                        presentationResetRequest: presentationResetRequest,
+                        onPresentation: handleDeepLinkPresentation,
+                        onWillDismiss: handleDeepLinkPresentationWillDismiss,
+                        onDidDismiss: { handleDeepLinkPresentationDismissal(of: $0) },
+                        onAdd: presentAddSheet
+                    )
+                    .tabItem { Label("Live", systemImage: "map") }
+                    .tag(WanderTab.discover)
+                } else {
                 MapScreen(
                     defaultSource: store.defaultMapFilter,
                     isMapTabActive: selectedTab == .map,
@@ -555,6 +585,8 @@ struct WanderRootView: View {
                     .tag(WanderTab.events)
                 }
 
+                }
+
                 ListsScreen(presentationResetRequest: presentationResetRequest)
                     .tabItem { tabItemLabel(for: .lists) }
                     .tag(WanderTab.lists)
@@ -580,7 +612,7 @@ struct WanderRootView: View {
         }
         .tint(astirBrandMode.accent)
         .background {
-            WanderNativeTabAppearance(selection: selectedTab, tabs: availableTabs)
+            WanderNativeTabAppearance(selection: unifiedLiveEnabled ? LiveNavigationPolicy.tab(for: selectedTab) : selectedTab, tabs: availableTabs)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
@@ -598,6 +630,52 @@ struct WanderRootView: View {
             }
         }
         .environmentObject(store)
+        .sheet(isPresented: $showsLegacyMapDestination, onDismiss: {
+            handleDeepLinkPresentationDismissal(of: .legacyMapDestination)
+        }) {
+            WanderRootPresentationLifecycle(surface: .legacyMapDestination,
+                                            onPresent: handleDeepLinkPresentation,
+                                            onDismiss: handleDeepLinkPresentationWillDismiss) {
+            NavigationStack {
+                MapScreen(
+                    defaultSource: store.defaultMapFilter,
+                    isMapTabActive: true,
+                    isAddPresented: isPresentingAdd,
+                    presentationResetRequest: presentationResetRequest,
+                    searchLaunchRequest: mapSearchLaunchRequest,
+                    onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                    onAdd: presentAddSheet
+                )
+                .toolbar { ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showsLegacyMapDestination = false }
+                } }
+            }
+            .environmentObject(store)
+            .environmentObject(walkthroughs)
+            .environmentObject(activityNavigation)
+            }
+        }
+        .onChange(of: selectedTab, initial: true) { _, tab in
+            guard unifiedLiveEnabled else { return }
+            if tab == .map {
+                // Existing place/search payloads keep their canonical renderer.
+                // Ordinary Map navigation lands on the unified surface.
+                showsLegacyMapDestination = mapSearchLaunchRequest != nil
+                    || pushNotifications.navigationRequest.map { Self.notificationTab(for: $0.destination) == .map } == true
+            }
+            selectedTab = LiveNavigationPolicy.tab(for: tab)
+        }
+        .onChange(of: unifiedLiveEnabled) { _, enabled in
+            if enabled { selectedTab = LiveNavigationPolicy.tab(for: selectedTab) }
+            configureWalkthroughsForCurrentUser()
+        }
+        .onChange(of: liveFlagValue, initial: true) { _, _ in resolveLiveExperienceForLaunch() }
+        .onChange(of: store.currentUser.id) { _, _ in
+            liveMigrationOffer = nil; liveMigrationGuide = nil; liveMigrationContacts = nil
+            liveMigrationDeviceGuide = nil; liveMigrationAfterHandoff = nil
+            if let request = liveRecoveryCenter.request { liveRecoveryCenter.consume(request.id) }
+            resolveLiveExperienceForLaunch()
+        }
         .environmentObject(importStore)
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
@@ -902,7 +980,7 @@ struct WanderRootView: View {
     }
 
     private var lifecycleRoot: some View {
-        presentedRoot
+        migrationPresentedRoot
         .task(id: featureFlagLoadUserID) {
             guard let userID = featureFlagLoadUserID else {
                 // Foreground validation deliberately preserves the last signed-in
@@ -1333,12 +1411,21 @@ struct WanderRootView: View {
             guard let surface else { return }
             routeWalkthrough(to: surface)
         }
+        .onChange(of: liveRecoveryCenter.request) { _, request in
+            guard let request else { return }
+            liveRecoveryCenter.consume(request.id)
+            guard isSessionValidated, request.userID == store.currentUser.id,
+                  auth.state.session?.userID == request.userID else { return }
+            preserveExplicitEntryDestination()
+            beginDeepLinkHandoff(to: .feed, resumingMigration: request)
+        }
+        .onChange(of: liveRecoveryCenter.revision) { _, _ in reconcileLiveMigration() }
         .onDisappear(perform: handleRootDisappear)
     }
 
     private var tabSelection: Binding<WanderTab> {
         Binding {
-            EventsAccessPolicy.resolvedTab(selectedTab, metroID: currentHomeMetro)
+            unifiedLiveEnabled ? LiveNavigationPolicy.tab(for: selectedTab) : EventsAccessPolicy.resolvedTab(selectedTab, metroID: currentHomeMetro)
         } set: { newTab in
             guard newTab != .events || eventsAreAvailable else { return }
             preserveExplicitEntryDestination()
@@ -1361,8 +1448,172 @@ struct WanderRootView: View {
 
     private var currentHomeMetro: String? { eventsAccess.homeMetro(for: auth.state.session?.userID) }
     private var eventsAreAvailable: Bool { EventsAccessPolicy.isEligible(metroID: currentHomeMetro) }
-    private var availableTabs: [WanderTab] { EventsAccessPolicy.availableTabs(metroID: currentHomeMetro) }
+    private var availableTabs: [WanderTab] {
+        unifiedLiveEnabled ? LiveNavigationPolicy.tabs : EventsAccessPolicy.availableTabs(metroID: currentHomeMetro)
+    }
+    private var unifiedLiveEnabled: Bool {
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        return liveExperienceLaunch.value(for: userID)
+            ?? LiveNavigationPolicy.isEnabled(liveFlagValue, isolatedSimulatorReview: isIsolatedLiveReview)
+    }
+    private var liveFlagValue: ResolvedFeatureFlagValue? {
+        backend.resolvedFeatureFlag(.unifiedLiveV1, for: auth.state.session?.userID ?? store.currentUser.id)
+    }
+    private var isIsolatedLiveReview: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        return ProcessInfo.processInfo.arguments.contains("-WanderUnifiedLiveUITest")
+            && ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest")
+        #else
+        return false
+        #endif
+    }
+    private func resolveLiveExperienceForLaunch() {
+        liveExperienceLaunch.resolve(for: auth.state.session?.userID ?? store.currentUser.id,
+                                     flag: liveFlagValue, isolatedSimulatorReview: isIsolatedLiveReview)
+    }
     private var eventsAccessLoadUserID: String? { isSessionValidated ? auth.state.session?.userID : nil }
+
+    private var migrationPresentedRoot: some View {
+        presentedRoot
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !unifiedLiveEnabled, liveMigrationOffer != nil,
+                   isSessionValidated, !liveIntroductionContext.hasPriorityPresentation,
+                   selectedTab == .map || selectedTab == .discover {
+                    LiveIntroductionMigrationCard(onContinue: {
+                        liveMigrationGuide = liveMigrationOffer; liveMigrationOffer = nil
+                    }, onNotNow: { markLiveMigrationOffered(); liveMigrationOffer = nil },
+                       onPresented: markLiveMigrationOffered).padding(.horizontal, 16)
+                }
+            }
+            .sheet(item: $liveMigrationGuide, onDismiss: migrationSheetDismissed) { record in
+                WanderRootPresentationLifecycle(surface: .liveModal,
+                    onPresent: handleDeepLinkPresentation, onDismiss: handleDeepLinkPresentationWillDismiss) {
+                    NavigationStack { LiveIntroductionReplayView(userID: record.userID) }
+                        .environmentObject(store)
+                }
+            }
+            .sheet(item: $liveMigrationContacts, onDismiss: migrationSheetDismissed) { record in
+                WanderRootPresentationLifecycle(surface: .liveModal,
+                    onPresent: handleDeepLinkPresentation, onDismiss: handleDeepLinkPresentationWillDismiss) {
+                    ContactInviteSheet(surface: .feedPeople, contactProvider: store.contactProvider,
+                        senderProfileID: record.userID, canDismiss: true,
+                        selectedContactIDs: record.contactSelection ?? record.checkpoint.tutorialInvitedContactIDs ?? [],
+                        onWalkthroughSelectionChange: { ids in
+                            guard isCurrentMigration(record) else { return }
+                            LiveIntroductionMigrationStore().updateContactSelection(ids, userID: record.userID, recordID: record.id)
+                        }, analytics: store.productAnalytics)
+                }
+            }
+            .sheet(item: $liveMigrationDeviceGuide, onDismiss: migrationSheetDismissed) { record in
+                WanderRootPresentationLifecycle(surface: .liveModal,
+                    onPresent: handleDeepLinkPresentation, onDismiss: handleDeepLinkPresentationWillDismiss) {
+                    NavigationStack {
+                        LiveIntroductionDeviceRecoveryView {
+                            guard isCurrentMigration(record) else { return }
+                            FirstVisitWalkthroughStore().markDeviceFeaturesLessonComplete(for: record.userID)
+                            _ = LiveIntroductionMigrationStore().completeRecovery(userID: record.userID, recordID: record.id)
+                            liveMigrationDeviceGuide = nil
+                            reconcileLiveMigration()
+                        }
+                    }
+                }
+            }
+    }
+
+    private func migrationSheetDismissed() {
+        handleDeepLinkPresentationDismissal(of: .liveModal)
+        reconcileLiveMigration()
+    }
+
+    private func isCurrentMigration(_ record: LiveIntroductionMigrationRecord) -> Bool {
+        isSessionValidated && auth.state.session?.userID == record.userID
+            && store.currentUser.id == record.userID
+            && LiveIntroductionMigrationStore().load(for: record.userID)?.id == record.id
+    }
+
+    private func reconcileLiveMigration() {
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        guard let record = LiveIntroductionMigrationStore().load(for: userID), !record.isComplete else {
+            liveMigrationOffer = nil
+            if FirstVisitWalkthroughStore().hasCompletedEntireWalkthrough(for: userID),
+               firstVisitWalkthroughEligibilityContext.applies(to: userID),
+               retiredWalkthroughUserIDs.insert(userID).inserted {
+                onFirstVisitWalkthroughCompleted(userID)
+            }
+            return
+        }
+        if liveMigrationOffer?.id == record.id || !record.hasBeenOffered { liveMigrationOffer = record }
+        else { liveMigrationOffer = nil }
+    }
+
+    private func markLiveMigrationOffered() {
+        guard let record = liveMigrationOffer, isCurrentMigration(record) else { return }
+        _ = LiveIntroductionMigrationStore().markOffered(userID: record.userID, recordID: record.id)
+        LiveIntroductionStore().markPresented(for: record.userID)
+    }
+
+    private func resumeLiveMigration(_ request: LiveIntroductionRecoveryRequest) {
+        guard let record = LiveIntroductionMigrationStore().load(for: request.userID),
+              record.id == request.recordID, isCurrentMigration(record), let recovery = record.recovery else { return }
+        // Route handoff is recorded separately from completion. The archive and
+        // any ordinary save draft remain available after cancellation.
+        _ = LiveIntroductionMigrationStore().markRecoveryOpened(userID: record.userID, recordID: record.id)
+        selectedTab = unifiedLiveEnabled ? .discover : .map
+        switch recovery {
+        case .retainedLesson(.contactInvite): liveMigrationContacts = record
+        case .retainedLesson(.deviceFeaturesLesson), .retainedLesson(.awaitingDeviceFeaturesLesson):
+            liveMigrationDeviceGuide = record
+        case .retainedLesson(.importLesson), .retained(.add, .addImport): presentImportHub()
+        case .retained(.saveFlow, _), .retained(.add, _), .retained(.map, .mapAddAgain):
+            if placeSaveDraftStore.draft?.ownerUserID == request.userID {
+                placeSaveDraftStore.flush()
+                restoredPlaceSaveDraftOwnerID = nil
+                restorePlaceSaveDraftIfNeeded()
+            } else if case .restored = placeSaveDraftStore.restore(ownerUserID: request.userID) {
+                restoredPlaceSaveDraftOwnerID = nil
+                restorePlaceSaveDraftIfNeeded()
+            } else {
+                // Old checkpoints lack the complete form and selected photos.
+                // Keep their original payload and open a normal, editable Add.
+                addLaunchRequest = record.checkpoint.tutorialCandidate.map {
+                    WanderAddLaunchRequest(destination: .search(query: $0.name))
+                }
+                store.saveFlowDidPresent(.addSheet)
+                addSheetDetent = .large
+                isPresentingAdd = true
+            }
+        case .retained(.feedSearch, _):
+            activateDeepLink(.quickSearch(query: record.checkpoint.tutorialDiscoverQuery))
+        case .retained(.profile, .profileCalendar): activateDeepLink(.profileCalendar)
+        case .retained(.profile, _): selectedTab = .profile
+        case .retained(.lists, _), .retained(.listDetail, _), .retained(.listEditor, _): selectedTab = .lists
+        case .retained(.placeDetail, _), .retained(.map, .mapMemory):
+            if let id = record.checkpoint.tutorialUserPlaceID,
+               let place = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == id }) {
+                activateDeepLink(.sharedPlace(placeID: place.place.id))
+            } else {
+                selectedTab = .profile
+                interruptedSaveRecoveryMessage = "This older guide no longer has an accessible place to reopen. Your saved guide is still in Settings → What’s changed."
+            }
+        default: selectedTab = unifiedLiveEnabled ? .discover : .map
+        }
+    }
+
+    private var liveIntroductionContext: LiveIntroductionContext {
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        return LiveIntroductionContext(
+            userID: userID, isLiveActive: selectedTab == .discover,
+            isSessionValidated: isSessionValidated, hasFinishedAccountSetup: isSessionValidated,
+            hasPriorityPresentation: blocksProductUpsellPresentation || productUpsells.activePresentation != nil
+                || productUpsells.presentationBlockerCount > 0
+                || deepLinkLaunchRequest != nil || controlNavigationCenter.pendingRequest != nil
+                || pushNotifications.navigationRequest != nil || deepLinkHandoff.pendingRequestID != nil
+                || placeSaveDraftStore.draft != nil,
+            hasPendingLegacyCheckpoint: FirstVisitWalkthroughStore().checkpoint(for: userID) != nil
+                || LiveIntroductionMigrationStore().load(for: userID).map { !$0.isComplete } == true,
+            isFirstVisitEligible: firstVisitWalkthroughEligibilityContext.applies(to: userID)
+        )
+    }
 
     private func presentAddSheet() {
         preserveExplicitEntryDestination()
@@ -1429,8 +1680,9 @@ struct WanderRootView: View {
             ownerUserID: ownerUserID
         ) else { return }
 
-        let checkpoint = FirstVisitWalkthroughStore().checkpoint(for: ownerUserID)
-        if PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+        let migration = LiveIntroductionMigrationStore().load(for: ownerUserID)
+        let checkpoint = FirstVisitWalkthroughStore().checkpoint(for: ownerUserID) ?? migration?.checkpoint
+        if !unifiedLiveEnabled, migration == nil, PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
             draft,
             lastWalkthroughActivityAt: checkpoint?.updatedAt,
             now: .now,
@@ -1459,6 +1711,18 @@ struct WanderRootView: View {
 
         switch PlaceSaveDraftRecoveryPolicy.outcome(for: draft, evidence: evidence) {
         case .committed:
+            if let migration, migration.canCompleteSaveRecovery(with: draft) {
+                // Existing domain evidence proves this save committed. Opening
+                // the editor or merely reading its guide never takes this path.
+                _ = LiveIntroductionMigrationStore().completeRecovery(userID: ownerUserID, recordID: migration.id)
+                placeSaveDraftStore.clear()
+                pendingCommittedWalkthroughDraft = nil
+                interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
+                    ? "Your check-in finished while Astir was in the background."
+                    : "This place was added to Wanna while Astir was in the background."
+                reconcileLiveMigration()
+                return
+            }
             pendingCommittedWalkthroughDraft = draft
             if completeCommittedWalkthroughDraftIfNeeded() {
                 routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
@@ -1480,7 +1744,8 @@ struct WanderRootView: View {
     @discardableResult
     private func retireWalkthroughPresentationAndDraft(
         for ownerUserID: String,
-        forceRootCleanup: Bool
+        forceRootCleanup: Bool,
+        preserveInactiveDestination: Bool = false
     ) -> Bool {
         let persistedDraft: PlaceSaveDraft?
         if let draft = placeSaveDraftStore.draft, draft.ownerUserID == ownerUserID {
@@ -1502,6 +1767,10 @@ struct WanderRootView: View {
         guard forceRootCleanup || didDiscardWalkthroughDraft else { return false }
         pendingCommittedWalkthroughDraft = nil
         interruptedSaveRecoveryMessage = nil
+        // Disabled stale progress does not own the current tab or an explicit
+        // destination. Still retire its old tutorial draft above. Expiration
+        // and a tutorial that was actually mounted keep their existing cleanup.
+        guard forceRootCleanup || !preserveInactiveDestination else { return true }
         presentationResetRequest = WanderPresentationResetRequest()
         // A retired onboarding checkpoint owns the tutorial's presentations,
         // not a profile or invitation opened by the current incoming link.
@@ -2014,6 +2283,8 @@ struct WanderRootView: View {
         nearbyWidgetRefreshTask = nil
         deepLinkHandoffTask?.cancel()
         deepLinkHandoff.cancel()
+        notificationAfterHandoff = nil
+        liveMigrationAfterHandoff = nil
         deepLinkPresentations.removeAll()
         sharedVisitBannerTask?.cancel()
         saveStreakCelebrationTask?.cancel()
@@ -2031,6 +2302,14 @@ struct WanderRootView: View {
     private func routeNotification(_ request: NotificationNavigationRequest) {
         foregroundEntryPolicy.recordNotificationNavigation(requestID: request.id)
         preserveExplicitEntryDestination()
+        if unifiedLiveEnabled,
+           deepLinkPresentations.presentedTokens.contains(where: { $0.surface == .liveModal }) {
+            // Own a copy while the physical sheet dismisses: tab observers may
+            // consume the shared request even while their tab is off screen.
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .feed, resuming: request)
+            return
+        }
         if case .importReview(let batchIDs) = request.destination {
             pushNotifications.consumeNavigationRequest(id: request.id)
             presentSharedPlaceImportReview(batchIDs: batchIDs)
@@ -2145,9 +2424,12 @@ struct WanderRootView: View {
         controlNavigationCenter.consume(request.id)
     }
 
-    private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {
+    private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute, resuming notification: NotificationNavigationRequest? = nil,
+                                      resumingMigration: LiveIntroductionRecoveryRequest? = nil) {
         if route != .feed { preserveExplicitEntryDestination() }
         deepLinkHandoffTask?.cancel()
+        notificationAfterHandoff = notification.map { ($0, store.currentUser.id) }
+        liveMigrationAfterHandoff = resumingMigration
 
         let resetRequest = WanderPresentationResetRequest()
         deepLinkHandoff.begin(
@@ -2249,7 +2531,7 @@ struct WanderRootView: View {
             || productUpsells.foregroundEntryBlockerCount > 0
             || deepLinkPresentations.presentedTokens.contains(where: { token in
                 switch token.surface {
-                case .profileSettings, .feedSave, .activityShare, .activityReport, .activitySave:
+                case .profileSettings, .feedSave, .activityShare, .activityReport, .activitySave, .liveModal, .legacyMapDestination:
                     true
                 default:
                     false
@@ -2285,6 +2567,8 @@ struct WanderRootView: View {
         deepLinkHandoffTask?.cancel()
         deepLinkHandoffTask = nil
         deepLinkHandoff.cancel()
+        notificationAfterHandoff = nil
+        liveMigrationAfterHandoff = nil
     }
 
     private func requestProductUpsell(
@@ -2376,6 +2660,16 @@ struct WanderRootView: View {
         // still need their own stale checkpoints cleared, never the previous
         // account's or the coordinator's placeholder account.
         walkthroughs.setUserID(userID)
+        if unifiedLiveEnabled || LiveIntroductionMigrationStore().load(for: userID) != nil {
+            // A feature rollback retains this recovery bridge. Do not hand an
+            // archived draft/lesson to the legacy forced-retirement branches.
+            if unifiedLiveEnabled { _ = LiveIntroductionMigrationStore().capture(for: userID) }
+            walkthroughs.setEligibilityResolutionPending(false)
+            walkthroughs.setEnabled(false)
+            walkthroughs.setContextualEnabled(false, enrollCurrentUser: false)
+            reconcileLiveMigration()
+            return
+        }
         let hasLocalReplayRequest = walkthroughDebugPreferenceSnapshot.isReplayRequested(
             for: userID
         )
@@ -2442,7 +2736,7 @@ struct WanderRootView: View {
             isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
             isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         ), enrollCurrentUser: isEnabled)
-        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePrimaryJourney
+        let hadActiveWalkthroughPresentation = walkthroughs.hasPresentedPrimaryJourney
             || walkthroughs.isPresentingLaunchLesson
         walkthroughs.setEnabled(isEnabled)
 
@@ -2465,7 +2759,8 @@ struct WanderRootView: View {
                 walkthroughs.retireJourneyForDisabledExperience()
                 retireWalkthroughPresentationAndDraft(
                     for: userID,
-                    forceRootCleanup: hadActiveWalkthroughPresentation
+                    forceRootCleanup: hadActiveWalkthroughPresentation,
+                    preserveInactiveDestination: true
                 )
             }
             walkthroughs.activate(walkthroughSurface(for: selectedTab))
@@ -2813,6 +3108,10 @@ struct WanderRootView: View {
     }
 
     private func resetRootPresentationsForDeepLink(preservingSharedDestinations: Bool = false) {
+        liveMigrationGuide = nil
+        liveMigrationContacts = nil
+        liveMigrationDeviceGuide = nil
+        showsLegacyMapDestination = false
         addLaunchRequest = nil
         mapSearchLaunchRequest = nil
         profileCalendarLaunchRequest = nil
@@ -2830,6 +3129,17 @@ struct WanderRootView: View {
     }
 
     private func activateDeepLink(_ route: WanderDeepLinkRoute) {
+        if let deferred = notificationAfterHandoff {
+            notificationAfterHandoff = nil
+            guard deferred.userID == store.currentUser.id else { return }
+            pushNotifications.route(to: deferred.request.destination)
+            return
+        }
+        if let migration = liveMigrationAfterHandoff {
+            liveMigrationAfterHandoff = nil
+            resumeLiveMigration(migration)
+            return
+        }
         activityNavigation.reset()
         switch route {
         case .feed:

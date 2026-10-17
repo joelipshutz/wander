@@ -82,6 +82,7 @@ final class NativeAccountSetupUITests: XCTestCase {
         // artwork into this simulator's Photos library. Selection and crop both
         // run through the same system picker and production crop view as users.
         XCTAssertTrue(waitFor(NSPredicate(format: "hittable == false"), on: photo, timeout: 6))
+        waitForPhotoPickerReady(in: app)
         // The iOS 26 system picker exposes photo tiles as images.
         let firstPhoto = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
         XCTAssertTrue(firstPhoto.waitForExistence(timeout: 8))
@@ -209,6 +210,28 @@ final class NativeAccountSetupUITests: XCTestCase {
         XCTAssertEqual(openSettings.label, "Open Settings")
         XCTAssertTrue(deniedApp.buttons["productUpsell.secondary"].exists)
         keepScreenshot("N32", app: deniedApp, settleSeconds: 1.5)
+    }
+
+    private func waitForPhotoPickerReady(in app: XCUIApplication) {
+        // This functional journey allows up to 15s for the system picker's
+        // first-load UI before the unchanged 8s photo lookup (23s combined).
+        // Positive content controls prevent an absent loading view from being
+        // mistaken for readiness before the remote picker has mounted. Match
+        // their visible labels without assuming an undocumented element role.
+        let photos = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Photos")).firstMatch
+        let collections = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Collections")).firstMatch
+        let cancel = app.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch
+        let loading = app.staticTexts.matching(NSPredicate(
+            format: "label IN %@", ["Loading...", "Loading…"]
+        )).firstMatch
+        XCTContext.runActivity(named: "Wait for system Photos picker readiness (up to 15s)") { _ in
+            XCTAssertTrue(waitFor(NSPredicate { _, _ in
+                photos.exists && collections.exists && cancel.exists
+                    && cancel.isHittable && !loading.exists
+            }, on: app, timeout: 15), "The system Photos picker must finish loading its content controls.")
+        }
     }
 
     private func permissionAlert(in app: XCUIApplication, required: Bool = true) -> XCUIElement {

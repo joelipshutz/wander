@@ -320,18 +320,21 @@ struct DiscoverScreen: View {
                 if !didInitializeContent {
                     didInitializeContent = true
                     applyRequestedSection()
-                    if isPlaceSearchPresented, !didTrackPlaceSearchOpen {
+                    let isNewSearchEntry = isPlaceSearchPresented && !didTrackPlaceSearchOpen
+                    if isNewSearchEntry {
                         didTrackPlaceSearchOpen = true
                         store.trackDiscoverSearchEvent(
                             WanderAnalyticsEvents.discoverSearchOpened,
                             properties: ["entry_surface": onClose == nil ? "discover" : "feed"]
                         )
                     }
-                    if isPlaceSearchPresented,
+                    if isNewSearchEntry,
                        walkthroughs.activeSurface != .feedSearch,
                        !ProcessInfo.processInfo.arguments.contains("-WanderDisableSearchAutofocus") {
                         await Task.yield()
-                        searchFieldFocused = true
+                        if !Task.isCancelled, isPlaceSearchPresented, selectedPlace == nil {
+                            searchFieldFocused = true
+                        }
                     }
                     if !placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         submitPlaceSearch()

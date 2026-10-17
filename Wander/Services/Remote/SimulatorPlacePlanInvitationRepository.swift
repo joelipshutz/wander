@@ -5,9 +5,11 @@ import Foundation
 @MainActor final class SimulatorPlacePlanInvitationRepository: PlacePlanInvitationRepository {
     private var readAt: Date?
     private let includesInvitations: Bool
+    private let suggestedAt: Date?
 
-    init(includesInvitations: Bool = true) {
+    init(includesInvitations: Bool = true, suggestedAt: Date? = nil) {
         self.includesInvitations = includesInvitations
+        self.suggestedAt = suggestedAt
     }
     static let invitationID = UUID(uuidString: "11111111-2222-4333-8444-555555555555")!
 
@@ -31,7 +33,9 @@ import Foundation
         return PlacePlanInvitation(payload: PlacePlanInvitationPayload(
             title: "Let’s go to Narwhal together", placeName: "Narwhal", location: "Los Angeles",
             senderName: "Ryan", senderAvatarURL: nil, message: "Coffee on Saturday?",
-            connection: "Both Wanna Go", dateLabel: "Sep 19, 2026 at 10 AM", imagePath: ""
+            connection: "Both Wanna Go",
+            dateLabel: suggestedAt?.formatted(date: .abbreviated, time: .shortened) ?? "Sep 19, 2026 at 10 AM",
+            imagePath: "", suggestedAt: suggestedAt
         ), artworkURL: URL(string: "https://example.invalid/preview.png")!)
     }
 }

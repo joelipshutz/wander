@@ -11,6 +11,22 @@ struct PlacePlanInvitationPayload: Decodable, Equatable, Sendable {
     let connection: String
     let dateLabel: String
     let imagePath: String
+    let suggestedAt: Date?
+
+    init(title: String, placeName: String, location: String, senderName: String,
+         senderAvatarURL: URL?, message: String, connection: String, dateLabel: String,
+         imagePath: String, suggestedAt: Date? = nil) {
+        self.title = title
+        self.placeName = placeName
+        self.location = location
+        self.senderName = senderName
+        self.senderAvatarURL = senderAvatarURL
+        self.message = message
+        self.connection = connection
+        self.dateLabel = dateLabel
+        self.imagePath = imagePath
+        self.suggestedAt = suggestedAt
+    }
 
     enum CodingKeys: String, CodingKey {
         case title, location, message, connection
@@ -19,6 +35,7 @@ struct PlacePlanInvitationPayload: Decodable, Equatable, Sendable {
         case senderAvatarURL = "sender_avatar_url"
         case dateLabel = "date_label"
         case imagePath = "image_path"
+        case suggestedAt = "suggested_at"
     }
 }
 

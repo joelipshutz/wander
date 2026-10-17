@@ -169,26 +169,71 @@ jobs:
           --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/$TEST_PRODUCT_NAME.xctestproducts"
           --result-bundle "$RUNNER_TEMP/Parent.xcresult"
           --selection-file "$RUNNER_TEMP/test-selection.json"
-      # Match Contacts and Feed's successful sequence: full unit fixtures,
-      # followed by the SDK capture probe in a separate test-host process on
-      # the same runner. Replay observers must not share the unit-test process.
-      # The real image, masking assertions and capture deadline remain required.
-      - name: Run isolated replay privacy after parent units
+      # Each real-image fixture gets a separate host for process-wide SDK hooks,
+      # matching Feed/Privacy. Keep the combined local mode for lifecycle work;
+      # this isolation does not establish the cause of a combined CI failure.
+      # Both methods remain required, once each, with their original assertions.
+      - name: Run private replay proof after parent units
         if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
         run: >-
-          python3 scripts/run-parent-regression.py --suite replay
+          python3 scripts/run-parent-regression.py --suite replay-private
           --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
-          --result-bundle "$RUNNER_TEMP/ParentReplay.xcresult"
-          --selection-file "$RUNNER_TEMP/replay-selection.json"
+          --result-bundle "$RUNNER_TEMP/ParentReplayPrivate.xcresult"
+          --selection-file "$RUNNER_TEMP/replay-private-selection.json"
+          --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayPrivate.host-admission.json"
+      - name: Run credential replay proof after parent units
+        if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
+        run: >-
+          python3 scripts/run-parent-regression.py --suite replay-credentials
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
+          --result-bundle "$RUNNER_TEMP/ParentReplayCredentials.xcresult"
+          --selection-file "$RUNNER_TEMP/replay-credentials-selection.json"
+          --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayCredentials.host-admission.json"
       - name: Summarize test result
         if: always()
         run: |
           if [ -f "$RUNNER_TEMP/Parent.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Parent.xcresult" --format json > "$RUNNER_TEMP/parent-summary.json"
           fi
-          if [ -f "$RUNNER_TEMP/ParentReplay.xcresult/Info.plist" ]; then
-            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ParentReplay.xcresult" --format json > "$RUNNER_TEMP/replay-summary.json"
-          fi
+      - name: Summarize and require both replay proofs
+        if: ${{ always() && matrix.suite == 'unit' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, json, os, subprocess
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          problems = []
+          for suite, name in [("replay-private", "ParentReplayPrivate"),
+                              ("replay-credentials", "ParentReplayCredentials")]:
+              bundle = root / (name + ".xcresult")
+              if not (bundle / "Info.plist").is_file():
+                  problems.append(suite + ": missing completed result bundle")
+                  continue
+              exports_ok = True
+              for kind in ["summary", "tests"]:
+                  try:
+                      with (root / (suite + "-" + kind + ".json")).open("wb") as output:
+                          result = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", kind,
+                                                   "--path", str(bundle), "--compact"], stdout=output, timeout=120)
+                      if result.returncode:
+                          problems.append(suite + ": " + kind + " export failed")
+                          exports_ok = False
+                  except subprocess.TimeoutExpired:
+                      problems.append(suite + ": " + kind + " export timed out")
+                      exports_ok = False
+              if exports_ok:
+                  try:
+                      summary = json.loads((root / (suite + "-summary.json")).read_text())
+                      tests = json.loads((root / (suite + "-tests.json")).read_text())
+                      regression.validate_replay_result(suite, summary, tests, os.environ["TEST_DEVICE_ID"])
+                  except (ValueError, KeyError, TypeError, AttributeError) as error:
+                      problems.append(suite + ": " + str(error))
+          if problems:
+              raise SystemExit("\n".join(problems))
+          PY
       - name: Retain regression evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -198,7 +243,16 @@ jobs:
             ${{ runner.temp }}/Parent.xcresult
             ${{ runner.temp }}/parent-summary.json
             ${{ runner.temp }}/test-selection.json
-            ${{ runner.temp }}/ParentReplay.xcresult
-            ${{ runner.temp }}/replay-summary.json
-            ${{ runner.temp }}/replay-selection.json
+            ${{ runner.temp }}/ParentReplayPrivate.xcresult
+            ${{ runner.temp }}/ParentReplayCredentials.xcresult
+            ${{ runner.temp }}/replay-private-summary.json
+            ${{ runner.temp }}/replay-private-tests.json
+            ${{ runner.temp }}/replay-private-selection.json
+            ${{ runner.temp }}/replay-credentials-summary.json
+            ${{ runner.temp }}/replay-credentials-tests.json
+            ${{ runner.temp }}/replay-credentials-selection.json
+            ${{ runner.temp }}/ParentReplayPrivate.host-admission.json
+            ${{ runner.temp }}/ParentReplayPrivate.host-admission
+            ${{ runner.temp }}/ParentReplayCredentials.host-admission.json
+            ${{ runner.temp }}/ParentReplayCredentials.host-admission
           retention-days: 14

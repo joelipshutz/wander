@@ -8,6 +8,9 @@ on:
       - 'Wander/Features/Activity/**'
       - 'Wander/Features/Add/PlaceSaveAttributePolicy.swift'
       - 'Wander/Features/Map/MapScreen.swift'
+      - 'Wander/Features/Live/LiveScreen.swift'
+      - 'Wander/DesignSystem/PersonMentionField.swift'
+      - 'WanderTests/PersonMention*Tests.swift'
       - 'Wander/Services/FeedModels.swift'
       - 'Wander/Services/ActivityEngagementModels.swift'
       - 'Wander/Services/WanderLocalStore.swift'
@@ -17,8 +20,15 @@ on:
       - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
+      - 'WanderUITests/FeedAudienceUITests.swift'
+      - 'WanderUITests/MapFilterInteractionUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/replay-simulator-fixture.py'
+      - 'scripts/test_replay_simulator_fixture.py'
       - 'WanderUITests/FeedActivityGroupingUITests.swift'
+      - 'WanderUITests/LiveReviewContinuityUITests.swift'
+      - 'WanderUITests/SenderNotificationFlowUITests.swift'
+      - 'WanderUITests/YourMapPrototypeUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
 
@@ -64,6 +74,9 @@ jobs:
           PY
       # Wall-clock budgets run on a controlled reference machine. The matching
       # deterministic search and high-data cache contracts still run below.
+      # Functional UI tests use the same execution allowance as Parent and Live
+      # continuity: XCTest's animation-idle waits count toward this allowance.
+      # Element assertions and measured performance budgets remain unchanged.
       - name: Unit suite and native Feed scrolling
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
@@ -75,6 +88,7 @@ jobs:
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
+          -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
@@ -83,20 +97,95 @@ jobs:
           -only-testing:WanderUITests/ForegroundEntryUITests
           -only-testing:WanderUITests/MapPlaceCardActionInteractionUITests/testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps
           -only-testing:WanderUITests/ShareCardMockupUITests/testExternalPlaceCanOpenNativeDestinationsFromEveryFormat
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 360
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      # SDK replay capture owns process-wide observers; validate in a fresh test host.
-      - name: Verify replay masking in an isolated process
+      - name: Prepare isolated Replay test products once
+        id: replay-products
         if: success() || failure()
         run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
           -only-testing:WanderTests/ReplayMaskingTests
-          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Prepare fresh same-model Replay simulator
+        id: replay-fixture
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 -B scripts/test_replay_simulator_fixture.py
+          python3 -B scripts/replay-simulator-fixture.py prepare --source-device "$LARGE_DEVICE_ID"
+      # Replay capture owns process-wide SDK state. Each scenario starts a fresh
+      # test host on one dedicated same-model/runtime simulator; both remain required.
+      - name: Verify private-message replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-private"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["REPLAY_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Verify credential replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-credentials"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["REPLAY_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Export Replay evidence before fixture cleanup
+        id: replay-evidence
+        if: ${{ always() && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          status=0
+          for device in replay-private replay-credentials; do
+            if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
+              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" > "$RUNNER_TEMP/evidence/$device-summary.json" || status=1
+              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/evidence/$device" || status=1
+            else
+              status=1
+            fi
+          done
+          exit "$status"
+      - name: Clean up owned Replay simulator
+        if: ${{ always() && steps.replay-fixture.outcome != 'skipped' }}
+        env:
+          REPLAY_EVIDENCE_EXPORTED: ${{ steps.replay-evidence.outcome == 'success' }}
+        run: python3 -B scripts/replay-simulator-fixture.py cleanup
       - name: Stop large simulator
-        if: always()
+        if: ${{ always() && steps.replay-fixture.outcome == 'skipped' }}
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
       - name: Verify scrolling on a compact phone
         if: success() || failure()
@@ -105,6 +194,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
@@ -119,7 +209,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small replay; do
+          for size in large small; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -133,5 +223,208 @@ jobs:
             ${{ runner.temp }}/evidence
             ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
-            ${{ runner.temp }}/replay.xcresult
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
+            ${{ runner.temp }}/replay-private-host.json
+            ${{ runner.temp }}/replay-private-host
+            ${{ runner.temp }}/replay-credentials-host.json
+            ${{ runner.temp }}/replay-credentials-host
+            ${{ runner.temp }}/replay-simulator-fixture
+          retention-days: 14
+
+  live-continuity:
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+      - name: Generate project and select existing continuity simulators
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/live-continuity-devices.json"
+          python3 - <<'PY_SETUP'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'live-continuity-devices.json').read_text())['devices']
+          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID'),
+                             (('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+              for name in names:
+                  choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                             for runtime, rows in devices.items() if 'iOS' in runtime
+                             for d in rows if d['name'] == name]
+                  if choices:
+                      device = sorted(choices, key=lambda item: item[0])[-1][1]
+                      break
+              else:
+                  raise RuntimeError(f'No supported simulator for {key}')
+              with open(os.environ['GITHUB_ENV'], 'a') as output:
+                  output.write(f'{key}={device["udid"]}\n')
+              print('Continuity on', device['name'])
+          PY_SETUP
+      - name: Build signed continuity test harness once
+        id: continuity-build
+        run: |
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID" \
+            -derivedDataPath "$RUNNER_TEMP/LiveContinuityDerivedData" -jobs 2 -parallel-testing-enabled NO \
+            -only-testing:WanderUITests/LiveReviewContinuityUITests \
+            -only-testing:WanderUITests/LiveDrawerAndFilterUITests \
+            -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls \
+            -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom \
+            -resultBundlePath "$RUNNER_TEMP/live-continuity-build.xcresult" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
+            > "$RUNNER_TEMP/live-continuity-build.log" 2>&1
+          python3 - <<'PY_RUNFILE'
+          import os
+          from pathlib import Path
+          products = Path(os.environ['RUNNER_TEMP']) / 'LiveContinuityDerivedData/Build/Products'
+          candidates = list(products.glob('Wander_iphonesimulator*-arm64.xctestrun'))
+          if len(candidates) != 1:
+              raise RuntimeError('Expected exactly one generated continuity xctestrun')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'LIVE_CONTINUITY_XCTESTRUN={candidates[0]}\n')
+          PY_RUNFILE
+      - name: Verify integrated Live continuity on large phone
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveReviewContinuityUITests
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests
+          -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
+          -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/live-continuity-large.xcresult"
+          > "$RUNNER_TEMP/live-continuity-large.log" 2>&1
+      - name: Release large simulator and prepare compact phone
+        if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' }}
+        run: |
+          if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["LARGE_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
+            xcrun simctl shutdown "$LARGE_DEVICE_ID"
+          fi
+          xcrun simctl bootstatus "$SMALL_DEVICE_ID" -b
+      - name: Verify integrated Live continuity on compact phone
+        if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
+          -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveReviewContinuityUITests
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests
+          -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
+          -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
+          > "$RUNNER_TEMP/live-continuity-compact.log" 2>&1
+      - name: Export and verify continuity evidence
+        if: always()
+        run: |
+          python3 - <<'PY_EVIDENCE'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          evidence = root / 'live-continuity-evidence'
+          evidence.mkdir()
+          (evidence / 'expected-coverage.json').write_text(json.dumps({
+              'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 8,
+              'requiredRegressionCases': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
+                                        'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()'],
+              'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}, indent=2) + '\n')
+          problems = []
+          for label in ['large', 'compact']:
+              counts = {}
+              bundle = root / f'live-continuity-{label}.xcresult'
+              if not bundle.is_dir():
+                  problems.append(f'{label}: result bundle missing')
+                  continue
+              summary = subprocess.run(['xcrun', 'xcresulttool', 'get', 'test-results', 'summary', '--path', str(bundle), '--compact'], capture_output=True, text=True)
+              (evidence / f'{label}-summary.json').write_text(summary.stdout)
+              (evidence / f'{label}-summary-errors.log').write_text(summary.stderr)
+              if summary.returncode != 0:
+                  problems.append(f'{label}: summary export failed')
+              else:
+                  try:
+                      parsed_counts = json.loads(summary.stdout)
+                      if not isinstance(parsed_counts, dict):
+                          raise ValueError('Expected a test summary object')
+                      counts = parsed_counts
+                      if not (counts.get('result') == 'Passed' and counts.get('passedTests') == 8
+                              and counts.get('totalTestCount') == counts.get('passedTests')
+                              and counts.get('failedTests') == 0 and counts.get('skippedTests') == 0
+                              and counts.get('expectedFailures') == 0):
+                          problems.append(f'{label}: incomplete passing class result')
+                  except (ValueError, TypeError):
+                      problems.append(f'{label}: invalid summary')
+              tests = subprocess.run(['xcrun', 'xcresulttool', 'get', 'test-results', 'tests', '--path', str(bundle), '--compact'], capture_output=True, text=True)
+              (evidence / f'{label}-tests.json').write_text(tests.stdout)
+              (evidence / f'{label}-tests-errors.log').write_text(tests.stderr)
+              if tests.returncode != 0:
+                  problems.append(f'{label}: named-test export failed')
+              else:
+                  try:
+                      def nodes(value):
+                          if isinstance(value, dict):
+                              yield value
+                              for child in value.values():
+                                  yield from nodes(child)
+                          elif isinstance(value, list):
+                              for child in value:
+                                  yield from nodes(child)
+                      cases = [node for node in nodes(json.loads(tests.stdout)) if node.get('nodeType') == 'Test Case']
+                      required = ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
+                                  'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()']
+                      required_continuity = [
+                          'LiveReviewContinuityUITests/testLiveFilterSurvivesProfileYourMapSavedPlaceAndPatternsReturn()',
+                          'LiveReviewContinuityUITests/testPinShowsItsOriginalFeedActivityAndOpensItsPlaceWithReturn()',
+                          'LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn()',
+                          'LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
+                          'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()',
+                          'LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']
+                      by_id = {}
+                      for node in cases:
+                          identifier = '/'.join(str(node.get('nodeIdentifier', '')).split('/')[-2:])
+                          by_id.setdefault(identifier, []).append(node)
+                      regression = {identifier: len(by_id.get(identifier, [])) == 1
+                                    and by_id[identifier][0].get('result') == 'Passed' for identifier in required}
+                      continuity = [node for identifier, matches in by_id.items()
+                                    if identifier in required_continuity for node in matches]
+                      continuity_required = {identifier: len(by_id.get(identifier, [])) == 1
+                                             and by_id[identifier][0].get('result') == 'Passed' for identifier in required_continuity}
+                      proof = {'requiredRegressionCases': regression, 'requiredContinuityCases': continuity_required,
+                               'continuityCaseCount': len(continuity),
+                               'continuityAllPassed': len(continuity) == 6 and all(node.get('result') == 'Passed' for node in continuity),
+                               'allSelectedCasesAccountedFor': len(cases) == 8
+                                   and set(by_id) == set(required + required_continuity)
+                                   and len(cases) == len(continuity) + len(required)
+                                   and len(cases) == counts.get('totalTestCount')
+                                   and all(len(value) == 1 for value in by_id.values())
+                                   and all(node.get('result') == 'Passed' for node in cases)}
+                      (evidence / f'{label}-named-case-proof.json').write_text(json.dumps(proof, indent=2) + '\n')
+                      if not all(regression.values()) or not all(continuity_required.values()) or not proof['continuityAllPassed'] or not proof['allSelectedCasesAccountedFor']:
+                          problems.append(f'{label}: required named cases did not all pass')
+                  except (ValueError, TypeError):
+                      problems.append(f'{label}: invalid named-test export')
+              with (evidence / f'{label}-attachment-export.log').open('w') as log:
+                  exported = subprocess.run(['xcrun', 'xcresulttool', 'export', 'attachments', '--path', str(bundle), '--output-path', str(evidence / label)], stdout=log, stderr=subprocess.STDOUT)
+              if exported.returncode != 0:
+                  problems.append(f'{label}: attachment export failed')
+          if problems:
+              raise SystemExit('; '.join(problems))
+          PY_EVIDENCE
+      - name: Save integrated Live continuity results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-continuity-native-evidence
+          path: |
+            ${{ runner.temp }}/live-continuity-evidence
+            ${{ runner.temp }}/live-continuity-build.xcresult
+            ${{ runner.temp }}/live-continuity-large.xcresult
+            ${{ runner.temp }}/live-continuity-compact.xcresult
+            ${{ runner.temp }}/live-continuity-*.log
           retention-days: 14
