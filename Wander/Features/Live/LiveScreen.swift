@@ -637,6 +637,10 @@ struct LiveScreen: View {
             }
             .accessibilityIdentifier("live.filters.form")
 #if DEBUG && targetEnvironment(simulator)
+            .onChange(of: draftSelection.scope, initial: true) { _, scope in
+                guard filtersPresented else { return }
+                NativeInputRecipientDiagnostic.liveScopeObserved(scope)
+            }
             .onChange(of: draftSelection.radius, initial: true) { _, radius in
                 guard filtersPresented else { return }
                 NativeInputRecipientDiagnostic.liveRadiusObserved(radius)

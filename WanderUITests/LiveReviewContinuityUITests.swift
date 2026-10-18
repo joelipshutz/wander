@@ -620,7 +620,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         selectMenu(app.buttons["live.filter.time"], option: "Past 24 hours", form: form, app: app, selected: {
             $0.identifier == "live.filter.time" && $0.label == "When, Past 24 hours"
         })
-        selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app, selected: {
+        selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app, scopeContactDiagnostic: true, selected: {
             $0.identifier == "live.filter.scope" && $0.label == "Scope, Nearby"
         })
         let city = app.buttons["live.filter.city"]
@@ -649,12 +649,13 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         filtersBack.tap()
         XCTAssertTrue(app.navigationBars["Filters"].waitForExistence(timeout: 5))
         reveal(app.buttons["25 km"], in: form, direction: .down, app: app)
-        app.buttons["25 km"].tap()
+        // Diagnostic contact-duration hypothesis only; one native input, no retry.
+        app.buttons["25 km"].press(forDuration: 0.2)
         let radiusSelected = app.buttons["25 km"].isSelected
         REC636PredicateObservation.attachNativeTrace(to: self, app: app,
-            name: "REC636-radius-after-original-tap", expectedFixture: "live-demo", selected: radiusSelected)
+            name: "REC636-radius-after-contact-press", expectedFixture: "live-demo", selected: radiusSelected)
         guard radiusSelected else {
-            XCTFail("Diagnostic setup stopped: the original radius tap did not select 25 km.")
+            XCTFail("Diagnostic setup stopped: the radius contact press did not select 25 km.")
             return
         }
         setOn(app.switches["live.filter.category.restaurants_food"], in: form, app: app)
@@ -877,9 +878,44 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func assertFeedCount(_ count: Int, in app: XCUIApplication) {
-        let feed = app.scrollViews["feed.places.scroll"]
-        XCTAssertTrue(feed.waitForExistence(timeout: 5))
-        wait(NSPredicate(format: "value == %@", "\(count) activities loaded"), on: feed)
+        // Resolve presence and the exact count from one fresh native tree. Separate
+        // XCUIElement existence/value queries can exhaust the observation budget
+        // while resolving the same scroll view after the drawer changes size.
+        let started = ProcessInfo.processInfo.systemUptime
+        let deadline = started + 5
+        var evaluations = 0
+        var matchingScrollViews = 0
+        var expectedValueMatches = 0
+        var snapshotAvailable = false
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            evaluations += 1
+            matchingScrollViews = 0
+            expectedValueMatches = 0
+            snapshotAvailable = false
+            guard let snapshot = try? app.snapshot() else { return false }
+            snapshotAvailable = true
+            @MainActor
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .scrollView && node.identifier == "feed.places.scroll" {
+                    matchingScrollViews += 1
+                    if node.value as? String == "\(count) activities loaded" {
+                        expectedValueMatches += 1
+                    }
+                }
+                for child in node.children { visit(child) }
+            }
+            visit(snapshot)
+            return matchingScrollViews == 1 && expectedValueMatches == 1
+                && ProcessInfo.processInfo.systemUptime <= deadline
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        let elapsed = ProcessInfo.processInfo.systemUptime - started
+        let observation = XCTAttachment(string: "expectedCount=\(count); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingScrollViews=\(matchingScrollViews); expectedValueMatches=\(expectedValueMatches); elapsed=\(elapsed); waitResult=\(result.rawValue)")
+        observation.name = "REC-636-feed-count-native-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
+        XCTAssertEqual(result, .completed)
     }
 
     private func assertCombinedResult(in app: XCUIApplication) {
@@ -965,13 +1001,20 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func selectMenu(_ picker: XCUIElement, option: String, form: XCUIElement,
                             direction: Direction = .down, app: XCUIApplication,
+                            scopeContactDiagnostic: Bool = false,
                             selected: @escaping (XCUIElementSnapshot) -> Bool) {
         reveal(picker, in: form, direction: direction, app: app)
-        picker.tap()
+        if scopeContactDiagnostic { picker.press(forDuration: 0.2) }
+        else { picker.tap() }
         // Native Picker options live in the popup collection; the retained
         // Live header can expose an identically labeled Nearby button.
         let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
-        waitHittable(choice, diagnosticFailure: { snapshotError in
+        waitHittable(choice, observedResult: { result in
+            guard scopeContactDiagnostic else { return }
+            // Preserve the opener before the choice becomes the latest touch.
+            REC636PredicateObservation.attachNativeTrace(to: self, app: app,
+                name: "REC636-scope-opener-contact", expectedFixture: "live-demo", result: result)
+        }, diagnosticFailure: { snapshotError in
             // Observe the failed wait once, before its original assertion aborts
             // the test. These reads neither retry the tap nor extend its gate.
             self.capture("popup-option-wait-failed")
@@ -1010,7 +1053,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         })
         choice.press(forDuration: 0.2)
         let deadline = ProcessInfo.processInfo.systemUptime + 5
-        wait(NSPredicate { _, _ in
+        let selectionExpectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard ProcessInfo.processInfo.systemUptime <= deadline,
                   let snapshot = try? app.snapshot() else { return false }
             // Resolve once, then observe popup absence and the exact selected
@@ -1030,7 +1073,13 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             visit(snapshot, inCollection: false, inForm: false)
             return !popupChoicePresent && selectedPickerCount == 1
                 && ProcessInfo.processInfo.systemUptime <= deadline
-        })
+        }, object: nil)
+        let selectionResult = XCTWaiter.wait(for: [selectionExpectation], timeout: 5)
+        if scopeContactDiagnostic {
+            REC636PredicateObservation.attachNativeTrace(to: self, app: app,
+                name: "REC636-scope-selection", expectedFixture: "live-demo", result: selectionResult)
+        }
+        XCTAssertEqual(selectionResult, .completed)
     }
 
     private func setOn(_ toggle: XCUIElement, in form: XCUIElement, app: XCUIApplication) {
@@ -1096,6 +1145,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10,
+                              observedResult: ((XCTWaiter.Result) -> Void)? = nil,
                               diagnosticFailure: ((Error?) -> Void)? = nil) {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         var lastSnapshotError: Error?
@@ -1116,6 +1166,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             return hittable && ProcessInfo.processInfo.systemUptime <= deadline
         }, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        observedResult?(result)
         if result != .completed { diagnosticFailure?(lastSnapshotError) }
         XCTAssertEqual(result, .completed)
     }

@@ -14,6 +14,7 @@ enum NativeInputRecipientDiagnostic {
         case liveCameraEnded, liveCameraInitialEnd, liveCameraCenterChanged, liveCameraSpanChanged, liveCameraPositionedByUser
         case liveDrawerCollapsed, liveDrawerHalf, liveDrawerExpanded, liveInitialFrameApplied
         case liveRadiusFiveKilometers, liveRadiusTwentyFiveKilometers
+        case liveScopeFollowing, liveScopeNearby
     }
 
     enum EventsSelectionStage: String {
@@ -65,6 +66,14 @@ enum NativeInputRecipientDiagnostic {
         if spanChanged { stages.append(.liveCameraSpanChanged) }
         if userPosition { stages.append(.liveCameraPositionedByUser) }
         NativeRecipientRecorder.shared.record(stages)
+    }
+
+    static func liveScopeObserved(_ scope: LiveBrowseSelection.Scope) {
+        guard fixture == "live-demo" else { return }
+        switch scope {
+        case .following: NativeRecipientRecorder.shared.record(.liveScopeFollowing)
+        case .nearby: NativeRecipientRecorder.shared.record(.liveScopeNearby)
+        }
     }
 
     static func liveRadiusObserved(_ radius: LiveBrowseSelection.Radius) {

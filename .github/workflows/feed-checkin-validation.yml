@@ -33,9 +33,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Acceptance suites or isolated REC-636 radius diagnostic
+        description: Acceptance suites or isolated REC-636 contact hypothesis diagnostic
         type: choice
-        options: [acceptance, rec636-radius-v56, rec636-original-control-v56]
+        options: [acceptance, rec636-contact-v57, rec636-original-control-v56]
         default: acceptance
       expected_commit:
         description: Required full reviewed diagnostic commit SHA for diagnostic mode
@@ -50,8 +50,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: feed-checkin-${{ github.ref }}${{ (inputs.mode == 'rec636-radius-v56' || inputs.mode == 'rec636-original-control-v56') && format('-diagnostic-{0}', github.run_id) || '' }}
-  cancel-in-progress: ${{ inputs.mode != 'rec636-radius-v56' && inputs.mode != 'rec636-original-control-v56' }}
+  group: feed-checkin-${{ github.ref }}${{ (inputs.mode == 'rec636-contact-v57' || inputs.mode == 'rec636-original-control-v56') && format('-diagnostic-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ inputs.mode != 'rec636-contact-v57' && inputs.mode != 'rec636-original-control-v56' }}
 
 jobs:
   native:
@@ -445,8 +445,8 @@ jobs:
             ${{ runner.temp }}/live-continuity-*.log
           retention-days: 14
 
-  rec636-radius-diagnostic:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-radius-v56' }}
+  rec636-contact-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-contact-v57' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -456,7 +456,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           lfs: true
-      - name: Admit exact radius diagnostic source, toolchain and large simulator
+      - name: Admit exact contact diagnostic source, toolchain and simulator pair
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_TREE: ${{ inputs.expected_tree }}
@@ -468,7 +468,7 @@ jobs:
               return subprocess.check_output(args, text=True, timeout=30).strip()
           def require(value, message):
               if not value: raise SystemExit(message)
-          out = Path(os.environ['RUNNER_TEMP']) / 'rec636-radius'
+          out = Path(os.environ['RUNNER_TEMP']) / 'rec636-contact'
           out.mkdir()
           require(os.environ['GITHUB_REF'] == 'refs/heads/codex/rec636-v56-input-diagnostic', 'Diagnostic branch mismatch')
           require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'One original diagnostic attempt only')
@@ -476,7 +476,7 @@ jobs:
           require(re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_COMMIT']) and re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_TREE']), 'Full reviewed commit/tree required')
           require(head == os.environ['EXPECTED_COMMIT'] == os.environ['GITHUB_SHA'] and tree == os.environ['EXPECTED_TREE'], 'Diagnostic source mismatch')
           require(not command('git','status','--porcelain'), 'Unexpected checkout changes')
-          subprocess.run(['git','merge-base','--is-ancestor','efcccb48b8586c7c62c016fe5ba07aae5e13b003',head], check=True, timeout=30)
+          subprocess.run(['git','merge-base','--is-ancestor','498f7bbf60a396ab9ecfdd9de5ab4b83985dcfc4',head], check=True, timeout=30)
           version = command('xcodebuild','-version').splitlines()
           require(version == ['Xcode 26.6','Build version 17F113'], 'Reference Xcode unavailable; no fallback')
           runtime_id = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'
@@ -485,52 +485,72 @@ jobs:
           require(len(matches) == 1 and matches[0].get('version') == '26.5' and matches[0].get('buildversion') == '23F77', 'Reference runtime unavailable; no fallback')
           devices = json.loads(command('xcrun','simctl','list','devices','available','--json'))['devices'].get(runtime_id, [])
           selected = {}
-          for label, name in [('large','iPhone 17 Pro')]:
+          for label, name in [('large','iPhone 17 Pro'),('compact','iPhone 17e')]:
               choices = [x for x in devices if x.get('name') == name and x.get('isAvailable')]
               require(len(choices) == 1, 'Exact unique reference phone required')
               selected[label] = {'name':name,'udid':choices[0]['udid'],'runtime':runtime_id,'runtimeBuild':'23F77'}
           sources = ['Wander/App/NativeInputRecipientDiagnostic.swift', 'Wander/App/WanderApp.swift', 'Wander/Features/Live/LiveScreen.swift', 'Wander/Features/Map/MapScreen.swift', 'Wander/Features/Settings/SenderNotificationReviewHost.swift', 'WanderUITests/LiveReviewContinuityUITests.swift', 'WanderUITests/SenderNotificationFlowUITests.swift', 'Wander.xcodeproj/project.pbxproj', 'project.yml', 'Wander/App/WanderRootView.swift', 'WanderUITests/EventsComingSoonUITests.swift', 'WanderTests/ReplayMaskingTests.swift', 'Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Wander/Resources/FoundersWelcome/founders-welcome.mp4', '.github/workflows/feed-checkin-validation.yml']
           hashes = {p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sources}
-          receipt = {'scope':'diagnostic_only_not_acceptance','baseCommit':'efcccb48b8586c7c62c016fe5ba07aae5e13b003','head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'devices':selected,'sourceSHA256':hashes,'diagnosticMode':'rec636-radius-v56','methodExecutions':1,'retryEnabled':False}
+          receipt = {'scope':'diagnostic_only_not_acceptance','baseCommit':'498f7bbf60a396ab9ecfdd9de5ab4b83985dcfc4','head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'devices':selected,'sourceSHA256':hashes,'diagnosticMode':'rec636-contact-v57','methodExecutions':2,'retryEnabled':False}
           (out/'source-toolchain.json').write_text(json.dumps(receipt,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as env:
               env.write('DIAGNOSTIC_LARGE='+selected['large']['udid']+'\n')
+              env.write('DIAGNOSTIC_COMPACT='+selected['compact']['udid']+'\n')
           PY_ADMIT
       - name: Build the committed diagnostic harness once
         id: input-build
         run: |
-          # This generated project was compiled before diagnostic publication.
-          # Build those exact bytes; source admission and postflight remain strict.
+          # Build the exact committed generated project; do not regenerate source.
+          # This contact experiment is diagnostic only, never acceptance.
           git diff --exit-code -- project.yml Wander.xcodeproj/project.pbxproj
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
             -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" \
-            -derivedDataPath "$RUNNER_TEMP/REC636RadiusDerivedData" -jobs 2 -parallel-testing-enabled NO \
+            -derivedDataPath "$RUNNER_TEMP/REC636ContactDerivedData" -jobs 2 -parallel-testing-enabled NO \
             -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
             -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement \
-            -resultBundlePath "$RUNNER_TEMP/rec636-radius/build.xcresult" \
+            -resultBundlePath "$RUNNER_TEMP/rec636-contact/build.xcresult" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
           python3 - <<'PY_PRODUCTS'
           import os
           from pathlib import Path
-          files = list((Path(os.environ['RUNNER_TEMP'])/'REC636RadiusDerivedData/Build/Products').glob('Wander_iphonesimulator*-arm64.xctestrun'))
+          files = list((Path(os.environ['RUNNER_TEMP'])/'REC636ContactDerivedData/Build/Products').glob('Wander_iphonesimulator*-arm64.xctestrun'))
           if len(files) != 1: raise SystemExit('Expected one exact xctestrun')
           with open(os.environ['GITHUB_ENV'],'a') as out: out.write('DIAGNOSTIC_XCTESTRUN='+str(files[0])+'\n')
           PY_PRODUCTS
-      - name: Observe the original Combined Filters radius path once
+      - name: Observe the contact hypothesis on the large phone once
         if: ${{ !cancelled() && steps.input-build.outcome == 'success' }}
         run: >-
           xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
           -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" -jobs 1 -parallel-testing-enabled NO
           -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
-          -resultBundlePath "$RUNNER_TEMP/rec636-radius/large.xcresult"
+          -resultBundlePath "$RUNNER_TEMP/rec636-contact/large.xcresult"
+      - name: Release large phone and prepare compact phone
+        id: input-compact
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' }}
+        run: |
+          python3 - <<'PY_COMPACT'
+          import json, os, subprocess
+          inventory = subprocess.check_output(['xcrun','simctl','list','devices','booted','--json'],text=True,timeout=30)
+          if any(d['udid'] == os.environ['DIAGNOSTIC_LARGE'] for rows in json.loads(inventory)['devices'].values() for d in rows):
+              subprocess.run(['xcrun','simctl','shutdown',os.environ['DIAGNOSTIC_LARGE']],check=True,timeout=60)
+          subprocess.run(['xcrun','simctl','bootstatus',os.environ['DIAGNOSTIC_COMPACT'],'-b'],check=True,timeout=180)
+          PY_COMPACT
+      - name: Observe the contact hypothesis on the compact phone once
+        if: ${{ !cancelled() && steps.input-build.outcome == 'success' && steps.input-compact.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$DIAGNOSTIC_COMPACT" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/rec636-contact/compact.xcresult"
       - name: Preserve original native outcomes and verify selected coverage
         if: always()
         run: |
           python3 - <<'PY_RESULTS'
           import hashlib, json, os, subprocess
           from pathlib import Path
-          out=Path(os.environ['RUNNER_TEMP'])/'rec636-radius'
+          out=Path(os.environ['RUNNER_TEMP'])/'rec636-contact'
           out.mkdir(exist_ok=True)
           problems=[]
           admitted={}
@@ -540,7 +560,7 @@ jobs:
               (out/'source-postflight.json').write_text(json.dumps({'unchanged':same},indent=2)+'\n')
               if not all(same.values()): problems.append('source_drift')
           except (OSError,ValueError,KeyError): problems.append('source_admission_or_postflight_unavailable')
-          expected={'large':['LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']}
+          expected={size:['LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()'] for size in ['large','compact']}
           def nodes(value):
               if isinstance(value,dict):
                   yield value
@@ -565,11 +585,12 @@ jobs:
               summary=exports['summary']
               exact=sorted(x['method'] for x in actual)==sorted(methods) and len(cases)==summary.get('totalTestCount')
               selected=admitted.get('devices',{}).get(size,{})
+              model = 'iPhone 17 Pro' if size == 'large' else 'iPhone 17e'
               expected_device={'architecture':'arm64','deviceId':selected.get('udid'),
-                  'deviceName':'iPhone 17 Pro','modelName':'iPhone 17 Pro','osBuildNumber':'23F77',
+                  'deviceName':model,'modelName':model,'osBuildNumber':'23F77',
                   'osVersion':'26.5','platform':'iOS Simulator'}
               configurations=summary.get('devicesAndConfigurations',[])
-              device_matches=bool(selected.get('udid')) and selected.get('name')=='iPhone 17 Pro' and selected.get('runtime')=='com.apple.CoreSimulator.SimRuntime.iOS-26-5' and selected.get('runtimeBuild')=='23F77' and exports['tests'].get('devices')==[expected_device] and len(configurations)==1 and configurations[0].get('device')==expected_device
+              device_matches=bool(selected.get('udid')) and selected.get('name')==model and selected.get('runtime')=='com.apple.CoreSimulator.SimRuntime.iOS-26-5' and selected.get('runtimeBuild')=='23F77' and exports['tests'].get('devices')==[expected_device] and len(configurations)==1 and configurations[0].get('device')==expected_device
               count_keys={'Passed':'passedTests','Failed':'failedTests','Skipped':'skippedTests','Expected Failure':'expectedFailures'}
               counts_match=all(x['result'] in count_keys for x in actual) and all(summary.get(key)==sum(x['result']==status for x in actual) for status,key in count_keys.items())
               device_counts_match=len(configurations)==1 and all(configurations[0].get(key)==summary.get(key) for key in count_keys.values())
@@ -578,15 +599,15 @@ jobs:
               passed=exact and device_matches and counts_match and device_counts_match and all(x['result']=='Passed' for x in actual) and summary.get('result')=='Passed' and summary.get('passedTests')==len(methods) and all(summary.get(k)==0 for k in ['failedTests','skippedTests','expectedFailures'])
               records[size]={'required':methods,'actual':actual,'exactCoverage':exact,'deviceMatchesAdmission':device_matches,'nativeCountsMatchTreeAndDevice':counts_match and device_counts_match,'allPassed':passed,'summarySHA256':hashlib.sha256((out/(size+'-summary.json')).read_bytes()).hexdigest(),'testsSHA256':hashlib.sha256((out/(size+'-tests.json')).read_bytes()).hexdigest()}
               if not passed: problems.append(size+'_native_failed_or_incomplete')
-          (out/'diagnostic-accounting.json').write_text(json.dumps({'scope':'diagnostic_only_not_acceptance','nativeOutcomesUnchanged':True,'diagnosticMode':'rec636-radius-v56','expectedExecutions':1,'devices':records,'gaps':problems},indent=2)+'\n')
+          (out/'diagnostic-accounting.json').write_text(json.dumps({'scope':'diagnostic_only_not_acceptance','nativeOutcomesUnchanged':True,'diagnosticMode':'rec636-contact-v57','expectedExecutions':2,'devices':records,'gaps':problems},indent=2)+'\n')
           if problems: raise SystemExit('Diagnostic failure or gap: '+','.join(problems))
           PY_RESULTS
       - name: Retain original diagnostic results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rec636-radius-diagnostic-${{ github.sha }}
-          path: ${{ runner.temp }}/rec636-radius
+          name: rec636-contact-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/rec636-contact
           retention-days: 14
           if-no-files-found: error
 
