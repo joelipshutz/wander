@@ -3,16 +3,73 @@ import XCTest
 
 @MainActor
 final class PlaceProfileAppearanceUITests: XCTestCase {
+    private var blurObservationApp: XCUIApplication?
+    private var blurObservationNonce: String?
+    private var blurObservationStart: TimeInterval = 0
+    private var blurOriginalReturned = false
+    private var blurFailureCountBefore: Int?
+    private var appearanceDeliveryPhase = "unstarted"
+    private var appearanceDeliveryStartup: [String: Any] = [:]
+    private var appearanceDeliveryRequestStarted: TimeInterval = 0
+    private var appearanceDeliveryRequestReturned: TimeInterval = 0
+
+    override func tearDown() async throws {
+        if let app = blurObservationApp {
+            blurObservationApp = nil // One attempt, including when AX collection itself fails.
+            let failureDelta = blurFailureCountBefore.flatMap { before in testRun.map { $0.failureCount - before } }
+            let verdict: [String: Any] = ["schema": 1, "fixture": "actual-profile-blur",
+                "capturePhase": "teardown_after_original_defer", "originalMethodReturned": blurOriginalReturned,
+                "recordedFailureDelta": failureDelta ?? -1, "testStartedAt": blurObservationStart,
+                "beforeAXAt": ProcessInfo.processInfo.systemUptime]
+            attachBlurObservation(verdict, name: "Original appearance verdict before diagnostic AX")
+            // No wait/existence/snapshot/retry. An AX error or missing teardown remains a collection gap.
+            let readStarted = ProcessInfo.processInfo.systemUptime
+            let raw = app.staticTexts["profile.blur.actual.observation"].value as? String
+            let data = raw?.data(using: .utf8)
+            let object: [String: Any]? = data.flatMap { bytes in
+                guard bytes.count <= 32_768 else { return nil }
+                return (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
+            }
+            if let object, object["schema"] as? Int == 1,
+               object["fixture"] as? String == "actual-profile-blur",
+               object["nonce"] as? String == blurObservationNonce,
+               object["readoutAttached"] as? Bool == true {
+                attachBlurObservation(object, name: "Actual Profile lifecycle after original verdict")
+            } else {
+                attachBlurObservation(["schema": 1, "fixture": "actual-profile-blur", "status": "Gap",
+                    "reason": "bounded_direct_read_unavailable", "byteCount": data?.count ?? -1],
+                    name: "Actual Profile lifecycle collection gap")
+            }
+            attachBlurObservation(["schema": 1, "readStarted": readStarted,
+                "readReturned": ProcessInfo.processInfo.systemUptime], name: "Diagnostic AX collection timing")
+        }
+        try await super.tearDown()
+    }
+    private func attachBlurObservation(_ value: [String: Any], name: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return }
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
     func testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges() throws {
         continueAfterFailure = false
         let previous = XCUIDevice.shared.appearance
         defer { XCUIDevice.shared.appearance = previous }
+        let startupAppearanceRequestedAt = ProcessInfo.processInfo.systemUptime
         XCUIDevice.shared.appearance = .dark
+        appearanceDeliveryStartup = ["requested": "dark", "requestedAt": startupAppearanceRequestedAt,
+            "setterReturnedAt": ProcessInfo.processInfo.systemUptime]
         let app = XCUIApplication()
         // Use the fixture root so account notification primers cannot cover
         // the screens whose appearance is under test.
         app.launchArguments = ["-WanderMapCapture", "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        let observationNonce = UUID().uuidString
+        app.launchArguments += ["-WanderActualProfileBlurObservation", observationNonce,
+                                "-WanderTabAppearanceDiagnostics"]
+        blurObservationApp = app; blurObservationNonce = observationNonce
+        blurObservationStart = ProcessInfo.processInfo.systemUptime
+        blurFailureCountBefore = testRun?.failureCount
         app.launch()
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
@@ -24,7 +81,10 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         for name in ["Map", "Feed", "Lists", "Events", "Profile"] {
             tabs.buttons[name].tap()
             for appearance in [XCUIDevice.Appearance.light, .dark] {
+                appearanceDeliveryPhase = name
+                appearanceDeliveryRequestStarted = ProcessInfo.processInfo.systemUptime
                 XCUIDevice.shared.appearance = appearance
+                appearanceDeliveryRequestReturned = ProcessInfo.processInfo.systemUptime
                 waitForAppearanceTransition(to: appearance)
                 capture("\(name) live appearance \(appearance)")
                 XCTAssertTrue(tabs.buttons[name].isSelected)
@@ -62,6 +122,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             XCTAssertTrue(search.isHittable)
             capture("Add live appearance \(appearance)")
         }
+        blurOriginalReturned = true
     }
 
     func testOpenHistorySurvivesLiveAppearanceChangesAndForegroundReturns() throws {
@@ -277,7 +338,9 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
     private func assertAppearance(of element: XCUIElement, expected: XCUIDevice.Appearance,
                                   file: StaticString = #filePath, line: UInt = #line) throws {
         XCTAssertEqual(XCUIDevice.shared.appearance, expected, file: file, line: line)
+        let appearanceSampleRequestedAt = ProcessInfo.processInfo.systemUptime
         let image = try XCTUnwrap(element.screenshot().image.cgImage)
+        let appearanceSampleReturnedAt = ProcessInfo.processInfo.systemUptime
         var pixels = [UInt8](repeating: 0, count: 64 * 8 * 4)
         try pixels.withUnsafeMutableBytes { buffer in
             let context = try XCTUnwrap(CGContext(
@@ -295,11 +358,58 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             total += 0.2126 * red + 0.7152 * green + 0.0722 * blue
         }
         let luminance = total / 512.0
+        if blurObservationApp != nil {
+            observeAppearanceDelivery(element, expected: expected, luminance: luminance, image: image,
+                sampleRequestedAt: appearanceSampleRequestedAt, sampleReturnedAt: appearanceSampleReturnedAt)
+        }
         if expected == .light {
             XCTAssertGreaterThan(luminance, 0.6, "Light appearance retained a dark surface.", file: file, line: line)
         } else {
             XCTAssertLessThan(luminance, 0.45, "Dark appearance retained a light surface.", file: file, line: line)
         }
+    }
+
+    /// Diagnostic-only: decide the original pixel predicate before one extra AX read.
+    /// The stored app readout describes its last Coordinator.apply(), not a live trait query.
+    private func observeAppearanceDelivery(_ element: XCUIElement, expected: XCUIDevice.Appearance,
+                                          luminance: Double, image: CGImage,
+                                          sampleRequestedAt: TimeInterval, sampleReturnedAt: TimeInterval) {
+        let isLight = expected == .light
+        let verdict: [String: Any] = [
+            "schema": 1, "fixture": "appearance-delivery", "phase": appearanceDeliveryPhase,
+            "expected": isLight ? "light" : "dark", "startupRequest": appearanceDeliveryStartup,
+            "requestStartedAt": appearanceDeliveryRequestStarted,
+            "setterReturnedAt": appearanceDeliveryRequestReturned,
+            "originalDeviceGetterAssertionReturned": true,
+            "sampleRequestedAt": sampleRequestedAt, "sampleReturnedAt": sampleReturnedAt,
+            "sampleWidth": image.width, "sampleHeight": image.height,
+            "luminance": luminance, "threshold": isLight ? 0.6 : 0.45,
+            "comparison": isLight ? "greaterThan" : "lessThan",
+            "originalPixelPredicate": isLight ? luminance > 0.6 : luminance < 0.45,
+            "decidedAt": ProcessInfo.processInfo.systemUptime
+        ]
+        // Persist the genuine predicate before AX can fail or consume the test budget.
+        attachBlurObservation(verdict, name: "Original appearance predicate before direct AX")
+        let originalPixels = XCTAttachment(image: UIImage(cgImage: image))
+        originalPixels.name = "Original tab-bar pixels used by appearance predicate"
+        originalPixels.lifetime = .keepAlways; add(originalPixels)
+        let readStarted = ProcessInfo.processInfo.systemUptime
+        let raw = element.value as? String // One direct read; no existence wait, snapshot, polling or retry.
+        let readReturned = ProcessInfo.processInfo.systemUptime
+        let allowed = #"^window=[012];anchor=[012];bar=[012];material=[012];materialHidden=(true|false);materialAlpha=(0(\.[0-9]+)?|1(\.0+)?);reduceTransparency=(true|false);increaseContrast=(true|false)$"#
+        let admitted = raw.map { value in
+            value.utf8.count <= 1024 && value.range(of: allowed, options: .regularExpression) == (value.startIndex..<value.endIndex)
+        } ?? false
+        var observation: [String: Any] = [
+            "schema": 1, "fixture": "appearance-delivery", "phase": appearanceDeliveryPhase,
+            "expected": isLight ? "light" : "dark", "readStartedAt": readStarted,
+            "readReturnedAt": readReturned, "status": admitted ? "Observed" : "Gap",
+            "readoutSemantics": "last_coordinator_apply_not_live_traits",
+            "originalPixelPredicate": isLight ? luminance > 0.6 : luminance < 0.45
+        ]
+        if admitted, let raw { observation["readout"] = raw }
+        else { observation["reason"] = "missing_or_unexpected_bounded_readout" }
+        attachBlurObservation(observation, name: "Native tab appearance delivery after original predicate")
     }
 
     private func waitForAppearanceTransition(to appearance: XCUIDevice.Appearance) {
