@@ -31,16 +31,31 @@ on:
       - 'WanderUITests/YourMapPrototypeUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Validation mode
+        type: choice
+        options: [acceptance, rec636-component-setup-v57]
+        default: acceptance
+      expected_commit:
+        description: Full reviewed commit for the isolated diagnostic
+        type: string
+        default: ''
+      expected_tree:
+        description: Full reviewed tree for the isolated diagnostic
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: feed-checkin-${{ github.ref }}
-  cancel-in-progress: true
+  group: feed-checkin-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-component-setup-v57' && format('-component-setup-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'rec636-component-setup-v57' }}
 
 jobs:
   native:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'acceptance' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -233,6 +248,7 @@ jobs:
           retention-days: 14
 
   live-continuity:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'acceptance' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -428,3 +444,203 @@ jobs:
             ${{ runner.temp }}/live-continuity-compact.xcresult
             ${{ runner.temp }}/live-continuity-*.log
           retention-days: 14
+
+  rec636-component-setup-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-component-setup-v57' }}
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+          lfs: true
+      - name: Admit exact isolated source, Xcode and large simulator
+        id: diagnostic-admission
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          python3 - <<'PY_ADMIT'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+          def command(*args):
+              return subprocess.check_output(args, text=True, timeout=30).strip()
+          def require(value, message):
+              if not value: raise SystemExit(message)
+          out = Path(os.environ['RUNNER_TEMP']) / 'rec636-component-setup'
+          out.mkdir()
+          (out/'request.json').write_text(json.dumps({'scope':'diagnostic_only_not_acceptance','mode':'rec636-component-setup-v57','runId':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT']},indent=2)+'\n')
+          base = '498f7bbf60a396ab9ecfdd9de5ab4b83985dcfc4'
+          require(os.environ['GITHUB_REF'] == 'refs/heads/codex/rec636-v57-component-setup-diagnostic', 'Diagnostic branch mismatch')
+          require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'One original diagnostic attempt only')
+          head, tree = command('git','rev-parse','HEAD'), command('git','rev-parse','HEAD^{tree}')
+          require(re.fullmatch('[0-9a-f]{40}',os.environ['EXPECTED_COMMIT']) and re.fullmatch('[0-9a-f]{40}',os.environ['EXPECTED_TREE']), 'Full reviewed commit/tree required')
+          require(head == os.environ['EXPECTED_COMMIT'] == os.environ['GITHUB_SHA'] and tree == os.environ['EXPECTED_TREE'], 'Diagnostic source mismatch')
+          require(command('git','show','-s','--format=%P','HEAD') == base, 'One component setup diagnostic commit directly above V57 required')
+          require(command('git','rev-parse',base+'^{tree}') == '2f65913ba01fe2543b625f66f3f797d1a6f525bb', 'V57 base tree mismatch')
+          require(not command('git','status','--porcelain'), 'Unexpected checkout changes')
+          proposed = {
+              'Wander/Features/Profile/ProfileHeaderMotion.swift':'7fca76b4ef4b14e4205b599faf73cc15ae34f410561d2a76c6a81c8134bf63ff',
+              'Wander/App/WanderApp.swift':'d6213460ad502203bfee275682050c1b807853351cecfc11f3b19b884acfeb9d',
+              'WanderUITests/PlaceProfileAppearanceUITests.swift':'78eec8ef7a6f83279613f95076bb2a87c189177986b5dd67bb9ee95c50906f4d',
+              'WanderUITests/ShareCardMockupUITests.swift':'7f3994705d2ac2b38ad85edee5db38e8dc02e487b9cf43b4561eb4eb5c848713'}
+          workflow = '.github/workflows/feed-checkin-validation.yml'
+          require(set(command('git','diff','--name-only',base,'HEAD').splitlines()) == {'Wander/Features/Profile/ProfileHeaderMotion.swift','Wander/App/WanderApp.swift','WanderUITests/PlaceProfileAppearanceUITests.swift',workflow}, 'Unexpected component setup scope')
+          sources = list(proposed) + [workflow,'Wander.xcodeproj/project.pbxproj','project.yml',
+              'Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved',
+              'Wander/Resources/FoundersWelcome/founders-welcome.mp4','Wander/App/WanderRootView.swift',
+              'Wander/Features/Profile/ProfileScreen.swift','Wander/Features/Profile/ProfileOwnerHome.swift',
+              'Wander/Features/Settings/SettingsScreen.swift','Wander/Features/Events/EventsComingSoonScreen.swift',
+              'WanderTests/ReplayMaskingTests.swift']
+          hashes = {p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sources}
+          require(all(hashes[p] == digest for p,digest in proposed.items()), 'Reviewed patch bytes changed')
+          for p in sources:
+              blob = subprocess.check_output(['git','show','HEAD:'+p],timeout=30)
+              if p.endswith('.mp4'):
+                  pointer = blob.decode('ascii')
+                  oid = re.search(r'^oid sha256:([0-9a-f]{64})$',pointer,re.M)
+                  size = re.search(r'^size (\d+)$',pointer,re.M)
+                  require(oid and size and hashes[p] == oid[1] and Path(p).stat().st_size == int(size[1]), 'Required media not hydrated to its committed LFS identity')
+              else:
+                  require(hashlib.sha256(blob).hexdigest() == hashes[p], 'Checkout differs from committed source: '+p)
+          version = command('xcodebuild','-version').splitlines()
+          require(version == ['Xcode 26.6','Build version 17F113'], 'Reference Xcode unavailable; no fallback')
+          runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'
+          runtimes = json.loads(command('xcrun','simctl','list','runtimes','--json'))['runtimes']
+          matches = [x for x in runtimes if x.get('identifier') == runtime and x.get('isAvailable')]
+          require(len(matches) == 1 and matches[0].get('version') == '26.5' and matches[0].get('buildversion') == '23F77', 'Reference runtime unavailable; no fallback')
+          devices = json.loads(command('xcrun','simctl','list','devices','available','--json'))['devices'].get(runtime,[])
+          matches = [x for x in devices if x.get('name') == 'iPhone 17 Pro' and x.get('isAvailable')]
+          require(len(matches) == 1, 'Exact unique reference phone required')
+          device = {'name':'iPhone 17 Pro','udid':matches[0]['udid'],'runtime':runtime,'runtimeBuild':'23F77'}
+          receipt = {'scope':'diagnostic_only_not_acceptance','baseCommit':base,'head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'device':device,'sourceSHA256':hashes,'diagnosticMode':'rec636-component-setup-v57','plannedExecutions':2,'retryEnabled':False}
+          (out/'source-toolchain.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as env: env.write('DIAGNOSTIC_LARGE='+device['udid']+'\n')
+          PY_ADMIT
+      - name: Build the committed diagnostic harness once
+        id: diagnostic-build
+        run: |
+          git diff --exit-code -- project.yml Wander.xcodeproj/project.pbxproj
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
+            -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" \
+            -derivedDataPath "$RUNNER_TEMP/REC636ComponentSetupDerivedData" -jobs 2 -parallel-testing-enabled NO \
+            -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution \
+            -only-testing:WanderUITests/ProfileBlurLifecycleDiagnosticUITests/testLightActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur \
+            -only-testing:WanderUITests/ProfileBlurLifecycleDiagnosticUITests/testDarkActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur \
+            -resultBundlePath "$RUNNER_TEMP/rec636-component-setup/build.xcresult" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          python3 - <<'PY_PRODUCTS'
+          import os
+          from pathlib import Path
+          files = list((Path(os.environ['RUNNER_TEMP'])/'REC636ComponentSetupDerivedData/Build/Products').glob('Wander_iphonesimulator*-arm64.xctestrun'))
+          if len(files) != 1: raise SystemExit('Expected one exact xctestrun')
+          with open(os.environ['GITHUB_ENV'],'a') as out: out.write('DIAGNOSTIC_XCTESTRUN='+str(files[0])+'\n')
+          PY_PRODUCTS
+      - name: Attach the selected simulator display for actual compositor captures
+        id: diagnostic-display
+        run: |
+          python3 - <<'PY_DISPLAY'
+          import os, subprocess
+          subprocess.run(['xcrun','simctl','bootstatus',os.environ['DIAGNOSTIC_LARGE'],'-b'],check=True,timeout=180)
+          subprocess.run(['open','-a','Simulator','--args','-CurrentDeviceUDID',os.environ['DIAGNOSTIC_LARGE']],check=True,timeout=30)
+          PY_DISPLAY
+      - name: Prepare exact native result accounting
+        if: ${{ !cancelled() && steps.diagnostic-admission.outcome == 'success' }}
+        run: |
+          cat > "$RUNNER_TEMP/rec636-component-setup/audit-native.py" <<'PY_AUDIT'
+          import hashlib, json, os, subprocess, sys
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'rec636-component-setup'
+          admitted=json.loads((out/'source-toolchain.json').read_text())
+          expected={
+              'components':['ProfileBlurLifecycleDiagnosticUITests/testLightActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur()',
+                            'ProfileBlurLifecycleDiagnosticUITests/testDarkActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur()']}
+          def nodes(value):
+              if isinstance(value,dict):
+                  yield value
+                  for child in value.values(): yield from nodes(child)
+              elif isinstance(value,list):
+                  for child in value: yield from nodes(child)
+          def audit(group):
+              record=out/(group+'-audit.json')
+              if record.exists(): raise SystemExit('Refusing repeated native export: '+group)
+              bundle=out/(group+'.xcresult'); methods=expected[group]; problems=[]; exports={}
+              if bundle.is_dir():
+                  for kind in ['summary','tests']:
+                      try:
+                          raw=subprocess.check_output(['xcrun','xcresulttool','get','test-results',kind,'--path',str(bundle),'--compact'],timeout=90)
+                          exports[kind]=json.loads(raw)
+                          with (out/(group+'-'+kind+'.json')).open('xb') as destination: destination.write(raw)
+                      except (subprocess.SubprocessError,OSError,ValueError): problems.append(kind+'_export')
+              else: problems.append('native_bundle_missing')
+              result={'group':group,'required':methods,'allPassed':False,'nativeOutcomesUnchanged':True,'gaps':problems}
+              if set(exports)=={'summary','tests'}:
+                  summary=exports['summary']; cases=[x for x in nodes(exports['tests']) if x.get('nodeType')=='Test Case']
+                  actual=[{'method':'/'.join(str(x.get('nodeIdentifier','')).split('/')[-2:]),'url':x.get('nodeIdentifierURL'),'result':x.get('result')} for x in cases]
+                  exact=sorted(x['method'] for x in actual)==sorted(methods) and len(cases)==summary.get('totalTestCount') and all(x['url']=='test://com.apple.xcode/Wander/WanderUITests/'+x['method'].removesuffix('()') for x in actual)
+                  selected=admitted['device']
+                  device={'architecture':'arm64','deviceId':selected['udid'],'deviceName':'iPhone 17 Pro','modelName':'iPhone 17 Pro','osBuildNumber':'23F77','osVersion':'26.5','platform':'iOS Simulator'}
+                  configurations=summary.get('devicesAndConfigurations',[])
+                  device_matches=selected['name']=='iPhone 17 Pro' and selected['runtime']=='com.apple.CoreSimulator.SimRuntime.iOS-26-5' and selected['runtimeBuild']=='23F77' and exports['tests'].get('devices')==[device] and len(configurations)==1 and configurations[0].get('device')==device
+                  keys={'Passed':'passedTests','Failed':'failedTests','Skipped':'skippedTests','Expected Failure':'expectedFailures'}
+                  counts=all(x['result'] in keys for x in actual) and all(summary.get(k)==sum(x['result']==s for x in actual) for s,k in keys.items()) and len(configurations)==1 and all(configurations[0].get(k)==summary.get(k) for k in keys.values())
+                  passed=exact and device_matches and counts and summary.get('result')=='Passed' and summary.get('passedTests')==len(methods) and all(summary.get(k)==0 for k in ['failedTests','skippedTests','expectedFailures'])
+                  if not exact: problems.append('native_roster_gap')
+                  if not device_matches: problems.append('native_device_gap')
+                  if not counts: problems.append('native_counts_gap')
+                  if not passed: problems.append('native_failed_or_incomplete')
+                  result.update(actual=actual,actualDevice=device,exactCoverage=exact,deviceMatchesAdmission=device_matches,nativeCountsMatchTreeAndDevice=counts,allPassed=passed,nativeStartTime=summary.get('startTime'),nativeFinishTime=summary.get('finishTime'),exportSHA256={k:hashlib.sha256((out/(group+'-'+k+'.json')).read_bytes()).hexdigest() for k in exports})
+              with record.open('x') as destination: destination.write(json.dumps(result,indent=2)+'\n')
+              return result
+          if sys.argv[1]=='components':
+              result=audit('components')
+              with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write('all_passed='+str(result['allPassed']).lower()+'\n')
+              raise SystemExit(0 if result['allPassed'] else 1)
+          if sys.argv[1]!='final': raise SystemExit('Unknown audit mode')
+          problems=[]; records={}
+          try:
+              same={p:hashlib.sha256(Path(p).read_bytes()).hexdigest()==digest for p,digest in admitted['sourceSHA256'].items()}
+              actual_head=subprocess.check_output(['git','rev-parse','HEAD'],text=True,timeout=30).strip()
+              actual_tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True,timeout=30).strip()
+              clean=not subprocess.check_output(['git','status','--porcelain'],text=True,timeout=30).strip()
+              (out/'source-postflight.json').write_text(json.dumps({'unchanged':same,'head':actual_head,'tree':actual_tree,'checkoutClean':clean},indent=2)+'\n')
+              if not all(same.values()) or actual_head!=admitted['head'] or actual_tree!=admitted['tree'] or not clean: problems.append('source_drift')
+          except (OSError,ValueError,KeyError,subprocess.SubprocessError): problems.append('source_postflight_unavailable')
+          try: records['components']=json.loads((out/'components-audit.json').read_text())
+          except (OSError,ValueError): problems.append('components_gate_receipt_missing')
+          process_outcomes={'components':os.environ.get('COMPONENT_NATIVE_OUTCOME','unknown')}
+          if process_outcomes['components']!='success': problems.append('component_native_process_not_successful')
+          for group,record in records.items():
+              if not record.get('allPassed'): problems.append(group+'_native_failed_or_not_executed')
+          (out/'diagnostic-accounting.json').write_text(json.dumps({'scope':'diagnostic_only_not_acceptance','nativeOutcomesUnchanged':True,'diagnosticMode':'rec636-component-setup-v57','plannedExecutions':2,'requiredExecutedCount':2,'nativeProcessOutcomes':process_outcomes,'groups':records,'gaps':problems},indent=2)+'\n')
+          if problems: raise SystemExit('Diagnostic failure or gap: '+','.join(problems))
+          PY_AUDIT
+      - name: Compare actual light and dark quarter-blur pixels once
+        id: diagnostic-components
+        if: ${{ !cancelled() && steps.diagnostic-build.outcome == 'success' && steps.diagnostic-display.outcome == 'success' }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$DIAGNOSTIC_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$DIAGNOSTIC_LARGE" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/ProfileBlurLifecycleDiagnosticUITests/testLightActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur
+          -only-testing:WanderUITests/ProfileBlurLifecycleDiagnosticUITests/testDarkActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600 -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/rec636-component-setup/components.xcresult"
+      - name: Account for both exact original component methods
+        id: component-verdict
+        if: ${{ !cancelled() && steps.diagnostic-build.outcome == 'success' && steps.diagnostic-display.outcome == 'success' }}
+        run: python3 "$RUNNER_TEMP/rec636-component-setup/audit-native.py" components
+      - name: Preserve original component outcomes and exact source/device coverage
+        if: ${{ always() && steps.diagnostic-admission.outcome == 'success' }}
+        env:
+          COMPONENT_NATIVE_OUTCOME: ${{ steps.diagnostic-components.outcome }}
+        run: python3 "$RUNNER_TEMP/rec636-component-setup/audit-native.py" final
+      - name: Retain original diagnostic result bundles and observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rec636-component-setup-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/rec636-component-setup
+          retention-days: 14
+          if-no-files-found: error
