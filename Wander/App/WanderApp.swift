@@ -348,7 +348,20 @@ struct WanderApp: App {
     }
 
     #if DEBUG
+    @ViewBuilder
     private var mapCaptureRoot: some View {
+        #if targetEnvironment(simulator)
+        if let style = ProfileBlurLifecycleDiagnostic.componentStyle {
+            ProfileBlurLifecycleDiagnosticHost(style: style).ignoresSafeArea()
+        } else {
+            mapCaptureAppRoot
+        }
+        #else
+        mapCaptureAppRoot
+        #endif
+    }
+
+    private var mapCaptureAppRoot: some View {
         WanderRootView(
             initialSession: auth.state.session,
             analytics: NoopAnalyticsClient(),

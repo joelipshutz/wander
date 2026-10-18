@@ -319,3 +319,128 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         add(attachment)
     }
 }
+
+
+/// Diagnostic only: original appearance methods above are byte-for-byte unchanged.
+@MainActor
+final class ProfileBlurLifecycleDiagnosticUITests: XCTestCase {
+    func testLightActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur() throws {
+        try check(.light, argument: "light")
+    }
+    func testDarkActualBackdropFinishAtCurrentPreservesRenderedQuarterBlur() throws {
+        try check(.dark, argument: "dark")
+    }
+
+    private func check(_ appearance: XCUIDevice.Appearance, argument: String) throws {
+        continueAfterFailure = false
+        executionTimeAllowance = 600
+        let previous = XCUIDevice.shared.appearance
+        defer { XCUIDevice.shared.appearance = previous }
+        XCUIDevice.shared.appearance = appearance
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderMapCapture", "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                               "-WanderDisableWalkthroughs", "-WanderInitialTab", "map",
+                               "-WanderProfileBlurLifecycleComponent", argument]
+        app.launch()
+        defer { app.terminate() }
+        let probe = app.staticTexts["profile.blur.lifecycle.state"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 10))
+        let before = try observation(probe, name: "\(argument) before lifecycle")
+        try assertState(before, key: "reference", state: 1)
+        try assertState(before, key: "immediateBefore", state: 1)
+        try assertState(before, key: "immediateAfter", state: 0)
+        XCTAssertEqual((before["immediate"] as? [String: Any])?["retained"] as? Bool, false)
+        let viewportWidth = CGFloat(try XCTUnwrap(before["viewportWidth"] as? Double))
+        let viewportHeight = CGFloat(try XCTUnwrap(before["viewportHeight"] as? Double))
+        let beforeImage = capture("\(argument) before finishing retained quarter blur")
+        let beforePanels = try panels(beforeImage, viewportWidth: viewportWidth, viewportHeight: viewportHeight)
+        app.buttons["profile.blur.lifecycle.finish"].tap()
+        let after = try observation(probe, name: "\(argument) after lifecycle")
+        XCTAssertEqual(after["finished"] as? Bool, true)
+        try assertState(after, key: "referenceBefore", state: 1)
+        try assertState(after, key: "referenceAfter", state: 0)
+        XCTAssertEqual((after["reference"] as? [String: Any])?["retained"] as? Bool, false)
+        let afterPanels = try panels(capture("\(argument) after finishing retained quarter blur"),
+                                     viewportWidth: viewportWidth, viewportHeight: viewportHeight)
+        // Fail closed if the OS screenshot did not contain an actual composited blur.
+        XCTAssertGreaterThan(standardDeviation(beforePanels[0]), 0.12, "Raw fixture must be non-flat.")
+        XCTAssertGreaterThan(standardDeviation(beforePanels[1]), 0.02, "Quarter blur must remain non-flat.")
+        XCTAssertGreaterThan(meanDifference(beforePanels[0], beforePanels[1]), 0.01,
+                             "Quarter blur must differ from the unblurred pattern.")
+        XCTAssertGreaterThan(meanDifference(beforePanels[3], beforePanels[1]), 0.005,
+                             "Quarter blur must differ from the full material.")
+        assertEquivalent(beforePanels[1], beforePanels[2], "Immediate finish versus original quarter blur")
+        assertEquivalent(beforePanels[0], afterPanels[0], "Raw display control stability")
+        assertEquivalent(beforePanels[1], afterPanels[1], "Same rendered instance before versus after finish")
+        assertEquivalent(beforePanels[2], afterPanels[2], "Immediate finish display stability")
+        assertEquivalent(afterPanels[1], afterPanels[2], "Both finished quarter-blur instances")
+    }
+
+    private func observation(_ probe: XCUIElement, name: String) throws -> [String: Any] {
+        let text = try XCTUnwrap(probe.value as? String) // Direct AX value; no snapshot truncation.
+        let data = Data(text.utf8)
+        XCTAssertLessThanOrEqual(data.count, 4096)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["schema"] as? Int, 1)
+        XCTAssertEqual(object["fixture"] as? String, "profile-blur")
+        XCTAssertEqual(object["ready"] as? Bool, true)
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        return object
+    }
+    private func assertState(_ object: [String: Any], key: String, state: Int) throws {
+        let value = try XCTUnwrap(object[key] as? [String: Any])
+        XCTAssertEqual(value["state"] as? Int, state)
+        XCTAssertEqual(value["running"] as? Bool, false)
+        XCTAssertEqual(value["windowAttached"] as? Bool, true)
+        if state == 1 { XCTAssertEqual(try XCTUnwrap(value["fraction"] as? Double), 0.25, accuracy: 0.000001) }
+    }
+    private func capture(_ name: String) -> UIImage {
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        return screenshot.image
+    }
+    private func panels(_ image: UIImage, viewportWidth: CGFloat, viewportHeight: CGFloat) throws -> [[Double]] {
+        let full = try XCTUnwrap(image.cgImage)
+        XCTAssertEqual(image.imageOrientation, .up)
+        XCTAssertGreaterThan(viewportHeight, viewportWidth)
+        let scale = CGFloat(full.width) / viewportWidth
+        XCTAssertEqual(CGFloat(full.height) / viewportHeight, scale, accuracy: 0.001)
+        return try (0..<4).map { index in
+            // Interior crops exclude panel boundary effects; the source pattern has identical local phase.
+            let rect = CGRect(x: 40, y: CGFloat(116 + index * 108), width: viewportWidth - 80, height: 56)
+                .applying(CGAffineTransform(scaleX: scale, y: scale)).integral
+            let crop = try XCTUnwrap(full.cropping(to: rect))
+            let width = crop.width, height = crop.height
+            var rgba = [UInt8](repeating: 0, count: width * height * 4)
+            try rgba.withUnsafeMutableBytes { buffer in
+                let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: width, height: height,
+                    bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(crop, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            }
+            return stride(from: 0, to: rgba.count, by: 4).flatMap { index in
+                [Double(rgba[index]) / 255, Double(rgba[index + 1]) / 255, Double(rgba[index + 2]) / 255]
+            }
+        }
+    }
+    private func meanDifference(_ a: [Double], _ b: [Double]) -> Double {
+        precondition(a.count == b.count && !a.isEmpty)
+        return zip(a, b).reduce(0) { $0 + abs($1.0 - $1.1) } / Double(a.count)
+    }
+    private func standardDeviation(_ values: [Double]) -> Double {
+        let mean = values.reduce(0, +) / Double(values.count)
+        return sqrt(values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count))
+    }
+    private func assertEquivalent(_ a: [Double], _ b: [Double], _ name: String) {
+        XCTAssertEqual(a.count, b.count)
+        let errors = zip(a, b).map { abs($0.0 - $0.1) }.sorted()
+        let mean = meanDifference(a, b), p95 = errors[errors.count * 95 / 100]
+        let metric = "{\"meanAbsoluteRGBError\":\(mean),\"p95AbsoluteRGBError\":\(p95)}"
+        let attachment = XCTAttachment(data: Data(metric.utf8), uniformTypeIdentifier: "public.json")
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        XCTAssertLessThanOrEqual(mean, 1.0 / 255, name)
+        XCTAssertLessThanOrEqual(p95, 2.0 / 255, name)
+    }
+}

@@ -391,6 +391,36 @@ struct ProfileMotionBackdropBlur: UIViewRepresentable {
             animator = nil
         }
 
+        #if DEBUG && targetEnvironment(simulator)
+        private var diagnosticFinishOnConfigure = false
+        private(set) var diagnosticBeforeFinish: [String: Any]?
+        private(set) var diagnosticAfterFinish: [String: Any]?
+
+        func enableImmediateFinishForDiagnostic() {
+            precondition(ProfileBlurLifecycleDiagnostic.componentStyle != nil && window == nil)
+            diagnosticFinishOnConfigure = true
+        }
+
+        var diagnosticState: [String: Any] {
+            guard let animator else { return ["retained": false, "windowAttached": window != nil] }
+            return ["retained": true, "windowAttached": window != nil,
+                    "state": animator.state.rawValue, "running": animator.isRunning,
+                    "fraction": Double(animator.fractionComplete)]
+        }
+
+        @discardableResult
+        func finishAtCurrentForDiagnostic() -> Bool {
+            guard ProfileBlurLifecycleDiagnostic.admitted,
+                  let animator, animator.state == .active else { return false }
+            diagnosticBeforeFinish = diagnosticState
+            animator.stopAnimation(false)
+            animator.finishAnimation(at: .current)
+            diagnosticAfterFinish = diagnosticState
+            self.animator = nil
+            return true
+        }
+        #endif
+
         private func configure() {
             stop()
             effect = nil
@@ -399,6 +429,11 @@ struct ProfileMotionBackdropBlur: UIViewRepresentable {
             }
             self.animator = animator
             animator.fractionComplete = 0.25
+            #if DEBUG && targetEnvironment(simulator)
+            if ProfileBlurLifecycleDiagnostic.finishAppearanceFixture || diagnosticFinishOnConfigure {
+                finishAtCurrentForDiagnostic()
+            }
+            #endif
         }
     }
 }
@@ -422,3 +457,136 @@ private struct ProfileMotionTransform: AnimatableModifier {
             )
     }
 }
+
+
+#if DEBUG && targetEnvironment(simulator)
+/// Unpublished REC-636 trial. No ordinary, release, or physical-device admission.
+@MainActor
+enum ProfileBlurLifecycleDiagnostic {
+    static let componentArgument = "-WanderProfileBlurLifecycleComponent"
+    static var admitted: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        let required = ["-WanderMapCapture", "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                        "-WanderDisableWalkthroughs"]
+        guard Bundle.main.bundleIdentifier == "com.grayline.wander",
+              required.allSatisfy({ flag in arguments.filter { $0 == flag }.count == 1 }),
+              !arguments.contains("-WanderUseLiveAuth"),
+              arguments.filter({ $0 == "-WanderInitialTab" }).count == 1,
+              let index = arguments.firstIndex(of: "-WanderInitialTab"),
+              arguments.indices.contains(index + 1), arguments[index + 1] == "map" else { return false }
+        return true
+    }
+    static var componentStyle: UIUserInterfaceStyle? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard admitted, arguments.filter({ $0 == componentArgument }).count == 1,
+              let index = arguments.firstIndex(of: componentArgument), arguments.indices.contains(index + 1)
+        else { return nil }
+        switch arguments[index + 1] {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
+    static var finishAppearanceFixture: Bool {
+        admitted && !ProcessInfo.processInfo.arguments.contains(componentArgument)
+    }
+}
+
+/// Real compositor surface, not a drawHierarchy snapshot of a visual-effect view.
+struct ProfileBlurLifecycleDiagnosticHost: UIViewRepresentable {
+    let style: UIUserInterfaceStyle
+    func makeUIView(context: Context) -> Host { Host(style: style) }
+    func updateUIView(_ view: Host, context: Context) {}
+
+    final class Pattern: UIView {
+        override func draw(_ rect: CGRect) {
+            guard let context = UIGraphicsGetCurrentContext() else { return }
+            for y in stride(from: 0, to: Int(bounds.height), by: 4) {
+                for x in stride(from: 0, to: Int(bounds.width), by: 4) {
+                    let coarse: CGFloat = (x / 48) % 2 == 0 ? 0.15 : 0.65
+                    let checker: CGFloat = ((x / 4 + y / 4) % 2 == 0) ? 0.0 : 0.2
+                    context.setFillColor(UIColor(white: coarse + checker, alpha: 1).cgColor)
+                    context.fill(CGRect(x: CGFloat(x), y: CGFloat(y), width: 4, height: 4))
+                }
+            }
+        }
+    }
+
+    final class Host: UIView {
+        private let reference = ProfileMotionBackdropBlur.BackdropView()
+        private let immediate = ProfileMotionBackdropBlur.BackdropView()
+        private let full = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+        private let panels = (0..<4).map { _ in Pattern() }
+        private let state = UILabel()
+        private let finish = UIButton(type: .system)
+        private var finished = false
+
+        init(style: UIUserInterfaceStyle) {
+            precondition(ProfileBlurLifecycleDiagnostic.componentStyle == style)
+            super.init(frame: .zero)
+            overrideUserInterfaceStyle = style
+            backgroundColor = .systemBackground
+            immediate.enableImmediateFinishForDiagnostic()
+            reference.setAppearance(style)
+            immediate.setAppearance(style)
+            for panel in panels { panel.isOpaque = true; addSubview(panel) }
+            for effect in [reference, immediate, full] { effect.isUserInteractionEnabled = false }
+            panels[1].addSubview(reference)
+            panels[2].addSubview(immediate)
+            panels[3].addSubview(full)
+            finish.setTitle("Finish retained blur", for: .normal)
+            finish.accessibilityIdentifier = "profile.blur.lifecycle.finish"
+            finish.addTarget(self, action: #selector(finishReference), for: .touchUpInside)
+            addSubview(finish)
+            state.text = "Synthetic blur lifecycle"
+            state.isAccessibilityElement = true
+            state.accessibilityIdentifier = "profile.blur.lifecycle.state"
+            addSubview(state)
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // Fixed synthetic viewport rectangles; tests crop the same screen-pixel regions.
+            for (index, panel) in panels.enumerated() {
+                panel.frame = CGRect(x: 24, y: CGFloat(100 + index * 108), width: bounds.width - 48, height: 88)
+            }
+            reference.frame = panels[1].bounds
+            immediate.frame = panels[2].bounds
+            full.frame = panels[3].bounds
+            finish.frame = CGRect(x: 24, y: 548, width: bounds.width - 48, height: 48)
+            state.frame = CGRect(x: 24, y: 604, width: bounds.width - 48, height: 44)
+            updateObservation()
+        }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            // One deferred lifecycle read, no recurring timer or sampling.
+            DispatchQueue.main.async { [weak self] in self?.updateObservation() }
+        }
+        @objc private func finishReference() {
+            guard !finished else { return }
+            finished = reference.finishAtCurrentForDiagnostic()
+            updateObservation()
+        }
+        private func updateObservation() {
+            let ready = window != nil && bounds.width > 300 && bounds.height >= 700
+                && window?.bounds.size == bounds.size && convert(bounds, to: window).origin == .zero
+            let value: [String: Any] = [
+                "schema": 1, "fixture": "profile-blur", "ready": ready, "finished": finished,
+                "viewportWidth": Double(bounds.width), "viewportHeight": Double(bounds.height),
+                "reference": reference.diagnosticState,
+                "referenceBefore": reference.diagnosticBeforeFinish ?? [:],
+                "referenceAfter": reference.diagnosticAfterFinish ?? [:],
+                "immediateBefore": immediate.diagnosticBeforeFinish ?? [:],
+                "immediateAfter": immediate.diagnosticAfterFinish ?? [:],
+                "immediate": immediate.diagnosticState
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+                  data.count <= 4096, let text = String(data: data, encoding: .utf8) else {
+                state.accessibilityValue = "invalid"; finish.isEnabled = false; return
+            }
+            state.accessibilityValue = text
+            finish.isEnabled = ready && !finished
+        }
+    }
+}
+#endif

@@ -3,6 +3,33 @@ import XCTest
 
 @MainActor
 final class ShareCardMockupUITests: XCTestCase {
+    private struct DatedTitleObservation {
+        let started: TimeInterval
+        var evaluations = 0
+        var readStarted: TimeInterval?
+        var readFinished: TimeInterval?
+        var label: String?
+        var conditionMatches = false
+        var accepted = false
+        var outcome = "notRequested"
+    }
+
+    private var datedTitleObservation: DatedTitleObservation?
+
+    override func tearDown() async throws {
+        // XCTest may stop the body on its original failed wait. Retain only the
+        // already-observed synthetic label after that verdict; make no AX read.
+        if let observation = datedTitleObservation, (testRun?.failureCount ?? 0) > 0 {
+            let label = observation.label.map { String(reflecting: String($0.prefix(512))) } ?? "nil"
+            let text = "evaluations=\(observation.evaluations); outcome=\(observation.outcome); label=\(label); labelCharacters=\(observation.label?.count ?? 0); readStarted=\(observation.readStarted.map(String.init(describing:)) ?? "nil"); readFinished=\(observation.readFinished.map(String.init(describing:)) ?? "nil"); elapsed=\(ProcessInfo.processInfo.systemUptime - observation.started); conditionMatches=\(observation.conditionMatches); acceptedWithinDeadline=\(observation.accepted); originalTestFailureCount=\(testRun?.failureCount ?? 0)"
+            let attachment = XCTAttachment(string: text)
+            attachment.name = "share-card-dated-title-native-observation"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        try await super.tearDown()
+    }
+
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
@@ -64,7 +91,42 @@ final class ShareCardMockupUITests: XCTestCase {
         app = launch("wanna", additional: ["-ShareCardDated"])
         let datedCard = app.descendants(matching: .any)["share-mock.headline"]
         XCTAssertTrue(datedCard.waitForExistence(timeout: 10))
-        let dated = NSPredicate(format: "label CONTAINS %@ AND NOT (label CONTAINS %@)", "2026", "radar")
+        let started = ProcessInfo.processInfo.systemUptime
+        let deadline = started + 4
+        datedTitleObservation = DatedTitleObservation(started: started)
+        let dated = NSPredicate { _, _ in
+            var observation = self.datedTitleObservation!
+            observation.evaluations += 1
+            let requested = ProcessInfo.processInfo.systemUptime
+            guard requested <= deadline else {
+                observation.outcome = "deadlineBeforeRead"
+                observation.accepted = false
+                self.datedTitleObservation = observation
+                return false
+            }
+            observation.readStarted = requested
+            do {
+                // Read this element once; both original conditions use the same
+                // fresh native snapshot inside the original four-second budget.
+                let snapshot = try datedCard.snapshot()
+                let finished = ProcessInfo.processInfo.systemUptime
+                observation.readFinished = finished
+                observation.label = snapshot.label
+                observation.conditionMatches = snapshot.label.contains("2026")
+                    && !snapshot.label.contains("radar")
+                observation.outcome = finished <= deadline ? "snapshot" : "deadlineAfterRead"
+                observation.accepted = observation.conditionMatches
+                    && ProcessInfo.processInfo.systemUptime <= deadline
+            } catch {
+                observation.readFinished = ProcessInfo.processInfo.systemUptime
+                observation.label = nil
+                observation.conditionMatches = false
+                observation.accepted = false
+                observation.outcome = "snapshotError"
+            }
+            self.datedTitleObservation = observation
+            return observation.accepted
+        }
         expectation(for: dated, evaluatedWith: datedCard)
         waitForExpectations(timeout: 4)
         XCTAssertFalse(datedCard.label.contains("radar"))
