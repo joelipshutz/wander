@@ -31,16 +31,31 @@ on:
       - 'WanderUITests/YourMapPrototypeUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Validation mode
+        type: choice
+        options: [acceptance, rec636-replay-inventory-v58]
+        default: acceptance
+      expected_commit:
+        description: Full reviewed isolated diagnostic commit
+        type: string
+        default: ''
+      expected_tree:
+        description: Full reviewed isolated diagnostic tree
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: feed-checkin-${{ github.ref }}
-  cancel-in-progress: true
+  group: feed-checkin-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-replay-inventory-v58' && format('-inventory-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'rec636-replay-inventory-v58' }}
 
 jobs:
   native:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'acceptance' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -233,6 +248,7 @@ jobs:
           retention-days: 14
 
   live-continuity:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'acceptance' }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -428,3 +444,39 @@ jobs:
             ${{ runner.temp }}/live-continuity-compact.xcresult
             ${{ runner.temp }}/live-continuity-*.log
           retention-days: 14
+
+  rec636-replay-inventory-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'rec636-replay-inventory-v58' }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      EXPECTED_TREE: ${{ inputs.expected_tree }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+          lfs: true
+      - name: Admit exact diagnostic source and reference toolchain
+        run: python3 -B scripts/diagnose-replay-inventory.py admit
+      - name: Build unchanged Replay test products once without running tests
+        timeout-minutes: 30
+        run: >-
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$REPLAY_INVENTORY_SOURCE"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
+          -only-testing:WanderTests/ReplayMaskingTests
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Compare component inventories and original broad inventory once
+        run: python3 -B scripts/diagnose-replay-inventory.py compare
+      - name: Preserve small diagnostic receipts regardless of outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rec636-replay-inventory-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/rec636-replay-inventory
+          retention-days: 14
+          if-no-files-found: error
