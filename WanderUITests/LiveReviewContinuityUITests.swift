@@ -649,13 +649,13 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         filtersBack.tap()
         XCTAssertTrue(app.navigationBars["Filters"].waitForExistence(timeout: 5))
         reveal(app.buttons["25 km"], in: form, direction: .down, app: app)
-        // Diagnostic contact-duration hypothesis only; one native input, no retry.
-        app.buttons["25 km"].press(forDuration: 0.2)
+        // Original V57 tap; observe once afterward without retrying the input.
+        app.buttons["25 km"].tap()
         let radiusSelected = app.buttons["25 km"].isSelected
         REC636PredicateObservation.attachNativeTrace(to: self, app: app,
-            name: "REC636-radius-after-contact-press", expectedFixture: "live-demo", selected: radiusSelected)
+            name: "REC636-radius-after-original-tap", expectedFixture: "live-demo", selected: radiusSelected)
         guard radiusSelected else {
-            XCTFail("Diagnostic setup stopped: the radius contact press did not select 25 km.")
+            XCTFail("Diagnostic setup stopped: the original radius tap did not select 25 km.")
             return
         }
         setOn(app.switches["live.filter.category.restaurants_food"], in: form, app: app)
@@ -1004,8 +1004,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                             scopeContactDiagnostic: Bool = false,
                             selected: @escaping (XCUIElementSnapshot) -> Bool) {
         reveal(picker, in: form, direction: direction, app: app)
-        if scopeContactDiagnostic { picker.press(forDuration: 0.2) }
-        else { picker.tap() }
+        picker.tap()
         // Native Picker options live in the popup collection; the retained
         // Live header can expose an identically labeled Nearby button.
         let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element

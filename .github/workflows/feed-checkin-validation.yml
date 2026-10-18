@@ -470,13 +470,20 @@ jobs:
               if not value: raise SystemExit(message)
           out = Path(os.environ['RUNNER_TEMP']) / 'rec636-contact'
           out.mkdir()
-          require(os.environ['GITHUB_REF'] == 'refs/heads/codex/rec636-v56-input-diagnostic', 'Diagnostic branch mismatch')
+          require(os.environ['GITHUB_REF'] == 'refs/heads/codex/rec636-v57-control-state-diagnostic', 'Diagnostic branch mismatch')
           require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'One original diagnostic attempt only')
           head, tree = command('git','rev-parse','HEAD'), command('git','rev-parse','HEAD^{tree}')
           require(re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_COMMIT']) and re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_TREE']), 'Full reviewed commit/tree required')
           require(head == os.environ['EXPECTED_COMMIT'] == os.environ['GITHUB_SHA'] and tree == os.environ['EXPECTED_TREE'], 'Diagnostic source mismatch')
           require(not command('git','status','--porcelain'), 'Unexpected checkout changes')
           subprocess.run(['git','merge-base','--is-ancestor','498f7bbf60a396ab9ecfdd9de5ab4b83985dcfc4',head], check=True, timeout=30)
+          parent = '3d59eb7230157430f7864e951825a675f503e244'
+          require(command('git','show','-s','--format=%P','HEAD') == parent, 'One control-state diagnostic commit above the reviewed contact source required')
+          require(command('git','rev-parse',parent+'^{tree}') == 'ea7efb3b66f443de3ff02fb8692eb76e0ca1b391', 'Reviewed contact source tree mismatch')
+          expected_sources = {
+              'Wander/App/NativeInputRecipientDiagnostic.swift':'be663c6cb7d70b1b4bc36faa205d9e8637246367ff6e8f61a043605f32dffdb0',
+              'WanderUITests/LiveReviewContinuityUITests.swift':'3f648bd6fc60e2d7cb6122a3a1f711cf4cdd98254656e4613c343800a4a226fc'}
+          require(set(command('git','diff','--name-only',parent,'HEAD').splitlines()) == set(expected_sources)|{'.github/workflows/feed-checkin-validation.yml'}, 'Unexpected control-state diagnostic scope')
           version = command('xcodebuild','-version').splitlines()
           require(version == ['Xcode 26.6','Build version 17F113'], 'Reference Xcode unavailable; no fallback')
           runtime_id = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'
@@ -491,7 +498,8 @@ jobs:
               selected[label] = {'name':name,'udid':choices[0]['udid'],'runtime':runtime_id,'runtimeBuild':'23F77'}
           sources = ['Wander/App/NativeInputRecipientDiagnostic.swift', 'Wander/App/WanderApp.swift', 'Wander/Features/Live/LiveScreen.swift', 'Wander/Features/Map/MapScreen.swift', 'Wander/Features/Settings/SenderNotificationReviewHost.swift', 'WanderUITests/LiveReviewContinuityUITests.swift', 'WanderUITests/SenderNotificationFlowUITests.swift', 'Wander.xcodeproj/project.pbxproj', 'project.yml', 'Wander/App/WanderRootView.swift', 'WanderUITests/EventsComingSoonUITests.swift', 'WanderTests/ReplayMaskingTests.swift', 'Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Wander/Resources/FoundersWelcome/founders-welcome.mp4', '.github/workflows/feed-checkin-validation.yml']
           hashes = {p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in sources}
-          receipt = {'scope':'diagnostic_only_not_acceptance','baseCommit':'498f7bbf60a396ab9ecfdd9de5ab4b83985dcfc4','head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'devices':selected,'sourceSHA256':hashes,'diagnosticMode':'rec636-contact-v57','methodExecutions':2,'retryEnabled':False}
+          require(all(hashes[p] == digest for p,digest in expected_sources.items()), 'Reviewed native control-state source bytes changed')
+          receipt = {'scope':'diagnostic_only_not_acceptance','baseCommit':parent,'head':head,'tree':tree,'runId':os.environ['GITHUB_RUN_ID'],'attempt':1,'xcode':version,'devices':selected,'sourceSHA256':hashes,'diagnosticMode':'rec636-contact-v57','methodExecutions':2,'retryEnabled':False}
           (out/'source-toolchain.json').write_text(json.dumps(receipt,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as env:
               env.write('DIAGNOSTIC_LARGE='+selected['large']['udid']+'\n')

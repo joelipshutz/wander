@@ -236,6 +236,28 @@ private struct NativeDiagnosticControlObservation: Codable, Sendable {
     let scrollIsTracking: Bool?, scrollIsDragging: Bool?, scrollIsDecelerating: Bool?
     let scrollDelaysContentTouches: Bool?, scrollCanCancelContentTouches: Bool?
 }
+private struct NativeLiveRecognizerState: Encodable {
+    let ordinal: Int?, type: String, typeTruncated: Bool
+    let available: Bool, state: Int?, enabled: Bool?, cancelsTouchesInView: Bool?
+    let ownerOrdinal: Int?, ownerType: String?, ownerTypeTruncated: Bool
+}
+private struct NativeLiveBoundaryObservation: Encodable {
+    let touchOrdinal: Int, phase: String
+    let observerEntryUptime: Double
+    var observerFinishUptime: Double
+    let segmentOrdinal: Int?, scrollOrdinal: Int?, initialWindowOrdinal: Int?, recorderWindowOrdinal: Int?
+    let segmentAvailable: Bool, scrollAvailable: Bool, ancestryTruncated: Bool
+    let segmentWindowOrdinal: Int?, scrollWindowOrdinal: Int?
+    let segmentInInitialWindow: Bool, scrollInInitialWindow: Bool
+    let selectedSegmentIndex: Int?, numberOfSegments: Int?, segmentEnabled: Bool?
+    let segmentIsTracking: Bool?, segmentIsTouchInside: Bool?
+    let normalizedTouchX: Double?, normalizedTouchY: Double?, touchInsideSegmentBounds: Bool?
+    let scrollIsTracking: Bool?, scrollIsDragging: Bool?, scrollIsDecelerating: Bool?
+    let scrollDelaysContentTouches: Bool?, scrollCanCancelContentTouches: Bool?
+    let recognizerListAvailable: Bool, recognizerSourceCount: Int, recognizers: [NativeLiveRecognizerState]
+    let recognizersCompleteAtObservation: Bool, recognizersTruncated: Bool, identitiesComplete: Bool
+}
+
 private struct NativeDiagnosticSample: Codable, Sendable {
     let touchOrdinal: Int, phase: String
     let eventUptime: Double, touchUptime: Double, observedUptime: Double
@@ -303,7 +325,139 @@ private final class NativeRecipientRecorder {
     private var nextOrdinal = 0
     private var active: [ObjectIdentifier: Int] = [:]
     private var retainedOrdinals: [Int] = []
-    private var pendingLater: [(Int, [UIGestureRecognizer], String, NativeControlTarget?)] = []
+    private var pendingLater: [(Int, [UIGestureRecognizer], String, NativeControlTarget?, LiveBoundaryRequest?)] = []
+    // Fixture-only, weak identities; no native object is kept alive by this lane.
+    private final class LiveWeakObject {
+        weak var object: AnyObject?
+        let ordinal: Int
+        init(_ object: AnyObject, ordinal: Int) { self.object = object; self.ordinal = ordinal }
+    }
+    private final class LiveTarget {
+        weak var segment: UISegmentedControl?
+        weak var scroll: UIScrollView?
+        weak var initialWindow: UIWindow?
+        weak var touch: UITouch?
+        let touchOrdinal: Int, segmentOrdinal: Int?, scrollOrdinal: Int?, windowOrdinal: Int?
+        let ancestryTruncated: Bool
+        init(touch: UITouch, ordinal: Int, segment: UISegmentedControl?, scroll: UIScrollView?,
+             window: UIWindow?, segmentOrdinal: Int?, scrollOrdinal: Int?, windowOrdinal: Int?,
+             ancestryTruncated: Bool) {
+            self.touch = touch; touchOrdinal = ordinal; self.segment = segment; self.scroll = scroll
+            initialWindow = window; self.segmentOrdinal = segmentOrdinal; self.scrollOrdinal = scrollOrdinal
+            self.windowOrdinal = windowOrdinal; self.ancestryTruncated = ancestryTruncated
+        }
+    }
+    private final class LiveWeakRecognizer {
+        weak var recognizer: UIGestureRecognizer?
+        let ordinal: Int?
+        init(_ recognizer: UIGestureRecognizer, ordinal: Int?) { self.recognizer = recognizer; self.ordinal = ordinal }
+    }
+    private struct LiveBoundaryRequest {
+        let target: LiveTarget, recognizers: [LiveWeakRecognizer], sourceCount: Int, listAvailable: Bool
+    }
+    private var liveObjects: [LiveWeakObject] = []
+    private var nextLiveObjectOrdinal = 0, droppedLiveIdentities = 0, droppedLiveBoundaries = 0
+    private var liveTargets: [ObjectIdentifier: LiveTarget] = [:]
+    private var liveBoundaries: [NativeLiveBoundaryObservation] = []
+
+    private func liveOrdinal(_ object: AnyObject?) -> Int? {
+        guard let object else { return nil }
+        liveObjects.removeAll { $0.object == nil }
+        if let known = liveObjects.first(where: { $0.object === object }) { return known.ordinal }
+        guard liveObjects.count < 128, nextLiveObjectOrdinal < 10_000 else {
+            droppedLiveIdentities += 1; return nil
+        }
+        nextLiveObjectOrdinal += 1
+        liveObjects.append(LiveWeakObject(object, ordinal: nextLiveObjectOrdinal))
+        return nextLiveObjectOrdinal
+    }
+
+    private func observeLiveBoundary(_ touch: UITouch, ordinal: Int, phase: String) -> LiveBoundaryRequest? {
+        guard trace.fixture == "live-demo" else { return nil }
+        let started = ProcessInfo.processInfo.systemUptime
+        let key = ObjectIdentifier(touch)
+        if phase == "began" {
+            guard liveTargets.count < 16 else { droppedLiveBoundaries += 1; return nil }
+            var ancestor = touch.view, segment: UISegmentedControl?, scroll: UIScrollView?
+            var visited = 0
+            while let current = ancestor, visited < 16 {
+                visited += 1
+                if segment == nil { segment = current as? UISegmentedControl }
+                if scroll == nil { scroll = current as? UIScrollView }
+                ancestor = current.superview
+            }
+            liveTargets[key] = LiveTarget(touch: touch, ordinal: ordinal, segment: segment, scroll: scroll,
+                window: window, segmentOrdinal: liveOrdinal(segment), scrollOrdinal: liveOrdinal(scroll),
+                windowOrdinal: liveOrdinal(window), ancestryTruncated: ancestor != nil)
+        }
+        guard let target = liveTargets[key] else { droppedLiveBoundaries += 1; return nil }
+        let receivingList = touch.gestureRecognizers
+        let receiving = receivingList ?? []
+        let request = LiveBoundaryRequest(target: target,
+            recognizers: receiving.prefix(64).map { LiveWeakRecognizer($0, ordinal: liveOrdinal($0)) },
+            sourceCount: receiving.count, listAvailable: receivingList != nil)
+        recordLiveBoundary(request, phase: phase, started: started)
+        if phase == "ended" || phase == "cancelled" { liveTargets.removeValue(forKey: key) }
+        return request
+    }
+
+    private func recordLiveBoundary(_ request: LiveBoundaryRequest, phase: String, started: Double) {
+        let target = request.target, segment = target.segment, scroll = target.scroll
+        let recorderWindowID = liveOrdinal(window)
+        let segmentWindowID = liveOrdinal(segment?.window), scrollWindowID = liveOrdinal(scroll?.window)
+        let rows = request.recognizers.map { reference -> NativeLiveRecognizerState in
+            guard let recognizer = reference.recognizer else {
+                return .init(ordinal: reference.ordinal, type: "unavailable", typeTruncated: false,
+                    available: false, state: nil, enabled: nil, cancelsTouchesInView: nil,
+                    ownerOrdinal: nil, ownerType: nil, ownerTypeTruncated: false)
+            }
+            let name = String(describing: type(of: recognizer))
+            let owner = recognizer.view
+            let ownerName = owner.map { String(describing: type(of: $0)) }
+            return .init(ordinal: reference.ordinal, type: String(name.prefix(96)), typeTruncated: name.count > 96,
+                available: true, state: recognizer.state.rawValue, enabled: recognizer.isEnabled,
+                cancelsTouchesInView: recognizer.cancelsTouchesInView, ownerOrdinal: liveOrdinal(owner),
+                ownerType: ownerName.map { String($0.prefix(96)) }, ownerTypeTruncated: (ownerName?.count ?? 0) > 96)
+        }
+        var normalizedX: Double?, normalizedY: Double?, inside: Bool?
+        if let segment, let touch = target.touch, let window, segment.window === window {
+            let bounds = segment.bounds, point = touch.location(in: segment)
+            if !bounds.isEmpty, !bounds.isNull, !bounds.isInfinite,
+               [bounds.minX, bounds.minY, bounds.width, bounds.height, point.x, point.y].allSatisfy(\.isFinite) {
+                let x = Double((point.x - bounds.minX) / bounds.width)
+                let y = Double((point.y - bounds.minY) / bounds.height)
+                if x.isFinite && y.isFinite {
+                    normalizedX = x; normalizedY = y; inside = bounds.contains(point)
+                }
+            }
+        }
+        let identitiesComplete = target.windowOrdinal != nil && (segment == nil || target.segmentOrdinal != nil)
+            && (scroll == nil || target.scrollOrdinal != nil) && (window == nil || recorderWindowID != nil)
+            && (segment?.window == nil || segmentWindowID != nil) && (scroll?.window == nil || scrollWindowID != nil)
+            && rows.allSatisfy { $0.ordinal != nil && ($0.ownerType == nil || $0.ownerOrdinal != nil) }
+        let truncated = request.sourceCount > request.recognizers.count
+        let complete = request.listAvailable && !truncated && rows.allSatisfy { $0.available && !$0.typeTruncated && !$0.ownerTypeTruncated }
+            && identitiesComplete
+        var record = NativeLiveBoundaryObservation(touchOrdinal: target.touchOrdinal, phase: phase,
+            observerEntryUptime: started, observerFinishUptime: 0,
+            segmentOrdinal: target.segmentOrdinal, scrollOrdinal: target.scrollOrdinal,
+            initialWindowOrdinal: target.windowOrdinal, recorderWindowOrdinal: recorderWindowID,
+            segmentAvailable: segment != nil, scrollAvailable: scroll != nil, ancestryTruncated: target.ancestryTruncated,
+            segmentWindowOrdinal: segmentWindowID, scrollWindowOrdinal: scrollWindowID,
+            segmentInInitialWindow: segment?.window != nil && segment?.window === target.initialWindow,
+            scrollInInitialWindow: scroll?.window != nil && scroll?.window === target.initialWindow,
+            selectedSegmentIndex: segment?.selectedSegmentIndex, numberOfSegments: segment?.numberOfSegments,
+            segmentEnabled: segment?.isEnabled, segmentIsTracking: segment?.isTracking, segmentIsTouchInside: segment?.isTouchInside,
+            normalizedTouchX: normalizedX, normalizedTouchY: normalizedY, touchInsideSegmentBounds: inside,
+            scrollIsTracking: scroll?.isTracking, scrollIsDragging: scroll?.isDragging, scrollIsDecelerating: scroll?.isDecelerating,
+            scrollDelaysContentTouches: scroll?.delaysContentTouches, scrollCanCancelContentTouches: scroll?.canCancelContentTouches,
+            recognizerListAvailable: request.listAvailable, recognizerSourceCount: request.sourceCount, recognizers: rows,
+            recognizersCompleteAtObservation: complete, recognizersTruncated: truncated, identitiesComplete: identitiesComplete)
+        record.observerFinishUptime = ProcessInfo.processInfo.systemUptime
+        if liveBoundaries.count == 64 { liveBoundaries.removeFirst(); droppedLiveBoundaries += 1 }
+        liveBoundaries.append(record)
+    }
+
     private final class WeakControlView {
         weak var view: UIView?
         let ordinal: Int
@@ -467,11 +621,14 @@ private final class NativeRecipientRecorder {
         let eventsSelectionCalls: Int, droppedEventsSelectionObservations: Int
         let eventsSelectionObservations: [NativeDiagnosticEventsSelection]
         let stages: [NativeDiagnosticStage], liveCameraEndCount: Int
+        let liveBoundaryObservations: [NativeLiveBoundaryObservation]
+        let droppedLiveIdentities: Int, droppedLiveBoundaries: Int, omittedLiveBoundaries: Int
         let droppedSamples: Int, droppedTouches: Int, droppedStages: Int, droppedLaterObservations: Int
     }
 
     /// One native AX read after the original XCTest decision. The projection is
-    /// memory-only and excludes coordinates, frames, labels, values and IDs.
+    /// memory-only: no content, absolute coordinates, frames or dynamic IDs.
+    /// The admitted fixture adds normalized contact geometry and native state.
     func readout() -> String {
         var types: [String] = [], typeOverflow = 0, typeNameTruncations = 0
         func typeID(_ name: String) -> Int {
@@ -506,6 +663,8 @@ private final class NativeRecipientRecorder {
                          recognizers: recognizers($0.recognizers), recognizersTruncated: $0.recognizers.count > 12,
                          nativeControl: $0.nativeControl)
         }
+        let availableLive = liveBoundaries.filter { $0.touchOrdinal == ordinal }
+        let selectedLive = Array(availableLive.suffix(8))
         let value = Readout(schema: 3, fixture: trace.fixture,
             observedUptime: ProcessInfo.processInfo.systemUptime, generation: trace.generation,
             attached: window != nil, keyWindow: window?.isKeyWindow ?? false,
@@ -518,6 +677,8 @@ private final class NativeRecipientRecorder {
             droppedEventsSelectionObservations: droppedEventsSelectionObservations,
             eventsSelectionObservations: eventsSelectionObservations,
             stages: trace.stages, liveCameraEndCount: liveCameraEnds,
+            liveBoundaryObservations: selectedLive, droppedLiveIdentities: droppedLiveIdentities,
+            droppedLiveBoundaries: droppedLiveBoundaries, omittedLiveBoundaries: availableLive.count - selectedLive.count,
             droppedSamples: trace.droppedSamples, droppedTouches: trace.droppedTouches,
             droppedStages: trace.droppedStages, droppedLaterObservations: trace.droppedLaterObservations)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
@@ -573,6 +734,7 @@ private final class NativeRecipientRecorder {
             let involved = touch.gestureRecognizers ?? []
             let observeControl = phase == "began" || phase == "ended" || phase == "cancelled"
             let controlTarget = observeControl ? senderControlTarget(from: touch) : nil
+            let liveBoundary = observeControl ? observeLiveBoundary(touch, ordinal: ordinal, phase: phase) : nil
             let point = touch.location(in: window)
             let sample = NativeDiagnosticSample(touchOrdinal: ordinal, phase: phase,
                 eventUptime: event.timestamp, touchUptime: touch.timestamp,
@@ -589,7 +751,7 @@ private final class NativeRecipientRecorder {
                 // delivery. It can miss transient recognizer states; no absence
                 // here proves that a recognizer never began.
                 scheduleLaterObservation(ordinal, recognizers: Array(involved.prefix(24)),
-                                         phase: phase, controlTarget: controlTarget)
+                                         phase: phase, controlTarget: controlTarget, liveBoundary: liveBoundary)
             }
             if phase == "ended" || phase == "cancelled" { active.removeValue(forKey: key) }
         }
@@ -599,9 +761,10 @@ private final class NativeRecipientRecorder {
     }
 
     private func scheduleLaterObservation(_ ordinal: Int, recognizers: [UIGestureRecognizer],
-                                          phase: String, controlTarget: NativeControlTarget?) {
+                                          phase: String, controlTarget: NativeControlTarget?,
+                                          liveBoundary: LiveBoundaryRequest?) {
         if pendingLater.count == 48 { pendingLater.removeFirst(); trace.droppedLaterObservations += 1 }
-        pendingLater.append((ordinal, recognizers, phase, controlTarget))
+        pendingLater.append((ordinal, recognizers, phase, controlTarget, liveBoundary))
         guard !laterObservationScheduled else { return }
         laterObservationScheduled = true
         Task { @MainActor [weak self] in
@@ -609,7 +772,7 @@ private final class NativeRecipientRecorder {
             let pending = self.pendingLater
             self.pendingLater.removeAll(keepingCapacity: true)
             self.laterObservationScheduled = false
-            for (ordinal, recognizers, phase, controlTarget) in pending {
+            for (ordinal, recognizers, phase, controlTarget, liveBoundary) in pending {
                 if self.trace.laterRecognizerObservations.count == 48 {
                     self.trace.laterRecognizerObservations.removeFirst()
                     self.trace.droppedLaterObservations += 1
@@ -618,6 +781,10 @@ private final class NativeRecipientRecorder {
                     observedUptime: ProcessInfo.processInfo.systemUptime,
                     recognizers: recognizers.map(self.recognizerRecord),
                     nativeControl: controlTarget?.observe(stage: "deferredAfter-" + phase, in: self.window)))
+                if let liveBoundary {
+                    self.recordLiveBoundary(liveBoundary, phase: "deferredAfter-" + phase,
+                        started: ProcessInfo.processInfo.systemUptime)
+                }
             }
             self.flush()
         }
