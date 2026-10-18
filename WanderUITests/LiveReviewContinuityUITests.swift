@@ -837,9 +837,44 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     }
 
     private func assertFeedCount(_ count: Int, in app: XCUIApplication) {
-        let feed = app.scrollViews["feed.places.scroll"]
-        XCTAssertTrue(feed.waitForExistence(timeout: 5))
-        wait(NSPredicate(format: "value == %@", "\(count) activities loaded"), on: feed)
+        // Resolve presence and the exact count from one fresh native tree. Separate
+        // XCUIElement existence/value queries can exhaust the observation budget
+        // while resolving the same scroll view after the drawer changes size.
+        let started = ProcessInfo.processInfo.systemUptime
+        let deadline = started + 5
+        var evaluations = 0
+        var matchingScrollViews = 0
+        var expectedValueMatches = 0
+        var snapshotAvailable = false
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            evaluations += 1
+            matchingScrollViews = 0
+            expectedValueMatches = 0
+            snapshotAvailable = false
+            guard let snapshot = try? app.snapshot() else { return false }
+            snapshotAvailable = true
+            @MainActor
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .scrollView && node.identifier == "feed.places.scroll" {
+                    matchingScrollViews += 1
+                    if node.value as? String == "\(count) activities loaded" {
+                        expectedValueMatches += 1
+                    }
+                }
+                for child in node.children { visit(child) }
+            }
+            visit(snapshot)
+            return matchingScrollViews == 1 && expectedValueMatches == 1
+                && ProcessInfo.processInfo.systemUptime <= deadline
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        let elapsed = ProcessInfo.processInfo.systemUptime - started
+        let observation = XCTAttachment(string: "expectedCount=\(count); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingScrollViews=\(matchingScrollViews); expectedValueMatches=\(expectedValueMatches); elapsed=\(elapsed); waitResult=\(result.rawValue)")
+        observation.name = "REC-636-feed-count-native-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
+        XCTAssertEqual(result, .completed)
     }
 
     private func assertCombinedResult(in app: XCUIApplication) {
