@@ -2390,7 +2390,6 @@ final class OnboardingUITests: XCTestCase {
         focusedScreenshot.lifetime = .keepAlways
         add(focusedScreenshot)
 
-        searchField.tap()
         searchField.typeText("coffee")
         XCTAssertEqual(searchField.value as? String, "coffee")
         searchField.typeText("\n")
@@ -2403,6 +2402,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(firstPlaceResult.isHittable)
         XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists)
         XCTAssertFalse(app.staticTexts["favorites"].exists)
+        let refinementGate = app.buttons["uitest.discoverRefinementGate"]
+        let pendingGateState = "first=1:pending;"
+        XCTAssertTrue((refinementGate.value as? String)?.hasPrefix(pendingGateState) == true,
+                       "The first parser operation must still be pending before navigation.")
         firstPlaceResult.tap()
 
         let placeBackButton = app.buttons["place-profile.back"]
@@ -2421,11 +2424,17 @@ final class OnboardingUITests: XCTestCase {
                        "Returning from a place must preserve submitted results without reopening the keyboard.")
         XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists,
                       "Returning must preserve the search still in flight.")
+        XCTAssertTrue((refinementGate.value as? String)?.hasPrefix(pendingGateState) == true,
+                       "Returning must preserve the original operation without cancellation; refresh operations may coexist.")
+        XCTAssertTrue(refinementGate.isHittable)
+        refinementGate.tap()
         XCTAssertTrue(app.staticTexts["favorites"].waitForExistence(timeout: 60),
                       "The pending refinement must finish and update results after returning.")
         XCTAssertFalse(app.staticTexts["Refining with smart filters…"].exists)
         XCTAssertEqual(searchField.value as? String, "coffee")
         XCTAssertFalse(app.keyboards.firstMatch.exists)
+        XCTAssertTrue((refinementGate.value as? String)?.hasPrefix("first=1:completed;") == true,
+                      "The original operation must consume the explicit release, not be replaced by another request.")
 
         app.swipeUp()
         XCTAssertTrue(backButton.exists)

@@ -758,25 +758,44 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
                               postInputCapture: String? = nil) {
-        let handle = drawer(in: app)
         let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
-        // Read both attributes from one native snapshot within the original budget.
+        // Match the drawer in one fresh app snapshot. Resolving an element as the
+        // predicate object can spend the observation budget before reading it.
         let observationStart = ProcessInfo.processInfo.systemUptime
         let observationDeadline = observationStart + 5
+        var evaluations = 0
+        var matchingHandles = 0
+        var matchingValues = 0
+        var snapshotAvailable = false
         let predicate = NSPredicate { _, _ in
-            let started = ProcessInfo.processInfo.systemUptime
-            var matchedExactCondition = false
-            if started <= observationDeadline, let snapshot = try? handle.snapshot() {
-                matchedExactCondition = snapshot.label == "Activity drawer, \(state)"
-                    && (snapshot.value as? String)?.hasPrefix(loadedCount) == true
+            guard ProcessInfo.processInfo.systemUptime <= observationDeadline else { return false }
+            evaluations += 1
+            matchingHandles = 0
+            matchingValues = 0
+            snapshotAvailable = false
+            guard let snapshot = try? app.snapshot() else { return false }
+            snapshotAvailable = true
+            @MainActor
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .staticText && node.identifier == "live.drawerHandle" {
+                    matchingHandles += 1
+                    if node.label == "Activity drawer, \(state)"
+                        && (node.value as? String)?.hasPrefix(loadedCount) == true {
+                        matchingValues += 1
+                    }
+                }
+                for child in node.children { visit(child) }
             }
-            let finished = ProcessInfo.processInfo.systemUptime
-            let withinFiveSeconds = started <= observationDeadline && finished <= observationDeadline
-            return withinFiveSeconds && matchedExactCondition
+            visit(snapshot)
+            return matchingHandles == 1 && matchingValues == 1
                 && ProcessInfo.processInfo.systemUptime <= observationDeadline
         }
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: handle)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        let observation = XCTAttachment(string: "expectedState=\(state); expectedLoadedCount=\(loadedCount); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingHandles=\(matchingHandles); matchingValues=\(matchingValues); elapsed=\(ProcessInfo.processInfo.systemUptime - observationStart); waitResult=\(result.rawValue)")
+        observation.name = "REC-636-drawer-native-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
         if let postInputCapture {
             captureState(postInputCapture, in: app, observations: [
                 "expectedState=\(state); expectedLoadedCount=\(loadedCount); waitResult=\(result)",

@@ -360,13 +360,20 @@ struct WanderApp: App {
             .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
+            #if targetEnvironment(simulator)
+            .overlay(alignment: .bottomTrailing) {
+                if ProcessInfo.processInfo.arguments.contains("-WanderDelayedDiscoverRefinementUITest") {
+                    DiscoverRefinementUITestControl(gate: .shared)
+                }
+            }
+            #endif
     }
 
     @MainActor
     private static func makeMapCaptureParser() -> any LLMFilterParser {
         #if targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-WanderDelayedDiscoverRefinementUITest") {
-            return DelayedDiscoverRefinementUITestParser()
+            return DelayedDiscoverRefinementUITestParser(gate: .shared)
         }
         #endif
         return DeterministicFilterParser()
@@ -399,10 +406,122 @@ struct WanderApp: App {
 
 #if DEBUG
 #if targetEnvironment(simulator)
-/// Keeps a real search pending across result navigation, then changes its filters.
+/// One fixture host owns one gate for the lifetime of its app process.
+/// Legitimate refreshes may coexist; every operation keeps its own identity.
+@MainActor
+final class DiscoverRefinementUITestGate: ObservableObject {
+    static let shared = DiscoverRefinementUITestGate()
+
+    enum OperationState: String {
+        case pending
+        case completed
+        case cancelled
+    }
+
+    @Published private(set) var startedCount = 0
+    @Published private(set) var cancelledCount = 0
+    @Published private(set) var completedCount = 0
+    @Published private(set) var pendingOperationIDs: Set<Int> = []
+    @Published private(set) var isWaiting = false
+    private var continuations: [Int: CheckedContinuation<Void, any Error>] = [:]
+    private var operationStates: [Int: OperationState] = [:]
+
+    func state(of operationID: Int) -> OperationState? {
+        operationStates[operationID]
+    }
+
+    var stateDescription: String {
+        let first = state(of: 1)?.rawValue ?? "notStarted"
+        let pending = pendingOperationIDs.sorted().map(String.init).joined(separator: ",")
+        return "first=1:\(first);started=\(startedCount);cancelled=\(cancelledCount);completed=\(completedCount);pending=\(pending.isEmpty ? "none" : pending)"
+    }
+
+    func waitForRelease() async throws {
+        startedCount += 1
+        let operationID = startedCount
+        guard !Task.isCancelled else {
+            operationStates[operationID] = .cancelled
+            cancelledCount += 1
+            throw CancellationError()
+        }
+        pendingOperationIDs.insert(operationID)
+        operationStates[operationID] = .pending
+
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (next: CheckedContinuation<Void, any Error>) in
+                    continuations[operationID] = next
+                    isWaiting = true
+                }
+            } onCancel: {
+                // A late callback affects only the operation that installed it.
+                Task { @MainActor [weak self] in
+                    self?.cancel(operationID: operationID)
+                }
+            }
+            // Release may race cancellation before this task consumes it.
+            try Task.checkCancellation()
+            guard pendingOperationIDs.remove(operationID) != nil else { throw CancellationError() }
+            operationStates[operationID] = .completed
+            completedCount += 1
+        } catch {
+            cancel(operationID: operationID)
+            throw error
+        }
+    }
+
+    @discardableResult
+    func release() -> Bool {
+        guard !continuations.isEmpty else { return false }
+        // Snapshot and remove all current waiters without yielding. A future
+        // request must still wait for a separate explicit release.
+        let waiting = continuations
+        continuations.removeAll()
+        isWaiting = false
+        for operationID in waiting.keys.sorted() {
+            waiting[operationID]?.resume()
+        }
+        return true
+    }
+
+    func cancelPending() {
+        for operationID in pendingOperationIDs.sorted() {
+            cancel(operationID: operationID)
+        }
+    }
+
+    private func cancel(operationID: Int) {
+        guard pendingOperationIDs.remove(operationID) != nil else { return }
+        operationStates[operationID] = .cancelled
+        cancelledCount += 1
+        let next = continuations.removeValue(forKey: operationID)
+        isWaiting = !continuations.isEmpty
+        next?.resume(throwing: CancellationError())
+    }
+}
+
+/// This control exists only in the explicitly requested simulator fixture.
+@MainActor
+private struct DiscoverRefinementUITestControl: View {
+    @ObservedObject var gate: DiscoverRefinementUITestGate
+
+    var body: some View {
+        Button("Release search fixture") { gate.release() }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("uitest.discoverRefinementGate")
+            .accessibilityValue(gate.stateDescription)
+            .disabled(!gate.isWaiting)
+            .padding(8)
+            .onDisappear { gate.cancelPending() }
+    }
+}
+
+/// Keeps the original search pending across result navigation until released.
 private struct DelayedDiscoverRefinementUITestParser: LLMFilterParser {
+    let gate: DiscoverRefinementUITestGate
+
     func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
-        try await Task.sleep(for: .seconds(45))
+        try await gate.waitForRelease()
         var filters = DeterministicFilterParser.filters(query: query, schema: schema)
         filters.opinion = .favorite
         return filters
