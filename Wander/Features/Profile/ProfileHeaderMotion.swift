@@ -213,7 +213,13 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
             if reduceTransparency {
                 brandMode.background
             } else {
+                #if DEBUG && targetEnvironment(simulator)
+                ProfileMotionBackdropBlur(isDark: brandMode.prefersDarkInterface,
+                    observationMask: ProfileBlurObservation.admitted
+                        ? [Double(surfaceProgress), Double(topInset), Double(surfaceBottom)] : nil)
+                #else
                 ProfileMotionBackdropBlur(isDark: brandMode.prefersDarkInterface)
+                #endif
             }
         }
         .frame(width: width, height: topInset + surfaceBottom)
@@ -354,18 +360,30 @@ private struct ProfileMotionOverlay<A: View, N: View>: View {
 /// scrolling text under the name and clock.
 struct ProfileMotionBackdropBlur: UIViewRepresentable {
     let isDark: Bool
+    #if DEBUG && targetEnvironment(simulator)
+    var observationMask: [Double]? = nil
+    #endif
 
     func makeUIView(context: Context) -> BackdropView {
         let view = BackdropView()
+        #if DEBUG && targetEnvironment(simulator)
+        if ProfileBlurObservation.admitted { view.observationMask = observationMask }
+        #endif
         view.isUserInteractionEnabled = false
         return view
     }
 
     func updateUIView(_ view: BackdropView, context: Context) {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProfileBlurObservation.admitted { view.observationMask = observationMask }
+        #endif
         view.setAppearance(isDark ? .dark : .light)
     }
 
     static func dismantleUIView(_ view: BackdropView, coordinator: ()) {
+        #if DEBUG && targetEnvironment(simulator)
+        ProfileBlurObservation.record(view, .dismantle)
+        #endif
         view.stop()
     }
 
@@ -377,21 +395,52 @@ struct ProfileMotionBackdropBlur: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .window)
+            #endif
             if window != nil { configure() } else { stop() }
         }
 
         func setAppearance(_ appearance: UIUserInterfaceStyle) {
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .appearanceRequested, requestedStyle: appearance.rawValue)
+            #endif
             guard overrideUserInterfaceStyle != appearance else { return }
             overrideUserInterfaceStyle = appearance
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .appearanceChanged)
+            #endif
             if window != nil { configure() }
         }
 
         func stop() {
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .stopBefore)
+            #endif
             animator?.stopAnimation(true)
             animator = nil
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .stopAfter)
+            #endif
         }
 
+        #if DEBUG && targetEnvironment(simulator)
+        var observationMask: [Double]?
+        var observationAnimator: [String: Any] {
+            guard let animator else { return ["retained": false] }
+            return ["retained": true, "state": animator.state.rawValue,
+                    "running": animator.isRunning, "fraction": ProfileBlurObservation.number(Double(animator.fractionComplete))]
+        }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            ProfileBlurObservation.record(self, .layout)
+        }
+        #endif
+
         private func configure() {
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .configureBefore)
+            #endif
             stop()
             effect = nil
             let animator = UIViewPropertyAnimator(duration: 1, curve: .linear) { [weak self] in
@@ -399,6 +448,10 @@ struct ProfileMotionBackdropBlur: UIViewRepresentable {
             }
             self.animator = animator
             animator.fractionComplete = 0.25
+            #if DEBUG && targetEnvironment(simulator)
+            ProfileBlurObservation.record(self, .configureAfter)
+            ProfileBlurObservation.deferOnce(self)
+            #endif
         }
     }
 }
@@ -422,3 +475,184 @@ private struct ProfileMotionTransform: AnimatableModifier {
             )
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Passive, synthetic-only observation. Never changes animator or layer behavior.
+@MainActor
+private enum ProfileBlurObservation {
+    enum Event: String {
+        case window, appearanceRequested, appearanceChanged, configureBefore, configureAfter
+        case stopBefore, stopAfter, layout, dismantle, deferred
+    }
+    static let argument = "-WanderActualProfileBlurObservation"
+    static let nonce: String? = {
+        let args = ProcessInfo.processInfo.arguments
+        let required = ["-WanderMapCapture", "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+                        "-WanderDisableWalkthroughs", "-WanderInitialTab", argument]
+        guard Bundle.main.bundleIdentifier == "com.grayline.wander",
+              Set(args.filter { $0.hasPrefix("-Wander") }) == Set(required),
+              required.allSatisfy({ flag in args.filter { $0 == flag }.count == 1 }),
+              let tab = args.firstIndex(of: "-WanderInitialTab"), args.indices.contains(tab + 1), args[tab + 1] == "map",
+              let index = args.firstIndex(of: argument), args.indices.contains(index + 1),
+              UUID(uuidString: args[index + 1]) != nil else { return nil }
+        return args[index + 1]
+    }()
+    static var admitted: Bool {
+        guard nonce != nil else { return false }
+        _ = firstAdmittedAt
+        return true
+    }
+    final class Instance {
+        weak var view: ProfileMotionBackdropBlur.BackdropView?
+        let ordinal: Int
+        var configurations = 0, layouts = 0, stops = 0, deferredRequests = 0, appearanceRequests = 0
+        var lastLayout: NSDictionary?
+        var lastRequestedStyle: Int?
+        var lastState: [String: Any] = [:]
+        var lastStateAt: TimeInterval = 0
+        var lastLayers: [[String: Any]] = []
+        var lastLayersAt: TimeInterval = 0
+        init(_ view: ProfileMotionBackdropBlur.BackdropView, ordinal: Int) { self.view = view; self.ordinal = ordinal }
+    }
+    static var instances: [Instance] = []
+    static var events: [[String: Any]] = []
+    static var totalEvents = 0, droppedEvents = 0, droppedInstances = 0, droppedDeferred = 0
+    static var layerObservations = 0
+    static let firstAdmittedAt = ProcessInfo.processInfo.systemUptime
+    static func number(_ value: Double) -> Any { value.isFinite ? value as Any : NSNull() }
+    static func state(_ view: ProfileMotionBackdropBlur.BackdropView) -> [String: Any] {
+        ["window": view.window != nil, "bounds": [number(Double(view.bounds.width)), number(Double(view.bounds.height))],
+         "windowSize": view.window.map { [number(Double($0.bounds.width)), number(Double($0.bounds.height))] } ?? [],
+         "hidden": view.isHidden, "alpha": number(Double(view.alpha)), "style": view.overrideUserInterfaceStyle.rawValue,
+         "animationsEnabled": UIView.areAnimationsEnabled, "animator": view.observationAnimator,
+         "sourceMask": view.observationMask?.map(number) ?? []]
+    }
+    static func instance(_ view: ProfileMotionBackdropBlur.BackdropView) -> Instance? {
+        if let found = instances.first(where: { $0.view === view }) { return found }
+        guard instances.count < 4 else { droppedInstances += 1; return nil }
+        let found = Instance(view, ordinal: instances.count + 1); instances.append(found); return found
+    }
+    static func record(_ view: ProfileMotionBackdropBlur.BackdropView, _ event: Event,
+                       requestedStyle: Int? = nil, requestedConfiguration: Int? = nil) {
+        guard admitted, let item = instance(view) else { return }
+        if event == .configureBefore { item.configurations += 1 }
+        if event == .stopBefore { item.stops += 1 }
+        let value = state(view)
+        item.lastState = value; item.lastStateAt = ProcessInfo.processInfo.systemUptime
+        if event == .appearanceRequested {
+            item.appearanceRequests += 1
+            if requestedStyle == item.lastRequestedStyle { return }
+            item.lastRequestedStyle = requestedStyle
+        }
+        if event == .layout {
+            item.layouts += 1
+            let next = NSDictionary(dictionary: value)
+            if item.lastLayout?.isEqual(next) == true { return }
+            item.lastLayout = next
+        }
+        totalEvents += 1
+        guard events.count < 64 else { droppedEvents += 1; return }
+        var row: [String: Any] = ["event": event.rawValue, "uptime": ProcessInfo.processInfo.systemUptime,
+            "instance": item.ordinal, "configuration": item.configurations, "state": value]
+        if let requestedStyle { row["requestedStyle"] = requestedStyle }
+        if let requestedConfiguration {
+            row["requestedConfiguration"] = requestedConfiguration
+            row["staleConfiguration"] = requestedConfiguration != item.configurations
+        }
+        // At most six layer walks on these source lifecycle events. AX reads never walk layers.
+        if event == .deferred || event == .configureAfter {
+            if layerObservations < 6 {
+                let observedLayers = layers(view.layer)
+                row["layers"] = observedLayers; item.lastLayers = observedLayers
+                item.lastLayersAt = ProcessInfo.processInfo.systemUptime; layerObservations += 1
+            }
+            else { row["layerObservationOmitted"] = true }
+        }
+        events.append(row)
+    }
+    static func deferOnce(_ view: ProfileMotionBackdropBlur.BackdropView) {
+        guard admitted, let item = instance(view) else { return }
+        guard item.deferredRequests < 16 else { droppedDeferred += 1; return }
+        item.deferredRequests += 1
+        let configuration = item.configurations
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
+            record(view, .deferred, requestedConfiguration: configuration)
+        }
+    }
+    static func layers(_ first: CALayer) -> [[String: Any]] {
+        var result: [[String: Any]] = [], next: CALayer? = first
+        while let layer = next, result.count < 5 {
+            let keys = layer.animationKeys() ?? []
+            let animations: [[String: Any]] = keys.prefix(2).enumerated().map { ordinal, key in
+                guard let animation = layer.animation(forKey: key) else { return ["ordinal": ordinal, "available": false] }
+                let kind = animation is CAAnimationGroup ? "group" : animation is CASpringAnimation ? "spring" :
+                    animation is CAKeyframeAnimation ? "keyframe" : animation is CABasicAnimation ? "basic" : "other"
+                return ["ordinal": ordinal, "available": true, "kind": kind,
+                    "duration": number(animation.duration), "speed": number(Double(animation.speed)),
+                    "timeOffset": number(animation.timeOffset), "repeatCount": number(Double(animation.repeatCount)),
+                    "repeatDuration": number(animation.repeatDuration), "autoreverses": animation.autoreverses,
+                    "removedOnCompletion": animation.isRemovedOnCompletion]
+            }
+            result.append(["depth": result.count, "hidden": layer.isHidden, "opacity": number(Double(layer.opacity)),
+                "bounds": [number(Double(layer.bounds.width)), number(Double(layer.bounds.height))],
+                "maskPresent": layer.mask != nil,
+                "maskBounds": layer.mask.map { [number(Double($0.bounds.width)), number(Double($0.bounds.height))] } ?? [],
+                "animationCount": keys.count, "animationLimitReached": keys.count > 2, "animations": animations])
+            next = layer.superlayer
+        }
+        if next != nil { result.append(["ancestorLimitReached": true]) }
+        return result
+    }
+    static func readout(attached: Bool) -> String {
+        guard admitted else { return "unadmitted" }
+        let final: [[String: Any]] = instances.map { item in
+            ["instance": item.ordinal, "configuration": item.configurations,
+             "layouts": item.layouts, "stops": item.stops, "deferredRequests": item.deferredRequests,
+             "appearanceRequests": item.appearanceRequests, "released": item.view == nil,
+             "lastObservedState": item.lastState, "lastObservedAt": item.lastStateAt,
+             "lastObservedLayers": item.lastLayers, "lastLayersObservedAt": item.lastLayersAt]
+        }
+        var payload: [String: Any] = ["schema": 1, "fixture": "actual-profile-blur", "nonce": nonce ?? "",
+            "readoutAttached": attached, "firstAdmittedAt": firstAdmittedAt, "readAt": ProcessInfo.processInfo.systemUptime,
+            "totalEvents": totalEvents, "droppedEvents": droppedEvents, "droppedInstances": droppedInstances,
+            "droppedDeferred": droppedDeferred, "events": events, "final": final,
+            "lastObservedStateIsNotReadTimeState": true]
+        // Automatic AX traversal may request this value; serialization does not inspect live animator/layers.
+        if let encoded = try? JSONSerialization.data(withJSONObject: payload), encoded.count > 32_768 {
+            payload["events"] = events.map { row in var copy = row; copy.removeValue(forKey: "layers"); return copy }
+            payload["final"] = final.map { row in var copy = row; copy.removeValue(forKey: "lastObservedLayers"); return copy }
+            payload["layerPayloadOmittedForSize"] = true
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+              data.count <= 32_768, let text = String(data: data, encoding: .utf8) else {
+            return "{\"schema\":1,\"fixture\":\"actual-profile-blur\",\"status\":\"Gap\",\"reason\":\"encoding_or_size_limit\"}"
+        }
+        return text
+    }
+}
+
+/// Transparent, non-interactive AX carrier in the fixture root, not in the masked Profile subtree.
+struct ProfileBlurObservationReadout: UIViewRepresentable {
+    static var admitted: Bool { ProfileBlurObservation.admitted }
+    func makeUIView(context: Context) -> Readout {
+        let view = Readout()
+        view.isUserInteractionEnabled = false
+        view.text = "Synthetic Profile lifecycle"
+        view.font = .systemFont(ofSize: 1)
+        view.textColor = .clear
+        view.isAccessibilityElement = true
+        view.accessibilityTraits = .staticText
+        view.accessibilityLabel = "Synthetic Profile lifecycle"
+        view.accessibilityIdentifier = "profile.blur.actual.observation"
+        return view
+    }
+    func updateUIView(_ view: Readout, context: Context) {}
+    final class Readout: UILabel {
+        override var accessibilityValue: String? {
+            get { ProfileBlurObservation.readout(attached: window != nil) }
+            set {}
+        }
+    }
+}
+#endif

@@ -3,6 +3,50 @@ import XCTest
 
 @MainActor
 final class PlaceProfileAppearanceUITests: XCTestCase {
+    private var blurObservationApp: XCUIApplication?
+    private var blurObservationNonce: String?
+    private var blurObservationStart: TimeInterval = 0
+    private var blurOriginalReturned = false
+    private var blurFailureCountBefore: Int?
+
+    override func tearDown() async throws {
+        if let app = blurObservationApp {
+            blurObservationApp = nil // One attempt, including when AX collection itself fails.
+            let failureDelta = blurFailureCountBefore.flatMap { before in testRun.map { $0.failureCount - before } }
+            let verdict: [String: Any] = ["schema": 1, "fixture": "actual-profile-blur",
+                "capturePhase": "teardown_after_original_defer", "originalMethodReturned": blurOriginalReturned,
+                "recordedFailureDelta": failureDelta ?? -1, "testStartedAt": blurObservationStart,
+                "beforeAXAt": ProcessInfo.processInfo.systemUptime]
+            attachBlurObservation(verdict, name: "Original appearance verdict before diagnostic AX")
+            // No wait/existence/snapshot/retry. An AX error or missing teardown remains a collection gap.
+            let readStarted = ProcessInfo.processInfo.systemUptime
+            let raw = app.staticTexts["profile.blur.actual.observation"].value as? String
+            let data = raw?.data(using: .utf8)
+            let object: [String: Any]? = data.flatMap { bytes in
+                guard bytes.count <= 32_768 else { return nil }
+                return (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
+            }
+            if let object, object["schema"] as? Int == 1,
+               object["fixture"] as? String == "actual-profile-blur",
+               object["nonce"] as? String == blurObservationNonce,
+               object["readoutAttached"] as? Bool == true {
+                attachBlurObservation(object, name: "Actual Profile lifecycle after original verdict")
+            } else {
+                attachBlurObservation(["schema": 1, "fixture": "actual-profile-blur", "status": "Gap",
+                    "reason": "bounded_direct_read_unavailable", "byteCount": data?.count ?? -1],
+                    name: "Actual Profile lifecycle collection gap")
+            }
+            attachBlurObservation(["schema": 1, "readStarted": readStarted,
+                "readReturned": ProcessInfo.processInfo.systemUptime], name: "Diagnostic AX collection timing")
+        }
+        try await super.tearDown()
+    }
+    private func attachBlurObservation(_ value: [String: Any], name: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return }
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
     func testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges() throws {
         continueAfterFailure = false
         let previous = XCUIDevice.shared.appearance
@@ -13,6 +57,11 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         // the screens whose appearance is under test.
         app.launchArguments = ["-WanderMapCapture", "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderInitialTab", "map"]
+        let observationNonce = UUID().uuidString
+        app.launchArguments += ["-WanderActualProfileBlurObservation", observationNonce]
+        blurObservationApp = app; blurObservationNonce = observationNonce
+        blurObservationStart = ProcessInfo.processInfo.systemUptime
+        blurFailureCountBefore = testRun?.failureCount
         app.launch()
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20))
@@ -62,6 +111,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             XCTAssertTrue(search.isHittable)
             capture("Add live appearance \(appearance)")
         }
+        blurOriginalReturned = true
     }
 
     func testOpenHistorySurvivesLiveAppearanceChangesAndForegroundReturns() throws {

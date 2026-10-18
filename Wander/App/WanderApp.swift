@@ -360,6 +360,14 @@ struct WanderApp: App {
             .environmentObject(productUpsells)
             .environmentObject(calendarReservations)
             .modelContainer(WanderModelContainer.preview)
+            #if targetEnvironment(simulator)
+            .overlay(alignment: .topLeading) {
+                if ProfileBlurObservationReadout.admitted {
+                    ProfileBlurObservationReadout().frame(width: 1, height: 1)
+                        .padding(.leading, 16).padding(.top, 16).allowsHitTesting(false)
+                }
+            }
+            #endif
     }
 
     @MainActor
