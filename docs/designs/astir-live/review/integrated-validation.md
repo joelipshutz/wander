@@ -1,8 +1,14 @@
 # REC-636 integrated validation
 
-## Replay startup pacing repair
+## Current acceptance status
 
-The latest test-only repair keeps requesting a genuine layout at the SDK's existing one-second cadence until the fixture observes its first completed native draw. Previously, merely requesting a layout reserved a ten-second encoding wait, even when no draw had happened. After any completed draw, including a failed draw that the SDK may still encode, the original delivery-progress/ten-second backpressure applies. Four deterministic regressions cover startup, cadence, delivery and timeout behavior. Both original privacy test bodies, 30-second capture gates, SDK settings and every-frame image assertions remain unchanged.
+[REC-636](https://linear.app/recme/issue/REC-636) records the current candidate, reconciled native results, hosted/device gates and exact restart steps. [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) records its current CI runs. Use those records together for readiness; a diagnostic pass or historical result below does not establish acceptance of a later candidate. The evidence history and capture provenance below retain their original source identities and outcomes.
+
+Live remains globally Off. Internal user testing requires accepted candidate validation, verified dormant backend installation and the designated account/device checks. Broader availability and release remain separate gates.
+
+## Historical Replay startup pacing repair
+
+The Replay startup test-only repair keeps requesting a genuine layout at the SDK's existing one-second cadence until the fixture observes its first completed native draw. Previously, merely requesting a layout reserved a ten-second encoding wait, even when no draw had happened. After any completed draw, including a failed draw that the SDK may still encode, the original delivery-progress/ten-second backpressure applies. Four deterministic regressions cover startup, cadence, delivery and timeout behavior. Both original privacy test bodies, 30-second capture gates, SDK settings and every-frame image assertions remain unchanged.
 
 V47 `37170753` remains **Failed: 8,970 Passed / 9 Failed**, zero skipped or expected, across 23 audited bundles and 15 digest-verified archives. All 102 build and 26 runtime warnings remain recorded. The five launch failures involved late system Developer-testing assertion replies after the apps reached foreground. The pan input reached its app window late; the compact picker and onboarding failures lack exact receiving-view/handler observations. These findings do not establish app defects or justify weaker checks.
 

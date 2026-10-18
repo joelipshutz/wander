@@ -1,12 +1,12 @@
 # Review Astir Live
 
-REC-636 · October 15, 2026 · **Implementation in progress**
+REC-636 · **Implementation in progress**
 
-Review the integrated `Wander` app against the accepted direction. Its map is SwiftUI `Map`/`MapReader`, its drawer embeds the existing Feed, and its pins/filters currently use authorized **loaded** Feed records. Use the [integrated validation report](review/integrated-validation.md) as the single authority for candidate identity, test results, captures and outstanding checks. This guide defines review journeys, not a completion claim; current bounded hosted preinstall metadata/full smoke passed; installation, post-install verification and real-account trials remain outstanding.
+Review the integrated `Wander` app against the accepted direction. Its map is SwiftUI `Map`/`MapReader`, its drawer embeds the existing Feed, and its pins/filters currently use authorized **loaded** Feed records. Use [REC-636](https://linear.app/recme/issue/REC-636) and [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) for current candidate identity, reconciled results and outstanding gates. The [integrated validation report](review/integrated-validation.md) preserves evidence history and capture provenance. This guide defines review journeys, not a completion claim; current bounded hosted preinstall metadata/full smoke passed; installation, post-install verification and real-account trials remain outstanding.
 
 ## Current review checkpoint
 
-Live combines the map with the existing Feed, preserves Profile's Your Map tools, and keeps private conversations separate from notifications. The current review also checks status-bar legibility and the embedded photo journey. The selected native gesture/filter corrections now pass on both phone sizes. Final full CI, its ordinary-auth case and backend/account gates remain; see their actual disposition in PR #736 Checks and REC-636. See the [validation report](review/integrated-validation.md) for the candidate, current results, gallery and outstanding gates.
+Live combines the map with the existing Feed, preserves Profile's Your Map tools, and keeps private conversations separate from notifications. The current review also checks status-bar legibility and the embedded photo journey. Selected gesture/filter diagnostics have passed on both phone sizes; their results remain separate from full candidate acceptance. Check the linked current record for full CI, its ordinary-auth case and backend/account gates. The [validation report](review/integrated-validation.md) retains historical results and the source-bound gallery.
 
 ## Run the integrated review
 
