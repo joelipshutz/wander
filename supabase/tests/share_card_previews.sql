@@ -12,6 +12,8 @@ declare
   card_token text;
   profile_card_token text;
   image_path text;
+  snapshot_path text;
+  publication jsonb;
   kinds text[] := array['profile','place','list','activity','invite'];
   identifiers text[];
   result jsonb;
@@ -27,12 +29,20 @@ begin
   end if;
   if exists (select 1 from pg_proc where oid in
       ('public.create_share_card_preview(text,text,text,text)'::regprocedure,
-       'public.share_card_preview(text,text,text)'::regprocedure)
+       'public.share_card_preview(text,text,text)'::regprocedure,
+       'public.share_card_context(text,text,text)'::regprocedure,
+       'public.publish_share_card_snapshot(text,text,text,text,text,text)'::regprocedure)
       and (not prosecdef or not ('search_path=public, app, extensions' = any(proconfig))))
     or has_function_privilege('anon','public.create_share_card_preview(text,text,text,text)','execute')
     or not has_function_privilege('authenticated','public.create_share_card_preview(text,text,text,text)','execute')
     or not has_function_privilege('anon','public.share_card_preview(text,text,text)','execute')
     then raise exception 'card RPC security posture changed'; end if;
+  if has_function_privilege('anon','public.publish_share_card_snapshot(text,text,text,text,text,text)','execute')
+    or not has_function_privilege('authenticated','public.publish_share_card_snapshot(text,text,text,text,text,text)','execute')
+    or not has_function_privilege('anon','public.share_card_context(text,text,text)','execute')
+    or exists (select 1 from pg_proc where oid = 'public.share_card_context(text,text,text)'::regprocedure and provolatile <> 's')
+    or exists (select 1 from pg_proc where oid = 'public.publish_share_card_snapshot(text,text,text,text,text,text)'::regprocedure and provolatile <> 'v')
+    then raise exception 'snapshot RPC security posture changed'; end if;
   insert into public.profiles(id, handle, display_name, is_private_profile)
     values(owner_id, 'codex_card_owner', 'Smoke Owner', false),
           (stranger_id, 'codex_card_stranger', 'Smoke Stranger', false);
@@ -56,7 +66,10 @@ begin
     set local role authenticated;
     -- Old clients may still upload; private artwork must never reach the preview.
     insert into storage.objects(bucket_id,name) values('share-card-previews',image_path);
-    card_token := public.create_share_card_preview(kinds[i],identifiers[i],image_path,'Approved smoke card')->>'token';
+    publication := public.create_share_card_preview(kinds[i],identifiers[i],image_path,'Approved smoke card');
+    card_token := publication->>'token';
+    snapshot_path := publication->>'snapshot_path';
+    if snapshot_path is null then raise exception 'owner share has no snapshot path'; end if;
     if card_token !~ '^[a-f0-9]{48}$' then raise exception 'invalid card token'; end if;
     if i = 1 then profile_card_token := card_token; end if;
     reset role;
@@ -74,6 +87,45 @@ begin
     begin
       perform public.create_share_card_preview(kinds[i],identifiers[i],image_path,'Forbidden');
       raise exception 'anonymous publication accepted';
+    exception when insufficient_privilege then null; end;
+    -- Legacy shares gain only already-public details, never a private source copy.
+    result := public.share_card_context(card_token,kinds[i],identifiers[i]);
+    if i in (1,2) and result->>'preview_mode' <> 'public' then raise exception 'public context missing'; end if;
+    if i not in (1,2) and result is distinct from '{"preview_mode":"generic"}'::jsonb then
+      raise exception 'protected legacy context leaked'; end if;
+    reset role;
+    perform set_config('request.jwt.claim.sub',owner_id,true);
+    perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
+    set local role authenticated;
+    insert into storage.objects(bucket_id,name) values('shared-link-snapshots',snapshot_path);
+    result := public.publish_share_card_snapshot(card_token,kinds[i],identifiers[i],snapshot_path,
+      'Selected ' || kinds[i], 'Selected context');
+    if result->>'published' <> 'true' then raise exception 'snapshot not published'; end if;
+    -- An identical retry is safe; a later mutation cannot replace an exported copy.
+    perform public.publish_share_card_snapshot(card_token,kinds[i],identifiers[i],snapshot_path,
+      'Selected ' || kinds[i], 'Selected context');
+    begin
+      perform public.publish_share_card_snapshot(card_token,kinds[i],identifiers[i],snapshot_path,'Changed','Changed');
+      raise exception 'mutable snapshot accepted';
+    exception when raise_exception then
+      if sqlerrm <> 'share_snapshot_immutable' then raise; end if;
+    end;
+    reset role;
+    perform set_config('request.jwt.claim.sub','',true);
+    perform set_config('request.jwt.claims','{"role":"anon"}',true);
+    set local role anon;
+    result := public.share_card_context(card_token,kinds[i],identifiers[i]);
+    if result->>'preview_mode' <> 'snapshot' or result->>'title' <> 'Selected ' || kinds[i]
+      or result->>'description' <> 'Selected context' or result->>'image_path' <> snapshot_path then
+      raise exception 'published context missing'; end if;
+    if public.share_card_preview(card_token,kinds[i],identifiers[i]) is distinct from '{"preview_mode":"generic"}'::jsonb
+      then raise exception 'build 184 handshake broken'; end if;
+    if public.share_card_context(card_token,kinds[i],'wrong-route') is not null
+      or public.share_card_context(card_token,'wrong-kind',identifiers[i]) is not null then
+      raise exception 'context token binding broken'; end if;
+    begin
+      perform public.publish_share_card_snapshot(card_token,kinds[i],identifiers[i],snapshot_path,'Forbidden','');
+      raise exception 'anonymous snapshot publication accepted';
     exception when insufficient_privilege then null; end;
     reset role;
     perform set_config('request.jwt.claim.sub',owner_id,true);
@@ -96,16 +148,21 @@ begin
     raise exception 'foreign folder accepted';
   exception when insufficient_privilege then null; end;
   -- Legacy callers may send artwork/title, but neither is retained or returned.
-  result := public.create_share_card_preview('profile',stranger_id,image_path,'PRIVATE TITLE');
+  result := public.create_share_card_preview('profile',owner_id,image_path,'PRIVATE TITLE');
   if result->>'token' is null then raise exception 'legacy publisher compatibility failed'; end if;
+  if result->>'snapshot_path' is not null then raise exception 'another profile can publish protected map'; end if;
+  begin
+    insert into storage.objects(bucket_id,name) values('shared-link-snapshots',stranger_id || '/' || gen_random_uuid()::text || '/preview.png');
+    raise exception 'upload without a pending eligible share accepted';
+  exception when insufficient_privilege then null; end;
   reset role;
   update public.place_list_invites set revoked_at = now() where token_hash = encode(extensions.digest(invite_token,'sha256'),'hex');
   set local role anon;
-  if public.share_card_preview(card_token,'invite',invite_token) is not null then raise exception 'revoked invite still resolved'; end if;
+  if public.share_card_context(card_token,'invite',invite_token) is not null or public.share_card_preview(card_token,'invite',invite_token) is not null then raise exception 'revoked invite still resolved'; end if;
   reset role;
   update public.profiles set deleted_at = now() where id = owner_id;
   set local role anon;
-  if public.share_card_preview(profile_card_token,'profile',owner_id) is not null then raise exception 'deleted publisher still resolved'; end if;
+  if public.share_card_context(profile_card_token,'profile',owner_id) is not null or public.share_card_preview(profile_card_token,'profile',owner_id) is not null then raise exception 'deleted publisher still resolved'; end if;
   reset role;
 end;
 $test$;
