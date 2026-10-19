@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One fixed diagnostic. No acceptance replacement or automatic retry."""
 from pathlib import Path
-import argparse, hashlib, importlib.util, json, os, re, signal, stat, subprocess, sys, time
+import argparse, hashlib, importlib.util, json, os, re, shlex, signal, stat, subprocess, sys, time
 
 HEAD='6f149bff202b839425ea7b6469c77813709070c4'
 TREE='5881d6224f0e7f8e04d58bebec30e95cec8a0118'
@@ -147,6 +147,34 @@ def fixture_phase(source,out,operation):
     os.chdir(source)
     module.main()
 
+def record_compiler_flags(out):
+    # Observe only generated compiler options; never persist paths/env/command text.
+    base=out/'DerivedData/Build/Intermediates.noindex'
+    paths=sorted(base.rglob('*-common-args.resp'))
+    need(0 < len(paths) <= 128,'compiler_response_count')
+    rows=[]
+    for path in paths:
+        need(path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(base.resolve())
+             and path.stat().st_size <= 262144,'compiler_response_path')
+        relative=path.relative_to(base).as_posix()
+        match=re.fullmatch(r'([A-Za-z0-9_.-]+)\.build/Debug-iphonesimulator/([A-Za-z0-9_.-]+)\.build/Objects-normal/arm64/[A-Za-z0-9_-]+-common-args\.resp',relative)
+        need(match is not None,'compiler_response_configuration')
+        tokens=shlex.split(path.read_text())
+        flags=[x for x in tokens if re.fullmatch(r'-O(?:[0-3szg]|fast)?',x)]
+        rows.append({'project':match[1],'target':match[2],'relativeResponse':relative,
+                     'sha256':sha(path),'bytes':path.stat().st_size,'optimizationFlags':flags,
+                     'debugDefine':'-DDEBUG=1' in tokens})
+    phlibwebp=[r for r in rows if r['project']=='PostHog' and r['target']=='phlibwebp']
+    verified=bool(phlibwebp) and all(r['optimizationFlags']==['-Os'] and r['debugDefine'] for r in rows)
+    save(out/'compiler-flags.json',{'diagnosticOnly':True,'acceptance':False,
+         'candidate':HEAD,'admissionSHA256':sha(out/'admission.json'),
+         'sourceRestorationSHA256':sha(out/'source-restoration.json'),
+         'configuration':'Debug','platform':'iphonesimulator','architecture':'arm64',
+         'requestedCOptimization':'s','observedCFlagsVerified':verified,
+         'requestedSwiftOptimization':'-Onone','swiftCompilerCommandObserved':False,
+         'treatmentScope':'all C-family targets','responses':rows})
+    need(verified,'actual_c_optimization_not_verified')
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase',choices=['admit','build','prepare','test','export','cleanup','verify-restoration'])
@@ -172,10 +200,11 @@ def main():
         def apply(root,patch):
             subprocess.run(['git','apply','--check',str(patch)],cwd=root,check=True,timeout=30)
             subprocess.run(['git','apply',str(patch)],cwd=root,check=True,timeout=30)
-        command=['xcodebuild','build-for-testing','-quiet','-project','Wander.xcodeproj','-scheme','Wander','-destination','platform=iOS Simulator,id='+device,'-derivedDataPath',str(out/'DerivedData'),'-clonedSourcePackagesDirPath',str(out/'SourcePackages'),'-disableAutomaticPackageResolution','-onlyUsePackageVersionsFromResolvedFile','-jobs','2','-parallel-testing-enabled','NO','-testProductsPath',str(out/'Replay.xctestproducts'),'-only-testing:WanderTests/ReplayMaskingTests','CODE_SIGNING_ALLOWED=YES','CODE_SIGN_IDENTITY=-','GENERATE_INFOPLIST_FILE=YES']
+        command=['xcodebuild','build-for-testing','-quiet','-project','Wander.xcodeproj','-scheme','Wander','-configuration','Debug','-destination','platform=iOS Simulator,id='+device,'-derivedDataPath',str(out/'DerivedData'),'-clonedSourcePackagesDirPath',str(out/'SourcePackages'),'-disableAutomaticPackageResolution','-onlyUsePackageVersionsFromResolvedFile','-jobs','2','-parallel-testing-enabled','NO','-testProductsPath',str(out/'Replay.xctestproducts'),'-only-testing:WanderTests/ReplayMaskingTests','CODE_SIGNING_ALLOWED=YES','CODE_SIGN_IDENTITY=-','GENERATE_INFOPLIST_FILE=YES','GCC_OPTIMIZATION_LEVEL=s','SWIFT_OPTIMIZATION_LEVEL=-Onone']
         code=instrumented_build(proof['files'],source,sdk,out,apply,lambda:run(command,source,1500,out/'process-cleanup-stop.json'))
         save(out/'build-result.json',{'exitCode':code,'diagnosticOnly':True})
         if code:raise SystemExit(code)
+        record_compiler_flags(out)
         save(out/'product-fingerprint.json',load_fixture(source).product_fingerprint(out/'Replay.xctestproducts'))
     elif phase=='verify-restoration':
         if not (out/'source-transaction-start.json').exists():return

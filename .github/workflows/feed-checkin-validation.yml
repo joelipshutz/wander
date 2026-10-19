@@ -1,4 +1,4 @@
-name: REC-636 passive Replay stages (diagnostic only)
+name: REC-636 C optimization Replay measurement (diagnostic only)
 on:
   workflow_dispatch:
     inputs:
@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: rec636-passive-replay-${{ github.ref }}
+  group: rec636-c-optimization-replay-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   private-stages:
@@ -39,7 +39,7 @@ jobs:
           xcodebuild -resolvePackageDependencies -project Wander.xcodeproj -scheme Wander \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/rec636-replay-stages/SourcePackages" \
             -onlyUsePackageVersionsFromResolvedFile
-      - name: Instrument and build once, restoring source and modes
+      - name: Measure C -Os with Swift Debug, restoring source and modes
         id: build
         run: python3 scripts/diagnostics/rec636-replay-stages.py build
       - name: Verify source restoration
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rec636-private-replay-stages
+          name: rec636-private-replay-c-optimization
           retention-days: 7
           path: |
             ${{ runner.temp }}/rec636-replay-stages/*.json
