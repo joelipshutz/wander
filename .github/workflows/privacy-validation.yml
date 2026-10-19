@@ -21,6 +21,8 @@ on:
       - 'WanderTests/WanderPlaceCategoryTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/record-replay-compiler-flags.py'
+      - 'scripts/test_record_replay_compiler_flags.py'
       - '.github/workflows/privacy-validation.yml'
   workflow_dispatch:
 
@@ -84,13 +86,22 @@ jobs:
       - name: Prepare isolated Replay test products once
         id: replay-products
         if: success() || failure()
-        run: >-
-          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
-          -only-testing:WanderTests/ReplayMaskingTests
-          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+        # Use production-style C size optimization while keeping Swift Debug and C DEBUG assertions.
+        run: |
+          test ! -e "$RUNNER_TEMP/ReplayDerivedData"
+          test ! -L "$RUNNER_TEMP/ReplayDerivedData"
+          python3 -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
+            -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID" \
+            -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
+            -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
+            -only-testing:WanderTests/ReplayMaskingTests \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
+            GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
+          python3 scripts/record-replay-compiler-flags.py \
+            --derived-data "$RUNNER_TEMP/ReplayDerivedData" --test-products "$RUNNER_TEMP/Replay.xctestproducts" \
+            --checkout "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/screens/replay-compiler-flags.json"
       # Replay owns process-wide SDK state; each scenario starts a fresh host.
       - name: Verify private-message replay in an isolated process
         if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}

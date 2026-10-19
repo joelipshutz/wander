@@ -62,6 +62,9 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
+    @State private var pendingActivityFocus: FeedActivityFocusRequest?
+    @State private var focusedActivityFrame: CGRect?
+    @State private var focusScrollGeneration = UUID()
     @State private var handledActivityFocusRequestID: UUID?
     @State private var handledSurfaceRequestID: UUID?
     @State private var showsNotifications = false
@@ -117,6 +120,12 @@ struct FeedScreen: View {
     }
 
     private var page: FollowedFeedPage? { store.followedFeedPage }
+    private var focusedGroupID: String? {
+        guard let activityID = pendingActivityFocus?.activityID else { return nil }
+        return displayedActivityGroups.first {
+            $0.activities.contains { $0.id == activityID }
+        }?.id
+    }
     private var visibleActivity: [FeedActivity] {
         (page?.activity ?? []).filter {
             store.feedAudience.includes(actorID: $0.actor.id, currentUserID: store.currentUser.id,
@@ -194,12 +203,15 @@ struct FeedScreen: View {
                     if !isEmbedded { store.selectFeedAudience(.everyone) }
                     handleSurfaceRequest()
                     handleActivityFocusRequest()
+                } else {
+                    cancelActivityFocus()
                 }
             }
             .onChange(of: surfaceRequest?.id, initial: true) { _, _ in
                 handleSurfaceRequest()
             }
-            .onChange(of: activityFocusRequest?.id, initial: true) { _, _ in
+            .onChange(of: activityFocusRequest?.id, initial: true) { _, requestID in
+                if pendingActivityFocus?.id != requestID { cancelActivityFocus() }
                 handleActivityFocusRequest()
             }
             .onChange(of: filteredActivityIDs) { _, _ in
@@ -304,6 +316,7 @@ struct FeedScreen: View {
                 placeSaveFlow = nil
                 savedMessage = nil
                 focusedActivityID = nil
+                cancelActivityFocus()
                 handledActivityFocusRequestID = activityFocusRequest?.id
                 handledSurfaceRequestID = surfaceRequest?.id
                 isShowingSearch = false
@@ -417,6 +430,11 @@ struct FeedScreen: View {
                 .accessibilityValue("\(displayedActivityGroups.count) activities loaded")
                 .onPreferenceChange(FeedPagingMetricsKey.self) { metrics in
                     defer { previousPagingMetrics = metrics }
+                    if let metrics,
+                       metrics.contentHeight != previousPagingMetrics?.contentHeight
+                        || metrics.viewportHeight != previousPagingMetrics?.viewportHeight {
+                        scrollPendingActivityFocus(proxy: proxy)
+                    }
                     guard let metrics, metrics.reachedBottom(after: previousPagingMetrics),
                           isFeedTabActive, !isShowingSearch, selectedProfile == nil,
                           selectedPlace == nil, activityNavigation.commentsRoute == nil,
@@ -424,7 +442,21 @@ struct FeedScreen: View {
                           store.hasMoreFeed else { return }
                     Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
                 }
+                .onPreferenceChange(FeedFocusedActivityFrameKey.self) { layout in
+                    guard let layout, layout.requestID == pendingActivityFocus?.id else { return }
+                    let frame = layout.frame
+                    let previousFrame = focusedActivityFrame
+                    focusedActivityFrame = frame
+                    let visible = frame.intersection(CGRect(origin: .zero, size: viewport.size))
+                    if visible.width >= 44, visible.height >= 44 {
+                        cancelActivityFocus()
+                    } else if previousFrame == nil || previousFrame?.size != frame.size {
+                        // Lazy cards can acquire their real size after the first scroll.
+                        scrollPendingActivityFocus(proxy: proxy)
+                    }
+                }
                 .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                    cancelActivityFocus()
                     if walkthroughs.currentStep?.target == .feedActivity {
                         walkthroughs.dismissCurrentContext()
                     }
@@ -438,6 +470,17 @@ struct FeedScreen: View {
                 }
                 .onChange(of: focusedActivityID, initial: true) { _, activityID in
                     scrollToFocusedActivity(activityID, proxy: proxy)
+                }
+                .onChange(of: pendingActivityFocus?.id, initial: true) { _, _ in
+                    focusedActivityFrame = nil
+                    scrollPendingActivityFocus(proxy: proxy)
+                }
+                .onChange(of: displayedActivityGroups.flatMap(\.activities).map(\.id)) { _, _ in
+                    if pendingActivityFocus != nil, focusedGroupID == nil {
+                        cancelActivityFocus()
+                    }
+                    handleActivityFocusRequest()
+                    scrollPendingActivityFocus(proxy: proxy)
                 }
                 .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
                     handleActivityFocusRequest()
@@ -593,7 +636,9 @@ struct FeedScreen: View {
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList,
-                    onPrivateReply: onPrivateReply
+                    onPrivateReply: onPrivateReply,
+                    focusedGroupID: focusedGroupID,
+                    focusRequestID: pendingActivityFocus?.id
                 )
             }
 
@@ -733,7 +778,8 @@ struct FeedScreen: View {
     private func refresh(force: Bool) async {
         await store.refreshFeedSurface(
             backend: auth.isSignedIn ? backend : nil,
-            preservingActivityID: activityNavigation.commentsRoute?.activityID ?? focusedActivityID,
+            preservingActivityID: activityNavigation.commentsRoute?.activityID
+                ?? focusedActivityID ?? pendingActivityFocus?.activityID,
             force: force
         )
     }
@@ -794,10 +840,35 @@ struct FeedScreen: View {
         }
     }
 
+    private func cancelActivityFocus() {
+        guard pendingActivityFocus != nil else { return }
+        pendingActivityFocus = nil
+        focusedActivityFrame = nil
+        focusScrollGeneration = UUID()
+    }
+
+    private func scrollPendingActivityFocus(proxy: ScrollViewProxy) {
+        guard isFeedTabActive, let request = pendingActivityFocus,
+              let groupID = focusedGroupID else { return }
+        let generation = UUID()
+        focusScrollGeneration = generation
+        Task { @MainActor in
+            await Task.yield()
+            guard isFeedTabActive, pendingActivityFocus?.id == request.id,
+                  focusScrollGeneration == generation, focusedGroupID == groupID else { return }
+            // Keep the request until the card is visible. Live may still be
+            // expanding its drawer when this first scroll is laid out.
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                proxy.scrollTo(groupID, anchor: .center)
+            }
+        }
+    }
+
     private func handleSurfaceRequest() {
         guard isFeedTabActive, let request = surfaceRequest,
               handledSurfaceRequestID != request.id else { return }
         handledSurfaceRequestID = request.id
+        cancelActivityFocus()
         switch request.target {
         case .search: openDiscoverSearch()
         case .notifications: showsNotifications = true
@@ -811,8 +882,11 @@ struct FeedScreen: View {
         guard let activity = displayedActivityGroups.flatMap(\.activities)
             .first(where: { $0.id == request.activityID }) else { return }
         handledActivityFocusRequestID = request.id
+        cancelActivityFocus()
         switch request.target {
-        case .activity: focusedActivityID = activity.id
+        case .activity:
+            if isEmbedded { pendingActivityFocus = request }
+            else { focusedActivityID = activity.id }
         case .place:
             if let place = activity.place { openPlace(place) }
             else if let list = activity.list { openList(list) }
@@ -821,16 +895,19 @@ struct FeedScreen: View {
     }
 
     private func openProfile(_ profile: ProfileShell) {
+        cancelActivityFocus()
         walkthroughs.perform(.feedActivity)
         selectedProfile = FeedProfileRoute(id: profile.id)
     }
 
     private func openPlace(_ visiblePlace: VisiblePlace) {
+        cancelActivityFocus()
         walkthroughs.perform(.feedActivity)
         selectedPlace = visiblePlace
     }
 
     private func openList(_ list: LocalPlaceList) {
+        cancelActivityFocus()
         walkthroughs.perform(.feedActivity)
         pushNotifications.route(to: .list(id: list.id))
     }
@@ -1333,6 +1410,8 @@ private struct FeedActivityList: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
     var onPrivateReply: ((FeedActivity) -> Void)? = nil
+    var focusedGroupID: String? = nil
+    var focusRequestID: UUID? = nil
 
     var body: some View {
         LazyVStack(spacing: WanderTheme.spacing3) {
@@ -1351,6 +1430,19 @@ private struct FeedActivityList: View {
                     }
                 }
                 .id(group.id)
+                .background {
+                    if group.id == focusedGroupID, let focusRequestID {
+                        GeometryReader { card in
+                            Color.clear.preference(
+                                key: FeedFocusedActivityFrameKey.self,
+                                value: FeedFocusedActivityLayout(
+                                    requestID: focusRequestID,
+                                    frame: card.frame(in: .named(FeedScrollCoordinateSpace.places))
+                                )
+                            )
+                        }
+                    }
+                }
                 .walkthroughTarget(
                     group.id == groups.first?.id ? .feedRecent : nil
                 )
@@ -1943,6 +2035,19 @@ private struct FeedPagingMetricsKey: PreferenceKey {
     static let defaultValue: FeedScrollMetrics? = nil
 
     static func reduce(value: inout FeedScrollMetrics?, nextValue: () -> FeedScrollMetrics?) {
+        value = nextValue() ?? value
+    }
+}
+
+private struct FeedFocusedActivityLayout: Equatable {
+    let requestID: UUID
+    let frame: CGRect
+}
+
+private struct FeedFocusedActivityFrameKey: PreferenceKey {
+    static let defaultValue: FeedFocusedActivityLayout? = nil
+
+    static func reduce(value: inout FeedFocusedActivityLayout?, nextValue: () -> FeedFocusedActivityLayout?) {
         value = nextValue() ?? value
     }
 }

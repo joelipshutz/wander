@@ -141,13 +141,40 @@ final class MapFilterInteractionUITests: XCTestCase {
             XCTAssertTrue(app.buttons[sourceID].waitForExistence(timeout: 12))
         }
 
-        let startedAt = Date()
+        let applicationFrame = app.frame
+        guard applicationFrame.minX.isFinite, applicationFrame.minY.isFinite,
+              applicationFrame.width.isFinite, applicationFrame.height.isFinite,
+              applicationFrame.width > 0, applicationFrame.height > 0 else {
+            return XCTFail("Expected finite application geometry before timing source switches.")
+        }
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        var sourceTaps: [(id: String, source: XCUIElement, coordinate: XCUICoordinate)] = []
         for sourceID in sourceIDs {
             let source = app.buttons[sourceID]
-            source.tap()
+            guard source.isHittable else {
+                return XCTFail("Expected hittable source control \(sourceID) before timing.")
+            }
+            let frame = source.frame
+            guard frame.minX.isFinite, frame.minY.isFinite,
+                  frame.width.isFinite, frame.height.isFinite,
+                  frame.width > 0, frame.height > 0,
+                  applicationFrame.contains(frame), source.frame == frame,
+                  app.frame == applicationFrame else {
+                return XCTFail("Expected stable visible source geometry for \(sourceID).")
+            }
+            sourceTaps.append((sourceID, source, origin.withOffset(CGVector(
+                dx: frame.midX - applicationFrame.minX,
+                dy: frame.midY - applicationFrame.minY
+            ))))
+        }
+
+        // Locate stable controls before measuring the four physical interactions.
+        let startedAt = Date()
+        for tap in sourceTaps {
+            tap.coordinate.tap()
             XCTAssertTrue(
-                source.isSelected,
-                "Dense-account source switch did not select \(sourceID)."
+                tap.source.isSelected,
+                "Dense-account source switch did not select \(tap.id)."
             )
         }
 

@@ -23,6 +23,8 @@ on:
       - 'WanderUITests/FeedAudienceUITests.swift'
       - 'WanderUITests/MapFilterInteractionUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/record-replay-compiler-flags.py'
+      - 'scripts/test_record_replay_compiler_flags.py'
       - 'scripts/replay-simulator-fixture.py'
       - 'scripts/test_replay_simulator_fixture.py'
       - 'WanderUITests/FeedActivityGroupingUITests.swift'
@@ -33,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       unpassed_only:
-        description: Run the remaining REC-636 large-phone filter and isolated Replay checks
+        description: Run the remaining REC-636 corrected native and isolated Replay checks
         type: boolean
         default: false
 
@@ -106,26 +108,37 @@ jobs:
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Verify remaining Live filters on large phone
+      - name: Verify remaining corrected native checks on large phone
         if: ${{ inputs.unpassed_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 1 -parallel-testing-enabled NO
-          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
+          -only-testing:WanderUITests/LiveReviewContinuityUITests/testPinShowsItsOriginalFeedActivityAndOpensItsPlaceWithReturn
+          -only-testing:WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureKeepsWarmSourceSwitchesResponsive
+          -only-testing:WanderTests/EventsComingSoonTests/testRapidExitCancelsPreparationAndReentryReusesPlayer
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Prepare isolated Replay test products once
         id: replay-products
         if: success() || failure()
-        run: >-
-          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
-          -only-testing:WanderTests/ReplayMaskingTests
-          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+        # Use production-style C size optimization while keeping Swift Debug and C DEBUG assertions.
+        run: |
+          test ! -e "$RUNNER_TEMP/ReplayDerivedData"
+          test ! -L "$RUNNER_TEMP/ReplayDerivedData"
+          python3 -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
+            -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID" \
+            -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
+            -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
+            -only-testing:WanderTests/ReplayMaskingTests \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
+            GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
+          python3 scripts/record-replay-compiler-flags.py \
+            --derived-data "$RUNNER_TEMP/ReplayDerivedData" --test-products "$RUNNER_TEMP/Replay.xctestproducts" \
+            --checkout "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/evidence/replay-compiler-flags.json"
       - name: Prepare fresh same-model Replay simulator
         id: replay-fixture
         if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
