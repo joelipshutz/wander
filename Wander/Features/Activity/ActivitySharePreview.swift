@@ -255,6 +255,8 @@ struct ActivitySharePreviewScreen: View {
                         Text(card.linkTitle)
                             .font(AstirTypography.body)
                     }
+                    Text("Sharing your own item publishes this preview for anyone with the link. Copies may remain after you change or delete the original.")
+                        .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
                     Text("The link is copied whenever you share. Paste it into a link sticker or anywhere the app supports links.")
                         .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
                 }.padding(20).padding(.top, 52)
@@ -522,7 +524,7 @@ struct ActivitySharePreviewScreen: View {
         defer { isPublishing = false }
         do {
             let shared = try await ShareCardLinkPreparation.prepare(
-                content: content.withSubject(card.linkTitle), repository: backend.shareCardPreviewRepository
+                content: content.withSubject(card.linkTitle).withPreviewDescription(card.subtitle ?? card.headline), repository: backend.shareCardPreviewRepository
             ) {
                 guard await prepareArtworkIfNeeded(format: .link), let renderedImage,
                       let png = renderedImage.pngData() else {

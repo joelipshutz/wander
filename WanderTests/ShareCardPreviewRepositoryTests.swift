@@ -208,7 +208,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         let transport = CardTransport()
         let repo = repository(transport)
         let original = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan Example", handle: "ryan")!
-        let shared = try await repo.publish(content: original, previewPNG: png)
+        let shared = try await repo.publish(content: original, previewPNG: { self.png })
         XCTAssertTrue(transport.bucket.isEmpty)
         XCTAssertTrue(transport.path.isEmpty)
         XCTAssertEqual(transport.params["input_image_path"], "")
@@ -229,7 +229,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         let transport = CardTransport()
         transport.fail = true
         do {
-            _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!, previewPNG: png)
+            _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!, previewPNG: { self.png })
             XCTFail("Publication must fail")
         } catch { XCTAssertFalse(transport.deleted) }
     }
@@ -238,12 +238,84 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         let transport = CardTransport()
         transport.token = "../evil"
         let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
-        do { _ = try await repository(transport).publish(content: content, previewPNG: png); XCTFail() }
+        do { _ = try await repository(transport).publish(content: content, previewPNG: { self.png }); XCTFail() }
         catch { XCTAssertFalse(transport.deleted) }
         let invalid = CardTransport()
-        do { _ = try await repository(invalid).publish(content: content, previewPNG: Data()) }
+        do { _ = try await repository(invalid).publish(content: content, previewPNG: { Data() }) }
         catch { XCTFail("Generic links need no image: \(error)") }
         XCTAssertTrue(invalid.path.isEmpty)
+    }
+
+    func testOwnerSharePublishesSelectedContextAndImageForEveryRoute() async throws {
+        let id = "41000000-0000-0000-0000-000000000001"
+        let cards: [WanderShareContent] = [
+            .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!,
+            .place(serverID: id, name: "Coffee House", message: "Coffee · Los Angeles")!,
+            .activity(activityID: id, placeName: "Ryan checked in · Coffee House", message: "October 18")!,
+            .list(serverID: id, name: "Weekend places")!,
+            .listInvite(token: String(repeating: "b", count: 48), name: "Weekend places")!
+        ]
+        for content in cards {
+            let transport = CardTransport()
+            transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+            var renders = 0
+            let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: repository(transport)) {
+                renders += 1
+                return self.png
+            }
+            XCTAssertEqual(renders, 1)
+            XCTAssertEqual(transport.bucket, "shared-link-snapshots")
+            XCTAssertEqual(transport.publishedParams["input_title"], content.subject)
+            XCTAssertEqual(transport.publishedParams["input_description"], content.message)
+            XCTAssertEqual(shared.subject, content.subject)
+            XCTAssertEqual(shared.items, [shared.item])
+            XCTAssertEqual(shared.message, "")
+            XCTAssertEqual(WanderDeepLinkRoute.parse(shared.item), WanderDeepLinkRoute.parse(content.item))
+        }
+    }
+
+    func testSnapshotFinalizationFailureCleansUpUploadAndReturnsNoLink() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        transport.failPublication = true
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await repository(transport).publish(content: content) { self.png }
+            XCTFail("A failed snapshot must not silently send a generic preview")
+        } catch { XCTAssertTrue(transport.deleted) }
+    }
+
+    func testForeignSnapshotPathIsRejectedBeforeRenderingOrUploading() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "another_user/11111111-2222-4333-8444-555555555555/preview.png"
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await repository(transport).publish(content: content) {
+                XCTFail("Foreign path must be rejected first")
+                return self.png
+            }
+            XCTFail("Foreign path accepted")
+        } catch { XCTAssertTrue(transport.path.isEmpty) }
+    }
+
+    func testInvalidSnapshotImageIsNotUploaded() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await repository(transport).publish(content: content) { Data([1, 2, 3]) }
+            XCTFail("Invalid image accepted")
+        } catch {
+            XCTAssertEqual(error as? ShareCardPreparationError, .artwork)
+            XCTAssertTrue(transport.path.isEmpty)
+        }
+    }
+
+    func testPreviewDescriptionIsBoundedAndNeverBecomesAMessageAttachment() {
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+            .withPreviewDescription(String(repeating: "🌎", count: 501))
+        XCTAssertLessThanOrEqual(content.message.utf16.count, 500)
+        XCTAssertEqual(content.withLink(content.item).message, "")
     }
 
     private var png: Data { UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }.pngData()! }
@@ -258,13 +330,23 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
     var path = ""
     var params: [String: String] = [:]
     var fail = false
+    var failPublication = false
+    var snapshotPath: String?
+    var publishedParams: [String: String] = [:]
     var deleted = false
     var token = String(repeating: "a", count: 48)
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
+        if name == "publish_share_card_snapshot" {
+            publishedParams = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(params))
+            if failPublication { throw WanderRemoteError.invalidResponse("share_target_unavailable") }
+            return try decoder.decode(Value.self, from: JSONEncoder().encode(["published": true]))
+        }
         XCTAssertEqual(name, "create_share_card_preview")
         self.params = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(params))
         if fail { throw WanderRemoteError.notAuthenticated }
-        return try decoder.decode(Value.self, from: JSONEncoder().encode(["token": token]))
+        var response = ["token": token]
+        if let snapshotPath { response["snapshot_path"] = snapshotPath }
+        return try decoder.decode(Value.self, from: JSONEncoder().encode(response))
     }
     func uploadObject(bucket: String, path: String, data: Data, contentType: String, upsert: Bool) async throws {
         self.bucket = bucket; self.path = path

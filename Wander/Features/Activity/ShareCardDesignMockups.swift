@@ -137,7 +137,7 @@ final class ShareCardMockPreviewRepository: ShareCardPreviewRepository {
 
     init(failsFirstAttempt: Bool) { failsNextAttempt = failsFirstAttempt }
 
-    func publish(content: WanderShareContent, previewPNG: Data) async throws -> WanderShareContent {
+    func publish(content: WanderShareContent, previewPNG: () async throws -> Data) async throws -> WanderShareContent {
         if failsNextAttempt {
             failsNextAttempt = false
             throw URLError(.notConnectedToInternet)

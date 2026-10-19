@@ -126,6 +126,12 @@ struct WanderShareContent: Equatable {
         WanderShareContent(item: item, additionalItems: additionalItems, subject: title, message: message)
     }
 
+    func withPreviewDescription(_ description: String) -> WanderShareContent {
+        var bounded = String(description.prefix(500))
+        while bounded.utf16.count > 500 { bounded.removeLast() }
+        return WanderShareContent(item: item, additionalItems: additionalItems, subject: subject, message: bounded)
+    }
+
     func withLink(_ url: URL) -> WanderShareContent {
         WanderShareContent(item: url, subject: subject, message: "")
     }

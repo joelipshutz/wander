@@ -1,5 +1,31 @@
 # Decisions
 
+## 2026-10-18 — Contextual link previews are deliberate copies (REC-647)
+
+Explicitly sharing one's own profile/map, activity, list or invitation publishes
+only the preview selected in the share screen: its artwork, title and short
+context. Anyone with the link can view that copy. It does not grant access to
+the original item. The share screen explains that third-party copies may remain
+after editing, deletion or a privacy change. This supersedes REC-590's blanket
+generic-preview rule for these newly published copies.
+
+The server authorizes the target before issuing an upload path and rechecks it
+before finalizing an immutable snapshot. A readable item belonging to someone
+else does not grant permission to publish its protected preview. Canonical place
+shares and already-public profile details remain available. Legacy protected
+cards are never retroactively republished, and legacy private artwork/photo
+buckets remain private. New copies use a separate storage namespace. Deleted
+publishers and invalid/revoked/expired/accepted invitations stop resolving;
+previously downloaded copies cannot be recalled.
+
+The website obtains context through a new reader while the original generic
+card-token handshake stays unchanged for the released build 184 App Clip.
+Roll out the backend contract, then website, then the new native publisher.
+Old public place/profile links can gain current public context. Rich owner
+snapshots require an updated app and a new explicit share. Apple controls the
+native footer layout and caching; preserve essential context in the title.
+
+
 Last updated: 2026-10-08
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
