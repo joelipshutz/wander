@@ -1,0 +1,127 @@
+--- a/WanderTests/ReplayMaskingTests.swift
++++ b/WanderTests/ReplayMaskingTests.swift
+@@ -84,7 +84,27 @@
+         // leaving the collector behind the actual presentation.
+         XCTAssertEqual(config.sessionReplayConfig.throttleDelay, 1.0)
+         config.setBeforeSend { event in frames.receive(event); return nil }
++        // REC636_STAGE_BEGIN
++        #if DEBUG && targetEnvironment(simulator)
++        let stageProbe = REC636ReplayStageProbe(timeline: captureTimeline, window: ObjectIdentifier(window))
++        REC636ReplayStageObserver.install { stage, owner, window, capture, main in
++            stageProbe.record(stage, owner: owner, window: window, capture: capture, main: main)
++        }
++        defer {
++            REC636ReplayStageObserver.install(nil)
++            let attachment = XCTAttachment(string: stageProbe.closeAndDiagnostics())
++            attachment.name = "REC636 passive Replay stages"
++            attachment.lifetime = .keepAlways
++            add(attachment)
++        }
++        #endif
++        // REC636_STAGE_END
+         let sdk = PostHogSDK.with(config)
++        // REC636_STAGE_BEGIN
++        #if DEBUG && targetEnvironment(simulator)
++        stageProbe.bind(owner: ObjectIdentifier(sdk))
++        #endif
++        // REC636_STAGE_END
+         captureTimeline.record(.sdkSetupReturned)
+         defer { sdk.close() }
+         sdk.capture(ReplayFrameCollector.probeEvent)
+@@ -130,6 +150,11 @@
+             if recorderReady { break }
+         }
+         captureTimeline.record(.readyGateEnded)
++        // REC636_STAGE_BEGIN
++        #if DEBUG && targetEnvironment(simulator)
++        stageProbe.checkpoint("ready_gate", passed: recorderReady)
++        #endif
++        // REC636_STAGE_END
+         XCTAssertTrue(recorderReady, "An actual public frame must precede first private presentation.")
+         guard recorderReady else {
+             let diagnostic = XCTAttachment(string: """
+@@ -229,6 +254,11 @@
+             }
+             if replay != nil { break }
+         }
++        // REC636_STAGE_BEGIN
++        #if DEBUG && targetEnvironment(simulator)
++        stageProbe.checkpoint("loaded_gate", passed: replay != nil)
++        #endif
++        // REC636_STAGE_END
+         // Preserve evidence even when the exact post-load control gate fails.
+         // A missing gate must not skip checking the frames that were captured.
+         let capturedFrames = frames.images
+@@ -546,6 +576,14 @@
+     private let lock = NSLock()
+     private var samples: [Stage: Sample] = [:]
+ 
++    // REC636_STAGE_BEGIN
++    #if DEBUG && targetEnvironment(simulator)
++    func stageElapsedMilliseconds() -> Int64 {
++        let elapsed = origin.duration(to: .now).components
++        return elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
++    }
++    #endif
++    // REC636_STAGE_END
+     func record(_ stage: Stage) {
+         lock.lock(); defer { lock.unlock() }
+         let elapsed = origin.duration(to: .now).components
+@@ -791,3 +829,57 @@
+     }
+     override func stopLoading() {}
+ }
++// REC636_STAGE_BEGIN
++#if DEBUG && targetEnvironment(simulator)
++/// Bounded diagnostics; object identities are compared only in memory.
++private final class REC636ReplayStageProbe: @unchecked Sendable {
++    private static let stages: Set<String> = ["snapshot_entered", "capture_enqueued", "encode_queue_began", "wireframe_began", "wireframe_ended", "sdk_capture_began", "sdk_capture_ended"]
++    private let lock = NSLock()
++    private let timeline: ReplayCaptureTimeline
++    private let window: ObjectIdentifier
++    private var owner: ObjectIdentifier?
++    private var closed = false
++    private var unbound = 0, foreign = 0, rejected = 0, dropped = 0
++    private var events: [String] = []
++    private var counts: [String: (count: Int, first: Int64, last: Int64)] = [:]
++    private var checkpoints: [String] = []
++    init(timeline: ReplayCaptureTimeline, window: ObjectIdentifier) {
++        self.timeline = timeline; self.window = window
++    }
++    func bind(owner: ObjectIdentifier) {
++        lock.lock(); defer { lock.unlock() }
++        self.owner = owner
++    }
++    func record(_ stage: String, owner: ObjectIdentifier, window: ObjectIdentifier, capture: UInt64, main: Bool) {
++        let elapsed = timeline.stageElapsedMilliseconds()
++        lock.lock(); defer { lock.unlock() }
++        guard !closed else { return }
++        guard self.owner != nil else { unbound += 1; return }
++        guard self.owner == owner, self.window == window else { foreign += 1; return }
++        guard Self.stages.contains(stage) else { rejected += 1; return }
++        let prior = counts[stage]
++        counts[stage] = ((prior?.count ?? 0) + 1, prior?.first ?? elapsed, elapsed)
++        if events.count < 128 {
++            events.append("stage=\(stage) elapsed_ms=\(elapsed) capture=\(capture) main=\(main)")
++        } else { dropped += 1 }
++    }
++    func checkpoint(_ name: String, passed: Bool) {
++        let elapsed = timeline.stageElapsedMilliseconds()
++        lock.lock(); defer { lock.unlock() }
++        guard !closed, checkpoints.count < 2, ["ready_gate", "loaded_gate"].contains(name) else { return }
++        checkpoints.append("checkpoint=\(name) elapsed_ms=\(elapsed) passed=\(passed)\n" + summaryLocked())
++    }
++    private func summaryLocked() -> String {
++        (["unbound=\(unbound) foreign=\(foreign) rejected=\(rejected) dropped=\(dropped)"] + Self.stages.sorted().map { stage in
++            let value = counts[stage]
++            return "stage=\(stage) count=\(value?.count ?? 0) first_ms=\(value?.first ?? -1) last_ms=\(value?.last ?? -1)"
++        }).joined(separator: "\n")
++    }
++    func closeAndDiagnostics() -> String {
++        lock.lock(); defer { lock.unlock() }
++        closed = true
++        return (["schema=1 diagnostic_only=true clock=existing_test_start unit=ms", summaryLocked()] + checkpoints + events).joined(separator: "\n")
++    }
++}
++#endif
++// REC636_STAGE_END

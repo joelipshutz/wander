@@ -1,0 +1,26 @@
+{
+  "candidate": "6f149bff202b839425ea7b6469c77813709070c4",
+  "tree": "5881d6224f0e7f8e04d58bebec30e95cec8a0118",
+  "sdkRevision": "ee5b5705b0038f0c44646cde5fe972bb65387596",
+  "diagnosticOnly": true,
+  "files": [
+    {
+      "role": "sdk",
+      "path": "PostHog/Replay/PostHogReplayIntegration.swift",
+      "originalSHA256": "5da5f38816fce2582bddc5cfef80f4ae7e6f51b55b48c268e60b03b69f517d2b",
+      "patchedSHA256": "ad8809feb8ba966fd84a06def0f3e2d3c3ded40b9cf205bac31112d2647942ae",
+      "patch": "replay-stages-sdk.patch",
+      "patchSHA256": "1f7a5edca1c09cb2306da3cbbadc599c92e455959f6cc325585e4507b2a2065a"
+    },
+    {
+      "role": "test",
+      "path": "WanderTests/ReplayMaskingTests.swift",
+      "originalSHA256": "80df366480648684a88923b4b2a954206507943465f3a0c02b52f1186be2afa4",
+      "patchedSHA256": "0b422ecaf98b6e5038c3e8fe3e2243be2596efb633753b2eb4f17da385791726",
+      "patch": "replay-stages-test.patch",
+      "patchSHA256": "a925055813c81b04c1c7ada379debe06e458aba229f02a4188334bc43246b0d2"
+    }
+  ],
+  "nativeRuns": 0,
+  "originalBytesPreservedAfterRemovingDiagnosticBlocks": true
+}

@@ -1,0 +1,114 @@
+--- a/PostHog/Replay/PostHogReplayIntegration.swift
++++ b/PostHog/Replay/PostHogReplayIntegration.swift
+@@ -13,6 +13,38 @@
+     import UIKit
+     import WebKit
+ 
++    // REC636_STAGE_BEGIN
++    #if DEBUG && targetEnvironment(simulator)
++    /// Temporary scalar-only observer, absent from ordinary and device builds.
++    public enum REC636ReplayStageObserver {
++        public typealias Observer = @Sendable (String, ObjectIdentifier, ObjectIdentifier, UInt64, Bool) -> Void
++        private final class State: @unchecked Sendable {
++            let lock = NSLock()
++            var observer: Observer?
++            var ordinal: UInt64 = 0
++        }
++        private static let state = State()
++        public static func install(_ observer: Observer?) {
++            state.lock.lock()
++            state.observer = observer
++            state.ordinal = 0
++            state.lock.unlock()
++        }
++        static func nextCapture() -> UInt64 {
++            state.lock.lock(); defer { state.lock.unlock() }
++            guard state.observer != nil, state.ordinal < UInt64.max else { return 0 }
++            state.ordinal += 1
++            return state.ordinal
++        }
++        static func record(_ stage: String, owner: ObjectIdentifier, window: ObjectIdentifier, capture: UInt64) {
++            state.lock.lock()
++            let observer = state.observer
++            state.lock.unlock()
++            observer?(stage, owner, window, capture, Thread.isMainThread)
++        }
++    }
++    #endif
++    // REC636_STAGE_END
+     class PostHogReplayIntegration: PostHogIntegration {
+         var requiresSwizzling: Bool { true }
+ 
+@@ -580,13 +612,36 @@
+ 
+             // TODO: IncrementalSnapshot, type=2
+ 
++            // REC636_STAGE_BEGIN
++            #if DEBUG && targetEnvironment(simulator)
++            let diagnosticOwner = ObjectIdentifier(postHog)
++            let diagnosticWindow = ObjectIdentifier(window)
++            let diagnosticCapture = REC636ReplayStageObserver.nextCapture()
++            REC636ReplayStageObserver.record("capture_enqueued", owner: diagnosticOwner, window: diagnosticWindow, capture: diagnosticCapture)
++            #endif
++            // REC636_STAGE_END
+             PostHogReplayIntegration.dispatchQueue.async {
++                // REC636_STAGE_BEGIN
++                #if DEBUG && targetEnvironment(simulator)
++                REC636ReplayStageObserver.record("encode_queue_began", owner: diagnosticOwner, window: diagnosticWindow, capture: diagnosticCapture)
++                #endif
++                // REC636_STAGE_END
+                 // always make sure we have a fresh session id at correct timestamp
+                 guard let sessionId = postHog.sessionManager.getSessionId(at: timestampDate) else {
+                     return
+                 }
+ 
++                // REC636_STAGE_BEGIN
++                #if DEBUG && targetEnvironment(simulator)
++                REC636ReplayStageObserver.record("wireframe_began", owner: diagnosticOwner, window: diagnosticWindow, capture: diagnosticCapture)
++                #endif
++                // REC636_STAGE_END
+                 let wireframeDict = autoreleasepool { wireframe.toDict() }
++                // REC636_STAGE_BEGIN
++                #if DEBUG && targetEnvironment(simulator)
++                REC636ReplayStageObserver.record("wireframe_ended", owner: diagnosticOwner, window: diagnosticWindow, capture: diagnosticCapture)
++                #endif
++                // REC636_STAGE_END
+                 wireframe.image = nil
+                 wireframe.maskableWidgets = nil
+ 
+@@ -597,6 +652,11 @@
+                 let snapshotData: [String: Any] = ["type": 2, "data": data, "timestamp": timestamp]
+                 snapshotsData.append(snapshotData)
+ 
++                // REC636_STAGE_BEGIN
++                #if DEBUG && targetEnvironment(simulator)
++                REC636ReplayStageObserver.record("sdk_capture_began", owner: diagnosticOwner, window: diagnosticWindow, capture: diagnosticCapture)
++                #endif
++                // REC636_STAGE_END
+                 postHog.capture(
+                     "$snapshot",
+                     properties: [
+@@ -606,6 +666,11 @@
+                     ],
+                     timestamp: timestampDate
+                 )
++                // REC636_STAGE_BEGIN
++                #if DEBUG && targetEnvironment(simulator)
++                REC636ReplayStageObserver.record("sdk_capture_ended", owner: diagnosticOwner, window: diagnosticWindow, capture: diagnosticCapture)
++                #endif
++                // REC636_STAGE_END
+             }
+         }
+ 
+@@ -1185,6 +1250,11 @@
+                 return
+             }
+ 
++            // REC636_STAGE_BEGIN
++            #if DEBUG && targetEnvironment(simulator)
++            REC636ReplayStageObserver.record("snapshot_entered", owner: ObjectIdentifier(postHog), window: ObjectIdentifier(window), capture: 0)
++            #endif
++            // REC636_STAGE_END
+             var screenName: String?
+ 
+             if let controller = window.rootViewController {
