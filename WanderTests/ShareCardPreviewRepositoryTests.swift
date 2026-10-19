@@ -318,6 +318,96 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         XCTAssertEqual(content.withLink(content.item).message, "")
     }
 
+    func testShareArtworkReplacesCachedFriendPhotoWithOwnerOnlyFallback() async throws {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: "friend"), data: png)
+        source.ownerPhoto = artworkPhoto(owner: "user_ryan")
+        let backend = artworkBackend(source)
+        let request = artworkRequest
+        _ = try await backend.placePhoto(for: request)
+        let images = await ShareCardRenderer.placeImages([request], backend: backend)
+        XCTAssertNotNil(images.first ?? nil)
+        XCTAssertEqual(source.fallbackRequests.first?.eligibleUserIDs, ["user_ryan"])
+        XCTAssertEqual(source.downloadedPaths, [source.ownerPhoto!.storagePath!])
+    }
+
+    func testShareArtworkNeverDownloadsAnotherPersonsProtectedFallback() async {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: "friend"), data: png)
+        source.ownerPhoto = artworkPhoto(owner: "user_ryan_other")
+        let images = await ShareCardRenderer.placeImages([artworkRequest], backend: artworkBackend(source))
+        XCTAssertEqual(images.count, 1)
+        XCTAssertNil(images[0])
+        XCTAssertTrue(source.downloadedPaths.isEmpty)
+    }
+
+    func testShareArtworkKeepsPublicProviderPhotoWithoutUserPhotoFallback() async {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: nil), data: png)
+        let images = await ShareCardRenderer.placeImages([artworkRequest], backend: artworkBackend(source))
+        XCTAssertNotNil(images.first ?? nil)
+        XCTAssertTrue(source.fallbackRequests.isEmpty)
+        XCTAssertEqual(source.downloadedPaths, ["public-provider"])
+    }
+
+    func testActivityExportSkipsForeignMediaBeforeReadingOwnerMedia() async {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: "friend"), data: png)
+        let ownPath = "user_ryan/\(UUID().uuidString)/own.jpg"
+        let context = ActivityEngagementContext(activityID: "event",
+            actor: ProfileShell(id: "user_ryan", handle: "ryan", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .owner),
+            placeName: "Coffee", placeServerID: nil, placeDetail: "", status: .been, occurredAt: Date(),
+            media: [
+                ActivityEngagementMedia(id: "foreign", storageBucket: "visit-photos", storagePath: "friend/photo.jpg", accessibilityLabel: "Friend photo"),
+                ActivityEngagementMedia(id: "own", storageBucket: "visit-photos", storagePath: ownPath, accessibilityLabel: "Own photo")
+            ])
+        let images = await ShareCardRenderer.activityImages(context, backend: artworkBackend(source))
+        XCTAssertNotNil(images.photos.first ?? nil)
+        XCTAssertEqual(source.downloadedPaths, [ownPath])
+    }
+
+    func testCancellationAfterUploadFinishesCleanupOutsideCancelledTask() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        transport.onUpload = { withUnsafeCurrentTask { $0?.cancel() } }
+        let repo = repository(transport)
+        let task = Task {
+            try await repo.publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!) { self.png }
+        }
+        do { _ = try await task.value; XCTFail("Cancelled publication returned a link") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.deleted)
+        XCTAssertFalse(transport.deleteWasCancelled)
+        XCTAssertTrue(transport.publishedParams.isEmpty)
+    }
+
+    func testUploadResponseLossStillCleansUpTheAttemptedPublicObject() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        transport.uploadError = CancellationError()
+        do {
+            _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!) { self.png }
+            XCTFail("An incomplete upload returned a link")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.deleted)
+        XCTAssertFalse(transport.deleteWasCancelled)
+        XCTAssertTrue(transport.publishedParams.isEmpty)
+    }
+
+    private var artworkRequest: PlacePhotoRequest {
+        PlacePhotoRequest(placeID: UUID().uuidString, name: "Coffee", address: nil,
+            latitude: nil, longitude: nil, sourceProvider: nil, sourceProviderPlaceID: nil)
+    }
+
+    private func artworkPhoto(owner: String?) -> PlacePhoto {
+        PlacePhoto(provider: owner == nil ? "google_places" : "visit_photo", providerPlaceID: UUID().uuidString,
+            photoURLString: "", width: nil, height: nil, authorName: nil, authorProfileURLString: nil,
+            authorAvatarURLString: nil, sourcePhotoURLString: nil, flagContentURLString: nil,
+            storageBucket: owner == nil ? nil : "visit-photos",
+            storagePath: owner.map { "\($0)/\(UUID().uuidString)/photo.jpg" }, localAssetRef: nil)
+    }
+
+    private func artworkBackend(_ repository: ShareArtworkPhotoRepository) -> WanderBackend {
+        WanderBackend(placePhotoRepository: repository,
+            photoAuthSession: PreviewAuthSessionProvider(state: .signedIn(AuthSession(userID: "user_ryan", displayName: "Ryan", handle: "ryan"))))
+    }
+
     private var png: Data { UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }.pngData()! }
     private func repository(_ transport: CardTransport) -> SupabaseShareCardPreviewRepository {
         SupabaseShareCardPreviewRepository(rpc: transport, storage: transport,
@@ -334,6 +424,9 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
     var snapshotPath: String?
     var publishedParams: [String: String] = [:]
     var deleted = false
+    var deleteWasCancelled = false
+    var onUpload: (() -> Void)?
+    var uploadError: Error?
     var token = String(repeating: "a", count: 48)
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
         if name == "publish_share_card_snapshot" {
@@ -351,8 +444,35 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
     func uploadObject(bucket: String, path: String, data: Data, contentType: String, upsert: Bool) async throws {
         self.bucket = bucket; self.path = path
         XCTAssertFalse(upsert); XCTAssertEqual(contentType, "image/png")
+        onUpload?()
+        if let uploadError { throw uploadError }
     }
-    func deleteObject(bucket: String, path: String) async throws { deleted = true; XCTAssertEqual(path, self.path) }
+    func deleteObject(bucket: String, path: String) async throws {
+        deleteWasCancelled = Task.isCancelled
+        try Task.checkCancellation()
+        deleted = true
+        XCTAssertEqual(path, self.path)
+    }
     func downloadObject(bucket: String, path: String) async throws -> Data { throw WanderRemoteError.notConfigured }
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL { throw WanderRemoteError.notConfigured }
+}
+
+@MainActor private final class ShareArtworkPhotoRepository: PlacePhotoRepository {
+    let photo: PlacePhoto
+    let data: Data
+    var ownerPhoto: PlacePhoto?
+    var downloadedPaths: [String] = []
+    var fallbackRequests: [PlacePhotoRequest] = []
+    init(photo: PlacePhoto, data: Data) { self.photo = photo; self.data = data }
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto { photo }
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        fallbackRequests.append(request)
+        guard let ownerPhoto else { throw WanderRemoteError.notConfigured }
+        return ownerPhoto
+    }
+    func validateAccess(to photo: PlacePhoto) async throws {}
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        downloadedPaths.append(photo.storagePath ?? "public-provider")
+        return data
+    }
 }

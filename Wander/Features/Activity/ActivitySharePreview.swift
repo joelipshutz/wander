@@ -224,6 +224,7 @@ struct ActivitySharePreviewScreen: View {
     @State private var isPreparingArtwork = false
     @State private var publishedContent: WanderShareContent?
     @State private var isPublishing = false
+    @State private var destinationTask: Task<Void, Never>?
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
     @State private var instagramPostPresentation: ActivityShareInstagramPostPresentation?
@@ -300,7 +301,7 @@ struct ActivitySharePreviewScreen: View {
             isMessagePresentationPending = false
             guard shouldOpenSystemShareAfterMessagesDismiss else { return }
             shouldOpenSystemShareAfterMessagesDismiss = false
-            Task { await presentSystemShare() }
+            runDestination { await presentSystemShare() }
         }) { presentation in
             ActivityShareMessageComposer(
                 body: presentation.content.messageBody
@@ -311,7 +312,7 @@ struct ActivitySharePreviewScreen: View {
         .sheet(item: $instagramPostPresentation, onDismiss: {
             guard shouldOpenSystemShareAfterInstagramDismiss else { return }
             shouldOpenSystemShareAfterInstagramDismiss = false
-            Task { await presentSystemShare() }
+            runDestination { await presentSystemShare() }
         }) { presentation in
             ActivityShareInstagramPostComposer(fileURL: presentation.fileURL) { result in
                 if result == .unavailable {
@@ -379,6 +380,7 @@ struct ActivitySharePreviewScreen: View {
             _ = await prepareArtworkIfNeeded(format: .link)
         }
         .onDisappear {
+            destinationTask?.cancel()
             guard let renderedImageURL else { return }
             Task {
                 await WanderShareAttachmentStore.removePreparedPNG(at: renderedImageURL)
@@ -392,7 +394,10 @@ struct ActivitySharePreviewScreen: View {
             ActivityShareChromeButton(
                 systemImage: "chevron.left",
                 accessibilityLabel: "Close share preview",
-                action: dismiss.callAsFunction
+                action: {
+                    destinationTask?.cancel()
+                    dismiss()
+                }
             )
 
             Spacer()
@@ -432,9 +437,10 @@ struct ActivitySharePreviewScreen: View {
     }
 
     private func handleDestination(_ destination: ActivityShareDestination) {
+        guard !isPublishing else { return }
         switch destination.route {
         case .copyLink:
-            Task {
+            runDestination {
                 guard await preparedShareContent() != nil else { return }
                 trackShareCompleted(destination: "copy_link", outcome: "copied")
                 showConfirmation("link copied")
@@ -442,9 +448,9 @@ struct ActivitySharePreviewScreen: View {
         case .messages:
             startMessagesPresentation()
         case .instagramStory:
-            Task { await presentInstagramStory() }
+            runDestination { await presentInstagramStory() }
         case .instagramPost:
-            Task {
+            runDestination {
                 guard await preparedShareContent() != nil else { return }
                 switch ActivityShareInstagramPhotoAccessGuidance.action(
                     hasAcknowledgedFullAccess: hasAcknowledgedInstagramFullPhotoAccess
@@ -456,14 +462,20 @@ struct ActivitySharePreviewScreen: View {
                 }
             }
         case .tikTok:
-            Task { await presentTikTok() }
+            runDestination { await presentTikTok() }
         case .snapchat:
-            Task { await presentSnapchat() }
+            runDestination { await presentSnapchat() }
         case .systemShare:
-            Task { await presentSystemShare() }
+            runDestination { await presentSystemShare() }
         case .savePhoto:
-            Task { await saveArtworkToPhotos() }
+            runDestination { await saveArtworkToPhotos() }
         }
+    }
+
+    @MainActor
+    private func runDestination(_ action: @escaping @MainActor () async -> Void) {
+        destinationTask?.cancel()
+        destinationTask = Task { await action() }
     }
 
     @MainActor
@@ -473,11 +485,12 @@ struct ActivitySharePreviewScreen: View {
         ) else { return }
 
         isMessagePresentationPending = true
-        Task { await presentMessages() }
+        runDestination { await presentMessages() }
     }
 
     @MainActor
     private func prepareArtworkIfNeeded(format: ShareCardFormat = .story) async -> Bool {
+        guard !Task.isCancelled else { return false }
         if renderedImage != nil, renderedImageURL != nil, renderedFormat == format { return true }
         guard !isPreparingArtwork else { return false }
         isPreparingArtwork = true
@@ -507,6 +520,10 @@ struct ActivitySharePreviewScreen: View {
             return false
         }
         if let oldURL = renderedImageURL { await WanderShareAttachmentStore.removePreparedPNG(at: oldURL) }
+        guard !Task.isCancelled else {
+            await WanderShareAttachmentStore.removePreparedPNG(at: fileURL)
+            return false
+        }
         renderedImage = image
         renderedImageURL = fileURL
         renderedFormat = format
@@ -515,6 +532,7 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func preparedShareContent() async -> WanderShareContent? {
+        guard !Task.isCancelled else { return nil }
         if let publishedContent {
             ActivitySharePasteboard.copyLink(publishedContent.item)
             return publishedContent
@@ -532,6 +550,7 @@ struct ActivitySharePreviewScreen: View {
                 }
                 return png
             }
+            try Task.checkCancellation()
             publishedContent = shared
             ActivitySharePasteboard.copyLink(shared.item)
             return shared
@@ -581,9 +600,9 @@ struct ActivitySharePreviewScreen: View {
 
         switch pendingInstagramPostShare {
         case .directEditor:
-            Task { await presentInstagramPost() }
+            runDestination { await presentInstagramPost() }
         case .compatibleDocumentHandoff:
-            Task { await presentCompatibleInstagramPost() }
+            runDestination { await presentCompatibleInstagramPost() }
         }
     }
 

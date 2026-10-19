@@ -6,7 +6,7 @@ owner-selected snapshots and public context for older profile/place links.
 
 ## Rollout
 
-1. Apply `20261018185252_contextual_share_snapshots.sql` after the hosted
+1. Apply `20261019063922_contextual_share_snapshots.sql` after the hosted
    rollback suite passes. The old `share_card_preview` response stays generic
    for build 184 compatibility; the new `share_card_context` reader supplies
    website content. Do not reopen the legacy buckets.
@@ -37,9 +37,15 @@ profile and canonical-place details may be shown. Verify a readable foreign
 protected item cannot publish a snapshot. Anonymous creation, foreign upload
 paths and a mismatched token/route/kind must be rejected.
 
+Place, list and activity artwork may use public provider imagery or the current
+user's own photos. A friend's in-app-visible photo must not enter an exported
+copy, including through the place photo cache or selected-place prepared image.
+
 Retry a failed upload/finalization and confirm no link is handed off as if it
 succeeded. Cancel or switch accounts during preparation and verify no link is
-returned. Existing stored photos and legacy share images stay private.
+returned. Closing the preview must stop pending publication; interrupted uploads
+must attempt cleanup even when the upload response was lost. Existing stored
+photos and legacy share images stay private.
 
 A published snapshot is a deliberate copy; later source edits/privacy changes
 do not rewrite it. Deleting its publisher or revoking/expiring/accepting an

@@ -139,10 +139,8 @@ final class SupabaseShareCardPreviewRepository: ShareCardPreviewRepository {
         }
         try Task.checkCancellation()
         guard authSession.state.session?.userID == session.userID else { throw CancellationError() }
-        var uploaded = false
         do {
             try await storage.uploadObject(bucket: Self.bucket, path: path, data: png, contentType: "image/png", upsert: false)
-            uploaded = true
             try Task.checkCancellation()
             guard authSession.state.session?.userID == session.userID else { throw CancellationError() }
             let published: PublishedCard = try await rpc.call("publish_share_card_snapshot", params: [
@@ -154,8 +152,14 @@ final class SupabaseShareCardPreviewRepository: ShareCardPreviewRepository {
             guard authSession.state.session?.userID == session.userID else { throw CancellationError() }
             return content.withLink(url)
         } catch {
-            if uploaded, authSession.state.session?.userID == session.userID {
-                try? await storage.deleteObject(bucket: Self.bucket, path: path)
+            if authSession.state.session?.userID == session.userID {
+                // URLSession would cancel the DELETE immediately in a cancelled
+                // publication task. Also clean up when an upload response was
+                // lost: the server may have written this unique path already.
+                await Task { @MainActor in
+                    guard authSession.state.session?.userID == session.userID else { return }
+                    try? await storage.deleteObject(bucket: Self.bucket, path: path)
+                }.value
             }
             throw error
         }
