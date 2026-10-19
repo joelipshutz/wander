@@ -180,6 +180,7 @@ jobs:
         with:
           name: ${{ !inputs.private_replay_recovery && 'parent-test-products' || '' }}
           artifact-ids: ${{ inputs.private_replay_recovery && '12157390989' || '' }}
+          merge-multiple: ${{ inputs.private_replay_recovery }}
           path: ${{ runner.temp }}
           run-id: ${{ inputs.private_replay_recovery && '39181550818' || github.run_id }}
           github-token: ${{ github.token }}
