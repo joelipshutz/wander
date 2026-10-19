@@ -31,6 +31,11 @@ on:
       - 'WanderUITests/YourMapPrototypeUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
+    inputs:
+      unpassed_only:
+        description: Run the remaining REC-636 large-phone filter and isolated Replay checks
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -78,6 +83,7 @@ jobs:
       # continuity: XCTest's animation-idle waits count toward this allowance.
       # Element assertions and measured performance budgets remain unchanged.
       - name: Unit suite and native Feed scrolling
+        if: ${{ !inputs.unpassed_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
@@ -97,6 +103,16 @@ jobs:
           -only-testing:WanderUITests/ForegroundEntryUITests
           -only-testing:WanderUITests/MapPlaceCardActionInteractionUITests/testActionButtonsCancelAfterDraggingAwayAndStillRespondToTaps
           -only-testing:WanderUITests/ShareCardMockupUITests/testExternalPlaceCanOpenNativeDestinationsFromEveryFormat
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Verify remaining Live filters on large phone
+        if: ${{ inputs.unpassed_only }}
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
@@ -188,7 +204,7 @@ jobs:
         if: ${{ always() && steps.replay-fixture.outcome == 'skipped' }}
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
       - name: Verify scrolling on a compact phone
-        if: success() || failure()
+        if: ${{ (success() || failure()) && !inputs.unpassed_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
@@ -200,7 +216,7 @@ jobs:
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Generic Simulator build
-        if: success() || failure()
+        if: ${{ (success() || failure()) && !inputs.unpassed_only }}
         run: >-
           xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
           -destination 'generic/platform=iOS Simulator'
@@ -233,6 +249,7 @@ jobs:
           retention-days: 14
 
   live-continuity:
+    if: ${{ !inputs.unpassed_only }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:

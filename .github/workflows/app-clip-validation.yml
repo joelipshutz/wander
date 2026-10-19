@@ -12,6 +12,10 @@ on:
       - 'scripts/test_parent_regression.py'
   workflow_dispatch:
     inputs:
+      unpassed_only:
+        description: Run the remaining REC-636 Parent shard and search recovery checks
+        type: boolean
+        default: false
       graphics_only:
         description: Run focused native appearance and map frame diagnostics
         type: boolean
@@ -43,7 +47,14 @@ jobs:
           lfs: true
           persist-credentials: false
       - name: Build portable test products once
+        env:
+          UNPASSED_ONLY: ${{ inputs.unpassed_only }}
+          GRAPHICS_ONLY: ${{ inputs.graphics_only }}
         run: |
+          if [ "$UNPASSED_ONLY" = "true" ] && [ "$GRAPHICS_ONLY" = "true" ]; then
+            echo 'Choose either unpassed_only or graphics_only.' >&2
+            exit 1
+          fi
           python3 -B -m unittest discover -s scripts -p test_parent_regression.py
           brew install xcodegen
           xcodegen generate
@@ -68,16 +79,22 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
             -testProductsPath "$RUNNER_TEMP/Parent.xctestproducts" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme AstirClip \
-            -destination "platform=iOS Simulator,id=$BUILD_DEVICE_ID" \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
-            -testProductsPath "$RUNNER_TEMP/Clip.xctestproducts" \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          if [ "$UNPASSED_ONLY" != "true" ]; then
+            xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme AstirClip \
+              -destination "platform=iOS Simulator,id=$BUILD_DEVICE_ID" \
+              -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
+              -testProductsPath "$RUNNER_TEMP/Clip.xctestproducts" \
+              CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          fi
           git rev-parse HEAD > "$RUNNER_TEMP/test-products-commit.txt"
           xcodebuild -version > "$RUNNER_TEMP/test-products-xcode.txt"
+          product_bundles=(Parent.xctestproducts)
+          if [ "$UNPASSED_ONLY" != "true" ]; then
+            product_bundles+=(Clip.xctestproducts)
+          fi
           # Preserve executable permissions and bundle symlinks in transport.
           tar -czf "$RUNNER_TEMP/parent-test-products.tar.gz" -C "$RUNNER_TEMP" \
-            Parent.xctestproducts Clip.xctestproducts test-products-commit.txt test-products-xcode.txt
+            "${product_bundles[@]}" test-products-commit.txt test-products-xcode.txt
       - uses: actions/upload-artifact@v4
         with:
           name: parent-test-products
@@ -93,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"UI performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3},{"name":"UI shard 5","suite":"ui","shard":4},{"name":"UI shard 6","suite":"ui","shard":5},{"name":"UI shard 7","suite":"ui","shard":6},{"name":"UI shard 8","suite":"ui","shard":7}]') }}
+        include: ${{ fromJSON(inputs.unpassed_only && '[{"name":"UI shard 1","suite":"ui","shard":0},{"name":"search recovery","suite":"ui","shard":2}]' || inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"UI performance","suite":"ui-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3},{"name":"UI shard 5","suite":"ui","shard":4},{"name":"UI shard 6","suite":"ui","shard":5},{"name":"UI shard 7","suite":"ui","shard":6},{"name":"UI shard 8","suite":"ui","shard":7}]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -159,6 +176,7 @@ jobs:
       # Original CPU/frame timing budgets are required separately on the reference
       # simulator, matching main's deterministic shared-runner benchmark policy.
       - name: Run complete parent suite
+        if: ${{ !inputs.unpassed_only || matrix.shard != 2 }}
         env:
           TEST_SUITE: ${{ matrix.suite }}
           TEST_SHARD: ${{ matrix.shard }}
@@ -169,6 +187,47 @@ jobs:
           --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/$TEST_PRODUCT_NAME.xctestproducts"
           --result-bundle "$RUNNER_TEMP/Parent.xcresult"
           --selection-file "$RUNNER_TEMP/test-selection.json"
+      - name: Verify repaired search navigation and gate lifecycle
+        if: ${{ inputs.unpassed_only && matrix.shard == 2 }}
+        run: |
+          python3 - <<'PY_RECOVERY'
+          import importlib.util, json, os, re, subprocess
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path.cwd()
+          products = Path(os.environ['RUNNER_TEMP']) / 'Parent.xctestproducts'
+          inventory = regression.ui_test_identifiers(root)
+          search = 'WanderUITests/OnboardingUITests/testFeedInlineSearchBackButtonCoversEntryEmptyResultsNavigationAndBack'
+          gate_methods = [
+              'testAlreadyCancelledTaskDoesNotInstallAContinuation',
+              'testCancellationAfterSuspensionResumesAndRemovesWaiter',
+              'testCancellationBetweenReleaseAndConsumptionDoesNotCountCompletion',
+              'testCancelledOperationDoesNotCancelTheNextOperation',
+              'testHostUnmountCancelsWithoutCompletingAndIsIdempotent',
+              'testOverlappingRequestCannotReplaceTheOriginalPendingOperation',
+              'testSequentialOperationsHaveDistinctIDsAndExactCounts',
+              'testWaitRequiresExplicitReleaseAndRejectsDuplicateRelease',
+          ]
+          actual_gate_methods = re.findall(r'\bfunc\s+(test\w*)\s*\(',
+              (root / 'WanderTests/DiscoverRefinementUITestGateTests.swift').read_text())
+          if search not in inventory or sorted(actual_gate_methods) != gate_methods:
+              raise SystemExit('Search recovery selection no longer matches source')
+          selected = [search] + ['WanderTests/DiscoverRefinementUITestGateTests/' + name for name in gate_methods]
+          selection = {'suite': 'search-recovery', 'mode': 'unpassed_only', 'shard': 2,
+              'totalUIInventory': len(inventory), 'identifiers': selected, 'isolatedTestSuites': {}}
+          (Path(os.environ['RUNNER_TEMP']) / 'test-selection.json').write_text(json.dumps(selection, indent=2) + '\n')
+          regression.prepare_ui_performance_products(products, preserve_system_failures=True)
+          command = ['xcodebuild', 'test-without-building', '-quiet', '-testProductsPath', str(products),
+              '-destination', 'platform=iOS Simulator,id=' + os.environ['TEST_DEVICE_ID'],
+              '-jobs', '2', '-parallel-testing-enabled', 'NO',
+              '-test-timeouts-enabled', 'YES', '-default-test-execution-time-allowance', '600',
+              '-maximum-test-execution-time-allowance', '900',
+              '-resultBundlePath', str(Path(os.environ['RUNNER_TEMP']) / 'Parent.xcresult')]
+          command.extend('-only-testing:' + identifier for identifier in selected)
+          raise SystemExit(subprocess.run(command, cwd=root, check=False).returncode)
+          PY_RECOVERY
       # Each real-image fixture gets a separate host for process-wide SDK hooks,
       # matching Feed/Privacy. Keep the combined local mode for lifecycle work;
       # this isolation does not establish the cause of a combined CI failure.

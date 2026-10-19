@@ -166,6 +166,65 @@ class ReplaySimulatorFixtureTests(unittest.TestCase):
         f=Fake();f.fixture.prepare();f.fixture.cleanup(lambda:{})
         self.assertTrue(all(0 < timeout <= 180 for _,timeout in f.calls))
 
+    def test_only_postboot_inventory_gets_the_readiness_deadline(self):
+        f=Fake();f.fixture.prepare();f.fixture.cleanup(lambda:{})
+        for event,(argv,timeout) in zip(f.state['commands'],f.calls):
+            expected=180 if event['operation']=='confirm_fixture_boot' or argv[2]=='bootstatus' else (
+                30 if argv[2]=='list' else 60)
+            with self.subTest(operation=event['operation']):
+                self.assertEqual(timeout,expected)
+                self.assertEqual(event['timeoutSeconds'],expected)
+
+    def test_command_records_monotonic_duration_on_completion_only(self):
+        f=Fake()
+        with mock.patch.object(F.time,'monotonic',side_effect=[100.0,102.125]):
+            f.fixture.inventory('initial_inventory')
+        self.assertNotIn('elapsedSeconds',f.saved[0]['commands'][0])
+        self.assertEqual(f.state['commands'][0]['elapsedSeconds'],2.125)
+        self.assertEqual(f.saved[-1]['commands'][0],f.state['commands'][0])
+
+    def test_failed_commands_retain_monotonic_duration(self):
+        for result,category in [({'returncode':1},'inventory_command_failed'),
+                ({'returncode':None,'timedOut':True},'command_timeout_outcome_uncertain'),
+                ({'returncode':None,'permissionDenied':True},'command_permission_denied')]:
+            f=Fake();f.failure=('initial_inventory',result)
+            with self.subTest(category=category),mock.patch.object(F.time,'monotonic',side_effect=[50.0,80.25]):
+                with self.assertRaisesRegex(F.FixtureError,'^'+category+'$'):
+                    f.fixture.inventory('initial_inventory')
+            self.assertEqual(f.state['commands'][0]['elapsedSeconds'],30.25)
+            self.assertEqual(f.state['commands'][0]['state'],'completed')
+            self.assertEqual(len(f.calls),1)
+
+    def test_postboot_inventory_timeout_is_terminal_without_retry(self):
+        f=Fake();f.failure=('confirm_fixture_boot',{'returncode':None,'timedOut':True})
+        with self.assertRaisesRegex(F.FixtureError,'^command_timeout_outcome_uncertain$'):
+            f.fixture.prepare()
+        self.assertFalse(f.state['admitted'])
+        self.assertEqual(f.calls[-1],(['/usr/bin/xcrun','simctl','list','--json'],180))
+        self.assertEqual(sum(x['operation']=='confirm_fixture_boot' for x in f.state['commands']),1)
+        before=len(f.calls)
+        with self.assertRaises(F.FixtureError):f.fixture.prepare()
+        with self.assertRaises(F.FixtureError):f.fixture.cleanup(lambda:{})
+        self.assertEqual(len(f.calls),before)
+
+    def test_postboot_inventory_keeps_fresh_identity_and_product_guards(self):
+        for change,category in [('name','fixture_boot_identity_mismatch'),
+                ('runtime','fixture_boot_identity_mismatch'),
+                ('source_state','fixture_boot_identity_mismatch'),
+                ('products','test_products_changed')]:
+            f=Fake();original_run=f.run
+            def changed_run(argv,timeout):
+                if f.saved[-1]['commands'][-1]['operation']=='confirm_fixture_boot':
+                    if change=='name':f.devices[NEW]['name']='Changed name'
+                    elif change=='runtime':f.changed_runtime=True
+                    elif change=='source_state':f.devices[OLD]['state']='Booted'
+                    else:f.fingerprint['filesSHA256']='d'*64
+                return original_run(argv,timeout)
+            f.fixture.run=changed_run
+            with self.subTest(change=change),self.assertRaisesRegex(F.FixtureError,'^'+category+'$'):
+                f.fixture.prepare()
+            self.assertFalse(f.state['admitted'])
+
     def test_local_or_other_repository_context_rejected(self):
         for env in [{},{'GITHUB_ACTIONS':'true','RUNNER_OS':'macOS','GITHUB_REPOSITORY':'other/repo'}]:
             with self.subTest(env=env),self.assertRaises(F.FixtureError):F.ci_context(env)

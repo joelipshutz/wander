@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import subprocess
+import time
 import uuid
 
 REPOSITORY = "joelipshutz/wander"
@@ -73,14 +74,16 @@ class Fixture:
         event = {"operation": operation, "mutation": mutation, "state": "dispatched", "timeoutSeconds": timeout}
         self.state.setdefault("commands", []).append(event)
         self.save(self.state)
+        started = time.monotonic()
         result = self.run(["/usr/bin/xcrun", "simctl", *arguments], timeout)
+        elapsed = time.monotonic() - started
         out, err = result.get("stdout", b""), result.get("stderr", b"")
         denied = result.get("permissionDenied", False) or any(
             x in err.lower() for x in [b"permission denied", b"operation not permitted", b"permission to save"])
         event.update(state="completed", exitCode=result.get("returncode"), timedOut=result.get("timedOut", False),
                      permissionDenied=denied, stdoutBytes=len(out), stderrBytes=len(err),
                      stdoutSHA256=hashlib.sha256(out).hexdigest(), stderrSHA256=hashlib.sha256(err).hexdigest(),
-                     rawOutputRetained=False)
+                     rawOutputRetained=False, elapsedSeconds=round(elapsed, 6))
         self.save(self.state)
         if denied:
             self.fail("command_permission_denied")
@@ -93,7 +96,9 @@ class Fixture:
         return out
 
     def inventory(self, operation):
-        raw = self.command(operation, ["list", "--json"])
+        # The first inventory after boot may wait for CoreSimulator readiness.
+        raw = self.command(operation, ["list", "--json"],
+                           timeout=180 if operation == "confirm_fixture_boot" else 30)
         try:
             return json.loads(raw)
         except (ValueError, UnicodeDecodeError):
