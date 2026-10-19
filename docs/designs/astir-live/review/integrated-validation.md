@@ -4,7 +4,7 @@
 
 [REC-636](https://linear.app/recme/issue/REC-636) records the current candidate, reconciled native results, hosted/device gates and exact restart steps. [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) records its current CI runs. Use those records together for readiness; a diagnostic pass or historical result below does not establish acceptance of a later candidate. The evidence history and capture provenance below retain their original source identities and outcomes.
 
-Live remains globally Off. Internal user testing requires accepted candidate validation, verified dormant backend installation and the designated account/device checks. Broader availability and release remain separate gates.
+Both REC-636 migrations are installed and dormant; installed metadata, grants, migration history and bounded post-install full smoke passed. Live remains globally Off. Internal user testing still requires accepted candidate validation and the designated real-client/account/device checks. Broader availability and release remain separate gates.
 
 ## Historical Replay startup pacing repair
 
@@ -18,7 +18,7 @@ The corrected local build passed, followed by **2,865 ordinary unit tests and bo
 
 The review audit verified all eight approved image hashes, both themes on both phone sizes, and source continuity for the completed human freehand journey. These checks need no repeated user drawing. Spoken VoiceOver task completion remains an explicit limitation of spec R15; simulator accessibility assertions do not establish it. Designated signed-in internal accounts remain required for real messaging trials after dormant backend verification. Live stays globally Off.
 
-## Publication checkpoint · exact-commit CI required
+## Historical publication checkpoint · exact-commit CI required
 
 Published V36 `22e7c6d9` is fully accounted **Failed: 8,966 Passed / 10 Failed among 8,976 executions**, with zero skips or expected failures across 23 bundles. Accounting `2c4b30c1…` preserves all failures, 26 runtime warnings and 158 overlapping build-warning events. The 15 result/evidence archives are digest-verified; the parent-product archive remains remotely retained without a local binary audit. Its exact ordinary-auth case passed, which establishes neither an actual sign-in nor real-account delivery.
 
@@ -93,7 +93,7 @@ The separate fixed-order replay host-isolation A/B completed **4/4 Passed**: bot
 
 Final published-head CI, its exact ordinary-auth node and provenance are pending at this local checkpoint. The authoritative latest disposition is [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and [REC-636](https://linear.app/recme/issue/REC-636). No later CI result is implied by this static local record. Dormant installation, designated two-account behavior, cleanup and operational/privacy gates remain separate. Do not merge, activate, release or message ordinary users.
 
-## Dormant backend checkpoint
+## Historical dormant preinstall checkpoint
 
 The refreshed a0 SQL package passed review across 76 source hashes. Bounded preinstall metadata and full smoke passed and rolled back; the corrected atomic installation rehearsal also rolled back. An independent read confirmed 145 migration versions, no owned REC-636 contracts, and Live globally Off. The original search-path rehearsal failure remains preserved. Neither REC-636 migration is installed.
 
@@ -101,7 +101,7 @@ After native, fresh CI and SQL acceptance, recheck the confirmed target, exact h
 
 ## Current continuation
 
-Publish the reviewed uninstrumented test-only candidate after final source/storage/tooling admission, then audit fresh exact-commit CI, its ordinary-auth node, all required checks, warning disposition and checkout/source/device/product/artifact evidence. Keep diagnostic markers, samplers and carrier workflows out of that candidate. The focused local pass does not replace final CI or clear historical failures; no cause is inferred from the unusable V45 sample. Preserve accepted unchanged UI observations within their original source scope, and verify the final published branch in Xcode. The authoritative latest disposition remains [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and [REC-636](https://linear.app/recme/issue/REC-636); later CI results require no documentation-only push. Dormant installation, internal-account trials and global activation retain their separate gates. Live stays globally Off.
+Follow the linked issue and PR for the current candidate, fresh CI, required checks, warning disposition and checkout/source/device/product/artifact evidence. Keep diagnostic markers, samplers and carrier workflows out of that candidate. The focused local pass does not replace final CI or clear historical failures; no cause is inferred from the unusable V45 sample. Preserve accepted unchanged UI observations within their original source scope, and verify the final published branch in Xcode. The authoritative latest disposition remains [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) and [REC-636](https://linear.app/recme/issue/REC-636); later CI results require no documentation-only push. Dormant installation and post-install verification are complete. Real-client/device checks and designated internal-account trials remain pending; global activation remains separately gated. Live stays globally Off.
 
 ## Historical checkpoint before V33
 

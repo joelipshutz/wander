@@ -1,21 +1,21 @@
 # REC-636 — Live implementation plan
 
-**Implementation in progress · October 11, 2026.** This document describes the integrated app source and the remaining work. Exact native results, captures and outstanding reruns belong in the [integrated validation report](review/integrated-validation.md). Earlier `preview/rec-636-live` evidence does not validate this integration.
+**Implementation in progress.** This document describes the integrated app source and the remaining work. Use [REC-636](https://linear.app/recme/issue/REC-636) and [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) for the current candidate and remaining gates; the [integrated validation report](review/integrated-validation.md) preserves evidence history. Earlier `preview/rec-636-live` evidence does not validate this integration.
 
 ## 1. Accepted scope and current boundaries
 
 The locked shell is **Live / Lists / Profile**, with Add as an action. Recent activity retains the existing Feed cards, grouping, engagement actions and **Invite people to Astir → People worth following → Activity** order. Profile retains identity/social, streak, recent activity, full Your Map and calendar. **Only area drawing is reused from Your Map**; Patterns, history, lenses, Snapshot, sharing and owner/member map navigation remain there.
 
-Production private messaging is approved with mutual-only eligibility. Wanna planning reuses the existing invitation flow. D2/D3 query presets/defaults are explicitly accepted: Following starts with seven days; local Nearby now starts at 5 km around an explicitly selected public city center with explicit expansion to 25 km. Category/person/24-hour controls, fixed bounds and the full native query/store contract are integrated; the matching SQL is packaged and rollback-preview tested, but undeployed. Current device-location centering is not implemented; selected public city centers remain available. Nearby narrows the existing trusted Feed subset and adds no unrelated public inventory. D9 migration and D10 separation of Upcoming from historical activity are accepted. Drawing uses freehand selection with explicit Apply/Cancel and account-session area retention. D11’s 15-minute Live social display lease is approved and implemented in the Live query projection; Profile/shared-cache policy stays unchanged. Delegated rollout is internal-only, with explicit server account approval required for both private-message participants.
+Production private messaging is approved with mutual-only eligibility. Wanna planning reuses the existing invitation flow. D2/D3 query presets/defaults are explicitly accepted: Following starts with seven days; local Nearby now starts at 5 km around an explicitly selected public city center with explicit expansion to 25 km. Category/person/24-hour controls, fixed bounds and the full native query/store contract are integrated; the matching SQL is installed and verified with Live globally Off. Current device-location centering is not implemented; selected public city centers remain available. Nearby narrows the existing trusted Feed subset and adds no unrelated public inventory. D9 migration and D10 separation of Upcoming from historical activity are accepted. Drawing uses freehand selection with explicit Apply/Cancel and account-session area retention. D11’s 15-minute Live social display lease is approved and implemented in the Live query projection; Profile/shared-cache policy stays unchanged. Delegated rollout is internal-only, with explicit server account approval required for both private-message participants.
 
 | Area | Implemented source | Remaining boundary |
 |---|---|---|
-| Shell and routing | `WanderRootView`, `LiveNavigationPolicy`, registered `.unifiedLiveV1`, three visible tabs when enabled; legacy shell retained | Native route/foreground/rollback verification and hosted flag registration before ordinary activation |
+| Shell and routing | `WanderRootView`, `LiveNavigationPolicy`, registered `.unifiedLiveV1`, three visible tabs when enabled; legacy shell retained | Hosted flag registration is verified and Live remains globally Off; final route/foreground/rollback and device evidence precede ordinary activation |
 | Map and drawer | `LiveScreen` uses **SwiftUI `Map`, `MapReader`, `Annotation` and `MapPolygon`**, plus a custom drawer | It does not embed `NativeMapView`; final gesture, accessibility, small-phone and performance evidence is required |
 | Feed integration | Defaulted embedded `FeedScreen` API; current cards/actions/supporting modules retained | Map/filter coverage is the authorized loaded Feed, not all server matches |
-| D2/D3 query selection | City-centered 5/25 km, category/person choices, 24-hour range, fixed bounds and committed native query/store integration | SQL deployment and hosted verification remain required; current device-location centering is not implemented |
-| Server-filtered Feed | `LiveFeedQuery`, `FeedRepository.liveFeed` and `SupabaseFeedRepository.liveFeed` exist | Store connection is implemented in `WanderLocalStore.swift`; the full-parameter RPC remains a packaged, undeployed migration |
-| Private messaging | Models, state/views, ephemeral transport and inactive-scene cover; SQL draft adds an operator-owned account gate for both mutual participants | SQL is packaged and rollback-preview tested, but undeployed; require real authorization/delivery and privacy evidence before activation. First rollout is internal-only |
+| D2/D3 query selection | City-centered 5/25 km, category/person choices, 24-hour range, fixed bounds and committed native query/store integration | Dormant installation and post-install verification passed; real-client checks remain pending. Current device-location centering is not implemented |
+| Server-filtered Feed | `LiveFeedQuery`, `FeedRepository.liveFeed` and `SupabaseFeedRepository.liveFeed` exist | Store connection is implemented in `WanderLocalStore.swift`; the full-parameter RPC is installed and verified, with real-client paging checks pending |
+| Private messaging | Models, state/views, ephemeral transport and inactive-scene cover; SQL draft adds an operator-owned account gate for both mutual participants | SQL is installed and verified with Live globally Off; require real-client authorization/delivery and privacy evidence before activation. First rollout is internal-only |
 | D11 display lease | Approved 15-minute, per-activity Live social authorization receipts and expiry projection | Owner, legacy Feed and Profile/shared-cache policy remain unchanged; validate expiry and authorized renewal on the candidate |
 | Wanna planning | `LivePlanPeoplePicker`/policy select existing `CommonGroundLiveData` candidates; existing composer/sharing/repository retained | Verify own and friend Wanna, cold-cache recovery, account changes, cancellation and real invitation create/share/open/inbox |
 | Upcoming invitations | Conditional 44-point entry, separate scrollable sheet and queued existing recipient/inbox routes; shared authorized inbox reused | Max three current/future dated received invitations from the latest 100; no complete schedule/sent-plan claim |
@@ -60,7 +60,7 @@ flowchart TD
     F --> A[Existing place, profile, search and engagement actions]
     L --> M[PrivateMessage inbox/thread state]
     M --> MR[PrivateMessageRepository and ephemeral RPC transport]
-    MR -. deployment pending .-> MS[Private-message SQL draft]
+    MR -. real-client verification pending .-> MS[Installed private-message SQL; Live Off]
     L --> I[Existing Common Ground invitation flow]
     PI[Existing recipient invitation inbox] --> U[Upcoming invitations: dated bounded projection]
     L --> U
@@ -68,23 +68,23 @@ flowchart TD
     L --> Q[Committed LiveFeedQuery and FeedRepository.liveFeed]
     Q --> S
     LE[Per-row Live display lease] --> P
-    Q -. deployment pending .-> SQL[live_activity_feed SQL draft]
+    Q -. real-client verification pending .-> SQL[Installed live_activity_feed; Live Off]
     PM[Profile / Your Map / Patterns / calendar] --> OS[Existing owner and member projections]
 ```
 
-## 3. Integrated query and undeployed server contract
+## 3. Integrated query and dormant server contract
 
 ### Current runtime
 
 `LiveScreen` commits `LiveBrowseSelection.query(area:)` through `WanderStore.selectLiveFeedQuery(_:)`. The store uses `FeedRepository.liveFeed` for a non-nil query, fences responses by account/audience/query/request identity, and fetches one bounded server page per explicit load action. Query changes cancel/reset paging; ordinary tab return retains the selection. Nil restores the legacy API. [The historical store patch](implementation-drafts/store.patch) has been applied and extended; current `WanderLocalStore.swift` and `LiveFeedStoreTests.swift` are authoritative. Do not reapply that patch.
 
-Map pins and embedded Feed share `store.visibleFeedActivityGroups`, including the Live display lease. `LiveFeedQuery.includes` remains the deterministic fixture filter and final presentation guard, not a production fallback for a missing RPC. Missing backend capability stays a visible failure. The SQL is packaged and rollback-preview tested, but undeployed, so integrated native wiring does not establish working hosted paging.
+Map pins and embedded Feed share `store.visibleFeedActivityGroups`, including the Live display lease. `LiveFeedQuery.includes` remains the deterministic fixture filter and final presentation guard, not a production fallback for a missing RPC. Missing backend capability stays a visible failure. The SQL is installed and post-install checks passed with Live globally Off; real-client paging remains to be verified.
 
 The visible count is **“N updates shown”**, with accessibility label **“N loaded updates”**. It counts matching loaded activity records, not all server matches or unique places. Preserve Load more, stable grouping/engagement identities and existing Feed cards/order. Unmapped records remain in their ordinary card position when no geography/category constraint requires a place. Full history, owner saves, calendar and Snapshot remain in Profile.
 
 The large filter sheet stages audience, type, 24-hour/7-day/30-day/all-time range, city/radius, categories/people and drawn-area removal until Apply. Nearby starts at 5 km with explicit 25 km selection around the visibly selected public `HomeMetro`; it does not request device location or change account home. Cancel preserves the committed query; Reset retains audience. Drawn geometry intersects radius. Apply or explicit refresh advances fixed time bounds; initial loading, pagination and tab/detail return do not. Facet options derive only from already authorized loaded rows.
 
-### SQL prepared, not deployed
+### SQL installed and dormant
 
 [Live Feed SQL draft](implementation-drafts/live-feed.sql) adds `app.live_feed_polygon` and `app/public.live_activity_feed`, preserving legacy `activity_feed`/`followed_feed`. Its parameters include audience, inclusive `input_after`/`input_until`, activity type, polygon, cursor/limit, `input_center_latitude`, `input_center_longitude`, `input_radius_meters`, `input_category_ids` and `input_person_ids`. Radius requires all three values, a finite WGS84 center and 100–25,000 metres. Each refinement array is limited to 100 values; empty means no refinement, and duplicate/order differences normalize to the same set.
 
@@ -94,7 +94,7 @@ Categories use `app.viewer_place_taxonomy`: the viewer’s override, frozen snap
 
 Committed times normalize to wire milliseconds. Polygon validation accepts 3–512 finite vertices, checks degeneracy/intersections, unwraps the dateline and rejects ambiguous spans of 180° or more. Narrow ±179° shapes remain valid. Swift/store tests and the expanded SQL suite cover independent pre-limit filters behind 60 newer nonmatches, combined paging, canonical taxonomy/privacy, invalid inputs, dateline and query/account cursor mismatches.
 
-The ordered migration pair is packaged through Supabase CLI 2.114.0; see the [migration inventory](implementation-drafts/README.md). Independent source review and both rolled-back SQL regressions passed against the hosted target without persisting schema or fixtures. Installation, full hosted smoke and measured query plans remain required. The full rollback-only preview also passes with the source/test reconciliation from [REC-638 / PR #741](https://github.com/joelipshutz/wander/pull/741); the original failure is retained in the validation history. No activation is asserted. Current device-location centering is not implemented; selected-city centers work.
+The ordered migration pair is packaged through Supabase CLI 2.114.0; see the [migration inventory](implementation-drafts/README.md). Independent source review and both rolled-back SQL regressions passed against the hosted target without persisting schema or fixtures. Dormant installation, installed metadata/grants/history and bounded post-install full smoke passed. Live remains globally Off; real-client paging and measured query plans remain required. The full rollback-only preview also passes with the source/test reconciliation from [REC-638 / PR #741](https://github.com/joelipshutz/wander/pull/741); the original failure is retained in the validation history. No activation is asserted. Current device-location centering is not implemented; selected-city centers work.
 
 ## 4. Map, drawing and retained content
 
@@ -162,7 +162,7 @@ The allowlisted ephemeral RPC transport checks the authenticated account before/
 
 [Private-message SQL draft](implementation-drafts/private-contextual-messages.sql) defines private conversation/message tables and narrow authenticated RPCs for starting, reading, paging, sending and marking read. It requires explicit operator-owned `unified_live_v1` Boolean account overrides for both participants and rechecks mutual eligibility, bilateral blocks and context access; sender-scoped client IDs provide idempotency, conflicting replays fail, and quotas bound creation/send. Current draft reads suppress messages tied to inaccessible source context; contextless follow-on messages have their own mutual/member access check. Source loss must never reveal a private preview through inbox counts or latest-message copy. Global enablement and device overrides cannot substitute for participant approval. Revoking either account override hides the thread and denies subsequent history, send, retry and read operations; tests cover restoration without duplicate messages.
 
-The SQL is not a deployed schema. Required gates: source-schema/grant review of the packaged additive migrations, `supabase/tests/private_contextual_messages.sql`, rolled-back hosted smoke, real two-account mutual/block/source-revocation/idempotency tests, safe analytics and actual replay inspection. The delegated initial rollout is internal-only after access/privacy checks. Message-specific notifications, reporting/moderation, deletion/retention and operational recovery remain broad-rollout gates; no new retention behavior is inferred from the draft. Soft-deleted accounts lose access but stored messages remain until physical deletion. Review-scheme fixtures show **Demo messages · nothing is delivered** and **Simulated** acknowledgements.
+The schema is installed and verified with Live globally Off. Remaining gates include real two-account mutual/block/source-revocation/idempotency checks, safe analytics and actual replay inspection. The delegated initial rollout is internal-only after access/privacy checks. Message-specific notifications, reporting/moderation, deletion/retention and operational recovery remain broad-rollout gates; no new retention behavior is inferred from the draft. Soft-deleted accounts lose access but stored messages remain until physical deletion. Review-scheme fixtures show **Demo messages · nothing is delivered** and **Simulated** acknowledgements.
 
 ## 7. Cache and privacy boundary
 
@@ -183,7 +183,7 @@ Full Event discovery/history remains governed by `docs/designs/astir-events/engi
 
 ## 9. Validation and next work
 
-The [integrated validation report](review/integrated-validation.md) is the single authority for candidate identity, commands, results, captures and outstanding checks. The table below defines required coverage, not completed validation. Native store/query/lease integration exists; backend migrations are packaged; installation and full hosted smoke remain outstanding. Native results do not substitute for hosted access/delivery, actual replay, hardware or rollback evidence.
+Use [REC-636](https://linear.app/recme/issue/REC-636) and [PR #736 Checks](https://github.com/joelipshutz/wander/pull/736/checks) for current candidate identity and readiness; the [integrated validation report](review/integrated-validation.md) preserves evidence history. The table below defines required coverage, not completed validation. Native store/query/lease integration exists; dormant backend installation and post-install verification passed, with Live globally Off. Real-client/device and designated two-account checks remain pending. Native results do not substitute for hosted access/delivery, actual replay, hardware or rollback evidence.
 
 | Area | Source/suite to use | Required evidence |
 |---|---|---|
@@ -208,9 +208,7 @@ Proposed performance acceptance targets remain targets, not measured behavior: s
 Completion order:
 
 1. Finish native and CI checks while preserving exact Feed/Profile behavior: Map accessibility, inbox app-switcher framing, actual private-message replay freshness and compact Feed pagination. Keep D9 recovery/rollback and D10 received-invitation coverage in the native gate.
-2. In parallel with step 1, finalize and package the messaging migration first, then the full-parameter Live query migration. Review authorization, grants, quotas, cursor/filter scope and rollback regressions.
-3. After steps 1 and 2 pass, reconcile the target and migration history, apply only the reviewed ordered pair with Live globally off, then execute metadata checks, SQL regressions and hosted smoke. A generated SQL preview is not an executed check.
-4. Immediately follow with the [two-account verification protocol](implementation-drafts/README.md#two-account-verification-protocol): actual client authentication, send/reply/read, interrupted and concurrent retries, participant approval/revocation, blocks, source access, Live refinements and offline lease expiry. Keep the initial rollout internal-only; resolve reporting, retention/export and operational gates before broader activation.
+2. With dormant installation and post-install verification complete, follow with the [two-account verification protocol](implementation-drafts/README.md#two-account-verification-protocol): actual client authentication, send/reply/read, interrupted and concurrent retries, participant approval/revocation, blocks, source access, Live refinements and offline lease expiry. Keep the initial rollout internal-only; resolve reporting, retention/export and operational gates before broader activation.
 
 Reviewed device evidence, flag rollback and the ordinary release gate remain required before a controlled rollout. D11 covers only the implemented Live display lease; broader cache changes are outside scope. Current device-location centering is not implemented; selected-city centers work.
 

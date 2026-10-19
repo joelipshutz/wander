@@ -95,6 +95,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
     func testPinShowsItsOriginalFeedActivityAndOpensItsPlaceWithReturn() {
         let diagnosticStart = ProcessInfo.processInfo.systemUptime
         let app = launchLive()
+        let destinationTopLimit = app.buttons["live.scope.following"].frame.maxY
         let pin = app.buttons["live.pin.place_noodles"]
         waitHittable(pin)
         XCTAssertTrue(pin.label.contains("Ryan"))
@@ -130,6 +131,9 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(send.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["comments.activity.actor"].label.contains("Ryan"))
         XCTAssertTrue(app.buttons["comments.activity.place"].label.contains("Larchmont Noodles"))
+        assertEmbeddedDestinationFillsViewport(
+            app.navigationBars.firstMatch.buttons.element(boundBy: 0),
+            in: app, topLimit: destinationTopLimit)
         capture("original-wanna-activity-from-pin")
         tapNavigationBack(app.navigationBars.firstMatch)
         XCTAssertTrue(send.waitForNonExistence(timeout: 5))
@@ -240,6 +244,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
     func testLiveSearchNotificationsAndAddCancelReturnToSameSurface() {
         let diagnosticStart = ProcessInfo.processInfo.systemUptime
         let app = launchLive()
+        let destinationTopLimit = app.buttons["live.scope.following"].frame.maxY
         let searchMatches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
         let search = readySearch(in: app, startedAt: diagnosticStart)
         captureRouteDiagnostics("search-before-single-tap", in: app, startedAt: diagnosticStart,
@@ -272,6 +277,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         }
         XCTAssertTrue(reachedSearch)
         waitHittable(searchBack)
+        assertEmbeddedDestinationFillsViewport(searchBack, in: app, topLimit: destinationTopLimit)
         searchBack.tap()
         XCTAssertTrue(searchBack.waitForNonExistence(timeout: 5))
         waitDrawer("expanded", in: app)
@@ -280,6 +286,8 @@ final class LiveReviewContinuityUITests: XCTestCase {
         app.buttons["Notifications"].tap()
         let inbox = app.navigationBars["Notifications"]
         XCTAssertTrue(inbox.waitForExistence(timeout: 10))
+        assertEmbeddedDestinationFillsViewport(
+            inbox.buttons.element(boundBy: 0), in: app, topLimit: destinationTopLimit)
         capture("notifications-from-live")
         tapNavigationBack(inbox)
         XCTAssertTrue(inbox.waitForNonExistence(timeout: 5))
@@ -422,6 +430,23 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let top = max(viewport.minY + 8, navigationBottom + 8)
         let bottom = min(viewport.maxY - 8, app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY - 8 : app.frame.maxY - 44)
         return frame.minY >= top && frame.maxY <= bottom && element.isHittable
+    }
+
+    private func assertEmbeddedDestinationFillsViewport(_ back: XCUIElement,
+                                                        in app: XCUIApplication, topLimit: CGFloat) {
+        XCTAssertTrue(topLimit.isFinite && topLimit > app.frame.minY && topLimit < app.frame.midY)
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard back.exists, back.isHittable,
+                  !app.descendants(matching: .any)["live.drawerHandle"].firstMatch.exists,
+                  !app.buttons["Upcoming events"].exists,
+                  !app.buttons["Close selected place"].exists,
+                  !app.buttons["live.draw"].exists else { return false }
+            let frame = back.frame
+            return !frame.isNull && !frame.isInfinite && !frame.isEmpty
+                && app.frame.contains(frame) && frame.minY <= topLimit
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 5), .completed,
+                       "Embedded Feed destinations must use the top viewport without Live chrome.")
     }
 
     private func waitForFocusedCardIntersection(_ card: XCUIElement, in feed: XCUIElement, app: XCUIApplication) {

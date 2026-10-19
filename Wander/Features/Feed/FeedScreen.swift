@@ -88,6 +88,7 @@ struct FeedScreen: View {
     private let activityFocusRequest: FeedActivityFocusRequest?
     private let surfaceRequest: FeedSurfaceRequest?
     private let onPrivateReply: ((FeedActivity) -> Void)?
+    private let onEmbeddedDestinationActiveChange: (Bool) -> Void
     private let onRefreshRequested: () -> Void
 
     init(
@@ -101,6 +102,7 @@ struct FeedScreen: View {
         activityFocusRequest: FeedActivityFocusRequest? = nil,
         surfaceRequest: FeedSurfaceRequest? = nil,
         onPrivateReply: ((FeedActivity) -> Void)? = nil,
+        onEmbeddedDestinationActiveChange: @escaping (Bool) -> Void = { _ in },
         onRefreshRequested: @escaping () -> Void = {},
         onAdd: @escaping () -> Void = {}
     ) {
@@ -114,6 +116,7 @@ struct FeedScreen: View {
         self.activityFocusRequest = activityFocusRequest
         self.surfaceRequest = surfaceRequest
         self.onPrivateReply = onPrivateReply
+        self.onEmbeddedDestinationActiveChange = onEmbeddedDestinationActiveChange
         self.onRefreshRequested = onRefreshRequested
         self.onAdd = onAdd
 
@@ -139,6 +142,10 @@ struct FeedScreen: View {
         FeedEmbeddedProjection.groups(
             from: store.visibleFeedActivityGroups, matching: filteredActivityIDs
         )
+    }
+
+    private var embeddedDestinationIsActive: Bool {
+        isEmbedded && (activityNavigation.commentsRoute != nil || isShowingSearch || showsNotifications)
     }
 
     var body: some View {
@@ -323,6 +330,15 @@ struct FeedScreen: View {
                 showsNotifications = false
                 resetFloatingHeaderScrollTracking(revealHeader: true)
             }
+        }
+        .onChange(of: embeddedDestinationIsActive, initial: true) { _, isActive in
+            onEmbeddedDestinationActiveChange(isActive)
+        }
+        .onChange(of: store.currentUser.id) { _, _ in
+            guard isEmbedded else { return }
+            isShowingSearch = false
+            showsNotifications = false
+            activityNavigation.reset()
         }
         .environment(\.activityPresentationHandoff, ActivityPresentationHandoff(
             resetID: presentationResetRequest?.id,

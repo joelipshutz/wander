@@ -18,6 +18,7 @@ struct LiveScreen: View {
     @State private var viewport: MKCoordinateRegion?
     @State private var didFrame = false
     @State private var detent = 1
+    @State private var isFeedDestinationActive = false
     @State private var selection = LiveBrowseSelection()
     @State private var area: LiveDrawnArea?
     @State private var drawing = false
@@ -90,12 +91,19 @@ struct LiveScreen: View {
 
     private var selectedPin: LivePlacePin? { pins.first { $0.id == selectedPlaceID } }
 
+    private var showsFeedDestination: Bool {
+        isFeedDestinationActive || activityNavigation.commentsRoute != nil
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let drawerHeight = drawing ? 0 : height(for: detent, available: geometry.size.height)
+            let drawerHeight = showsFeedDestination ? geometry.size.height
+                : drawing ? 0 : height(for: detent, available: geometry.size.height)
             ZStack(alignment: .bottom) {
                 map(drawerHeight: drawerHeight)
-                if !drawing {
+                    .allowsHitTesting(!showsFeedDestination)
+                    .accessibilityHidden(showsFeedDestination)
+                if !drawing || showsFeedDestination {
                     drawer(height: drawerHeight)
                         .background(alignment: .bottom) {
                             // Paint only below the drawer, behind the native tab
@@ -208,6 +216,7 @@ struct LiveScreen: View {
         }
         .onChange(of: store.followedFeedPage?.fetchedAt, initial: true) { _, _ in frameInitialMap() }
         .onChange(of: store.currentUser.id) { _, _ in
+            isFeedDestinationActive = false
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
             planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false
@@ -220,6 +229,7 @@ struct LiveScreen: View {
             frameInitialMap()
         }
         .onChange(of: presentationResetRequest?.id) { _, _ in
+            isFeedDestinationActive = false
             filtersPresented = false; showsMessages = false; replyTarget = nil
             selectedPlan = nil; planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false
             showsEvents = false; drawing = false; showsIntroductionGuide = false
@@ -425,69 +435,73 @@ struct LiveScreen: View {
 
     private func drawer(height: CGFloat) -> some View {
         VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
-                HStack {
-                    Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.sectionTitle)
-                        .accessibilityLabel(LiveActivityPresentation.loadedUpdateCount(activity.count))
-                    Spacer()
-                    Text(filterSummary).font(.caption).foregroundStyle(brand.secondaryText)
-                        .lineLimit(2).multilineTextAlignment(.trailing)
-                        .accessibilityIdentifier("live.filter.summary")
+            if !showsFeedDestination {
+                VStack(spacing: 8) {
+                    Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
+                    HStack {
+                        Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.sectionTitle)
+                            .accessibilityLabel(LiveActivityPresentation.loadedUpdateCount(activity.count))
+                        Spacer()
+                        Text(filterSummary).font(.caption).foregroundStyle(brand.secondaryText)
+                            .lineLimit(2).multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("live.filter.summary")
+                    }
                 }
+                .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 12)
+                .frame(minHeight: 64).contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 12).onEnded { value in
+                    let travel = value.predictedEndTranslation.height
+                    if abs(travel) > 35 { changeDetent(detent + (travel < 0 ? 1 : -1)) }
+                })
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
+                .accessibilityValue("\(LiveActivityPresentation.loadedUpdateCount(activity.count)). \(filterSummary)")
+                .accessibilityAdjustableAction { direction in
+                    changeDetent(detent + (direction == .increment ? 1 : -1))
+                }
+                .accessibilityIdentifier("live.drawerHandle")
             }
-            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 12)
-            .frame(minHeight: 64).contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 12).onEnded { value in
-                let travel = value.predictedEndTranslation.height
-                if abs(travel) > 35 { changeDetent(detent + (travel < 0 ? 1 : -1)) }
-            })
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-            .accessibilityValue("\(LiveActivityPresentation.loadedUpdateCount(activity.count)). \(filterSummary)")
-            .accessibilityAdjustableAction { direction in
-                changeDetent(detent + (direction == .increment ? 1 : -1))
-            }
-            .accessibilityIdentifier("live.drawerHandle")
 
             VStack(spacing: 0) {
-                if store.liveFeedSocialExpired {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Reconnect to refresh your people’s activity").font(AstirTypography.bodySmall)
-                        Button("Try again") { commitSelection(selection) }.frame(minHeight: 44)
-                            .accessibilityIdentifier("live.reconnect")
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20)
-                }
-                if migrationRecord != nil, selectedPin == nil,
-                   !introductionContext.hasPriorityPresentation, detent > 0 {
-                    LiveIntroductionMigrationCard(onContinue: onContinueMigration,
-                        onNotNow: onDeferMigration, onPresented: onMigrationPresented)
+                if !showsFeedDestination {
+                    if store.liveFeedSocialExpired {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Reconnect to refresh your people’s activity").font(AstirTypography.bodySmall)
+                            Button("Try again") { commitSelection(selection) }.frame(minHeight: 44)
+                                .accessibilityIdentifier("live.reconnect")
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20)
+                    }
+                    if migrationRecord != nil, selectedPin == nil,
+                       !introductionContext.hasPriorityPresentation, detent > 0 {
+                        LiveIntroductionMigrationCard(onContinue: onContinueMigration,
+                            onNotNow: onDeferMigration, onPresented: onMigrationPresented)
+                            .padding(.horizontal, 16).padding(.bottom, 8)
+                    } else if let introductionAudience, !introductionAcknowledged, selectedPin == nil,
+                       !introductionContext.hasPriorityPresentation, detent > 0 {
+                        LiveIntroductionCard(audience: introductionAudience, onShowMe: {
+                            acknowledgeIntroduction(); showsIntroductionGuide = true
+                        }, onNotNow: acknowledgeIntroduction, onPresented: {
+                            LiveIntroductionStore().markPresented(for: store.currentUser.id)
+                        })
                         .padding(.horizontal, 16).padding(.bottom, 8)
-                } else if let introductionAudience, !introductionAcknowledged, selectedPin == nil,
-                   !introductionContext.hasPriorityPresentation, detent > 0 {
-                    LiveIntroductionCard(audience: introductionAudience, onShowMe: {
-                        acknowledgeIntroduction(); showsIntroductionGuide = true
-                    }, onNotNow: acknowledgeIntroduction, onPresented: {
-                        LiveIntroductionStore().markPresented(for: store.currentUser.id)
-                    })
-                    .padding(.horizontal, 16).padding(.bottom, 8)
-                }
-                if eventsAvailable {
-                    Button { showsEvents = true } label: {
-                        Label("Upcoming events", systemImage: "calendar").font(AstirTypography.bodySmall)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }.padding(.horizontal, 20)
-                }
-                if upcomingInvitationCount > 0 {
-                    Button { showsUpcomingInvitations = true } label: {
-                        Label("Upcoming invitations (\(upcomingInvitationCount))", systemImage: "envelope")
-                            .font(AstirTypography.bodySmall)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }.padding(.horizontal, 20).accessibilityIdentifier("live.upcomingInvitations")
-                }
-                if let selectedPin {
-                    ScrollView { selectedPlace(selectedPin) }
-                        .frame(maxHeight: max(96, height * 0.55))
+                    }
+                    if eventsAvailable {
+                        Button { showsEvents = true } label: {
+                            Label("Upcoming events", systemImage: "calendar").font(AstirTypography.bodySmall)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }.padding(.horizontal, 20)
+                    }
+                    if upcomingInvitationCount > 0 {
+                        Button { showsUpcomingInvitations = true } label: {
+                            Label("Upcoming invitations (\(upcomingInvitationCount))", systemImage: "envelope")
+                                .font(AstirTypography.bodySmall)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }.padding(.horizontal, 20).accessibilityIdentifier("live.upcomingInvitations")
+                    }
+                    if let selectedPin {
+                        ScrollView { selectedPlace(selectedPin) }
+                            .frame(maxHeight: max(96, height * 0.55))
+                    }
                 }
                 FeedScreen(
                     isFeedTabActive: isActive, presentationResetRequest: presentationResetRequest,
@@ -495,6 +509,7 @@ struct LiveScreen: View {
                     isEmbedded: true, filteredActivityIDs: Set(activity.map(\.id)),
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
                     onPrivateReply: openReply,
+                    onEmbeddedDestinationActiveChange: { isFeedDestinationActive = $0 },
                     onRefreshRequested: {
                         selection = selection.committed(at: .now)
                         installCommittedQuery(refresh: false)
@@ -502,14 +517,16 @@ struct LiveScreen: View {
                     onAdd: onAdd
                 )
             }
-            .opacity(detent > 0 ? 1 : 0)
-            .allowsHitTesting(detent > 0)
-            .accessibilityHidden(detent == 0)
+            .opacity(showsFeedDestination || detent > 0 ? 1 : 0)
+            .allowsHitTesting(showsFeedDestination || detent > 0)
+            .accessibilityHidden(!showsFeedDestination && detent == 0)
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
-        .background(brand.background, in: UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26))
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26))
+        .background(brand.background, in: UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
+            topTrailingRadius: showsFeedDestination ? 0 : 26))
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
+            topTrailingRadius: showsFeedDestination ? 0 : 26))
         .shadow(color: .black.opacity(0.12), radius: 12, y: -3)
     }
 
