@@ -139,21 +139,45 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         #else
         let appearancePage = settings.buttons["Display & Brightness"]
         #endif
+        var admittedPageFrames: (row: CGRect, application: CGRect)?
         func pageControlIsVisible() -> Bool {
+            admittedPageFrames = nil
             guard appearancePage.isHittable else { return false }
-            let toolbar = settings.toolbars.firstMatch
-            let bottom = toolbar.exists ? toolbar.frame.minY : settings.frame.maxY
-            // Settings may report a row as hittable when only its upper edge
-            // is above the floating Search toolbar. Move the entire row clear.
-            return appearancePage.frame.minY >= settings.navigationBars.firstMatch.frame.maxY
-                && appearancePage.frame.maxY < bottom
+            let applicationFrame = settings.frame
+            let rowFrame = appearancePage.frame
+            var bottom = applicationFrame.maxY
+            var hasChromeFrame = false
+            // The Search settings row is content, not the floating SearchField.
+            for chrome in [settings.toolbars.firstMatch,
+                           settings.searchFields.firstMatch] where chrome.exists {
+                let frame = chrome.frame
+                if frame.width > 0, frame.height > 0, frame.intersects(applicationFrame) {
+                    bottom = min(bottom, frame.minY)
+                    hasChromeFrame = true
+                }
+            }
+            // Collapsed search may omit native chrome frames; keep the whole
+            // row above its recorded bottom area instead of tapping through it.
+            if !hasChromeFrame { bottom -= 100 }
+            guard rowFrame.width > 0, rowFrame.height > 0,
+                  applicationFrame.contains(rowFrame),
+                  rowFrame.minY >= settings.navigationBars.firstMatch.frame.maxY,
+                  rowFrame.maxY < bottom,
+                  appearancePage.frame == rowFrame,
+                  settings.frame == applicationFrame else { return false }
+            admittedPageFrames = (rowFrame, applicationFrame)
+            return true
         }
         for _ in 0..<6 {
             if pageControlIsVisible() { break }
             settings.swipeUp()
         }
         XCTAssertTrue(pageControlIsVisible())
-        appearancePage.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let admittedFrames = try XCTUnwrap(admittedPageFrames)
+        settings.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: admittedFrames.row.midX - admittedFrames.application.minX,
+            dy: admittedFrames.row.midY - admittedFrames.application.minY
+        )).tap()
         try changeAppearanceInSettings(settings, to: .dark)
         let app = XCUIApplication()
         app.launchArguments = [
@@ -231,6 +255,8 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
         #if targetEnvironment(simulator)
         let choice = settings.switches["UIAppearanceSettings"]
         XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.navigationBars["Developer"].exists,
+                      "Settings must open Developer before changing appearance.")
         let expectedValue = appearance == .dark ? "1" : "0"
         if choice.value as? String != expectedValue {
             // Hit the switch itself, rather than the combined cell label.

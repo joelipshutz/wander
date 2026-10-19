@@ -4,6 +4,34 @@ import XCTest
 final class FeedModelsTests: XCTestCase {
     private let groupingNow = Date(timeIntervalSince1970: 1_800_000_000)
 
+    #if DEBUG && targetEnvironment(simulator)
+    func testEmbeddedLivePhotosRequireIsolatedExplicitLaunch() {
+        let required = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture", "-WanderLiveFeedPhotosUITest"]
+        XCTAssertTrue(ActivityPostcardPhotoUITestFixtures.isLiveEnabled(arguments: required))
+        for missing in required {
+            XCTAssertFalse(ActivityPostcardPhotoUITestFixtures.isLiveEnabled(
+                arguments: required.filter { $0 != missing }))
+        }
+        for excluded in ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest",
+            "-WanderOnboardingUITestSignedOut", "-WanderFeedPhotoStackUITest",
+            "-WanderUseStorefrontFixtures", "-WanderUsePerformanceFixtures", "-WanderUseEphemeralEmptyFixtures"] {
+            XCTAssertFalse(ActivityPostcardPhotoUITestFixtures.isLiveEnabled(arguments: required + [excluded]))
+        }
+        XCTAssertEqual(ActivityPostcardPhotoUITestFixtures.liveFeedMedia(arguments: []), [])
+        let protectedPhoto = FeedMediaPreview(id: "64000000-0000-0000-0000-000000000641",
+            storageBucket: "visit-photos", storagePath: "owner/visit/photo.jpg",
+            accessibilityLabel: "Sample check-in photo 1")
+        XCTAssertNil(ActivityPostcardPhotoUITestFixtures.livePhoto(matching: protectedPhoto, arguments: required))
+        let urlPhoto = FeedMediaPreview(id: protectedPhoto.id, urlString: "https://example.invalid/photo.jpg",
+            accessibilityLabel: protectedPhoto.accessibilityLabel)
+        XCTAssertNil(ActivityPostcardPhotoUITestFixtures.livePhoto(matching: urlPhoto, arguments: required))
+        XCTAssertNil(ActivityPostcardPhotoUITestFixtures.livePhoto(
+            matching: FeedMediaPreview(id: "remote-photo", storageBucket: "visit-photos",
+                storagePath: "owner/visit/photo.jpg", accessibilityLabel: "Photo"), arguments: []))
+    }
+    #endif
+
     @MainActor
     func testDecodedRepeatCheckInsKeepDistinctAndEmptyMetadata() async throws {
         let decoder = JSONDecoder()

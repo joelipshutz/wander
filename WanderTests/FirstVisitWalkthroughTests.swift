@@ -52,6 +52,35 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertNil(coordinator.currentStep)
     }
 
+    func testDisabledPersistedCheckpointDoesNotOwnCurrentPresentation() throws {
+        let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
+        store.setCheckpoint(FirstVisitWalkthroughCheckpoint(
+            target: .mapFeatured, updatedAt: .now, tutorialCandidate: nil,
+            tutorialUserPlaceID: nil, tutorialMemorySnapshot: nil
+        ), for: "returning-user")
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "returning-user", store: store, isEnabled: false
+        )
+
+        XCTAssertTrue(coordinator.hasActivePrimaryJourney)
+        XCTAssertFalse(coordinator.hasPresentedPrimaryJourney)
+        XCTAssertFalse(coordinator.isPresentingLaunchLesson)
+        coordinator.retireJourneyForDisabledExperience()
+        XCTAssertNil(store.checkpoint(for: "returning-user"))
+        XCTAssertFalse(coordinator.hasActivePrimaryJourney)
+    }
+
+    func testMountedPrimaryJourneyStillOwnsItsPresentationBeforeDisable() throws {
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "new-user", store: FirstVisitWalkthroughStore(defaults: try makeDefaults())
+        )
+        coordinator.activate(.map)
+        XCTAssertTrue(coordinator.hasPresentedPrimaryJourney)
+        coordinator.setEnabled(false)
+        XCTAssertFalse(coordinator.hasPresentedPrimaryJourney)
+        XCTAssertTrue(coordinator.hasActivePrimaryJourney, "The retained checkpoint is distinct from mounted UI.")
+    }
+
     func testLateCoachCallbackCannotSkipTheNextMapBeat() throws {
         let coordinator = FirstVisitWalkthroughCoordinator(
             userID: "reviewer", store: FirstVisitWalkthroughStore(defaults: try makeDefaults())

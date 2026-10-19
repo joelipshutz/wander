@@ -5,12 +5,20 @@ on:
     branches: [main]
     paths:
       - 'Wander/DesignSystem/PlaceRatingExplanation.swift'
+      - 'Wander/DesignSystem/PersonMentionField.swift'
       - 'Wander/Features/Activity/ActivityEngagementViews.swift'
+      - 'Wander/Features/Live/LiveScreen.swift'
+      - 'Wander/Features/Messaging/**'
+      - 'Wander/Models/PrivateMessageModels.swift'
+      - 'Wander/Services/Remote/PrivateMessage*.swift'
+      - 'Wander/Services/PostHogAnalyticsClient.swift'
+      - 'WanderTests/PrivateMessag*Tests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderUITests/LiveMigrationAndPrivacyUITests.swift'
       - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
       - 'WanderTests/WanderPlaceCategoryTests.swift'
-      - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
       - 'scripts/run-parent-regression.py'
       - '.github/workflows/privacy-validation.yml'
@@ -68,19 +76,72 @@ jobs:
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Verify replay masking in an isolated process
+      - name: Prepare isolated Replay test products once
+        id: replay-products
         if: success() || failure()
         run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts"
           -only-testing:WanderTests/ReplayMaskingTests
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      # Replay owns process-wide SDK state; each scenario starts a fresh host.
+      - name: Verify private-message replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-private"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["PRO_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+              "-maximum-test-execution-time-allowance", "180",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Verify credential replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-credentials"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["PRO_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+              "-maximum-test-execution-time-allowance", "180",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
       - name: Release Pro simulator and wait for compact startup
         if: success() || failure()
         run: |
@@ -97,6 +158,8 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
@@ -104,7 +167,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact replay; do
+          for device in pro compact replay-private replay-credentials; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
@@ -125,7 +188,12 @@ jobs:
           path: |
             ${{ runner.temp }}/pro.xcresult
             ${{ runner.temp }}/compact.xcresult
-            ${{ runner.temp }}/replay.xcresult
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
+            ${{ runner.temp }}/replay-private-host.json
+            ${{ runner.temp }}/replay-private-host
+            ${{ runner.temp }}/replay-credentials-host.json
+            ${{ runner.temp }}/replay-credentials-host
           retention-days: 14
       - name: Package simulator app for local review
         if: always()

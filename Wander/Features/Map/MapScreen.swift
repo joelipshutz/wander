@@ -2242,6 +2242,7 @@ struct MapScreen: View {
                                         query: $mapQuery,
                                         personMentions: $mapPersonMentions,
                                         isFocused: $isMapSearchFocused,
+                                        isVisible: !isMoreFiltersPresented,
                                         focusRequestID: mapSearchFocusRequestID,
                                         onFocusRequestHandled: { requestID in
                                             guard mapSearchFocusRequestID == requestID else { return }
@@ -9443,6 +9444,7 @@ private struct SearchBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var query: String
     let isFocused: Binding<Bool>
+    let isVisible: Bool
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
     let onQueryEdited: () -> Void
@@ -9458,6 +9460,7 @@ private struct SearchBar: View {
         query: Binding<String>,
         personMentions: Binding<[PersonMention]>,
         isFocused: Binding<Bool>,
+        isVisible: Bool = true,
         focusRequestID: UUID?,
         onFocusRequestHandled: @escaping (UUID) -> Void,
         onQueryEdited: @escaping () -> Void,
@@ -9467,6 +9470,7 @@ private struct SearchBar: View {
         _query = query
         _personMentions = personMentions
         self.isFocused = isFocused
+        self.isVisible = isVisible
         self.focusRequestID = focusRequestID
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onQueryEdited = onQueryEdited
@@ -9480,17 +9484,15 @@ private struct SearchBar: View {
             text: $draftQuery, mentions: $personMentions,
             focus: isFocused,
             placeholder: "search your map or people...", accessibilityLabel: "Search your map or people",
-            accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true,
+            accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true, isVisible: isVisible,
             onSubmit: {
                 let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText
                 commitDraftQuery(draftQuery)
                 onSubmit(requestedQuery)
             }, decorateInput: { input in AnyView(searchChrome(input)) }
         )
-        .task(id: focusRequestID) { await focusIfRequested() }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active, focusRequestID != nil else { return }
-            Task { await focusIfRequested() }
+        .task(id: "\(focusRequestID?.uuidString ?? "")|\(isVisible)|\(scenePhase == .active)") {
+            await focusIfRequested()
         }
         .animation(
             reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
@@ -9507,7 +9509,12 @@ private struct SearchBar: View {
         }
         .onChange(of: isFocused.wrappedValue) { _, focused in
             guard !focused else { return }
-            cancelPendingQueryCommitAndSyncDraft()
+            if isVisible {
+                cancelPendingQueryCommitAndSyncDraft()
+            } else {
+                // Hiding the dock must retain the latest debounced search edit.
+                commitDraftQuery(draftQuery)
+            }
         }
         .onDisappear {
             queryCommitTask?.cancel()
@@ -9516,11 +9523,14 @@ private struct SearchBar: View {
 
     private func searchChrome(_ input: AnyView) -> some View {
         HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(astirBrandMode.secondaryText)
+            if isVisible {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(astirBrandMode.secondaryText)
+                    .accessibilityHidden(true)
+            }
             input
             Spacer()
-            if !draftQuery.isEmpty {
+            if isVisible && !draftQuery.isEmpty {
                 Button {
                     queryCommitTask?.cancel()
                     draftQuery = ""
@@ -9530,14 +9540,18 @@ private struct SearchBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(astirBrandMode.secondaryText)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Clear map search")
                 .accessibilityIdentifier("map.searchClear")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
-        .contentShape(Rectangle())
+        // Keep hit shapes on the controls: a row-wide shape expands Clear's
+        // accessibility frame across the native editor.
         .mapSearchCapsuleSurface()
         .overlay {
             if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {
@@ -9576,7 +9590,7 @@ private struct SearchBar: View {
 
     @MainActor
     private func focusIfRequested() async {
-        guard let focusRequestID, scenePhase == .active else { return }
+        guard isVisible, let focusRequestID, scenePhase == .active else { return }
 
         // Run from the TextField's own lifecycle so the selected Map tab and
         // its navigation hierarchy are attached before becoming first

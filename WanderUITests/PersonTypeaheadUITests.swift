@@ -40,8 +40,13 @@ final class PersonTypeaheadUITests: XCTestCase {
         // after foregrounding. Require the exact edit before testing deletion.
         expectation(for: NSPredicate(format: "value == %@", "With @Caitlin Cortez x"), evaluatedWith: field)
         waitForExpectations(timeout: 5)
+        XCTAssertEqual(field.value as? String, "With @Caitlin Cortez x")
         field.typeText(XCUIKeyboardKey.delete.rawValue)
-        assertAtomicBackspace(field, remaining: "With ")
+        waitForFieldValue("With @Caitlin Cortez ", in: field)
+        XCTAssertEqual(field.value as? String, "With @Caitlin Cortez ",
+                       "Deleting the caret probe must preserve the selected mention and its separator")
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        assertAtomicBackspace(field, removing: "@Caitlin Cortez", remaining: "With ")
     }
 
     func testFeedSearchPickerInsertsFullNameAndKeepsKeyboard() {
@@ -68,7 +73,7 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertFalse(person.exists)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         capture("feed-search-selected")
-        assertAtomicBackspace(field, remaining: "")
+        assertAtomicBackspace(field, removing: "@Caitlin Cortez", remaining: "")
     }
 
     func testMapSearchPickerInsertsFullName() {
@@ -92,20 +97,34 @@ final class PersonTypeaheadUITests: XCTestCase {
         field.typeText("@cait123 ")
         expectation(for: NSPredicate(format: "value == %@", "@Caitlin Cortez "), evaluatedWith: field)
         waitForExpectations(timeout: 5)
-        assertAtomicBackspace(field, remaining: "")
+        assertAtomicBackspace(field, removing: "@Caitlin Cortez", remaining: "")
     }
 
     func testCheckInAndWannaNotesUseTheSamePicker() {
         for mode in ["checkIn", "wanna"] {
-            let app = launch(["-WanderMapPlace", "Griffith Observatory Trail", "-WanderMapSheetExpanded", "-WanderPlaceProfileSaveTrayV1"], demo: true)
+            let app = launch(["-WanderMapPlace", "Griffith Observatory Trail", "-WanderPlaceProfileSaveTrayV1"], demo: true)
+            // This test covers picker semantics. Open the normal visible card
+            // instead of depending on the separate expanded-startup fixture.
+            let card = app.buttons["map.selectedPlaceCard"]
+            let cardReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: card
+            )], timeout: 25) == .completed
+            XCTAssertTrue(cardReady, "The selected place card must be ready for a real tap.")
+            guard cardReady else { return }
+            card.tap()
+
             let action = app.buttons["place-profile.floating-action.\(mode)"]
-            XCTAssertTrue(action.waitForExistence(timeout: 25))
+            let actionReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: action
+            )], timeout: 10) == .completed
+            XCTAssertTrue(actionReady, "The expanded place action must be visible and hittable.")
+            guard actionReady else { return }
             action.tap()
             let field = app.textViews["save.note"]
             XCTAssertTrue(field.waitForExistence(timeout: 10))
             for _ in 0..<4 where !field.isHittable { app.swipeUp() }
             exercisePicker(app, field: field, identifier: "save.note", prefix: "With ")
-            assertAtomicBackspace(field, remaining: "With @Caitlin Cortez and ")
+            assertAtomicBackspace(field, removing: "@Camilo Flores", remaining: "With @Caitlin Cortez and ")
             capture("\(mode)-note-selected")
             app.terminate()
         }
@@ -166,29 +185,50 @@ final class PersonTypeaheadUITests: XCTestCase {
         XCTAssertEqual(commentComposer(app).frame.maxY, bottom, accuracy: 1)
         capture("comment-composer-multiline-picker")
         caitlin.tap()
-        assertAtomicBackspace(field, remaining: prefix)
+        assertAtomicBackspace(field, removing: "@Caitlin Cortez", remaining: prefix)
         XCTAssertEqual(commentComposer(app).frame.maxY, bottom, accuracy: 1)
         field.typeText("@cait123 ")
         expectation(for: NSPredicate(format: "value == %@", prefix + "@Caitlin Cortez "), evaluatedWith: field)
         waitForExpectations(timeout: 5)
-        assertAtomicBackspace(field, remaining: prefix)
+        assertAtomicBackspace(field, removing: "@Caitlin Cortez", remaining: prefix)
         field.typeText("still typing @")
         XCTAssertTrue(caitlin.waitForExistence(timeout: 5))
         assertPickerAtKeyboard(app, identifier: "activity.comment.input")
         capture("comment-composer-reopened")
     }
 
-    private func assertAtomicBackspace(_ field: XCUIElement, remaining: String) {
-        // The inserted trailing space is ordinary text. The next delete removes
-        // the entire tagged person, including @, and keeps preceding text.
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
-        // UIKit can finish the native edit before its accessibility value is
-        // refreshed. Observe the result without sending another delete.
-        expectation(for: NSPredicate { _, _ in
-            field.exists && (field.value as? String ?? "") == remaining
-        }, evaluatedWith: field)
-        waitForExpectations(timeout: 5)
-        XCTAssertEqual(field.value as? String ?? "", remaining)
+    private func assertAtomicBackspace(
+        _ field: XCUIElement,
+        removing mention: String,
+        remaining: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitForFieldValue(remaining + mention + " ", in: field, file: file, line: line)
+        XCTAssertEqual(field.value as? String, remaining + mention + " ", file: file, line: line)
+        // Observe the ordinary separator deletion separately so the atomic
+        // assertion starts with the caret immediately after the tagged name.
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        waitForFieldValue(remaining + mention, in: field, file: file, line: line)
+        XCTAssertEqual(field.value as? String, remaining + mention,
+                       "The first backspace must remove only the trailing separator", file: file, line: line)
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        waitForFieldValue(remaining, in: field, file: file, line: line)
+        XCTAssertEqual(field.value as? String, remaining,
+                       "One backspace must remove the entire tagged person, including @", file: file, line: line)
+    }
+
+    private func waitForFieldValue(
+        _ value: String,
+        in field: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        // Require the exact native edit before checking atomic deletion; an
+        // intermediate accessibility snapshot cannot satisfy this predicate.
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: field)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 5), .completed,
+                       "The exact native edit must reach accessibility.", file: file, line: line)
     }
 
     private func focus(_ field: XCUIElement, in app: XCUIApplication) {

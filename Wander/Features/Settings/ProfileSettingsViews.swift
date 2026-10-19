@@ -375,6 +375,14 @@ struct ProfileSettingsHome: View {
 
     private var resourcesSection: some View {
         Section {
+            if showsLiveIntroductionReplay {
+                NavigationLink {
+                    LiveIntroductionReplayView(userID: auth.state.session?.userID ?? store.currentUser.id)
+                } label: {
+                    Label("What’s changed", systemImage: "sparkles")
+                }
+                .accessibilityIdentifier("settings.whatsChanged")
+            }
             NavigationLink {
                 SettingsResourcesScreen()
             } label: {
@@ -383,6 +391,19 @@ struct ProfileSettingsHome: View {
             .accessibilityIdentifier("settings.resources")
         }
         .listRowBackground(brandMode.raisedBackground)
+    }
+
+    private var showsLiveIntroductionReplay: Bool {
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        if let record = LiveIntroductionMigrationStore().load(for: userID), !record.isComplete { return true }
+        let value = backend.resolvedFeatureFlag(.unifiedLiveV1, for: userID)
+        #if DEBUG && targetEnvironment(simulator)
+        let isolatedReview = ProcessInfo.processInfo.arguments.contains("-WanderUnifiedLiveUITest")
+            && ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest")
+        #else
+        let isolatedReview = false
+        #endif
+        return LiveNavigationPolicy.isEnabled(value, isolatedSimulatorReview: isolatedReview)
     }
 
     // Every Simulator build exposes this local tester surface. Physical devices

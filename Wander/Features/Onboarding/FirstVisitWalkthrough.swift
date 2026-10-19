@@ -1106,6 +1106,12 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             || isRequestingContactInvite
     }
 
+    /// Persisted checkpoints can require retirement without owning any current
+    /// navigation. Only mounted primary content needs root presentation cleanup.
+    var hasPresentedPrimaryJourney: Bool {
+        activeSurface.map(FirstVisitWalkthroughContent.primaryJourneySurfaces.contains) == true
+    }
+
     var hasActivePrimaryJourney: Bool {
         activeSurface.map(FirstVisitWalkthroughContent.primaryJourneySurfaces.contains) == true
             || requestedSurface.map(FirstVisitWalkthroughContent.primaryJourneySurfaces.contains) == true

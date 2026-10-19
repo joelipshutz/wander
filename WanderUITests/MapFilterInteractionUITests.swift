@@ -302,6 +302,15 @@ final class MapFilterInteractionUITests: XCTestCase {
             let current = app.descendants(matching: .any)["map.performanceProbe"].firstMatch.value as? String ?? ""
             return current != previousProbe && current.contains("camera=")
         }
+        let beforePanFrame = map.frame
+        let beforePan = XCTAttachment(string:
+            "probe=\(previousProbe)\nmapFrame=\(beforePanFrame)\n"
+                + "normalizedStart=(0.72,0.42); normalizedEnd=(0.28,0.56); velocity=slow"
+        )
+        beforePan.name = "REC-404 selected-pin pan before probe and geometry"
+        beforePan.lifetime = .keepAlways
+        add(beforePan)
+
         var didMeasurePan = false
         var invocationCount = 0
         let options = XCTMeasureOptions()
@@ -319,7 +328,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             dragStart.press(
                 forDuration: 0.08,
                 thenDragTo: dragEnd,
-                withVelocity: .fast,
+                withVelocity: .slow,
                 thenHoldForDuration: 0.08
             )
             XCTAssertEqual(
@@ -338,6 +347,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         let snapshot = String(describing: probe.value)
         print("REC404_MAP_PERFORMANCE_PROBE \(snapshot)")
         add(XCTAttachment(string: snapshot))
+
+        let afterPanFrame = map.frame
+        let afterPan = XCTAttachment(string: "probe=\(snapshot)\nmapFrame=\(afterPanFrame)")
+        afterPan.name = "REC-404 selected-pin pan after probe and geometry"
+        afterPan.lifetime = .keepAlways
+        add(afterPan)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-404 dense map after selected-pin pan"
@@ -790,8 +805,19 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textViews["map.searchField"]
         let nearby = app.buttons["map.nearby"]
         let add = app.buttons["map.headerAdd"]
-        XCTAssertFalse(search.exists, "The hidden native input must leave the accessibility tree")
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Hidden Map dock accessibility tree"
+        hierarchy.lifetime = .keepAlways
+        self.add(hierarchy)
+        if search.isHittable {
+            let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            capture.name = "Map dock hidden while accessibility reports hittable"
+            capture.lifetime = .keepAlways
+            self.add(capture)
+        }
+        XCTAssertFalse(search.exists, "The hidden editor must leave the accessibility tree")
         XCTAssertFalse(search.isHittable)
+        XCTAssertFalse(app.images["magnifyingglass"].exists, "The search icon is decorative; the native field supplies its label")
         XCTAssertFalse(nearby.isHittable)
         XCTAssertFalse(add.exists, "The hidden glass action must leave the accessibility tree")
         XCTAssertFalse(add.isHittable)
@@ -805,9 +831,46 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.buttons["Map"].tap()
         assertOneSelectedFilter(in: app)
         XCTAssertTrue(search.waitForExistence(timeout: 2))
-        XCTAssertTrue(search.isHittable)
+        XCTAssertTrue(search.isHittable, "Dismissing More filters must restore the retained editor")
+        XCTAssertEqual(app.textViews.matching(identifier: "map.searchField").count, 1)
         XCTAssertTrue(add.waitForExistence(timeout: 2))
         XCTAssertTrue(add.isHittable)
+
+        // Exercise real nonempty editor state too: hiding must remove the
+        // clear action without removing the editor or discarding its query.
+        search.tap()
+        search.typeText("coffee")
+        let clear = app.buttons["map.searchClear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 3))
+        search.typeText("\n")
+        let more = app.buttons["map.filter.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 3))
+        more.tap()
+        XCTAssertTrue(panel.waitForExistence(timeout: 3))
+        XCTAssertTrue(search.waitForNonExistence(timeout: 3))
+        XCTAssertEqual(app.textViews.matching(identifier: "map.searchField").count, 0)
+        XCTAssertFalse(clear.exists)
+        XCTAssertFalse(app.images["magnifyingglass"].exists)
+        XCTAssertFalse(add.exists)
+        XCTAssertFalse(app.buttons["map.searchCancel"].exists)
+        let retainedHierarchy = XCTAttachment(string: app.debugDescription)
+        retainedHierarchy.name = "Hidden Map dock with retained query accessibility tree"
+        retainedHierarchy.lifetime = .keepAlways
+        self.add(retainedHierarchy)
+        panel.buttons["Done"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        let restoredHierarchy = XCTAttachment(string: app.debugDescription)
+        restoredHierarchy.name = "Restored Map query accessibility tree"
+        restoredHierarchy.lifetime = .keepAlways
+        self.add(restoredHierarchy)
+        XCTAssertTrue(search.isHittable)
+        XCTAssertEqual(search.value as? String, "coffee")
+        XCTAssertEqual(app.textViews.matching(identifier: "map.searchField").count, 1)
+        XCTAssertTrue(clear.waitForExistence(timeout: 3))
+        XCTAssertTrue(clear.isHittable)
+        XCTAssertFalse(clear.frame.intersects(search.frame), "Clear must not cover the editor's accessibility frame")
+        search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "The restored retained editor must accept a physical tap")
     }
 
     func testThreeMinutesOnAnotherTabResetsMoreFilters() {

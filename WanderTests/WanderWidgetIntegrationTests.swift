@@ -595,7 +595,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(map.contains(".task(id: searchLaunchRequest?.id)"))
         XCTAssertTrue(map.contains("await handleMapSearchLaunchRequest(searchLaunchRequest)"))
         XCTAssertTrue(map.contains("mapSearchFocusRequestID = request.id"))
-        XCTAssertTrue(map.contains(".task(id: focusRequestID)"))
+        // A queued widget focus also restarts when the field becomes visible
+        // or the scene returns; native visibility behavior has separate tests.
+        XCTAssertTrue(map.contains(#".task(id: "\(focusRequestID?.uuidString ?? "")|\(isVisible)|\(scenePhase == .active)")"#))
         XCTAssertTrue(map.contains("scenePhase == .active"))
         XCTAssertTrue(map.contains("isFocused.wrappedValue = true"))
         XCTAssertTrue(map.contains("onFocusRequestHandled(focusRequestID)"))

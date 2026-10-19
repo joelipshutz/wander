@@ -1,8 +1,84 @@
 # Decisions
 
-Last updated: 2026-10-08
+Last updated: 2026-10-14
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Live integration and Profile continuity (REC-636, October 10)
+
+Ryan accepted **Live / Lists / Profile** as the primary tabs, with Add as an
+action. Live combines the map and existing Feed through a directly draggable
+drawer. Remove the redundant Live/place memories/your people header and the
+separate drawer arrow, while retaining accessible alternatives. Initial camera
+framing responds to authorized activity density and then respects user pan.
+Wanna pins use a muted outlined bookmark with a distinct shape from Check-ins.
+
+D2/D3 query presets and defaults are explicitly accepted. Following uses the
+existing authorized audience and defaults to seven days. Nearby begins at 5 km
+with explicit expansion up to 25 km; it never expands social visibility. Controls use an explicitly selected public city center, category/person choices
+and 24-hour/7-day/30-day/all-time ranges. Committed fields now reach the Live
+repository through the store, with stable bounds and cursor/account fencing.
+SQL applies every predicate before pagination; installation and post-install
+hosted verification remain pending.
+Current-location centering and separately eligible discovery remain distinct work.
+
+Recent activity must remain the current Feed experience: the existing cards,
+grouping and actions, with **Invite people to Astir → People worth following →
+Activity** in their existing order. Profile retains identity/social, streak,
+recent activity, Your Map and calendar. **Only area drawing is reused from Your
+Map.** Full owner/member maps, Patterns, history, lenses, Snapshot, sharing and
+return routes stay in Profile; no wholesale or additional owner-map relocation
+is approved.
+
+D6/D7 approve production private messaging with a **mutual-only baseline**.
+Implement actual access, block/report, delivery/retry and privacy contracts;
+existing public comments are not private replies. Wanna planning reuses the
+existing place-plan invitation composer/repository and its truthful share/inbox
+outcome. It does not invent acceptance, attendance or a new planning backend.
+D9's dismissible account/version migration teaching and D10's separately labelled
+Upcoming plans/events are accepted. Events retains its own lifecycle and access
+contracts.
+
+The D10 source now provides a compact Upcoming invitations entry and a separate
+sheet with at most three dated invitations, ascending by suggested time. It
+reuses the account's latest 100 received invitations and existing recipient/full
+inbox routes. This is not a complete calendar, sent-plan list or RSVP/attendance
+system. Undated invitations remain in the ordinary inbox. Real Events discovery is still separate work.
+
+The map and drawer share authorized loaded Live query data. The native query
+integration is implemented. SQL packaging and rolled-back hosted previews pass;
+the dormant backend installation remains pending.
+The visible count is
+“N updates shown,” with accessibility label “N loaded updates”; neither is a
+server total. Current tabs stay visible at every drawer detent; full height exits
+through handle drag or VoiceOver adjustment, without a Map pill. This differs
+from the earlier hidden-peek-tabs/Map-pill target and is not evidence that target
+was completed. Earlier standalone-prototype captures do not validate the current
+integrated app. The [integrated validation report](designs/astir-live/review/integrated-validation.md)
+is the single authority for candidate identity, native results and outstanding
+validation. D9 recovery and messaging's inactive-scene cover are implemented;
+release evidence must establish their behavior, including rollback and replay
+privacy. Production release and hosted validation remain separate gates.
+
+Freehand drawing uses explicit Apply/Cancel and account-session area retention.
+The committed area survives tab/detail return; it is not persisted across accounts
+or launches. Ryan approved D11's **15-minute** display lease for other people's
+Live activity. Each row uses a monotonic authorized-response receipt captured
+before media work. Suspension counts; wall-clock changes cannot extend access.
+Only successful authorization renews the returned rows; expired rows disappear
+until revalidated. Owner content and Profile/shared-cache
+history retain their existing policy.
+
+Ryan delegated the first messaging rollout choice. The initial rollout is limited
+to internal testers: both participants must have explicit server-side account
+`unified_live_v1` enablement, in addition to mutual friendship and current access.
+A global flag or device override alone cannot grant messaging access. Broad rollout
+still requires message reporting and explicit soft-delete retention/export rules;
+no public rollout is authorized by this review. Soft deletion denies access;
+physical profile deletion cascades stored conversations/messages.
+
+See the [current contract](designs/astir-live/product-spec.md) and
+[remaining questions](open-questions.md#live-experience-review-rec-636).
 
 ## Shared-link App Clip (REC-408)
 
