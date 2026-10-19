@@ -230,7 +230,7 @@ class PhotoFixturePreparationTests(unittest.TestCase):
         with mock.patch("sys.argv", ["run-parent-regression.py", "--suite", "ui", "--shard", "0",
                                     "--shard-count", "1", "--destination", "fixture-device",
                                     "--test-products", "prepared.xctestproducts", "--result-bundle", "photo.xcresult"]), \
-                mock.patch.object(regression, "ui_test_identifiers", return_value=sorted({identifier} | regression.ISOLATED_UI_PERFORMANCE | regression.REFERENCE_UI_PERFORMANCE)), \
+                mock.patch.object(regression, "ui_test_identifiers", return_value=sorted({identifier} | regression.ISOLATED_UI_PERFORMANCE | regression.ISOLATED_UI_WARM_PERFORMANCE | regression.REFERENCE_UI_PERFORMANCE)), \
                 mock.patch.object(regression, "prepare_ui_performance_products", return_value=1), \
                 mock.patch.object(regression.subprocess, "run", side_effect=native), \
                 contextlib.redirect_stdout(io.StringIO()):
@@ -275,7 +275,7 @@ class PhotoFixturePreparationTests(unittest.TestCase):
 class PerformanceProductsTests(unittest.TestCase):
     def test_ui_inventory_has_disjoint_complete_hosted_and_reference_coverage(self):
         inventory = regression.ui_test_identifiers(Path(__file__).resolve().parents[1])
-        hosted = regression.ISOLATED_UI_PERFORMANCE
+        hosted = regression.ISOLATED_UI_PERFORMANCE | regression.ISOLATED_UI_WARM_PERFORMANCE
         reference = regression.REFERENCE_UI_PERFORMANCE
         self.assertFalse(hosted & reference)
         self.assertTrue((hosted | reference).issubset(inventory))
@@ -283,9 +283,121 @@ class PerformanceProductsTests(unittest.TestCase):
                     if test not in hosted | reference]
         self.assertEqual(Counter(ordinary + sorted(hosted) + sorted(reference)), Counter(inventory))
 
+    def selection(self, suite, shard=0):
+        output = io.StringIO()
+        with mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
+                                     "--shard", str(shard), "--shard-count", "8", "--list-only"]), \
+                mock.patch.object(regression.subprocess, "run", side_effect=AssertionError("No native execution")), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(regression.main(), 0)
+        return json.loads(output.getvalue())
+
+    def test_warm_is_required_once_and_does_not_reshuffle_other_ui_methods(self):
+        inventory = regression.ui_test_identifiers(Path(__file__).resolve().parents[1])
+        warm = regression.ISOLATED_UI_WARM_PERFORMANCE
+        self.assertEqual(warm, {
+            "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureKeepsWarmSourceSwitchesResponsive"})
+        ordinary = []
+        for shard in range(8):
+            selected = self.selection("ui", shard)
+            expected = [identifier for identifier in inventory[shard::8]
+                        if identifier not in regression.ISOLATED_UI_PERFORMANCE | regression.REFERENCE_UI_PERFORMANCE | warm]
+            self.assertEqual(selected["identifiers"], expected)
+            for identifier in warm:
+                self.assertEqual(selected["isolatedTestSuites"][identifier], "ui-warm-performance")
+            ordinary += selected["identifiers"]
+        isolated = [identifier for suite in ("ui-performance", "ui-warm-performance", "ui-reference-performance")
+                    for identifier in self.selection(suite)["identifiers"]]
+        self.assertEqual(Counter(ordinary + isolated), Counter(inventory))
+        self.assertFalse(warm & set(self.selection("graphics")["identifiers"]))
+
+    def test_only_warm_dispatch_uses_recording_and_keeps_original_native_contract(self):
+        for suite, capture, preserve in [("ui-warm-performance", "screenRecording", True),
+                                          ("ui-performance", "screenshots", False),
+                                          ("ui-reference-performance", "screenshots", False),
+                                          ("ui", "screenshots", True), ("graphics", "screenshots", True),
+                                          ("ui-snapshot-recovery", "screenshots", True),
+                                          ("ui-profile-share-recovery", "screenshots", True)]:
+            with self.subTest(suite=suite), \
+                    mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
+                        "--destination", "fixture-device", "--test-products", "prepared.xctestproducts",
+                        "--result-bundle", "result.xcresult"]), \
+                    mock.patch.object(regression, "prepare_ui_performance_products", return_value=1) as prepare, \
+                    mock.patch.object(regression.subprocess, "run", return_value=SimpleNamespace(returncode=65)) as run, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(regression.main(), 65)
+                prepare.assert_called_once_with(Path("prepared.xctestproducts"),
+                    preserve_system_failures=preserve, screen_capture_format=capture)
+                self.assertEqual(run.call_count, 1)
+                command = run.call_args.args[0]
+                self.assertEqual(command[:3], ["xcodebuild", "test-without-building", "-quiet"])
+                for flag, value in [("-testProductsPath", "prepared.xctestproducts"),
+                    ("-destination", "platform=iOS Simulator,id=fixture-device"), ("-jobs", "2"),
+                    ("-parallel-testing-enabled", "NO"), ("-test-timeouts-enabled", "YES"),
+                    ("-default-test-execution-time-allowance", "600"),
+                    ("-maximum-test-execution-time-allowance", "900")]:
+                    self.assertEqual(command[command.index(flag) + 1], value)
+                self.assertFalse(any(x.startswith(("-test-iterations", "-retry-tests")) for x in command))
+                if suite == "ui-warm-performance" or suite in regression.UI_RECOVERY_METHODS:
+                    identifier = (next(iter(regression.ISOLATED_UI_WARM_PERFORMANCE))
+                                  if suite == "ui-warm-performance" else regression.UI_RECOVERY_METHODS[suite])
+                    self.assertEqual([x for x in command if x.startswith("-only-testing:")],
+                                     ["-only-testing:" + identifier])
+                    self.assertFalse(any(x.startswith("-skip-testing:") for x in command))
+
+    def test_invalid_capture_mode_fails_before_any_configuration_write(self):
+        with tempfile.TemporaryDirectory() as temporary, self.assertRaisesRegex(ValueError, "Unsupported"):
+            regression.prepare_ui_performance_products(Path(temporary), screen_capture_format="none")
+
+    def test_full_workflow_requires_the_separate_warm_suite(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
+        self.assertEqual(workflow.count('{"name":"UI warm performance","suite":"ui-warm-performance","shard":0}'), 2)
+        self.assertIn("'ui-performance', 'ui-warm-performance', 'ui-snapshot-recovery', 'ui-profile-share-recovery', 'graphics'", workflow)
+
+    def test_recovery_methods_are_exact_and_do_not_leave_ordinary_coverage(self):
+        expected = {
+            "ui-snapshot-recovery": "WanderUITests/YourMapPrototypeUITests/testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls",
+            "ui-profile-share-recovery": "WanderUITests/ProfileResponsivenessUITests/testProfileSharePresentsAndCancelsOnColdAndWarmEntry",
+        }
+        self.assertEqual(regression.UI_RECOVERY_METHODS, expected)
+        ordinary = [case for shard in range(8) for case in self.selection("ui", shard)["identifiers"]]
+        inventory = regression.ui_test_identifiers(Path(__file__).resolve().parents[1])
+        for suite, identifier in expected.items():
+            with self.subTest(suite=suite):
+                self.assertEqual(self.selection(suite)["identifiers"], [identifier])
+                self.assertEqual(ordinary.count(identifier), 1)
+                with mock.patch.object(regression, "ui_test_identifiers", return_value=[x for x in inventory if x != identifier]), \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    self.selection(suite)
+
+    def test_recovery_mode_selects_only_three_jobs_and_rejects_conflicting_modes_before_build(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
+        self.assertIn("parent_ui_recovery:\n        description: Run only the original warm-source timing, Your Map snapshot and Profile share checks\n        type: boolean\n        default: false", workflow)
+        matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
+        modes = {name or "default": json.loads(value) for name, value in
+                 re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
+        self.assertEqual(set(modes), {"parent_ui_recovery", "unpassed_only", "graphics_only", "default"})
+        self.assertEqual([(x["suite"], x["shard"]) for x in modes["parent_ui_recovery"]],
+                         [("ui-warm-performance", 0), ("ui-snapshot-recovery", 0), ("ui-profile-share-recovery", 0)])
+        self.assertEqual([(x["suite"], x["shard"]) for x in modes["unpassed_only"]], [("ui", 0), ("ui", 2)])
+        self.assertEqual([(x["suite"], x["shard"]) for x in modes["graphics_only"]], [("graphics", 0)])
+        self.assertEqual(sum(x["suite"] == "ui-warm-performance" for x in modes["default"]), 1)
+        self.assertFalse(set(regression.UI_RECOVERY_METHODS) & {x["suite"] for x in modes["default"]})
+        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ]; then'), 2)
+        guard = textwrap.dedent(workflow.split("        run: |\n", 1)[1].split("          python3 -B", 1)[0])
+        self.assertNotIn("xcodebuild", guard)
+        self.assertNotIn("brew", guard)
+        for mask in range(8):
+            values = ["true" if mask & (1 << index) else "false" for index in range(3)]
+            with self.subTest(values=values):
+                result = subprocess.run(["/bin/bash", "-c", guard], capture_output=True,
+                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2]})
+                self.assertEqual(result.returncode, 0 if values.count("true") <= 1 else 1)
+
     def test_both_formats_preserve_selection_binaries_and_unit_configuration(self):
-        for version, preserve_failures in ((1, False), (2, False), (1, True), (2, True)):
-            with self.subTest(version=version, preserve_failures=preserve_failures), tempfile.TemporaryDirectory() as temporary:
+        for version, preserve_failures, capture in [(v, p, c) for v in (1, 2) for p in (False, True)
+                                                    for c in ("screenshots", "screenRecording")]:
+            with self.subTest(version=version, preserve_failures=preserve_failures, capture=capture), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 unit = {"BlueprintName": "WanderTests", "TestBundlePath": "units.xctest"}
                 ui = {"IsUITestBundle": True, "BlueprintName": "WanderUITests",
@@ -298,13 +410,14 @@ class PerformanceProductsTests(unittest.TestCase):
                 expected = copy.deepcopy(document)
                 expected_ui = (expected["WanderUITests"] if version == 1 else
                                expected["TestConfigurations"][0]["TestTargets"][1])
-                expected_ui.update(PreferredScreenCaptureFormat="screenshots",
+                expected_ui.update(PreferredScreenCaptureFormat=capture,
                                    SystemAttachmentLifetime="deleteOnSuccess" if preserve_failures else "keepNever")
                 (root / "Info.plist").write_bytes(plistlib.dumps({
                     "Tests": [{"xctestrun": "tests.plist"}]}))
                 configuration = root / "tests.plist"
                 configuration.write_bytes(plistlib.dumps(document))
-                self.assertEqual(regression.prepare_ui_performance_products(root, preserve_failures), 1)
+                self.assertEqual(regression.prepare_ui_performance_products(root, preserve_failures,
+                                                                          screen_capture_format=capture), 1)
                 self.assertEqual(plistlib.loads(configuration.read_bytes()), expected)
 
     def test_missing_ui_target_fails_without_rewriting_configuration(self):

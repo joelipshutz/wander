@@ -331,12 +331,56 @@ final class YourMapPrototypeUITests: XCTestCase {
         dismissStartupNotificationPromptIfNeeded(in: app)
         let preview = app.buttons["profile.yourMap.preview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
-        // The combined preview can exist below the tab bar. Bring its actual
-        // tap target into view before opening Explore on every phone size.
-        for _ in 0..<5 where preview.frame.maxY > app.frame.maxY - 100 || !preview.isHittable {
-            app.swipeUp()
+        let headerPhoto = app.buttons["profile.header.photo"]
+        let headerName = app.staticTexts["profile.header.name"]
+        let notifications = app.buttons["profile.checkInInvitations"]
+        let tabBar = app.tabBars["main.tabBar"]
+        func finiteFrame(_ frame: CGRect) -> Bool {
+            !frame.isNull && !frame.isInfinite && !frame.isEmpty
+                && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
         }
-        preview.tap()
+        func visiblePreviewViewport() -> CGRect? {
+            guard headerPhoto.exists, headerName.exists, notifications.exists, tabBar.exists else { return nil }
+            let frames = [headerPhoto.frame, headerName.frame, notifications.frame, tabBar.frame, app.frame]
+            guard frames.allSatisfy(finiteFrame) else { return nil }
+            // The compact header backdrop consumes taps behind it even when
+            // XCTest reports the obscured preview as hittable. Leave half a
+            // measured native toolbar target clear below the header controls
+            // and above the tab bar, rather than guessing screen coordinates.
+            let clearance = min(notifications.frame.width, notifications.frame.height) / 2
+            let top = max(headerPhoto.frame.maxY, headerName.frame.maxY, notifications.frame.maxY) + clearance
+            let bottom = tabBar.frame.minY - clearance
+            guard bottom > top else { return nil }
+            return CGRect(x: app.frame.minX, y: top, width: app.frame.width, height: bottom - top)
+        }
+        for _ in 0..<5 {
+            guard let viewport = visiblePreviewViewport(), finiteFrame(preview.frame) else {
+                return XCTFail("Expected measured Profile chrome and map preview geometry")
+            }
+            if viewport.contains(preview.frame) && preview.isHittable { break }
+            // Short, slow drags avoid full-screen swipe momentum. A target
+            // above the viewport reverses the drag instead of scrolling on.
+            let delta = preview.frame.midY - viewport.midY
+            let distance = min(abs(delta), viewport.height / 2)
+            guard distance > 0 else { return XCTFail("Map preview is not tappable inside the visible Profile content") }
+            let direction: CGFloat = delta > 0 ? 1 : -1
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: viewport.midX - app.frame.minX,
+                                                   dy: viewport.midY + direction * distance / 2 - app.frame.minY))
+            let end = origin.withOffset(CGVector(dx: viewport.midX - app.frame.minX,
+                                                 dy: viewport.midY - direction * distance / 2 - app.frame.minY))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+        }
+        guard let viewport = visiblePreviewViewport(), finiteFrame(preview.frame),
+              viewport.contains(preview.frame), preview.isHittable else {
+            capture("REC-413 Profile map preview outside visible content")
+            return XCTFail("Expected the entire map preview below the sticky header and above the tab bar")
+        }
+        let previewFrame = preview.frame
+        capture("REC-413 Visible Profile map preview before snapshot")
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: previewFrame.midX - app.frame.minX, dy: previewFrame.midY - app.frame.minY))
+            .tap()
         let snapshot = app.buttons["yourMap.snapshot"]
         XCTAssertTrue(snapshot.waitForExistence(timeout: 10))
         let pin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "yourMap.prototype.pin.")).firstMatch

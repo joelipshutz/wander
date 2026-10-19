@@ -22,11 +22,22 @@ ISOLATED_UI_PERFORMANCE = {
     "WanderUITests/OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
 }
 
+# This wall-clock UI budget includes XCTest capture work. Keep the existing
+# screen-recording mode used by its reference run, isolated from screenshot jobs.
+ISOLATED_UI_WARM_PERFORMANCE = {
+    "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureKeepsWarmSourceSwitchesResponsive",
+}
+
 # The original display-frame limit remains a required reference-machine check,
 # alongside the CPU limits. Shared CI runs the identical dense-map workload and
 # its bounded native annotation-work assertions through the companion case.
 REFERENCE_UI_PERFORMANCE = {
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomWithoutCondensedPins",
+}
+
+UI_RECOVERY_METHODS = {
+    "ui-profile-share-recovery": "WanderUITests/ProfileResponsivenessUITests/testProfileSharePresentsAndCancelsOnColdAndWarmEntry",
+    "ui-snapshot-recovery": "WanderUITests/YourMapPrototypeUITests/testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls",
 }
 
 REPLAY_METHODS = {
@@ -231,8 +242,11 @@ def validate_replay_result(suite: str, summary: dict, tests: dict, device_id: st
         raise ValueError("Required Replay case identity or outcome does not match")
 
 
-def prepare_ui_performance_products(products: Path, preserve_system_failures: bool = False) -> int:
-    """Avoid automatic video encoding; optionally retain failure diagnostics."""
+def prepare_ui_performance_products(products: Path, preserve_system_failures: bool = False,
+                                    *, screen_capture_format: str = "screenshots") -> int:
+    """Set the selected UI suite's capture mode without changing its test selection."""
+    if screen_capture_format not in {"screenshots", "screenRecording"}:
+        raise ValueError("Unsupported UI screen capture format")
     root = products.resolve()
     info = plistlib.loads((root / "Info.plist").read_bytes())
     documents = {}
@@ -254,7 +268,7 @@ def prepare_ui_performance_products(products: Path, preserve_system_failures: bo
             if target.get("IsUITestBundle"):
                 # These are Xcode's normal test-plan capture settings. Explicit
                 # test attachments, assertions and test selection are unchanged.
-                target["PreferredScreenCaptureFormat"] = "screenshots"
+                target["PreferredScreenCaptureFormat"] = screen_capture_format
                 target["SystemAttachmentLifetime"] = "deleteOnSuccess" if preserve_system_failures else "keepNever"
                 targets_changed += 1
         documents[path] = document
@@ -288,7 +302,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", "ui-performance", "ui-reference-performance", "ui", "graphics"], required=True)
+    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -313,15 +327,19 @@ def main() -> int:
         "WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget",
     ]
     inventory = (["AstirClipTests", "AstirClipUITests"] if args.suite == "clip" else
-                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} else
+                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "graphics"} else
                  [REPLAY_METHODS[args.suite]] if args.suite in REPLAY_METHODS else
                  [replay] if args.suite == "replay" else
                  performance if args.suite == "performance" else ["WanderTests"])
-    isolated_ui = ISOLATED_UI_PERFORMANCE | REFERENCE_UI_PERFORMANCE
-    if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} and not isolated_ui.issubset(inventory):
+    isolated_ui = ISOLATED_UI_PERFORMANCE | ISOLATED_UI_WARM_PERFORMANCE | REFERENCE_UI_PERFORMANCE
+    if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "graphics"} and not isolated_ui.issubset(inventory):
         parser.error("isolated UI performance selection no longer matches the test inventory")
-    if args.suite == "graphics":
-        selected = sorted(isolated_ui | {
+    if args.suite in UI_RECOVERY_METHODS:
+        selected = [UI_RECOVERY_METHODS[args.suite]]
+        if not set(selected).issubset(inventory):
+            parser.error("exact UI recovery selection no longer matches the test inventory")
+    elif args.suite == "graphics":
+        selected = sorted(ISOLATED_UI_PERFORMANCE | REFERENCE_UI_PERFORMANCE | {
             "WanderUITests/EventsComingSoonUITests/testLightTabBarStaysLightAcrossEventsVisits",
             "WanderUITests/EventsComingSoonUITests/testDarkTabBarStaysDarkAcrossEventsVisits",
             "WanderUITests/EventsComingSoonUITests/testTabGlassSurvivesScrubbingAndLiveAppearanceChanges",
@@ -330,6 +348,8 @@ def main() -> int:
             parser.error("graphics diagnostic selection no longer matches the test inventory")
     elif args.suite == "ui-performance":
         selected = sorted(ISOLATED_UI_PERFORMANCE)
+    elif args.suite == "ui-warm-performance":
+        selected = sorted(ISOLATED_UI_WARM_PERFORMANCE)
     elif args.suite == "ui-reference-performance":
         selected = sorted(REFERENCE_UI_PERFORMANCE)
     elif args.suite == "ui":
@@ -348,11 +368,12 @@ def main() -> int:
     isolated = {replay: "replay", **{test: "performance" for test in performance}} if args.suite == "unit" else {}
     if args.suite == "ui":
         isolated = {**{test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)},
+                    **{test: "ui-warm-performance" for test in sorted(ISOLATED_UI_WARM_PERFORMANCE)},
                     **{test: "ui-reference-performance" for test in sorted(REFERENCE_UI_PERFORMANCE)}}
     excluded = list(isolated)
     if not selected:
         parser.error("empty test selection")
-    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "ui-reference-performance", "graphics"} else None,
+    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "graphics"} else None,
                  "identifiers": selected, "isolatedTestSuites": isolated}
     if args.selection_file:
         Path(args.selection_file).write_text(json.dumps(selection, indent=2) + "\n")
@@ -373,11 +394,14 @@ def main() -> int:
         subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
     if args.test_products:
-        if args.suite in {"ui", "graphics", "ui-performance", "ui-reference-performance"}:
+        if args.suite in {"ui", "graphics", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS}:
+            capture_format = "screenRecording" if args.suite == "ui-warm-performance" else "screenshots"
             count = prepare_ui_performance_products(
-                Path(args.test_products), preserve_system_failures=args.suite in {"ui", "graphics"}
+                Path(args.test_products),
+                preserve_system_failures=args.suite in {"ui", "graphics", "ui-warm-performance", *UI_RECOVERY_METHODS},
+                screen_capture_format=capture_format
             )
-            print(f"Using screenshots instead of automatic video for {count} UI target(s)", flush=True)
+            print(f"Using {capture_format} for {count} UI target(s)", flush=True)
         command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", args.test_products]
     else:
         scheme = "AstirClip" if args.suite == "clip" else "Wander"
