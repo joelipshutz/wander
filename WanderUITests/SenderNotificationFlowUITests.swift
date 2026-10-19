@@ -187,11 +187,39 @@ final class SenderNotificationFlowUITests: XCTestCase {
         // Use the trailing-edge native press from the save-form control tests.
         // A fixed drag distance is not a reliable switch activation gesture.
         if silent.value as? String != "1" {
+            capture("checkIn-dark-silent-before-press")
             silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
                 .press(forDuration: 0.2)
         }
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: silent)
-        wait(for: [enabled], timeout: 5)
+        let activationResult = XCTWaiter.wait(for: [enabled], timeout: 5)
+        if activationResult != .completed {
+            // Preserve the five-second outcome before collecting later evidence.
+            capture("checkIn-dark-silent-after-timeout")
+            var observations = ["waitResult=\(activationResult.rawValue)"]
+            if let row = try? silent.snapshot() {
+                observations.append("rowValue=\(String(describing: row.value)); rowEnabled=\(row.isEnabled); rowFrame=\(row.frame)")
+            } else {
+                observations.append("rowSnapshotAvailable=false")
+            }
+            if let editor = try? app.scrollViews["save.editorScroll"].snapshot() {
+                @MainActor
+                func recordSwitches(_ node: any XCUIElementSnapshot) {
+                    if node.elementType == .switch {
+                        observations.append("editorSwitchID=\(node.identifier); value=\(String(describing: node.value)); enabled=\(node.isEnabled); frame=\(node.frame)")
+                    }
+                    for child in node.children { recordSwitches(child) }
+                }
+                recordSwitches(editor)
+            } else {
+                observations.append("editorSnapshotAvailable=false")
+            }
+            let observation = XCTAttachment(string: observations.joined(separator: "\n"))
+            observation.name = "REC-636-sender-silent-post-timeout-observation"
+            observation.lifetime = .keepAlways
+            add(observation)
+        }
+        XCTAssertEqual(activationResult, .completed, "Silent must enable within the original five seconds.")
         reveal(app.staticTexts["save.silentHelp"], app: app)
         XCTAssertTrue(app.buttons["save.submit"].isHittable)
         capture("checkIn-dark-accessibility-text")

@@ -43,6 +43,11 @@ on:
         type: boolean
         default: false
 
+      continuity_remaining_only:
+        description: Run only the remaining large Sender and compact Search plus Reset continuity cases
+        type: boolean
+        default: false
+
 permissions:
   contents: read
 
@@ -52,7 +57,7 @@ concurrency:
 
 jobs:
   native:
-    if: ${{ !inputs.continuity_only }}
+    if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -267,7 +272,7 @@ jobs:
           retention-days: 14
 
   live-continuity:
-    if: ${{ !inputs.unpassed_only || inputs.continuity_only }}
+    if: ${{ !inputs.unpassed_only || inputs.continuity_only || inputs.continuity_remaining_only }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -275,9 +280,14 @@ jobs:
         env:
           CONTINUITY_ONLY: ${{ inputs.continuity_only }}
           UNPASSED_ONLY: ${{ inputs.unpassed_only }}
+          CONTINUITY_REMAINING_ONLY: ${{ inputs.continuity_remaining_only }}
         run: |
-          if [ "$CONTINUITY_ONLY" = "true" ] && [ "$UNPASSED_ONLY" = "true" ]; then
-            echo 'Choose either continuity_only or unpassed_only.' >&2
+          selected_modes=0
+          for mode in "$CONTINUITY_ONLY" "$UNPASSED_ONLY" "$CONTINUITY_REMAINING_ONLY"; do
+            if [ "$mode" = "true" ]; then selected_modes=$((selected_modes + 1)); fi
+          done
+          if [ "$selected_modes" -gt 1 ]; then
+            echo 'Choose only one focused mode.' >&2
             exit 1
           fi
       - uses: actions/checkout@v4
@@ -332,6 +342,7 @@ jobs:
               output.write(f'LIVE_CONTINUITY_XCTESTRUN={candidates[0]}\n')
           PY_RUNFILE
       - name: Verify integrated Live continuity on large phone
+        if: ${{ !inputs.continuity_remaining_only }}
         run: >-
           xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
@@ -344,6 +355,17 @@ jobs:
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-large.xcresult"
           > "$RUNNER_TEMP/live-continuity-large.log" 2>&1
+      - name: Verify remaining Sender continuity on large phone
+        if: ${{ inputs.continuity_remaining_only }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/live-continuity-large.xcresult"
+          > "$RUNNER_TEMP/live-continuity-large.log" 2>&1
       - name: Release large simulator and prepare compact phone
         if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' }}
         run: |
@@ -352,7 +374,7 @@ jobs:
           fi
           xcrun simctl bootstatus "$SMALL_DEVICE_ID" -b
       - name: Verify integrated Live continuity on compact phone
-        if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' && !inputs.continuity_remaining_only }}
         run: >-
           xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
@@ -365,8 +387,22 @@ jobs:
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
           > "$RUNNER_TEMP/live-continuity-compact.log" 2>&1
+      - name: Verify remaining Search and Reset continuity on compact phone
+        if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' && inputs.continuity_remaining_only }}
+        run: >-
+          xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
+          -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
+          -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
+          > "$RUNNER_TEMP/live-continuity-compact.log" 2>&1
       - name: Export and verify continuity evidence
         if: always()
+        env:
+          CONTINUITY_REMAINING_ONLY: ${{ inputs.continuity_remaining_only }}
         run: |
           python3 - <<'PY_EVIDENCE'
           import json, os, subprocess
@@ -374,13 +410,25 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP'])
           evidence = root / 'live-continuity-evidence'
           evidence.mkdir()
-          (evidence / 'expected-coverage.json').write_text(json.dumps({
+          remaining = os.environ.get('CONTINUITY_REMAINING_ONLY') == 'true'
+          remaining_cases = {
+              'large': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()'],
+              'compact': ['LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
+                          'LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']}
+          expected_devices = {'large': os.environ.get('LARGE_DEVICE_ID', ''), 'compact': os.environ.get('SMALL_DEVICE_ID', '')}
+          coverage = {
               'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 8,
               'requiredRegressionCases': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
                                         'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()'],
-              'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}, indent=2) + '\n')
+              'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
+          if remaining:
+              coverage = {'mode': 'continuity_remaining_only', 'expectedCasesByDevice': {'large': 1, 'compact': 2},
+                          'requiredCasesByDevice': remaining_cases, 'expectedDeviceIDs': expected_devices,
+                          'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
+          (evidence / 'expected-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
           problems = []
           for label in ['large', 'compact']:
+              expected_count = len(remaining_cases[label]) if remaining else 8
               counts = {}
               bundle = root / f'live-continuity-{label}.xcresult'
               if not bundle.is_dir():
@@ -397,7 +445,7 @@ jobs:
                       if not isinstance(parsed_counts, dict):
                           raise ValueError('Expected a test summary object')
                       counts = parsed_counts
-                      if not (counts.get('result') == 'Passed' and counts.get('passedTests') == 8
+                      if not (counts.get('result') == 'Passed' and counts.get('passedTests') == expected_count
                               and counts.get('totalTestCount') == counts.get('passedTests')
                               and counts.get('failedTests') == 0 and counts.get('skippedTests') == 0
                               and counts.get('expectedFailures') == 0):
@@ -419,7 +467,8 @@ jobs:
                           elif isinstance(value, list):
                               for child in value:
                                   yield from nodes(child)
-                      cases = [node for node in nodes(json.loads(tests.stdout)) if node.get('nodeType') == 'Test Case']
+                      native_tree = json.loads(tests.stdout)
+                      cases = [node for node in nodes(native_tree) if node.get('nodeType') == 'Test Case']
                       required = ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
                                   'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()']
                       required_continuity = [
@@ -429,6 +478,9 @@ jobs:
                           'LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
                           'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()',
                           'LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']
+                      if remaining:
+                          required = remaining_cases[label] if label == 'large' else []
+                          required_continuity = remaining_cases[label] if label == 'compact' else []
                       by_id = {}
                       for node in cases:
                           identifier = '/'.join(str(node.get('nodeIdentifier', '')).split('/')[-2:])
@@ -441,13 +493,33 @@ jobs:
                                              and by_id[identifier][0].get('result') == 'Passed' for identifier in required_continuity}
                       proof = {'requiredRegressionCases': regression, 'requiredContinuityCases': continuity_required,
                                'continuityCaseCount': len(continuity),
-                               'continuityAllPassed': len(continuity) == 6 and all(node.get('result') == 'Passed' for node in continuity),
-                               'allSelectedCasesAccountedFor': len(cases) == 8
+                               'continuityAllPassed': len(continuity) == len(required_continuity) and all(node.get('result') == 'Passed' for node in continuity),
+                               'allSelectedCasesAccountedFor': len(cases) == expected_count
                                    and set(by_id) == set(required + required_continuity)
                                    and len(cases) == len(continuity) + len(required)
                                    and len(cases) == counts.get('totalTestCount')
                                    and all(len(value) == 1 for value in by_id.values())
                                    and all(node.get('result') == 'Passed' for node in cases)}
+                      if remaining:
+                          configurations = counts.get('devicesAndConfigurations', [])
+                          actual_devices = native_tree.get('devices', [])
+                          device_matches = bool(expected_devices[label]) and len(configurations) == len(actual_devices) == 1
+                          if device_matches:
+                              device_summary = configurations[0]
+                              actual_device = actual_devices[0]
+                              device_matches = (device_summary.get('device') == actual_device
+                                  and actual_device.get('deviceId') == expected_devices[label]
+                                  and actual_device.get('platform') == 'iOS Simulator'
+                                  and device_summary.get('passedTests') == expected_count
+                                  and all(device_summary.get(key) == 0 for key in ['failedTests', 'skippedTests', 'expectedFailures']))
+                          urls_match = all(node.get('nodeIdentifierURL') ==
+                              'test://com.apple.xcode/Wander/WanderUITests/' + identifier.removesuffix('()')
+                              for identifier, matches in by_id.items() for node in matches)
+                          proof.update(mode='continuity_remaining_only', expectedCaseCount=expected_count,
+                                       expectedDeviceID=expected_devices[label], deviceMatched=device_matches,
+                                       fullNativeIdentifiersMatched=urls_match)
+                          if not device_matches or not urls_match:
+                              problems.append(f'{label}: focused source identifier or device mismatch')
                       (evidence / f'{label}-named-case-proof.json').write_text(json.dumps(proof, indent=2) + '\n')
                       if not all(regression.values()) or not all(continuity_required.values()) or not proof['continuityAllPassed'] or not proof['allSelectedCasesAccountedFor']:
                           problems.append(f'{label}: required named cases did not all pass')

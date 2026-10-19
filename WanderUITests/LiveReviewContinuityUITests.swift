@@ -452,18 +452,55 @@ final class LiveReviewContinuityUITests: XCTestCase {
 
     private func assertEmbeddedDestinationFillsViewport(_ back: XCUIElement,
                                                         in app: XCUIApplication, topLimit: CGFloat) {
-        XCTAssertTrue(topLimit.isFinite && topLimit > app.frame.minY && topLimit < app.frame.midY)
+        let initialAppFrame = app.frame
+        XCTAssertTrue(topLimit.isFinite && topLimit > initialAppFrame.minY && topLimit < initialAppFrame.midY)
+        let forbiddenButtons = ["Upcoming events", "Close selected place", "live.draw"]
+        // Match the same identifier-or-label names and element types in one
+        // fresh query instead of four serial absence queries per evaluation.
+        let forbiddenChrome = app.descendants(matching: .any).matching(NSPredicate(
+            format: "(identifier == %@ OR label == %@) OR (elementType == %d AND (identifier IN %@ OR label IN %@))",
+            "live.drawerHandle", "live.drawerHandle", Int(XCUIElement.ElementType.button.rawValue),
+            forbiddenButtons, forbiddenButtons)).firstMatch
+        var lastValues: [String: Bool] = [:]
+        var lastBackFrame = CGRect.null
+        var lastAppFrame = CGRect.null
+        let startedAt = ProcessInfo.processInfo.systemUptime
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard back.exists, back.isHittable,
-                  !app.descendants(matching: .any)["live.drawerHandle"].firstMatch.exists,
-                  !app.buttons["Upcoming events"].exists,
-                  !app.buttons["Close selected place"].exists,
-                  !app.buttons["live.draw"].exists else { return false }
+            lastValues = [:]
+            lastBackFrame = .null
+            lastAppFrame = .null
+            let exists = back.exists
+            lastValues["backExists"] = exists
+            guard exists else { return false }
+            let hittable = back.isHittable
+            lastValues["backHittable"] = hittable
+            guard hittable else { return false }
+            let chromeExists = forbiddenChrome.exists
+            lastValues["forbiddenChromeExists"] = chromeExists
+            guard !chromeExists else { return false }
             let frame = back.frame
-            return !frame.isNull && !frame.isInfinite && !frame.isEmpty
-                && app.frame.contains(frame) && frame.minY <= topLimit
+            lastBackFrame = frame
+            let validFrame = !frame.isNull && !frame.isInfinite && !frame.isEmpty
+            lastValues["backFrameValid"] = validFrame
+            guard validFrame else { return false }
+            let appFrame = app.frame
+            lastAppFrame = appFrame
+            let contained = appFrame.contains(frame)
+            let atTop = frame.minY <= topLimit
+            lastValues["backFrameContained"] = contained
+            lastValues["backFrameAtTop"] = atTop
+            return contained && atTop
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 5), .completed,
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if result != .completed {
+            let values = lastValues.keys.sorted().map { "\($0)=\(lastValues[$0]!)" }.joined(separator: "; ")
+            let observation = XCTAttachment(string:
+                "\(values); backFrame=\(lastBackFrame); appFrame=\(lastAppFrame); topLimit=\(topLimit); elapsedSeconds=\(ProcessInfo.processInfo.systemUptime - startedAt)")
+            observation.name = "REC-636-embedded-viewport-last-observation"
+            observation.lifetime = .keepAlways
+            add(observation)
+        }
+        XCTAssertEqual(result, .completed,
                        "Embedded Feed destinations must use the top viewport without Live chrome.")
     }
 
@@ -725,8 +762,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
         app.buttons["Filters"].tap()
         let cancelledForm = filterForm(in: app)
-        reveal(app.buttons["live.filter.reset"], in: cancelledForm, direction: .down, app: app)
-        app.buttons["live.filter.reset"].tap()
+        resetFilters(in: app)
         selectMenu(app.buttons["live.filter.people"], option: "Everyone", form: cancelledForm, direction: .up, app: app, selected: {
             $0.identifier == "live.filter.people" && $0.value as? String == "Everyone"
         })
@@ -751,8 +787,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertEqual(app.switches["live.filter.category.restaurants_food"].value as? String, "1")
         reveal(app.switches["live.filter.person.user_ryan"], in: retainedForm, direction: .down, app: app)
         XCTAssertEqual(app.switches["live.filter.person.user_ryan"].value as? String, "1")
-        reveal(app.buttons["live.filter.reset"], in: retainedForm, direction: .down, app: app)
-        app.buttons["live.filter.reset"].tap()
+        resetFilters(in: app)
         app.buttons["live.applyFilters"].tap()
 
         assertDrawer("half expanded", count: 2, in: app)
@@ -1080,6 +1115,97 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             return !popupChoicePresent && selectedPickerCount == 1
                 && ProcessInfo.processInfo.systemUptime <= deadline
         })
+    }
+
+    private func resetFilters(in app: XCUIApplication) {
+        let form = app.collectionViews.matching(NSPredicate(format: "identifier == %@", "live.filters.form")).element
+        let navigation = app.navigationBars.matching(NSPredicate(format: "identifier == %@", "Filters")).element
+        let cancel = navigation.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).element
+        let apply = navigation.buttons.matching(NSPredicate(format: "identifier == %@", "live.applyFilters")).element
+
+        @MainActor
+        func readTarget() -> (app: CGRect, form: CGRect, navigation: CGRect, viewport: CGRect, button: CGRect?)? {
+            let appFrame = app.frame
+            guard let formSnapshot = try? form.snapshot(),
+                  let navigationSnapshot = try? navigation.snapshot(),
+                  formSnapshot.elementType == .collectionView,
+                  formSnapshot.identifier == "live.filters.form",
+                  navigationSnapshot.elementType == .navigationBar,
+                  navigationSnapshot.identifier == "Filters",
+                  formSnapshot.isEnabled, navigationSnapshot.isEnabled,
+                  finite(appFrame), finite(formSnapshot.frame), finite(navigationSnapshot.frame),
+                  appFrame.contains(formSnapshot.frame), appFrame.contains(navigationSnapshot.frame),
+                  app.alerts.count == 0, cancel.isHittable, apply.isHittable else {
+                XCTFail("Expected the unique foreground Filters sheet before Reset input")
+                return nil
+            }
+            let sheetFrame = formSnapshot.frame.intersection(appFrame)
+            let top = max(sheetFrame.minY + 8, navigationSnapshot.frame.maxY + 8)
+            let tabs = app.tabBars.firstMatch
+            let bottom = min(sheetFrame.maxY - 8,
+                             tabs.exists && tabs.isHittable ? tabs.frame.minY - 8 : sheetFrame.maxY - 8)
+            let viewport = CGRect(x: sheetFrame.minX + 12, y: top,
+                                  width: sheetFrame.width - 24, height: max(0, bottom - top))
+            guard finite(viewport), viewport.width > 44, viewport.height > 88 else {
+                XCTFail("Expected usable Filters content below its navigation bar")
+                return nil
+            }
+            var matches: [XCUIElementSnapshot] = []
+            @MainActor
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .button && node.identifier == "live.filter.reset" { matches.append(node) }
+                for child in node.children { visit(child) }
+            }
+            visit(formSnapshot)
+            guard matches.count <= 1 else {
+                XCTFail("Expected at most one exact Reset button inside the Filters form")
+                return nil
+            }
+            let target = matches.first
+            if let target, !target.isEnabled {
+                XCTFail("Expected the exact Reset button to be enabled")
+                return nil
+            }
+            return (appFrame, formSnapshot.frame, navigationSnapshot.frame, viewport, target?.frame)
+        }
+
+        for attempt in 0...16 {
+            guard let observed = readTarget() else { return }
+            if let frame = observed.button, finite(frame), observed.viewport.contains(frame) {
+                // Reset can expose its full enabled row while XCTest cannot
+                // obtain a native activation point. Confirm fresh sheet and
+                // target geometry before one physical center press.
+                guard let confirmed = readTarget(), let confirmedFrame = confirmed.button,
+                      confirmed.app == observed.app, confirmed.form == observed.form,
+                      confirmed.navigation == observed.navigation, confirmed.viewport == observed.viewport,
+                      confirmedFrame == frame, finite(confirmedFrame),
+                      confirmed.viewport.contains(confirmedFrame) else {
+                    XCTFail("Expected stable fully visible Reset geometry before its one press")
+                    return
+                }
+                let contact = CGPoint(x: confirmedFrame.midX, y: confirmedFrame.midY)
+                let diagnostic = XCTAttachment(string: "targetID=live.filter.reset; targetFrame=\(confirmedFrame); viewport=\(confirmed.viewport); sheetFrame=\(confirmed.form); navigationFrame=\(confirmed.navigation); appFrame=\(confirmed.app); contact=\(contact); uniqueEnabledButton=true; geometryConfirmed=true; nativeResetHittabilityQueried=false; pressDuration=0.2")
+                diagnostic.name = "REC-636-reset-filter-physical-target"
+                diagnostic.lifetime = .keepAlways
+                add(diagnostic)
+                let origin = app.coordinate(withNormalizedOffset: .zero)
+                origin.withOffset(CGVector(dx: contact.x - confirmed.app.minX,
+                                           dy: contact.y - confirmed.app.minY)).press(forDuration: 0.2)
+                return
+            }
+            // Keep the original reveal path and maximum of sixteen drags.
+            guard attempt < 16 else { break }
+            let from = CGPoint(x: observed.form.maxX - 8,
+                               y: observed.viewport.minY + observed.viewport.height * 0.75)
+            let to = CGPoint(x: from.x, y: observed.viewport.minY + observed.viewport.height * 0.45)
+            XCTAssertTrue(observed.form.contains(from) && observed.form.contains(to))
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: from.x - observed.app.minX, dy: from.y - observed.app.minY))
+                .press(forDuration: 0.1, thenDragTo: origin.withOffset(
+                    CGVector(dx: to.x - observed.app.minX, dy: to.y - observed.app.minY)))
+        }
+        captureState("reset-filter-target-unreachable", in: app)
+        XCTFail("Expected the exact enabled Reset button fully inside the foreground Filters content")
     }
 
     private func setOn(_ toggle: XCUIElement, in form: XCUIElement, app: XCUIApplication) {
