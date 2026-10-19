@@ -1092,7 +1092,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             diagnostic.lifetime = .keepAlways
             self.add(diagnostic)
         })
-        choice.press(forDuration: 0.2)
+        choice.tap()
         let deadline = ProcessInfo.processInfo.systemUptime + 5
         wait(NSPredicate { _, _ in
             guard ProcessInfo.processInfo.systemUptime <= deadline,
@@ -1126,16 +1126,67 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         @MainActor
         func readTarget() -> (app: CGRect, form: CGRect, navigation: CGRect, viewport: CGRect, button: CGRect?)? {
             let appFrame = app.frame
-            guard let formSnapshot = try? form.snapshot(),
-                  let navigationSnapshot = try? navigation.snapshot(),
-                  formSnapshot.elementType == .collectionView,
-                  formSnapshot.identifier == "live.filters.form",
-                  navigationSnapshot.elementType == .navigationBar,
-                  navigationSnapshot.identifier == "Filters",
-                  formSnapshot.isEnabled, navigationSnapshot.isEnabled,
-                  finite(appFrame), finite(formSnapshot.frame), finite(navigationSnapshot.frame),
-                  appFrame.contains(formSnapshot.frame), appFrame.contains(navigationSnapshot.frame),
-                  app.alerts.count == 0, cancel.isHittable, apply.isHittable else {
+            var capturedForm: XCUIElementSnapshot?
+            var capturedNavigation: XCUIElementSnapshot?
+            var failedPredicate = "none"
+            var snapshotErrorCategory = "none"
+
+            @MainActor
+            func readSnapshot(_ element: XCUIElement, name: String,
+                              into captured: inout XCUIElementSnapshot?) -> XCUIElementSnapshot? {
+                do {
+                    captured = try element.snapshot()
+                    return captured
+                } catch {
+                    failedPredicate = "\(name).snapshot"
+                    let nativeError = error as NSError
+                    snapshotErrorCategory = "domain=\(nativeError.domain); code=\(nativeError.code)"
+                    return nil
+                }
+            }
+
+            func checked(_ condition: Bool, _ name: String) -> Bool {
+                if !condition { failedPredicate = name }
+                return condition
+            }
+
+            // Permit only two representable boundary steps for container-frame
+            // arithmetic; the usable viewport below stays clipped to the app.
+            let containerRoundingTolerance = max(max(appFrame.minX.ulp, appFrame.maxX.ulp),
+                                                 max(appFrame.minY.ulp, appFrame.maxY.ulp)) * 2
+            guard let formSnapshot = readSnapshot(form, name: "form", into: &capturedForm),
+                  let navigationSnapshot = readSnapshot(navigation, name: "navigation", into: &capturedNavigation),
+                  checked(formSnapshot.elementType == .collectionView, "form.type"),
+                  checked(formSnapshot.identifier == "live.filters.form", "form.identifier"),
+                  checked(navigationSnapshot.elementType == .navigationBar, "navigation.type"),
+                  checked(navigationSnapshot.identifier == "Filters", "navigation.identifier"),
+                  checked(formSnapshot.isEnabled, "form.enabled"),
+                  checked(navigationSnapshot.isEnabled, "navigation.enabled"),
+                  checked(finite(appFrame), "app.finiteFrame"),
+                  checked(finite(formSnapshot.frame), "form.finiteFrame"),
+                  checked(finite(navigationSnapshot.frame), "navigation.finiteFrame"),
+                  checked(appFrame.insetBy(dx: -containerRoundingTolerance, dy: -containerRoundingTolerance)
+                    .contains(formSnapshot.frame), "app.containsForm"),
+                  checked(appFrame.contains(navigationSnapshot.frame), "app.containsNavigation"),
+                  checked(app.alerts.count == 0, "app.noAlerts"),
+                  checked(cancel.isHittable, "cancel.hittable"),
+                  checked(apply.isHittable, "apply.hittable") else {
+                // Retain only the values already read by this failed guard.
+                // Do not query the live app again while diagnosing the failure.
+                var observations = ["failedPredicate=\(failedPredicate)",
+                                    "snapshotErrorCategory=\(snapshotErrorCategory)",
+                                    "appFrame=\(appFrame)"]
+                for (name, snapshot) in [("form", capturedForm), ("navigation", capturedNavigation)] {
+                    if let snapshot {
+                        observations.append("\(name).type=\(snapshot.elementType.rawValue); identifier=\(snapshot.identifier); enabled=\(snapshot.isEnabled); frame=\(snapshot.frame)")
+                    } else {
+                        observations.append("\(name).snapshot=notReadOrUnavailable")
+                    }
+                }
+                let diagnostic = XCTAttachment(string: observations.joined(separator: "\n"))
+                diagnostic.name = "REC-636-reset-foreground-guard-failure"
+                diagnostic.lifetime = .keepAlways
+                add(diagnostic)
                 XCTFail("Expected the unique foreground Filters sheet before Reset input")
                 return nil
             }

@@ -191,8 +191,35 @@ final class SenderNotificationFlowUITests: XCTestCase {
             silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
                 .press(forDuration: 0.2)
         }
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: silent)
-        let activationResult = XCTWaiter.wait(for: [enabled], timeout: 5)
+        // Observe a fresh native snapshot: the CI value predicate reused its
+        // pre-press snapshot. Every read shares the original five-second budget.
+        let activationStartedAt = ProcessInfo.processInfo.systemUptime
+        let activationDeadline = activationStartedAt + 5
+        var activationReads: [String] = []
+        func observeSilentEnabled() -> Bool {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            guard startedAt <= activationDeadline else { return false }
+            let snapshot = try? silent.snapshot()
+            let finishedAt = ProcessInfo.processInfo.systemUptime
+            let value = snapshot?.value as? String
+            let accepted = finishedAt <= activationDeadline && value == "1"
+            activationReads.append("started=\(startedAt - activationStartedAt); finished=\(finishedAt - activationStartedAt); value=\(value ?? "unavailable"); acceptedWithinDeadline=\(accepted)")
+            return accepted
+        }
+        let activationResult: XCTWaiter.Result
+        if observeSilentEnabled() {
+            activationResult = .completed
+        } else {
+            let remaining = max(0, activationDeadline - ProcessInfo.processInfo.systemUptime)
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeSilentEnabled()
+            }, object: nil)
+            activationResult = remaining > 0 ? XCTWaiter.wait(for: [enabled], timeout: remaining) : .timedOut
+        }
+        let activationEvidence = XCTAttachment(string: activationReads.joined(separator: "\n"))
+        activationEvidence.name = "REC-636-sender-silent-fresh-observation"
+        activationEvidence.lifetime = .keepAlways
+        add(activationEvidence)
         if activationResult != .completed {
             // Preserve the five-second outcome before collecting later evidence.
             capture("checkIn-dark-silent-after-timeout")

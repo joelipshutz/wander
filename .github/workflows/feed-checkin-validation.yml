@@ -44,7 +44,7 @@ on:
         default: false
 
       continuity_remaining_only:
-        description: Run only the remaining large Sender and compact Search plus Reset continuity cases
+        description: Run only the remaining large Sender and compact Reset continuity cases
         type: boolean
         default: false
 
@@ -387,13 +387,12 @@ jobs:
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
           > "$RUNNER_TEMP/live-continuity-compact.log" 2>&1
-      - name: Verify remaining Search and Reset continuity on compact phone
+      - name: Verify remaining Reset continuity on compact phone
         if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' && inputs.continuity_remaining_only }}
         run: >-
           xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -jobs 1 -parallel-testing-enabled NO
-          -only-testing:WanderUITests/LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface
           -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
@@ -413,8 +412,7 @@ jobs:
           remaining = os.environ.get('CONTINUITY_REMAINING_ONLY') == 'true'
           remaining_cases = {
               'large': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()'],
-              'compact': ['LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
-                          'LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']}
+              'compact': ['LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']}
           expected_devices = {'large': os.environ.get('LARGE_DEVICE_ID', ''), 'compact': os.environ.get('SMALL_DEVICE_ID', '')}
           coverage = {
               'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 8,
@@ -422,7 +420,7 @@ jobs:
                                         'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()'],
               'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
           if remaining:
-              coverage = {'mode': 'continuity_remaining_only', 'expectedCasesByDevice': {'large': 1, 'compact': 2},
+              coverage = {'mode': 'continuity_remaining_only', 'expectedCasesByDevice': {'large': 1, 'compact': 1},
                           'requiredCasesByDevice': remaining_cases, 'expectedDeviceIDs': expected_devices,
                           'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
           (evidence / 'expected-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
