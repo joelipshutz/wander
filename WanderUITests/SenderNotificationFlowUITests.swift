@@ -184,12 +184,20 @@ final class SenderNotificationFlowUITests: XCTestCase {
         let silent = app.switches["save.silent"]
         reveal(silent, app: app)
         XCTAssertTrue(silent.isHittable)
-        activate(silent)
+        // Use the trailing-edge native press from the save-form control tests.
+        // A fixed drag distance is not a reliable switch activation gesture.
+        if silent.value as? String != "1" {
+            silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+                .press(forDuration: 0.2)
+        }
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: silent)
+        wait(for: [enabled], timeout: 5)
         reveal(app.staticTexts["save.silentHelp"], app: app)
         XCTAssertTrue(app.buttons["save.submit"].isHittable)
         capture("checkIn-dark-accessibility-text")
         press(app.buttons["save.submit"])
         expectState(app, contains: "submitted=true")
+        expectState(app, contains: "visits=1;silentVisits=1;")
     }
 
     func testDiscoverQuickWannaDialogPersistsSilentChoice() {

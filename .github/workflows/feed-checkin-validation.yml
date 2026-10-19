@@ -38,6 +38,10 @@ on:
         description: Run the remaining REC-636 corrected native and isolated Replay checks
         type: boolean
         default: false
+      continuity_only:
+        description: Run both original Live continuity phone suites without repeating unrelated native or Replay checks
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,6 +52,7 @@ concurrency:
 
 jobs:
   native:
+    if: ${{ !inputs.continuity_only }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -262,10 +267,19 @@ jobs:
           retention-days: 14
 
   live-continuity:
-    if: ${{ !inputs.unpassed_only }}
+    if: ${{ !inputs.unpassed_only || inputs.continuity_only }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
+      - name: Validate focused mode
+        env:
+          CONTINUITY_ONLY: ${{ inputs.continuity_only }}
+          UNPASSED_ONLY: ${{ inputs.unpassed_only }}
+        run: |
+          if [ "$CONTINUITY_ONLY" = "true" ] && [ "$UNPASSED_ONLY" = "true" ]; then
+            echo 'Choose either continuity_only or unpassed_only.' >&2
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           persist-credentials: false

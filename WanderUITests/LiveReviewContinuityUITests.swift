@@ -276,6 +276,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
                 queries: [("exact-Search-label", searchMatches)])
         }
         XCTAssertTrue(reachedSearch)
+        dismissFirstKeyboardTutorial(in: app)
         waitHittable(searchBack)
         assertEmbeddedDestinationFillsViewport(searchBack, in: app, topLimit: destinationTopLimit)
         searchBack.tap()
@@ -430,6 +431,23 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let top = max(viewport.minY + 8, navigationBottom + 8)
         let bottom = min(viewport.maxY - 8, app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY - 8 : app.frame.maxY - 44)
         return frame.minY >= top && frame.maxY <= bottom && element.isHittable
+    }
+
+    private func dismissFirstKeyboardTutorial(in app: XCUIApplication) {
+        let introduction = app.otherElements["UIContinuousPathIntroductionView"]
+        let explanation = introduction.staticTexts[
+            "Speed up your typing by sliding your finger across the letters to compose a word."]
+        guard explanation.waitForExistence(timeout: 1) else { return }
+        let buttons = introduction.buttons.matching(NSPredicate(format: "label == %@", "Continue"))
+        let count = buttons.count
+        XCTAssertEqual(count, 1, "The recognized system typing tutorial must have one Continue button.")
+        guard count == 1 else { return }
+        let button = buttons.element
+        let actionable = button.isEnabled && button.isHittable
+        XCTAssertTrue(actionable)
+        guard actionable else { return }
+        button.tap()
+        XCTAssertTrue(explanation.waitForNonExistence(timeout: 5))
     }
 
     private func assertEmbeddedDestinationFillsViewport(_ back: XCUIElement,
@@ -784,40 +802,44 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
                               postInputCapture: String? = nil) {
         let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
-        // Match the drawer in one fresh app snapshot. Resolving an element as the
-        // predicate object can spend the observation budget before reading it.
+        // Read only the uniquely identified native drawer snapshot. Keep query
+        // resolution inside the timed predicate; .element rejects ambiguity.
         let observationStart = ProcessInfo.processInfo.systemUptime
         let observationDeadline = observationStart + 5
         var evaluations = 0
         var matchingHandles = 0
         var matchingValues = 0
         var snapshotAvailable = false
+        var snapshotStartedAt: TimeInterval?
+        var snapshotFinishedAt: TimeInterval?
         let predicate = NSPredicate { _, _ in
             guard ProcessInfo.processInfo.systemUptime <= observationDeadline else { return false }
             evaluations += 1
             matchingHandles = 0
             matchingValues = 0
             snapshotAvailable = false
-            guard let snapshot = try? app.snapshot() else { return false }
+            snapshotStartedAt = ProcessInfo.processInfo.systemUptime
+            let handle = app.staticTexts.matching(
+                NSPredicate(format: "identifier == %@", "live.drawerHandle")).element
+            let snapshot = try? handle.snapshot()
+            snapshotFinishedAt = ProcessInfo.processInfo.systemUptime
+            guard let snapshot else { return false }
             snapshotAvailable = true
-            @MainActor
-            func visit(_ node: XCUIElementSnapshot) {
-                if node.elementType == .staticText && node.identifier == "live.drawerHandle" {
-                    matchingHandles += 1
-                    if node.label == "Activity drawer, \(state)"
-                        && (node.value as? String)?.hasPrefix(loadedCount) == true {
-                        matchingValues += 1
-                    }
+            if snapshot.elementType == .staticText && snapshot.identifier == "live.drawerHandle" {
+                matchingHandles = 1
+                if snapshot.label == "Activity drawer, \(state)"
+                    && (snapshot.value as? String)?.hasPrefix(loadedCount) == true {
+                    matchingValues = 1
                 }
-                for child in node.children { visit(child) }
             }
-            visit(snapshot)
             return matchingHandles == 1 && matchingValues == 1
                 && ProcessInfo.processInfo.systemUptime <= observationDeadline
         }
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: 5)
-        let observation = XCTAttachment(string: "expectedState=\(state); expectedLoadedCount=\(loadedCount); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingHandles=\(matchingHandles); matchingValues=\(matchingValues); elapsed=\(ProcessInfo.processInfo.systemUptime - observationStart); waitResult=\(result.rawValue)")
+        let snapshotElapsed = snapshotStartedAt.flatMap { start in snapshotFinishedAt.map { $0 - start } }
+        let snapshotWithinDeadline = snapshotFinishedAt.map { $0 <= observationDeadline }
+        let observation = XCTAttachment(string: "expectedState=\(state); expectedLoadedCount=\(loadedCount); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingHandles=\(matchingHandles); matchingValues=\(matchingValues); querySnapshotElapsed=\(String(describing: snapshotElapsed)); snapshotWithinDeadline=\(String(describing: snapshotWithinDeadline)); elapsed=\(ProcessInfo.processInfo.systemUptime - observationStart); waitResult=\(result.rawValue)")
         observation.name = "REC-636-drawer-native-observation"
         observation.lifetime = .keepAlways
         add(observation)
