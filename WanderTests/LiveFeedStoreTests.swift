@@ -69,6 +69,49 @@ final class LiveFeedStoreTests: XCTestCase {
         XCTAssertFalse(store.feedPaginationFailed)
     }
 
+    func testPagedPolygonChangeRestartsCursorAndRejectsOldPolygonPage() async {
+        let store = WanderStore(fixtures: .seed())
+        let polygonA = LiveFeedQuery(polygon: [
+            .init(latitude: 0, longitude: 0), .init(latitude: 0, longitude: 1),
+            .init(latitude: 1, longitude: 1), .init(latitude: 1, longitude: 0)])
+        let polygonB = LiveFeedQuery(polygon: [
+            .init(latitude: 10, longitude: 10), .init(latitude: 10, longitude: 11),
+            .init(latitude: 11, longitude: 11), .init(latitude: 11, longitude: 10)])
+        XCTAssertTrue(polygonA.isValid && polygonB.isValid)
+        func page(_ timestamp: TimeInterval, cursor: String?) -> FollowedFeedPage {
+            FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: cursor,
+                            fetchedAt: Date(timeIntervalSince1970: timestamp))
+        }
+        let repository = LiveStoreRepository(pages: [
+            page(1, cursor: "a-next"), page(2, cursor: "a-stale"),
+            page(3, cursor: "a-after-stale"), page(4, cursor: "b-next")])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(polygonA)
+        let initial = await store.refreshFollowedFeed(backend: backend)
+        let paged = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(initial && paged)
+        XCTAssertEqual(repository.cursors, [nil, "a-next"])
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "a-stale")
+        repository.suspendedCall = 3
+        let oldPage = Task { await store.loadMoreFeed(backend: backend) }
+        await waitFor(repository, calls: 3)
+        store.selectLiveFeedQuery(polygonB)
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertEqual(store.feedVisibleTileLimit, FeedPagination.pageSize)
+        let refreshed = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(repository.queries, [polygonA, polygonA, polygonA, polygonB])
+        XCTAssertEqual(repository.cursors, [nil, "a-next", "a-stale", nil])
+        repository.suspendedCall = nil
+        let accepted = await oldPage.value
+        XCTAssertFalse(accepted)
+        XCTAssertEqual(store.liveFeedQuery, polygonB)
+        XCTAssertEqual(store.followedFeedPage?.fetchedAt, Date(timeIntervalSince1970: 4))
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "b-next")
+        XCTAssertFalse(store.isLoadingMoreFeed)
+        XCTAssertFalse(store.feedPaginationFailed)
+    }
+
     func testNilRestoresLegacyAndAccountResetClearsQueryBeforeLoad() async {
         let store = WanderStore(fixtures: .seed())
         let repository = LiveStoreRepository(pages: [emptyPage(1)])

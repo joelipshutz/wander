@@ -164,6 +164,36 @@ import XCTest
         XCTAssertFalse(selection.summary.contains("opaque-1"))
     }
 
+    func testMapSearchReplacesNearbyBoundsButKeepsAllOtherCommittedFilters() throws {
+        var selection = LiveBrowseSelection(now: now)
+        selection.scope = .nearby
+        selection.cityID = "los-angeles"
+        selection.radius = .twentyFiveKilometers
+        selection.time = .month
+        selection.activityType = .wannas
+        selection.personIDs = ["selected-person"]
+        selection.categoryIDs = [WanderPlaceCategory.coffeeTeaSweets]
+        let visibleArea = try XCTUnwrap(LiveDrawnArea(coordinates: [
+            .init(latitude: 40, longitude: -75), .init(latitude: 40, longitude: -73),
+            .init(latitude: 42, longitude: -73), .init(latitude: 42, longitude: -75)]))
+        let searched = selection.searchingMapArea().committed(at: now.addingTimeInterval(60))
+        let query = searched.query(area: visibleArea)
+        XCTAssertTrue(query.isValid)
+        XCTAssertNil(query.center)
+        XCTAssertNil(query.radiusMeters)
+        XCTAssertEqual(query.polygon, visibleArea.vertices.map { .init(latitude: $0.latitude, longitude: $0.longitude) })
+        XCTAssertEqual(query.activityType, .wannas)
+        XCTAssertEqual(query.categoryIDs, [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(query.personIDs, ["selected-person"])
+        XCTAssertEqual(query.occurredAfter, now.addingTimeInterval(60 - 30 * 86_400))
+        XCTAssertEqual(query.occurredBefore, now.addingTimeInterval(60))
+        XCTAssertEqual(searched.cityID, selection.cityID)
+        XCTAssertEqual(searched.radius, selection.radius)
+        XCTAssertEqual(selection.scope, .nearby, "The prior query remains unchanged until the explicit commit.")
+        XCTAssertFalse(query.contains(latitude: 34.05, longitude: -118.24))
+        XCTAssertTrue(query.contains(latitude: 41, longitude: -74))
+    }
+
     private func event(_ id: String, personID: String = "person", place: VisiblePlace? = nil,
                        kind: FeedActivityKind = .listCreated, offset: TimeInterval = 0) -> FeedActivity {
         FeedActivity(id: id, kind: kind,

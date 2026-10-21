@@ -30,6 +30,7 @@ The standard **Live Experience Review** scheme launches the integrated `Wander` 
 |---|---|
 | `Wander/Features/Live/LiveScreen.swift` | Presentation state, map/drawer, committed query installation and matching map/Feed projection, selected-place activity chooser, drawing draft, search/notifications/Add/messages/plan entry |
 | `Wander/Features/Live/LiveMapPolicy.swift` | `LiveDrawnArea`, `LiveActivityFilter`, `LiveTimeFilter`, density-based `LiveMapCameraPolicy`, `LiveNavigationPolicy` |
+| `Wander/Features/Live/LiveMapSearchPolicy.swift` | Pending camera/reference state, exposed-map geometry and distinct drawn/Map area origins |
 | `Wander/Features/Live/LiveBrowseSelection.swift` | Scope/radius/category/person/type selection, fixed bounds, authorized-loaded facet options and conversion to the committed `LiveFeedQuery` |
 | `Wander/Features/Live/LiveIntroductionPolicy.swift`, `LiveIntroductionViews.swift` | Account/version presentation store, eligibility policy, optional card/guide and non-mutating semantic checkpoint adapter |
 | `Wander/Features/Live/LiveIntroductionOrientationStore.swift` | Explicit fresh-orientation context, account/version-fenced teaching acknowledgements and contiguous primary map/feed progress; default replay remains read-only |
@@ -82,7 +83,7 @@ Map pins and embedded Feed share `store.visibleFeedActivityGroups`, including th
 
 The visible count is **“N updates shown”**, with accessibility label **“N loaded updates”**. It counts matching loaded activity records, not all server matches or unique places. Preserve Load more, stable grouping/engagement identities and existing Feed cards/order. Unmapped records remain in their ordinary card position when no geography/category constraint requires a place. Full history, owner saves, calendar and Snapshot remain in Profile.
 
-The large filter sheet stages audience, type, 24-hour/7-day/30-day/all-time range, city/radius, categories/people and drawn-area removal until Apply. Nearby starts at 5 km with explicit 25 km selection around the visibly selected public `HomeMetro`; it does not request device location or change account home. Cancel preserves the committed query; Reset retains audience. Drawn geometry intersects radius. Apply or explicit refresh advances fixed time bounds; initial loading, pagination and tab/detail return do not. Facet options derive only from already authorized loaded rows.
+The large filter sheet stages audience, type, 24-hour/7-day/30-day/all-time range, city/radius, categories/people and drawn/Map area removal until Apply. Nearby starts at 5 km with explicit 25 km selection around the visibly selected public `HomeMetro`; it does not request device location or change account home. Cancel preserves the committed query; Reset retains audience. Drawn geometry intersects radius. Apply or explicit refresh advances fixed time bounds; initial loading, pagination and tab/detail return do not. Facet options derive only from already authorized loaded rows. Past 7 days remains the default; exhausting its matching pages never changes the time window automatically.
 
 ### SQL installed and dormant
 
@@ -98,7 +99,26 @@ The ordered migration pair is packaged through Supabase CLI 2.114.0; see the [mi
 
 ## 4. Map, drawing and retained content
 
-Keep one SwiftUI map mounted across drawer modes. Camera framing uses authorized loaded density and a home-area anchor when available; after manual pan, new results must not recenter it. Camera movement alone does not change the committed area or fetch a new query. Nearby commits a 5 km radius around the selected public city center, with explicit expansion to 25 km. A drawn polygon intersects that radius independently; viewport changes and panning do not change the query or broaden its authorized audience.
+Keep one SwiftUI map mounted across drawer modes. Camera framing uses authorized loaded density and a home-area anchor when available; after manual pan, new results must not recenter it. Camera movement alone does not change the committed area or fetch a new query. Nearby commits a 5 km radius around the selected public city center, with explicit expansion to 25 km. A drawn polygon intersects that radius independently; viewport changes and panning alone do not change the query or broaden its authorized audience.
+
+A settled user camera change stages a floating **Search this area** action.
+Compare physical camera pose against the last committed/reference pose, rather
+than the enclosing region alone; initial/programmatic framing and drawer/control
+layout changes must not produce a pending search. The action is an overlay with
+no additional map inset. At activation, convert the exposed rectangle's corners
+through `MapReader`, validate them with the existing polygon policy, and install
+one query through `selectLiveFeedQuery`. Reject unavailable projection and spans
+of at least 180 degrees without replacing the query. Date-line handling remains
+in the shared validator.
+
+Map-area activation replaces previous drawn and city/radius bounds while
+retaining audience, type, time, category and people filters. It uses the existing
+query reset, page cancellation and late-response fences; no second pin/count API
+or backend parameter is added. Keep the camera fixed. Track the area origin so
+Map area does not display Redraw or Keep drawn area. Clear/Following, Reset +
+Apply, a new Nearby selection and account reset clear Map area as appropriate;
+Cancel and ordinary tab/detail return preserve committed state. This retains the
+existing Recent activity interface and pagination behavior.
 
 Drawing keeps a draft separate from the committed area, pauses map pan during tracing, previews before Apply, and provides Cancel/Clear and a visible-area alternative. Geometry uses `MapReader` conversion. Retention is session-only and clears on account change. Do not persist coordinates across devices or create a Snapshot/list from drawing. Freehand Apply/Cancel and account-session retention are the implemented interaction.
 
@@ -188,7 +208,7 @@ Use [REC-636](https://linear.app/recme/issue/REC-636) and [PR #736 Checks](https
 | Area | Source/suite to use | Required evidence |
 |---|---|---|
 | Feed continuity | `FeedIntegrationTests`, existing Feed audience/models/pagination and engagement suites | Exact cards/actions/module order, default init compatibility, filtered grouping, empty page continuation |
-| Geometry and camera | `LiveMapPolicyTests`, `LiveFeedQueryTests` | Dateline, boundary, invalid/wide shapes, manual pan before/after first page, same loaded IDs |
+| Geometry and camera | `LiveMapPolicyTests`, `LiveMapSearchPolicyTests`, `LiveFeedQueryTests` | Dateline, boundary, invalid/wide shapes, visible-map projection, explicit pan/tap commit, layout/programmatic suppression, retained camera and same loaded IDs |
 | Local scope and facets | `LiveBrowseSelectionTests` plus integrated filter UI tests | Fixed bounds, radius/city/facet semantics, cancellation/reset, continuity and loaded-results wording |
 | Plans | `LivePlanPeoplePolicyTests`, existing Common Ground/invitation suites | Own/friend Wanna, viewer Been, canonical aliases, no-owner-save recovery, block/account switch, real invitation result |
 | Upcoming invitations | `LiveUpcomingInvitationsTests`, existing recipient repository/inbox suites, integrated route UI checks | Optional dates, stable sort/max-three display, account/failure/clock fences and existing authorized opening |

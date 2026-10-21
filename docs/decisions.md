@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-10-14
+Last updated: 2026-10-20
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -12,6 +12,18 @@ drawer. Remove the redundant Live/place memories/your people header and the
 separate drawer arrow, while retaining accessible alternatives. Initial camera
 framing responds to authorized activity density and then respects user pan.
 Wanna pins use a muted outlined bookmark with a distinct shape from Check-ins.
+
+**October 20 map-area refinement:** after a user pans or zooms, a floating
+Liquid Glass **Search this area** button offers an explicit query change.
+Movement alone preserves the current pins, loaded-update count and Feed. Tapping
+commits the exposed map area to their shared query and replaces earlier drawn
+or Nearby city/radius bounds; audience, activity type, time, categories and
+people remain selected. The camera stays where the user put it. The summary
+identifies **Map area**, separate from a freehand **Drawn area**. Both are
+session-only, survive tab/detail return, and clear on reset or account change.
+Programmatic framing and drawer resizing do not offer a new search. Recent
+activity cards, module order and pagination behavior remain unchanged. **Past
+7 days** stays the default: reaching the end never silently widens the period.
 
 D2/D3 query presets and defaults are explicitly accepted. Following uses the
 existing authorized audience and defaults to seven days. Nearby begins at 5 km

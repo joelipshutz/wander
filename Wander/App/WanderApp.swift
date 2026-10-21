@@ -217,6 +217,10 @@ struct WanderApp: App {
                     usesSystemProvider: ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoverySystemPermissionTest")
                 ),
                 followRepository: contactTestRepository,
+                feedRepository: LiveManualPaginationUITestRepository.make(
+                    arguments: ProcessInfo.processInfo.arguments,
+                    authenticatedUserID: authStore.state.session?.userID
+                ),
                 notificationRepository: SimulatorNotificationRepository(),
                 followNotificationRepository: SimulatorFollowNotificationRepository(
                     includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderFollowNotificationUITest")
@@ -1009,3 +1013,67 @@ struct WanderAppEntryView: View {
         hasResolvedSession = true
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Isolated native coverage for an authorized empty page with a continuation.
+/// The real store, cursor handling, loading state and automatic paging stay active.
+@MainActor
+final class LiveManualPaginationUITestRepository: FeedRepository {
+    enum FixtureError: Error { case unexpectedRequest }
+    static let requiredArguments: Set<String> = [
+        "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderUnifiedLiveUITest",
+        "-WanderFeedPaginationUITest", "-WanderLiveManualPaginationUITest"
+    ]
+    static let nextCursor = "fixture-live-manual-continuation"
+    static let activityID = "fixture-live-manual-next"
+    private var initialQuery: LiveFeedQuery?
+
+    private init() {}
+
+    static func make(arguments: [String], authenticatedUserID: String?) -> LiveManualPaginationUITestRepository? {
+        guard authenticatedUserID == "user_joe",
+              requiredArguments.isSubset(of: Set(arguments)) else { return nil }
+        return LiveManualPaginationUITestRepository()
+    }
+
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        guard audience == .everyone, limit == FeedPagination.pageSize, query.isValid,
+              query.activityType == .all, query.polygon == nil, query.center == nil,
+              query.categoryIDs.isEmpty, query.personIDs.isEmpty else {
+            throw FixtureError.unexpectedRequest
+        }
+        let page: FollowedFeedPage
+        if before == nil {
+            initialQuery = query
+            page = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: Self.nextCursor, fetchedAt: .now)
+        } else {
+            guard before == Self.nextCursor, initialQuery == query else { throw FixtureError.unexpectedRequest }
+            let occurredAt = query.occurredBefore ?? query.occurredAfter ?? Date(timeIntervalSince1970: 1_700_000_000)
+            let actor = ProfileShell(id: "user_joe", handle: "fixture", displayName: "Fixture owner",
+                                     avatarURL: nil, bio: nil, relationship: .owner)
+            let list = LocalPlaceList(localID: "fixture-live-manual-list", ownerUserID: actor.id,
+                                      name: "Paging fixture", description: "", createdAt: occurredAt, updatedAt: occurredAt)
+            let activity = FeedActivity(id: Self.activityID, kind: .listCreated, actor: actor,
+                                        list: list, occurredAt: occurredAt)
+            guard query.includes(activity) else { throw FixtureError.unexpectedRequest }
+            page = FollowedFeedPage(activity: [activity], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        }
+        onContent(page)
+        return page
+    }
+
+    func activityFeed(
+        audience: FeedAudience, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        throw FixtureError.unexpectedRequest
+    }
+
+    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
+        throw FixtureError.unexpectedRequest
+    }
+}
+#endif

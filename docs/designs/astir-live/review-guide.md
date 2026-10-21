@@ -67,7 +67,9 @@ D2/D3 are accepted decisions, not recommendations awaiting approval. Their commi
 | Pin → activity choice → Show in Feed / Open place → return | Original source IDs, retained context, every loaded overlapping activity reachable; bounded chooser remains scrollable |
 | Audience/type/time/area with few matches and another page | Existing audience semantics, honest loaded count, continuation after filtered-empty page; no inferred total |
 | Filter edits → Cancel; edits → Reset → Apply | Cancel preserves all committed choices; Reset keeps selected audience; Apply synchronizes map/Feed projection and active-count badge |
-| Draw → preview → Cancel; redraw → Apply → pan → Clear | Previous committed area preserved; no refilter on pan; invalid/wide/date-line geometry and accessible visible-area alternative |
+| Draw → preview → Cancel; redraw → Apply → pan → Clear | Previous committed area preserved; no refilter on pan alone; invalid/wide/date-line geometry and accessible visible-area alternative |
+| Pan → Search this area → place/tab return → Reset | Floating glass action appears after user movement only; tap replaces old geography in one shared map/count/Feed query, preserves other filters/camera and labels Map area; reset clears it; drawer-only movement does not offer search |
+| Past 7 days → final page → explicit range change | No automatic widening or new Feed layout; current pagination remains reachable when more matching results exist |
 | Profile → Your Map → old save → Patterns → calendar | Existing hierarchy/history/tools and return; Live drawing does not mutate Profile state |
 | Own/friend Wanna → person/shared-source check → invitation | Correct partner; viewer Been + friend Wanna; explicit recovery without a shared save; no create/send on selection; original Wanna intact |
 | Mutual reply → inbox/thread → send/retry | Fixture mode visibly Simulated; hosted mode requires separate real delivery/access evidence; correct recipient and no false receipt claim |

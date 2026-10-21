@@ -20,7 +20,10 @@ struct LiveScreen: View {
     @State private var detent = 1
     @State private var isFeedDestinationActive = false
     @State private var selection = LiveBrowseSelection()
-    @State private var area: LiveDrawnArea?
+    @State private var area: LiveSelectedArea?
+    @State private var mapSearch = LiveMapSearchState()
+    @State private var mapControlsHeight: CGFloat = 0
+    @State private var drawerHeaderHeight: CGFloat = 0
     @State private var drawing = false
     @State private var drawPoints: [CGPoint] = []
     @State private var drawCoordinates: [CLLocationCoordinate2D] = []
@@ -76,7 +79,7 @@ struct LiveScreen: View {
     private var activity: [FeedActivity] {
         authorizedActivity.filter {
             selection.includes($0)
-                && (area == nil || $0.place.map { area!.contains(coordinate($0)) } == true)
+                && (area == nil || $0.place.map { area!.boundary.contains(coordinate($0)) } == true)
         }
     }
 
@@ -218,6 +221,7 @@ struct LiveScreen: View {
         .onChange(of: store.currentUser.id) { _, _ in
             isFeedDestinationActive = false
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
+            mapSearch = LiveMapSearchState(); camera = .automatic
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
             planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
@@ -262,6 +266,8 @@ struct LiveScreen: View {
             #endif
         }
         .onChange(of: introductionContext) { _, _ in updateIntroduction() }
+        .onChange(of: isActive) { _, _ in rebaseMapCameraForPresentationChange() }
+        .onChange(of: showsFeedDestination) { _, _ in rebaseMapCameraForPresentationChange() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.refreshLiveFeedDisplayLease() }
         }
@@ -290,7 +296,15 @@ struct LiveScreen: View {
     }
 
     private func map(drawerHeight: CGFloat) -> some View {
+        GeometryReader { geometry in
+            map(size: geometry.size, drawerHeight: drawerHeight)
+        }
+    }
+
+    private func map(size: CGSize, drawerHeight: CGFloat) -> some View {
         MapReader { proxy in
+            let layout = LiveMapSearchLayout(size: size,
+                controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
             Map(position: $camera, interactionModes: drawing ? [] : .all) {
                 ForEach(pins) { pin in
                     Annotation(pin.place.place.canonicalName, coordinate: coordinate(pin.place)) {
@@ -316,7 +330,7 @@ struct LiveScreen: View {
                     }
                     .annotationTitles(.hidden)
                 }
-                if let drawn = draftArea ?? area {
+                if let drawn = draftArea ?? area?.boundary {
                     MapPolygon(coordinates: drawn.vertices.map(\.coordinate))
                         .foregroundStyle(brand.accent.opacity(0.12))
                         .stroke(brand.accent, lineWidth: 3)
@@ -335,11 +349,58 @@ struct LiveScreen: View {
                 // drawer height, avoid competing top/bottom viewport insets.
                 if !drawing && detent < 2 {
                     controls.padding(.top, 8).padding(.bottom, 8)
+                        .background {
+                            GeometryReader { controlsGeometry in
+                                Color.clear.preference(key: LiveMapControlsHeightKey.self, value: controlsGeometry.size.height)
+                            }
+                        }
                 }
             }
-            .onMapCameraChange(frequency: .onEnd) {
-                viewport = $0.region
-                if camera.positionedByUser { didFrame = true }
+            .onPreferenceChange(LiveMapControlsHeightKey.self) { mapControlsHeight = $0 }
+            .onChange(of: layout) { _, _ in rebaseMapCameraForPresentationChange() }
+            .onAppear { rebaseMapCameraForPresentationChange() }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                viewport = context.region
+                let positionedByUser = camera.positionedByUser
+                if positionedByUser { didFrame = true }
+                let needsProvenanceReset = mapSearch.observe(camera: LiveMapSearchCamera(
+                    latitude: context.camera.centerCoordinate.latitude,
+                    longitude: context.camera.centerCoordinate.longitude,
+                    distance: context.camera.distance, heading: context.camera.heading, pitch: context.camera.pitch),
+                    layout: layout, positionedByUser: positionedByUser)
+                if needsProvenanceReset { preserveMapCamera(context.camera) }
+            }
+            .overlay(alignment: .bottom) {
+                if mapSearch.shouldOfferSearch, !drawing, !showsFeedDestination, detent < 2,
+                   !filtersPresented, layout.visibleRect != nil {
+                    Button {
+                        guard let viewport,
+                              let boundary = LiveMapSearchGeometry.area(layout: layout,
+                                  longitudeSpan: viewport.span.longitudeDelta,
+                                  convert: { proxy.convert($0, from: .local) }) else {
+                            areaNotice = true
+                            return
+                        }
+                        area = .mapViewport(boundary)
+                        mapSearch.didCommit()
+                        focusRequest = nil
+                        commitSelection(selection.searchingMapArea())
+                    } label: {
+                        Label("Search this area", systemImage: "magnifyingglass")
+                            .font(AstirTypography.body)
+                            .foregroundStyle(brand.primaryText)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 18).padding(.vertical, 8)
+                            .frame(minHeight: 44)
+                            .astirGlassSurface(cornerRadius: 22, castsShadow: true, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("live.searchArea")
+                    .accessibilityHint("Updates map pins and activity to the visible map area. Replaces the previous area; keeps your other filters.")
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, drawerHeight + 12)
+                }
             }
             .overlay {
                 if drawing {
@@ -386,10 +447,10 @@ struct LiveScreen: View {
             .padding(.horizontal, 12).padding(.vertical, 4)
             .background(.regularMaterial, in: Capsule())
             HStack {
-                Button { startDrawing() } label: { Label(area == nil ? "Draw area" : "Redraw", systemImage: "pencil.and.outline").frame(minHeight: 44) }
+                Button { startDrawing() } label: { Label(area?.drawActionTitle ?? "Draw area", systemImage: "pencil.and.outline").frame(minHeight: 44) }
                     .accessibilityIdentifier("live.draw")
                 if area != nil {
-                    Button("Clear") { area = nil; commitSelection(selection) }.frame(minHeight: 44).accessibilityIdentifier("live.clearArea")
+                    Button("Clear") { area = nil; mapSearch.didCommit(); commitSelection(selection) }.frame(minHeight: 44).accessibilityIdentifier("live.clearArea")
                 }
                 Spacer()
                 control("Filters", symbol: "slider.horizontal.3") {
@@ -415,6 +476,7 @@ struct LiveScreen: View {
         HStack(spacing: 8) {
             Button("Following") {
                 var next = selection; next.scope = .following
+                if area?.isMapViewport == true { area = nil; mapSearch.didCommit() }
                 commitSelection(next)
             }
                 .font(AstirTypography.bodySmall.weight(selection.scope == .following ? .bold : .regular)).frame(minHeight: 44)
@@ -433,22 +495,47 @@ struct LiveScreen: View {
         }
     }
 
+    private var drawerUpdateCount: some View {
+        Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.sectionTitle)
+            .accessibilityLabel(LiveActivityPresentation.loadedUpdateCount(activity.count))
+    }
+
+    private var drawerFilterSummary: some View {
+        Text(filterSummary).font(.caption).foregroundStyle(brand.secondaryText)
+            .accessibilityIdentifier("live.filter.summary")
+    }
+
     private func drawer(height: CGFloat) -> some View {
         VStack(spacing: 0) {
             if !showsFeedDestination {
                 VStack(spacing: 8) {
                     Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
-                    HStack {
-                        Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.sectionTitle)
-                            .accessibilityLabel(LiveActivityPresentation.loadedUpdateCount(activity.count))
-                        Spacer()
-                        Text(filterSummary).font(.caption).foregroundStyle(brand.secondaryText)
-                            .lineLimit(2).multilineTextAlignment(.trailing)
-                            .accessibilityIdentifier("live.filter.summary")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            drawerUpdateCount.fixedSize()
+                            Spacer(minLength: 0)
+                            drawerFilterSummary.fixedSize()
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            drawerUpdateCount
+                            drawerFilterSummary.multilineTextAlignment(.leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 12)
-                .frame(minHeight: 64).contentShape(Rectangle())
+                .frame(minHeight: 64)
+                .fixedSize(horizontal: false, vertical: true)
+                .background {
+                    GeometryReader { headerGeometry in
+                        Color.clear.preference(key: LiveDrawerHeaderHeightKey.self, value: headerGeometry.size.height)
+                    }
+                }
+                .onPreferenceChange(LiveDrawerHeaderHeightKey.self) { height in
+                    if height.isFinite, height > 0 { drawerHeaderHeight = ceil(height) }
+                }
+                .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 12).onEnded { value in
                     let travel = value.predictedEndTranslation.height
                     if abs(travel) > 35 { changeDetent(detent + (travel < 0 ? 1 : -1)) }
@@ -602,7 +689,8 @@ struct LiveScreen: View {
         }.frame(minHeight: 44)
         Button {
             guard let draftArea else { return }
-            area = draftArea; self.draftArea = nil; drawing = false; selectedPlaceID = nil
+            area = .drawn(draftArea); self.draftArea = nil; drawing = false; selectedPlaceID = nil
+            mapSearch.didCommit()
             commitSelection(selection)
         } label: {
             Text("Apply").fixedSize(horizontal: false, vertical: true)
@@ -630,8 +718,8 @@ struct LiveScreen: View {
                 categoryFilterSection
                 personFilterSection
                 Section {
-                    if area != nil {
-                        Toggle("Keep drawn area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
+                    if let area, !(draftSelection.scope == .nearby && area.isMapViewport) {
+                        Toggle(area.isMapViewport ? "Keep map area" : "Keep drawn area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
                     }
                     Text("Filters apply to your people’s activity before each page loads. Map and Feed show the same matching updates.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -653,7 +741,7 @@ struct LiveScreen: View {
                     Button("Apply") {
                         guard draftSelection.isValid else { return }
                         store.selectFeedAudience(draftAudience)
-                        if draftClearsArea { area = nil }
+                        if draftClearsArea { area = nil; mapSearch.didCommit() }
                         commitSelection(draftSelection)
                         filtersPresented = false
                     }.disabled(!draftSelection.isValid).accessibilityIdentifier("live.applyFilters")
@@ -675,7 +763,7 @@ struct LiveScreen: View {
                 Picker("Radius", selection: $draftSelection.radius) {
                     ForEach(LiveBrowseSelection.Radius.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).accessibilityIdentifier("live.filter.radius")
-                Text("Around the selected city's public center. Panning does not change this area. A drawn boundary narrows it further.")
+                Text("Around the selected city's public center. A drawn boundary narrows it further. Search this area replaces these bounds with the visible map.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -728,10 +816,15 @@ struct LiveScreen: View {
         guard next.isValid else { return }
         let changedNearby = next.scope == .nearby && (selection.scope != .nearby
             || next.center != selection.center || next.radius != selection.radius)
+        if next.scope == .nearby, area?.isMapViewport == true {
+            area = nil
+            mapSearch.didCommit()
+        }
         selection = next.committed(at: .now)
         selectedPlaceID = nil
         installCommittedQuery()
         if changedNearby, let center = selection.center {
+            mapSearch.willMoveProgrammatically()
             camera = .region(MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
                 latitudinalMeters: Double(selection.radius.rawValue) * 2.8,
@@ -743,12 +836,12 @@ struct LiveScreen: View {
 
     private var filterSummary: String {
         ([selection.summary] + (store.feedAudience == .everyone ? [] : [store.feedAudience.title])
-            + (area == nil ? [] : ["Drawn area"])).joined(separator: " · ")
+            + (area.map { [$0.summary] } ?? [])).joined(separator: " · ")
     }
 
     private func installCommittedQuery(refresh: Bool = true) {
         guard selection.isValid else { return }
-        store.selectLiveFeedQuery(selection.query(area: area))
+        store.selectLiveFeedQuery(selection.query(area: area?.boundary))
         store.refreshLiveFeedDisplayLease()
         if refresh {
             let userID = store.currentUser.id, query = store.liveFeedQuery
@@ -793,10 +886,35 @@ struct LiveScreen: View {
         CLLocationCoordinate2D(latitude: place.place.latitude, longitude: place.place.longitude)
     }
     private func height(for detent: Int, available: CGFloat) -> CGFloat {
-        switch detent { case 0: 70; case 2: max(70, available - 8); default: max(70, available * 0.48) }
+        // The same height sizes the drawer and Map inset. Measure the header
+        // without vertical compression so compact/large-text summaries stay visible.
+        let minimum = max(70, drawerHeaderHeight)
+        switch detent {
+        case 0: return minimum
+        case 2: return max(minimum, available - 8)
+        default: return max(minimum, available * 0.48)
+        }
     }
     private func changeDetent(_ value: Int) {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { detent = min(2, max(0, value)) }
+        let next = min(2, max(0, value))
+        guard next != detent else { return }
+        rebaseMapCameraForPresentationChange()
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { detent = next }
+    }
+    private func rebaseMapCameraForPresentationChange() {
+        let currentCamera = camera.camera ?? mapSearch.latestCamera.map {
+            MapCamera(centerCoordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
+                      distance: $0.distance, heading: $0.heading, pitch: $0.pitch)
+        }
+        mapSearch.rebaseForPresentationChange()
+        if let currentCamera { preserveMapCamera(currentCamera) }
+    }
+    private func preserveMapCamera(_ currentCamera: MapCamera) {
+        // Reassert the same pose, not a fitted region. This clears the historic
+        // user-positioned bit while leaving the map exactly where it is.
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { camera = .camera(currentCamera) }
     }
     private func startDrawing() {
         guard let viewport, viewport.span.longitudeDelta < 180 else { areaNotice = true; return }
@@ -818,6 +936,7 @@ struct LiveScreen: View {
         guard !didFrame, !camera.positionedByUser, !pins.isEmpty,
               let region = LiveMapCameraPolicy.region(coordinates: pins.map { coordinate($0.place) },
                                                       anchor: homeAnchor ?? activity.compactMap(\.place).first.map(coordinate)) else { return }
+        mapSearch.willMoveProgrammatically()
         camera = .region(region); didFrame = true
     }
     private func planPlace(for event: FeedActivity) -> CommonGroundMockPlace? {
@@ -845,6 +964,16 @@ struct LiveScreen: View {
         case .place: pushNotifications.route(to: .place(id: context.id))
         }
     }
+}
+
+private struct LiveDrawerHeaderHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private struct LiveMapControlsHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 /// Shared copy for Live's map and selection chooser; Feed cards keep their own presentation.

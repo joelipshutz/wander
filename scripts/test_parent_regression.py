@@ -328,8 +328,10 @@ class PerformanceProductsTests(unittest.TestCase):
                 self.assertEqual(regression.main(), 65)
                 prepare.assert_called_once_with(Path("prepared.xctestproducts"),
                     preserve_system_failures=preserve, screen_capture_format=capture)
-                self.assertEqual(run.call_count, 1)
-                command = run.call_args.args[0]
+                # Ordinary shards may seed PhotoKit before their one native dispatch.
+                native_calls = [call for call in run.call_args_list if call.args[0][0] == "xcodebuild"]
+                self.assertEqual(len(native_calls), 1)
+                command = native_calls[0].args[0]
                 self.assertEqual(command[:3], ["xcodebuild", "test-without-building", "-quiet"])
                 for flag, value in [("-testProductsPath", "prepared.xctestproducts"),
                     ("-destination", "platform=iOS Simulator,id=fixture-device"), ("-jobs", "2"),

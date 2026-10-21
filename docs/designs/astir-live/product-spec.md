@@ -1,6 +1,6 @@
 # Astir Live — accepted direction and implementation contract
 
-REC-636 · October 11, 2026 · **Implementation in progress; release validation pending**
+REC-636 · October 20, 2026 · **Implementation in progress; release validation pending**
 
 ## 1. The change we are making
 
@@ -103,13 +103,13 @@ Initial camera framing responds to the density of authorized loaded activity: ke
 
 Within Live, the drawer and pins must derive from the same authorized loaded projection. Toggling presentation does not refetch with different defaults. A map cannot quietly show the first page as if it represents every result in the area. This parity contract does not replace the existing Profile/Your Map projection or couple its state to Feed.
 
-The integrated store uses the typed Live repository query, resetting its cursor when committed filters change and fencing late account/query responses. The additive Live RPC is installed and verified with Live globally Off; real-client validation is required before enabling ordinary accounts. Pins correspond to loaded geocoded results. The visible drawer count is **“N updates shown”**, with **“N loaded updates”** as its accessibility label; it counts matching loaded activity records, which may be grouped into fewer cards or pins. Feed's **Load more** remains available in the expanded drawer and updates the shared loaded projection; the collapsed peek does not expose that button. No exact total is displayed unless the server supplies a count for that exact query. Items without eligible coordinates remain in their existing Feed card position and are excluded from pins; do not redesign or reorder the Recent cards into a new group. Later bounded spatial paging may improve coverage, but must preserve visible parity and honest counts.
+The integrated store uses the typed Live repository query, resetting its cursor when committed filters change and fencing late account/query responses. The additive Live RPC is installed and verified with Live globally Off; real-client validation is required before enabling ordinary accounts. Pins correspond to loaded geocoded results. The visible drawer count is **“N updates shown”**, with **“N loaded updates”** as its accessibility label; it counts matching loaded activity records, which may be grouped into fewer cards or pins. Feed's **Load more** remains available in the expanded drawer and updates the shared loaded projection; the collapsed peek does not expose that button. No exact total is displayed unless the server supplies a count for that exact query. Items without eligible coordinates remain in their existing Feed card position when no geographic filter requires a place, and are excluded from pins; do not redesign or reorder the Recent cards into a new group. Later bounded spatial paging may improve coverage, but must preserve visible parity and honest counts.
 
 The selected activity remains selected while changing presentation. The current client filter reprojects loaded data and clears selection if excluded. The server-query integration resets its cursor on committed semantic filter changes; it never leaves a private or out-of-scope detail visible. In-flight requests are cancelled or discarded using a query/account generation key. Existing Your Map Snapshot and full history remain independent of Feed pagination.
 
 ### Scope controls — integrated query and pending real-client verification
 
-The current compact controls show **Following · Nearby**. Following removes the radius constraint; an independently drawn boundary remains until explicitly cleared. Nearby opens staged controls for a public `HomeMetro` city center and starts at **5 km**, with **25 km** available only through explicit selection. The profile home metro is shown as the initial selected city when available; Apply is required, and this does not change the account's home city or request device location. The radius circle and loaded results use that committed center; panning does not move it. **D2/D3 are explicitly accepted product decisions.** The complete query is integrated in native source; its dormant SQL installation and post-install full smoke passed. Live remains globally Off while real-client checks are pending. Current device-location centering is not implemented; selected-city centers work. Separately eligible discovery remains distinct work. No Your places scope is added. Profile and Live retain independent camera, lens and selection state.
+The current compact controls show **Following · Nearby**. Following removes the radius constraint and any committed Map area; an independently drawn boundary remains until explicitly cleared. Nearby opens staged controls for a public `HomeMetro` city center and starts at **5 km**, with **25 km** available only through explicit selection. The profile home metro is shown as the initial selected city when available; Apply is required, and this does not change the account's home city or request device location. The radius circle and loaded results use that committed center; panning alone does not move it. Tapping Search this area explicitly replaces that geographic restriction with the visible map. **D2/D3 are explicitly accepted product decisions.** The complete query is integrated in native source; its dormant SQL installation and post-install full smoke passed. Live remains globally Off while real-client checks are pending. Current device-location centering is not implemented; selected-city centers work. Separately eligible discovery remains distinct work. No Your places scope is added. Profile and Live retain independent camera, lens and selection state.
 
 | Preset | Audience | Geography | Default time / result kind |
 |---|---|---|---|
@@ -119,15 +119,42 @@ The current compact controls show **Following · Nearby**. Following removes the
 
 Default home is **Following**, with local framing if relevant activity exists. When a user chooses Nearby, widening from 5 km to 25 km is offered explicitly. Distant activity is offered as **See Following everywhere**, never silently called nearby. The existing Feed audience selection retains its current semantics; a person refinement narrows authorized content only.
 
+### Search the visible map
+
+After a user pans or zooms, show a hovering Liquid Glass **Search this area**
+button above the drawer. Movement alone does not refilter or fetch. Tapping
+commits one polygon for the exposed map, updates pins, the loaded-update count
+and existing Feed through the same query, and leaves the camera in place. The
+polygon excludes the map covered by the header controls and drawer. An
+unavailable projection or an area spanning at least half the world leaves the
+query unchanged and asks the user to zoom in.
+
+This explicit search replaces a previous drawing or Nearby city/radius bounds;
+it preserves audience, activity type, time range, categories and people. The
+summary says **Map area** and the drawing action remains **Draw area**. Selecting
+Nearby replaces the Map area with the chosen city/radius; Following or Clear
+removes the Map area. Drawing can replace it with a freehand area through
+Apply/Cancel. Filter Cancel preserves it, and Reset takes effect only on Apply.
+Tab/detail return retains it for this account session; account change clears it.
+Initial framing, a programmatic city selection and drawer resizing must not
+create a pending search. The floating action changes no map inset and remains
+accessible in compact/large layouts, large text and reduced-transparency modes.
+
+The selected time range stays explicit. **Past 7 days** is the default and does
+not automatically widen when its final page is reached. Older activity requires
+an explicit range change. Preserve Recent activity's existing cards, module
+order, loading, retry and pagination controls; this change adds no replacement
+Feed layout or server-total claim.
+
 ### Filters
 
-Current controls expose the existing Feed audience through `store.selectFeedAudience`, Everything/Check-ins/Wannas, **24 hours/7 days/30 days/All activity**, city/radius, categories and selected people. Category/person options come only from authorized loaded activity, before local refinements; they do not enumerate a new directory or private taxonomy. The large scrollable filter sheet stages these fields and removal of a drawn area until **Apply**; **Cancel** discards edits. Applying an audience change retains the existing Feed refresh behavior. The active count and drawer summary describe committed filters. Time bounds stay fixed during pagination and tab/detail return; Apply or explicit pull-to-refresh advances them. Native query/store integration and the full SQL predicates and cursor binding are implemented. SQL installation and post-install full smoke passed with Live globally Off; real-client completeness remains unverified.
+Current controls expose the existing Feed audience through `store.selectFeedAudience`, Everything/Check-ins/Wannas, **24 hours/7 days/30 days/All activity**, city/radius, categories and selected people. Category/person options come only from authorized loaded activity, before local refinements; they do not enumerate a new directory or private taxonomy. The large scrollable filter sheet stages these fields and removal of a drawn or Map area until **Apply**; **Cancel** discards edits. Applying an audience change retains the existing Feed refresh behavior. The active count and drawer summary describe committed filters. Time bounds stay fixed during pagination and tab/detail return; Apply or explicit pull-to-refresh advances them. Native query/store integration and the full SQL predicates and cursor binding are implemented. SQL installation and post-install full smoke passed with Live globally Off; real-client completeness remains unverified.
 
 The RPC draft accepts time, type, polygon, radius, category and selected-person parameters and applies them before the page limit. Events/Plans are admitted only when corresponding data is available. No owner-lens controls are being moved from Your Map. Your Map retains all current facets; its controls remain independent.
 
 Collection updates remain included in All activity; a separate collection-only filter is proposed and is not currently implemented. Owner and member Your Map/Patterns retain their existing **All time**, **This month** and **This year** calendar ranges and session-only saved lenses; Feed's rolling windows do not replace or expand Profile controls by default. The existing Profile Map/Patterns switch carries the same person and lens. No direct Profile → Patterns shortcut is introduced. Member Patterns remains available only over viewer-authorized records and never uses owner totals. Durable cross-device lens storage is not implicitly promised.
 
-**Reset filters** stages Following everywhere, Everything, Past 7 days, no category/person refinement and removal of the drawn area while retaining the selected audience; it takes effect only on Apply. Drawing has its own draft/Apply/Cancel interaction and intersects a committed radius when both are active. Contradictory filters produce a recoverable loaded-results empty state with existing pagination. The drawer now exposes a concise committed summary and accessible value. This Feed interaction does not change the existing Your Map filter sheet as a side effect.
+**Reset filters** stages Following everywhere, Everything, Past 7 days, no category/person refinement and removal of the drawn or Map area while retaining the selected audience; it takes effect only on Apply. Drawing has its own draft/Apply/Cancel interaction and intersects a committed radius when both are active. Contradictory filters produce a recoverable loaded-results empty state with existing pagination. The drawer now exposes a concise committed summary and accessible value. This Feed interaction does not change the existing Your Map filter sheet as a side effect.
 
 The old prototype used local search. The integration reuses current unified search, with explicit submitted search and the existing parser/fallback behavior. A query containing a city does not silently discard a manually drawn area: ask the user to use the searched place or keep the current area.
 
@@ -158,7 +185,7 @@ The drawing reference is the interaction concept: Zillow's [official draw-your-o
 1. **Draw area** enters a visible drawing mode. Pause normal map pan only while drawing; keep Cancel reachable and prevent the drawer from hiding the drawing controls.
 2. The working default traces a freehand boundary through the real map projection, then previews it. Provide a non-drawing alternative such as **Use visible area** with the same explicit confirmation.
 3. **Apply** commits the draft; **Cancel** restores the previous committed area and camera. **Clear area** removes only geography. Do not issue a server request on every pointer update.
-4. Panning after Apply moves the camera without changing the committed area or audience. Retaining an area on tab/detail return is the session-only working default; account change clears it. Relaunch persistence is not approved.
+4. Panning after Apply moves the camera without changing the committed area or audience until Search this area is tapped. That explicit action replaces the drawing with the visible map area. Retaining an area on tab/detail return is the session-only working default; account change clears it. Relaunch persistence is not approved.
 5. Drawing never creates a list or relocates Snapshot, lenses, sharing, Patterns or history from Profile.
 
 Validate boundary closure, invalid/degenerate shapes, map projection, date line, camera rotation, gesture cancellation and accessible alternatives. No coordinates, vertices or raw search phrase enter analytics. The existing circle demo is historical prototype evidence, not the current geometry decision.
@@ -295,7 +322,7 @@ Acceptance of product direction is not a claim of completed implementation, host
 | R02 drawer | Live root half/full/peek; retained drawer and detail/modal contracts. Current tabs stay visible at all detents; escape uses handle drag/VoiceOver adjustment | UI tests and small/large phone captures; explicitly review the prior hidden-peek-tabs/Map-pill target gap |
 | R03 chronology | Historical import does not become recent; repeats retain IDs | Feed/date and grouping regressions |
 | R04 scope | Following/mutual/owner/other-user access never broadens | RPC/RLS smoke matrix + cache tests |
-| R05 geography | Draw/apply/cancel/clear; pan alone does not refilter | Projection tests + native gestures |
+| R05 geography | Draw/apply/cancel/clear; pan alone does not refilter; Search this area explicitly replaces geography in the shared query and preserves the camera and other filters | Projection/state tests + native pan/tap, drawer-resize, date-line and retention journeys |
 | R06 personal history | Current Profile section order, full owner/member Your Map, Map/Patterns, calendar/history, filters and independent context remain; drawing reuse never mutates Profile context | Existing Profile/YourMap tests + before/after journey and screenshots + selected-feature review |
 | R07 snapshots | Existing Your Map Snapshot action and lists retained; no Live Snapshot added | MapSnapshotListTests + existing Your Map UI |
 | R08 routes | Existing place/activity/list/plan/widget/import/calendar routes resolve; future event links are separately integrated | Route table integration + cold/warm tests |

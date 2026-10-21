@@ -60,6 +60,14 @@ struct LiveBrowseSelection: Equatable {
             categoryIDs: categoryIDs, personIDs: personIDs)
     }
 
+    /// The visible map replaces earlier geographic bounds; all other filters
+    /// and the remembered city/radius choices remain available in Filters.
+    func searchingMapArea() -> Self {
+        var copy = self
+        copy.scope = .following
+        return copy
+    }
+
     var summary: String {
         var terms = [scope == .nearby ? "\(radius.title) · \(city?.name ?? "Choose a city")" : "Following", time.title]
         if activityType != .all { terms.append(activityType.rawValue) }
