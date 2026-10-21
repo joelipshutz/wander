@@ -36,6 +36,8 @@ REFERENCE_UI_PERFORMANCE = {
 }
 
 UI_RECOVERY_METHODS = {
+    "ui-silent-native-controls-recovery": "WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls",
+    "ui-drawer-native-controls-recovery": "WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity",
     "ui-appearance-recovery": "WanderUITests/PlaceProfileAppearanceUITests/testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges",
     "ui-search-area-recovery": "WanderUITests/LiveExperienceUITests/testSearchThisAreaRequiresTapAndSurvivesPlaceTabsAndReset",
     "ui-notification-edge-recovery": "WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed",

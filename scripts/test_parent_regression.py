@@ -1,3 +1,4 @@
+import ast
 import copy
 from collections import Counter
 import contextlib
@@ -321,7 +322,9 @@ class PerformanceProductsTests(unittest.TestCase):
                                           ("ui-three-case-recovery", "screenshots", True),
                                           ("ui-search-area-recovery", "screenshots", True),
                                           ("ui-notification-edge-recovery", "screenshots", True),
-                                          ("ui-appearance-recovery", "screenshots", True)]:
+                                          ("ui-appearance-recovery", "screenshots", True),
+                                          ("ui-silent-native-controls-recovery", "screenshots", True),
+                                          ("ui-drawer-native-controls-recovery", "screenshots", True)]:
             with self.subTest(suite=suite), \
                     mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
                         "--destination", "fixture-device", "--test-products", "prepared.xctestproducts",
@@ -366,6 +369,8 @@ class PerformanceProductsTests(unittest.TestCase):
 
     def test_recovery_methods_are_exact_and_do_not_leave_ordinary_coverage(self):
         expected = {
+            "ui-silent-native-controls-recovery": "WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls",
+            "ui-drawer-native-controls-recovery": "WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity",
             "ui-appearance-recovery": "WanderUITests/PlaceProfileAppearanceUITests/testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges",
             "ui-search-area-recovery": "WanderUITests/LiveExperienceUITests/testSearchThisAreaRequiresTapAndSurvivesPlaceTabsAndReset",
             "ui-notification-edge-recovery": "WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed",
@@ -389,7 +394,7 @@ class PerformanceProductsTests(unittest.TestCase):
         matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
         modes = {name or "default": json.loads(value) for name, value in
                  re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
-        self.assertEqual(set(modes), {"parent_ui_recovery", "parent_three_case_recovery", "parent_map_navigation_recovery", "unpassed_only", "graphics_only", "default"})
+        self.assertEqual(set(modes), {"parent_ui_recovery", "parent_three_case_recovery", "parent_map_navigation_recovery", "parent_native_controls_recovery", "unpassed_only", "graphics_only", "default"})
         self.assertEqual(modes["parent_three_case_recovery"],
                          [{"name": "three-case recovery", "suite": "ui-three-case-recovery", "shard": 0}])
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["parent_ui_recovery"]],
@@ -398,15 +403,15 @@ class PerformanceProductsTests(unittest.TestCase):
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["graphics_only"]], [("graphics", 0)])
         self.assertEqual(sum(x["suite"] == "ui-warm-performance" for x in modes["default"]), 1)
         self.assertFalse(set(regression.UI_RECOVERY_METHODS) & {x["suite"] for x in modes["default"]})
-        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ] && [ "$PARENT_MAP_NAVIGATION_RECOVERY" != "true" ]; then'), 2)
+        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ] && [ "$PARENT_MAP_NAVIGATION_RECOVERY" != "true" ] && [ "$PARENT_NATIVE_CONTROLS_RECOVERY" != "true" ]; then'), 2)
         guard = textwrap.dedent(workflow.split("        run: |\n", 1)[1].split("          python3 -B", 1)[0])
         self.assertNotIn("xcodebuild", guard)
         self.assertNotIn("brew", guard)
-        for mask in range(32):
-            values = ["true" if mask & (1 << index) else "false" for index in range(5)]
+        for mask in range(64):
+            values = ["true" if mask & (1 << index) else "false" for index in range(6)]
             with self.subTest(values=values):
                 result = subprocess.run(["/bin/bash", "-c", guard], capture_output=True,
-                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2], "PARENT_THREE_CASE_RECOVERY": values[3], "PARENT_MAP_NAVIGATION_RECOVERY": values[4]})
+                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2], "PARENT_THREE_CASE_RECOVERY": values[3], "PARENT_MAP_NAVIGATION_RECOVERY": values[4], "PARENT_NATIVE_CONTROLS_RECOVERY": values[5]})
                 self.assertEqual(result.returncode, 0 if values.count("true") <= 1 else 1)
 
     def test_three_case_recovery_keeps_exact_original_membership(self):
@@ -463,6 +468,52 @@ class PerformanceProductsTests(unittest.TestCase):
             self.assertIn('"$PARENT_MAP_NAVIGATION_RECOVERY" != "true"', skip_clip)
         self.assertFalse(any(row["suite"] in {"ui-search-area-recovery", "ui-notification-edge-recovery", "ui-appearance-recovery"}
                              for row in modes["default"]))
+
+    def test_native_controls_mode_is_default_off_exactly_two_parent_jobs(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
+        self.assertIn("parent_native_controls_recovery:\n        description: Run only original large Silent and compact drawer checks with Parent readiness\n        type: boolean\n        default: false", workflow)
+        matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
+        modes = {name or "default": json.loads(value) for name, value in
+                 re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
+        self.assertEqual(modes["parent_native_controls_recovery"], [
+            {"name": "large Silent native controls recovery", "suite": "ui-silent-native-controls-recovery", "shard": 0},
+            {"name": "compact drawer native controls recovery", "suite": "ui-drawer-native-controls-recovery", "shard": 0},
+        ])
+        for skip_clip in re.findall(r'if \[ "\$UNPASSED_ONLY".*?; then', workflow):
+            self.assertIn('"$PARENT_NATIVE_CONTROLS_RECOVERY" != "true"', skip_clip)
+        self.assertFalse(any("native-controls-recovery" in row["suite"] for key, rows in modes.items()
+                             if key != "parent_native_controls_recovery" for row in rows))
+        self.assertIn("permissions:\n  contents: read\n", workflow)
+        self.assertNotIn("actions: read", workflow)
+        self.assertNotIn("overwrite:", workflow)
+        self.assertNotIn("run-id:", workflow)
+        self.assertIn("'ui-appearance-recovery', 'ui-silent-native-controls-recovery', 'ui-drawer-native-controls-recovery'):", workflow)
+
+    def test_native_controls_device_names_are_fixed_and_latest_available(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
+        start = workflow.index("          native_control_devices = {")
+        end = workflow.index("          with open(os.environ['GITHUB_ENV']", start)
+        code = textwrap.dedent(workflow[start:end])
+        mapping = ast.literal_eval(ast.parse(code).body[0].value)
+        self.assertEqual(mapping, {"ui-silent-native-controls-recovery": "iPhone 17 Pro",
+                                  "ui-drawer-native-controls-recovery": "iPhone 17e"})
+        old_pro = {"name": "iPhone 17 Pro", "udid": "00000000-0000-0000-0000-000000000001"}
+        new_pro = {"name": "iPhone 17 Pro", "udid": "00000000-0000-0000-0000-000000000002"}
+        new_compact = {"name": "iPhone 17e", "udid": "00000000-0000-0000-0000-000000000003"}
+        devices = {"com.apple.CoreSimulator.SimRuntime.iOS-26-2": [old_pro],
+                   "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [new_compact, new_pro]}
+        for suite, expected in [("ui-silent-native-controls-recovery", new_pro),
+                                ("ui-drawer-native-controls-recovery", new_compact),
+                                ("ui", new_pro), ("ui-appearance-recovery", new_pro)]:
+            scope = {"devices": devices, "os": SimpleNamespace(environ={"TEST_SUITE": suite}), "re": re}
+            exec(compile(code, "<native-control-device-selection>", "exec"), scope)
+            self.assertEqual(scope["device"], expected)
+            self.assertEqual(scope["runtime"], (26, 5))
+        for bad_devices in [{"com.apple.CoreSimulator.SimRuntime.iOS-26-5": [new_pro]},
+                            {"com.apple.CoreSimulator.SimRuntime.iOS-26-5": [{"name": "iPhone 17e", "udid": "invalid"}]}]:
+            scope = {"devices": bad_devices, "os": SimpleNamespace(environ={"TEST_SUITE": "ui-drawer-native-controls-recovery"}), "re": re}
+            with self.assertRaises(AssertionError):
+                exec(compile(code, "<native-control-device-selection>", "exec"), scope)
 
     def test_both_formats_preserve_selection_binaries_and_unit_configuration(self):
         for version, preserve_failures, capture in [(v, p, c) for v in (1, 2) for p in (False, True)
