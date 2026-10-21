@@ -56,6 +56,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The native and Replay suite uses its own bounded runner. A generic build
+  # must not lose its remaining time to earlier Simulator test execution.
+  generic-simulator:
+    if: ${{ !inputs.unpassed_only && !inputs.continuity_only && !inputs.continuity_remaining_only }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Record toolchain
+        run: xcodebuild -version
+      - name: Generic Simulator build
+        run: >-
+          xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+
   native:
     if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
@@ -238,12 +261,6 @@ jobs:
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Generic Simulator build
-        if: ${{ (success() || failure()) && !inputs.unpassed_only }}
-        run: >-
-          xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander
-          -destination 'generic/platform=iOS Simulator'
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export native evidence
         if: always()
         run: |

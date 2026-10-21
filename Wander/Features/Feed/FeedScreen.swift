@@ -65,6 +65,7 @@ struct FeedScreen: View {
     @State private var pendingActivityFocus: FeedActivityFocusRequest?
     @State private var focusedActivityFrame: CGRect?
     @State private var focusScrollGeneration = UUID()
+    @State private var completedFocusScrollGeneration: UUID?
     @State private var handledActivityFocusRequestID: UUID?
     @State private var handledSurfaceRequestID: UUID?
     @State private var showsNotifications = false
@@ -449,7 +450,7 @@ struct FeedScreen: View {
                     if let metrics,
                        metrics.contentHeight != previousPagingMetrics?.contentHeight
                         || metrics.viewportHeight != previousPagingMetrics?.viewportHeight {
-                        scrollPendingActivityFocus(proxy: proxy)
+                        scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
                     }
                     guard let metrics, metrics.reachedBottom(after: previousPagingMetrics),
                           isFeedTabActive, !isShowingSearch, selectedProfile == nil,
@@ -463,12 +464,10 @@ struct FeedScreen: View {
                     let frame = layout.frame
                     let previousFrame = focusedActivityFrame
                     focusedActivityFrame = frame
-                    let visible = frame.intersection(CGRect(origin: .zero, size: viewport.size))
-                    if visible.width >= 44, visible.height >= 44 {
-                        cancelActivityFocus()
-                    } else if previousFrame == nil || previousFrame?.size != frame.size {
+                    if !finishActivityFocusIfVisible(in: viewport.size),
+                       previousFrame == nil || previousFrame?.size != frame.size {
                         // Lazy cards can acquire their real size after the first scroll.
-                        scrollPendingActivityFocus(proxy: proxy)
+                        scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
                     }
                 }
                 .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
@@ -489,14 +488,14 @@ struct FeedScreen: View {
                 }
                 .onChange(of: pendingActivityFocus?.id, initial: true) { _, _ in
                     focusedActivityFrame = nil
-                    scrollPendingActivityFocus(proxy: proxy)
+                    scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
                 }
                 .onChange(of: displayedActivityGroups.flatMap(\.activities).map(\.id)) { _, _ in
                     if pendingActivityFocus != nil, focusedGroupID == nil {
                         cancelActivityFocus()
                     }
                     handleActivityFocusRequest()
-                    scrollPendingActivityFocus(proxy: proxy)
+                    scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
                 }
                 .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
                     handleActivityFocusRequest()
@@ -861,21 +860,40 @@ struct FeedScreen: View {
         pendingActivityFocus = nil
         focusedActivityFrame = nil
         focusScrollGeneration = UUID()
+        completedFocusScrollGeneration = nil
     }
 
-    private func scrollPendingActivityFocus(proxy: ScrollViewProxy) {
+    @discardableResult
+    private func finishActivityFocusIfVisible(in viewportSize: CGSize) -> Bool {
+        guard pendingActivityFocus != nil,
+              completedFocusScrollGeneration == focusScrollGeneration,
+              let frame = focusedActivityFrame else { return false }
+        let visible = frame.intersection(CGRect(origin: .zero, size: viewportSize))
+        guard !visible.isNull, visible.width >= 44, visible.height >= 44 else { return false }
+        cancelActivityFocus()
+        return true
+    }
+
+    private func scrollPendingActivityFocus(proxy: ScrollViewProxy, viewportSize: CGSize) {
         guard isFeedTabActive, let request = pendingActivityFocus,
               let groupID = focusedGroupID else { return }
         let generation = UUID()
         focusScrollGeneration = generation
+        completedFocusScrollGeneration = nil
         Task { @MainActor in
             await Task.yield()
             guard isFeedTabActive, pendingActivityFocus?.id == request.id,
                   focusScrollGeneration == generation, focusedGroupID == groupID else { return }
-            // Keep the request until the card is visible. Live may still be
-            // expanding its drawer when this first scroll is laid out.
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+            // A transient frame during drawer expansion must not consume the
+            // request before its scroll has actually finished.
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25),
+                          completionCriteria: .removed) {
                 proxy.scrollTo(groupID, anchor: .center)
+            } completion: {
+                guard isFeedTabActive, pendingActivityFocus?.id == request.id,
+                      focusScrollGeneration == generation, focusedGroupID == groupID else { return }
+                completedFocusScrollGeneration = generation
+                finishActivityFocusIfVisible(in: viewportSize)
             }
         }
     }
