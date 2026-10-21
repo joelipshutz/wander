@@ -24,6 +24,10 @@ on:
         description: Run only Shared acceptance, Calendar tray latency and dense-map trace checks
         type: boolean
         default: false
+      parent_map_navigation_recovery:
+        description: Run only original Search this area, notification edge-swipe, warm-source timing and appearance checks
+        type: boolean
+        default: false
       graphics_only:
         description: Run focused native appearance and map frame diagnostics
         type: boolean
@@ -60,9 +64,10 @@ jobs:
           GRAPHICS_ONLY: ${{ inputs.graphics_only }}
           PARENT_UI_RECOVERY: ${{ inputs.parent_ui_recovery }}
           PARENT_THREE_CASE_RECOVERY: ${{ inputs.parent_three_case_recovery }}
+          PARENT_MAP_NAVIGATION_RECOVERY: ${{ inputs.parent_map_navigation_recovery }}
         run: |
           focus_modes=0
-          for mode in "$UNPASSED_ONLY" "$GRAPHICS_ONLY" "$PARENT_UI_RECOVERY" "$PARENT_THREE_CASE_RECOVERY"; do
+          for mode in "$UNPASSED_ONLY" "$GRAPHICS_ONLY" "$PARENT_UI_RECOVERY" "$PARENT_THREE_CASE_RECOVERY" "$PARENT_MAP_NAVIGATION_RECOVERY"; do
             if [ "$mode" = "true" ]; then focus_modes=$((focus_modes + 1)); fi
           done
           if [ "$focus_modes" -gt 1 ]; then
@@ -93,7 +98,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
             -testProductsPath "$RUNNER_TEMP/Parent.xctestproducts" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-          if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ]; then
+          if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ] && [ "$PARENT_MAP_NAVIGATION_RECOVERY" != "true" ]; then
             xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme AstirClip \
               -destination "platform=iOS Simulator,id=$BUILD_DEVICE_ID" \
               -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 \
@@ -103,7 +108,7 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/test-products-commit.txt"
           xcodebuild -version > "$RUNNER_TEMP/test-products-xcode.txt"
           product_bundles=(Parent.xctestproducts)
-          if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ]; then
+          if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ] && [ "$PARENT_MAP_NAVIGATION_RECOVERY" != "true" ]; then
             product_bundles+=(Clip.xctestproducts)
           fi
           # Preserve executable permissions and bundle symlinks in transport.
@@ -124,7 +129,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.parent_three_case_recovery && '[{"name":"three-case recovery","suite":"ui-three-case-recovery","shard":0}]' || inputs.parent_ui_recovery && '[{"name":"UI warm performance","suite":"ui-warm-performance","shard":0},{"name":"Your Map snapshot recovery","suite":"ui-snapshot-recovery","shard":0},{"name":"Profile share recovery","suite":"ui-profile-share-recovery","shard":0}]' || inputs.unpassed_only && '[{"name":"UI shard 1","suite":"ui","shard":0},{"name":"search recovery","suite":"ui","shard":2}]' || inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"UI performance","suite":"ui-performance","shard":0},{"name":"UI warm performance","suite":"ui-warm-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3},{"name":"UI shard 5","suite":"ui","shard":4},{"name":"UI shard 6","suite":"ui","shard":5},{"name":"UI shard 7","suite":"ui","shard":6},{"name":"UI shard 8","suite":"ui","shard":7}]') }}
+        include: ${{ fromJSON(inputs.parent_map_navigation_recovery && '[{"name":"Search this area recovery","suite":"ui-search-area-recovery","shard":0},{"name":"notification edge-swipe recovery","suite":"ui-notification-edge-recovery","shard":0},{"name":"UI warm performance","suite":"ui-warm-performance","shard":0},{"name":"appearance recovery","suite":"ui-appearance-recovery","shard":0}]' || inputs.parent_three_case_recovery && '[{"name":"three-case recovery","suite":"ui-three-case-recovery","shard":0}]' || inputs.parent_ui_recovery && '[{"name":"UI warm performance","suite":"ui-warm-performance","shard":0},{"name":"Your Map snapshot recovery","suite":"ui-snapshot-recovery","shard":0},{"name":"Profile share recovery","suite":"ui-profile-share-recovery","shard":0}]' || inputs.unpassed_only && '[{"name":"UI shard 1","suite":"ui","shard":0},{"name":"search recovery","suite":"ui","shard":2}]' || inputs.graphics_only && '[{"name":"focused graphics diagnostics","suite":"graphics","shard":0}]' || '[{"name":"Clip suite","suite":"clip","shard":0},{"name":"unit suite","suite":"unit","shard":0},{"name":"UI performance","suite":"ui-performance","shard":0},{"name":"UI warm performance","suite":"ui-warm-performance","shard":0},{"name":"UI shard 1","suite":"ui","shard":0},{"name":"UI shard 2","suite":"ui","shard":1},{"name":"UI shard 3","suite":"ui","shard":2},{"name":"UI shard 4","suite":"ui","shard":3},{"name":"UI shard 5","suite":"ui","shard":4},{"name":"UI shard 6","suite":"ui","shard":5},{"name":"UI shard 7","suite":"ui","shard":6},{"name":"UI shard 8","suite":"ui","shard":7}]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -168,7 +173,7 @@ jobs:
           subprocess.run(['xcrun', 'simctl', 'ui', device['udid'], 'appearance', 'light'], check=True)
           subprocess.run(['xcrun', 'simctl', 'shutdown', device['udid']], check=True)
           subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
-          if os.environ['TEST_SUITE'] in ('clip', 'unit', 'ui', 'ui-performance', 'ui-warm-performance', 'ui-snapshot-recovery', 'ui-profile-share-recovery', 'graphics', 'replay', 'ui-three-case-recovery'):
+          if os.environ['TEST_SUITE'] in ('clip', 'unit', 'ui', 'ui-performance', 'ui-warm-performance', 'ui-snapshot-recovery', 'ui-profile-share-recovery', 'graphics', 'replay', 'ui-three-case-recovery', 'ui-search-area-recovery', 'ui-notification-edge-recovery', 'ui-appearance-recovery'):
               # Attach the display before testing native materials and frame
               # cadence or capturing the SDK's actual replay screenshot.
               subprocess.run(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', device['udid']], check=True)

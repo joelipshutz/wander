@@ -36,6 +36,9 @@ REFERENCE_UI_PERFORMANCE = {
 }
 
 UI_RECOVERY_METHODS = {
+    "ui-appearance-recovery": "WanderUITests/PlaceProfileAppearanceUITests/testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges",
+    "ui-search-area-recovery": "WanderUITests/LiveExperienceUITests/testSearchThisAreaRequiresTapAndSurvivesPlaceTabsAndReset",
+    "ui-notification-edge-recovery": "WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed",
     "ui-profile-share-recovery": "WanderUITests/ProfileResponsivenessUITests/testProfileSharePresentsAndCancelsOnColdAndWarmEntry",
     "ui-snapshot-recovery": "WanderUITests/YourMapPrototypeUITests/testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls",
 }

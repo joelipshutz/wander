@@ -340,52 +340,80 @@ final class SenderNotificationFlowUITests: XCTestCase {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
     }
     private func expandNativeSaveEditor(_ app: XCUIApplication) -> Bool {
-        // This native sheet starts at its compact detent. Expand its real grabber
-        // before planning content drags; dense XXL controls can leave no safe corridor.
-        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        // One unchanged 5s helper deadline covers readiness, native input and
+        // viewport response. Consolidate geometry without extending that clock.
+        let helperStartedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = helperStartedAt + 5
         let editor = app.scrollViews["save.editorScroll"]
-        let grabbers = app.descendants(matching: .any).matching(
+        let grabber = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier == %@ OR label == %@", "Sheet Grabber", "Sheet Grabber")
-        )
-        let remaining = { max(0, deadline - ProcessInfo.processInfo.systemUptime) }
-        guard (editor.exists || editor.waitForExistence(timeout: remaining())),
-              (grabbers.firstMatch.exists || grabbers.firstMatch.waitForExistence(timeout: remaining())),
-              grabbers.count == 1 else {
-            capture("save-editor-native-grabber-missing")
-            XCTFail("Expected one actual native Sheet Grabber for the save editor.")
-            return false
+        ).element
+        var admitted: (app: CGRect, editor: CGRect, grabber: CGRect)?
+        func finite(_ frame: CGRect) -> Bool {
+            !frame.isNull && !frame.isEmpty && !frame.isInfinite
+                && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
         }
-        let grabber = grabbers.element(boundBy: 0)
-        let appFrame = app.frame
-        let before = editor.frame.intersection(appFrame)
-        let grabberFrame = grabber.frame
-        let target = CGPoint(x: grabberFrame.midX, y: appFrame.minY + 22)
-        guard editor.isHittable, grabber.isEnabled, grabber.isHittable,
-              !before.isNull, !before.isEmpty, !before.isInfinite,
-              !grabberFrame.isNull, !grabberFrame.isEmpty, !grabberFrame.isInfinite,
-              appFrame.contains(grabberFrame), appFrame.contains(target),
-              grabberFrame.midY - target.y >= 44,
-              ProcessInfo.processInfo.systemUptime < deadline else {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline,
+                  let snapshot = try? app.snapshot() else { return false }
+            var editors: [XCUIElementSnapshot] = []
+            var grabbers: [XCUIElementSnapshot] = []
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .scrollView && node.identifier == "save.editorScroll" { editors.append(node) }
+                if node.identifier == "Sheet Grabber" || node.label == "Sheet Grabber" { grabbers.append(node) }
+                for child in node.children { visit(child) }
+            }
+            visit(snapshot)
+            guard editors.count == 1, grabbers.count == 1 else { return false }
+            let appFrame = snapshot.frame
+            let before = editors[0].frame.intersection(appFrame)
+            let grabberFrame = grabbers[0].frame
+            let target = CGPoint(x: grabberFrame.midX, y: appFrame.minY + 22)
+            guard finite(appFrame), finite(before), finite(grabberFrame),
+                  editors[0].isEnabled, grabbers[0].isEnabled,
+                  appFrame.contains(grabberFrame), appFrame.contains(target),
+                  grabberFrame.midY - target.y >= 44,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            guard editor.isHittable, grabber.isHittable,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            admitted = (appFrame, before, grabberFrame)
+            return true
+        }, object: nil)
+        let readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        guard readinessResult == .completed, let admitted else {
             capture("save-editor-native-grabber-not-ready")
-            XCTFail("Expected a visible native sheet handle and an in-app upward expansion path.")
+            XCTFail("Expected one enabled native editor and Sheet Grabber with a visible in-app upward path.")
             return false
         }
         let origin = app.coordinate(withNormalizedOffset: .zero)
-        grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.05, thenDragTo: origin.withOffset(
-                CGVector(dx: target.x - appFrame.minX, dy: target.y - appFrame.minY)
-            ))
+        let contact = CGPoint(x: admitted.grabber.midX - admitted.app.minX,
+                              y: admitted.grabber.midY - admitted.app.minY)
+        let target = CGPoint(x: admitted.grabber.midX - admitted.app.minX, y: 22)
+        origin.withOffset(CGVector(dx: contact.x, dy: contact.y))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)))
+        // Use only the remainder of the same entry deadline after native input.
+        // The later Silent activation retains its separate original 5s clock.
+        let responseStartedAt = ProcessInfo.processInfo.systemUptime
+        var responseReads = 0
+        var lastReadFinishedAt: TimeInterval?
         let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard ProcessInfo.processInfo.systemUptime <= deadline,
-                  let snapshot = try? editor.snapshot() else { return false }
-            let after = snapshot.frame.intersection(appFrame)
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            responseReads += 1
+            let snapshot = try? editor.snapshot()
+            lastReadFinishedAt = ProcessInfo.processInfo.systemUptime
+            guard let snapshot else { return false }
+            let after = snapshot.frame.intersection(admitted.app)
             return ProcessInfo.processInfo.systemUptime <= deadline
-                && !after.isNull && !after.isEmpty && !after.isInfinite
-                && after.minY <= before.minY - 44
-                && after.height >= before.height + 44
+                && finite(after)
+                && after.minY <= admitted.editor.minY - 44
+                && after.height >= admitted.editor.height + 44
         }, object: nil)
-        let budget = remaining()
+        let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
         let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        let observation = XCTAttachment(string: "readinessResult=\(readinessResult.rawValue); responseReads=\(responseReads); helperElapsed=\(ProcessInfo.processInfo.systemUptime - helperStartedAt); postActionObservationElapsed=\(ProcessInfo.processInfo.systemUptime - responseStartedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
+        observation.name = "REC-636-save-editor-expansion-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
         if result != .completed { capture("save-editor-native-expansion-failed") }
         XCTAssertEqual(result, .completed, "The actual save-editor viewport must expand before content scrolling.")
         return result == .completed

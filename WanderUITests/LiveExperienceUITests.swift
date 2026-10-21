@@ -387,18 +387,18 @@ final class LiveExperienceUITests: XCTestCase {
     private func scrollToAutomaticPage(in app: XCUIApplication, feed: XCUIElement, previousCount: Int) {
         for _ in 0..<24 {
             XCTAssertEqual(app.state, .runningForeground)
-            if app.descendants(matching: .any)["feed.loadingMore"].firstMatch.exists {
-                waitFeedCount(previousCount, in: app)
+            guard let observed = automaticPageSnapshot(in: app) else { return }
+            // Loading and its still-committed page must come from the same tree.
+            // A second native query can run after the next page has committed.
+            XCTAssertEqual(observed.feed.value as? String, "\(previousCount) activities loaded",
+                           "The next page must not arrive without observable loading feedback.")
+            if observed.loading {
                 capture("live-automatic-loading-after-\(previousCount)")
                 return
             }
-            let currentPage = app.scrollViews.matching(identifier: "feed.places.scroll")
-                .matching(NSPredicate(format: "value == %@", "\(previousCount) activities loaded")).firstMatch
-            XCTAssertTrue(currentPage.exists, "The next page must not arrive without observable loading feedback.")
-            let viewport = feed.frame.intersection(app.frame)
-            let top = max(viewport.minY, app.navigationBars.firstMatch.exists ? app.navigationBars.firstMatch.frame.maxY : viewport.minY) + 8
-            let tabs = app.tabBars.firstMatch
-            let bottom = min(viewport.maxY, tabs.exists && tabs.isHittable ? tabs.frame.minY : viewport.maxY) - 8
+            let viewport = observed.feed.frame.intersection(observed.appFrame)
+            let top = max(viewport.minY, observed.navigationFrame?.maxY ?? viewport.minY) + 8
+            let bottom = min(viewport.maxY, observed.tabFrame?.minY ?? viewport.maxY) - 8
             let visible = CGRect(x: viewport.minX + 8, y: top, width: viewport.width - 16, height: bottom - top)
             XCTAssertGreaterThan(visible.height, 80)
             XCTAssertGreaterThan(visible.width, 44)
@@ -408,13 +408,52 @@ final class LiveExperienceUITests: XCTestCase {
             let start = CGPoint(x: visible.midX, y: visible.maxY - 8)
             let end = CGPoint(x: start.x, y: visible.minY + 8)
             let origin = app.coordinate(withNormalizedOffset: .zero)
-            origin.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
-                .press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)))
+            origin.withOffset(CGVector(dx: start.x - observed.appFrame.minX, dy: start.y - observed.appFrame.minY))
+                .press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: end.x - observed.appFrame.minX, dy: end.y - observed.appFrame.minY)))
         }
-        XCTAssertTrue(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.waitForExistence(timeout: 5),
-                      "Scrolling to the bottom must expose loading feedback.")
-        waitFeedCount(previousCount, in: app)
+        waitForCondition(timeout: 5) {
+            guard let observed = self.automaticPageSnapshot(in: app) else { return false }
+            return observed.loading && (observed.feed.value as? String) == "\(previousCount) activities loaded"
+        }
         capture("live-automatic-loading-after-\(previousCount)")
+    }
+
+    private func automaticPageSnapshot(in app: XCUIApplication) -> (
+        appFrame: CGRect, feed: XCUIElementSnapshot, loading: Bool,
+        navigationFrame: CGRect?, tabFrame: CGRect?
+    )? {
+        guard let root = try? app.snapshot() else {
+            XCTFail("The current Feed must have a native accessibility snapshot.")
+            return nil
+        }
+        var feeds: [XCUIElementSnapshot] = []
+        var loading = false
+        var navigationFrame: CGRect?
+        var tabFrame: CGRect?
+        @MainActor
+        func visit(_ node: XCUIElementSnapshot) {
+            if node.elementType == .scrollView && node.identifier == "feed.places.scroll" {
+                feeds.append(node)
+            }
+            if node.identifier == "feed.loadingMore" { loading = true }
+            // Bound the gesture with the onscreen chrome from this same tree.
+            // An offscreen retained navigation or tab view cannot clip it.
+            if !node.frame.isEmpty && root.frame.intersects(node.frame) {
+                if node.elementType == .navigationBar && navigationFrame == nil {
+                    navigationFrame = node.frame
+                }
+                if node.elementType == .tabBar && tabFrame == nil {
+                    tabFrame = node.frame
+                }
+            }
+            for child in node.children { visit(child) }
+        }
+        visit(root)
+        guard feeds.count == 1, let feed = feeds.first else {
+            XCTFail("Exactly one loaded Feed must be present in the native snapshot.")
+            return nil
+        }
+        return (root.frame, feed, loading, navigationFrame, tabFrame)
     }
 
     private func liveState(in app: XCUIApplication) -> (count: Int, value: String, label: String)? {

@@ -913,9 +913,34 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertMapControls(in app: XCUIApplication) {
         waitHittable(app.buttons["live.draw"])
-        waitHittable(app.buttons["Filters"])
+        waitForEnabledFilters(in: app)
         waitHittable(app.buttons["Add a place"])
         XCTAssertTrue(app.maps.firstMatch.exists)
+    }
+
+    private func waitForEnabledFilters(in app: XCUIApplication) {
+        // Keep enabled state in the unique exact native query so each timed
+        // evaluation needs only the genuine native hit-point computation.
+        let filters = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label == %@ AND enabled == true",
+            "slider.horizontal.3", "Filters")).element
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + 10
+        var reads = 0
+        var lastReadFinishedAt: TimeInterval?
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            reads += 1
+            let hittable = filters.isHittable
+            lastReadFinishedAt = ProcessInfo.processInfo.systemUptime
+            return hittable && ProcessInfo.processInfo.systemUptime <= deadline
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        let observation = XCTAttachment(string: "reads=\(reads); elapsed=\(ProcessInfo.processInfo.systemUptime - startedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
+        observation.name = "REC-636-filters-native-hit-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
+        XCTAssertEqual(result, .completed)
     }
 
     private func assertCollapsedFeedDoesNotReceiveTouches(_ feed: XCUIElement) {

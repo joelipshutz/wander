@@ -318,7 +318,10 @@ class PerformanceProductsTests(unittest.TestCase):
                                           ("ui", "screenshots", True), ("graphics", "screenshots", True),
                                           ("ui-snapshot-recovery", "screenshots", True),
                                           ("ui-profile-share-recovery", "screenshots", True),
-                                          ("ui-three-case-recovery", "screenshots", True)]:
+                                          ("ui-three-case-recovery", "screenshots", True),
+                                          ("ui-search-area-recovery", "screenshots", True),
+                                          ("ui-notification-edge-recovery", "screenshots", True),
+                                          ("ui-appearance-recovery", "screenshots", True)]:
             with self.subTest(suite=suite), \
                     mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
                         "--destination", "fixture-device", "--test-products", "prepared.xctestproducts",
@@ -358,11 +361,14 @@ class PerformanceProductsTests(unittest.TestCase):
 
     def test_full_workflow_requires_the_separate_warm_suite(self):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
-        self.assertEqual(workflow.count('{"name":"UI warm performance","suite":"ui-warm-performance","shard":0}'), 2)
+        self.assertEqual(workflow.count('{"name":"UI warm performance","suite":"ui-warm-performance","shard":0}'), 3)
         self.assertIn("'ui-performance', 'ui-warm-performance', 'ui-snapshot-recovery', 'ui-profile-share-recovery', 'graphics'", workflow)
 
     def test_recovery_methods_are_exact_and_do_not_leave_ordinary_coverage(self):
         expected = {
+            "ui-appearance-recovery": "WanderUITests/PlaceProfileAppearanceUITests/testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges",
+            "ui-search-area-recovery": "WanderUITests/LiveExperienceUITests/testSearchThisAreaRequiresTapAndSurvivesPlaceTabsAndReset",
+            "ui-notification-edge-recovery": "WanderUITests/FeedActivityGroupingUITests/testNotificationPostEdgeSwipeReturnsFeed",
             "ui-snapshot-recovery": "WanderUITests/YourMapPrototypeUITests/testSnapshotCreatesListAndOpensEditorWithoutDuplicatePlaceControls",
             "ui-profile-share-recovery": "WanderUITests/ProfileResponsivenessUITests/testProfileSharePresentsAndCancelsOnColdAndWarmEntry",
         }
@@ -383,7 +389,7 @@ class PerformanceProductsTests(unittest.TestCase):
         matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
         modes = {name or "default": json.loads(value) for name, value in
                  re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
-        self.assertEqual(set(modes), {"parent_ui_recovery", "parent_three_case_recovery", "unpassed_only", "graphics_only", "default"})
+        self.assertEqual(set(modes), {"parent_ui_recovery", "parent_three_case_recovery", "parent_map_navigation_recovery", "unpassed_only", "graphics_only", "default"})
         self.assertEqual(modes["parent_three_case_recovery"],
                          [{"name": "three-case recovery", "suite": "ui-three-case-recovery", "shard": 0}])
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["parent_ui_recovery"]],
@@ -392,15 +398,15 @@ class PerformanceProductsTests(unittest.TestCase):
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["graphics_only"]], [("graphics", 0)])
         self.assertEqual(sum(x["suite"] == "ui-warm-performance" for x in modes["default"]), 1)
         self.assertFalse(set(regression.UI_RECOVERY_METHODS) & {x["suite"] for x in modes["default"]})
-        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ]; then'), 2)
+        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ] && [ "$PARENT_MAP_NAVIGATION_RECOVERY" != "true" ]; then'), 2)
         guard = textwrap.dedent(workflow.split("        run: |\n", 1)[1].split("          python3 -B", 1)[0])
         self.assertNotIn("xcodebuild", guard)
         self.assertNotIn("brew", guard)
-        for mask in range(16):
-            values = ["true" if mask & (1 << index) else "false" for index in range(4)]
+        for mask in range(32):
+            values = ["true" if mask & (1 << index) else "false" for index in range(5)]
             with self.subTest(values=values):
                 result = subprocess.run(["/bin/bash", "-c", guard], capture_output=True,
-                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2], "PARENT_THREE_CASE_RECOVERY": values[3]})
+                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2], "PARENT_THREE_CASE_RECOVERY": values[3], "PARENT_MAP_NAVIGATION_RECOVERY": values[4]})
                 self.assertEqual(result.returncode, 0 if values.count("true") <= 1 else 1)
 
     def test_three_case_recovery_keeps_exact_original_membership(self):
@@ -436,6 +442,27 @@ class PerformanceProductsTests(unittest.TestCase):
         modes = {name or "default": json.loads(value) for name, value in
                  re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
         self.assertFalse(any(row["suite"] == "ui-three-case-recovery" for row in modes["default"]))
+
+    def test_map_navigation_mode_is_default_off_and_exactly_four_separate_jobs(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
+        self.assertIn("parent_map_navigation_recovery:\n        description: Run only original Search this area, notification edge-swipe, warm-source timing and appearance checks\n        type: boolean\n        default: false", workflow)
+        matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
+        modes = {name or "default": json.loads(value) for name, value in
+                 re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
+        self.assertEqual(modes["parent_map_navigation_recovery"], [
+            {"name": "Search this area recovery", "suite": "ui-search-area-recovery", "shard": 0},
+            {"name": "notification edge-swipe recovery", "suite": "ui-notification-edge-recovery", "shard": 0},
+            {"name": "UI warm performance", "suite": "ui-warm-performance", "shard": 0},
+            {"name": "appearance recovery", "suite": "ui-appearance-recovery", "shard": 0},
+        ])
+        self.assertIn("permissions:\n  contents: read\n", workflow)
+        self.assertNotIn("actions: read", workflow)
+        self.assertNotIn("overwrite:", workflow)
+        self.assertNotIn("run-id:", workflow)
+        for skip_clip in re.findall(r'if \[ "\$UNPASSED_ONLY".*?; then', workflow):
+            self.assertIn('"$PARENT_MAP_NAVIGATION_RECOVERY" != "true"', skip_clip)
+        self.assertFalse(any(row["suite"] in {"ui-search-area-recovery", "ui-notification-edge-recovery", "ui-appearance-recovery"}
+                             for row in modes["default"]))
 
     def test_both_formats_preserve_selection_binaries_and_unit_configuration(self):
         for version, preserve_failures, capture in [(v, p, c) for v in (1, 2) for p in (False, True)
