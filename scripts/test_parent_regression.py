@@ -317,7 +317,8 @@ class PerformanceProductsTests(unittest.TestCase):
                                           ("ui-reference-performance", "screenshots", False),
                                           ("ui", "screenshots", True), ("graphics", "screenshots", True),
                                           ("ui-snapshot-recovery", "screenshots", True),
-                                          ("ui-profile-share-recovery", "screenshots", True)]:
+                                          ("ui-profile-share-recovery", "screenshots", True),
+                                          ("ui-three-case-recovery", "screenshots", True)]:
             with self.subTest(suite=suite), \
                     mock.patch("sys.argv", ["run-parent-regression.py", "--suite", suite,
                         "--destination", "fixture-device", "--test-products", "prepared.xctestproducts",
@@ -340,6 +341,10 @@ class PerformanceProductsTests(unittest.TestCase):
                     ("-maximum-test-execution-time-allowance", "900")]:
                     self.assertEqual(command[command.index(flag) + 1], value)
                 self.assertFalse(any(x.startswith(("-test-iterations", "-retry-tests")) for x in command))
+                if suite == "ui-three-case-recovery":
+                    self.assertEqual([x for x in command if x.startswith("-only-testing:")],
+                                     ["-only-testing:" + identifier for identifier in regression.UI_THREE_CASE_RECOVERY])
+                    self.assertFalse(any(x.startswith("-skip-testing:") for x in command))
                 if suite == "ui-warm-performance" or suite in regression.UI_RECOVERY_METHODS:
                     identifier = (next(iter(regression.ISOLATED_UI_WARM_PERFORMANCE))
                                   if suite == "ui-warm-performance" else regression.UI_RECOVERY_METHODS[suite])
@@ -378,23 +383,59 @@ class PerformanceProductsTests(unittest.TestCase):
         matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
         modes = {name or "default": json.loads(value) for name, value in
                  re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
-        self.assertEqual(set(modes), {"parent_ui_recovery", "unpassed_only", "graphics_only", "default"})
+        self.assertEqual(set(modes), {"parent_ui_recovery", "parent_three_case_recovery", "unpassed_only", "graphics_only", "default"})
+        self.assertEqual(modes["parent_three_case_recovery"],
+                         [{"name": "three-case recovery", "suite": "ui-three-case-recovery", "shard": 0}])
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["parent_ui_recovery"]],
                          [("ui-warm-performance", 0), ("ui-snapshot-recovery", 0), ("ui-profile-share-recovery", 0)])
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["unpassed_only"]], [("ui", 0), ("ui", 2)])
         self.assertEqual([(x["suite"], x["shard"]) for x in modes["graphics_only"]], [("graphics", 0)])
         self.assertEqual(sum(x["suite"] == "ui-warm-performance" for x in modes["default"]), 1)
         self.assertFalse(set(regression.UI_RECOVERY_METHODS) & {x["suite"] for x in modes["default"]})
-        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ]; then'), 2)
+        self.assertEqual(workflow.count('if [ "$UNPASSED_ONLY" != "true" ] && [ "$PARENT_UI_RECOVERY" != "true" ] && [ "$PARENT_THREE_CASE_RECOVERY" != "true" ]; then'), 2)
         guard = textwrap.dedent(workflow.split("        run: |\n", 1)[1].split("          python3 -B", 1)[0])
         self.assertNotIn("xcodebuild", guard)
         self.assertNotIn("brew", guard)
-        for mask in range(8):
-            values = ["true" if mask & (1 << index) else "false" for index in range(3)]
+        for mask in range(16):
+            values = ["true" if mask & (1 << index) else "false" for index in range(4)]
             with self.subTest(values=values):
                 result = subprocess.run(["/bin/bash", "-c", guard], capture_output=True,
-                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2]})
+                    env={"UNPASSED_ONLY": values[0], "GRAPHICS_ONLY": values[1], "PARENT_UI_RECOVERY": values[2], "PARENT_THREE_CASE_RECOVERY": values[3]})
                 self.assertEqual(result.returncode, 0 if values.count("true") <= 1 else 1)
+
+    def test_three_case_recovery_keeps_exact_original_membership(self):
+        expected = [
+            "WanderUITests/SenderNotificationFlowUITests/testSharedAcceptanceAndExplicitInvitationCopyUseRealComposer",
+            "WanderUITests/OnboardingUITests/testCheckInCalendarTrayPresentationLatency",
+            "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomAndBoundsAnnotationWork",
+        ]
+        self.assertEqual(list(regression.UI_THREE_CASE_RECOVERY), expected)
+        self.assertEqual(self.selection("ui-three-case-recovery")["identifiers"], expected)
+        ordinary = [case for shard in range(8) for case in self.selection("ui", shard)["identifiers"]]
+        self.assertEqual(ordinary.count(expected[0]), 1)
+        performance = self.selection("ui-performance")["identifiers"]
+        for identifier in expected[1:]:
+            self.assertEqual(performance.count(identifier), 1)
+        inventory = regression.ui_test_identifiers(Path(__file__).resolve().parents[1])
+        for identifier in expected:
+            with self.subTest(identifier=identifier), \
+                    mock.patch.object(regression, "ui_test_identifiers", return_value=[x for x in inventory if x != identifier]), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.selection("ui-three-case-recovery")
+
+    def test_three_case_recovery_is_default_off_and_parent_only(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
+        self.assertIn("parent_three_case_recovery:\n        description: Run only Shared acceptance, Calendar tray latency and dense-map trace checks\n        type: boolean\n        default: false", workflow)
+        self.assertIn("permissions:\n  contents: read\n", workflow)
+        self.assertNotIn("actions: read", workflow)
+        self.assertNotIn("overwrite:", workflow)
+        self.assertNotIn("run-id:", workflow)
+        for skip_clip in re.findall(r'if \[ "\$UNPASSED_ONLY".*?; then', workflow):
+            self.assertIn('"$PARENT_THREE_CASE_RECOVERY" != "true"', skip_clip)
+        matrix = next(line for line in workflow.splitlines() if "include: ${{ fromJSON(" in line)
+        modes = {name or "default": json.loads(value) for name, value in
+                 re.findall(r"(?:inputs\.(\w+) && )?'(\[.*?\])'", matrix)}
+        self.assertFalse(any(row["suite"] == "ui-three-case-recovery" for row in modes["default"]))
 
     def test_both_formats_preserve_selection_binaries_and_unit_configuration(self):
         for version, preserve_failures, capture in [(v, p, c) for v in (1, 2) for p in (False, True)
