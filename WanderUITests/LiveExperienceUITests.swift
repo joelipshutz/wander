@@ -402,8 +402,11 @@ final class LiveExperienceUITests: XCTestCase {
             let visible = CGRect(x: viewport.minX + 8, y: top, width: viewport.width - 16, height: bottom - top)
             XCTAssertGreaterThan(visible.height, 80)
             XCTAssertGreaterThan(visible.width, 44)
-            let start = CGPoint(x: visible.maxX - 8, y: visible.minY + visible.height * 0.75)
-            let end = CGPoint(x: start.x, y: max(visible.minY + 8, start.y - visible.height * 0.65))
+            // Traverse the exposed Feed height: a shorter fixed fraction can
+            // exhaust the gesture budget before reaching the loaded page's end.
+            // Keep the drag in content, away from the native scrollbar thumb.
+            let start = CGPoint(x: visible.midX, y: visible.maxY - 8)
+            let end = CGPoint(x: start.x, y: visible.minY + 8)
             let origin = app.coordinate(withNormalizedOffset: .zero)
             origin.withOffset(CGVector(dx: start.x - app.frame.minX, dy: start.y - app.frame.minY))
                 .press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: end.x - app.frame.minX, dy: end.y - app.frame.minY)))

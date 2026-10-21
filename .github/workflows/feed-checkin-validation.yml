@@ -44,7 +44,7 @@ on:
         default: false
 
       continuity_remaining_only:
-        description: Run only the remaining large Sender and compact Reset continuity cases
+        description: Run pagination and Silent on both phones plus the remaining compact drawer check
         type: boolean
         default: false
 
@@ -337,7 +337,13 @@ jobs:
           PY_SETUP
       - name: Build signed continuity test harness once
         id: continuity-build
+        env:
+          CONTINUITY_REMAINING_ONLY: ${{ inputs.continuity_remaining_only }}
         run: |
+          additional_selectors=()
+          if [ "$CONTINUITY_REMAINING_ONLY" = "true" ]; then
+            additional_selectors+=("-only-testing:WanderUITests/LiveExperienceUITests/testLiveAutomaticPaginationReachesTerminalBufferedPage")
+          fi
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander \
             -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/LiveContinuityDerivedData" -jobs 2 -parallel-testing-enabled NO \
@@ -345,6 +351,7 @@ jobs:
             -only-testing:WanderUITests/LiveDrawerAndFilterUITests \
             -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls \
             -only-testing:WanderUITests/YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom \
+            "${additional_selectors[@]}" \
             -resultBundlePath "$RUNNER_TEMP/live-continuity-build.xcresult" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
             > "$RUNNER_TEMP/live-continuity-build.log" 2>&1
@@ -372,12 +379,13 @@ jobs:
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-large.xcresult"
           > "$RUNNER_TEMP/live-continuity-large.log" 2>&1
-      - name: Verify remaining Sender continuity on large phone
+      - name: Verify remaining pagination and Silent drivers on large phone
         if: ${{ inputs.continuity_remaining_only }}
         run: >-
           xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
           -jobs 1 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveExperienceUITests/testLiveAutomaticPaginationReachesTerminalBufferedPage
           -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
@@ -404,13 +412,15 @@ jobs:
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
           > "$RUNNER_TEMP/live-continuity-compact.log" 2>&1
-      - name: Verify remaining Reset continuity on compact phone
+      - name: Verify remaining pagination, Silent, and drawer checks on compact phone
         if: ${{ !cancelled() && steps.continuity-build.outcome == 'success' && inputs.continuity_remaining_only }}
         run: >-
           xcodebuild test-without-building -quiet -xctestrun "$LIVE_CONTINUITY_XCTESTRUN"
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -jobs 1 -parallel-testing-enabled NO
-          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement
+          -only-testing:WanderUITests/LiveExperienceUITests/testLiveAutomaticPaginationReachesTerminalBufferedPage
+          -only-testing:WanderUITests/SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls
+          -only-testing:WanderUITests/LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/live-continuity-compact.xcresult"
@@ -428,8 +438,11 @@ jobs:
           evidence.mkdir()
           remaining = os.environ.get('CONTINUITY_REMAINING_ONLY') == 'true'
           remaining_cases = {
-              'large': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()'],
-              'compact': ['LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']}
+              'large': ['LiveExperienceUITests/testLiveAutomaticPaginationReachesTerminalBufferedPage()',
+                        'SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()'],
+              'compact': ['LiveExperienceUITests/testLiveAutomaticPaginationReachesTerminalBufferedPage()',
+                          'SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
+                          'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()']}
           expected_devices = {'large': os.environ.get('LARGE_DEVICE_ID', ''), 'compact': os.environ.get('SMALL_DEVICE_ID', '')}
           coverage = {
               'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 8,
@@ -437,7 +450,7 @@ jobs:
                                         'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()'],
               'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
           if remaining:
-              coverage = {'mode': 'continuity_remaining_only', 'expectedCasesByDevice': {'large': 1, 'compact': 1},
+              coverage = {'mode': 'continuity_remaining_only', 'expectedCasesByDevice': {'large': 2, 'compact': 3},
                           'requiredCasesByDevice': remaining_cases, 'expectedDeviceIDs': expected_devices,
                           'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
           (evidence / 'expected-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')

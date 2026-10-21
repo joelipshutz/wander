@@ -182,13 +182,23 @@ final class SenderNotificationFlowUITests: XCTestCase {
     func testLargeTextAndDarkNativeControls() {
         let app = launch("checkIn", extra: ["-WanderSenderDark", "-UIPreferredContentSizeCategoryName", UIContentSizeCategory.accessibilityExtraLarge.rawValue])
         let silent = app.switches["save.silent"]
+        guard expandNativeSaveEditor(app) else { return }
         reveal(silent, app: app)
         XCTAssertTrue(silent.isHittable)
-        // Use the trailing-edge native press from the save-form control tests.
-        // A fixed drag distance is not a reliable switch activation gesture.
+        // Target the native control within the label-spanning Silent row.
+        // Reject ambiguity instead of selecting another form switch.
         if silent.value as? String != "1" {
+            let nativeSwitches = silent.descendants(matching: .switch)
+                .matching(NSPredicate(format: "value == %@ OR value == %@ OR value == 0 OR value == 1", "0", "1"))
+            let nativeSwitchCount = nativeSwitches.count
+            XCTAssertEqual(nativeSwitchCount, 1, "Expected one Boolean native switch within Silent.")
+            guard nativeSwitchCount == 1 else { return }
+            let nativeSwitch = nativeSwitches.element(boundBy: 0)
+            let nativeSwitchReady = nativeSwitch.exists && nativeSwitch.isEnabled && nativeSwitch.isHittable
+            XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
+            guard nativeSwitchReady else { return }
             capture("checkIn-dark-silent-before-press")
-            silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+            nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                 .press(forDuration: 0.2)
         }
         // Observe a fresh native snapshot: the CI value predicate reused its
@@ -328,6 +338,57 @@ final class SenderNotificationFlowUITests: XCTestCase {
     }
     private func press(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
+    }
+    private func expandNativeSaveEditor(_ app: XCUIApplication) -> Bool {
+        // This native sheet starts at its compact detent. Expand its real grabber
+        // before planning content drags; dense XXL controls can leave no safe corridor.
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        let editor = app.scrollViews["save.editorScroll"]
+        let grabbers = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ OR label == %@", "Sheet Grabber", "Sheet Grabber")
+        )
+        let remaining = { max(0, deadline - ProcessInfo.processInfo.systemUptime) }
+        guard (editor.exists || editor.waitForExistence(timeout: remaining())),
+              (grabbers.firstMatch.exists || grabbers.firstMatch.waitForExistence(timeout: remaining())),
+              grabbers.count == 1 else {
+            capture("save-editor-native-grabber-missing")
+            XCTFail("Expected one actual native Sheet Grabber for the save editor.")
+            return false
+        }
+        let grabber = grabbers.element(boundBy: 0)
+        let appFrame = app.frame
+        let before = editor.frame.intersection(appFrame)
+        let grabberFrame = grabber.frame
+        let target = CGPoint(x: grabberFrame.midX, y: appFrame.minY + 22)
+        guard editor.isHittable, grabber.isEnabled, grabber.isHittable,
+              !before.isNull, !before.isEmpty, !before.isInfinite,
+              !grabberFrame.isNull, !grabberFrame.isEmpty, !grabberFrame.isInfinite,
+              appFrame.contains(grabberFrame), appFrame.contains(target),
+              grabberFrame.midY - target.y >= 44,
+              ProcessInfo.processInfo.systemUptime < deadline else {
+            capture("save-editor-native-grabber-not-ready")
+            XCTFail("Expected a visible native sheet handle and an in-app upward expansion path.")
+            return false
+        }
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(
+                CGVector(dx: target.x - appFrame.minX, dy: target.y - appFrame.minY)
+            ))
+        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline,
+                  let snapshot = try? editor.snapshot() else { return false }
+            let after = snapshot.frame.intersection(appFrame)
+            return ProcessInfo.processInfo.systemUptime <= deadline
+                && !after.isNull && !after.isEmpty && !after.isInfinite
+                && after.minY <= before.minY - 44
+                && after.height >= before.height + 44
+        }, object: nil)
+        let budget = remaining()
+        let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        if result != .completed { capture("save-editor-native-expansion-failed") }
+        XCTAssertEqual(result, .completed, "The actual save-editor viewport must expand before content scrolling.")
+        return result == .completed
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication, down: Bool = false) {
         _ = element.waitForExistence(timeout: 5)
