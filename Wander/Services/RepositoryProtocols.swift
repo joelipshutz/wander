@@ -2024,6 +2024,8 @@ extension PlaceRepository {
 
 @MainActor
 protocol FeedRepository {
+    /// Complete map enumeration uses the same authorized query, without gallery hydration.
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage
     func liveFeed(
         audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
@@ -2042,6 +2044,10 @@ protocol FeedRepository {
 }
 
 extension FeedRepository {
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
+        try await liveFeed(audience: audience, query: query, before: before, limit: limit, onContent: { _ in })
+    }
+
     func liveFeed(
         audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void

@@ -696,6 +696,12 @@ struct SupabaseFeedRepository: FeedRepository {
         self.includesFeaturedPlaces = includesFeaturedPlaces
     }
 
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
+        guard query.isValid else { throw WanderRemoteError.invalidResponse("Invalid Live query") }
+        return try await loadFeed(audience: audience, before: before, limit: limit, query: query,
+                                  includeMedia: false, onContent: { _ in })
+    }
+
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
         try await followedFeed(before: before, limit: limit, onContent: { _ in })
     }
@@ -725,7 +731,7 @@ struct SupabaseFeedRepository: FeedRepository {
 
     private func loadFeed(
         audience: FeedAudience?, before: String?, limit: Int,
-        query: LiveFeedQuery? = nil,
+        query: LiveFeedQuery? = nil, includeMedia: Bool = true,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         let boundedLimit = min(max(limit, 1), 50)
@@ -766,6 +772,7 @@ struct SupabaseFeedRepository: FeedRepository {
         )
         try Task.checkCancellation()
         onContent(content)
+        guard includeMedia else { return try await response.followedFeedPage() }
         let activityIDs = Array(
             Set(response.activity.compactMap { item in
                 UUID(uuidString: item.id)?.uuidString.lowercased()
@@ -775,6 +782,7 @@ struct SupabaseFeedRepository: FeedRepository {
             return try await response.followedFeedPage()
         }
 
+        async let sharedVisits = sharedVisitContexts(for: response.activity)
         let mediaRows: [RemoteActivityMediaDTO]
         do {
             mediaRows = try await rpc.call(
@@ -786,7 +794,10 @@ struct SupabaseFeedRepository: FeedRepository {
             // Keep the verified text page and neutral artwork placeholders.
             // Falling back to an unrelated provider image here would make a
             // later refresh visibly swap the wrong photo for the visit photo.
-            return content
+            return try await response.followedFeedPage(
+                mediaByActivityID: pendingMediaByActivityID,
+                sharedVisitsByActivityID: await sharedVisits
+            )
         }
         let mediaByActivityID = Dictionary(
             mediaRows.map { ($0.activityID.lowercased(), $0.media) },
@@ -794,8 +805,33 @@ struct SupabaseFeedRepository: FeedRepository {
         )
         return try await response.followedFeedPage(
             storage: storage,
-            mediaByActivityID: mediaByActivityID
+            mediaByActivityID: mediaByActivityID,
+            sharedVisitsByActivityID: await sharedVisits
         )
+    }
+
+    private func sharedVisitContexts(for activity: [RemoteFeedActivityDTO]) async -> [String: FeedSharedVisitContext] {
+        let ids = Set(activity.filter { $0.eventType == FeedActivityKind.placeBeen.rawValue }
+            .compactMap { UUID(uuidString: $0.id)?.uuidString.lowercased() })
+        guard !ids.isEmpty else { return [:] }
+        do {
+            let rows: [RemoteFeedSharedVisitContextDTO] = try await rpc.call(
+                "feed_shared_visit_context",
+                params: ActivityEngagementSummariesParams(activityIDs: Array(ids).sorted())
+            )
+            guard !Task.isCancelled else { return [:] }
+            return Dictionary(rows.compactMap { row in
+                guard ids.contains(row.activityID.lowercased()),
+                      UUID(uuidString: row.groupID) != nil, UUID(uuidString: row.visitID) != nil,
+                      !row.companions.isEmpty else { return nil }
+                return (row.activityID.lowercased(), row.context)
+            }, uniquingKeysWith: { first, _ in first })
+        } catch {
+            // Attribution is additive. A missing migration or unavailable read
+            // leaves separately authorized original posts; never infer a group
+            // from local people/place/timing, and never reuse stale companions.
+            return [:]
+        }
     }
 
     private func followedFeedResponse(

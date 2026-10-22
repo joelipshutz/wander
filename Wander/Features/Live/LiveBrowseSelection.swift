@@ -4,7 +4,7 @@ import Foundation
 /// Draft controls become an immutable server query only when committed.
 struct LiveBrowseSelection: Equatable {
     enum Scope: String, CaseIterable, Identifiable {
-        case following = "Following", nearby = "Nearby"
+        case featured = "Featured", nearby = "Nearby"
         var id: Self { self }
     }
     enum Radius: Int, CaseIterable, Identifiable {
@@ -13,7 +13,7 @@ struct LiveBrowseSelection: Equatable {
         var title: String { "\(rawValue / 1_000) km" }
     }
 
-    var scope: Scope = .following {
+    var scope: Scope = .featured {
         didSet {
             if scope == .nearby, oldValue != .nearby { radius = .tenKilometers }
         }
@@ -23,7 +23,7 @@ struct LiveBrowseSelection: Equatable {
     var nearbyCenterName: String?
     var radius: Radius = .tenKilometers
     var activityType: LiveActivityFilter = .all
-    var time: LiveTimeFilter = .week
+    var time: LiveTimeFilter = .all
     var categoryIDs: Set<String> = []
     var personIDs: Set<String> = []
     private(set) var committedAt: Date
@@ -66,12 +66,12 @@ struct LiveBrowseSelection: Equatable {
     /// and the remembered city/radius choices remain available in Filters.
     func searchingMapArea() -> Self {
         var copy = self
-        copy.scope = .following
+        copy.scope = .featured
         return copy
     }
 
     var summary: String {
-        var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose a city") : (nearbyCenterName ?? "Map center"))" : "Following", time.title]
+        var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose a city") : (nearbyCenterName ?? "Map center"))" : "Featured", time.title]
         if activityType != .all { terms.append(activityType.rawValue) }
         if !categoryIDs.isEmpty { terms.append("\(categoryIDs.count) \(categoryIDs.count == 1 ? "category" : "categories")") }
         if !personIDs.isEmpty { terms.append("\(personIDs.count) \(personIDs.count == 1 ? "person" : "people")") }
@@ -79,7 +79,7 @@ struct LiveBrowseSelection: Equatable {
     }
 
     var activeFilterCount: Int {
-        (scope == .nearby ? 1 : 0) + (activityType == .all ? 0 : 1) + (time == .week ? 0 : 1)
+        (scope == .nearby ? 1 : 0) + (activityType == .all ? 0 : 1) + (time == .all ? 0 : 1)
             + (categoryIDs.isEmpty ? 0 : 1) + (personIDs.isEmpty ? 0 : 1)
     }
 

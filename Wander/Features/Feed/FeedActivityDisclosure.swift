@@ -65,6 +65,10 @@ struct FeedActivityDisclosure: View {
         }
     }
 
+    private func eventTitle(_ event: FeedActivity) -> String {
+        group.sharedVisitGroupID == nil ? event.sequenceTitle : "\(event.actor.displayName) · \(event.sequenceTitle)"
+    }
+
     private func timelineRow(_ event: FeedActivity) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -79,7 +83,7 @@ struct FeedActivityDisclosure: View {
                         .foregroundStyle(brandMode.secondaryText)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(event.sequenceTitle)
+                        Text(eventTitle(event))
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.primaryText)
                         Text(event.occurredAt.formatted(date: .abbreviated, time: .standard))
@@ -96,7 +100,7 @@ struct FeedActivityDisclosure: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(event.sequenceTitle), \(event.occurredAt.formatted(date: .complete, time: .standard))")
+            .accessibilityLabel("\(eventTitle(event)), \(event.occurredAt.formatted(date: .complete, time: .standard))")
             .accessibilityHint("Opens original post and comments")
             .accessibilityIdentifier("feed.activity.\(event.id).sequenceEvent")
 

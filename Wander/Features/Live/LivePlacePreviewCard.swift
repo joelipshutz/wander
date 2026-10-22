@@ -16,12 +16,23 @@ struct LivePlacePreviewCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @State private var photo: PlacePhoto?
     @State private var failedGooglePhotoID: String?
+    @State private var photoViewer: LivePreviewPhotoRoute?
+    @State private var hydratedActivity: [String: FeedActivity] = [:]
+    @State private var unavailableActivityIDs: Set<String> = []
 
     private var sheetPlace: PlaceSheetPlace { PlaceSheetPlace(visiblePlace: place) }
-    private var recentActivity: [FeedActivity] {
+    private var selectedActivity: [FeedActivity] {
         LivePlacePreviewPresentation.recentActivity(activities, placeID: place.place.id)
+    }
+    private var recentActivity: [FeedActivity] {
+        selectedActivity.filter { !unavailableActivityIDs.contains($0.id) }.map { hydratedActivity[$0.id] ?? $0 }
+    }
+    private var activityHydrationKey: String {
+        "\(place.place.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoAccessRevision)|\(scenePhase)|"
+            + selectedActivity.map { "\($0.id):\(store.activityAccessGeneration(for: $0.id))" }.joined(separator: ",")
     }
     private var photoResolutionKey: String {
         "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(scenePhase)|\(failedGooglePhotoID ?? "ready")"
@@ -43,6 +54,10 @@ struct LivePlacePreviewCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("live.placePreview")
         .task(id: photoResolutionKey) { await resolvePhoto() }
+        .task(id: activityHydrationKey) { await hydrateSelectedActivity() }
+        .fullScreenCover(item: $photoViewer) { route in
+            ActivityPhotoViewerScreen(context: route.context, initialMediaID: route.mediaID)
+        }
     }
 
     private var photoHeader: some View {
@@ -94,6 +109,9 @@ struct LivePlacePreviewCard: View {
             actionRail
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(10)
+            action("Close place preview", symbol: "xmark", identifier: "close", perform: onClose)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(10)
         }
         .frame(height: dynamicTypeSize.isAccessibilitySize ? 236 : 196)
         .clipped()
@@ -104,7 +122,6 @@ struct LivePlacePreviewCard: View {
             action("Save place", symbol: "plus", identifier: "add", signal: true, perform: onAdd)
             action("Share place", symbol: "square.and.arrow.up", identifier: "share", perform: onShare)
             action("Add place to list", symbol: "text.badge.plus", identifier: "list", perform: onAddToList)
-            action("Close place preview", symbol: "xmark", identifier: "close", perform: onClose)
         }
     }
 
@@ -113,14 +130,18 @@ struct LivePlacePreviewCard: View {
         Button(action: perform) {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(signal ? Color.white : brand.primaryText)
+                .foregroundStyle(signal ? brand.accentForeground : brand.primaryText)
                 .frame(width: 34, height: 34)
+                // A photo can be much darker/lighter than the selected app theme.
+                // Keep the glyph's backing legible while retaining the glass edge.
+                .background(signal ? brand.accent : brand.raisedBackground.opacity(0.88), in: Circle())
                 .astirGlassSurface(cornerRadius: 17, castsShadow: true,
                                    interactive: true, accentAction: signal)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .environment(\.colorScheme, brand.prefersDarkInterface ? .dark : .light)
         .accessibilityLabel(title)
         .accessibilityIdentifier("live.placePreview.\(identifier)")
     }
@@ -191,56 +212,95 @@ struct LivePlacePreviewCard: View {
 
     private func activityRow(_ activity: FeedActivity) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            WanderAvatar(initials: initials(activity.actor.displayName),
-                         avatarURL: activity.actor.avatarURL, size: 28)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(activity.actor.displayName)
-                        .font(AstirTypography.label)
-                        .lineLimit(1)
-                    Text(LivePlacePreviewPresentation.emoji(for: activity))
-                        .font(.caption)
-                        .accessibilityLabel(LivePlacePreviewPresentation.actionLabel(for: activity))
-                    Spacer(minLength: 0)
-                    Text(FeedPresentation.timestampText(for: activity.occurredAt))
+            Button(action: onOpen) {
+                HStack(alignment: .center, spacing: 8) {
+                    WanderAvatar(initials: initials(activity.actor.displayName),
+                                 avatarURL: activity.actor.avatarURL, size: 28)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text(activity.actor.displayName)
+                                .font(AstirTypography.label)
+                                .lineLimit(1)
+                            Text(LivePlacePreviewPresentation.emoji(for: activity))
+                                .font(.caption)
+                                .accessibilityLabel(LivePlacePreviewPresentation.actionLabel(for: activity))
+                            Spacer(minLength: 0)
+                            Text(FeedPresentation.timestampText(for: activity.occurredAt))
+                                .font(AstirTypography.caption)
+                                .foregroundStyle(brand.secondaryText)
+                                .lineLimit(1)
+                        }
+                        Text(LivePlacePreviewPresentation.highlight(for: activity))
                         .font(AstirTypography.caption)
                         .foregroundStyle(brand.secondaryText)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    }
                 }
-                Text(LivePlacePreviewPresentation.highlight(for: activity))
-                    .font(AstirTypography.caption)
-                    .foregroundStyle(brand.secondaryText)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            if !activity.media.isEmpty {
-                photoPile(activity.media)
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Opens the full place page")
+            let media = previewMedia(activity)
+            if !media.isEmpty {
+                photoPile(activity, media: media)
             }
         }
         .foregroundStyle(brand.primaryText)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("live.placePreview.activity.\(activity.id)")
     }
 
-    private func photoPile(_ media: [FeedMediaPreview]) -> some View {
-        HStack(spacing: -9) {
-            ForEach(Array(media.prefix(3))) { item in
-                PlaceProfilePhotoImage(
-                    photo: ActivityEngagementMedia(id: item.id, urlString: item.urlString,
-                                                  storageBucket: item.storageBucket, storagePath: item.storagePath,
-                                                  accessibilityLabel: item.accessibilityLabel).placePhoto,
-                    canonicalPlaceKey: "activity-photo:\(item.id)",
-                    placeName: item.accessibilityLabel,
-                    variant: .card
-                )
-                .frame(width: 27, height: 27)
-                .background(brand.background)
-                .clipShape(Circle())
-                .overlay(Circle().strokeBorder(brand.raisedBackground, lineWidth: 1.5))
-            }
+    private func previewMedia(_ activity: FeedActivity) -> [FeedMediaPreview] {
+        activity.media.filter {
+            !$0.id.hasPrefix("pending:") && ($0.urlString?.isEmpty == false
+                || ($0.storageBucket?.isEmpty == false && $0.storagePath?.isEmpty == false))
         }
+    }
+
+    private func photoPile(_ activity: FeedActivity, media: [FeedMediaPreview]) -> some View {
+        Button {
+            guard let first = media.first, let context = activity.activityEngagementContext else { return }
+            photoViewer = LivePreviewPhotoRoute(context: context, mediaID: first.id)
+        } label: {
+            ZStack {
+                ForEach(Array(media.prefix(3).enumerated()), id: \.element.id) { index, item in
+                    PlaceProfilePhotoImage(
+                        photo: ActivityEngagementMedia(id: item.id, urlString: item.urlString,
+                                                      storageBucket: item.storageBucket, storagePath: item.storagePath,
+                                                      accessibilityLabel: item.accessibilityLabel).placePhoto,
+                        canonicalPlaceKey: "activity-photo:\(item.id)",
+                        placeName: item.accessibilityLabel,
+                        variant: .card
+                    )
+                    .frame(width: 36, height: 36)
+                    .background(brand.background)
+                    .overlay(alignment: .bottomTrailing) {
+                        if index == 0 {
+                            Text("\(media.count)")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4).padding(.vertical, 2)
+                                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
+                                .padding(3)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(brand.raisedBackground, lineWidth: 1.5))
+                    .rotationEffect(.degrees(Double(index) * 7))
+                    .offset(x: CGFloat(index) * 3, y: CGFloat(index) * -2)
+                    .zIndex(Double(3 - index))
+                }
+            }.frame(width: 48, height: 44).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(media.count) \(media.count == 1 ? "photo" : "photos") from this activity")
+        .accessibilityLabel("View \(media.count) \(media.count == 1 ? "photo" : "photos") from \(activity.actor.displayName)’s activity")
+        .accessibilityHint("Opens the photo gallery")
+        .accessibilityIdentifier("live.placePreview.photos.\(activity.id)")
     }
 
     private var ratingPresentation: PlaceCardRatingPresentation? {
@@ -271,6 +331,25 @@ struct LivePlacePreviewCard: View {
 
     private func initials(_ name: String) -> String {
         name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+    }
+
+    private func hydrateSelectedActivity() async {
+        let key = activityHydrationKey
+        hydratedActivity = [:]; unavailableActivityIDs = []
+        guard scenePhase == .active, auth.isSignedIn else { return }
+        // Resolve only the three visible preview rows. The map's full cursor
+        // enumeration intentionally avoids media and unrelated profile reads.
+        let candidates = selectedActivity
+        for event in candidates where UUID(uuidString: event.id) != nil && event.activityEngagementContext != nil {
+            let fresh = await store.activity(id: event.id, backend: backend, authSession: auth)
+            guard !Task.isCancelled, key == activityHydrationKey else { return }
+            guard let fresh, fresh.place?.place.id == place.place.id,
+                  store.canDisplayLiveMapActivity(fresh), store.liveFeedQuery?.includes(fresh) ?? true else {
+                unavailableActivityIDs.insert(event.id)
+                continue
+            }
+            hydratedActivity[event.id] = fresh
+        }
     }
 
     private func resolvePhoto() async {
@@ -306,6 +385,12 @@ struct LivePlacePreviewCard: View {
         if failedPhoto.isGooglePlacesPhoto { failedGooglePhotoID = failedPhoto.providerPlaceID }
         else { photo = nil }
     }
+}
+
+private struct LivePreviewPhotoRoute: Identifiable {
+    let id = UUID()
+    let context: ActivityEngagementContext
+    let mediaID: String
 }
 
 enum LivePlacePreviewPresentation {

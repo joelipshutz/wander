@@ -380,6 +380,9 @@ struct ActivityPostcardView: View {
     var activityGroup: FeedActivityGroup? = nil
     var openActivityList: ((LocalPlaceList) -> Void)? = nil
     var openPhotos: (() -> Void)? = nil
+    var sharedVisitCompanions: [FeedSharedVisitCompanion] = []
+    var sharedVisitCurrentUserID: String = ""
+    var openSharedVisitProfile: ((String) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -402,6 +405,8 @@ struct ActivityPostcardView: View {
                         photoStack(firstPhoto: firstPhoto)
                     }
                 }
+
+                sharedVisitAttribution
 
                 if let note = context.note {
                     Text("“\(note)”")
@@ -677,6 +682,37 @@ struct ActivityPostcardView: View {
         }
         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var sharedVisitAttribution: some View {
+        let accepted = sharedVisitCompanions.filter { $0.status == .owner || $0.status == .accepted }
+        let pending = sharedVisitCompanions.filter { $0.status == .pending }
+        if !accepted.isEmpty {
+            companionLabel(accepted)
+                .accessibilityIdentifier("\(postcardAccessibilityIdentifier).companions")
+        }
+        if !pending.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                companionLabel(pending)
+                Text(pending.count == 1 ? "Invitation pending" : "Invitations pending")
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(secondaryText)
+            }
+            .accessibilityIdentifier("\(postcardAccessibilityIdentifier).pendingCompanions")
+        }
+    }
+
+    private func companionLabel(_ companions: [FeedSharedVisitCompanion]) -> some View {
+        SharedVisitCompanionLabel(
+            companions: companions.map {
+                SharedVisitCompanion(visitID: context.activityID, userID: $0.profile.id,
+                    handle: $0.profile.handle, displayName: $0.profile.displayName,
+                    avatarURL: $0.profile.avatarURL)
+            },
+            currentUserID: sharedVisitCurrentUserID,
+            onSelect: openSharedVisitProfile
+        )
     }
 
     private var actorAccessibilityLabel: String {
@@ -1421,7 +1457,7 @@ private struct ActivityCommentsPhotoViewerRoute: Identifiable {
 
 /// Both Feed and comments must re-resolve the exact activity before mounting
 /// its media. A cached card is not authorization to display protected photos.
-private struct ActivityPhotoViewerScreen: View {
+struct ActivityPhotoViewerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore

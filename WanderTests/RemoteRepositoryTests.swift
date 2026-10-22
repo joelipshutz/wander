@@ -1438,6 +1438,56 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 50)
     }
 
+    func testLiveMapPageHasNoPendingMediaAndSkipsMediaAndCompanionRequests() async throws {
+        let rpc = RecordingRPC()
+        let eventID = "63600000-0000-0000-0000-000000000010"
+        rpc.responses["live_activity_feed"] = """
+        {"activity":[{"id":"\(eventID)","event_type":"place_been","occurred_at":"2026-10-20T12:00:00Z",
+          "actor":{"id":"owner","handle":"owner","display_name":"Owner"},"media":[]}],
+          "featured_places":[],"next_cursor":"next-map-page","fetched_at":"2026-10-20T12:00:00Z"}
+        """.data(using: .utf8)
+
+        let page = try await SupabaseFeedRepository(rpc: rpc).liveMapActivity(
+            audience: .everyone, query: LiveFeedQuery(), before: "map-cursor", limit: 100
+        )
+
+        XCTAssertEqual(page.activity.map(\.id), [eventID])
+        XCTAssertEqual(page.nextCursor, "next-map-page")
+        XCTAssertEqual(page.activity.first?.media, [], "A map-only result must not retain a loading-media placeholder forever.")
+        XCTAssertNil(page.activity.first?.sharedVisit)
+        XCTAssertEqual(rpc.calls.map(\.name), ["live_activity_feed"], "Map pagination must not wait for Feed-only media or companion hydration.")
+        XCTAssertEqual(rpc.calls.first?.body["input_before"] as? String, "map-cursor")
+        XCTAssertEqual(rpc.calls.first?.body["input_limit"] as? Int, 50)
+    }
+
+    func testFeedSharedVisitHydrationUsesOnlyReturnedAuthorizedCheckInIDs() async throws {
+        let rpc = RecordingRPC()
+        let eventID = "63600000-0000-0000-0000-000000000001"
+        let otherID = "63600000-0000-0000-0000-000000000002"
+        rpc.responses["followed_feed"] = """
+        {"activity":[{"id":"\(eventID)","event_type":"place_been","occurred_at":"2026-10-20T12:00:00Z",
+          "actor":{"id":"owner","handle":"owner","display_name":"Owner"},"media":[]}],
+          "featured_places":[],"next_cursor":null,"fetched_at":"2026-10-20T12:00:00Z"}
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = "[]".data(using: .utf8)
+        rpc.responses["feed_shared_visit_context"] = """
+        [{"activity_id":"\(eventID)","group_id":"63610000-0000-0000-0000-000000000001",
+          "visit_id":"63620000-0000-0000-0000-000000000001","companions":[
+          {"status":"accepted","profile":{"id":"accepted","handle":"accepted","display_name":"Accepted","relationship":"mutual"}},
+          {"status":"pending","profile":{"id":"pending","handle":"pending","display_name":"Pending"}}]},
+         {"activity_id":"\(otherID)","group_id":"63610000-0000-0000-0000-000000000002",
+          "visit_id":"63620000-0000-0000-0000-000000000002","companions":[
+          {"status":"accepted","profile":{"id":"unrequested","handle":"unrequested","display_name":"Unrequested"}}]}]
+        """.data(using: .utf8)
+        let page = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+        XCTAssertEqual(page.activity.map(\.id), [eventID])
+        let context = try XCTUnwrap(page.activity.first?.sharedVisit)
+        XCTAssertEqual(context.groupID, "63610000-0000-0000-0000-000000000001")
+        XCTAssertEqual(context.companions.map(\.profile.id), ["accepted", "pending"])
+        XCTAssertEqual(context.companions.map(\.status), [.accepted, .pending])
+        XCTAssertEqual(rpc.calls.first { $0.name == "feed_shared_visit_context" }?.body["input_activity_ids"] as? [String], [eventID])
+    }
+
     func testFollowedFeedHydratesProtectedObjectReferencesWithoutSigning() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
@@ -1483,8 +1533,13 @@ final class RemoteRepositoryTests: XCTestCase {
         let page = try await repository.followedFeed(before: nil, limit: 25)
 
         XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
-        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
-        XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
+        XCTAssertEqual(rpc.calls.first?.name, "followed_feed")
+        XCTAssertEqual(Set(rpc.calls.dropFirst().map(\.name)), ["activity_media", "feed_shared_visit_context"])
+        XCTAssertEqual(rpc.calls.count, 3)
+        for call in rpc.calls.dropFirst() {
+            XCTAssertEqual(call.body["input_activity_ids"] as? [String], [activityID])
+        }
+        XCTAssertNil(page.activity.first?.sharedVisit, "Missing attribution RPC keeps the authorized original post")
         XCTAssertTrue(storage.signedURLs.isEmpty)
         XCTAssertEqual(page.activity.first?.media.first?.storagePath, "user_ryan/visit_dudley/photo.jpg")
         XCTAssertNil(page.activity.first?.media.first?.urlString)
@@ -1555,8 +1610,13 @@ final class RemoteRepositoryTests: XCTestCase {
         add(attachment)
 
         XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
-        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed", "activity_media"])
-        XCTAssertEqual(rpc.rawBodies[1]["input_activity_ids"] as? [String], [activityID])
+        XCTAssertEqual(rpc.calls.first?.name, "followed_feed")
+        XCTAssertEqual(Set(rpc.calls.dropFirst().map(\.name)), ["activity_media", "feed_shared_visit_context"])
+        XCTAssertEqual(rpc.calls.count, 3)
+        for call in rpc.calls.dropFirst() {
+            XCTAssertEqual(call.body["input_activity_ids"] as? [String], [activityID])
+        }
+        XCTAssertNil(page.activity.first?.sharedVisit, "Missing attribution RPC keeps the authorized original post")
         XCTAssertTrue(storage.signedURLs.isEmpty)
         XCTAssertEqual(page.activity.first?.media.first?.storagePath, "user_ryan/visit_dudley/photo.jpg")
         XCTAssertNil(page.activity.first?.media.first?.urlString)

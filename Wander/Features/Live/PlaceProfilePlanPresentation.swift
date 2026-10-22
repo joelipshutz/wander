@@ -47,7 +47,7 @@ struct PlaceProfilePlanPresentation: ViewModifier {
                         draft: CommonGroundInvitationDraft(place: selected), liveSharing: true,
                         analytics: store.productAnalytics,
                         canShare: { candidate in
-                            CommonGroundLiveData.places(store: store, profileID: candidate.partner.id).contains(candidate)
+                            LivePlanPeoplePolicy.canShare(candidate, store: store)
                         }, prepareShare: { draft in
                             try await CommonGroundInvitationSharing.prepare(draft: draft, backend: backend, brand: brand)
                         })

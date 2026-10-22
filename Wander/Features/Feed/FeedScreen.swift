@@ -1630,6 +1630,7 @@ private enum FeedFeaturedLayout {
 }
 
 private struct FeedActivityModule: View {
+    @EnvironmentObject private var store: WanderStore
     let group: FeedActivityGroup
     private var activity: FeedActivity { group.primaryActivity }
     let openProfile: (ProfileShell) -> Void
@@ -1655,9 +1656,26 @@ private struct FeedActivityModule: View {
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
             showsEngagementActions: engagementContext != nil,
             activityGroup: group.isCombined ? group : nil,
-            openActivityList: openList
+            openActivityList: openList,
+            sharedVisitCompanions: visibleCompanions,
+            sharedVisitCurrentUserID: store.currentUser.id,
+            openSharedVisitProfile: { userID in
+                if let companion = visibleCompanions.first(where: { $0.profile.id == userID }) {
+                    openProfile(companion.profile)
+                }
+            }
         )
         .environment(\.activityPostcardVisualStyle, .astir)
+    }
+
+    private var visibleCompanions: [FeedSharedVisitCompanion] {
+        (activity.sharedVisit?.companions ?? []).filter {
+            $0.profile.id != activity.actor.id
+                && !store.isBlockedBetweenCurrentUser(and: $0.profile.id)
+                && !store.isMuted(userID: $0.profile.id)
+                && ($0.profile.id == store.currentUser.id || !store.isProfilePrivate($0.profile.id))
+                && ($0.status != .pending || activity.actor.id == store.currentUser.id)
+        }
     }
 
     private func openActivityDestination() {

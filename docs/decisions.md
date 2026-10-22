@@ -899,3 +899,26 @@ The three previously unresolved native cases and instrumentation gap remain open
 This pass uses compilation, focused changed-behavior checks, visual inspection and a
 new manual device review. It does not restart their old CI diagnostic sequence or
 claim that manual interaction supplies missing internal instrumentation evidence.
+
+
+## REC-636 — second feedback round, 2026-10-22
+
+Live defaults to Featured and All time. Featured reuses the established recommendation
+source/ranking. Authorized map activity is enumerated independently from Feed's visible
+page window; the drawer formats counts at 100+ without truncating map membership.
+The drawer tracks touch movement within a lightweight full-width header shell, while
+map framing changes at the committed detent.
+
+Map pins use the place's primary photo plus an activity badge, with lightweight dots
+for overlap. Place previews open the current full profile directly, use vertical-only
+entrance overshoot, and put Close at the upper left. Plans uses one indexed evidence
+snapshot per refresh and focused current-visibility checks on selection/sharing.
+
+An existing Wanna opens the full prefilled editor and can become a new check-in.
+Remove from Wanna? defaults No. Choosing Yes removes only the captured source Wanna
+after the replacement check-in is durable; other visits, Wannas and lists remain.
+
+Accepted shared check-ins combine only through exact server-authorized shared-visit
+identity. Pending companions are sender-only and labeled invited. Original event IDs
+retain their discussion targets. A shared card belongs to the earliest matching Feed
+stage and never promotes another participant's outside-filter note across the divider.

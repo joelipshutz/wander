@@ -15,6 +15,8 @@ struct LivePlanPeoplePicker: View {
     @State private var needsOwnSave = false
     @State private var requestID = UUID()
     @State private var demoPlan: CommonGroundMockPlace?
+    @State private var people: [LivePlanPeoplePolicy.PersonChoice] = []
+    @State private var peopleViewerID: String?
 
     let place: VisiblePlace
     let onSelect: (CommonGroundMockPlace) -> Void
@@ -28,19 +30,13 @@ struct LivePlanPeoplePicker: View {
     }
 
     private var friends: [LocalProfile] {
-        store.friends(of: store.currentUser.id).filter {
+        guard peopleViewerID == store.currentUser.id else { return [] }
+        return people.map(\.profile).filter {
             $0.id != store.currentUser.id && $0.deletedAt == nil
                 && store.relationship(to: $0.id) == .mutual
-                && store.profileState(for: $0.id)?.isBlocked == false
+                && store.profile(for: $0.id) != nil
                 && (targetFriendID == nil || $0.id == targetFriendID)
-        }.map { friend in
-            (friend, LivePlanPeoplePolicy.sharedActivityScore(
-                CommonGroundLiveData.places(store: store, profileID: friend.id)))
-        }.sorted { lhs, rhs in
-            if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
-            let names = lhs.0.displayName.localizedCaseInsensitiveCompare(rhs.0.displayName)
-            return names == .orderedSame ? lhs.0.id < rhs.0.id : names == .orderedAscending
-        }.map(\.0)
+        }
     }
 
     var body: some View {
@@ -118,13 +114,18 @@ struct LivePlanPeoplePicker: View {
         }
         .task(id: store.currentUser.id) {
             requestID = UUID(); checkingID = nil; notice = nil; needsOwnSave = false; demoPlan = nil
+            rebuildPeople()
+            if let targetFriendID, candidate(for: targetFriendID) != nil {
+                await select(targetFriendID)
+                return
+            }
             await refreshAndCheckTarget()
         }
         .onDisappear { requestID = UUID() }
     }
 
     private func personRow(_ friend: LocalProfile) -> some View {
-        let available = candidate(for: friend.id) != nil
+        let available = people.first(where: { $0.profile.id == friend.id })?.hasRequestedPlace == true
         return Button { Task { await select(friend.id) } } label: {
             HStack(spacing: 13) {
                 WanderAvatar(initials: String(friend.displayName.split(whereSeparator: \.isWhitespace).prefix(2).compactMap(\.first)),
@@ -138,17 +139,15 @@ struct LivePlanPeoplePicker: View {
                 if checkingID == friend.id { ProgressView() }
                 else { Image(systemName: "chevron.right").foregroundStyle(brand.secondaryText) }
             }.frame(maxWidth: .infinity, minHeight: 72, alignment: .leading).padding(.vertical, 8).contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(checkingID != nil || loading)
+        }.buttonStyle(.plain).disabled(checkingID != nil)
             .accessibilityIdentifier("live.plan.person.\(friend.id)")
             .accessibilityHint("Checks current shared-place access before opening invitation details")
     }
 
     private func candidate(for partnerID: String) -> CommonGroundMockPlace? {
-        LivePlanPeoplePolicy.matchingPlace(for: place,
-            candidates: CommonGroundLiveData.places(store: store, profileID: partnerID),
-            authorizedPlaces: store.currentUserVisiblePlaces + store.visiblePlaces(for: partnerID),
-            viewerID: store.currentUser.id, partnerID: partnerID, relationship: store.relationship(to: partnerID),
-            sourceContext: sourceContext)
+        guard peopleViewerID == store.currentUser.id,
+              let cached = people.first(where: { $0.profile.id == partnerID })?.candidate else { return nil }
+        return LivePlanPeoplePolicy.revalidatedCandidate(cached, source: place, store: store, sourceContext: sourceContext)
     }
 
     private func refreshFriends() async {
@@ -159,6 +158,7 @@ struct LivePlanPeoplePicker: View {
         await store.refreshRemoteSocialGraph(userID: viewerID, backend: backend)
         guard store.currentUser.id == viewerID, !Task.isCancelled else { loading = false; return }
         loading = false
+        rebuildPeople()
         if store.lastRemoteError != nil { notice = "Couldn’t refresh friends. Try again when you’re connected." }
     }
 
@@ -181,14 +181,24 @@ struct LivePlanPeoplePicker: View {
         let request = UUID(); requestID = request
         checkingID = partnerID; notice = nil; needsOwnSave = false
         defer { if requestID == request { checkingID = nil } }
-        if !isDemo { await store.refreshRemoteProfileData(profileID: partnerID, backend: backend) }
+        // Opening a composer is local and sends nothing. Use current authorized
+        // evidence immediately; only a missing mapping needs a network refresh.
+        // The invitation's share path still verifies eligibility on the server.
+        var selected = candidate(for: partnerID)
+        if selected == nil && !isDemo {
+            await store.refreshRemoteProfileVisiblePlaces(profileID: partnerID, backend: backend)
+            guard requestID == request, store.currentUser.id == viewerID,
+                  auth.state.session?.userID == sessionID, !Task.isCancelled else { return }
+            guard store.lastRemoteError == nil else {
+                notice = "Couldn’t check shared places. Try again when you’re connected."
+                return
+            }
+            rebuildPeople()
+            selected = candidate(for: partnerID)
+        }
         guard requestID == request, store.currentUser.id == viewerID,
               auth.state.session?.userID == sessionID, !Task.isCancelled else { return }
-        guard isDemo || store.lastRemoteError == nil else {
-            notice = "Couldn’t check shared places. Try again when you’re connected."
-            return
-        }
-        guard let selected = candidate(for: partnerID) else {
+        guard let selected else {
             needsOwnSave = (targetFriendID != nil || sourceContext == .placeProfile) && !LivePlanPeoplePolicy.hasViewerSave(
                 for: place, authorizedPlaces: store.currentUserVisiblePlaces, viewerID: viewerID)
             if needsOwnSave {
@@ -209,6 +219,27 @@ struct LivePlanPeoplePicker: View {
         onSelect(selected)
     }
 
+    private func rebuildPeople() {
+        let viewerID = store.currentUser.id
+        let profiles = store.friends(of: viewerID).filter {
+            $0.id != viewerID && $0.deletedAt == nil && store.relationship(to: $0.id) == .mutual
+                && (targetFriendID == nil || $0.id == targetFriendID)
+        }
+        let own = store.currentUserVisiblePlaces
+        let evidence = CommonGroundEvidenceIndex(store: store)
+        let rowsByFriend = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, own + store.visiblePlaces(for: $0.id)) })
+        people = LivePlanPeoplePolicy.peopleSnapshot(profiles: profiles, project: { friend in
+            CommonGroundLiveData.snapshot(store: store, profileID: friend.id, evidence: evidence,
+                                          authorizedPlaces: rowsByFriend[friend.id] ?? []).places
+        }, requestedPlace: { friend, candidates in
+            LivePlanPeoplePolicy.matchingPlace(for: place, candidates: candidates,
+                authorizedPlaces: rowsByFriend[friend.id] ?? [],
+                viewerID: viewerID, partnerID: friend.id, relationship: store.relationship(to: friend.id),
+                sourceContext: sourceContext)
+        })
+        peopleViewerID = viewerID
+    }
+
     private func openWannaRecovery() {
         #if DEBUG && targetEnvironment(simulator)
         if isDemo {
@@ -223,6 +254,58 @@ struct LivePlanPeoplePicker: View {
 
 @MainActor
 enum LivePlanPeoplePolicy {
+    struct PersonChoice {
+        let profile: LocalProfile
+        let sharedActivityScore: Int
+        let candidate: CommonGroundMockPlace?
+        var hasRequestedPlace: Bool { candidate != nil }
+    }
+
+    /// Project each friend's authorized evidence once per refresh, not once per
+    /// row and every SwiftUI body evaluation while a request is in flight.
+    static func peopleSnapshot(profiles: [LocalProfile],
+                               project: (LocalProfile) -> [CommonGroundMockPlace],
+                               requestedPlace: (LocalProfile, [CommonGroundMockPlace]) -> CommonGroundMockPlace?) -> [PersonChoice] {
+        profiles.map { profile in
+            let places = project(profile)
+            return PersonChoice(profile: profile, sharedActivityScore: sharedActivityScore(places),
+                                candidate: requestedPlace(profile, places))
+        }.sorted {
+            if $0.sharedActivityScore != $1.sharedActivityScore { return $0.sharedActivityScore > $1.sharedActivityScore }
+            let names = $0.profile.displayName.localizedCaseInsensitiveCompare($1.profile.displayName)
+            return names == .orderedSame ? $0.profile.id < $1.profile.id : names == .orderedAscending
+        }
+    }
+
+    /// Recheck only the selected physical place against current access. The
+    /// cached candidate is a routing hint, never an authorization receipt.
+    static func revalidatedCandidate(_ cached: CommonGroundMockPlace, source: VisiblePlace, store: WanderStore,
+                                     sourceContext: LivePlanSourceContext) -> CommonGroundMockPlace? {
+        guard cached.viewer.id == store.currentUser.id,
+              store.relationship(to: cached.partner.id) == .mutual else { return nil }
+        let authorized = store.currentUserVisiblePlaces + store.visiblePlaces(for: cached.partner.id)
+        guard let group = VisiblePlaceGrouping.matchingGroup(for: source, in: authorized,
+            currentUserID: store.currentUser.id) else { return nil }
+        // Preserve transitive canonical aliases while limiting event projection
+        // to this one physical place.
+        let rows = group.places
+        let candidates = CommonGroundLiveData.snapshot(store: store, profileID: cached.partner.id,
+            evidence: CommonGroundEvidenceIndex(store: store), authorizedPlaces: rows).places
+        return matchingPlace(for: source, candidates: candidates, authorizedPlaces: rows,
+            viewerID: store.currentUser.id, partnerID: cached.partner.id,
+            relationship: store.relationship(to: cached.partner.id), sourceContext: sourceContext)
+    }
+
+    static func canShare(_ candidate: CommonGroundMockPlace, store: WanderStore) -> Bool {
+        guard candidate.viewer.id == store.currentUser.id,
+              store.relationship(to: candidate.partner.id) == .mutual else { return false }
+        let rows = store.currentUserVisiblePlaces + store.visiblePlaces(for: candidate.partner.id)
+        guard let source = rows.first(where: {
+            $0.id == candidate.sourcePlaceID || ($0.place.serverID != nil && $0.place.serverID == candidate.photoReference?.placeID)
+        }) else { return false }
+        return revalidatedCandidate(candidate, source: source, store: store, sourceContext: .placeProfile) == candidate
+    }
+
     /// Rank only from currently authorized shared-place evidence. One-sided
     /// recommendations do not inflate the relationship, and no private message
     /// contents or unavailable profile records are inspected.

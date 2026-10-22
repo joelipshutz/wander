@@ -151,6 +151,37 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
         XCTAssertEqual(LivePlanPeoplePolicy.sharedActivityScore([place(visits: 100, wanna: true, introduction: true)]), 0)
     }
 
+    func testPeopleSnapshotProjectsEachFriendOnceAndReusesEvidenceForAvailabilityAndRanking() {
+        let low = profile("low"), high = profile("high"), noShared = profile("none")
+        var projectionCounts: [String: Int] = [:]
+        var availabilityCounts: [String: Int] = [:]
+        let choices = LivePlanPeoplePolicy.peopleSnapshot(profiles: [low, noShared, high], project: { person in
+            projectionCounts[person.id, default: 0] += 1
+            return [CommonGroundMockPlace(id: person.id, name: "Cafe", category: "Coffee", area: "", city: "",
+                systemImage: "cup.and.saucer", youRating: nil, joeRating: nil,
+                youVisits: person.id == high.id ? 5 : 1, joeVisits: 1, youWanna: false, joeWanna: false,
+                reason: "", isOneSidedRecommendation: person.id == noShared.id)]
+        }, requestedPlace: { person, projected in
+            availabilityCounts[person.id, default: 0] += 1
+            XCTAssertEqual(projected.first?.id, person.id)
+            return projected.first?.isOneSidedRecommendation == false ? projected.first : nil
+        })
+        XCTAssertEqual(choices.map(\.profile.id), [high.id, low.id, noShared.id])
+        XCTAssertEqual(choices.map(\.hasRequestedPlace), [true, true, false])
+        XCTAssertEqual(projectionCounts, [low.id: 1, high.id: 1, noShared.id: 1])
+        XCTAssertEqual(availabilityCounts, projectionCounts)
+    }
+
+    func testPeopleSnapshotHasStableNameThenIdentityOrderForEqualActivity() {
+        let alpha = profile("a"), sameA = profile("b"), sameB = profile("c")
+        alpha.displayName = "Anna"
+        sameA.displayName = "Sam"
+        sameB.displayName = "sam"
+        let choices = LivePlanPeoplePolicy.peopleSnapshot(profiles: [sameB, alpha, sameA],
+            project: { _ in [] }, requestedPlace: { _, _ in nil })
+        XCTAssertEqual(choices.map(\.profile.id), [alpha.id, sameA.id, sameB.id])
+    }
+
     private func match(_ requested: VisiblePlace, viewer: LocalProfile, partner: LocalProfile,
                        rows: [VisiblePlace], relationship: ViewerRelationship = .mutual,
                        sourceContext: LivePlanSourceContext = .wannaActivity) -> CommonGroundMockPlace? {

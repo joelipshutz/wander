@@ -104,11 +104,20 @@ enum LivePinDensity {
             if ($0.id == selectedID) != ($1.id == selectedID) { return $0.id == selectedID }
             return $0.id < $1.id
         }
-        var expanded: [CGPoint] = [], compact: Set<String> = []
+        guard minimumSpacing > 0, minimumSpacing.isFinite else { return [] }
+        struct Cell: Hashable { let x: CGFloat; let y: CGFloat }
+        var buckets: [Cell: [CGPoint]] = [:], compact: Set<String> = []
         for entry in sorted where entry.point.x.isFinite && entry.point.y.isFinite {
-            if entry.id != selectedID && expanded.contains(where: { hypot($0.x - entry.point.x, $0.y - entry.point.y) < minimumSpacing }) {
-                compact.insert(entry.id)
-            } else { expanded.append(entry.point) }
+            let cell = Cell(x: floor(entry.point.x / minimumSpacing), y: floor(entry.point.y / minimumSpacing))
+            let overlaps = (-1...1).contains { dx in
+                (-1...1).contains { dy in
+                    (buckets[Cell(x: cell.x + CGFloat(dx), y: cell.y + CGFloat(dy))] ?? []).contains {
+                        hypot($0.x - entry.point.x, $0.y - entry.point.y) < minimumSpacing
+                    }
+                }
+            }
+            if entry.id != selectedID && overlaps { compact.insert(entry.id) }
+            else { buckets[cell, default: []].append(entry.point) }
         }
         return compact
     }

@@ -4,16 +4,29 @@ import XCTest
 @MainActor final class LiveBrowseSelectionTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 
-    func testDefaultFollowingUsesFixedSevenDayBoundsIncludingUnmappedActivity() {
+    func testDefaultFeaturedUsesAllTimeIncludingUnmappedHistoricalActivity() {
         let selection = LiveBrowseSelection(now: now)
-        XCTAssertEqual(selection.scope, .following)
+        XCTAssertEqual(selection.scope, .featured)
+        XCTAssertEqual(selection.time, .all)
         XCTAssertEqual(selection.radius, .tenKilometers)
-        XCTAssertEqual(selection.occurredAfter, now.addingTimeInterval(-7 * 86_400))
+        XCTAssertNil(selection.occurredAfter)
         XCTAssertEqual(selection.occurredBefore, now)
+        XCTAssertEqual(selection.summary, "Featured · All time")
+        XCTAssertEqual(selection.activeFilterCount, 0)
+        XCTAssertTrue(selection.includes(event("historical", offset: -400 * 86_400)))
+        XCTAssertTrue(selection.includes(event("end")))
+        XCTAssertFalse(selection.includes(event("future", offset: 1)))
+    }
+
+    func testExplicitSevenDayFilterKeepsInclusiveStableBounds() {
+        var selection = LiveBrowseSelection(now: now)
+        selection.time = .week
+        XCTAssertEqual(selection.occurredAfter, now.addingTimeInterval(-7 * 86_400))
         XCTAssertTrue(selection.includes(event("start", offset: -7 * 86_400)))
         XCTAssertTrue(selection.includes(event("end")))
         XCTAssertFalse(selection.includes(event("old", offset: -7 * 86_400 - 1)))
         XCTAssertFalse(selection.includes(event("future", offset: 1)))
+        XCTAssertEqual(selection.activeFilterCount, 1)
     }
 
     func testTwentyFourHourAndAllTimeNeverMixFutureItemsIntoPastActivity() {
@@ -55,7 +68,7 @@ import XCTest
         XCTAssertTrue(selection.includes(tenKilometers))
         XCTAssertFalse(selection.includes(outside))
         XCTAssertFalse(selection.includes(event("invalid", place: place("invalid", latitude: .nan))))
-        selection.scope = .following
+        selection.scope = .featured
         XCTAssertTrue(selection.includes(outside))
     }
 
@@ -79,7 +92,7 @@ import XCTest
         selection.cityID = "los-angeles"
         selection.radius = .twentyFiveKilometers
         selection.personIDs = ["selected-person"]
-        selection.scope = .following
+        selection.scope = .featured
         selection.scope = .nearby
         XCTAssertEqual(selection.radius, .tenKilometers)
         XCTAssertEqual(selection.cityID, "los-angeles")
@@ -96,7 +109,7 @@ import XCTest
         XCTAssertFalse(selection.includes(event("beyond-ten", place: place("far", latitude: 34.15))))
         selection.cityID = "new-york"
         XCTAssertNil(selection.nearbyCenter, "Choosing a city must replace the prior automatic nearby center.")
-        selection.scope = .following
+        selection.scope = .featured
         XCTAssertNil(selection.query().center)
         XCTAssertNil(selection.query().radiusMeters)
     }

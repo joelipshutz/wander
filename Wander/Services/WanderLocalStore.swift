@@ -2225,6 +2225,14 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func liveMapFixtureActivity() -> [FeedActivity] { fixtureFollowedFeedPage(relativeTo: .now).activity }
+
+    /// Presentation guard for the independently paged map. Server queries remain authoritative.
+    func canDisplayLiveMapActivity(_ activity: FeedActivity) -> Bool {
+        canDisplayActivity(activity) && feedAudience.includes(actorID: activity.actor.id,
+            currentUserID: currentUser.id, relationship: relationship(to: activity.actor.id))
+    }
+
     private func canDisplayActivity(_ activity: FeedActivity) -> Bool {
         guard !isBlockedBetweenCurrentUser(and: activity.actor.id) else { return false }
         guard activity.actor.id == currentUser.id
@@ -2878,13 +2886,10 @@ final class WanderStore: ObservableObject {
                 && liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: now)
         }
         var remaining = feedVisibleTileLimit
-        return LiveFeedExpansionStage.allCases.filter {
-            $0.rawValue <= liveFeedExpansionStage.rawValue && ($0 != .older || query.occurredAfter != nil)
-        }.map { stage in
-            let groups = FeedPresentation.groupedActivity(allowed.filter { query.expansionStage(for: $0) == stage })
-            let visible = Array(groups.prefix(remaining))
+        return FeedPresentation.stagedActivitySections(allowed, query: query, through: liveFeedExpansionStage).map { section in
+            let visible = Array(section.groups.prefix(remaining))
             remaining -= visible.count
-            return LiveFeedActivitySection(stage: stage, groups: visible)
+            return LiveFeedActivitySection(stage: section.stage, groups: visible)
         }
     }
 
@@ -2941,9 +2946,7 @@ final class WanderStore: ObservableObject {
                                   relationship: $0.actor.relationship)
         }
         guard let query = liveFeedQuery else { return FeedPresentation.groupedActivity(activity) }
-        return LiveFeedExpansionStage.allCases.filter { $0.rawValue <= liveFeedExpansionStage.rawValue }.flatMap { stage in
-            FeedPresentation.groupedActivity(activity.filter { query.expansionStage(for: $0) == stage })
-        }
+        return FeedPresentation.stagedActivitySections(activity, query: query, through: liveFeedExpansionStage).flatMap(\.groups)
     }
 
     private func resetFeedPagination() {

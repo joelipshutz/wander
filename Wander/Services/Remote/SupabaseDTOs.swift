@@ -487,7 +487,8 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
     func activity(
         storage: (any RemoteStorageCalling)? = nil,
         mediaOverride: [RemoteFeedMediaDTO]? = nil,
-        renderedMediaOverride: [FeedMediaPreview]? = nil
+        renderedMediaOverride: [FeedMediaPreview]? = nil,
+        sharedVisit: FeedSharedVisitContext? = nil
     ) async throws -> FeedActivity {
         guard let kind = FeedActivityKind(rawValue: eventType) else {
             throw WanderRemoteError.invalidResponse("Unknown Feed event type: \(eventType)")
@@ -519,8 +520,30 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
             occurredAt: occurredAt,
             note: note,
             rating: rating,
-            media: renderedMedia
+            media: renderedMedia,
+            sharedVisit: sharedVisit
         )
+    }
+}
+
+struct RemoteFeedSharedVisitContextDTO: Decodable {
+    let activityID: String
+    let visitID: String
+    let groupID: String
+    let companions: [Companion]
+
+    struct Companion: Decodable {
+        let profile: RemoteProfileShellDTO
+        let status: SharedVisitParticipantStatus
+    }
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id", visitID = "visit_id", groupID = "group_id", companions
+    }
+    var context: FeedSharedVisitContext {
+        FeedSharedVisitContext(groupID: groupID.lowercased(), visitID: visitID.lowercased(),
+            companions: companions.filter { [.owner, .accepted, .pending].contains($0.status) }.map {
+                FeedSharedVisitCompanion(profile: $0.profile.profileShell(fallbackRelationship: .nonFollower), status: $0.status)
+            })
     }
 }
 
@@ -561,7 +584,8 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
     @MainActor
     func followedFeedPage(
         storage: (any RemoteStorageCalling)? = nil,
-        mediaByActivityID: [String: [RemoteFeedMediaDTO]] = [:]
+        mediaByActivityID: [String: [RemoteFeedMediaDTO]] = [:],
+        sharedVisitsByActivityID: [String: FeedSharedVisitContext] = [:]
     ) async throws -> FollowedFeedPage {
         let mediaRequests = activity.flatMap { item in
             let activityID = item.id.lowercased()
@@ -584,7 +608,8 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
         for item in activity {
             renderedActivity.append(
                 try await item.activity(
-                    renderedMediaOverride: renderedMediaByActivityID[item.id.lowercased()] ?? []
+                    renderedMediaOverride: renderedMediaByActivityID[item.id.lowercased()] ?? [],
+                    sharedVisit: sharedVisitsByActivityID[item.id.lowercased()]
                 )
             )
         }

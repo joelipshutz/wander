@@ -193,6 +193,7 @@ struct PlaceProfileFullScreen: View {
     @State private var localListTarget: MapPlaceListTarget?
     @StateObject private var recentListAdd = RecentPlaceListAddController()
     @State private var showsPlans = false
+    @State private var planSource: VisiblePlace?
     @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
     init(
@@ -328,7 +329,12 @@ struct PlaceProfileFullScreen: View {
             onAction: onAction,
             onAddToList: addToList,
             onFloatingAction: handleSaveAction,
-            onPlans: liveExperienceEnabled ? { showsPlans = true } : nil
+            onPlans: liveExperienceEnabled ? {
+                let current = resolvedSaves
+                planSource = current.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
+                    ?? current.first?.visiblePlace
+                showsPlans = true
+            } : nil
         )
         .overlay(alignment: .top) {
             if historyRefresh.hasFailed {
@@ -391,11 +397,6 @@ struct PlaceProfileFullScreen: View {
             else { return }
             saveActionSnapshot = snapshot.refreshingPresentation(for: state)
         }
-    }
-
-    private var planSource: VisiblePlace? {
-        resolvedSaves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
-            ?? resolvedSaves.first?.visiblePlace
     }
 
     private func addToList() {
@@ -502,6 +503,18 @@ struct PlaceProfileFullScreen: View {
         }
         guard let status = action.destinationStatus else { return }
         let own = resolvedSaves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
+        let wanna = own.flatMap { store.wannaSaves(for: $0.userPlace).first }
+        if liveExperienceEnabled, let own, own.userPlace.status == .wannaGo || wanna != nil {
+            // Both explicit actions reuse the active Wanna's details. Check-in
+            // starts in its chosen mode and keeps optional Wanna removal; the
+            // Wanna action keeps the two-choice form with Wanna preselected.
+            localSaveContext = MapPlaceSaveContext.addFromExistingWanna(own,
+                attributes: store.attributes(for: own.userPlace.id),
+                latestVisit: store.visits(for: own.userPlace.id).first, wanna: wanna)
+                .resolvingExistingSave(selection: status)
+            store.saveFlowDidPresent(.saveSheet)
+            return
+        }
         let context: MapPlaceSaveContext
         if let own {
             context = .existingCurrentUserSave(

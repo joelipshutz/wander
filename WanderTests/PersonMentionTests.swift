@@ -236,6 +236,31 @@ final class PersonMentionTests: XCTestCase {
         XCTAssertEqual(trailingSpace[.foregroundColor] as? UIColor, .black)
     }
 
+    @MainActor
+    func testUnchangedNativeStylingDoesNotEditStorageOrMoveCaret() throws {
+        let input = PersonMentionNativeInput(text: .constant("A saved note"), mentions: .constant([]),
+            selection: .constant(NSRange(location: 3, length: 2)), focus: .constant(false), placeholder: "",
+            accessibilityLabel: "", accessibilityIdentifier: "", replacementID: UUID(), editor: PersonMentionInputController(),
+            primaryColor: .black, accentColor: .red, placeholderColor: .gray,
+            minimumLines: 1, maximumLines: 4, isSearch: false, submitOnReturn: false,
+            suggestions: AnyView(EmptyView()), suggestionHeight: 0, onSubmit: {}, onFocus: {}, onCompletionRequest: { _ in })
+        let view = UITextView()
+        view.text = "A saved note"
+        view.selectedRange = NSRange(location: 3, length: 2)
+        let coordinator = input.makeCoordinator()
+        coordinator.style(view)
+        let edits = MentionTextStorageEditCounter()
+        view.textStorage.delegate = edits
+        for _ in 0..<10 { coordinator.style(view) }
+        XCTAssertEqual(edits.count, 0, "Unrelated form choices must not invalidate native text layout.")
+        XCTAssertEqual(view.selectedRange, NSRange(location: 3, length: 2))
+        XCTAssertEqual(view.text, "A saved note")
+        view.text = "A changed note"
+        coordinator.style(view)
+        XCTAssertGreaterThan(edits.count, 0)
+        XCTAssertEqual(view.textStorage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor, .black)
+    }
+
     func testInvalidatedSelectionCannotReplaceNewlyEditedText() throws {
         var draft = PersonMentionDraft(text: "@c")
         let query = try XCTUnwrap(draft.query(at: NSRange(location: 2, length: 0)))
@@ -329,5 +354,13 @@ final class PersonMentionTests: XCTestCase {
             recommendations: { [camilo, caitlin] }, remote: { _ in blocked = true; return [caitlin, camilo] },
             eligible: { !blocked || $0.id != "camilo" }, debounce: .zero)
         XCTAssertEqual(model.profiles.map(\.id), ["caitlin"])
+    }
+}
+
+private final class MentionTextStorageEditCounter: NSObject, NSTextStorageDelegate {
+    var count = 0
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorage.EditActions,
+                     range editedRange: NSRange, changeInLength delta: Int) {
+        count += 1
     }
 }

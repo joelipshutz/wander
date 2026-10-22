@@ -609,15 +609,21 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             updating = true
             defer { updating = wasUpdating }
             let normal: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: parent.primaryColor]
-            view.textStorage.beginEditing()
-            view.textStorage.setAttributes(normal, range: NSRange(location: 0, length: view.text.utf16.count))
+            let styled = NSMutableAttributedString(string: view.text, attributes: normal)
             let bold = parent.inputFont(bold: true)
             for mention in parent.mentions where mention.isValid(in: view.text) {
-                view.textStorage.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.nameRange)
+                styled.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.nameRange)
             }
-            view.textStorage.endEditing()
-            if view.selectedRange != caret { view.selectedRange = caret }
-            view.typingAttributes = normal
+            // Answer and tag changes rerender the containing save form. Rewriting
+            // unchanged text storage asks UIKit to lay out/reveal the caret again,
+            // pulling its enclosing ScrollView back toward the note field.
+            if !view.textStorage.isEqual(to: styled) {
+                view.textStorage.setAttributedString(styled)
+                if view.selectedRange != caret { view.selectedRange = caret }
+            }
+            if !NSDictionary(dictionary: view.typingAttributes).isEqual(to: normal) {
+                view.typingAttributes = normal
+            }
         }
     }
 

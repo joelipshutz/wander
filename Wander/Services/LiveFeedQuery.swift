@@ -233,3 +233,22 @@ extension LiveFeedQuery {
         return stage == .allActivity && expandedQuery(for: .allActivity).includes(activity)
     }
 }
+
+
+extension LiveFeedQuery {
+    /// Featured's anonymous aggregate is a place recommendation, never a social post.
+    func includesFeatured(_ visible: VisiblePlace) -> Bool {
+        guard isValid, personIDs.isEmpty, activityType != .wannas,
+              visible.userPlace.status == .been else { return false }
+        let date = visible.userPlace.visitedAt ?? visible.userPlace.savedAt
+        if let occurredAfter, date < occurredAfter { return false }
+        if let occurredBefore, date > occurredBefore { return false }
+        if !categoryIDs.isEmpty, !categoryIDs.contains(Self.categoryID(for: visible)) { return false }
+        let place = visible.place
+        if polygon != nil && !contains(latitude: place.latitude, longitude: place.longitude) { return false }
+        if let center, let radiusMeters,
+           CLLocation(latitude: center.latitude, longitude: center.longitude)
+            .distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude)) > Double(radiusMeters) { return false }
+        return true
+    }
+}

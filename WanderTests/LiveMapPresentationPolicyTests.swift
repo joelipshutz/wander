@@ -15,6 +15,53 @@ final class LiveMapPresentationPolicyTests: XCTestCase {
                        "Network page ordering must not change which pin wins an overlapping position.")
     }
 
+    func testSpatialBucketsMatchGreedyDensityAcrossNegativeBoundariesAndSelectedPriority() {
+        var points: [(id: String, point: CGPoint)] = []
+        for x in -5...5 {
+            for y in -5...5 {
+                let offset: CGFloat = (x + y).isMultiple(of: 2) ? -0.001 : 0.001
+                points.append(("grid-\(x)-\(y)", CGPoint(x: CGFloat(x) * 38 + offset,
+                                                        y: CGFloat(y) * 38 - offset)))
+            }
+        }
+        for index in 0..<80 {
+            points.append(("dense-\(index)", CGPoint(x: -38 + CGFloat(index % 8) / 10,
+                                                   y: 38 + CGFloat(index / 8) / 10)))
+        }
+        points += [("boundary-origin", .zero), ("boundary-exact", CGPoint(x: 38, y: 0)),
+                   ("boundary-inside", CGPoint(x: 37.999, y: 0)),
+                   ("z-selected", CGPoint(x: -38, y: 38))]
+
+        // Keep a simple reference scan: this verifies the optimization without
+        // copying its spatial indexing or depending on network arrival order.
+        func greedy(_ input: [(id: String, point: CGPoint)], selected: String?, spacing: CGFloat) -> Set<String> {
+            let sorted = input.sorted {
+                if ($0.id == selected) != ($1.id == selected) { return $0.id == selected }
+                return $0.id < $1.id
+            }
+            var expanded: [CGPoint] = [], compact = Set<String>()
+            for entry in sorted {
+                if entry.id != selected && expanded.contains(where: {
+                    hypot($0.x - entry.point.x, $0.y - entry.point.y) < spacing
+                }) { compact.insert(entry.id) }
+                else { expanded.append(entry.point) }
+            }
+            return compact
+        }
+        let selectedIDs: [String?] = [nil, "z-selected", "grid--3--2"]
+        for spacing in [CGFloat(1), 17, 38, 76] {
+            for selected in selectedIDs {
+                let expected = greedy(points, selected: selected, spacing: spacing)
+                XCTAssertEqual(LivePinDensity.compactIDs(points: points, selectedID: selected, minimumSpacing: spacing), expected)
+                XCTAssertEqual(LivePinDensity.compactIDs(points: Array(points.reversed()), selectedID: selected,
+                                                        minimumSpacing: spacing), expected)
+                if let selected { XCTAssertFalse(expected.contains(selected)) }
+            }
+        }
+        XCTAssertTrue(LivePinDensity.compactIDs(points: [("a", .zero), ("b", CGPoint(x: 38, y: 0))],
+                                                selectedID: nil).isEmpty, "Exactly spaced pins remain full size.")
+    }
+
     func testZoomingApartRestoresFullPinsWithoutCombiningTheirIdentities() {
         let dense: [(id: String, point: CGPoint)] = [
             ("a", .init(x: 100, y: 100)), ("b", .init(x: 110, y: 110)), ("c", .init(x: 120, y: 120))
