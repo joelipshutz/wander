@@ -1011,7 +1011,7 @@ struct LiveScreen: View {
         default: return max(minimum, available * 0.48)
         }
     }
-    private func changeDetent(_ value: Int) {
+    private func changeDetent(_ value: Int, restoredOrigin: MKCoordinateRegion? = nil) {
         let next = min(2, max(0, value))
         guard next != detent else { return }
         mapSearch.rebaseForPresentationChange()
@@ -1019,7 +1019,7 @@ struct LiveScreen: View {
         if next == 0, let origin = drawerMapOrigin {
             nextRegion = origin
             drawerMapOrigin = nil
-        } else if next == 1, detent == 0, let viewport {
+        } else if next == 1, detent == 0, let viewport = restoredOrigin ?? viewport {
             drawerMapOrigin = viewport
             let old = LiveMapSearchLayout(size: mapSize, controlsHeight: mapControlsHeight,
                 drawerHeight: height(for: 0, available: mapSize.height))
@@ -1045,8 +1045,12 @@ struct LiveScreen: View {
     private func restoreFeedPresentation() {
         let retains = LiveReviewContinuity.keepsFeedPosition(scrolled: departedFeedWasScrolled, departedAt: departedAt)
         if !retains { feedScrollResetRequest = UUID(); feedIsScrolled = false }
-        if selectedPlaceID != nil || cardMapOrigin != nil { dismissPlacePreview() }
-        changeDetent(retains ? max(1, departedDetent) : 1)
+        let returningFromCard = selectedPlaceID != nil || cardMapOrigin != nil
+        let restoredOrigin = returningFromCard ? (cardMapOrigin ?? drawerMapOrigin) : nil
+        if returningFromCard { dismissPlacePreview() }
+        // MapKit publishes its new viewport asynchronously. Fit from the restored
+        // origin now, rather than the previous card-reveal camera callback.
+        changeDetent(retains ? max(1, departedDetent) : 1, restoredOrigin: restoredOrigin)
         departedAt = nil; departedFeedWasScrolled = false
     }
 
