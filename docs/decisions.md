@@ -863,3 +863,39 @@ Ordinary CI UI runs use screenshots instead of automatic video encoding and
 retain system failure diagnostics. Explicit test attachments remain unchanged.
 This keeps long UI shards from accumulating an unrelated video-encoding workload
 while preserving screenshots and hierarchies needed to investigate failures.
+
+
+## REC-636 — map and Feed feedback pass, 2026-10-22
+
+Live keeps one stable Map surface below its controls and activity drawer. A map drag
+collapses overlays and stages a search; only the full-map state offers the floating
+Liquid Glass **Search this area** action. Committing the visible area has no drawn
+rectangle. Freehand drawings retain their outline and Apply/Cancel contract.
+
+The Feed expands automatically in three labeled stages: selected time and filters,
+older activity with the same filters, then authorized activity outside the discovery
+filters. The last stage includes a small explicit disclosure above **Showing all
+activity**. Audience authorization, blocks, privacy, account binding, and the existing
+15-minute social-content lease apply to every stage. The map/count remain scoped to
+the committed selection. Ordinary Feed cards, invitations and follow suggestions remain.
+
+Selecting a pin presents a separate photo-led place preview. It never recenters an
+already visible pin; only a card-covered pin receives the minimum visibility adjustment.
+Closing restores the full-map pose. Drawer expansion fits the same geographic content
+into the exposed map, and collapse restores the prior pose. Notifications/search return
+to the half drawer unless a scrolled Feed is being resumed within 30 minutes.
+
+Viewed-pin treatment expires after 24 hours and is account-scoped on the device.
+Recent list choice expires after 30 minutes, is account-scoped and session-only, and
+provides **Change** after automatic addition. These are explicit Astir review defaults,
+not claims of a universal industry standard. Change preserves the original membership
+until the replacement succeeds; collaborator permissions are unchanged.
+
+Messages moves to Profile beside Notifications. Plans leads the place-profile action
+row and ranks mutual friends by currently authorized shared activity. Profile retains
+Your Map, history, Patterns and its existing owner tools.
+
+The three previously unresolved native cases and instrumentation gap remain open.
+This pass uses compilation, focused changed-behavior checks, visual inspection and a
+new manual device review. It does not restart their old CI diagnostic sequence or
+claim that manual interaction supplies missing internal instrumentation evidence.

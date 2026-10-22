@@ -17,9 +17,8 @@ enum LiveSelectedArea: Equatable {
     var drawActionTitle: String { isMapViewport ? "Draw area" : "Redraw" }
 }
 
-/// The exposed rectangle is in the outer layout's coordinates. MapKit's local
-/// content origin already follows its safe-area insets; geographic projection
-/// uses this rectangle's size without adding its outer origin a second time.
+/// The exposed rectangle is in the stable Map's local coordinates. Controls
+/// and sheets overlay it without changing its native view or coordinate origin.
 struct LiveMapSearchLayout: Equatable {
     let size: CGSize
     let controlsHeight: CGFloat
@@ -51,9 +50,9 @@ enum LiveMapSearchGeometry {
         // polygon on the opposite side of the world. Reject before projection.
         guard longitudeSpan.isFinite, longitudeSpan > 0, longitudeSpan < 180,
               let visibleRect = layout.visibleRect else { return nil }
-        // MapProxy .local starts at the inset Map content, below the controls.
-        // Keep the outer rectangle for layout; convert zero-origin content points.
-        let rect = CGRect(origin: .zero, size: visibleRect.size)
+        // Live keeps Map at one stable full-screen size. Its overlays do not
+        // alter MapProxy coordinates; project the actual exposed rectangle.
+        let rect = visibleRect
         let points = [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
                       CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
         let coordinates = points.compactMap(convert)
@@ -126,6 +125,13 @@ struct LiveMapSearchState: Equatable {
     mutating func rebaseForPresentationChange() {
         pendingBeforePresentationChange = shouldOfferSearch
         referenceCamera = latestCamera
+    }
+
+    /// A genuine map drag can also collapse an overlay. Preserve that intent
+    /// when the resulting layout update rebases the camera's native provenance.
+    mutating func didInteractWithMap() {
+        shouldOfferSearch = true
+        pendingBeforePresentationChange = true
     }
 
     mutating func didCommit() {

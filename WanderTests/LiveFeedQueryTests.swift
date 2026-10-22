@@ -106,6 +106,46 @@ final class LiveFeedQueryTests: XCTestCase {
             actor: store.shell(for: store.currentUser), occurredAt: .now)))
     }
 
+    func testOlderExpansionPreservesEveryDiscoveryFilterAndAnInclusiveWindowBoundary() {
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100),
+            occurredBefore: Date(timeIntervalSince1970: 200), activityType: .wannas,
+            polygon: [.init(latitude: 0, longitude: 0), .init(latitude: 1, longitude: 0), .init(latitude: 0, longitude: 1)],
+            center: .init(latitude: 0, longitude: 0), radiusMeters: 10_000,
+            categoryIDs: ["restaurants_food"], personIDs: ["selected-person"])
+        let older = query.expandedQuery(for: .older)
+        XCTAssertNil(older.occurredAfter)
+        XCTAssertEqual(older.occurredBefore, query.occurredAfter)
+        XCTAssertEqual(older.activityType, query.activityType)
+        XCTAssertEqual(older.polygon, query.polygon)
+        XCTAssertEqual(older.center, query.center)
+        XCTAssertEqual(older.radiusMeters, query.radiusMeters)
+        XCTAssertEqual(older.categoryIDs, query.categoryIDs)
+        XCTAssertEqual(older.personIDs, query.personIDs)
+        let all = query.expandedQuery(for: .allActivity)
+        XCTAssertEqual(all.occurredBefore, query.occurredBefore)
+        XCTAssertNil(all.occurredAfter)
+        XCTAssertFalse(all.hasDiscoveryFilters)
+        XCTAssertEqual(query.nextExpansion(after: .selected), .older)
+        XCTAssertEqual(query.nextExpansion(after: .older), .allActivity)
+        XCTAssertNil(query.nextExpansion(after: .allActivity))
+    }
+
+    func testExpansionDoesNotSkipSubmillisecondActivityAtTheWindowBoundary() {
+        let store = WanderStore(fixtures: .seed())
+        let actor = store.shell(for: store.currentUser)
+        let boundary = Date(timeIntervalSince1970: 100)
+        let query = LiveFeedQuery(occurredAfter: boundary)
+        let justBefore = FeedActivity(id: "fractional", kind: .placeBeen, actor: actor,
+                                      occurredAt: boundary.addingTimeInterval(-0.0005))
+        let exact = FeedActivity(id: "boundary", kind: .placeBeen, actor: actor, occurredAt: boundary)
+        XCTAssertFalse(query.includes(justBefore))
+        XCTAssertTrue(query.expandedQuery(for: .older).includes(justBefore))
+        XCTAssertEqual(query.expansionStage(for: justBefore), .older)
+        XCTAssertTrue(query.expandedQuery(for: .older).includes(exact))
+        XCTAssertEqual(query.expansionStage(for: exact), .selected,
+                       "The overlapping boundary remains in the selected section")
+    }
+
     func testMissingLiveRPCAndLegacyRepositoryCannotFallBackToLoadedPageFiltering() async {
         let transport = LiveQueryTransport()
         transport.failure = WanderRemoteError.invalidResponse("PGRST202 live_activity_feed")

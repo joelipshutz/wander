@@ -61,6 +61,21 @@ final class LiveMapSearchPolicyTests: XCTestCase {
         XCTAssertFalse(state.shouldOfferSearch)
     }
 
+    func testFirstMapDragRetainsSearchWhenItCollapsesTheHalfFeed() {
+        var state = initializedState()
+        let collapsed = LiveMapSearchLayout(size: layout.size, controlsHeight: 120, drawerHeight: 70)
+        state.didInteractWithMap()
+        // The same finger gesture changes the overlay and moves the camera.
+        // Overlay rebasing must not erase the intentional geographic movement.
+        state.observe(camera: camera(latitude: 35), layout: collapsed, positionedByUser: true)
+        XCTAssertTrue(state.shouldOfferSearch)
+        // MapKit provenance is cleared after the layout change settles.
+        state.observe(camera: camera(latitude: 35), layout: collapsed, positionedByUser: false)
+        XCTAssertTrue(state.shouldOfferSearch)
+        state.didCommit()
+        XCTAssertFalse(state.shouldOfferSearch)
+    }
+
     func testDrawerLayoutDoesNotDiscardAnAlreadyPendingSearch() {
         var state = initializedState()
         state.observe(camera: camera(latitude: 35), layout: layout, positionedByUser: true)
@@ -147,17 +162,17 @@ final class LiveMapSearchPolicyTests: XCTestCase {
             return coordinate(point)
         })
         XCTAssertEqual(layout.visibleRect, CGRect(x: 0, y: 120, width: 390, height: 296))
-        XCTAssertEqual(convertedPoints, [CGPoint(x: 0, y: 0), CGPoint(x: 390, y: 0),
-                                         CGPoint(x: 390, y: 296), CGPoint(x: 0, y: 296)])
-        XCTAssertTrue(area.contains(coordinate(CGPoint(x: 195, y: 148))))
-        XCTAssertFalse(area.contains(coordinate(CGPoint(x: 195, y: -60))))
-        XCTAssertFalse(area.contains(coordinate(CGPoint(x: 195, y: 356))))
+        XCTAssertEqual(convertedPoints, [CGPoint(x: 0, y: 120), CGPoint(x: 390, y: 120),
+                                         CGPoint(x: 390, y: 416), CGPoint(x: 0, y: 416)])
+        XCTAssertTrue(area.contains(coordinate(CGPoint(x: 195, y: 268))))
+        XCTAssertFalse(area.contains(coordinate(CGPoint(x: 195, y: 60))))
+        XCTAssertFalse(area.contains(coordinate(CGPoint(x: 195, y: 476))))
     }
 
     func testContentProjectionDoesNotDoubleCountControlsOrSystemSafeAreas() throws {
-        // First row is the measured native geometry: outer y62/height729,
-        // inset Map y188/height533, drawer y721. Other rows cover a compact
-        // phone and taller controls/half drawer. All coordinates are points.
+        // Map keeps the full outer geometry (first row y62/height729).
+        // Controls cover its first126 points; they do not move its origin.
+        // The other rows cover compact and taller-controls/half-drawer layouts.
         let cases: [(screen: CGSize, top: CGFloat, bottom: CGFloat, controls: CGFloat,
                      drawer: CGFloat, expected: CGRect)] = [
             (.init(width: 402, height: 874), 62, 83, 126, 70,
@@ -176,8 +191,8 @@ final class LiveMapSearchPolicyTests: XCTestCase {
                 .init(latitude: 35 - Double(point.y) / 1_000, longitude: -119 + Double(point.x) / 1_000)
             }
             let area = try XCTUnwrap(LiveMapSearchGeometry.area(layout: layout, longitudeSpan: 1) { local in
-                // Reproduce the measured MapProxy local-to-screen basis.
-                let screen = CGPoint(x: local.x, y: local.y + sample.top + sample.controls)
+                // MapProxy coordinates already include the covered controls.
+                let screen = CGPoint(x: local.x, y: local.y + sample.top)
                 screenPoints.append(screen)
                 return coordinate(screen)
             })
@@ -195,8 +210,8 @@ final class LiveMapSearchPolicyTests: XCTestCase {
             .init(latitude: 34 + Double(point.x + point.y) / 1_000,
                   longitude: -118 + Double(point.x - point.y) / 1_000)
         })
-        XCTAssertTrue(area.contains(.init(latitude: 34.343, longitude: -117.953)))
-        XCTAssertFalse(area.contains(.init(latitude: 34.18, longitude: -118.22)),
+        XCTAssertTrue(area.contains(.init(latitude: 34.463, longitude: -118.073)))
+        XCTAssertFalse(area.contains(.init(latitude: 34.3, longitude: -118.34)),
                        "A point inside the enclosing latitude/longitude box can still be offscreen.")
     }
 

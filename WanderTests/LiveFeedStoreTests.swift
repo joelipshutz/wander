@@ -233,6 +233,115 @@ final class LiveFeedStoreTests: XCTestCase {
         XCTAssertFalse(store.hasMoreFeed)
     }
 
+    func testExhaustedWindowExpandsOlderThenOutsideFiltersWithoutReorderingOrDuplicates() async {
+        let store = WanderStore(fixtures: .seed())
+        let own = store.shell(for: store.currentUser)
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100),
+                                  occurredBefore: Date(timeIntervalSince1970: 200), activityType: .checkIns)
+        let recent = FeedActivity(id: "recent-check", kind: .placeBeen, actor: own,
+                                  occurredAt: Date(timeIntervalSince1970: 150))
+        let older = FeedActivity(id: "older-check", kind: .placeBeen, actor: own,
+                                 occurredAt: Date(timeIntervalSince1970: 50))
+        let outside = FeedActivity(id: "outside-wanna", kind: .placeWannaGo, actor: own,
+                                   occurredAt: Date(timeIntervalSince1970: 190))
+        func page(_ activity: [FeedActivity]) -> FollowedFeedPage {
+            FollowedFeedPage(activity: activity, featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+        }
+        let repository = LiveStoreRepository(pages: [page([recent]), page([older]), page([outside, recent, older])])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(store.hasMoreFeed, "A terminal selected-window cursor must allow older matching activity")
+        let loadedOlder = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(loadedOlder)
+        XCTAssertEqual(store.liveFeedExpansionStage, .older)
+        XCTAssertEqual(repository.queries[1], query.expandedQuery(for: .older))
+        XCTAssertNil(repository.cursors[1], "A changed query must never reuse the preceding query's cursor")
+        let loadedAll = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(loadedAll)
+        XCTAssertEqual(store.liveFeedExpansionStage, .allActivity)
+        XCTAssertEqual(repository.queries[2], query.expandedQuery(for: .allActivity))
+        XCTAssertEqual(store.visibleLiveFeedSections.map(\.stage), [.selected, .older, .allActivity])
+        XCTAssertEqual(store.visibleFeedActivityGroups.flatMap(\.activities).map(\.id),
+                       ["recent-check", "older-check", "outside-wanna"],
+                       "The newer outside-filter post stays below its disclosure")
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 3)
+        XCTAssertFalse(store.hasMoreFeed)
+        XCTAssertEqual(store.liveFeedQuery, query, "The map's committed filters do not broaden with the Feed")
+    }
+
+    func testExpansionFailurePreservesStageAndRetriesSameNewQuery() async {
+        let store = WanderStore(fixtures: .seed())
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100), activityType: .wannas)
+        let repository = LiveStoreRepository(pages: [emptyPage(1), emptyPage(2), emptyPage(3)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        repository.failureOnCalls = [2]
+        let failed = await store.loadMoreFeed(backend: backend)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(store.liveFeedExpansionStage, .selected)
+        XCTAssertTrue(store.feedPaginationFailed)
+        repository.failureOnCalls = []
+        let retried = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(retried)
+        XCTAssertEqual(repository.queries[1], repository.queries[2])
+        XCTAssertEqual(repository.cursors, [nil, nil, nil])
+        XCTAssertEqual(store.liveFeedExpansionStage, .older)
+    }
+
+    func testTimeOnlyExpansionFinishesWithoutRefetchingAllActivity() async {
+        let store = WanderStore(fixtures: .seed())
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100))
+        let repository = LiveStoreRepository(pages: [emptyPage(1), emptyPage(2)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        _ = await store.loadMoreFeed(backend: backend)
+        XCTAssertEqual(store.liveFeedExpansionStage, .older)
+        XCTAssertFalse(store.hasMoreFeed, "The older stage already contains all activity when no discovery filters exist")
+        XCTAssertEqual(repository.queries.count, 2)
+    }
+
+    func testLiveCursorCycleStopsAndKeepsPreviouslyLoadedRows() async {
+        let store = WanderStore(fixtures: .seed())
+        func page(_ cursor: String) -> FollowedFeedPage {
+            FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: cursor, fetchedAt: .now)
+        }
+        let repository = LiveStoreRepository(pages: [page("first"), page("second"), page("first")])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(LiveFeedQuery())
+        _ = await store.refreshFollowedFeed(backend: backend)
+        let loaded = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(loaded)
+        let cycled = await store.loadMoreFeed(backend: backend)
+        XCTAssertFalse(cycled)
+        XCTAssertTrue(store.feedPaginationFailed)
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "second")
+        XCTAssertEqual(repository.cursors, [nil, "first", "second"])
+    }
+
+    func testLateExpansionCannotCrossAChangedFilter() async {
+        let store = WanderStore(fixtures: .seed())
+        let first = LiveFeedQuery(activityType: .wannas)
+        let second = LiveFeedQuery(activityType: .checkIns)
+        let repository = LiveStoreRepository(pages: [emptyPage(1), emptyPage(2), emptyPage(3)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(first)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        repository.suspendedCall = 2
+        let broadening = Task { await store.loadMoreFeed(backend: backend) }
+        await waitFor(repository, calls: 2)
+        store.selectLiveFeedQuery(second)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        repository.suspendedCall = nil
+        let accepted = await broadening.value
+        XCTAssertFalse(accepted)
+        XCTAssertEqual(store.liveFeedExpansionStage, .selected)
+        XCTAssertEqual(store.liveFeedQuery, second)
+        XCTAssertEqual(store.followedFeedPage?.fetchedAt, Date(timeIntervalSince1970: 3))
+    }
+
     private func assertDelayedMediaDoesNotRenewLease(paging: Bool) async {
         var clock = ContinuousClock.now
         let store = WanderStore(fixtures: .seed(), liveFeedClock: { clock })

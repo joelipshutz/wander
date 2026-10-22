@@ -7,7 +7,7 @@ import XCTest
     func testDefaultFollowingUsesFixedSevenDayBoundsIncludingUnmappedActivity() {
         let selection = LiveBrowseSelection(now: now)
         XCTAssertEqual(selection.scope, .following)
-        XCTAssertEqual(selection.radius, .fiveKilometers)
+        XCTAssertEqual(selection.radius, .tenKilometers)
         XCTAssertEqual(selection.occurredAfter, now.addingTimeInterval(-7 * 86_400))
         XCTAssertEqual(selection.occurredBefore, now)
         XCTAssertTrue(selection.includes(event("start", offset: -7 * 86_400)))
@@ -44,6 +44,7 @@ import XCTest
         var selection = LiveBrowseSelection(now: now)
         selection.scope = .nearby
         selection.cityID = "los-angeles"
+        selection.radius = .fiveKilometers
         let near = event("near", place: place("near", latitude: 34.06))
         let tenKilometers = event("middle", place: place("middle", latitude: 34.14))
         let outside = event("outside", place: place("outside", latitude: 34.35))
@@ -72,7 +73,7 @@ import XCTest
         XCTAssertFalse(selection.includes(event("still-excluded", personID: "selected-person", place: coffee)))
     }
 
-    func testReturningToNearbyRestartsAtFiveKilometersWithoutChangingOtherRefinements() {
+    func testReturningToNearbyRestartsAtTenKilometersWithoutChangingOtherRefinements() {
         var selection = LiveBrowseSelection(now: now)
         selection.scope = .nearby
         selection.cityID = "los-angeles"
@@ -80,9 +81,24 @@ import XCTest
         selection.personIDs = ["selected-person"]
         selection.scope = .following
         selection.scope = .nearby
-        XCTAssertEqual(selection.radius, .fiveKilometers)
+        XCTAssertEqual(selection.radius, .tenKilometers)
         XCTAssertEqual(selection.cityID, "los-angeles")
         XCTAssertEqual(selection.personIDs, ["selected-person"])
+    }
+
+    func testNearbyCanUseAnExplicitCurrentLocationWithoutOpeningCityFilters() {
+        var selection = LiveBrowseSelection(now: now)
+        selection.scope = .nearby
+        selection.nearbyCenter = .init(latitude: 34.05, longitude: -118.24)
+        XCTAssertTrue(selection.isValid)
+        XCTAssertEqual(selection.query().radiusMeters, 10_000)
+        XCTAssertTrue(selection.includes(event("within-ten", place: place("near", latitude: 34.13))))
+        XCTAssertFalse(selection.includes(event("beyond-ten", place: place("far", latitude: 34.15))))
+        selection.cityID = "new-york"
+        XCTAssertNil(selection.nearbyCenter, "Choosing a city must replace the prior automatic nearby center.")
+        selection.scope = .following
+        XCTAssertNil(selection.query().center)
+        XCTAssertNil(selection.query().radiusMeters)
     }
 
     func testCategoryUsesViewerEffectiveProjectionAndActivityKindStillApplies() {

@@ -3,6 +3,29 @@ import XCTest
 
 @MainActor
 final class PrivateMessagingStateTests: XCTestCase {
+    #if DEBUG && targetEnvironment(simulator)
+    func testSharedDemoSessionKeepsReplyInInboxAndDropsItAcrossAccountSwitch() async throws {
+        let session = LivePrivateMessageSession()
+        session.configure(userID: "viewer", authenticatedUITest: true, enabled: true, participants: [])
+        let replyRepository = try XCTUnwrap(session.repository)
+        let context = PrivateMessageContext(kind: .activity, id: UUID().uuidString)
+        let thread = try await replyRepository.startReply(recipientID: "friend", context: context)
+        _ = try await replyRepository.send(conversationID: thread.id, body: "Review reply", clientID: UUID(), context: context)
+        session.configure(userID: "viewer", authenticatedUITest: true, enabled: true, participants: [])
+        let inboxRepository = try XCTUnwrap(session.repository)
+        let page = try await inboxRepository.inbox(before: nil, limit: 20)
+        XCTAssertEqual(page.items.first { $0.id == thread.id }?.lastMessagePreview, "Review reply")
+        session.configure(userID: "other", authenticatedUITest: true, enabled: true, participants: [])
+        let other = try XCTUnwrap(session.repository)
+        let otherPage = try await other.inbox(before: nil, limit: 20)
+        XCTAssertFalse(otherPage.items.contains { $0.id == thread.id })
+        session.configure(userID: "viewer", authenticatedUITest: false, enabled: true, participants: [])
+        XCTAssertNil(session.repository)
+        session.configure(userID: "viewer", authenticatedUITest: true, enabled: false, participants: [])
+        XCTAssertNil(session.repository)
+    }
+    #endif
+
     func testDraftPolicyMatchesServerScalarLimitAndRejectsEmptyOrNul() {
         XCTAssertEqual(PrivateMessageDraftPolicy.maximumCharacters, SupabasePrivateMessageRepository.maximumBodyLength)
         XCTAssertNil(PrivateMessageDraftPolicy.prepared(" \n\t"))

@@ -596,6 +596,11 @@ struct SharedVisitInvitationInboxScreen: View {
         .onDisappear { notificationBadge.close() }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
+        // The Profile host hides its own navigation bar. Destinations must
+        // explicitly reclaim the system safe area instead of inheriting it.
+        .toolbar(.visible, for: .navigationBar)
+        .toolbarBackground(brandMode.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .task { await refresh() }
         .fullScreenCover(item: $selectedFollower) { route in
             ProfileDetailView(profileID: route.id)

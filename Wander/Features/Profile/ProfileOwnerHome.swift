@@ -285,6 +285,7 @@ struct ProfileOwnerHome: View {
     let calendarScrollRequestID: UUID?
     let onCalendarScrollRequestHandled: (UUID) -> Void
     var feedbackAction: (() -> Void)? = nil
+    var messagesAction: (() -> Void)? = nil
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
     @Environment(\.resolvedProfileHeaderMotion) private var profileHeaderMotion
@@ -437,6 +438,11 @@ struct ProfileOwnerHome: View {
             }
 
             Spacer(minLength: 0)
+
+            if mode.isOwner, let messagesAction {
+                ProfileHeaderActionButton(systemImage: "bubble.left.and.bubble.right", accessibilityLabel: "Messages", action: messagesAction)
+                    .accessibilityIdentifier("profile.messages")
+            }
 
             if mode.isOwner {
                 ProfileInvitationButton(

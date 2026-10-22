@@ -124,12 +124,40 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
     }
     #endif
 
+    func testPlaceProfilePlanAcceptsSharedCheckInsWithoutInventingWanna() throws {
+        let viewer = profile("viewer"), partner = profile("friend")
+        let mine = row("mine", owner: viewer), theirs = row("theirs", owner: partner)
+        mine.userPlace.statusRaw = PlaceStatus.been.rawValue
+        theirs.userPlace.statusRaw = PlaceStatus.been.rawValue
+        XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs]))
+        let result = try XCTUnwrap(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs],
+            sourceContext: .placeProfile))
+        XCTAssertFalse(result.youWanna)
+        XCTAssertFalse(result.joeWanna)
+        XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs],
+            relationship: .follower, sourceContext: .placeProfile))
+        XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine], sourceContext: .placeProfile))
+    }
+
+    func testSharedActivityRankingCountsAuthorizedEventsAndExcludesIntroductions() {
+        func place(visits: Int, wanna: Bool, introduction: Bool = false) -> CommonGroundMockPlace {
+            CommonGroundMockPlace(id: "p", name: "Cafe", category: "Coffee", area: "", city: "",
+                systemImage: "cup.and.saucer", youRating: nil, joeRating: nil,
+                youVisits: visits, joeVisits: 1, youWanna: wanna, joeWanna: false,
+                reason: "", isOneSidedRecommendation: introduction)
+        }
+        XCTAssertGreaterThan(LivePlanPeoplePolicy.sharedActivityScore([place(visits: 4, wanna: true)]),
+            LivePlanPeoplePolicy.sharedActivityScore([place(visits: 1, wanna: false)]))
+        XCTAssertEqual(LivePlanPeoplePolicy.sharedActivityScore([place(visits: 100, wanna: true, introduction: true)]), 0)
+    }
+
     private func match(_ requested: VisiblePlace, viewer: LocalProfile, partner: LocalProfile,
-                       rows: [VisiblePlace], relationship: ViewerRelationship = .mutual) -> CommonGroundMockPlace? {
+                       rows: [VisiblePlace], relationship: ViewerRelationship = .mutual,
+                       sourceContext: LivePlanSourceContext = .wannaActivity) -> CommonGroundMockPlace? {
         let candidates = CommonGroundLiveData.snapshot(viewerProfile: viewer, partnerProfile: partner,
             authorizedPlaces: rows, visitsForUserPlace: { _ in [] }, shouldShowLegacyCheckInSummary: { _ in false }).places
         return LivePlanPeoplePolicy.matchingPlace(for: requested, candidates: candidates, authorizedPlaces: rows,
-                                                viewerID: viewer.id, partnerID: partner.id, relationship: relationship)
+                                                viewerID: viewer.id, partnerID: partner.id, relationship: relationship, sourceContext: sourceContext)
     }
 
     private func profile(_ id: String) -> LocalProfile {

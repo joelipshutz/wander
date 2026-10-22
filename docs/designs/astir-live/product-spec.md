@@ -2,6 +2,8 @@
 
 REC-636 · October 20, 2026 · **Implementation in progress; release validation pending**
 
+> **October feedback revision:** [Review feedback A–F](review-feedback-2026-10.md) is the current interaction contract; [Review Astir Live](review-guide.md) is its entry point. It supersedes the older UI descriptions below: Nearby now applies 10 km directly, Search this area appears only in full map, full Feed has a Map button, the count/header and pins/place preview are redesigned, Messages moves to Profile, and recent-list/Plans actions are added. Feed automatically continues through older matching posts and then beyond the discovery filters, with a separate divider and explicit small-print warning before broader authorized activity. Older statements below requiring manual time widening, 5 km default or no device centering are historical. Privacy, account, server authorization and migration contracts remain unless the revision explicitly changes them. Use its changed-only manual script; linked historical results do not validate the new candidate.
+
 ## 1. The change we are making
 
 Astir should answer **“What are my people up to, and what could we do together?”** on its first screen. The home combines an activity map and a draggable feed. A check-in, Wanna, plan, or event gives someone a concrete reason to connect. Saved places remain useful long after that activity is recent.

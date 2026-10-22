@@ -35,6 +35,20 @@ struct LiveFeedQuery: Equatable, Sendable {
         self.polygonIsValid = Self.validPolygon(polygon)
     }
 
+    /// Reusing an already-validated polygon avoids rechecking every edge pair
+    /// for each visible Feed row when classifying an expanded section.
+    private init(olderThan source: LiveFeedQuery) {
+        occurredAfter = nil
+        occurredBefore = source.occurredAfter ?? source.occurredBefore
+        activityType = source.activityType
+        polygon = source.polygon
+        center = source.center
+        radiusMeters = source.radiusMeters
+        categoryIDs = source.categoryIDs
+        personIDs = source.personIDs
+        polygonIsValid = source.polygonIsValid
+    }
+
     var isValid: Bool {
         if let occurredAfter, !occurredAfter.timeIntervalSince1970.isFinite { return false }
         if let occurredBefore, !occurredBefore.timeIntervalSince1970.isFinite { return false }
@@ -156,5 +170,66 @@ struct LiveFeedQuery: Equatable, Sendable {
             }
         }
         return true
+    }
+}
+
+
+/// Expansion changes only discovery filters. The selected audience, visibility,
+/// block rules and short-lived social authorization remain owned by WanderStore.
+enum LiveFeedExpansionStage: Int, CaseIterable, Identifiable, Sendable {
+    case selected, older, allActivity
+    var id: Int { rawValue }
+}
+
+struct LiveFeedActivitySection: Identifiable {
+    let stage: LiveFeedExpansionStage
+    let groups: [FeedActivityGroup]
+    var id: LiveFeedExpansionStage { stage }
+}
+
+extension LiveFeedQuery {
+    var hasDiscoveryFilters: Bool {
+        activityType != .all || polygon != nil || center != nil
+            || !categoryIDs.isEmpty || !personIDs.isEmpty
+    }
+
+    func nextExpansion(after stage: LiveFeedExpansionStage) -> LiveFeedExpansionStage? {
+        guard isValid else { return nil }
+        switch stage {
+        case .selected:
+            if occurredAfter != nil { return .older }
+            return hasDiscoveryFilters ? .allActivity : nil
+        case .older:
+            return hasDiscoveryFilters ? .allActivity : nil
+        case .allActivity:
+            return nil
+        }
+    }
+
+    func expandedQuery(for stage: LiveFeedExpansionStage) -> LiveFeedQuery {
+        switch stage {
+        case .selected: return self
+        case .older:
+            // Keep the inclusive boundary: the server may store submillisecond
+            // timestamps. ID deduplication removes the boundary overlap without
+            // skipping activity immediately before the selected window.
+            return LiveFeedQuery(olderThan: self)
+        case .allActivity:
+            return LiveFeedQuery(occurredBefore: occurredBefore)
+        }
+    }
+
+    func expansionStage(for activity: FeedActivity) -> LiveFeedExpansionStage {
+        if includes(activity) { return .selected }
+        if occurredAfter != nil, expandedQuery(for: .older).includes(activity) { return .older }
+        return .allActivity
+    }
+
+    func includes(_ activity: FeedActivity, through stage: LiveFeedExpansionStage) -> Bool {
+        guard isValid else { return false }
+        if includes(activity) { return true }
+        if stage.rawValue >= LiveFeedExpansionStage.older.rawValue,
+           occurredAfter != nil, expandedQuery(for: .older).includes(activity) { return true }
+        return stage == .allActivity && expandedQuery(for: .allActivity).includes(activity)
     }
 }

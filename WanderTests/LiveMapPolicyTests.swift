@@ -99,9 +99,9 @@ final class LiveMapPolicyTests: XCTestCase {
     }
 
     func testLiveDrawerCountCopyUsesSingularOnlyForOneUpdate() {
-        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(0), "0 updates shown")
-        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(1), "1 update shown")
-        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(2), "2 updates shown")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(0), "0 place updates")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(1), "1 place update")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(2), "2 place updates")
         XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(0), "0 loaded updates")
         XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(1), "1 loaded update")
         XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(2), "2 loaded updates")

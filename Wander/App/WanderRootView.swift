@@ -344,6 +344,7 @@ struct WanderRootView: View {
     @State private var liveMigrationDeviceGuide: LiveIntroductionMigrationRecord?
     @State private var liveMigrationAfterHandoff: LiveIntroductionRecoveryRequest?
     @State private var liveExperienceLaunch = LiveExperienceLaunchPolicy()
+    @StateObject private var liveMessageSession = LivePrivateMessageSession()
     @State private var deepLinkHandoff = WanderDeepLinkHandoffCoordinator()
     @State private var foregroundEntryPolicy = WanderForegroundEntryPolicy()
     @State private var deepLinkPresentations = WanderDeepLinkPresentationRegistry()
@@ -506,6 +507,17 @@ struct WanderRootView: View {
 
     var body: some View {
         stateObservedRoot
+            .environment(\.liveExperienceEnabled, unifiedLiveEnabled)
+            .environment(\.liveMessageSession, liveMessageSession)
+            .onChange(of: "\(store.currentUser.id)|\(unifiedLiveEnabled)", initial: true) { _, _ in
+                liveMessageSession.configure(userID: store.currentUser.id,
+                    authenticatedUITest: ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+                    enabled: unifiedLiveEnabled,
+                    participants: store.profiles.map { profile in
+                        PrivateMessageParticipant(id: profile.id, displayName: profile.displayName,
+                            handle: profile.handle, avatarURL: profile.avatarURL.flatMap { URL(string: $0) })
+                    })
+            }
             .environment(\.astirBrandMode, astirBrandMode)
             .environment(\.restartPlaceImport, restartImportFromReport)
             .environment(

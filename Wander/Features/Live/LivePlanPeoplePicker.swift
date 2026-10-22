@@ -1,5 +1,7 @@
 import SwiftUI
 
+enum LivePlanSourceContext { case wannaActivity, placeProfile }
+
 /// Chooses a mutual friend for the existing invitation composer. Selecting a
 /// person never creates, publishes, or sends a plan.
 struct LivePlanPeoplePicker: View {
@@ -16,12 +18,13 @@ struct LivePlanPeoplePicker: View {
 
     let place: VisiblePlace
     let onSelect: (CommonGroundMockPlace) -> Void
+    var sourceContext: LivePlanSourceContext = .wannaActivity
     var onFindPeople: (() -> Void)?
     var onOpenPlace: ((VisiblePlace) -> Void)?
     private var isDemo: Bool { LivePlanDemoPolicy.isEnabled() }
 
     private var targetFriendID: String? {
-        place.owner.id == store.currentUser.id ? nil : place.owner.id
+        sourceContext == .placeProfile || place.owner.id == store.currentUser.id ? nil : place.owner.id
     }
 
     private var friends: [LocalProfile] {
@@ -30,7 +33,14 @@ struct LivePlanPeoplePicker: View {
                 && store.relationship(to: $0.id) == .mutual
                 && store.profileState(for: $0.id)?.isBlocked == false
                 && (targetFriendID == nil || $0.id == targetFriendID)
-        }
+        }.map { friend in
+            (friend, LivePlanPeoplePolicy.sharedActivityScore(
+                CommonGroundLiveData.places(store: store, profileID: friend.id)))
+        }.sorted { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+            let names = lhs.0.displayName.localizedCaseInsensitiveCompare(rhs.0.displayName)
+            return names == .orderedSame ? lhs.0.id < rhs.0.id : names == .orderedAscending
+        }.map(\.0)
     }
 
     var body: some View {
@@ -137,7 +147,8 @@ struct LivePlanPeoplePicker: View {
         LivePlanPeoplePolicy.matchingPlace(for: place,
             candidates: CommonGroundLiveData.places(store: store, profileID: partnerID),
             authorizedPlaces: store.currentUserVisiblePlaces + store.visiblePlaces(for: partnerID),
-            viewerID: store.currentUser.id, partnerID: partnerID, relationship: store.relationship(to: partnerID))
+            viewerID: store.currentUser.id, partnerID: partnerID, relationship: store.relationship(to: partnerID),
+            sourceContext: sourceContext)
     }
 
     private func refreshFriends() async {
@@ -178,7 +189,7 @@ struct LivePlanPeoplePicker: View {
             return
         }
         guard let selected = candidate(for: partnerID) else {
-            needsOwnSave = targetFriendID != nil && !LivePlanPeoplePolicy.hasViewerSave(
+            needsOwnSave = (targetFriendID != nil || sourceContext == .placeProfile) && !LivePlanPeoplePolicy.hasViewerSave(
                 for: place, authorizedPlaces: store.currentUserVisiblePlaces, viewerID: viewerID)
             if needsOwnSave {
                 notice = "Save this place to your Wannas first, then come back to make a plan together. Nothing has been sent."
@@ -212,6 +223,16 @@ struct LivePlanPeoplePicker: View {
 
 @MainActor
 enum LivePlanPeoplePolicy {
+    /// Rank only from currently authorized shared-place evidence. One-sided
+    /// recommendations do not inflate the relationship, and no private message
+    /// contents or unavailable profile records are inspected.
+    static func sharedActivityScore(_ places: [CommonGroundMockPlace]) -> Int {
+        places.filter { !$0.isOneSidedRecommendation }.reduce(0) {
+            $0 + $1.youEvidence.visitCount + $1.joeEvidence.visitCount
+                + $1.youEvidence.wannaCount + $1.joeEvidence.wannaCount
+        }
+    }
+
     static func hasViewerSave(for requested: VisiblePlace, authorizedPlaces: [VisiblePlace], viewerID: String) -> Bool {
         let rows = authorizedPlaces.filter {
             $0.owner.id == viewerID && $0.userPlace.userID == viewerID
@@ -222,10 +243,11 @@ enum LivePlanPeoplePolicy {
 
     static func matchingPlace(for requested: VisiblePlace, candidates: [CommonGroundMockPlace],
                               authorizedPlaces: [VisiblePlace], viewerID: String,
-                              partnerID: String, relationship: ViewerRelationship) -> CommonGroundMockPlace? {
+                              partnerID: String, relationship: ViewerRelationship,
+                              sourceContext: LivePlanSourceContext = .wannaActivity) -> CommonGroundMockPlace? {
         let isOwnSource = requested.owner.id == viewerID
         guard relationship == .mutual, viewerID != partnerID,
-              isOwnSource || requested.owner.id == partnerID,
+              sourceContext == .placeProfile || isOwnSource || requested.owner.id == partnerID,
               requested.owner.id == requested.userPlace.userID,
               requested.userPlace.deletedAt == nil, requested.owner.deletedAt == nil,
               !requested.isCommunityAggregate,
@@ -239,7 +261,9 @@ enum LivePlanPeoplePolicy {
         guard let group = VisiblePlaceGrouping.matchingGroup(for: requested, in: rows, currentUserID: viewerID) else { return nil }
         let sourceIDs = Set(group.places.map(\.id))
         return candidates.first {
-            $0.viewer.id == viewerID && $0.partner.id == partnerID && (isOwnSource ? $0.youWanna : $0.joeWanna)
+            $0.viewer.id == viewerID && $0.partner.id == partnerID
+                && (sourceContext == .placeProfile
+                    ? !$0.isOneSidedRecommendation : (isOwnSource ? $0.youWanna : $0.joeWanna))
                 && ($0.id == group.key || $0.sourcePlaceID.map(sourceIDs.contains) == true)
         }
     }

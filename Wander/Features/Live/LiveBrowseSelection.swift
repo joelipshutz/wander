@@ -4,22 +4,24 @@ import Foundation
 /// Draft controls become an immutable server query only when committed.
 struct LiveBrowseSelection: Equatable {
     enum Scope: String, CaseIterable, Identifiable {
-        case following = "Following everywhere", nearby = "Nearby"
+        case following = "Following", nearby = "Nearby"
         var id: Self { self }
     }
     enum Radius: Int, CaseIterable, Identifiable {
-        case fiveKilometers = 5_000, twentyFiveKilometers = 25_000
+        case fiveKilometers = 5_000, tenKilometers = 10_000, twentyFiveKilometers = 25_000
         var id: Self { self }
         var title: String { "\(rawValue / 1_000) km" }
     }
 
     var scope: Scope = .following {
         didSet {
-            if scope == .nearby, oldValue != .nearby { radius = .fiveKilometers }
+            if scope == .nearby, oldValue != .nearby { radius = .tenKilometers }
         }
     }
-    var cityID: String?
-    var radius: Radius = .fiveKilometers
+    var cityID: String? { didSet { if cityID != oldValue { nearbyCenter = nil; nearbyCenterName = nil } } }
+    var nearbyCenter: LiveFeedQuery.Vertex?
+    var nearbyCenterName: String?
+    var radius: Radius = .tenKilometers
     var activityType: LiveActivityFilter = .all
     var time: LiveTimeFilter = .week
     var categoryIDs: Set<String> = []
@@ -30,7 +32,7 @@ struct LiveBrowseSelection: Equatable {
 
     var city: HomeMetro? { HomeMetro.find(cityID) }
     var center: LiveFeedQuery.Vertex? {
-        city.map { .init(latitude: $0.latitude, longitude: $0.longitude) }
+        nearbyCenter ?? city.map { .init(latitude: $0.latitude, longitude: $0.longitude) }
     }
     var isValid: Bool { committedAt.timeIntervalSince1970.isFinite && (scope != .nearby || center != nil) && query().isValid }
     var occurredAfter: Date? {
@@ -69,7 +71,7 @@ struct LiveBrowseSelection: Equatable {
     }
 
     var summary: String {
-        var terms = [scope == .nearby ? "\(radius.title) · \(city?.name ?? "Choose a city")" : "Following", time.title]
+        var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose a city") : (nearbyCenterName ?? "Map center"))" : "Following", time.title]
         if activityType != .all { terms.append(activityType.rawValue) }
         if !categoryIDs.isEmpty { terms.append("\(categoryIDs.count) \(categoryIDs.count == 1 ? "category" : "categories")") }
         if !personIDs.isEmpty { terms.append("\(personIDs.count) \(personIDs.count == 1 ? "person" : "people")") }

@@ -77,6 +77,8 @@ struct FeedScreen: View {
     @State private var previousPagingMetrics: FeedScrollMetrics?
     @State private var lastFeedScrollOffset: CGFloat?
     @State private var accumulatedFeedScrollTravel: CGFloat = 0
+    @State private var isEmbeddedScrolled = false
+    @State private var embeddedVisibleViewportHeight: CGFloat?
     @Namespace private var searchTransitionNamespace
     private let isFeedTabActive: Bool
     private let onAdd: () -> Void
@@ -85,12 +87,15 @@ struct FeedScreen: View {
     private let onWillDismiss: (WanderDeepLinkPresentationToken) -> Void
     private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
     private let isEmbedded: Bool
+    private let isEmbeddedFeedVisible: Bool
     private let filteredActivityIDs: Set<String>?
     private let activityFocusRequest: FeedActivityFocusRequest?
     private let surfaceRequest: FeedSurfaceRequest?
     private let onPrivateReply: ((FeedActivity) -> Void)?
     private let onEmbeddedDestinationActiveChange: (Bool) -> Void
     private let onRefreshRequested: () -> Void
+    private let onEmbeddedScrollPositionChange: (Bool) -> Void
+    private let embeddedScrollResetRequest: UUID?
 
     init(
         isFeedTabActive: Bool = true,
@@ -99,12 +104,15 @@ struct FeedScreen: View {
         onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         isEmbedded: Bool = false,
+        isEmbeddedFeedVisible: Bool = true,
         filteredActivityIDs: Set<String>? = nil,
         activityFocusRequest: FeedActivityFocusRequest? = nil,
         surfaceRequest: FeedSurfaceRequest? = nil,
         onPrivateReply: ((FeedActivity) -> Void)? = nil,
         onEmbeddedDestinationActiveChange: @escaping (Bool) -> Void = { _ in },
         onRefreshRequested: @escaping () -> Void = {},
+        onEmbeddedScrollPositionChange: @escaping (Bool) -> Void = { _ in },
+        embeddedScrollResetRequest: UUID? = nil,
         onAdd: @escaping () -> Void = {}
     ) {
         self.isFeedTabActive = isFeedTabActive
@@ -113,12 +121,15 @@ struct FeedScreen: View {
         self.onWillDismiss = onWillDismiss
         self.onDidDismiss = onDidDismiss
         self.isEmbedded = isEmbedded
+        self.isEmbeddedFeedVisible = isEmbeddedFeedVisible
         self.filteredActivityIDs = filteredActivityIDs
         self.activityFocusRequest = activityFocusRequest
         self.surfaceRequest = surfaceRequest
         self.onPrivateReply = onPrivateReply
         self.onEmbeddedDestinationActiveChange = onEmbeddedDestinationActiveChange
         self.onRefreshRequested = onRefreshRequested
+        self.onEmbeddedScrollPositionChange = onEmbeddedScrollPositionChange
+        self.embeddedScrollResetRequest = embeddedScrollResetRequest
         self.onAdd = onAdd
 
     }
@@ -140,7 +151,10 @@ struct FeedScreen: View {
         Binding(get: { store.feedAudience }, set: { store.selectFeedAudience($0) })
     }
     private var displayedActivityGroups: [FeedActivityGroup] {
-        FeedEmbeddedProjection.groups(
+        if isEmbedded, store.liveFeedQuery != nil {
+            return store.visibleLiveFeedSections.flatMap(\.groups)
+        }
+        return FeedEmbeddedProjection.groups(
             from: store.visibleFeedActivityGroups, matching: filteredActivityIDs
         )
     }
@@ -411,6 +425,12 @@ struct FeedScreen: View {
     private var placesSurface: some View {
         ScrollViewReader { proxy in
             GeometryReader { viewport in
+                // Search and Notifications expand the host NavigationStack.
+                // Keep only the covered Feed viewport unchanged so UIScrollView
+                // cannot clamp its offset before returning to the same card.
+                let heldHeight = holdsEmbeddedViewport ? embeddedVisibleViewportHeight : nil
+                let feedViewportSize = CGSize(width: viewport.size.width,
+                                              height: heldHeight ?? viewport.size.height)
                 ScrollView {
                     AstirScrollOffsetReader(
                         coordinateSpaceName: FeedScrollCoordinateSpace.places
@@ -431,17 +451,27 @@ struct FeedScreen: View {
                                 value: FeedScrollMetrics(
                                     offset: -content.frame(in: .named(FeedScrollCoordinateSpace.places)).minY,
                                     contentHeight: content.size.height,
-                                    viewportHeight: viewport.size.height
+                                    viewportHeight: feedViewportSize.height
                                 )
                             )
                         }
                     }
                 }
+                .frame(height: heldHeight, alignment: .top)
+                .onAppear { rememberEmbeddedViewport(viewport.size) }
+                .onChange(of: viewport.size) { _, size in rememberEmbeddedViewport(size) }
                 .coordinateSpace(name: FeedScrollCoordinateSpace.places)
                 .astirScrollTracking(
                     coordinateSpaceName: FeedScrollCoordinateSpace.places
                 ) { offset in
                     updateFloatingHeaderVisibility(scrollOffset: offset)
+                    if isEmbedded {
+                        let scrolled = offset > 80
+                        if isEmbeddedScrolled != scrolled {
+                            isEmbeddedScrolled = scrolled
+                            onEmbeddedScrollPositionChange(scrolled)
+                        }
+                    }
                 }
                 .accessibilityIdentifier("feed.places.scroll")
                 .accessibilityValue("\(displayedActivityGroups.count) activities loaded")
@@ -450,24 +480,44 @@ struct FeedScreen: View {
                     if let metrics,
                        metrics.contentHeight != previousPagingMetrics?.contentHeight
                         || metrics.viewportHeight != previousPagingMetrics?.viewportHeight {
-                        scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
+                        scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
                     }
-                    guard let metrics, metrics.reachedBottom(after: previousPagingMetrics),
-                          isFeedTabActive, !isShowingSearch, selectedProfile == nil,
-                          selectedPlace == nil, activityNavigation.commentsRoute == nil,
-                          !store.isLoadingMoreFeed, !store.feedPaginationFailed,
-                          store.hasMoreFeed else { return }
-                    Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                    guard let metrics else { return }
+                    if isEmbedded, store.liveFeedQuery != nil {
+                        requestMoreLiveActivityIfNeeded(metrics)
+                    } else if metrics.reachedBottom(after: previousPagingMetrics), canAutomaticallyLoadMore {
+                        Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                    }
+                }
+                .task(id: store.feedPaginationRevision) {
+                    // Empty or duplicate-only pages can advance their cursor
+                    // without changing layout. Continue only while the bottom
+                    // remains visible, never by scanning inside a page request.
+                    await Task.yield()
+                    if let metrics = previousPagingMetrics {
+                        requestMoreLiveActivityIfNeeded(metrics)
+                    }
+                }
+                .onChange(of: isEmbeddedFeedVisible) { _, visible in
+                    if visible { rememberEmbeddedViewport(viewport.size) }
+                    if visible, let metrics = previousPagingMetrics {
+                        requestMoreLiveActivityIfNeeded(metrics)
+                    }
+                }
+                .onChange(of: store.feedLoadState) { _, state in
+                    if state == .loaded, let metrics = previousPagingMetrics {
+                        requestMoreLiveActivityIfNeeded(metrics)
+                    }
                 }
                 .onPreferenceChange(FeedFocusedActivityFrameKey.self) { layout in
                     guard let layout, layout.requestID == pendingActivityFocus?.id else { return }
                     let frame = layout.frame
                     let previousFrame = focusedActivityFrame
                     focusedActivityFrame = frame
-                    if !finishActivityFocusIfVisible(in: viewport.size),
+                    if !finishActivityFocusIfVisible(in: feedViewportSize),
                        previousFrame == nil || previousFrame?.size != frame.size {
                         // Lazy cards can acquire their real size after the first scroll.
-                        scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
+                        scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
                     }
                 }
                 .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
@@ -483,19 +533,28 @@ struct FeedScreen: View {
                 .refreshable {
                     await refresh()
                 }
+                .onChange(of: embeddedScrollResetRequest) { _, _ in
+                    resetEmbeddedScroll(proxy)
+                }
+                .onChange(of: store.liveFeedQuery) { _, _ in
+                    if isEmbedded { resetEmbeddedScroll(proxy) }
+                }
+                .onChange(of: store.feedAudience) { _, _ in
+                    if isEmbedded { resetEmbeddedScroll(proxy) }
+                }
                 .onChange(of: focusedActivityID, initial: true) { _, activityID in
                     scrollToFocusedActivity(activityID, proxy: proxy)
                 }
                 .onChange(of: pendingActivityFocus?.id, initial: true) { _, _ in
                     focusedActivityFrame = nil
-                    scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
+                    scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
                 }
                 .onChange(of: displayedActivityGroups.flatMap(\.activities).map(\.id)) { _, _ in
                     if pendingActivityFocus != nil, focusedGroupID == nil {
                         cancelActivityFocus()
                     }
                     handleActivityFocusRequest()
-                    scrollPendingActivityFocus(proxy: proxy, viewportSize: viewport.size)
+                    scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
                 }
                 .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
                     handleActivityFocusRequest()
@@ -504,6 +563,39 @@ struct FeedScreen: View {
                 }
             }
         }
+    }
+
+    private var holdsEmbeddedViewport: Bool {
+        isEmbedded && (embeddedDestinationIsActive || !isEmbeddedFeedVisible)
+    }
+
+    private func rememberEmbeddedViewport(_ size: CGSize) {
+        guard isEmbedded, !holdsEmbeddedViewport, size.height.isFinite, size.height > 0 else { return }
+        if embeddedVisibleViewportHeight != size.height { embeddedVisibleViewportHeight = size.height }
+    }
+
+    private func resetEmbeddedScroll(_ proxy: ScrollViewProxy) {
+        guard isEmbedded else { return }
+        previousPagingMetrics = nil
+        isEmbeddedScrolled = false
+        onEmbeddedScrollPositionChange(false)
+        proxy.scrollTo("nux.feed.top", anchor: .top)
+    }
+
+    private var canAutomaticallyLoadMore: Bool {
+        isFeedTabActive && !isShowingSearch && !showsNotifications
+            && selectedProfile == nil && selectedPlace == nil
+            && activityNavigation.commentsRoute == nil
+            && !store.isLoadingMoreFeed && !store.feedPaginationFailed
+            && (!isEmbedded || (isEmbeddedFeedVisible && store.feedLoadState == .loaded))
+            && store.hasMoreFeed
+    }
+
+    private func requestMoreLiveActivityIfNeeded(_ metrics: FeedScrollMetrics) {
+        guard isEmbedded, store.liveFeedQuery != nil, canAutomaticallyLoadMore,
+              metrics.viewportHeight > 0,
+              metrics.offset + metrics.viewportHeight >= metrics.contentHeight - 120 else { return }
+        Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
     }
 
     private func scrollForIntroduction(_ target: NUXFeedScrollTarget?, proxy: ScrollViewProxy) {
@@ -630,6 +722,35 @@ struct FeedScreen: View {
         }
         if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
             FeedLoadingState(audience: audienceSelection)
+        } else if isEmbedded, store.liveFeedQuery != nil, page != nil {
+            FeedSectionHeading(title: "Activity", detail: freshnessDetail, audience: audienceSelection)
+            ForEach(store.visibleLiveFeedSections) { section in
+                if section.stage == .older {
+                    expansionDivider(title: "Showing older activity", identifier: "feed.olderActivity")
+                } else if section.stage == .allActivity {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text("These posts are outside your selected location, people, categories and activity filters.")
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(astirBrandMode.secondaryText)
+                        expansionDivider(title: "Showing all activity", identifier: "feed.allActivity")
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                if section.stage == .selected, section.groups.isEmpty {
+                    filteredActivityEmptyState
+                } else {
+                    activityList(section.groups)
+                }
+            }
+            if !store.hasMoreFeed, store.liveFeedExpansionStage != .allActivity,
+               store.feedLoadState == .loaded {
+                expansionDivider(title: "Showing all activity", identifier: "feed.allActivity")
+            }
+            paginationControls
+            if store.feedLoadState == .stale {
+                FeedRetryRow(title: "Updated earlier", subtitle: "We’ll keep this cached Feed until it reconnects.",
+                             actionTitle: "Retry", retry: refresh)
+            }
         } else if let page, !page.activity.isEmpty {
             if FeedPresentation.showsFeaturedPlaces, !page.featuredPlaces.isEmpty {
                 FeedSectionHeading(title: "Featured for you")
@@ -696,7 +817,7 @@ struct FeedScreen: View {
         if store.isLoadingMoreFeed {
             HStack(spacing: WanderTheme.spacing2) {
                 ProgressView()
-                Text("Loading more...").font(AstirTypography.body)
+                Text("Loading more activities…").font(AstirTypography.body)
             }
             .foregroundStyle(astirBrandMode.secondaryText)
             .frame(maxWidth: .infinity, minHeight: 44)
@@ -709,18 +830,31 @@ struct FeedScreen: View {
                 actionTitle: "Retry",
                 retry: { _ = await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
             ).accessibilityIdentifier("feed.loadMoreRetry")
-        } else if filteredActivityIDs != nil, store.hasMoreFeed {
-            Button("Load more activity") {
-                Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
-            }
-            .font(AstirTypography.body)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .accessibilityIdentifier("feed.filteredLoadMore")
         }
     }
 
+    private func activityList(_ groups: [FeedActivityGroup]) -> some View {
+        FeedActivityList(
+            groups: groups, openProfile: openProfile, openPlace: openPlace, openList: openList,
+            onPrivateReply: onPrivateReply, focusedGroupID: focusedGroupID,
+            focusRequestID: pendingActivityFocus?.id
+        )
+    }
+
+    private func expansionDivider(title: String, identifier: String) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Rectangle().fill(astirBrandMode.border).frame(height: 1)
+            Text(title).font(AstirTypography.caption).fixedSize()
+                .foregroundStyle(astirBrandMode.secondaryText)
+            Rectangle().fill(astirBrandMode.border).frame(height: 1)
+        }
+        .padding(.vertical, WanderTheme.spacing3)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier(identifier)
+    }
+
     private var filteredActivityEmptyState: some View {
-        Text("No activity in this page matches your map filters.")
+        Text("No activity matches your selected filters.")
             .font(AstirTypography.body)
             .foregroundStyle(astirBrandMode.secondaryText)
             .frame(maxWidth: .infinity, alignment: .leading)

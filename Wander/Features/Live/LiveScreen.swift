@@ -16,6 +16,22 @@ struct LiveScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var camera: MapCameraPosition = .automatic
     @State private var viewport: MKCoordinateRegion?
+    @State private var mapSize: CGSize = .zero
+    @State private var drawerMapOrigin: MKCoordinateRegion?
+    @State private var cardMapOrigin: MKCoordinateRegion?
+    @State private var previewHeight: CGFloat = 400
+    @State private var previewCameraAdjusted = false
+    @State private var previewAnimationTrigger = 0
+    @State private var viewedPins: [String: Date] = [:]
+    @State private var feedIsScrolled = false
+    @State private var feedScrollResetRequest: UUID?
+    @State private var previewSaveContext: MapPlaceSaveContext?
+    @State private var previewSharePlace: VisiblePlace?
+    @State private var departedAt: Date?
+    @State private var departedDetent = 1
+    @State private var departedFeedWasScrolled = false
+    @State private var nearbyLoading = false
+    @StateObject private var recentListAdd = RecentPlaceListAddController()
     @State private var didFrame = false
     @State private var detent = 1
     @State private var isFeedDestinationActive = false
@@ -52,7 +68,7 @@ struct LiveScreen: View {
     @State private var wantsNotificationInbox = false
     @State private var showsMessages = false
     @State private var areaNotice = false
-    @State private var demoMessageRepository: (any PrivateMessageRepository)?
+    @Environment(\.liveMessageSession) private var demoMessageSession
     @State private var replyTarget: PrivateMessageThreadTarget?
 
     let isActive: Bool
@@ -101,13 +117,16 @@ struct LiveScreen: View {
     var body: some View {
         GeometryReader { geometry in
             let drawerHeight = showsFeedDestination ? geometry.size.height
-                : drawing ? 0 : height(for: detent, available: geometry.size.height)
+                : drawing || selectedPin != nil ? 0 : height(for: detent, available: geometry.size.height)
             ZStack(alignment: .bottom) {
                 map(drawerHeight: drawerHeight)
                     .allowsHitTesting(!showsFeedDestination)
                     .accessibilityHidden(showsFeedDestination)
                 if !drawing || showsFeedDestination {
                     drawer(height: drawerHeight)
+                        .offset(y: selectedPin != nil && !showsFeedDestination ? geometry.size.height : 0)
+                        .allowsHitTesting(selectedPin == nil || showsFeedDestination)
+                        .accessibilityHidden(selectedPin != nil && !showsFeedDestination)
                         .background(alignment: .bottom) {
                             // Paint only below the drawer, behind the native tab
                             // bar; preserve the map's existing attribution inset.
@@ -118,7 +137,24 @@ struct LiveScreen: View {
                 } else {
                     drawingControls
                 }
+                if let selectedPin, !drawing, !showsFeedDestination {
+                    placePreview(selectedPin, availableHeight: geometry.size.height)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(3)
+                }
+                if detent == 2, !showsFeedDestination, selectedPin == nil, !drawing {
+                    Button { changeDetent(0) } label: {
+                        Label("Map", systemImage: "map.fill")
+                            .font(AstirTypography.body.weight(.semibold))
+                            .padding(.horizontal, 22).frame(height: 48)
+                            .foregroundStyle(brand.primaryText)
+                            .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
+                    }.buttonStyle(.plain).padding(.bottom, 18)
+                        .accessibilityIdentifier("live.showMap").zIndex(4)
+                }
             }
+            .onAppear { mapSize = geometry.size; frameInitialMap() }
+            .onChange(of: geometry.size) { _, size in mapSize = size; frameInitialMap() }
             .overlay(alignment: .top) {
                 // Shield system status text from map labels without moving the
                 // Map, its camera insets, or the drawing coordinate space.
@@ -130,6 +166,35 @@ struct LiveScreen: View {
             }
         }
         .background(brand.background)
+        .recentPlaceListAddPresentation(recentListAdd)
+        .sheet(item: $previewSaveContext, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+            modalDidDismiss()
+        }) { context in
+            MapPlaceSaveFlowSheet(context: context,
+                onSave: { submission in
+                    await persistAddPlaceSaveSubmission(submission, store: store, backend: auth.isSignedIn ? backend : nil)
+                },
+                onRemove: { context in
+                    guard case .editWant(let own) = context.mode else { return false }
+                    return await store.removeSave(userPlaceID: own.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
+                },
+                onClose: { previewSaveContext = nil },
+                onSaveCompleted: { _ in previewSaveContext = nil })
+                .modifier(modalLifecycle)
+        }
+        .sheet(item: $previewSharePlace, onDismiss: modalDidDismiss) { visible in
+            let place = PlaceSheetPlace(visiblePlace: visible)
+            if let content = WanderShareContent.place(serverID: place.id, name: place.name,
+                message: PlaceExternalLinks.shareSummary(placeName: place.name, locality: place.locality, status: place.status)) {
+                ActivitySharePreviewScreen(
+                    card: ShareCardContent(kind: .place, name: place.name, detail: place.compactPlaceType),
+                    content: content,
+                    completion: { completed in store.trackPlaceShareCompletion(completed: completed) },
+                    loadImages: { ShareCardImages(photos: await ShareCardRenderer.placeImages([place.photoRequest], backend: backend)) }
+                ).modifier(modalLifecycle)
+            }
+        }
         .sheet(isPresented: $filtersPresented, onDismiss: modalDidDismiss) { filters.modifier(modalLifecycle) }
         .sheet(isPresented: $showsIntroductionGuide, onDismiss: modalDidDismiss) {
             NavigationStack {
@@ -225,8 +290,11 @@ struct LiveScreen: View {
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
             planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
-            demoMessageRepository = nil; draftArea = nil; drawPoints = []; drawCoordinates = []
+            draftArea = nil; drawPoints = []; drawCoordinates = []
             selection = LiveBrowseSelection(); draftSelection = selection; detent = 1
+            viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
+            drawerMapOrigin = nil; cardMapOrigin = nil; departedAt = nil; feedIsScrolled = false
+            previewSaveContext = nil; previewSharePlace = nil; feedScrollResetRequest = UUID()
             introductionAudience = nil; introductionAcknowledged = false; showsIntroductionGuide = false
             updateIntroduction()
             installCommittedQuery()
@@ -237,43 +305,39 @@ struct LiveScreen: View {
             filtersPresented = false; showsMessages = false; replyTarget = nil
             selectedPlan = nil; planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false
             showsEvents = false; drawing = false; showsIntroductionGuide = false
+            previewSaveContext = nil; previewSharePlace = nil
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
         }
         .onChange(of: pins.map(\.id)) { _, ids in
-            if let selectedPlaceID, !ids.contains(selectedPlaceID) { self.selectedPlaceID = nil }
-        }
-        .onChange(of: activityNavigation.commentsRoute?.id) { _, requestID in
-            if requestID != nil { changeDetent(2) }
+            if let selectedPlaceID, !ids.contains(selectedPlaceID) { dismissPlacePreview() }
+            frameInitialMap()
         }
         .alert("Zoom in to choose an area", isPresented: $areaNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Choose a region smaller than half the world, then draw or use the visible area.") }
         .onAppear {
+            viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
             installCommittedQuery()
             updateIntroduction()
-            #if DEBUG && targetEnvironment(simulator)
-            if demoMessageRepository == nil {
-                demoMessageRepository = PrivateMessageUITestFixtures.make(
-                    userID: store.currentUser.id,
-                    authenticatedUITest: ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
-                    unifiedLiveEnabled: ProcessInfo.processInfo.arguments.contains("-WanderUnifiedLiveUITest"),
-                    participants: store.profiles.map { profile in
-                        PrivateMessageParticipant(id: profile.id, displayName: profile.displayName,
-                                                  handle: profile.handle, avatarURL: profile.avatarURL.flatMap { URL(string: $0) })
-                    }
-                )
-            }
-            #endif
         }
         .onChange(of: introductionContext) { _, _ in updateIntroduction() }
-        .onChange(of: isActive) { _, _ in rebaseMapCameraForPresentationChange() }
-        .onChange(of: showsFeedDestination) { _, _ in rebaseMapCameraForPresentationChange() }
+        .onChange(of: isActive) { _, active in
+            if active { restoreFeedPresentation(); updateIntroduction() }
+            else { rememberFeedPresentation() }
+        }
+        .onChange(of: showsFeedDestination) { _, presented in
+            if presented { rememberFeedPresentation() }
+            else { restoreFeedPresentation() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { store.refreshLiveFeedDisplayLease() }
+            if phase == .active {
+                store.refreshLiveFeedDisplayLease()
+                viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
+            }
         }
     }
 
-    private var messageRepository: (any PrivateMessageRepository)? { demoMessageRepository ?? backend.privateMessageRepository }
+    private var messageRepository: (any PrivateMessageRepository)? { demoMessageSession?.repository ?? backend.privateMessageRepository }
     private var modalLifecycle: LiveModalLifecycle {
         LiveModalLifecycle(onPresentation: onPresentation, onWillDismiss: onWillDismiss)
     }
@@ -305,24 +369,14 @@ struct LiveScreen: View {
         MapReader { proxy in
             let layout = LiveMapSearchLayout(size: size,
                 controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
+            let compactIDs = compactPinIDs(proxy: proxy)
             Map(position: $camera, interactionModes: drawing ? [] : .all) {
                 ForEach(pins) { pin in
                     Annotation(pin.place.place.canonicalName, coordinate: coordinate(pin.place)) {
-                        Button {
-                            selectedPlaceID = pin.id
-                            changeDetent(1)
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: pin.isWanna ? "bookmark" : "checkmark")
-                                if pin.activities.count > 1 { Text("\(pin.activities.count)").font(.caption.bold()) }
-                            }
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(pin.isWanna ? brand.primaryText : Color.white)
-                            .padding(11)
-                            .background(pin.isWanna ? brand.background : brand.accent, in: RoundedRectangle(cornerRadius: pin.isWanna ? 12 : 22))
-                            .overlay(RoundedRectangle(cornerRadius: pin.isWanna ? 12 : 22)
-                                .stroke(pin.id == selectedPlaceID ? brand.primaryText : brand.secondaryText.opacity(0.5), lineWidth: pin.id == selectedPlaceID ? 3 : 1.5))
-                            .frame(minWidth: 44, minHeight: 44)
+                        Button { selectPin(pin) } label: {
+                            LiveMapPinView(kind: pin.kind, selected: pin.id == selectedPlaceID,
+                                viewed: LiveViewedPinHistory.isViewed(pin.id, dates: viewedPins),
+                                compact: compactIDs.contains(pin.id))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(pin.accessibilityLabel)
@@ -330,7 +384,7 @@ struct LiveScreen: View {
                     }
                     .annotationTitles(.hidden)
                 }
-                if let drawn = draftArea ?? area?.boundary {
+                if let drawn = draftArea ?? (area?.isMapViewport == false ? area?.boundary : nil) {
                     MapPolygon(coordinates: drawn.vertices.map(\.coordinate))
                         .foregroundStyle(brand.accent.opacity(0.12))
                         .stroke(brand.accent, lineWidth: 3)
@@ -343,11 +397,8 @@ struct LiveScreen: View {
                 }
             }
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
-            .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: drawerHeight) }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                // MapKit frames content below the actual controls. At full
-                // drawer height, avoid competing top/bottom viewport insets.
-                if !drawing && detent < 2 {
+            .overlay(alignment: .top) {
+                if !drawing && detent < 2 && !showsFeedDestination {
                     controls.padding(.top, 8).padding(.bottom, 8)
                         .background {
                             GeometryReader { controlsGeometry in
@@ -356,9 +407,22 @@ struct LiveScreen: View {
                         }
                 }
             }
-            .onPreferenceChange(LiveMapControlsHeightKey.self) { mapControlsHeight = $0 }
-            .onChange(of: layout) { _, _ in rebaseMapCameraForPresentationChange() }
-            .onAppear { rebaseMapCameraForPresentationChange() }
+            .onPreferenceChange(LiveMapControlsHeightKey.self) { mapControlsHeight = $0; frameInitialMap() }
+            .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                guard !drawing else { return }
+                mapSearch.didInteractWithMap()
+                collapseForMapInteraction()
+            })
+            .onChange(of: selectedPlaceID) { _, _ in
+                if selectedPlaceID != nil { revealSelectedPin(proxy: proxy, size: size) }
+            }
+            .onChange(of: previewHeight) { _, _ in
+                previewCameraAdjusted = false
+                if selectedPlaceID != nil { revealSelectedPin(proxy: proxy, size: size) }
+            }
+            .onMapCameraChange(frequency: .continuous) { context in
+                viewport = context.region
+            }
             .onMapCameraChange(frequency: .onEnd) { context in
                 viewport = context.region
                 let positionedByUser = camera.positionedByUser
@@ -371,7 +435,7 @@ struct LiveScreen: View {
                 if needsProvenanceReset { preserveMapCamera(context.camera) }
             }
             .overlay(alignment: .bottom) {
-                if mapSearch.shouldOfferSearch, !drawing, !showsFeedDestination, detent < 2,
+                if mapSearch.shouldOfferSearch, !drawing, !showsFeedDestination, detent == 0, selectedPin == nil,
                    !filtersPresented, layout.visibleRect != nil {
                     Button {
                         guard let viewport,
@@ -436,72 +500,99 @@ struct LiveScreen: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 8) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 0) { scopeControls; appControls }
-                } else {
-                    HStack(spacing: 8) { scopeControls; Spacer(minLength: 0); appControls }
-                }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 4)
-            .background(.regularMaterial, in: Capsule())
-            HStack {
-                Button { startDrawing() } label: { Label(area?.drawActionTitle ?? "Draw area", systemImage: "pencil.and.outline").frame(minHeight: 44) }
-                    .accessibilityIdentifier("live.draw")
-                if area != nil {
-                    Button("Clear") { area = nil; mapSearch.didCommit(); commitSelection(selection) }.frame(minHeight: 44).accessibilityIdentifier("live.clearArea")
-                }
-                Spacer()
-                control("Filters", symbol: "slider.horizontal.3") {
-                    openFilters()
-                }
-                .accessibilityValue("\(activeFilterCount) active filters")
-                .overlay(alignment: .topTrailing) {
-                    if activeFilterCount > 0 {
-                        Text("\(activeFilterCount)").font(.caption2.bold()).foregroundStyle(Color.white)
-                            .padding(4).background(brand.accent, in: Circle()).allowsHitTesting(false)
-                            .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 0) {
+                            scopeControls
+                            HStack(spacing: 0) {
+                                appControls
+                                Spacer(minLength: 0)
+                                filterControl
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            scopeControls
+                            Spacer(minLength: 0)
+                            appControls
+                            filterControl
+                        }
                     }
                 }
+                .padding(.horizontal, 8)
+                .astirGlassSurface(cornerRadius: 26, castsShadow: true, interactive: true)
                 control("Add a place", symbol: "plus") { onAdd() }
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true, accentAction: true)
             }
-            .font(AstirTypography.body).padding(.horizontal, 14).padding(.vertical, 3)
-            .background(.regularMaterial, in: Capsule())
+            HStack(spacing: 8) {
+                control(area?.drawActionTitle ?? "Draw area", symbol: "pencil.and.outline") { startDrawing() }
+                    .font(.system(size: 20, weight: .medium))
+                    .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
+                    .accessibilityIdentifier("live.draw")
+                if area != nil {
+                    Button("Clear") { area = nil; mapSearch.didCommit(); commitSelection(selection) }
+                        .font(AstirTypography.bodySmall).padding(.horizontal, 14).frame(minHeight: 44)
+                        .astirGlassSurface(cornerRadius: 22, interactive: true)
+                        .accessibilityIdentifier("live.clearArea")
+                }
+                Spacer()
+                if nearbyLoading { ProgressView().padding(12).background(.regularMaterial, in: Circle()) }
+            }
         }
         .foregroundStyle(brand.primaryText).padding(.horizontal, 16)
     }
 
+    private var filterControl: some View {
+        control("Filters", symbol: "slider.horizontal.3") { openFilters() }
+            .accessibilityValue("\(activeFilterCount) active filters")
+            .overlay(alignment: .topTrailing) {
+                if activeFilterCount > 0 {
+                    Circle().fill(brand.accent).frame(width: 7, height: 7).padding(6)
+                        .accessibilityHidden(true).allowsHitTesting(false)
+                }
+            }
+    }
+
     private var scopeControls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Button("Following") {
                 var next = selection; next.scope = .following
                 if area?.isMapViewport == true { area = nil; mapSearch.didCommit() }
                 commitSelection(next)
             }
-                .font(AstirTypography.bodySmall.weight(selection.scope == .following ? .bold : .regular)).frame(minHeight: 44)
+                .font(AstirTypography.bodySmall.weight(selection.scope == .following ? .bold : .regular))
+                .foregroundStyle(selection.scope == .following ? brand.accentText : brand.primaryText)
+                .frame(minHeight: 44)
+                .accessibilityAddTraits(selection.scope == .following ? .isSelected : [])
                 .accessibilityIdentifier("live.scope.following")
-            Button("Nearby") { openFilters(nearby: true) }
-                .font(AstirTypography.bodySmall.weight(selection.scope == .nearby ? .bold : .regular)).frame(minHeight: 44)
+            Button("Nearby") { selectNearby() }
+                .font(AstirTypography.bodySmall.weight(selection.scope == .nearby ? .bold : .regular))
+                .foregroundStyle(selection.scope == .nearby ? brand.accentText : brand.primaryText)
+                .frame(minHeight: 44).disabled(nearbyLoading)
+                .accessibilityAddTraits(selection.scope == .nearby ? .isSelected : [])
                 .accessibilityIdentifier("live.scope.nearby")
         }
     }
 
     private var appControls: some View {
-        HStack(spacing: 8) {
-            control("Search", symbol: "magnifyingglass") { changeDetent(2); surfaceRequest = .init(target: .search) }
-            control("Notifications", symbol: "bell") { changeDetent(2); surfaceRequest = .init(target: .notifications) }
-            control("Messages", symbol: "bubble.left.and.bubble.right") { showsMessages = true }
+        HStack(spacing: 0) {
+            control("Search", symbol: "magnifyingglass") { rememberFeedPresentation(); surfaceRequest = .init(target: .search) }
+            control("Notifications", symbol: "bell") { rememberFeedPresentation(); surfaceRequest = .init(target: .notifications) }
         }
     }
 
     private var drawerUpdateCount: some View {
-        Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.sectionTitle)
+        Text(LiveActivityPresentation.shownUpdateCount(activity.count)).font(AstirTypography.bodySmall.weight(.semibold))
             .accessibilityLabel(LiveActivityPresentation.loadedUpdateCount(activity.count))
     }
 
     private var drawerFilterSummary: some View {
-        Text(filterSummary).font(.caption).foregroundStyle(brand.secondaryText)
+        Text(selection.time == .all ? "All time" : "Past \(selection.time.rawValue) \(selection.time.rawValue == 1 ? "day" : "days")")
+            .font(.caption2).foregroundStyle(brand.secondaryText)
             .accessibilityIdentifier("live.filter.summary")
     }
 
@@ -510,19 +601,8 @@ struct LiveScreen: View {
             if !showsFeedDestination {
                 VStack(spacing: 8) {
                     Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            drawerUpdateCount.fixedSize()
-                            Spacer(minLength: 0)
-                            drawerFilterSummary.fixedSize()
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            drawerUpdateCount
-                            drawerFilterSummary.multilineTextAlignment(.leading)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                    }
+                    drawerUpdateCount
+                    drawerFilterSummary
                 }
                 .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 12)
                 .frame(minHeight: 64)
@@ -585,15 +665,13 @@ struct LiveScreen: View {
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         }.padding(.horizontal, 20).accessibilityIdentifier("live.upcomingInvitations")
                     }
-                    if let selectedPin {
-                        ScrollView { selectedPlace(selectedPin) }
-                            .frame(maxHeight: max(96, height * 0.55))
-                    }
                 }
                 FeedScreen(
                     isFeedTabActive: isActive, presentationResetRequest: presentationResetRequest,
                     onPresentation: onPresentation, onWillDismiss: onWillDismiss, onDidDismiss: onDidDismiss,
-                    isEmbedded: true, filteredActivityIDs: Set(activity.map(\.id)),
+                    isEmbedded: true,
+                    isEmbeddedFeedVisible: isActive && detent > 0 && selectedPin == nil && !showsFeedDestination,
+                    filteredActivityIDs: Set(activity.map(\.id)),
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
                     onPrivateReply: openReply,
                     onEmbeddedDestinationActiveChange: { isFeedDestinationActive = $0 },
@@ -601,6 +679,8 @@ struct LiveScreen: View {
                         selection = selection.committed(at: .now)
                         installCommittedQuery(refresh: false)
                     },
+                    onEmbeddedScrollPositionChange: { feedIsScrolled = $0 },
+                    embeddedScrollResetRequest: feedScrollResetRequest,
                     onAdd: onAdd
                 )
             }
@@ -617,42 +697,36 @@ struct LiveScreen: View {
         .shadow(color: .black.opacity(0.12), radius: 12, y: -3)
     }
 
-    private func selectedPlace(_ pin: LivePlacePin) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(pin.place.place.canonicalName).font(AstirTypography.sectionTitle)
-                Spacer()
-                control("Close selected place", symbol: "xmark") { selectedPlaceID = nil }
-            }
-            ForEach(pin.activities) { event in
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("\(event.actor.displayName) · \(LiveActivityPresentation.title(for: event))")
-                            .font(AstirTypography.body)
-                        Text(FeedPresentation.timestampText(for: event.occurredAt))
-                            .font(.caption).foregroundStyle(brand.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("live.activityTime.\(event.id)")
+    private func placePreview(_ pin: LivePlacePin, availableHeight: CGFloat) -> some View {
+        ScrollView {
+            LivePlacePreviewCard(place: pin.place, activities: pin.activities,
+                onOpen: { openPlace(pin) },
+                onAdd: { openPlace(pin, add: true) },
+                onShare: { sharePlace(pin) },
+                onAddToList: { recentListAdd.add(.visiblePlace(pin.place), store: store, backend: backend, analyticsSurface: "map") },
+                onClose: { dismissPlacePreview() })
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: LivePlacePreviewHeightKey.self, value: geometry.size.height)
                     }
-                    Spacer()
-                    Button("Open") { changeDetent(2); focusRequest = .init(activityID: event.id, target: .place) }
                 }
-                HStack {
-                    Button("Show in Feed") { changeDetent(2); focusRequest = .init(activityID: event.id, target: .activity) }
-                    if event.resolvedTicketKind == .wanna, let place = event.place {
-                        Button("Make a plan") {
-                            if let plan = planPlace(for: event) { selectedPlan = plan }
-                            else { planSource = place }
-                        }
-                    }
-                    if event.actor.relationship == .mutual {
-                        Button("Reply privately") { openReply(event) }
-                    }
-                }.font(.subheadline).buttonStyle(.bordered)
-            }
         }
-        .padding(16).background(brand.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 16).padding(.bottom, 8)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: min(availableHeight * 0.72, previewHeight))
+        .onPreferenceChange(LivePlacePreviewHeightKey.self) { previewHeight = $0 }
+        .padding(.horizontal, 16).padding(.bottom, 12)
+        .phaseAnimator([1.0, 1.3, 1.0], trigger: previewAnimationTrigger) { content, scale in
+            content.scaleEffect(reduceMotion ? 1 : scale, anchor: .bottom)
+        } animation: { scale in
+            reduceMotion ? nil : scale == 1.3 ? .easeOut(duration: 0.18) : .spring(response: 0.3, dampingFraction: 0.7)
+        }
+        .task(id: pin.id) { previewAnimationTrigger &+= 1 }
+        .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
+            if value.translation.height > 60 && abs(value.translation.height) > abs(value.translation.width) {
+                dismissPlacePreview()
+            }
+        })
+        .accessibilityIdentifier("live.placePreview")
     }
 
     private var drawingControls: some View {
@@ -702,6 +776,11 @@ struct LiveScreen: View {
         NavigationStack {
             Form {
                 Section {
+                    Button("Reset filters") { resetDraftFilters() }
+                        .foregroundStyle(brand.accentText)
+                        .accessibilityIdentifier("live.filter.reset")
+                }
+                Section {
                     Picker("People", selection: $draftAudience) {
                         ForEach(FeedAudience.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -721,16 +800,11 @@ struct LiveScreen: View {
                     if let area, !(draftSelection.scope == .nearby && area.isMapViewport) {
                         Toggle(area.isMapViewport ? "Keep map area" : "Keep drawn area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
                     }
-                    Text("Filters apply to your people’s activity before each page loads. Map and Feed show the same matching updates.")
+                    Text("The map and recent Feed use these filters. Scroll further for older matches, then clearly labeled activity outside your filters.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Text("Time window ends \(selection.committedAt.formatted(date: .abbreviated, time: .shortened)). Apply or refresh updates the window.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Button("Reset filters") {
-                        let cityID = draftSelection.cityID
-                        draftSelection = LiveBrowseSelection(now: selection.committedAt)
-                        draftSelection.cityID = cityID
-                        draftClearsArea = true
-                    }.accessibilityIdentifier("live.filter.reset")
+
                 }
             }
             .accessibilityIdentifier("live.filters.form")
@@ -756,14 +830,19 @@ struct LiveScreen: View {
                 ForEach(LiveBrowseSelection.Scope.allCases) { Text($0.rawValue).tag($0) }
             }.accessibilityIdentifier("live.filter.scope")
             if draftSelection.scope == .nearby {
-                Picker("City center", selection: $draftSelection.cityID) {
-                    Text("Choose a city").tag(nil as String?)
+                Picker("Area center", selection: Binding(get: {
+                    draftSelection.nearbyCenter == nil ? draftSelection.cityID : nil
+                }, set: { cityID in
+                    draftSelection.cityID = cityID
+                    draftSelection.nearbyCenter = nil; draftSelection.nearbyCenterName = nil
+                })) {
+                    Text(draftSelection.nearbyCenterName ?? "Choose a city").tag(nil as String?)
                     ForEach(HomeMetro.all) { Text($0.name).tag(Optional($0.id)) }
                 }.pickerStyle(.navigationLink).accessibilityIdentifier("live.filter.city")
                 Picker("Radius", selection: $draftSelection.radius) {
                     ForEach(LiveBrowseSelection.Radius.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).accessibilityIdentifier("live.filter.radius")
-                Text("Around the selected city's public center. A drawn boundary narrows it further. Search this area replaces these bounds with the visible map.")
+                Text("Nearby uses a 10 km radius around your location when available, otherwise the map center. You can choose a city or another radius here. A drawn area narrows it further.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -805,11 +884,47 @@ struct LiveScreen: View {
         if draftSelection.cityID == nil { draftSelection.cityID = HomeMetro.find(homeMetroID)?.id }
         if nearby {
             draftSelection.scope = .nearby
-            if selection.scope != .nearby { draftSelection.radius = .fiveKilometers }
+            if selection.scope != .nearby { draftSelection.radius = .tenKilometers }
         }
         draftAudience = store.feedAudience
         draftClearsArea = false
         filtersPresented = true
+    }
+
+    private func resetDraftFilters() {
+        let cityID = draftSelection.cityID
+        draftSelection = LiveBrowseSelection(now: selection.committedAt)
+        draftSelection.cityID = cityID
+        draftAudience = .everyone
+        draftClearsArea = true
+    }
+
+    private func selectNearby() {
+        var next = selection
+        next.scope = .nearby; next.radius = .tenKilometers
+        next.cityID = HomeMetro.find(homeMetroID)?.id ?? next.cityID
+        // Use an already-authorized location only. Otherwise the visible map
+        // center gives an immediate, deterministic 10 km scope with no sheet.
+        if let center = viewport?.center {
+            next.nearbyCenter = .init(latitude: center.latitude, longitude: center.longitude)
+            next.nearbyCenterName = "Map center"
+        }
+        if next.isValid { commitSelection(next) }
+        guard CLLocationManager().authorizationStatus == .authorizedWhenInUse
+                || CLLocationManager().authorizationStatus == .authorizedAlways else { return }
+        nearbyLoading = true
+        let accountID = store.currentUser.id
+        let requestedSelection = selection
+        Task { @MainActor in
+            defer { nearbyLoading = false }
+            guard let location = try? await CoreLocationProvider(purpose: .map).currentLocation(),
+                  store.currentUser.id == accountID, selection == requestedSelection, selection.scope == .nearby else { return }
+            var located = selection
+            located.nearbyCenter = .init(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
+            located.nearbyCenterName = "Your location"
+            located.radius = .tenKilometers
+            commitSelection(located)
+        }
     }
 
     private func commitSelection(_ next: LiveBrowseSelection) {
@@ -822,10 +937,11 @@ struct LiveScreen: View {
         }
         selection = next.committed(at: .now)
         selectedPlaceID = nil
+        cardMapOrigin = nil
         installCommittedQuery()
         if changedNearby, let center = selection.center {
             mapSearch.willMoveProgrammatically()
-            camera = .region(MKCoordinateRegion(
+            presentMapRegion(MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
                 latitudinalMeters: Double(selection.radius.rawValue) * 2.8,
                 longitudinalMeters: Double(selection.radius.rawValue) * 2.8
@@ -891,16 +1007,124 @@ struct LiveScreen: View {
         let minimum = max(70, drawerHeaderHeight)
         switch detent {
         case 0: return minimum
-        case 2: return max(minimum, available - 8)
+        case 2: return max(minimum, available)
         default: return max(minimum, available * 0.48)
         }
     }
     private func changeDetent(_ value: Int) {
         let next = min(2, max(0, value))
         guard next != detent else { return }
-        rebaseMapCameraForPresentationChange()
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { detent = next }
+        mapSearch.rebaseForPresentationChange()
+        var nextRegion: MKCoordinateRegion?
+        if next == 0, let origin = drawerMapOrigin {
+            nextRegion = origin
+            drawerMapOrigin = nil
+        } else if next == 1, detent == 0, let viewport {
+            drawerMapOrigin = viewport
+            let old = LiveMapSearchLayout(size: mapSize, controlsHeight: mapControlsHeight,
+                drawerHeight: height(for: 0, available: mapSize.height))
+            let new = LiveMapSearchLayout(size: mapSize, controlsHeight: mapControlsHeight,
+                drawerHeight: height(for: 1, available: mapSize.height))
+            if let oldRect = old.visibleRect, let newRect = new.visibleRect {
+                nextRegion = LiveMapViewportPolicy.fittedRegion(viewport, size: mapSize, from: oldRect, to: newRect)
+            }
+        }
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
+            if let nextRegion { camera = .region(nextRegion) }
+            detent = next
+        }
     }
+
+    private func rememberFeedPresentation() {
+        guard departedAt == nil else { return }
+        departedAt = .now
+        departedDetent = detent
+        departedFeedWasScrolled = feedIsScrolled
+    }
+
+    private func restoreFeedPresentation() {
+        let retains = LiveReviewContinuity.keepsFeedPosition(scrolled: departedFeedWasScrolled, departedAt: departedAt)
+        if !retains { feedScrollResetRequest = UUID(); feedIsScrolled = false }
+        if selectedPlaceID != nil || cardMapOrigin != nil { dismissPlacePreview() }
+        changeDetent(retains ? max(1, departedDetent) : 1)
+        departedAt = nil; departedFeedWasScrolled = false
+    }
+
+    private func compactPinIDs(proxy: MapProxy) -> Set<String> {
+        LivePinDensity.compactIDs(points: pins.compactMap { pin in
+            proxy.convert(coordinate(pin.place), to: .local).map { (id: pin.id, point: $0) }
+        }, selectedID: selectedPlaceID)
+    }
+
+    private func selectPin(_ pin: LivePlacePin) {
+        if cardMapOrigin == nil { cardMapOrigin = drawerMapOrigin ?? viewport }
+        previewCameraAdjusted = false
+        viewedPins[pin.id] = .now
+        LiveViewedPinHistory.save(viewedPins, userID: store.currentUser.id)
+        mapSearch.rebaseForPresentationChange()
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            selectedPlaceID = pin.id
+            detent = 0
+        }
+    }
+
+    private func revealSelectedPin(proxy: MapProxy, size: CGSize) {
+        guard !previewCameraAdjusted, let pin = selectedPin,
+              let point = proxy.convert(coordinate(pin.place), to: .local),
+              let current = camera.camera ?? mapSearch.latestCamera.map({
+                  MapCamera(centerCoordinate: .init(latitude: $0.latitude, longitude: $0.longitude),
+                            distance: $0.distance, heading: $0.heading, pitch: $0.pitch)
+              }),
+              let exposed = LiveMapSearchLayout(size: size, controlsHeight: mapControlsHeight,
+                                                drawerHeight: min(previewHeight, size.height * 0.72) + 12).visibleRect else { return }
+        let offset = LiveMapViewportPolicy.revealOffset(pin: point, exposedRect: exposed)
+        guard offset != .zero,
+              let center = proxy.convert(CGPoint(x: size.width / 2 + offset.width,
+                                                  y: size.height / 2 + offset.height), from: .local) else { return }
+        previewCameraAdjusted = true
+        mapSearch.rebaseForPresentationChange()
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.28)) {
+            camera = .camera(MapCamera(centerCoordinate: center, distance: current.distance,
+                                      heading: current.heading, pitch: current.pitch))
+        }
+    }
+
+    private func dismissPlacePreview() {
+        mapSearch.rebaseForPresentationChange()
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
+            selectedPlaceID = nil; detent = 0
+            if let origin = cardMapOrigin ?? drawerMapOrigin { camera = .region(origin) }
+        }
+        cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
+    }
+
+    private func collapseForMapInteraction() {
+        guard selectedPlaceID != nil || detent != 0 else { return }
+        // The finger now owns the camera. Never undo a pan by restoring an old pose.
+        cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
+            selectedPlaceID = nil; detent = 0
+        }
+    }
+
+    private func openPlace(_ pin: LivePlacePin, add: Bool = false) {
+        if add {
+            let own = store.visiblePlaces().first { $0.owner.id == store.currentUser.id && $0.place.id == pin.place.place.id }
+            if let own {
+                previewSaveContext = .existingCurrentUserSave(own,
+                    attributes: store.attributes(for: own.userPlace.id), latestVisit: store.visits(for: own.userPlace.id).first)
+            } else {
+                previewSaveContext = .addVisiblePlace(pin.place, defaultVisibility: store.effectiveDefaultVisibility)
+            }
+            store.saveFlowDidPresent(.saveSheet)
+        } else {
+            dismissPlacePreview()
+            pushNotifications.route(to: .place(id: pin.place.place.id))
+        }
+    }
+
+    private func sharePlace(_ pin: LivePlacePin) { previewSharePlace = pin.place }
+
     private func rebaseMapCameraForPresentationChange() {
         let currentCamera = camera.camera ?? mapSearch.latestCamera.map {
             MapCamera(centerCoordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
@@ -933,12 +1157,26 @@ struct LiveScreen: View {
         let homeAnchor = HomeMetro.find(homeMetroID).map {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
-        guard !didFrame, !camera.positionedByUser, !pins.isEmpty,
+        guard mapSize.width > 0, mapControlsHeight > 0,
+              !didFrame, !camera.positionedByUser, !pins.isEmpty,
               let region = LiveMapCameraPolicy.region(coordinates: pins.map { coordinate($0.place) },
                                                       anchor: homeAnchor ?? activity.compactMap(\.place).first.map(coordinate)) else { return }
         mapSearch.willMoveProgrammatically()
-        camera = .region(region); didFrame = true
+        presentMapRegion(region); didFrame = true
     }
+
+    private func presentMapRegion(_ region: MKCoordinateRegion) {
+        let old = LiveMapSearchLayout(size: mapSize, controlsHeight: mapControlsHeight,
+            drawerHeight: height(for: 0, available: mapSize.height))
+        let new = LiveMapSearchLayout(size: mapSize, controlsHeight: mapControlsHeight,
+            drawerHeight: height(for: 1, available: mapSize.height))
+        if detent > 0, let oldRect = old.visibleRect, let newRect = new.visibleRect,
+           let fitted = LiveMapViewportPolicy.fittedRegion(region, size: mapSize, from: oldRect, to: newRect) {
+            drawerMapOrigin = region
+            camera = .region(fitted)
+        } else { drawerMapOrigin = nil; camera = .region(region) }
+    }
+
     private func planPlace(for event: FeedActivity) -> CommonGroundMockPlace? {
         guard let place = event.place, event.actor.id != store.currentUser.id else { return nil }
         return CommonGroundLiveData.places(store: store, profileID: event.actor.id).first {
@@ -966,6 +1204,11 @@ struct LiveScreen: View {
     }
 }
 
+private struct LivePlacePreviewHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct LiveDrawerHeaderHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
@@ -979,7 +1222,7 @@ private struct LiveMapControlsHeightKey: PreferenceKey {
 /// Shared copy for Live's map and selection chooser; Feed cards keep their own presentation.
 enum LiveActivityPresentation {
     static func shownUpdateCount(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "update" : "updates") shown"
+        "\(count) \(count == 1 ? "place update" : "place updates")"
     }
 
     static func loadedUpdateCount(_ count: Int) -> String {
@@ -1000,7 +1243,11 @@ private struct LivePlacePin: Identifiable {
     let id: String
     let place: VisiblePlace
     let activities: [FeedActivity]
-    var isWanna: Bool { activities.allSatisfy { $0.resolvedTicketKind == .wanna } }
+    var kind: LivePinKind {
+        if activities.contains(where: { $0.resolvedTicketKind == .checkIn }) { return .checkIn }
+        if activities.contains(where: { $0.resolvedTicketKind == .wanna }) { return .wanna }
+        return .list
+    }
 
     var accessibilityLabel: String {
         // Pin activities are already ordered by FeedPresentation.newestFirst.

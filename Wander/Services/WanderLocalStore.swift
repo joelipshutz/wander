@@ -318,6 +318,9 @@ final class WanderStore: ObservableObject {
     private var syncingWannaIDs = Set<String>()
     @Published private(set) var feedAudience: FeedAudience = .everyone
     @Published private(set) var liveFeedQuery: LiveFeedQuery?
+    @Published private(set) var liveFeedExpansionStage: LiveFeedExpansionStage = .selected
+    @Published private(set) var feedPaginationRevision: UInt64 = 0
+    private var liveFeedRequestedCursors = Set<String>()
     @Published private(set) var liveFeedSocialExpired = false
     private var liveFeedDisplayLease = LiveFeedDisplayLease()
     private var liveFeedLeaseTask: Task<Void, Never>?
@@ -1960,6 +1963,7 @@ final class WanderStore: ObservableObject {
                 feedRefreshCompletedAt = .now
                 feedRefreshCompletedRevision = requestRevision
             }
+            feedPaginationRevision &+= 1
         }
         return result && !Task.isCancelled && currentUser.id == requestUserID
     }
@@ -2231,7 +2235,7 @@ final class WanderStore: ObservableObject {
 
     private func displayableFeedPage(_ page: FollowedFeedPage) -> FollowedFeedPage {
         FollowedFeedPage(
-            activity: page.activity.filter { canDisplayActivity($0) && (liveFeedQuery?.includes($0) ?? true) },
+            activity: page.activity.filter { canDisplayActivity($0) && (liveFeedQuery?.includes($0, through: liveFeedExpansionStage) ?? true) },
             featuredPlaces: page.featuredPlaces.filter { canDisplayRemotePlace($0.visiblePlace) },
             nextCursor: page.nextCursor,
             fetchedAt: page.fetchedAt
@@ -2861,11 +2865,27 @@ final class WanderStore: ObservableObject {
 
     var visibleFeedActivityGroups: [FeedActivityGroup] {
         guard liveFeedQuery != nil else { return Array(groupedFeedActivity.prefix(feedVisibleTileLimit)) }
+        return visibleLiveFeedSections.flatMap(\.groups)
+    }
+
+    /// Keep the appended, broader discovery results behind their divider. A
+    /// newer outside-filter post must never jump above the selected results.
+    var visibleLiveFeedSections: [LiveFeedActivitySection] {
+        guard let query = liveFeedQuery else { return [] }
         let now = liveFeedClock()
         let allowed = groupedFeedActivity.flatMap(\.activities).filter {
-            liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: now)
+            query.includes($0, through: liveFeedExpansionStage)
+                && liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: now)
         }
-        return Array(FeedPresentation.groupedActivity(allowed).prefix(feedVisibleTileLimit))
+        var remaining = feedVisibleTileLimit
+        return LiveFeedExpansionStage.allCases.filter {
+            $0.rawValue <= liveFeedExpansionStage.rawValue && ($0 != .older || query.occurredAfter != nil)
+        }.map { stage in
+            let groups = FeedPresentation.groupedActivity(allowed.filter { query.expansionStage(for: $0) == stage })
+            let visible = Array(groups.prefix(remaining))
+            remaining -= visible.count
+            return LiveFeedActivitySection(stage: stage, groups: visible)
+        }
     }
 
     private func clearLiveFeedLease() {
@@ -2905,6 +2925,7 @@ final class WanderStore: ObservableObject {
 
     var hasMoreFeed: Bool {
         groupedFeedActivity.count > feedVisibleTileLimit || followedFeedPage?.nextCursor != nil
+            || (followedFeedPage != nil && liveFeedQuery?.nextExpansion(after: liveFeedExpansionStage) != nil)
     }
 
     func revealFeedActivity(_ activityID: String) {
@@ -2915,10 +2936,14 @@ final class WanderStore: ObservableObject {
     }
 
     private func feedGroups(in page: FollowedFeedPage?) -> [FeedActivityGroup] {
-        FeedPresentation.groupedActivity((page?.activity ?? []).filter {
+        let activity = (page?.activity ?? []).filter {
             feedAudience.includes(actorID: $0.actor.id, currentUserID: currentUser.id,
                                   relationship: $0.actor.relationship)
-        })
+        }
+        guard let query = liveFeedQuery else { return FeedPresentation.groupedActivity(activity) }
+        return LiveFeedExpansionStage.allCases.filter { $0.rawValue <= liveFeedExpansionStage.rawValue }.flatMap { stage in
+            FeedPresentation.groupedActivity(activity.filter { query.expansionStage(for: $0) == stage })
+        }
     }
 
     private func resetFeedPagination() {
@@ -2927,6 +2952,9 @@ final class WanderStore: ObservableObject {
         isLoadingMoreFeed = false
         feedPaginationFailed = false
         feedVisibleTileLimit = FeedPagination.pageSize
+        liveFeedExpansionStage = .selected
+        liveFeedRequestedCursors.removeAll()
+        feedPaginationRevision &+= 1
     }
 
     @discardableResult
@@ -2950,16 +2978,53 @@ final class WanderStore: ObservableObject {
                 }
                 #endif
                 var page = currentPage
+                var acceptedStage = self.liveFeedExpansionStage
+                var requestedCursors = self.liveFeedRequestedCursors
                 var authorizedAt: ContinuousClock.Instant?
-                if let repository = backend?.feedRepository {
-                    page = try await self.fillFeedPage(
-                        page, through: targetCount, from: repository, audience: audience, query: query
-                    ) { _ in
-                        guard !Task.isCancelled, self.currentUser.id == userID,
-                              self.feedAudience == audience, self.liveFeedQuery == query,
-                              self.feedPageTask?.id == requestID else { return }
-                        authorizedAt = self.liveFeedClock()
+                if let query {
+                    // Reveal already buffered tiles before fetching another page.
+                    if self.groupedFeedActivity.count <= self.feedVisibleTileLimit {
+                        let previousCursor = currentPage.nextCursor
+                        if previousCursor == nil, let next = query.nextExpansion(after: acceptedStage) {
+                            acceptedStage = next
+                            requestedCursors.removeAll()
+                        }
+                        let requestQuery = query.expandedQuery(for: acceptedStage)
+                        let next: FollowedFeedPage
+                        if let repository = backend?.feedRepository {
+                            next = try await self.requestFeedPage(
+                                from: repository, audience: audience, query: requestQuery, before: previousCursor
+                            ) { _ in
+                                guard !Task.isCancelled, self.currentUser.id == userID,
+                                      self.feedAudience == audience, self.liveFeedQuery == query,
+                                      self.feedPageTask?.id == requestID else { return }
+                                authorizedAt = self.liveFeedClock()
+                            }
+                            if let nextCursor = next.nextCursor,
+                               nextCursor == previousCursor || requestedCursors.contains(nextCursor) {
+                                throw URLError(.badServerResponse)
+                            }
+                            if let previousCursor { requestedCursors.insert(previousCursor) }
+                        } else {
+                            let fixture = self.fixtureFollowedFeedPage(relativeTo: currentPage.fetchedAt)
+                            next = FollowedFeedPage(activity: fixture.activity.filter {
+                                audience.includes(actorID: $0.actor.id, currentUserID: userID,
+                                                  relationship: self.relationship(to: $0.actor.id))
+                                    && requestQuery.includes($0)
+                            }, featuredPlaces: [], nextCursor: nil, fetchedAt: fixture.fetchedAt)
+                        }
+                        // The server is authoritative; this guard also protects
+                        // fixture parity and malformed/stale response payloads.
+                        let filtered = FollowedFeedPage(
+                            activity: next.activity.filter(requestQuery.includes), featuredPlaces: [],
+                            nextCursor: next.nextCursor, fetchedAt: next.fetchedAt
+                        )
+                        page = FeedPagination.appending(filtered, to: currentPage)
                     }
+                } else if let repository = backend?.feedRepository {
+                    page = try await self.fillFeedPage(
+                        page, through: targetCount, from: repository, audience: audience, query: nil
+                    )
                 }
                 try Task.checkCancellation()
                 guard self.currentUser.id == userID, self.feedAudience == audience,
@@ -2973,6 +3038,8 @@ final class WanderStore: ObservableObject {
                     featuredPlaces: [], nextCursor: page.nextCursor, fetchedAt: page.fetchedAt
                 )
                 let latest = self.followedFeedPage ?? currentPage
+                self.liveFeedExpansionStage = acceptedStage
+                self.liveFeedRequestedCursors = requestedCursors
                 self.followedFeedPage = self.displayableFeedPage(FeedPagination.appending(appended, to: latest))
                 self.acceptLiveFeedAuthorization(appended, at: authorizedAt ?? self.liveFeedClock(), replacing: false)
                 self.feedVisibleTileLimit = targetCount
@@ -2995,6 +3062,7 @@ final class WanderStore: ObservableObject {
         if feedPageTask?.id == requestID {
             feedPageTask = nil
             isLoadingMoreFeed = false
+            feedPaginationRevision &+= 1
         }
         return result
     }
@@ -3018,7 +3086,7 @@ final class WanderStore: ObservableObject {
         onContent: @MainActor (FollowedFeedPage) -> Void = { _ in }
     ) async throws -> FollowedFeedPage {
         if let query {
-            // One explicit Load more fetches one server page in either Live mode.
+            // Each Live page request fetches one server page; cursors remain query-bound.
             guard let cursor = initial.nextCursor else { return initial }
             let next = try await requestFeedPage(from: repository, audience: audience, query: query, before: cursor,
                                                  onContent: onContent)
@@ -4051,6 +4119,7 @@ final class WanderStore: ObservableObject {
             )
         )
         persist()
+        RecentPlaceListChoice.shared.remember(list, accountID: currentUser.id, notificationPolicy: .standard)
         return list
     }
 
