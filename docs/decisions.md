@@ -922,6 +922,10 @@ Accepted shared check-ins combine only through exact server-authorized shared-vi
 identity. Pending companions are sender-only and labeled invited. Original event IDs
 retain their discussion targets. A shared card belongs to the earliest matching Feed
 stage and never promotes another participant's outside-filter note across the divider.
+Attribution enriches already-authorized Feed posts; it does not merge stored visits or
+their discussion histories. The additive read endpoint is installed as
+`20261022233153_feed_shared_visit_context`, with atomic targeted privacy and core smoke
+verification and authenticated-only access. Live remains globally Off.
 
 
 ### REC-636: native map discovery alongside Live activity
