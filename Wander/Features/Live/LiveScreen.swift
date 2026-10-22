@@ -23,6 +23,12 @@ struct LiveScreen: View {
     @State private var mapRefresh: UInt64 = 0
     @State private var mapRefreshDeferred = false
     @State private var fullProfilePin: LivePlacePin?
+    @State private var fullProfileCandidate: PlaceCandidate?
+    @State private var nativeFeature: MapFeature?
+    @State private var selectedCandidate: PlaceCandidate?
+    @State private var nativeFeatureTask: Task<Void, Never>?
+    @State private var nativeFeatureRequest = UUID()
+    @State private var nativePreviewID: String?
     @State private var viewport: MKCoordinateRegion?
     @State private var mapSize: CGSize = .zero
     @State private var drawerMapOrigin: MKCoordinateRegion?
@@ -34,7 +40,7 @@ struct LiveScreen: View {
     @State private var feedIsScrolled = false
     @State private var feedScrollResetRequest: UUID?
     @State private var previewSaveContext: MapPlaceSaveContext?
-    @State private var previewSharePlace: VisiblePlace?
+    @State private var previewSharePlace: LivePlaceShareRoute?
     @State private var departedAt: Date?
     @State private var departedDetent = 1
     @State private var departedFeedWasScrolled = false
@@ -105,6 +111,14 @@ struct LiveScreen: View {
 
     private var selectedPin: LivePlacePin? { pins.first { $0.id == selectedPlaceID } }
 
+    private var hasPlacePreview: Bool { selectedPin != nil || selectedCandidate != nil }
+    private var previewID: String? { selectedPin?.id ?? nativePreviewID }
+    private var previewCoordinate: CLLocationCoordinate2D? {
+        if let pin = selectedPin { return coordinate(pin.place) }
+        guard let latitude = selectedCandidate?.latitude, let longitude = selectedCandidate?.longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
     private var showsFeedDestination: Bool {
         isFeedDestinationActive || activityNavigation.commentsRoute != nil
     }
@@ -112,16 +126,16 @@ struct LiveScreen: View {
     var body: some View {
         GeometryReader { geometry in
             let drawerHeight = showsFeedDestination ? geometry.size.height
-                : drawing || selectedPin != nil ? 0 : height(for: detent, available: geometry.size.height)
+                : drawing || hasPlacePreview ? 0 : height(for: detent, available: geometry.size.height)
             ZStack(alignment: .bottom) {
                 map(drawerHeight: drawerHeight)
                     .allowsHitTesting(!showsFeedDestination)
                     .accessibilityHidden(showsFeedDestination)
                 if !drawing || showsFeedDestination {
                     drawer(height: drawerHeight)
-                        .offset(y: selectedPin != nil && !showsFeedDestination ? geometry.size.height : 0)
-                        .allowsHitTesting(selectedPin == nil || showsFeedDestination)
-                        .accessibilityHidden(selectedPin != nil && !showsFeedDestination)
+                        .offset(y: hasPlacePreview && !showsFeedDestination ? geometry.size.height : 0)
+                        .allowsHitTesting(!hasPlacePreview || showsFeedDestination)
+                        .accessibilityHidden(hasPlacePreview && !showsFeedDestination)
                         .background(alignment: .bottom) {
                             // Paint only below the drawer, behind the native tab
                             // bar; preserve the map's existing attribution inset.
@@ -132,12 +146,12 @@ struct LiveScreen: View {
                 } else {
                     drawingControls
                 }
-                if let selectedPin, !drawing, !showsFeedDestination {
-                    placePreview(selectedPin, availableHeight: geometry.size.height)
+                if hasPlacePreview, !drawing, !showsFeedDestination {
+                    placePreview(availableHeight: geometry.size.height)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(3)
                 }
-                if detent == 2, !showsFeedDestination, selectedPin == nil, !drawing {
+                if detent == 2, !showsFeedDestination, !hasPlacePreview, !drawing {
                     Button { changeDetent(0) } label: {
                         Label("Map", systemImage: "map.fill")
                             .font(AstirTypography.body.weight(.semibold))
@@ -167,6 +181,10 @@ struct LiveScreen: View {
                 onBack: { fullProfilePin = nil })
                 .modifier(modalLifecycle)
         }
+        .fullScreenCover(item: $fullProfileCandidate, onDismiss: modalDidDismiss) { candidate in
+            LivePlaceFullProfileScreen(candidate: candidate, onBack: { fullProfileCandidate = nil })
+                .modifier(modalLifecycle)
+        }
         .sheet(item: $previewSaveContext, onDismiss: {
             store.saveFlowDidDismiss(.saveSheet)
             modalDidDismiss()
@@ -183,10 +201,11 @@ struct LiveScreen: View {
                 onSaveCompleted: { _ in previewSaveContext = nil })
                 .modifier(modalLifecycle)
         }
-        .sheet(item: $previewSharePlace, onDismiss: modalDidDismiss) { visible in
-            let place = PlaceSheetPlace(visiblePlace: visible)
-            if let content = WanderShareContent.place(serverID: place.id, name: place.name,
-                message: PlaceExternalLinks.shareSummary(placeName: place.name, locality: place.locality, status: place.status)) {
+        .sheet(item: $previewSharePlace, onDismiss: modalDidDismiss) { route in
+            let place = route.place
+            if let url = route.shareURL {
+                let content = WanderShareContent.place(item: url, name: place.name,
+                    message: PlaceExternalLinks.shareSummary(placeName: place.name, locality: place.locality, status: place.status))
                 ActivitySharePreviewScreen(
                     card: ShareCardContent(kind: .place, name: place.name, detail: place.compactPlaceType),
                     content: content,
@@ -312,8 +331,9 @@ struct LiveScreen: View {
         .onChange(of: store.followedFeedPage?.fetchedAt, initial: true) { _, _ in frameInitialMap() }
         .onChange(of: store.currentUser.id) { _, _ in
             isFeedDestinationActive = false
+            clearNativePlaceSelection()
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
-            fullProfilePin = nil; committedMapBoundary = nil; committedMapViewport = nil
+            fullProfilePin = nil; fullProfileCandidate = nil; committedMapBoundary = nil; committedMapViewport = nil
             mapActivity = []; mapPins = []
             mapSearch = LiveMapSearchState(); camera = .automatic
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
@@ -330,6 +350,7 @@ struct LiveScreen: View {
             frameInitialMap()
         }
         .onChange(of: presentationResetRequest?.id) { _, _ in
+            clearNativePlaceSelection(); fullProfileCandidate = nil
             isFeedDestinationActive = false
             filtersPresented = false; showsMessages = false; replyTarget = nil
             selectedPlan = nil; planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false
@@ -353,7 +374,7 @@ struct LiveScreen: View {
         .onChange(of: isActive) { _, active in
             if active { resumeDeferredMapRefresh() }
             if active { restoreFeedPresentation(); updateIntroduction() }
-            else { rememberFeedPresentation() }
+            else { rememberFeedPresentation(); clearNativePlaceSelection() }
         }
         .onChange(of: showsFeedDestination) { _, presented in
             if presented { rememberFeedPresentation() }
@@ -369,7 +390,7 @@ struct LiveScreen: View {
     }
 
     private var isMapCovered: Bool {
-        fullProfilePin != nil || planSource != nil || selectedPlan != nil || filtersPresented
+        fullProfilePin != nil || fullProfileCandidate != nil || planSource != nil || selectedPlan != nil || filtersPresented
             || previewSaveContext != nil || previewSharePlace != nil || showsFeedDestination
             || showsMessages || replyTarget != nil || showsEvents || showsUpcomingInvitations
             || receivedPlan != nil || showsIntroductionGuide
@@ -413,7 +434,7 @@ struct LiveScreen: View {
             let layout = LiveMapSearchLayout(size: size,
                 controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
             let compactIDs = compactPinIDs(proxy: proxy)
-            Map(position: $camera, interactionModes: drawing ? [] : .all) {
+            Map(position: $camera, interactionModes: drawing ? [] : .all, selection: $nativeFeature) {
                 ForEach(pins) { pin in
                     Annotation(pin.place.place.canonicalName, coordinate: coordinate(pin.place)) {
                         Button { selectPin(pin) } label: {
@@ -439,7 +460,14 @@ struct LiveScreen: View {
                         .stroke(brand.accent.opacity(0.7), lineWidth: 1.5)
                 }
             }
-            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .all))
+            .mapFeatureSelectionDisabled { drawing || $0.kind != .pointOfInterest }
+            .modifier(LiveMapNativeAccessory())
+            .onChange(of: nativeFeature) { _, feature in
+                // MapKit can clear its transient highlight without dismissing
+                // the app's durable place preview.
+                if let feature { selectNativePlace(feature) }
+            }
             .overlay(alignment: .top) {
                 if !drawing && detent < 2 && !showsFeedDestination {
                     controls.padding(.top, 8).padding(.bottom, 8)
@@ -456,12 +484,12 @@ struct LiveScreen: View {
                 mapSearch.didInteractWithMap()
                 collapseForMapInteraction()
             })
-            .onChange(of: selectedPlaceID) { _, _ in
-                if selectedPlaceID != nil { revealSelectedPin(proxy: proxy, size: size) }
+            .onChange(of: previewID) { _, _ in
+                if hasPlacePreview { revealSelectedPin(proxy: proxy, size: size) }
             }
             .onChange(of: previewHeight) { _, _ in
                 previewCameraAdjusted = false
-                if selectedPlaceID != nil { revealSelectedPin(proxy: proxy, size: size) }
+                if hasPlacePreview { revealSelectedPin(proxy: proxy, size: size) }
             }
             .onMapCameraChange(frequency: .onEnd) { context in
                 viewport = context.region
@@ -475,7 +503,7 @@ struct LiveScreen: View {
                 if needsProvenanceReset { preserveMapCamera(context.camera) }
             }
             .overlay(alignment: .bottom) {
-                if mapSearch.shouldOfferSearch, !drawing, !showsFeedDestination, detent == 0, selectedPin == nil,
+                if mapSearch.shouldOfferSearch, !drawing, !showsFeedDestination, detent == 0, !hasPlacePreview,
                    !filtersPresented, layout.visibleRect != nil {
                     Button {
                         guard let viewport,
@@ -738,14 +766,26 @@ struct LiveScreen: View {
         .shadow(color: .black.opacity(0.12), radius: 12, y: -3)
     }
 
-    private func placePreview(_ pin: LivePlacePin, availableHeight: CGFloat) -> some View {
-        ScrollView {
+    @ViewBuilder private var placePreviewContent: some View {
+        if let pin = selectedPin {
             LivePlacePreviewCard(place: pin.place, activities: pin.activities,
-                onOpen: { openPlace(pin) },
-                onAdd: { openPlace(pin, add: true) },
+                onOpen: { openPlace(pin) }, onAdd: { openPlace(pin, add: true) },
                 onShare: { sharePlace(pin) },
                 onAddToList: { recentListAdd.add(.visiblePlace(pin.place), store: store, backend: backend, analyticsSurface: "map") },
-                onClose: { dismissPlacePreview() })
+                onClose: dismissPlacePreview)
+        } else if let candidate = selectedCandidate {
+            LivePlacePreviewCard(candidate: candidate,
+                onOpen: { rememberFeedPresentation(); fullProfileCandidate = candidate },
+                onAdd: { saveNativePlace(candidate) },
+                onShare: { previewSharePlace = LivePlaceShareRoute(place: PlaceSheetPlace(candidate: candidate)) },
+                onAddToList: { recentListAdd.add(.candidate(candidate), store: store, backend: backend, analyticsSurface: "map") },
+                onClose: dismissPlacePreview)
+        }
+    }
+
+    private func placePreview(availableHeight: CGFloat) -> some View {
+        ScrollView {
+            placePreviewContent
                 .background {
                     GeometryReader { geometry in
                         Color.clear.preference(key: LivePlacePreviewHeightKey.self, value: geometry.size.height)
@@ -761,7 +801,7 @@ struct LiveScreen: View {
         } animation: { scale in
             reduceMotion ? nil : scale == 1.3 ? .easeOut(duration: 0.18) : .spring(response: 0.3, dampingFraction: 0.7)
         }
-        .task(id: pin.id) { previewAnimationTrigger &+= 1 }
+        .task(id: previewID) { previewAnimationTrigger &+= 1 }
         .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
             if value.translation.height > 60 && abs(value.translation.height) > abs(value.translation.width) {
                 dismissPlacePreview()
@@ -978,6 +1018,7 @@ struct LiveScreen: View {
         }
         if next.scope == .featured && selection.scope == .nearby { resetCommittedMapWindow() }
         selection = next.committed(at: .now)
+        clearNativePlaceSelection()
         selectedPlaceID = nil
         cardMapOrigin = nil
         installCommittedQuery()
@@ -1156,7 +1197,7 @@ struct LiveScreen: View {
     private func restoreFeedPresentation() {
         let retains = LiveReviewContinuity.keepsFeedPosition(scrolled: departedFeedWasScrolled, departedAt: departedAt)
         if !retains { feedScrollResetRequest = UUID(); feedIsScrolled = false }
-        let returningFromCard = selectedPlaceID != nil || cardMapOrigin != nil
+        let returningFromCard = hasPlacePreview || cardMapOrigin != nil
         let restoredOrigin = returningFromCard ? (cardMapOrigin ?? drawerMapOrigin) : nil
         if returningFromCard { dismissPlacePreview() }
         // MapKit publishes its new viewport asynchronously. Fit from the restored
@@ -1179,6 +1220,7 @@ struct LiveScreen: View {
     }
 
     private func selectPin(_ pin: LivePlacePin) {
+        clearNativePlaceSelection()
         if cardMapOrigin == nil { cardMapOrigin = drawerMapOrigin ?? viewport }
         previewCameraAdjusted = false
         viewedPins[pin.id] = .now
@@ -1191,8 +1233,8 @@ struct LiveScreen: View {
     }
 
     private func revealSelectedPin(proxy: MapProxy, size: CGSize) {
-        guard !previewCameraAdjusted, let pin = selectedPin,
-              let point = proxy.convert(coordinate(pin.place), to: .local),
+        guard !previewCameraAdjusted, let coordinate = previewCoordinate,
+              let point = proxy.convert(coordinate, to: .local),
               let current = camera.camera ?? mapSearch.latestCamera.map({
                   MapCamera(centerCoordinate: .init(latitude: $0.latitude, longitude: $0.longitude),
                             distance: $0.distance, heading: $0.heading, pitch: $0.pitch)
@@ -1212,6 +1254,7 @@ struct LiveScreen: View {
     }
 
     private func dismissPlacePreview() {
+        clearNativePlaceSelection()
         mapSearch.rebaseForPresentationChange()
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
             selectedPlaceID = nil; detent = 0
@@ -1221,7 +1264,8 @@ struct LiveScreen: View {
     }
 
     private func collapseForMapInteraction() {
-        guard selectedPlaceID != nil || detent != 0 else { return }
+        guard hasPlacePreview || nativeFeature != nil || detent != 0 else { return }
+        clearNativePlaceSelection()
         // The finger now owns the camera. Never undo a pan by restoring an old pose.
         cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
@@ -1249,7 +1293,49 @@ struct LiveScreen: View {
         }
     }
 
-    private func sharePlace(_ pin: LivePlacePin) { previewSharePlace = pin.place }
+    private func sharePlace(_ pin: LivePlacePin) {
+        previewSharePlace = LivePlaceShareRoute(place: PlaceSheetPlace(visiblePlace: pin.place))
+    }
+
+    private func clearNativePlaceSelection() {
+        nativeFeatureTask?.cancel(); nativeFeatureTask = nil
+        nativeFeatureRequest = UUID()
+        nativeFeature = nil; selectedCandidate = nil; nativePreviewID = nil
+    }
+
+    private func selectNativePlace(_ feature: MapFeature) {
+        guard !drawing, let candidate = LiveMapPlaceDiscovery.candidate(from: feature) else { return }
+        nativeFeatureTask?.cancel()
+        let request = UUID(); nativeFeatureRequest = request
+        let accountID = store.currentUser.id
+        if cardMapOrigin == nil { cardMapOrigin = drawerMapOrigin ?? viewport }
+        previewCameraAdjusted = false
+        mapSearch.rebaseForPresentationChange()
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            selectedPlaceID = nil; nativePreviewID = candidate.id; selectedCandidate = candidate; detent = 0
+        }
+        nativeFeatureTask = Task { @MainActor in
+            let resolved = await LiveMapPlaceDiscovery.resolve(feature)
+            guard !Task.isCancelled, request == nativeFeatureRequest,
+                  accountID == store.currentUser.id, isActive, selectedCandidate != nil else { return }
+            if let resolved { selectedCandidate = resolved }
+            nativeFeatureTask = nil
+        }
+    }
+
+    private func saveNativePlace(_ candidate: PlaceCandidate) {
+        let own = store.currentUserVisiblePlaces.first { VisiblePlaceGrouping.matches($0, candidate: candidate) }
+        if let own, own.userPlace.status == .wannaGo || store.wannaSaves(for: own.userPlace).first != nil {
+            previewSaveContext = .addFromExistingWanna(own, attributes: store.attributes(for: own.userPlace.id),
+                latestVisit: store.visits(for: own.userPlace.id).first, wanna: store.wannaSaves(for: own.userPlace).first)
+        } else if let own {
+            previewSaveContext = .existingCurrentUserSave(own, attributes: store.attributes(for: own.userPlace.id),
+                latestVisit: store.visits(for: own.userPlace.id).first)
+        } else {
+            previewSaveContext = .addCandidate(candidate, sourceType: .manual, defaultVisibility: store.effectiveDefaultVisibility)
+        }
+        store.saveFlowDidPresent(.saveSheet)
+    }
 
     private func rebaseMapCameraForPresentationChange() {
         let currentCamera = camera.camera ?? mapSearch.latestCamera.map {
@@ -1268,6 +1354,7 @@ struct LiveScreen: View {
     }
     private func startDrawing() {
         guard let viewport, viewport.span.longitudeDelta < 180 else { areaNotice = true; return }
+        clearNativePlaceSelection()
         drawing = true; draftArea = nil; drawPoints = []; drawCoordinates = []; drawingError = nil
     }
     private static func areaForViewport(_ region: MKCoordinateRegion) -> LiveDrawnArea? {
@@ -1375,5 +1462,22 @@ private struct LiveModalLifecycle: ViewModifier {
     func body(content: Content) -> some View {
         WanderRootPresentationLifecycle(surface: .liveModal,
                                         onPresent: onPresentation, onDismiss: onWillDismiss) { content }
+    }
+}
+
+private struct LiveMapNativeAccessory: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) { content.mapFeatureSelectionAccessory(nil) }
+        else { content }
+    }
+}
+
+private struct LivePlaceShareRoute: Identifiable {
+    let id = UUID()
+    let place: PlaceSheetPlace
+    var shareURL: URL? {
+        if UUID(uuidString: place.id) != nil { return WanderDeepLinkRoute.sharedPlace(placeID: place.id).url }
+        guard let latitude = place.latitude, let longitude = place.longitude else { return nil }
+        return PlaceExternalLinks.directionsAction(placeName: place.name, latitude: latitude, longitude: longitude)?.url
     }
 }

@@ -922,3 +922,8 @@ Accepted shared check-ins combine only through exact server-authorized shared-vi
 identity. Pending companions are sender-only and labeled invited. Original event IDs
 retain their discussion targets. A shared card belongs to the earliest matching Feed
 stage and never promotes another participant's outside-filter note across the divider.
+
+
+### REC-636: native map discovery alongside Live activity
+
+Live keeps MapKit’s public points of interest visible at the map’s normal zoom-dependent density. Native labels are independent of the authorized activity query and count. Tapping an unsaved place opens the same current Astir preview, full profile and save/list actions, using a provider candidate rather than inventing a user save. MapKit detail lookup is cancellable; account changes, map gestures and another selection invalidate late results. Only an explicit save or list action persists anything.

@@ -353,6 +353,7 @@
 		97DA8BB449DC58D55A4DD2ED /* FirstVisitWalkthrough.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3A3B59E94C99CDA86C1B466 /* FirstVisitWalkthrough.swift */; };
 		9800E02122FDAD2796619FC8 /* WanderLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */; };
 		983E4529E27D443CF4EB85D3 /* FullPageBackSwipeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7327B8B87EDE207236010857 /* FullPageBackSwipeUITests.swift */; };
+		98A38153B3EDC5A571D75DEE /* LiveMapPlaceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F52200F5CE3DCD5895BE5E /* LiveMapPlaceDiscovery.swift */; };
 		99630B9D3D4662F901C150FB /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
 		99E2F0658DAE8BBB47E0DDAF /* HomeCitySearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BAD5313A8A000B5D0D289A9 /* HomeCitySearchTests.swift */; };
 		9A2B61C3874341AE3A94072F /* SharedVisitComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34E2861127F5EE79AF8571A /* SharedVisitComponents.swift */; };
@@ -366,6 +367,7 @@
 		9D71E27C136BBB3AAE7D7C6E /* rec-228-import-row-selection-style-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 61E0DC7340E8C6EA795815B7 /* rec-228-import-row-selection-style-pre.json */; };
 		9D9465BB4AD4B3D5503568BA /* CommonGroundMockDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E48A158290C7A15C1FB643 /* CommonGroundMockDataTests.swift */; };
 		9DFE753E4B0763F68A5BC558 /* PlaceImportCanonicalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACA1D246E6E8CBC7DA85910 /* PlaceImportCanonicalViews.swift */; };
+		9E35E8BF2C5FEEF68839722C /* LiveMapPlaceDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CB61A3E9EE230B88E703ECF /* LiveMapPlaceDiscoveryTests.swift */; };
 		9FAF2FA32C9F0E7323C9A507 /* SocialPlaceImportMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */; };
 		9FB326CCA609385EEEED194B /* rec-270-liquid-glass-pin-transition-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = 94C2EEFCBA5E32F70E1FDDD6 /* rec-270-liquid-glass-pin-transition-pre.png */; };
 		9FBB0F26F26D0A3C74556000 /* PlaceProfilePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */; };
@@ -823,6 +825,7 @@
 		484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockup.swift; sourceTree = "<group>"; };
 		4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPlaceCardActionInteractionUITests.swift; sourceTree = "<group>"; };
 		4C425E62A869F6D5434E793A /* CommonGroundMockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundMockData.swift; sourceTree = "<group>"; };
+		4CB61A3E9EE230B88E703ECF /* LiveMapPlaceDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMapPlaceDiscoveryTests.swift; sourceTree = "<group>"; };
 		4E041C0E0118EF24A45BB0F3 /* PlaceCheckInQuestionCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCheckInQuestionCatalogTests.swift; sourceTree = "<group>"; };
 		4EA9C4F456C7AF33B5D9EA15 /* ProfileHeaderMotionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHeaderMotionStateTests.swift; sourceTree = "<group>"; };
 		4EAC12B0ACB3D0718B1015B2 /* FeedAudienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedAudienceTests.swift; sourceTree = "<group>"; };
@@ -1070,6 +1073,7 @@
 		C33366EFB2CE96DE38A7C74F /* OnboardingFriendSuggestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFriendSuggestionsView.swift; sourceTree = "<group>"; };
 		C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildConfigurationTests.swift; sourceTree = "<group>"; };
 		C3D3419D22C8CE6E132FBBA5 /* PlaceSaveDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceSaveDraftStore.swift; sourceTree = "<group>"; };
+		C3F52200F5CE3DCD5895BE5E /* LiveMapPlaceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMapPlaceDiscovery.swift; sourceTree = "<group>"; };
 		C4687BE4401F77C99D6F53A3 /* PrivateMessagingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateMessagingComponents.swift; sourceTree = "<group>"; };
 		C5DB03E3C851D9EABD4BE731 /* ForegroundEntryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundEntryUITests.swift; sourceTree = "<group>"; };
 		C6B6E136E929847985479204 /* ClipDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipDemo.swift; sourceTree = "<group>"; };
@@ -1599,6 +1603,7 @@
 				5F597CBB36CBD4972DB78E7C /* LiveIntroductionPolicyTests.swift */,
 				482C04CA887D0DEBB7B145A9 /* LiveIntroductionUITestFixtureTests.swift */,
 				ADE59424F9EFB5BF652D3CE2 /* LiveManualPaginationUITestRepositoryTests.swift */,
+				4CB61A3E9EE230B88E703ECF /* LiveMapPlaceDiscoveryTests.swift */,
 				B9C0FF61812EF90B1AF8C856 /* LiveMapPolicyTests.swift */,
 				8DD1494583D1D618F46C9279 /* LiveMapPresentationPolicyTests.swift */,
 				B71A9B4C41258747E8F42091 /* LiveMapResultsTests.swift */,
@@ -1789,6 +1794,7 @@
 				54901841BFF245767870FA47 /* LiveIntroductionPolicy.swift */,
 				C89121E34E3440487CB08E53 /* LiveIntroductionUITestFixtures.swift */,
 				B2A8B8950E99A02E74DD90DE /* LiveIntroductionViews.swift */,
+				C3F52200F5CE3DCD5895BE5E /* LiveMapPlaceDiscovery.swift */,
 				8860D955D3B18D31B6F0D96D /* LiveMapPolicy.swift */,
 				BECF9601FDEAF98F4D0D69AD /* LiveMapPresentationPolicy.swift */,
 				F7F0D72F877134D48965DD3D /* LiveMapResults.swift */,
@@ -2626,6 +2632,7 @@
 				30608892ADB51824DCD6D5A2 /* LiveIntroductionPolicy.swift in Sources */,
 				CFA80C0F53CF1051A9D8E120 /* LiveIntroductionUITestFixtures.swift in Sources */,
 				B0FFE656FD5927233A6941E7 /* LiveIntroductionViews.swift in Sources */,
+				98A38153B3EDC5A571D75DEE /* LiveMapPlaceDiscovery.swift in Sources */,
 				F93A462E6835210CD7524A94 /* LiveMapPolicy.swift in Sources */,
 				3EDA03718E8C1CFA7C679417 /* LiveMapPresentationPolicy.swift in Sources */,
 				02CA47C744149A676F3DF63F /* LiveMapResults.swift in Sources */,
@@ -2902,6 +2909,7 @@
 				651A4E591DBDE74777517A04 /* LiveIntroductionPolicyTests.swift in Sources */,
 				F4417290FEB72A57C0F5492D /* LiveIntroductionUITestFixtureTests.swift in Sources */,
 				0E7314B58A814F46114DFAD7 /* LiveManualPaginationUITestRepositoryTests.swift in Sources */,
+				9E35E8BF2C5FEEF68839722C /* LiveMapPlaceDiscoveryTests.swift in Sources */,
 				164E94759746A48CAFF69C44 /* LiveMapPolicyTests.swift in Sources */,
 				BB6C6D8DE70925A432DBF79D /* LiveMapPresentationPolicyTests.swift in Sources */,
 				929917545BDAFB5AFBAA003A /* LiveMapResultsTests.swift in Sources */,

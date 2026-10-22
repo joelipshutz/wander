@@ -3,7 +3,8 @@ import SwiftUI
 /// A preview of a selected Live pin. The caller supplies only currently authorized,
 /// filter-matching events; opening the preview does not fetch unrelated activity.
 struct LivePlacePreviewCard: View {
-    let place: VisiblePlace
+    private let visiblePlace: VisiblePlace?
+    private let sheetPlace: PlaceSheetPlace
     let activities: [FeedActivity]
     let onOpen: () -> Void
     let onAdd: () -> Void
@@ -23,19 +24,45 @@ struct LivePlacePreviewCard: View {
     @State private var hydratedActivity: [String: FeedActivity] = [:]
     @State private var unavailableActivityIDs: Set<String> = []
 
-    private var sheetPlace: PlaceSheetPlace { PlaceSheetPlace(visiblePlace: place) }
+    init(place: VisiblePlace, activities: [FeedActivity], onOpen: @escaping () -> Void,
+         onAdd: @escaping () -> Void, onShare: @escaping () -> Void,
+         onAddToList: @escaping () -> Void, onClose: @escaping () -> Void) {
+        visiblePlace = place
+        sheetPlace = PlaceSheetPlace(visiblePlace: place)
+        self.activities = activities
+        self.onOpen = onOpen
+        self.onAdd = onAdd
+        self.onShare = onShare
+        self.onAddToList = onAddToList
+        self.onClose = onClose
+    }
+
+    init(candidate: PlaceCandidate, onOpen: @escaping () -> Void,
+         onAdd: @escaping () -> Void, onShare: @escaping () -> Void,
+         onAddToList: @escaping () -> Void, onClose: @escaping () -> Void) {
+        visiblePlace = nil
+        sheetPlace = PlaceSheetPlace(candidate: candidate)
+        // A native POI has no authorized activity or save of its own.
+        activities = []
+        self.onOpen = onOpen
+        self.onAdd = onAdd
+        self.onShare = onShare
+        self.onAddToList = onAddToList
+        self.onClose = onClose
+    }
+
     private var selectedActivity: [FeedActivity] {
-        LivePlacePreviewPresentation.recentActivity(activities, placeID: place.place.id)
+        LivePlacePreviewPresentation.recentActivity(activities, placeID: sheetPlace.id)
     }
     private var recentActivity: [FeedActivity] {
         selectedActivity.filter { !unavailableActivityIDs.contains($0.id) }.map { hydratedActivity[$0.id] ?? $0 }
     }
     private var activityHydrationKey: String {
-        "\(place.place.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoAccessRevision)|\(scenePhase)|"
+        "\(sheetPlace.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoAccessRevision)|\(scenePhase)|"
             + selectedActivity.map { "\($0.id):\(store.activityAccessGeneration(for: $0.id))" }.joined(separator: ",")
     }
     private var photoResolutionKey: String {
-        "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(scenePhase)|\(failedGooglePhotoID ?? "ready")"
+        "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(backend.photoSessionRevision)|\(backend.photoAccessRevision)|\(scenePhase)|\(failedGooglePhotoID ?? "ready")"
     }
 
     var body: some View {
@@ -72,7 +99,7 @@ struct LivePlacePreviewCard: View {
                     PlaceProfilePhotoImage(
                         photo: photo,
                         canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
-                        placeName: place.place.canonicalName,
+                        placeName: sheetPlace.name,
                         photoRequest: sheetPlace.photoRequest,
                         variant: .card,
                         onLoadFailure: handlePhotoFailure
@@ -88,7 +115,7 @@ struct LivePlacePreviewCard: View {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: 5) {
                     Spacer(minLength: 0)
-                    Text(place.place.canonicalName)
+                    Text(sheetPlace.name)
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(.white)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
@@ -102,7 +129,7 @@ struct LivePlacePreviewCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(place.place.canonicalName)")
+            .accessibilityLabel("Open \(sheetPlace.name)")
             .accessibilityHint("Opens the full place page")
             .accessibilityIdentifier("live.placePreview.open")
 
@@ -181,7 +208,7 @@ struct LivePlacePreviewCard: View {
     }
 
     private var category: some View {
-        Text(place.effectiveCompactType)
+        Text(sheetPlace.compactPlaceType)
             .font(AstirTypography.label)
             .foregroundStyle(brand.primaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -305,14 +332,14 @@ struct LivePlacePreviewCard: View {
 
     private var ratingPresentation: PlaceCardRatingPresentation? {
         var seen = Set<String>()
-        let summaries = ([place] + activities.compactMap(\.place)).filter {
-            $0.place.id == place.place.id && seen.insert($0.userPlace.id).inserted
+        let summaries = ([visiblePlace].compactMap { $0 } + activities.compactMap(\.place)).filter {
+            $0.place.id == sheetPlace.id && seen.insert($0.userPlace.id).inserted
         }.map {
             PlaceSaveSummary(visiblePlace: $0, attributes: $0.attributes,
                              viewerFollowsOwner: store.viewerFollows($0.owner.id))
         }
         let presentation = PlaceProfilePresenter.presentation(
-            placeID: place.place.id, category: place.effectiveCategory, saves: summaries,
+            placeID: sheetPlace.id, category: sheetPlace.category, saves: summaries,
             tasteSaves: [], currentUserID: store.currentUser.id
         )
         return PlaceCardPresentation.rating(
@@ -343,7 +370,7 @@ struct LivePlacePreviewCard: View {
         for event in candidates where UUID(uuidString: event.id) != nil && event.activityEngagementContext != nil {
             let fresh = await store.activity(id: event.id, backend: backend, authSession: auth)
             guard !Task.isCancelled, key == activityHydrationKey else { return }
-            guard let fresh, fresh.place?.place.id == place.place.id,
+            guard let fresh, fresh.place?.place.id == sheetPlace.id,
                   store.canDisplayLiveMapActivity(fresh), store.liveFeedQuery?.includes(fresh) ?? true else {
                 unavailableActivityIDs.insert(event.id)
                 continue
