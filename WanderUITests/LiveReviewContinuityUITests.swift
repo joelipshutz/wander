@@ -101,26 +101,35 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(pin.label.contains("Ryan"))
         XCTAssertTrue(pin.label.contains("Wanna"))
         pin.tap()
-        let time = app.staticTexts["live.activityTime.fixture-feed-ryan-wanna-noodles"]
-        XCTAssertTrue(time.waitForExistence(timeout: 5))
-        XCTAssertEqual(time.label, "5h ago")
-        let show = app.buttons["Show in Feed"].firstMatch
-        captureRouteDiagnostics("pin-selected-before-show-wait", in: app, startedAt: diagnosticStart,
-            queries: [("exact-Show-in-Feed-label", app.buttons.matching(NSPredicate(format: "label == %@", "Show in Feed"))),
-                      ("selected-card-scroll-containing-time", app.scrollViews.containing(.staticText,
-                          identifier: "live.activityTime.fixture-feed-ryan-wanna-noodles"))])
-        let selectedCardScroll = app.scrollViews.containing(.staticText,
-            identifier: "live.activityTime.fixture-feed-ryan-wanna-noodles").firstMatch
-        reveal(show, in: selectedCardScroll, app: app, leadingPaddingReference: time)
-        waitHittable(show)
-        show.tap()
-        waitDrawer("expanded", in: app)
+        let activity = app.descendants(matching: .any)["live.placePreview.activity.fixture-feed-ryan-wanna-noodles"].firstMatch
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        XCTAssertTrue(activity.label.contains("Ryan"))
+        XCTAssertTrue(activity.label.contains("Wanna"))
+        XCTAssertTrue(activity.label.contains("5h ago"))
+        let open = app.buttons["live.placePreview.open"]
+        captureRouteDiagnostics("pin-selected-before-open", in: app, startedAt: diagnosticStart,
+            queries: [("selected-place-open", app.buttons.matching(identifier: "live.placePreview.open")),
+                      ("selected-activity", app.descendants(matching: .any).matching(
+                          identifier: "live.placePreview.activity.fixture-feed-ryan-wanna-noodles"))])
+        waitHittable(open)
+        XCTAssertEqual(open.label, "Open Larchmont Noodles")
+        open.tap()
+        let placeBack = app.buttons["place-profile.back"]
+        XCTAssertTrue(placeBack.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Larchmont Noodles"].firstMatch.waitForExistence(timeout: 5))
+        capture("original-place-from-pin-preview")
+        placeBack.tap()
+        XCTAssertTrue(placeBack.waitForNonExistence(timeout: 5))
+        waitDrawer("half expanded", in: app)
+        XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
+        expandDrawer(in: app)
 
         let feed = app.scrollViews["feed.places.scroll"]
         let card = app.descendants(matching: .any)["feed.activity.fixture-feed-ryan-wanna-noodles.postcard"].firstMatch
+        let actor = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.actor"]
+        reveal(actor, in: feed, app: app)
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         waitForFocusedCardIntersection(card, in: feed, app: app)
-        let actor = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.actor"]
         XCTAssertTrue(actor.label.contains("Ryan"))
         let destination = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
         XCTAssertTrue(destination.label.contains("Larchmont Noodles"))
@@ -139,15 +148,12 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(send.waitForNonExistence(timeout: 5))
         XCTAssertTrue(card.waitForExistence(timeout: 5))
 
-        collapseDrawerToHalf(in: app)
-        XCTAssertTrue(time.waitForExistence(timeout: 5))
-        let open = app.buttons.matching(NSPredicate(format: "label == %@", "Open")).firstMatch
-        waitHittable(open)
-        open.tap()
-        let placeBack = app.buttons["place-profile.back"]
+        reveal(destination, in: feed, app: app)
+        waitHittable(destination)
+        destination.tap()
         XCTAssertTrue(placeBack.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Larchmont Noodles"].firstMatch.waitForExistence(timeout: 5))
-        capture("original-place-from-pin")
+        capture("same-place-from-original-feed-activity")
         placeBack.tap()
         XCTAssertTrue(placeBack.waitForNonExistence(timeout: 5))
         waitDrawer("expanded", in: app)
@@ -694,7 +700,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         selectMenu(app.buttons["live.filter.people"], option: "Only Friends", form: form, app: app, selected: {
             $0.identifier == "live.filter.people" && $0.value as? String == "Only Friends"
         })
-        selectMenu(form.buttons["Activity, Everything"], option: "Wannas", form: form, app: app, selected: {
+        selectMenu(form.buttons["Activity, All"], option: "Wannas", form: form, app: app, selected: {
             $0.label == "Activity, Wannas"
         })
         selectMenu(app.buttons["live.filter.time"], option: "Past 24 hours", form: form, app: app, selected: {
@@ -743,9 +749,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
         assertCombinedResult(in: app)
         panMapOnce(anchorID: "place_noodles", in: app)
-        assertCombinedResult(in: app)
+        assertCombinedResult(in: app, drawerState: "collapsed")
+        dragDrawer(.up, to: "half expanded", count: 1, in: app)
         dragDrawer(.up, to: "expanded", count: 1, in: app)
-        assertFeedCount(1, in: app)
         let feed = app.scrollViews["feed.places.scroll"]
         let actor = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.actor"]
         let place = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
@@ -753,11 +759,35 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(place.label.contains("Larchmont Noodles"))
         reveal(actor, in: feed, direction: .down, app: app)
         XCTAssertTrue(actor.label.contains("Ryan"))
-        let observedCards = feed.descendants(matching: .any).matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@", "feed.activity.", ".postcard"))
-        XCTAssertEqual(observedCards.allElementsBoundByIndex.map(\.identifier),
-                       ["feed.activity.fixture-feed-ryan-wanna-noodles.postcard"])
-        capture("combined-filter-only-wanna-in-feed")
+        capture("combined-filter-selected-wanna")
+
+        let older = feed.descendants(matching: .any)["feed.olderActivity"].firstMatch
+        reveal(older, in: feed, direction: .down, app: app)
+        XCTAssertTrue(older.exists, "Older matching activity has its own boundary even when this fixture has no older match.")
+        let disclosure = "These posts are outside your selected location, people, categories and activity filters."
+        let allBoundary = feed.descendants(matching: .any).matching(NSPredicate(
+            format: "label CONTAINS %@ AND label CONTAINS %@", disclosure, "Showing all activity")).firstMatch
+        reveal(allBoundary, in: feed, direction: .down, app: app)
+        XCTAssertTrue(allBoundary.label.hasPrefix(disclosure),
+                      "The disclosure must precede the all-activity divider in the accessibility reading order.")
+        XCTAssertLessThanOrEqual(older.frame.maxY, allBoundary.frame.minY)
+        let outsideID = "fixture-feed-ryan-added-juniper-list"
+        let outsidePlace = app.buttons["feed.activity.\(outsideID).place"]
+        reveal(outsidePlace, in: feed, direction: .down, app: app)
+        XCTAssertTrue(outsidePlace.label.contains("Juniper Table"))
+        let outsideCard = feed.descendants(matching: .any)["feed.activity.\(outsideID).postcard"].firstMatch
+        XCTAssertTrue(outsideCard.exists)
+        XCTAssertGreaterThanOrEqual(outsideCard.frame.minY, allBoundary.frame.maxY,
+                                    "An outside-filter list addition belongs below its explicit disclosure.")
+        assertFeedCount(2, in: app)
+        XCTAssertEqual(drawer(in: app).value as? String, "1 loaded update. \(combinedSummary)",
+                       "Broadening Feed discovery must not broaden the committed map count or filters.")
+        for forbiddenID in ["fixture-feed-maya-been-bar-nido", "fixture-feed-maya-created-sunset-list",
+                            "fixture-feed-demo-saved-fern-desk"] {
+            XCTAssertFalse(feed.descendants(matching: .any)["feed.activity.\(forbiddenID).postcard"].firstMatch.exists,
+                           "The all-activity tail must still exclude activity outside Only Friends.")
+        }
+        capture("combined-filter-authorized-unfiltered-tail")
         dragDrawer(.down, to: "half expanded", count: 1, in: app)
 
         app.buttons["Filters"].tap()
@@ -788,10 +818,15 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         reveal(app.switches["live.filter.person.user_ryan"], in: retainedForm, direction: .down, app: app)
         XCTAssertEqual(app.switches["live.filter.person.user_ryan"].value as? String, "1")
         resetFilters(in: app)
+        selectMenu(app.buttons["live.filter.people"], option: "Only Friends", form: retainedForm,
+                   direction: .up, app: app, selected: {
+            $0.identifier == "live.filter.people" && $0.value as? String == "Only Friends"
+        })
         app.buttons["live.applyFilters"].tap()
 
         assertDrawer("half expanded", count: 2, in: app)
-        XCTAssertEqual(summary(in: app).label, "Following · Past 7 days · Only Friends")
+        XCTAssertEqual(summary(in: app).label, "Past 7 days")
+        XCTAssertEqual(drawer(in: app).value as? String, "2 loaded updates. Following · Past 7 days · Only Friends")
         XCTAssertEqual(app.buttons["Filters"].value as? String, "1 active filters")
         assertPins(["place_noodles", "place_juniper_table"], in: app)
         dragDrawer(.up, to: "expanded", count: 2, in: app)
@@ -1003,9 +1038,10 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertEqual(result, .completed)
     }
 
-    private func assertCombinedResult(in app: XCUIApplication) {
-        assertDrawer("half expanded", count: 1, in: app)
-        XCTAssertEqual(summary(in: app).label, combinedSummary)
+    private func assertCombinedResult(in app: XCUIApplication, drawerState: String = "half expanded") {
+        assertDrawer(drawerState, count: 1, in: app)
+        XCTAssertEqual(summary(in: app).label, "Past 1 day")
+        XCTAssertEqual(drawer(in: app).value as? String, "1 loaded update. \(combinedSummary)")
         XCTAssertEqual(app.buttons["Filters"].value as? String, "6 active filters")
         assertPins(["place_noodles"], in: app)
         let pin = app.buttons["live.pin.place_noodles"]

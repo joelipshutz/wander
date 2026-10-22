@@ -115,7 +115,10 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
 
     func testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview() async throws {
         let app = launchLive()
-        app.buttons["Messages"].tap()
+        app.tabBars.buttons["Profile"].tap()
+        let messages = app.buttons["profile.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 10))
+        messages.tap()
         let conversation = app.buttons["messaging.conversation.63600000-0000-0000-0000-000000000010"]
         XCTAssertTrue(conversation.waitForExistence(timeout: 10))
         let activeText = try recognizedText(in: app.screenshot())
@@ -128,7 +131,10 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
 
     func testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn() async throws {
         let app = launchLive()
-        app.buttons["Messages"].tap()
+        app.tabBars.buttons["Profile"].tap()
+        let messages = app.buttons["profile.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 10))
+        messages.tap()
         let conversation = app.buttons["messaging.conversation.63600000-0000-0000-0000-000000000010"]
         XCTAssertTrue(conversation.waitForExistence(timeout: 10))
         conversation.tap()

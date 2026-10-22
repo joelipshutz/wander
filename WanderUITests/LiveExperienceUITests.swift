@@ -114,8 +114,10 @@ final class LiveExperienceUITests: XCTestCase {
 
     func testPrivateDemoReplyAndForegroundPreserveDraft() {
         let app = launch()
-        XCTAssertTrue(app.buttons["Messages"].waitForExistence(timeout: 30))
-        app.buttons["Messages"].tap()
+        app.tabBars.buttons["Profile"].tap()
+        let messages = app.buttons["profile.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 30))
+        messages.tap()
         let conversation = app.buttons["messaging.conversation.63600000-0000-0000-0000-000000000010"]
         XCTAssertTrue(conversation.waitForExistence(timeout: 10))
         conversation.tap()
@@ -143,9 +145,18 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(pin.label.contains("Wanna"))
         XCTAssertTrue(pin.label.contains("5h ago"), "Pin accessibility must describe the activity time, not current presence.")
         pin.tap()
-        let activityTime = app.staticTexts["live.activityTime.fixture-feed-ryan-wanna-noodles"]
-        XCTAssertTrue(activityTime.waitForExistence(timeout: 5))
-        XCTAssertEqual(activityTime.label, "5h ago")
+        let activity = app.descendants(matching: .any)["live.placePreview.activity.fixture-feed-ryan-wanna-noodles"].firstMatch
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        XCTAssertTrue(activity.label.contains("Ryan"))
+        XCTAssertTrue(activity.label.contains("Wanna"))
+        XCTAssertTrue(activity.label.contains("5h ago"))
+        app.buttons["live.placePreview.close"].tap()
+        setDrawer("expanded", in: app)
+        let feed = app.scrollViews["feed.places.scroll"]
+        let destination = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
+        revealFully(destination, in: feed, app: app)
+        XCTAssertTrue(destination.label.contains("Larchmont Noodles"))
+        destination.press(forDuration: 1)
         let reply = app.buttons["Reply privately"].firstMatch
         XCTAssertTrue(reply.waitForExistence(timeout: 5))
         reply.tap()
@@ -156,7 +167,16 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Demo friend"].exists)
         capture("wanna-contextual-reply")
         app.navigationBars.buttons["Done"].tap()
-        app.buttons["Make a plan"].firstMatch.tap()
+        revealFully(destination, in: feed, app: app)
+        destination.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 10))
+        let plans = app.buttons["place-profile.plans"]
+        revealFully(plans, in: app.scrollViews["place-profile.scroll"], app: app)
+        plans.tap()
+        let friend = app.buttons["live.plan.person.user_ryan"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10))
+        XCTAssertTrue(friend.label.contains("Ryan"))
+        friend.tap()
         let save = app.buttons["live.plan.saveWanna"]
         XCTAssertTrue(save.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Share invitation"].exists)
@@ -184,17 +204,21 @@ final class LiveExperienceUITests: XCTestCase {
     func testNearbyRadiusIsStagedAndRetainedAcrossTabs() {
         let app = launch()
         app.buttons["live.scope.nearby"].tap()
+        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        waitForCondition { (handle.value as? String)?.contains("10 km") == true }
+        XCTAssertTrue(app.buttons["live.scope.nearby"].isSelected)
+        XCTAssertFalse(app.navigationBars["Filters"].exists, "Nearby applies its 10 km radius directly.")
+        app.buttons["Filters"].tap()
         let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
-        let five = app.buttons["5 km"]
-        for _ in 0..<4 where !five.isHittable { form.swipeUp() }
-        XCTAssertTrue(five.isSelected)
+        let ten = app.buttons["10 km"]
+        for _ in 0..<4 where !ten.isHittable { form.swipeUp() }
+        XCTAssertTrue(ten.isSelected)
         app.buttons["25 km"].tap()
         app.buttons["Cancel"].tap()
-        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
-        XCTAssertTrue((handle.value as? String)?.contains("Following") == true)
-        app.buttons["live.scope.nearby"].tap()
-        for _ in 0..<4 where !five.isHittable { form.swipeUp() }
-        XCTAssertTrue(five.isSelected)
+        XCTAssertTrue((handle.value as? String)?.contains("10 km") == true)
+        app.buttons["Filters"].tap()
+        for _ in 0..<4 where !ten.isHittable { form.swipeUp() }
+        XCTAssertTrue(ten.isSelected)
         app.buttons["25 km"].tap()
         capture("nearby-radius-filters")
         app.buttons["live.applyFilters"].tap()
@@ -228,7 +252,12 @@ final class LiveExperienceUITests: XCTestCase {
 
     func testAccessibleDrawingControlsRemainReachable() {
         let app = launch(largeText: true)
-        XCTAssertTrue(app.buttons["Messages"].isHittable)
+        app.tabBars.buttons["Profile"].tap()
+        let messages = app.buttons["profile.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 10))
+        XCTAssertTrue(messages.isHittable)
+        app.tabBars.buttons["Live"].tap()
+        XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 10))
         app.buttons["live.draw"].tap()
         let visibleArea = app.buttons["Use visible area"]
         XCTAssertTrue(visibleArea.waitForExistence(timeout: 5))
@@ -284,7 +313,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(retainedPin.isHittable)
         capture("search-area-committed")
         retainedPin.tap()
-        let open = app.buttons.matching(NSPredicate(format: "label == %@", "Open")).firstMatch
+        let open = app.buttons["live.placePreview.open"]
         XCTAssertTrue(open.waitForExistence(timeout: 5))
         XCTAssertTrue(open.isHittable)
         open.tap()
@@ -347,8 +376,8 @@ final class LiveExperienceUITests: XCTestCase {
         capture("live-buffered-page-exhausted")
     }
 
-    /// No scroll precedes this tap: an empty authorized page leaves only its
-    /// explicit continuation, so automatic bottom scrolling cannot satisfy it.
+    /// Retain the historical case identifier while checking the new automatic
+    /// continuation through an empty authorized page and its older stage.
     func testLiveManualLoadMoreContinuesAnEmptyAuthorizedPage() throws {
         executionTimeAllowance = 300
         let app = launch(extraArguments: ["-WanderFeedPaginationUITest", "-WanderLiveManualPaginationUITest"])
@@ -356,32 +385,30 @@ final class LiveExperienceUITests: XCTestCase {
         waitLiveCount(0, in: app)
         waitFeedCount(0, in: app)
         let feed = app.scrollViews["feed.places.scroll"]
-        let more = app.buttons.matching(identifier: "feed.filteredLoadMore").element
-        XCTAssertTrue(more.waitForExistence(timeout: 5))
-        let frame = try more.snapshot().frame
-        let scrollFrame = try feed.snapshot().frame.intersection(app.frame)
-        let tabs = app.tabBars.firstMatch
-        let bottom = tabs.exists && tabs.isHittable ? min(scrollFrame.maxY, tabs.frame.minY) : scrollFrame.maxY
-        let visible = CGRect(x: scrollFrame.minX + 8, y: scrollFrame.minY + 8,
-                             width: scrollFrame.width - 16, height: bottom - scrollFrame.minY - 16)
-        XCTAssertTrue(visible.width > 0 && visible.height > 0 && frame.width > 0 && frame.height > 0
-                      && visible.contains(frame), "The entire manual control must be visible without scrolling.")
-        XCTAssertTrue(more.isEnabled && more.isHittable)
-        XCTAssertFalse(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists,
+                       "An empty authorized page must continue automatically without a manual control.")
+        scrollToAutomaticPage(in: app, feed: feed, previousCount: 0)
         XCTAssertFalse(app.descendants(matching: .any)["feed.loadMoreRetry"].firstMatch.exists)
-        capture("live-empty-authorized-page-with-continuation")
-        more.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.waitForExistence(timeout: 5))
+        capture("live-empty-authorized-page-automatically-loading")
         waitFeedCount(1, in: app, timeout: 15)
         waitLiveCount(1, in: app)
         XCTAssertTrue(app.descendants(matching: .any)["feed.activity.fixture-live-manual-next.postcard"].firstMatch.exists)
+        // The fixture's older page overlaps the same event ID. Exhausting it
+        // must retain one authorized card, rather than duplicate or drop it.
+        let older = app.descendants(matching: .any)["feed.olderActivity"].firstMatch
+        XCTAssertTrue(older.waitForExistence(timeout: 15))
+        let terminal = app.descendants(matching: .any)["feed.allActivity"].firstMatch
+        revealFully(terminal, in: feed, app: app)
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15))
+        waitFeedCount(1, in: app)
+        waitLiveCount(1, in: app)
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.exists)
         XCTAssertFalse(app.descendants(matching: .any)["feed.loadMoreRetry"].firstMatch.exists)
         feed.swipeUp()
         waitFeedCount(1, in: app)
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists)
-        capture("live-manual-page-exhausted")
+        capture("live-empty-page-and-older-stage-exhausted")
     }
 
     private func scrollToAutomaticPage(in app: XCUIApplication, feed: XCUIElement, previousCount: Int) {
