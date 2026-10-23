@@ -1,0 +1,832 @@
+{
+  "round": 8,
+  "svgSize": [
+    2200,
+    1050
+  ],
+  "pngSize": [
+    1600,
+    764
+  ],
+  "palettes": {
+    "signal": "#F05A3C",
+    "oxide": "#A45B42"
+  },
+  "font": ".NewYork-Medium",
+  "textColor": "#E6DDCD",
+  "glyphPathsSha256": "765bfc599ffa8635f00578f07df8d62d5dfad8cd7885bd0180243e6952004f9d",
+  "tracking": 26,
+  "sourceCopies": [
+    {
+      "source": 34,
+      "file": "source34.png",
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de"
+    },
+    {
+      "source": 35,
+      "file": "source35.png",
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded"
+    },
+    {
+      "source": 36,
+      "file": "source36.png",
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0"
+    }
+  ],
+  "warmTreatment": "Approximate, source-aware color match from source36 toward source34. A luminance-dependent RGB lookup is applied with native SVG filter primitives; geometry, faces, child and source alpha silhouette are retained. This is a tonal approximation, not a redrawn sculpture or exact photographic match.",
+  "directions": [
+    {
+      "id": 46,
+      "family": "34",
+      "reference": true,
+      "title": "Retained warm editorial reference",
+      "source": 34,
+      "files": [
+        {
+          "palette": "signal",
+          "png": "46-tall-signal.png",
+          "svg": "46-tall-signal.svg",
+          "geometry": {
+            "statue": {
+              "height": 525,
+              "width": 355.6149732620321,
+              "x": 311.4726350282267,
+              "y": 205,
+              "crop": [
+                188,
+                154,
+                380,
+                561
+              ]
+            },
+            "letters": {
+              "height": 420,
+              "width": 1187.4397566815144,
+              "x": 701.0876082902588,
+              "baseline": 730,
+              "scale": 0.5838396436525612
+            },
+            "gap": 34,
+            "wordWidth": 1577.0547299435466,
+            "base": {
+              "x": 251.4726350282267,
+              "y": 770,
+              "width": 1697.0547299435466,
+              "height": 110,
+              "inscriptionWidth": 290,
+              "rightInset": 48
+            }
+          }
+        },
+        {
+          "palette": "oxide",
+          "png": "46-tall-oxide.png",
+          "svg": "46-tall-oxide.svg",
+          "geometry": {
+            "statue": {
+              "height": 525,
+              "width": 355.6149732620321,
+              "x": 311.4726350282267,
+              "y": 205,
+              "crop": [
+                188,
+                154,
+                380,
+                561
+              ]
+            },
+            "letters": {
+              "height": 420,
+              "width": 1187.4397566815144,
+              "x": 701.0876082902588,
+              "baseline": 730,
+              "scale": 0.5838396436525612
+            },
+            "gap": 34,
+            "wordWidth": 1577.0547299435466,
+            "base": {
+              "x": 251.4726350282267,
+              "y": 770,
+              "width": 1697.0547299435466,
+              "height": 110,
+              "inscriptionWidth": 290,
+              "rightInset": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "family": "36",
+      "title": "Original36 /46 lettering",
+      "source": 36,
+      "files": [
+        {
+          "palette": "signal",
+          "png": "54-tall-signal.png",
+          "svg": "54-tall-signal.svg",
+          "geometry": {
+            "statue": {
+              "height": 525,
+              "width": 378.64208633093523,
+              "x": 299.9590784937752,
+              "y": 205,
+              "crop": [
+                111,
+                82,
+                401,
+                556
+              ]
+            },
+            "letters": {
+              "height": 420,
+              "width": 1187.4397566815144,
+              "x": 712.6011648247104,
+              "baseline": 730,
+              "scale": 0.5838396436525612
+            },
+            "gap": 34,
+            "wordWidth": 1600.0818430124496,
+            "base": {
+              "x": 239.95907849377522,
+              "y": 770,
+              "width": 1720.0818430124496,
+              "height": 110,
+              "inscriptionWidth": 290,
+              "rightInset": 48
+            }
+          }
+        },
+        {
+          "palette": "oxide",
+          "png": "54-tall-oxide.png",
+          "svg": "54-tall-oxide.svg",
+          "geometry": {
+            "statue": {
+              "height": 525,
+              "width": 378.64208633093523,
+              "x": 299.9590784937752,
+              "y": 205,
+              "crop": [
+                111,
+                82,
+                401,
+                556
+              ]
+            },
+            "letters": {
+              "height": 420,
+              "width": 1187.4397566815144,
+              "x": 712.6011648247104,
+              "baseline": 730,
+              "scale": 0.5838396436525612
+            },
+            "gap": 34,
+            "wordWidth": 1600.0818430124496,
+            "base": {
+              "x": 239.95907849377522,
+              "y": 770,
+              "width": 1720.0818430124496,
+              "height": 110,
+              "inscriptionWidth": 290,
+              "rightInset": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "family": "36-warm",
+      "title": "Warmer36 /46 lettering",
+      "source": 36,
+      "files": [
+        {
+          "palette": "signal",
+          "png": "55-tall-signal.png",
+          "svg": "55-tall-signal.svg",
+          "geometry": {
+            "statue": {
+              "height": 525,
+              "width": 378.64208633093523,
+              "x": 299.9590784937752,
+              "y": 205,
+              "crop": [
+                111,
+                82,
+                401,
+                556
+              ]
+            },
+            "letters": {
+              "height": 420,
+              "width": 1187.4397566815144,
+              "x": 712.6011648247104,
+              "baseline": 730,
+              "scale": 0.5838396436525612
+            },
+            "gap": 34,
+            "wordWidth": 1600.0818430124496,
+            "base": {
+              "x": 239.95907849377522,
+              "y": 770,
+              "width": 1720.0818430124496,
+              "height": 110,
+              "inscriptionWidth": 290,
+              "rightInset": 48
+            }
+          }
+        },
+        {
+          "palette": "oxide",
+          "png": "55-tall-oxide.png",
+          "svg": "55-tall-oxide.svg",
+          "geometry": {
+            "statue": {
+              "height": 525,
+              "width": 378.64208633093523,
+              "x": 299.9590784937752,
+              "y": 205,
+              "crop": [
+                111,
+                82,
+                401,
+                556
+              ]
+            },
+            "letters": {
+              "height": 420,
+              "width": 1187.4397566815144,
+              "x": 712.6011648247104,
+              "baseline": 730,
+              "scale": 0.5838396436525612
+            },
+            "gap": 34,
+            "wordWidth": 1600.0818430124496,
+            "base": {
+              "x": 239.95907849377522,
+              "y": 770,
+              "width": 1720.0818430124496,
+              "height": 110,
+              "inscriptionWidth": 290,
+              "rightInset": 48
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "family": "34",
+      "source": 34,
+      "base": "long",
+      "palette": "signal",
+      "icon": "icon-34-long-signal.png",
+      "social": "social-34-long-signal.png",
+      "svg": "icon-34-long-signal.svg",
+      "socialSvg": "social-34-long-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 413.19073083778966,
+          "x": 305.40463458110514,
+          "y": 160,
+          "crop": [
+            188,
+            154,
+            380,
+            561
+          ]
+        },
+        "base": {
+          "width": 588,
+          "height": 61,
+          "x": 218,
+          "y": 794,
+          "inscriptionWidth": 150,
+          "rightInset": 48
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "34",
+      "source": 34,
+      "base": "long",
+      "palette": "oxide",
+      "icon": "icon-34-long-oxide.png",
+      "social": "social-34-long-oxide.png",
+      "svg": "icon-34-long-oxide.svg",
+      "socialSvg": "social-34-long-oxide.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 413.19073083778966,
+          "x": 305.40463458110514,
+          "y": 160,
+          "crop": [
+            188,
+            154,
+            380,
+            561
+          ]
+        },
+        "base": {
+          "width": 588,
+          "height": 61,
+          "x": 218,
+          "y": 794,
+          "inscriptionWidth": 150,
+          "rightInset": 48
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "34",
+      "source": 34,
+      "base": "compact",
+      "palette": "signal",
+      "icon": "icon-34-compact-signal.png",
+      "social": "social-34-compact-signal.png",
+      "svg": "icon-34-compact-signal.svg",
+      "socialSvg": "social-34-compact-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 413.19073083778966,
+          "x": 305.40463458110514,
+          "y": 160,
+          "crop": [
+            188,
+            154,
+            380,
+            561
+          ]
+        },
+        "base": {
+          "width": 413.19073083778966,
+          "height": 61,
+          "x": 305.40463458110514,
+          "y": 794,
+          "inscriptionWidth": 105.40579868310961,
+          "rightInset": 33.72985557859507
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "34",
+      "source": 34,
+      "base": "compact",
+      "palette": "oxide",
+      "icon": "icon-34-compact-oxide.png",
+      "social": "social-34-compact-oxide.png",
+      "svg": "icon-34-compact-oxide.svg",
+      "socialSvg": "social-34-compact-oxide.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 413.19073083778966,
+          "x": 305.40463458110514,
+          "y": 160,
+          "crop": [
+            188,
+            154,
+            380,
+            561
+          ]
+        },
+        "base": {
+          "width": 413.19073083778966,
+          "height": 61,
+          "x": 305.40463458110514,
+          "y": 794,
+          "inscriptionWidth": 105.40579868310961,
+          "rightInset": 33.72985557859507
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "34",
+      "source": 34,
+      "base": "none",
+      "palette": null,
+      "icon": "icon-34-none.png",
+      "social": "social-34-none.png",
+      "svg": "icon-34-none.svg",
+      "socialSvg": "social-34-none.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 413.19073083778966,
+          "x": 305.40463458110514,
+          "y": 160,
+          "crop": [
+            188,
+            154,
+            380,
+            561
+          ]
+        },
+        "base": null
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "36",
+      "source": 36,
+      "base": "long",
+      "palette": "signal",
+      "icon": "icon-36-long-signal.png",
+      "social": "social-36-long-signal.png",
+      "svg": "icon-36-long-signal.svg",
+      "socialSvg": "social-36-long-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 588,
+          "height": 61,
+          "x": 218,
+          "y": 794,
+          "inscriptionWidth": 150,
+          "rightInset": 48
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "36",
+      "source": 36,
+      "base": "long",
+      "palette": "oxide",
+      "icon": "icon-36-long-oxide.png",
+      "social": "social-36-long-oxide.png",
+      "svg": "icon-36-long-oxide.svg",
+      "socialSvg": "social-36-long-oxide.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 588,
+          "height": 61,
+          "x": 218,
+          "y": 794,
+          "inscriptionWidth": 150,
+          "rightInset": 48
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "36",
+      "source": 36,
+      "base": "compact",
+      "palette": "signal",
+      "icon": "icon-36-compact-signal.png",
+      "social": "social-36-compact-signal.png",
+      "svg": "icon-36-compact-signal.svg",
+      "socialSvg": "social-36-compact-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 439.94604316546764,
+          "height": 61,
+          "x": 292.02697841726615,
+          "y": 794,
+          "inscriptionWidth": 112.23113346057849,
+          "rightInset": 35.91396270738511
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "36",
+      "source": 36,
+      "base": "compact",
+      "palette": "oxide",
+      "icon": "icon-36-compact-oxide.png",
+      "social": "social-36-compact-oxide.png",
+      "svg": "icon-36-compact-oxide.svg",
+      "socialSvg": "social-36-compact-oxide.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 439.94604316546764,
+          "height": 61,
+          "x": 292.02697841726615,
+          "y": 794,
+          "inscriptionWidth": 112.23113346057849,
+          "rightInset": 35.91396270738511
+        }
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "36",
+      "source": 36,
+      "base": "none",
+      "palette": null,
+      "icon": "icon-36-none.png",
+      "social": "social-36-none.png",
+      "svg": "icon-36-none.svg",
+      "socialSvg": "social-36-none.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": null
+      },
+      "description": "Original photographic statue colors"
+    },
+    {
+      "family": "36-warm",
+      "source": 36,
+      "base": "long",
+      "palette": "signal",
+      "icon": "icon-36-warm-long-signal.png",
+      "social": "social-36-warm-long-signal.png",
+      "svg": "icon-36-warm-long-signal.svg",
+      "socialSvg": "social-36-warm-long-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 588,
+          "height": 61,
+          "x": 218,
+          "y": 794,
+          "inscriptionWidth": 150,
+          "rightInset": 48
+        }
+      },
+      "description": "Native source-aware tonal approximation toward34; same36geometry"
+    },
+    {
+      "family": "36-warm",
+      "source": 36,
+      "base": "long",
+      "palette": "oxide",
+      "icon": "icon-36-warm-long-oxide.png",
+      "social": "social-36-warm-long-oxide.png",
+      "svg": "icon-36-warm-long-oxide.svg",
+      "socialSvg": "social-36-warm-long-oxide.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 588,
+          "height": 61,
+          "x": 218,
+          "y": 794,
+          "inscriptionWidth": 150,
+          "rightInset": 48
+        }
+      },
+      "description": "Native source-aware tonal approximation toward34; same36geometry"
+    },
+    {
+      "family": "36-warm",
+      "source": 36,
+      "base": "compact",
+      "palette": "signal",
+      "icon": "icon-36-warm-compact-signal.png",
+      "social": "social-36-warm-compact-signal.png",
+      "svg": "icon-36-warm-compact-signal.svg",
+      "socialSvg": "social-36-warm-compact-signal.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 439.94604316546764,
+          "height": 61,
+          "x": 292.02697841726615,
+          "y": 794,
+          "inscriptionWidth": 112.23113346057849,
+          "rightInset": 35.91396270738511
+        }
+      },
+      "description": "Native source-aware tonal approximation toward34; same36geometry"
+    },
+    {
+      "family": "36-warm",
+      "source": 36,
+      "base": "compact",
+      "palette": "oxide",
+      "icon": "icon-36-warm-compact-oxide.png",
+      "social": "social-36-warm-compact-oxide.png",
+      "svg": "icon-36-warm-compact-oxide.svg",
+      "socialSvg": "social-36-warm-compact-oxide.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": {
+          "width": 439.94604316546764,
+          "height": 61,
+          "x": 292.02697841726615,
+          "y": 794,
+          "inscriptionWidth": 112.23113346057849,
+          "rightInset": 35.91396270738511
+        }
+      },
+      "description": "Native source-aware tonal approximation toward34; same36geometry"
+    },
+    {
+      "family": "36-warm",
+      "source": 36,
+      "base": "none",
+      "palette": null,
+      "icon": "icon-36-warm-none.png",
+      "social": "social-36-warm-none.png",
+      "svg": "icon-36-warm-none.svg",
+      "socialSvg": "social-36-warm-none.svg",
+      "size": [
+        1024,
+        1024
+      ],
+      "background": "#080A09",
+      "geometry": {
+        "statue": {
+          "height": 610,
+          "width": 439.94604316546764,
+          "x": 292.02697841726615,
+          "y": 160,
+          "crop": [
+            111,
+            82,
+            401,
+            556
+          ]
+        },
+        "base": null
+      },
+      "description": "Native source-aware tonal approximation toward34; same36geometry"
+    }
+  ],
+  "warmRenderingNote": "The source image and SVG geometry are identical for 54 and 55. Native filter rasterization changes 132 edge alpha samples by at most 2/255; their silhouette at 50% alpha is identical. No spatial filtering or shape regeneration is applied."
+}

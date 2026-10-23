@@ -1,0 +1,812 @@
+{
+  "checkedAt": "2026-09-10T06:16:30.667Z",
+  "sourceCopies": [
+    {
+      "file": "source34.png",
+      "sha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de",
+      "byteIdentical": true
+    },
+    {
+      "file": "source35.png",
+      "sha256": "732850c25574d30dddd30866a5c37e6caba51abc5d0e29fbff104468cd435ded",
+      "byteIdentical": true
+    },
+    {
+      "file": "source36.png",
+      "sha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0",
+      "byteIdentical": true
+    }
+  ],
+  "references": [
+    {
+      "file": "46-tall-signal.png",
+      "byteIdentical": true
+    },
+    {
+      "file": "46-tall-signal.svg",
+      "byteIdentical": true
+    },
+    {
+      "file": "46-tall-oxide.png",
+      "byteIdentical": true
+    },
+    {
+      "file": "46-tall-oxide.svg",
+      "byteIdentical": true
+    }
+  ],
+  "wordmarks": [
+    {
+      "file": "46-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "statueHeight": 525,
+      "letterHeight": 420,
+      "gap": 34,
+      "exactCurrentGlyphs": true,
+      "textColor": "#E6DDCD",
+      "pass": true
+    },
+    {
+      "file": "46-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "statueHeight": 525,
+      "letterHeight": 420,
+      "gap": 34,
+      "exactCurrentGlyphs": true,
+      "textColor": "#E6DDCD",
+      "pass": true
+    },
+    {
+      "file": "54-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "statueHeight": 525,
+      "letterHeight": 420,
+      "gap": 34,
+      "exactCurrentGlyphs": true,
+      "textColor": "#E6DDCD",
+      "pass": true
+    },
+    {
+      "file": "54-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "statueHeight": 525,
+      "letterHeight": 420,
+      "gap": 34,
+      "exactCurrentGlyphs": true,
+      "textColor": "#E6DDCD",
+      "pass": true
+    },
+    {
+      "file": "55-tall-signal.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "statueHeight": 525,
+      "letterHeight": 420,
+      "gap": 34,
+      "exactCurrentGlyphs": true,
+      "textColor": "#E6DDCD",
+      "pass": true
+    },
+    {
+      "file": "55-tall-oxide.png",
+      "size": [
+        1600,
+        764
+      ],
+      "alpha": [
+        0,
+        255
+      ],
+      "statueHeight": 525,
+      "letterHeight": 420,
+      "gap": 34,
+      "exactCurrentGlyphs": true,
+      "textColor": "#E6DDCD",
+      "pass": true
+    }
+  ],
+  "icons": [
+    {
+      "file": "icon-34-long-signal.png",
+      "social": "social-34-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "long",
+      "baseWidth": 588,
+      "statueWidth": 413.19073083778966,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 449.1063348473277,
+      "minimumCircularMargin": 62.89366515267233,
+      "pass": true
+    },
+    {
+      "file": "icon-34-long-oxide.png",
+      "social": "social-34-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "long",
+      "baseWidth": 588,
+      "statueWidth": 413.19073083778966,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 449.1063348473277,
+      "minimumCircularMargin": 62.89366515267233,
+      "pass": true
+    },
+    {
+      "file": "icon-34-compact-signal.png",
+      "social": "social-34-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "compact",
+      "baseWidth": 413.19073083778966,
+      "statueWidth": 413.19073083778966,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 398.906630679411,
+      "minimumCircularMargin": 113.09336932058898,
+      "pass": true
+    },
+    {
+      "file": "icon-34-compact-oxide.png",
+      "social": "social-34-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "compact",
+      "baseWidth": 413.19073083778966,
+      "statueWidth": 413.19073083778966,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 398.906630679411,
+      "minimumCircularMargin": 113.09336932058898,
+      "pass": true
+    },
+    {
+      "file": "icon-34-none.png",
+      "social": "social-34-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "none",
+      "baseWidth": null,
+      "statueWidth": 413.19073083778966,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 355.77029105871105,
+      "minimumCircularMargin": 156.22970894128895,
+      "pass": true
+    },
+    {
+      "file": "icon-36-long-signal.png",
+      "social": "social-36-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "long",
+      "baseWidth": 588,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 449.1063348473277,
+      "minimumCircularMargin": 62.89366515267233,
+      "pass": true
+    },
+    {
+      "file": "icon-36-long-oxide.png",
+      "social": "social-36-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "long",
+      "baseWidth": 588,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 449.1063348473277,
+      "minimumCircularMargin": 62.89366515267233,
+      "pass": true
+    },
+    {
+      "file": "icon-36-compact-signal.png",
+      "social": "social-36-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "compact",
+      "baseWidth": 439.94604316546764,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 405.72466033013075,
+      "minimumCircularMargin": 106.27533966986925,
+      "pass": true
+    },
+    {
+      "file": "icon-36-compact-oxide.png",
+      "social": "social-36-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "compact",
+      "baseWidth": 439.94604316546764,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 405.72466033013075,
+      "minimumCircularMargin": 106.27533966986925,
+      "pass": true
+    },
+    {
+      "file": "icon-36-none.png",
+      "social": "social-36-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "none",
+      "baseWidth": null,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 354.5595859654623,
+      "minimumCircularMargin": 157.4404140345377,
+      "pass": true
+    },
+    {
+      "file": "icon-36-warm-long-signal.png",
+      "social": "social-36-warm-long-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "long",
+      "baseWidth": 588,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 449.1063348473277,
+      "minimumCircularMargin": 62.89366515267233,
+      "pass": true
+    },
+    {
+      "file": "icon-36-warm-long-oxide.png",
+      "social": "social-36-warm-long-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "long",
+      "baseWidth": 588,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 449.1063348473277,
+      "minimumCircularMargin": 62.89366515267233,
+      "pass": true
+    },
+    {
+      "file": "icon-36-warm-compact-signal.png",
+      "social": "social-36-warm-compact-signal.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "compact",
+      "baseWidth": 439.94604316546764,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 405.72466033013075,
+      "minimumCircularMargin": 106.27533966986925,
+      "pass": true
+    },
+    {
+      "file": "icon-36-warm-compact-oxide.png",
+      "social": "social-36-warm-compact-oxide.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "compact",
+      "baseWidth": 439.94604316546764,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 405.72466033013075,
+      "minimumCircularMargin": 106.27533966986925,
+      "pass": true
+    },
+    {
+      "file": "icon-36-warm-none.png",
+      "social": "social-36-warm-none.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha": [
+        255,
+        255
+      ],
+      "statueHeight": 610,
+      "statueY": 160,
+      "base": "none",
+      "baseWidth": null,
+      "statueWidth": 439.94604316546764,
+      "socialByteIdentical": true,
+      "maxArtworkRadius": 354.6977586622166,
+      "minimumCircularMargin": 157.3022413377834,
+      "pass": true
+    }
+  ],
+  "warmGeometry": [
+    {
+      "palette": "signal",
+      "alphaDifferences": 132,
+      "maxAlphaDelta": 2,
+      "silhouetteDifferences": 0,
+      "rgbChangedPixels": 63718,
+      "note": "Native SVG filter introduces at most 2/255 antialias rounding; threshold silhouette is identical.",
+      "pass": true
+    },
+    {
+      "palette": "oxide",
+      "alphaDifferences": 132,
+      "maxAlphaDelta": 2,
+      "silhouetteDifferences": 0,
+      "rgbChangedPixels": 63718,
+      "note": "Native SVG filter introduces at most 2/255 antialias rounding; threshold silhouette is identical.",
+      "pass": true
+    }
+  ],
+  "svgReferences": [
+    {
+      "svg": "46-tall-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "46-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "54-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "54-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "54-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "54-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "55-tall-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "55-tall-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "55-tall-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "55-tall-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-compact-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-compact-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-compact-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-compact-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-long-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-long-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-long-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-long-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-34-none.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-compact-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-compact-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-compact-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-compact-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-long-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-long-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-long-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-long-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-none.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-compact-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-compact-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-compact-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-compact-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-long-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-long-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-long-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-long-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "icon-36-warm-none.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-compact-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-compact-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-compact-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-compact-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-long-oxide.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-long-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-long-signal.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-long-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-34-none.svg",
+      "reference": "source34.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-compact-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-compact-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-compact-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-compact-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-long-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-long-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-long-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-long-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-none.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-compact-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-compact-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-compact-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-compact-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-long-oxide.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-long-oxide.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-long-signal.svg",
+      "reference": "source36.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-long-signal.svg",
+      "reference": "source35.png",
+      "exists": true
+    },
+    {
+      "svg": "social-36-warm-none.svg",
+      "reference": "source36.png",
+      "exists": true
+    }
+  ],
+  "complete": true
+}

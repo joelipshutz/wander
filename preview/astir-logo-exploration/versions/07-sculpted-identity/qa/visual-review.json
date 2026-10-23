@@ -1,0 +1,18 @@
+{
+  "date": "2026-09-09",
+  "reviewed": [
+    "qa/splash-grid-ink.png",
+    "qa/splash-grid-light.png",
+    "build/flat-contact.png",
+    "build/social-contact.png",
+    "assets/49-equal-mono.png"
+  ],
+  "findings": [
+    "All eight lettering directions appear in both native iPhone composition sheets.",
+    "Equal-height statue and STIR align visually; narrower alternatives remain legible.",
+    "Dark charcoal light-study letters separate clearly from cool white.",
+    "Black square and circular icon compositions retain the statue and foundation.",
+    "Transparent native Photoshop cutouts preserve four letter shapes and open R counters."
+  ],
+  "method": "Native PNG/SVG rendering and visual inspection. No interactive browser or iOS runtime verification."
+}

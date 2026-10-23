@@ -1,0 +1,605 @@
+{
+  "checkedAt": "2026-09-09T22:43:54.032575+00:00",
+  "scope": "Archive preservation, native SVG/image assets, local references, JavaScript syntax, and portable packaging. Review-page interactive browser rendering was blocked by the browser automation file URL policy.",
+  "priorVersions": {
+    "fileCountBefore": 213,
+    "fileCountAfter": 213,
+    "changed": [],
+    "missing": [],
+    "added": [],
+    "pass": true
+  },
+  "staticReferences": [
+    {
+      "element": "link",
+      "attribute": "href",
+      "value": "styles.css",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "#",
+      "status": "page-top"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "#wordmarks",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "#app",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "#sources",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/42-wordmark.svg",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "assets/42-wordmark.png",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "assets/42-wordmark.svg",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/42-wordmark.svg",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/42-wordmark.svg",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/icon42.png",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/icon42.png",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/icon42.png",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/icon42.png",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "assets/icon42.png",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "assets/source34.png",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/source34.png",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "assets/source36.png",
+      "status": "pass"
+    },
+    {
+      "element": "img",
+      "attribute": "src",
+      "value": "assets/source36.png",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "README.md",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "ASTIR-exploration-06.zip",
+      "status": "pass"
+    },
+    {
+      "element": "a",
+      "attribute": "href",
+      "value": "../../START-HERE.html",
+      "status": "pass"
+    },
+    {
+      "element": "script",
+      "attribute": "src",
+      "value": "review.js",
+      "status": "pass"
+    }
+  ],
+  "dynamicOptions": [
+    {
+      "id": 42,
+      "source": 34,
+      "references": [
+        {
+          "key": "wordmark",
+          "file": "42-wordmark.svg",
+          "exists": true
+        },
+        {
+          "key": "wordmarkPng",
+          "file": "42-wordmark.png",
+          "exists": true
+        },
+        {
+          "key": "icon",
+          "file": "icon42.svg",
+          "exists": true
+        },
+        {
+          "key": "iconPng",
+          "file": "icon42.png",
+          "exists": true
+        },
+        {
+          "key": "sourceFile",
+          "file": "source34.png",
+          "exists": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": 43,
+      "source": 36,
+      "references": [
+        {
+          "key": "wordmark",
+          "file": "43-wordmark.svg",
+          "exists": true
+        },
+        {
+          "key": "wordmarkPng",
+          "file": "43-wordmark.png",
+          "exists": true
+        },
+        {
+          "key": "icon",
+          "file": "icon43.svg",
+          "exists": true
+        },
+        {
+          "key": "iconPng",
+          "file": "icon43.png",
+          "exists": true
+        },
+        {
+          "key": "sourceFile",
+          "file": "source36.png",
+          "exists": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": 44,
+      "source": 34,
+      "references": [
+        {
+          "key": "wordmark",
+          "file": "44-wordmark.svg",
+          "exists": true
+        },
+        {
+          "key": "wordmarkPng",
+          "file": "44-wordmark.png",
+          "exists": true
+        },
+        {
+          "key": "icon",
+          "file": "icon44.svg",
+          "exists": true
+        },
+        {
+          "key": "iconPng",
+          "file": "icon44.png",
+          "exists": true
+        },
+        {
+          "key": "sourceFile",
+          "file": "source34.png",
+          "exists": true
+        }
+      ],
+      "pass": true
+    },
+    {
+      "id": 45,
+      "source": 36,
+      "references": [
+        {
+          "key": "wordmark",
+          "file": "45-wordmark.svg",
+          "exists": true
+        },
+        {
+          "key": "wordmarkPng",
+          "file": "45-wordmark.png",
+          "exists": true
+        },
+        {
+          "key": "icon",
+          "file": "icon45.svg",
+          "exists": true
+        },
+        {
+          "key": "iconPng",
+          "file": "icon45.png",
+          "exists": true
+        },
+        {
+          "key": "sourceFile",
+          "file": "source36.png",
+          "exists": true
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "images": [
+    {
+      "file": "42-wordmark.png",
+      "size": [
+        2200,
+        1050
+      ],
+      "mode": "RGBA",
+      "alphaRange": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        105,
+        131,
+        2094,
+        948
+      ],
+      "expectedSize": [
+        2200,
+        1050
+      ],
+      "pass": true
+    },
+    {
+      "file": "43-wordmark.png",
+      "size": [
+        2200,
+        1050
+      ],
+      "mode": "RGBA",
+      "alphaRange": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        105,
+        130,
+        2094,
+        948
+      ],
+      "expectedSize": [
+        2200,
+        1050
+      ],
+      "pass": true
+    },
+    {
+      "file": "44-wordmark.png",
+      "size": [
+        2200,
+        1050
+      ],
+      "mode": "RGBA",
+      "alphaRange": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        105,
+        131,
+        2094,
+        948
+      ],
+      "expectedSize": [
+        2200,
+        1050
+      ],
+      "pass": true
+    },
+    {
+      "file": "45-wordmark.png",
+      "size": [
+        2200,
+        1050
+      ],
+      "mode": "RGBA",
+      "alphaRange": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        105,
+        130,
+        2094,
+        948
+      ],
+      "expectedSize": [
+        2200,
+        1050
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon42.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alphaRange": null,
+      "alphaBounds": null,
+      "expectedSize": [
+        1024,
+        1024
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon43.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alphaRange": null,
+      "alphaBounds": null,
+      "expectedSize": [
+        1024,
+        1024
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon44.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alphaRange": null,
+      "alphaBounds": null,
+      "expectedSize": [
+        1024,
+        1024
+      ],
+      "pass": true
+    },
+    {
+      "file": "icon45.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alphaRange": null,
+      "alphaBounds": null,
+      "expectedSize": [
+        1024,
+        1024
+      ],
+      "pass": true
+    },
+    {
+      "file": "source34.png",
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "alphaRange": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        111,
+        155,
+        1674,
+        847
+      ],
+      "expectedSize": null,
+      "pass": true
+    },
+    {
+      "file": "source36.png",
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "alphaRange": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        46,
+        82,
+        1737,
+        799
+      ],
+      "expectedSize": null,
+      "pass": true
+    }
+  ],
+  "sourceCopies": [
+    {
+      "source": 34,
+      "copy": "06-stone-type/assets/source34.png",
+      "copySha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de",
+      "identical": true,
+      "fullBackgroundReference": "02-wordmarks/assets/34-floating-white-foundation.png",
+      "fullBackgroundReferenceSha256": "07db47880b82e7145112852912aed20eb176574d9920f7a943f3c10dd256e4b0",
+      "original": "02-wordmarks/transparent/34-floating-white-foundation.png",
+      "originalSha256": "d25a6f38537c392fd9c71b230b5e6782112ef3e44554609005eaabcd572908de",
+      "note": "The preserved source copy is byte-identical to the existing transparent export, as documented in build/README.md; the separate original background image also remains unchanged under the prior-versions baseline."
+    },
+    {
+      "source": 36,
+      "copy": "06-stone-type/assets/source36.png",
+      "copySha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0",
+      "identical": true,
+      "fullBackgroundReference": "02-wordmarks/assets/36-monochrome-monument.png",
+      "fullBackgroundReferenceSha256": "d9ace8e8deda38a3d1023ac240ea5a9f14537b02d43772c581f8c7ff526a9b83",
+      "original": "02-wordmarks/transparent/36-monochrome-monument.png",
+      "originalSha256": "025135e168af9dda9234d3e07db9473f91557b3d5cddbe7ec72e1bf08cdaa4b0",
+      "note": "The preserved source copy is byte-identical to the existing transparent export, as documented in build/README.md; the separate original background image also remains unchanged under the prior-versions baseline."
+    }
+  ],
+  "svgValidation": [
+    {
+      "file": "42-wordmark.svg",
+      "validXml": true,
+      "embeddedImageCount": 2,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 4
+    },
+    {
+      "file": "43-wordmark.svg",
+      "validXml": true,
+      "embeddedImageCount": 2,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 4
+    },
+    {
+      "file": "44-wordmark.svg",
+      "validXml": true,
+      "embeddedImageCount": 2,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 4
+    },
+    {
+      "file": "45-wordmark.svg",
+      "validXml": true,
+      "embeddedImageCount": 2,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 4
+    },
+    {
+      "file": "icon42.svg",
+      "validXml": true,
+      "embeddedImageCount": 2,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 4
+    },
+    {
+      "file": "icon43.svg",
+      "validXml": true,
+      "embeddedImageCount": 1,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 3
+    },
+    {
+      "file": "icon44.svg",
+      "validXml": true,
+      "embeddedImageCount": 1,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 3
+    },
+    {
+      "file": "icon45.svg",
+      "validXml": true,
+      "embeddedImageCount": 2,
+      "externalImageReferences": [],
+      "liveTextElementCount": 0,
+      "pass": true,
+      "embeddedUseReferences": 4
+    }
+  ],
+  "scriptDomIds": {
+    "count": 18,
+    "missing": [],
+    "pass": true
+  },
+  "cssUrlReferences": [],
+  "contactSheetVisualReview": {
+    "file": "build/contact.png",
+    "inspected": true,
+    "blockingIssues": [],
+    "observations": [
+      "All four wordmarks retain clear upper and lower openings in the sculpture-A.",
+      "Signal foundation spans the full lockup with ONENESS visible at the right at large size.",
+      "At small icon sizes the sculpture silhouette remains distinct; ONENESS should be judged on the large lockup."
+    ]
+  },
+  "knownPendingPackaging": [],
+  "pass": true,
+  "javascriptSyntax": {
+    "command": "node --check review.js",
+    "pass": true
+  },
+  "portableArchive": {
+    "file": "ASTIR-exploration-06.zip",
+    "crcVerified": true,
+    "selfDownloadLinkOmittedInsideBundle": true
+  },
+  "interactivePageValidation": {
+    "performed": false,
+    "reason": "Browser automation policy blocked direct file URL navigation; no workaround attempted."
+  }
+}

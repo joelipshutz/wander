@@ -1,0 +1,254 @@
+[
+  {
+    "id": 48,
+    "size": [
+      1774,
+      887
+    ],
+    "hasAlpha": true,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "visibleFraction": 0.1963136575030282,
+    "components": [
+      {
+        "pixels": 84433,
+        "bounds": [
+          185,
+          156,
+          521,
+          702
+        ]
+      },
+      {
+        "pixels": 67500,
+        "bounds": [
+          544,
+          163,
+          915,
+          700
+        ]
+      },
+      {
+        "pixels": 50628,
+        "bounds": [
+          958,
+          164,
+          1128,
+          699
+        ]
+      },
+      {
+        "pixels": 106397,
+        "bounds": [
+          1177,
+          164,
+          1603,
+          699
+        ]
+      }
+    ],
+    "counterSample": [
+      1370,
+      315
+    ],
+    "counterAlpha": 0,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "pass": true
+  },
+  {
+    "id": 49,
+    "size": [
+      1774,
+      887
+    ],
+    "hasAlpha": true,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "visibleFraction": 0.1907059124088519,
+    "components": [
+      {
+        "pixels": 86402,
+        "bounds": [
+          291,
+          159,
+          610,
+          724
+        ]
+      },
+      {
+        "pixels": 60406,
+        "bounds": [
+          642,
+          167,
+          920,
+          716
+        ]
+      },
+      {
+        "pixels": 49288,
+        "bounds": [
+          999,
+          167,
+          1090,
+          716
+        ]
+      },
+      {
+        "pixels": 104021,
+        "bounds": [
+          1184,
+          165,
+          1507,
+          717
+        ]
+      }
+    ],
+    "counterSample": [
+      1320,
+      345
+    ],
+    "counterAlpha": 0,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "pass": true
+  },
+  {
+    "id": 52,
+    "size": [
+      1774,
+      887
+    ],
+    "hasAlpha": true,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "visibleFraction": 0.31930528528704105,
+    "components": [
+      {
+        "pixels": 140415,
+        "bounds": [
+          52,
+          131,
+          476,
+          783
+        ]
+      },
+      {
+        "pixels": 108840,
+        "bounds": [
+          504,
+          140,
+          938,
+          783
+        ]
+      },
+      {
+        "pixels": 76832,
+        "bounds": [
+          1039,
+          139,
+          1170,
+          783
+        ]
+      },
+      {
+        "pixels": 176395,
+        "bounds": [
+          1295,
+          132,
+          1726,
+          782
+        ]
+      }
+    ],
+    "counterSample": [
+      1490,
+      320
+    ],
+    "counterAlpha": 0,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "pass": true
+  },
+  {
+    "id": 53,
+    "size": [
+      1774,
+      887
+    ],
+    "hasAlpha": true,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "visibleFraction": 0.2992574694732507,
+    "components": [
+      {
+        "pixels": 124048,
+        "bounds": [
+          112,
+          154,
+          503,
+          758
+        ]
+      },
+      {
+        "pixels": 106289,
+        "bounds": [
+          515,
+          150,
+          910,
+          758
+        ]
+      },
+      {
+        "pixels": 77035,
+        "bounds": [
+          975,
+          155,
+          1136,
+          758
+        ]
+      },
+      {
+        "pixels": 163561,
+        "bounds": [
+          1241,
+          157,
+          1689,
+          758
+        ]
+      }
+    ],
+    "counterSample": [
+      1450,
+      330
+    ],
+    "counterAlpha": 0,
+    "cornerAlpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "pass": true
+  }
+]

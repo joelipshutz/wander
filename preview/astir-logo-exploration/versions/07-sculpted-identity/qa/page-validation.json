@@ -1,0 +1,22 @@
+{
+  "scope": "Static checks only; native review sheets are not browser screenshots.",
+  "allHtmlLocalLinksExist": true,
+  "uniqueHtmlIds": true,
+  "literalJsIdSelectorsPresent": true,
+  "directions": [
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53
+  ],
+  "wordmarkPngs": 96,
+  "wordmarkSvgs": 96,
+  "blackIconOptions": 6,
+  "socialOptions": 6,
+  "priorVersionFilesUnchanged": 256,
+  "interactiveBrowserVerified": false
+}
