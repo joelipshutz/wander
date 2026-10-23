@@ -145,8 +145,8 @@ begin
   -- Exact timestamp alone is insufficient: two candidate parent events must
   -- remain separate. No repair, guessed identity, or later visit borrowing.
   insert into public.feed_events(id,actor_user_id,event_type,user_place_id,place_id,occurred_at)
-    select competing_event,actor_user_id,event_type,user_place_id,place_id,occurred_at
-    from public.feed_events where id=source_event;
+    select competing_event,source.actor_user_id,source.event_type,source.user_place_id,source.place_id,source.occurred_at
+    from public.feed_events source where source.id=source_event;
   set local role authenticated;
   if exists(select 1 from public.feed_shared_visit_context(array[source_event,competing_event]))
     or exists(select 1 from public.shared_visit_posts(source_event))
