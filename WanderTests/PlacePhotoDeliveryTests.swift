@@ -324,3 +324,199 @@ private final class PrivacyPhotoSession: AuthSessionProviding {
     func supabaseAccessToken() async throws -> String { "test" }
     func refreshSupabaseAccessToken() async throws -> String { "test" }
 }
+
+
+@MainActor
+final class PlacePhotoManifestTests: XCTestCase {
+    func testExpiredManifestRefetchesProviderHours() async throws {
+        var now = Date(timeIntervalSince1970: 2_000_000_000)
+        let repository = ManifestTestPhotoRepository()
+        let backend = WanderBackend(placePhotoRepository: repository, photoMetadataNow: { now })
+        let request = manifestRequest("freshness").metadataOnly()
+        let first = try await backend.placePhoto(for: request)
+        XCTAssertEqual(first.providerOpenNow, true)
+        now.addTimeInterval(299)
+        _ = try await backend.placePhoto(for: request)
+        XCTAssertEqual(repository.requestCount, 1)
+        now.addTimeInterval(1)
+        XCTAssertNil(backend.cachedPlacePhoto(for: request))
+        repository.openNow = false
+        let refreshed = try await backend.placePhoto(for: request)
+        XCTAssertEqual(refreshed.providerOpenNow, false)
+        XCTAssertEqual(repository.requestCount, 2)
+        XCTAssertFalse(PlacePhotoManifestCachePolicy.isFresh(cachedAt: now, now: now.addingTimeInterval(-1)))
+    }
+
+    func testHoursLoadWithoutAnyAvailableImage() async throws {
+        let repository = ManifestTestPhotoRepository()
+        repository.photoMissing = true
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let request = manifestRequest("no-photo")
+        do {
+            _ = try await backend.placePhoto(for: request)
+            XCTFail("The missing image must remain unavailable")
+        } catch {}
+        let metadata = try await backend.placePhoto(for: request.metadataOnly())
+        var details = LivePlacePreviewProviderDetails()
+        details.receive(metadata)
+        XCTAssertEqual(details.hours?.statusText, "Open")
+        XCTAssertTrue(metadata.photoURLString.isEmpty)
+    }
+
+    func testLatePreviousAccountMetadataCannotBePublishedOrCached() async throws {
+        let session = PrivacyPhotoSession(), gate = PhotoManifestTestGate()
+        let repository = ManifestTestPhotoRepository()
+        repository.gate = gate
+        let backend = WanderBackend(placePhotoRepository: repository, photoAuthSession: session)
+        let request = manifestRequest("account-change")
+        let task = Task { @MainActor in try await backend.placePhoto(for: request) }
+        await gate.waitUntilStarted()
+        session.state = .signedIn(AuthSession(userID: "second", displayName: nil, handle: nil))
+        gate.release()
+        do { _ = try await task.value; XCTFail("Old account result must be rejected") }
+        catch is CancellationError {} catch { XCTFail("Unexpected error") }
+        XCTAssertNil(backend.cachedPlacePhoto(for: request))
+        repository.gate = nil
+        _ = try await backend.placePhoto(for: request)
+        XCTAssertEqual(repository.requestCount, 2)
+    }
+
+    func testLatePreviousAccountBatchCannotBePublishedOrCached() async throws {
+        let session = PrivacyPhotoSession(), gate = PhotoManifestTestGate()
+        let repository = ManifestTestPhotoRepository()
+        repository.gate = gate
+        let backend = WanderBackend(placePhotoRepository: repository, photoAuthSession: session)
+        let request = manifestRequest("batch-account-change")
+        let task = Task { @MainActor in try await backend.placePhotos(for: [request]) }
+        await gate.waitUntilStarted()
+        session.state = .signedIn(AuthSession(userID: "second", displayName: nil, handle: nil))
+        gate.release()
+        do { _ = try await task.value; XCTFail("Old account batch must be rejected") }
+        catch is CancellationError {} catch { XCTFail("Unexpected error") }
+        XCTAssertNil(backend.cachedPlacePhoto(for: request))
+    }
+
+    func testLiveDefaultPublishesReadyPinWhileSlowSiblingWaitsAndRejectsCancelledSubscriber() async {
+        let gate = PhotoManifestTestGate(), repository = ManifestTestPhotoRepository()
+        repository.gate = gate
+        repository.heldName = "slow"
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let slow = Task { @MainActor in
+            await LivePinPhotoResolver.resolve(request: self.manifestRequest("slow"),
+                authorizationScopeKey: "viewer", backend: backend, retryDelayNanoseconds: 0)
+        }
+        var readyFinished = false
+        let ready = Task { @MainActor in
+            let photo = await LivePinPhotoResolver.resolve(request: self.manifestRequest("ready"),
+                authorizationScopeKey: "viewer", backend: backend, retryDelayNanoseconds: 0)
+            readyFinished = true
+            return photo
+        }
+        await gate.waitUntilStarted()
+        // Both requests enter the production debounce together. Give ready work
+        // a bounded window, then release the gate even if independence regresses.
+        for _ in 0..<100 {
+            if readyFinished { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(readyFinished, "Ready pins must publish before the held pin resumes")
+        XCTAssertLessThanOrEqual(repository.maximumActiveBatches, 6)
+        XCTAssertTrue(repository.batchSizes.allSatisfy { $0 == 1 })
+        slow.cancel()
+        gate.release()
+        let readyPhoto = await ready.value, cancelledPhoto = await slow.value
+        XCTAssertNotNil(readyPhoto)
+        XCTAssertNil(cancelledPhoto)
+    }
+
+    func testExpiredPreviewHoursClearBeforeAnUnsuccessfulRefresh() async throws {
+        var now = Date(timeIntervalSince1970: 2_000_000_000)
+        let repository = ManifestTestPhotoRepository()
+        let backend = WanderBackend(placePhotoRepository: repository, photoMetadataNow: { now })
+        let request = manifestRequest("preview-freshness").metadataOnly()
+        var details = LivePlacePreviewProviderDetails()
+        details.receive(try await backend.placePhoto(for: request))
+        details.prepareForRefresh(cached: backend.cachedPlacePhoto(for: request))
+        XCTAssertEqual(details.hours?.statusText, "Open")
+        now.addTimeInterval(300)
+        details.prepareForRefresh(cached: backend.cachedPlacePhoto(for: request))
+        XCTAssertNil(details.hours, "A failed refresh must not leave expired hours on screen")
+    }
+
+    func testBatchConcurrencyStaysBoundedAcrossManyExpandedPins() async {
+        let repository = ManifestTestPhotoRepository()
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let tasks = (0..<15).map { index in
+            Task { @MainActor in
+                await LivePinPhotoResolver.resolve(request: self.manifestRequest("pin-\(index)"),
+                    authorizationScopeKey: "viewer", backend: backend, retryDelayNanoseconds: 0)
+            }
+        }
+        var photos = 0
+        for task in tasks { if await task.value != nil { photos += 1 } }
+        XCTAssertEqual(photos, 15)
+        XCTAssertLessThanOrEqual(repository.maximumActiveBatches, 6)
+        XCTAssertTrue(repository.batchSizes.allSatisfy { $0 == 1 })
+    }
+
+    private func manifestRequest(_ name: String) -> PlacePhotoRequest {
+        PlacePhotoRequest(placeID: name, name: name, address: nil, latitude: 34, longitude: -118,
+                          sourceProvider: "google", sourceProviderPlaceID: name, renderVariant: .listThumbnail)
+    }
+}
+
+@MainActor
+private final class ManifestTestPhotoRepository: PlacePhotoRepository {
+    var requestCount = 0
+    var photoMissing = false
+    var openNow = true
+    var gate: PhotoManifestTestGate?
+    var heldName: String?
+    var activeBatches = 0
+    var maximumActiveBatches = 0
+    var batchSizes: [Int] = []
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        requestCount += 1
+        if let gate, heldName == nil || heldName == request.name { await gate.wait() }
+        if photoMissing && request.requiresPhoto { throw WanderRemoteError.invalidResponse("photo_not_found") }
+        return PlacePhoto(provider: "google_places", providerPlaceID: request.name, providerOpenNow: openNow,
+            photoURLString: request.requiresPhoto ? "https://example.com/photo" : "", width: nil, height: nil,
+            authorName: nil, authorProfileURLString: nil, authorAvatarURLString: nil,
+            sourcePhotoURLString: nil, flagContentURLString: nil, storageBucket: nil, storagePath: nil, localAssetRef: nil)
+    }
+    func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        activeBatches += 1
+        maximumActiveBatches = max(maximumActiveBatches, activeBatches)
+        batchSizes.append(requests.count)
+        defer { activeBatches -= 1 }
+        await Task.yield()
+        var photos: [PlacePhotoBatchResult] = []
+        for request in requests {
+            photos.append(PlacePhotoBatchResult(canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                                               photo: try await photo(for: request)))
+        }
+        return photos
+    }
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.notConfigured
+    }
+    func imageData(for photo: PlacePhoto) async throws -> Data { throw WanderRemoteError.notConfigured }
+}
+
+@MainActor
+private final class PhotoManifestTestGate {
+    private var waiting: CheckedContinuation<Void, Never>?
+    private var started: CheckedContinuation<Void, Never>?
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            waiting = continuation
+            started?.resume(); started = nil
+        }
+    }
+    func waitUntilStarted() async {
+        if waiting != nil { return }
+        await withCheckedContinuation { started = $0 }
+    }
+    func release() { waiting?.resume(); waiting = nil }
+}

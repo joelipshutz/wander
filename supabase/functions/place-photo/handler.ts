@@ -154,17 +154,29 @@ async function handleBatchRequest(
     )
     : new Map<string, CachedPhotoRow>();
 
-  const resolved = await mapWithConcurrency(keyedInputs, 4, async (item) => ({
-    index: item.index,
-    resolution: await resolvePhotoPayload(
-      item.input,
-      supabase,
-      dependencies,
-      item.cacheKey,
-      cachedRows.get(item.cacheKey) ?? null,
-      true,
-    ),
-  }));
+  const resolved = await mapWithConcurrency(keyedInputs, 4, async (item) => {
+    try {
+      return {
+        index: item.index,
+        resolution: await resolvePhotoPayload(
+          item.input,
+          supabase,
+          dependencies,
+          item.cacheKey,
+          cachedRows.get(item.cacheKey) ?? null,
+          item.input.requiresPhoto,
+        ),
+      };
+    } catch {
+      // One provider timeout must not discard successful sibling manifests.
+      // Preserve a per-item failure without logging request/place content.
+      console.warn("place_photo_batch_item_failed");
+      return {
+        index: item.index,
+        resolution: { status: 503, error: "provider_unavailable" } as PlacePhotoResolution,
+      };
+    }
+  });
   const resolutionsByIndex = new Map(
     resolved.map((item) => [item.index, item.resolution]),
   );
@@ -228,7 +240,9 @@ async function resolvePhotoPayload(
             placePayload(refreshedPlace),
             dependencies.now(),
           );
-          await upsertCacheRow(refreshedRow, supabase, dependencies);
+          await writeCachedMetadata(
+            cacheKey, placePayload(refreshedPlace), supabase, dependencies,
+          );
           const payload = await cachedPayload(
             refreshedRow,
             input,
@@ -266,7 +280,6 @@ async function resolvePhotoPayload(
   }
 
   const place = await resolvePlace(input, apiKey, dependencies);
-  const photo = place ? representativePhoto(place) : null;
   if (!place?.id) {
     return { status: 404, error: "photo_not_found" };
   }
@@ -278,8 +291,17 @@ async function resolvePhotoPayload(
     }
     return { status: 200, payload: basePayload };
   }
-  if (!photo?.name) {
-    return { status: 404, error: "photo_not_found" };
+  // A venue can have usable photos after a first item with missing source
+  // attribution. Keep provider order, but require each chosen image's own
+  // Maps link; a place/gallery URL does not identify the individual photo.
+  const photo = representativePhoto({
+    ...place,
+    photos: place.photos?.filter((item) => absoluteGoogleURL(item.googleMapsUri)),
+  });
+  const sourcePhotoURL = absoluteGoogleURL(photo?.googleMapsUri);
+  if (!photo?.name || !sourcePhotoURL) {
+    return { status: 404, error: representativePhoto(place)
+      ? "photo_attribution_unavailable" : "photo_not_found" };
   }
 
   const media = await fetchJSON<{ photoUri?: string }>(
@@ -294,10 +316,6 @@ async function resolvePhotoPayload(
   }
 
   const author = photo.authorAttributions?.[0];
-  const sourcePhotoURL = absoluteGoogleURL(photo.googleMapsUri);
-  if (!sourcePhotoURL) {
-    return { status: 404, error: "photo_attribution_unavailable" };
-  }
   const providerPayload: PlacePhotoPayload = {
     ...basePayload,
     photo_url: media.photoUri,
@@ -408,11 +426,12 @@ async function readCachedPhoto(
     endpoint.searchParams.set("cache_key", `eq.${cacheKey}`);
     endpoint.searchParams.set("select", "*");
     endpoint.searchParams.set("limit", "1");
-    const response = await dependencies.fetch(endpoint, {
+    const rows = await fetchWithTimeout(endpoint, {
       headers: serviceHeaders(supabase),
+    }, 6_000, dependencies, async (response) => {
+      if (!response.ok) throw new Error(`cache_read_status_${response.status}`);
+      return await response.json() as CachedPhotoRow[];
     });
-    if (!response.ok) throw new Error(`cache_read_status_${response.status}`);
-    const rows = await response.json() as CachedPhotoRow[];
     return rows[0] ?? null;
   } catch (error) {
     console.warn(
@@ -438,13 +457,12 @@ async function readCachedPhotos(
     );
     endpoint.searchParams.set("cache_key", `in.(${uniqueKeys.join(",")})`);
     endpoint.searchParams.set("select", "*");
-    const response = await dependencies.fetch(endpoint, {
+    const rows = await fetchWithTimeout(endpoint, {
       headers: serviceHeaders(supabase),
+    }, 6_000, dependencies, async (response) => {
+      if (!response.ok) throw new Error(`cache_batch_read_status_${response.status}`);
+      return await response.json() as CachedPhotoRow[];
     });
-    if (!response.ok) {
-      throw new Error(`cache_batch_read_status_${response.status}`);
-    }
-    const rows = await response.json() as CachedPhotoRow[];
     return new Map(rows.map((row) => [row.cache_key, row]));
   } catch (error) {
     console.warn(
@@ -542,11 +560,22 @@ async function writeCachedMetadata(
   dependencies: PlacePhotoDependencies,
 ): Promise<void> {
   try {
-    await upsertCacheRow(
-      cacheRow(cacheKey, payload, dependencies.now()),
-      supabase,
-      dependencies,
-    );
+    // Metadata and image requests can finish concurrently. Updating only
+    // these columns preserves any image that the other request just cached.
+    await upsertCacheRow({
+      cache_key: cacheKey,
+      provider_place_id: payload.provider_place_id,
+      provider_primary_type: payload.provider_primary_type,
+      provider_types: payload.provider_types,
+      provider_rating: payload.provider_rating,
+      provider_user_rating_count: payload.provider_user_rating_count,
+      provider_open_now: payload.provider_open_now,
+      provider_next_open_time: payload.provider_next_open_time,
+      provider_next_close_time: payload.provider_next_close_time,
+      provider_utc_offset_minutes: payload.provider_utc_offset_minutes,
+      fetched_at: dependencies.now().toISOString(),
+      last_accessed_at: dependencies.now().toISOString(),
+    }, supabase, dependencies);
     console.log("place_photo_metadata_cache_stored");
   } catch (error) {
     console.warn(
@@ -625,13 +654,13 @@ function omittingStaleOpeningHours(row: CachedPhotoRow): CachedPhotoRow {
 }
 
 async function upsertCacheRow(
-  row: CachedPhotoRow,
+  row: Pick<CachedPhotoRow, "cache_key" | "provider_place_id" | "fetched_at"> & Partial<CachedPhotoRow>,
   supabase: SupabaseConfiguration,
   dependencies: PlacePhotoDependencies,
 ): Promise<void> {
   const endpoint = new URL(`${supabase.url}/rest/v1/google_place_photo_cache`);
   endpoint.searchParams.set("on_conflict", "cache_key");
-  const response = await dependencies.fetch(endpoint, {
+  await fetchWithTimeout(endpoint, {
     method: "POST",
     headers: {
       ...serviceHeaders(supabase),
@@ -639,15 +668,17 @@ async function upsertCacheRow(
       Prefer: "resolution=merge-duplicates,return=minimal",
     },
     body: JSON.stringify(row),
+  }, 6_000, dependencies, async (response) => {
+    await response.body?.cancel();
+    if (!response.ok) throw new Error(`cache_write_status_${response.status}`);
   });
-  if (!response.ok) throw new Error(`cache_write_status_${response.status}`);
 }
 
 async function downloadCacheableImage(
   url: string,
   dependencies: PlacePhotoDependencies,
 ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-  const response = await fetchWithTimeout(
+  return await fetchWithTimeout(
     url,
     {
       method: "GET",
@@ -655,30 +686,24 @@ async function downloadCacheableImage(
     },
     10_000,
     dependencies,
+    async (response) => {
+      if (!response.ok) throw new Error(`google_photo_download_status_${response.status}`);
+      const contentLength = Number(response.headers.get("content-length"));
+      if (Number.isFinite(contentLength) && contentLength > maximumCachedImageBytes) {
+        throw new Error("google_photo_too_large");
+      }
+      const contentType = response.headers.get("content-type")?.split(";", 1)[0]
+        ?.trim().toLowerCase();
+      if (!contentType || !["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+        throw new Error("google_photo_unsupported_content_type");
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (!bytes.byteLength || bytes.byteLength > maximumCachedImageBytes) {
+        throw new Error("google_photo_invalid_size");
+      }
+      return { bytes, contentType };
+    },
   );
-  if (!response.ok) {
-    throw new Error(`google_photo_download_status_${response.status}`);
-  }
-
-  const contentLength = Number(response.headers.get("content-length"));
-  if (
-    Number.isFinite(contentLength) && contentLength > maximumCachedImageBytes
-  ) {
-    throw new Error("google_photo_too_large");
-  }
-  const contentType = response.headers.get("content-type")?.split(";", 1)[0]
-    ?.trim().toLowerCase();
-  if (
-    !contentType ||
-    !["image/jpeg", "image/png", "image/webp"].includes(contentType)
-  ) {
-    throw new Error("google_photo_unsupported_content_type");
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.byteLength || bytes.byteLength > maximumCachedImageBytes) {
-    throw new Error("google_photo_invalid_size");
-  }
-  return { bytes, contentType };
 }
 
 async function uploadCachedImage(
@@ -687,7 +712,7 @@ async function uploadCachedImage(
   supabase: SupabaseConfiguration,
   dependencies: PlacePhotoDependencies,
 ): Promise<void> {
-  const response = await dependencies.fetch(
+  await fetchWithTimeout(
     `${supabase.url}/storage/v1/object/${cacheBucket}/${
       encodeStoragePath(objectPath)
     }`,
@@ -703,8 +728,13 @@ async function uploadCachedImage(
         type: image.contentType,
       }),
     },
+    10_000,
+    dependencies,
+    async (response) => {
+      await response.body?.cancel();
+      if (!response.ok) throw new Error(`cache_upload_status_${response.status}`);
+    },
   );
-  if (!response.ok) throw new Error(`cache_upload_status_${response.status}`);
 }
 
 async function signedStorageURL(
@@ -714,7 +744,7 @@ async function signedStorageURL(
   dependencies: PlacePhotoDependencies,
 ): Promise<string | null> {
   try {
-    const response = await dependencies.fetch(
+    const body = await fetchWithTimeout(
       `${supabase.url}/storage/v1/object/sign/${cacheBucket}/${
         encodeStoragePath(objectPath)
       }`,
@@ -726,12 +756,13 @@ async function signedStorageURL(
         },
         body: JSON.stringify(signedURLRequestBody(renderVariant)),
       },
+      6_000,
+      dependencies,
+      async (response) => {
+        if (!response.ok) throw new Error(`cache_sign_status_${response.status}`);
+        return await response.json() as { signedURL?: string; signedUrl?: string };
+      },
     );
-    if (!response.ok) throw new Error(`cache_sign_status_${response.status}`);
-    const body = await response.json() as {
-      signedURL?: string;
-      signedUrl?: string;
-    };
     const signedURL = cleanString(body.signedURL) ??
       cleanString(body.signedUrl);
     if (!signedURL) throw new Error("cache_sign_missing_url");
@@ -811,24 +842,37 @@ async function fetchJSON<Value>(
   init: RequestInit,
   dependencies: PlacePhotoDependencies,
 ): Promise<Value> {
-  const response = await fetchWithTimeout(url, init, 6_000, dependencies);
-  if (!response.ok) throw new Error(`google_places_status_${response.status}`);
-  return await response.json() as Value;
+  return await fetchWithTimeout(url, init, 6_000, dependencies, async (response) => {
+    if (!response.ok) throw new Error(`google_places_status_${response.status}`);
+    return await response.json() as Value;
+  });
 }
 
-async function fetchWithTimeout(
-  url: string,
+export async function fetchWithTimeout<Value>(
+  url: string | URL,
   init: RequestInit,
   timeoutMilliseconds: number,
   dependencies: PlacePhotoDependencies,
-): Promise<Response> {
+  consume: (response: Response) => Promise<Value>,
+): Promise<Value> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMilliseconds);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error("network_timeout"));
+    }, timeoutMilliseconds);
+  });
   try {
-    return await dependencies.fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
+    // Keep the deadline active through JSON/image body consumption, not just
+    // response headers. An upstream stall must release the caller's slot.
+    return await Promise.race([
+      (async () => consume(await dependencies.fetch(url, {
+        ...init,
+        signal: controller.signal,
+      })))(),
+      deadline,
+    ]);
   } finally {
     clearTimeout(timeout);
   }
@@ -840,7 +884,7 @@ async function hasValidSupabaseSession(
   dependencies: PlacePhotoDependencies,
 ): Promise<boolean> {
   try {
-    const response = await dependencies.fetch(
+    return await fetchWithTimeout(
       `${supabase.url}/rest/v1/rpc/current_profile`,
       {
         method: "POST",
@@ -851,8 +895,13 @@ async function hasValidSupabaseSession(
         },
         body: "{}",
       },
+      6_000,
+      dependencies,
+      async (response) => {
+        await response.body?.cancel();
+        return response.ok;
+      },
     );
-    return response.ok;
   } catch {
     return false;
   }

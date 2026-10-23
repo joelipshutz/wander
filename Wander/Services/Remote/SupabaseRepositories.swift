@@ -924,8 +924,18 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
             try Task.checkCancellation()
             posts.append(try await row.activity.activity(storage: storage))
         }
+        // Pending identity is supplied only by the existing owner-authorized
+        // context RPC. It never supplies an unaccepted member's contributions.
+        let contexts: [RemoteFeedSharedVisitContextDTO] = try await rpc.call(
+            "feed_shared_visit_context", params: ActivityEngagementSummariesParams(activityIDs: [activityID]))
+        try Task.checkCancellation()
+        guard let context = contexts.first(where: { $0.activityID == activityID && $0.groupID == first.groupID }) else { return nil }
+        guard let requestedActorID = rows.first(where: { $0.visitID == context.visitID })?.activity.actor.id else { return nil }
+        let memberIDs = Set(context.companions.filter { $0.status == .owner || $0.status == .accepted }.map { $0.profile.id })
+            .union([requestedActorID])
         return SharedVisitPostCollection(groupID: first.groupID,
-            commentActivityID: first.commentActivityID, posts: posts)
+            commentActivityID: first.commentActivityID, posts: posts.filter { memberIDs.contains($0.actor.id) },
+            companions: context.context.companions, visitIDs: rows.map(\.visitID))
     }
 
     func activity(id: String) async throws -> FeedActivity {

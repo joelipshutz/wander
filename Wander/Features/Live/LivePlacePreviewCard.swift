@@ -18,13 +18,13 @@ struct LivePlacePreviewCard: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
-    @State private var photo: PlacePhoto?
+    @State private var resolvedPhoto: ListPlaceResolvedPhoto?
+    @State private var resolvedPhotoKey: String?
     @State private var providerDetails = LivePlacePreviewProviderDetails()
     @State private var providerDetailsKey: String?
-    @State private var failedGooglePhotoID: String?
     @State private var photoViewer: LivePreviewPhotoRoute?
-    @State private var hydratedActivity: [String: FeedActivity] = [:]
-    @State private var unavailableActivityIDs: Set<String> = []
+    @State private var hydratedActivity: [FeedActivity] = []
+    @State private var hydratedActivityKey: String?
 
     init(place: VisiblePlace, activities: [FeedActivity], onOpen: @escaping () -> Void,
          onAdd: @escaping () -> Void, onShare: @escaping () -> Void,
@@ -54,10 +54,11 @@ struct LivePlacePreviewCard: View {
     }
 
     private var selectedActivity: [FeedActivity] {
-        LivePlacePreviewPresentation.recentActivity(activities, placeID: sheetPlace.id)
+        LivePlacePreviewPresentation.hydrationCandidates(activities, placeID: sheetPlace.id)
     }
     private var recentActivity: [FeedActivity] {
-        selectedActivity.filter { !unavailableActivityIDs.contains($0.id) }.map { hydratedActivity[$0.id] ?? $0 }
+        let rows = hydratedActivityKey == activityHydrationKey ? hydratedActivity : selectedActivity
+        return LivePlacePreviewPresentation.recentActivity(rows, placeID: sheetPlace.id)
     }
     private var activityHydrationKey: String {
         "\(sheetPlace.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoAccessRevision)|\(scenePhase)|"
@@ -70,7 +71,7 @@ struct LivePlacePreviewCard: View {
         providerDetailsKey == providerDetailsRequestKey ? providerDetails : LivePlacePreviewProviderDetails()
     }
     private var photoResolutionKey: String {
-        "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(backend.photoSessionRevision)|\(backend.photoAccessRevision)|\(scenePhase)|\(failedGooglePhotoID ?? "ready")"
+        "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(backend.photoSessionRevision)|\(backend.photoAccessRevision)|\(scenePhase)"
     }
 
     var body: some View {
@@ -89,7 +90,13 @@ struct LivePlacePreviewCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("live.placePreview")
         .task(id: photoResolutionKey) { await resolvePhoto() }
+        .task(id: "\(providerDetailsRequestKey)|\(scenePhase)") { await resolveProviderDetails() }
         .task(id: activityHydrationKey) { await hydrateSelectedActivity() }
+        .onDisappear {
+            if resolvedPhoto?.photo.requiresAccessCheck == true {
+                resolvedPhoto = nil; resolvedPhotoKey = nil
+            }
+        }
         .fullScreenCover(item: $photoViewer) { route in
             ActivityPhotoViewerScreen(context: route.context, initialMediaID: route.mediaID)
         }
@@ -103,15 +110,8 @@ struct LivePlacePreviewCard: View {
                 Image(systemName: "mappin.and.ellipse")
                     .font(.system(size: 54, weight: .light))
                     .foregroundStyle(brand.secondaryText.opacity(0.5))
-                if let photo {
-                    PlaceProfilePhotoImage(
-                        photo: photo,
-                        canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
-                        placeName: sheetPlace.name,
-                        photoRequest: sheetPlace.photoRequest,
-                        variant: .card,
-                        onLoadFailure: handlePhotoFailure
-                    )
+                if resolvedPhotoKey == photoResolutionKey, let resolvedPhoto {
+                    Image(uiImage: resolvedPhoto.image).resizable().scaledToFill()
                 }
             }
             .accessibilityHidden(true)
@@ -368,64 +368,59 @@ struct LivePlacePreviewCard: View {
 
     private func hydrateSelectedActivity() async {
         let key = activityHydrationKey
-        hydratedActivity = [:]; unavailableActivityIDs = []
+        hydratedActivity = []; hydratedActivityKey = key
         guard scenePhase == .active, auth.isSignedIn else { return }
-        // Resolve only the three visible preview rows. The map's full cursor
-        // enumeration intentionally avoids media and unrelated profile reads.
-        let candidates = selectedActivity
-        for event in candidates where UUID(uuidString: event.id) != nil && event.activityEngagementContext != nil {
-            let fresh = await store.activity(id: event.id, backend: backend, authSession: auth)
-            guard !Task.isCancelled, key == activityHydrationKey else { return }
-            guard let fresh, fresh.place?.place.id == sheetPlace.id,
-                  store.canDisplayLiveMapActivity(fresh), store.liveFeedQuery?.includes(fresh) ?? true else {
-                unavailableActivityIDs.insert(event.id)
-                continue
-            }
-            hydratedActivity[event.id] = fresh
-        }
+        // Candidate identity is independent of hydrated notes/media. Resolve a
+        // bounded prefix until three distinct, still-authorized rows are ready.
+        await LivePlacePreviewPresentation.hydrateRecentActivity(
+            selectedActivity, placeID: sheetPlace.id,
+            isCurrent: { key == activityHydrationKey },
+            resolve: { event in
+                guard UUID(uuidString: event.id) != nil else { return event }
+                guard event.activityEngagementContext != nil,
+                      let fresh = await store.activity(id: event.id, backend: backend, authSession: auth),
+                      store.canDisplayLiveMapActivity(fresh), store.liveFeedQuery?.includes(fresh) ?? true
+                else { return nil }
+                return fresh
+            },
+            onUpdate: { hydratedActivity = $0 }
+        )
     }
 
     private func resolvePhoto() async {
-        let detailsKey = providerDetailsRequestKey
-        if providerDetailsKey != detailsKey {
-            providerDetails = LivePlacePreviewProviderDetails()
-            providerDetailsKey = detailsKey
-        }
-        photo = nil
+        resolvedPhoto = nil; resolvedPhotoKey = nil
         guard scenePhase == .active else { return }
         let key = photoResolutionKey
         let request = sheetPlace.photoRequest.rendering(.card)
-        if let cached = backend.cachedPlacePhoto(for: request),
-           !(cached.isGooglePlacesPhoto && cached.providerPlaceID == failedGooglePhotoID) {
-            providerDetails.receive(cached)
-            photo = cached
-            return
+        let resolved = await LivePinPhotoResolver.resolveImage(request: request,
+            authorizationScopeKey: "\(store.currentUser.id)|\(backend.photoSessionRevision)|\(backend.photoAccessRevision)",
+            backend: backend, targetPixelSize: PlacePhotoRenderVariant.card.maximumPixelDimension ?? 1_440,
+            batcher: LivePinPhotoResolver.previewBatcher)
+        guard !Task.isCancelled, key == photoResolutionKey else { return }
+        resolvedPhoto = resolved; resolvedPhotoKey = key
+    }
+
+    private func resolveProviderDetails() async {
+        let key = providerDetailsRequestKey
+        if providerDetailsKey != key {
+            providerDetails = LivePlacePreviewProviderDetails()
+            providerDetailsKey = key
         }
+        guard scenePhase == .active else { return }
+        // Hours and ratings must load even when a venue has no usable photo.
+        let request = sheetPlace.photoRequest.metadataOnly()
+        let cached = backend.cachedPlacePhoto(for: request)
+        providerDetails.prepareForRefresh(cached: cached)
+        if cached != nil { return }
         do {
-            let candidate = try await backend.placePhoto(for: request)
-            try Task.checkCancellation()
-            guard key == photoResolutionKey else { return }
-            providerDetails.receive(candidate)
-            let resolved: PlacePhoto
-            if candidate.isGooglePlacesPhoto && candidate.providerPlaceID == failedGooglePhotoID {
-                resolved = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
-            } else {
-                resolved = candidate
-            }
-            try Task.checkCancellation()
-            guard key == photoResolutionKey else { return }
-            photo = resolved
+            let details = try await backend.placePhoto(for: request)
+            guard !Task.isCancelled, key == providerDetailsRequestKey else { return }
+            providerDetails.receive(details)
         } catch {
-            guard !Task.isCancelled, key == photoResolutionKey else { return }
-            photo = nil
+            // Unknown provider facts stay unknown; image failure is independent.
         }
     }
 
-    private func handlePhotoFailure(_ failedPhoto: PlacePhoto) {
-        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
-        if failedPhoto.isGooglePlacesPhoto { failedGooglePhotoID = failedPhoto.providerPlaceID }
-        else { photo = nil }
-    }
 }
 
 private struct LivePreviewPhotoRoute: Identifiable {
@@ -435,18 +430,78 @@ private struct LivePreviewPhotoRoute: Identifiable {
 }
 
 enum LivePlacePreviewPresentation {
-    static func recentActivity(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
-        var seen = Set<String>()
-        let matching = activities.filter {
-            $0.place?.place.id == placeID && seen.insert($0.id).inserted
+    static let maximumHydrationCandidates = 20
+    private static let maximumRecentActivity = 3
+
+    /// Map rows do not yet carry authoritative media. Only event identity and
+    /// ordering choose the hydration candidates; content dedup happens later.
+    static func hydrationCandidates(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
+        Array(sortedUniqueActivities(activities, placeID: placeID).prefix(maximumHydrationCandidates))
+    }
+
+    @MainActor
+    @discardableResult
+    static func hydrateRecentActivity(
+        _ activities: [FeedActivity], placeID: String,
+        isCurrent: @MainActor () -> Bool,
+        resolve: @MainActor (FeedActivity) async -> FeedActivity?,
+        onUpdate: @MainActor ([FeedActivity]) -> Void = { _ in }
+    ) async -> [FeedActivity] {
+        var accepted: [FeedActivity] = []
+        var rows: [FeedActivity] = []
+        for candidate in hydrationCandidates(activities, placeID: placeID) {
+            guard !Task.isCancelled, isCurrent() else { return [] }
+            let fresh = await resolve(candidate)
+            guard !Task.isCancelled, isCurrent() else { return [] }
+            if let fresh, fresh.place?.place.id == placeID { accepted.append(fresh) }
+            rows = recentActivity(accepted, placeID: placeID)
+            onUpdate(rows)
+            if rows.count == maximumRecentActivity { break }
         }
-        return Array(matching.sorted { lhs, rhs in
+        return rows
+    }
+
+    static func recentActivity(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
+        let matching = sortedUniqueActivities(activities, placeID: placeID)
+        let originals = Set(matching.filter {
+            $0.kind == .placeBeen || $0.kind == .placeWannaGo || $0.kind == .placeSaved
+        }.compactMap(listEchoKey))
+        var seenListEchoes = Set<ListEchoKey>()
+        return Array(matching.filter { activity in
+            // List additions can repeat their source save's note across lists.
+            // Keep the original event and every distinct visit/Wanna untouched.
+            guard activity.kind == .listItemAdded, let key = listEchoKey(activity) else { return true }
+            return !originals.contains(key) && seenListEchoes.insert(key).inserted
+        }.prefix(maximumRecentActivity))
+    }
+
+    private static func sortedUniqueActivities(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
+        var seen = Set<String>()
+        return activities.filter {
+            $0.place?.place.id == placeID && seen.insert($0.id).inserted
+        }.sorted { lhs, rhs in
             let lhsFollowed = lhs.actor.relationship == .follower || lhs.actor.relationship == .mutual
             let rhsFollowed = rhs.actor.relationship == .follower || rhs.actor.relationship == .mutual
             if lhsFollowed != rhsFollowed { return lhsFollowed }
             if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
             return lhs.id < rhs.id
-        }.prefix(3))
+        }
+    }
+
+    private struct ListEchoKey: Hashable {
+        let actorID: String
+        let placeID: String
+        let sourceID: String
+        let note: String
+        let mediaIDs: [String]
+    }
+
+    private static func listEchoKey(_ activity: FeedActivity) -> ListEchoKey? {
+        guard let place = activity.place,
+              let note = activity.note?.split(whereSeparator: { $0.isWhitespace }).joined(separator: " "),
+              !note.isEmpty else { return nil }
+        return ListEchoKey(actorID: activity.actor.id, placeID: place.place.id,
+            sourceID: place.userPlace.id, note: note, mediaIDs: Set(activity.media.map(\.id)).sorted())
     }
 
     static func emoji(for activity: FeedActivity) -> String {
@@ -480,6 +535,12 @@ enum LivePlacePreviewPresentation {
 /// The card resets this state for a different place or account/session.
 struct LivePlacePreviewProviderDetails {
     private(set) var photo: PlacePhoto?
+
+    mutating func prepareForRefresh(cached: PlacePhoto?) {
+        // An expired Open/Closed value must not survive a failed foreground refresh.
+        photo = nil
+        if let cached { receive(cached) }
+    }
 
     mutating func receive(_ photo: PlacePhoto) {
         guard photo.isGooglePlacesPhoto else { return }

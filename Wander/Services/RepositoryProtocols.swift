@@ -1103,6 +1103,13 @@ struct PlacePhotoRequest: Encodable, Equatable {
         )
     }
 
+    func metadataOnly() -> PlacePhotoRequest {
+        PlacePhotoRequest(placeID: placeID, name: name, address: address,
+            latitude: latitude, longitude: longitude, sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID, requiresPhoto: false,
+            eligibleUserIDs: eligibleUserIDs, renderVariant: renderVariant)
+    }
+
     func rendering(_ variant: PlacePhotoRenderVariant) -> PlacePhotoRequest {
         PlacePhotoRequest(
             placeID: placeID,

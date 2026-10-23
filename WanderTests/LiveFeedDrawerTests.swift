@@ -39,6 +39,15 @@ final class LiveFeedDrawerTests: XCTestCase {
         XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 30, predicted: 5, heights: heights), 1)
     }
 
+    func testShortHighVelocityFlickNeverSkipsTheNextDetent() {
+        for projected: CGFloat in [300, 900, 5_000] {
+            XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -56, predicted: -projected, heights: heights), 1)
+            XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 56, predicted: projected, heights: heights), 1)
+            XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -56, predicted: -projected, heights: heights), 2)
+            XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 56, predicted: projected, heights: heights), 0)
+        }
+    }
+
     func testLongDragChoosesADetentBeyondTheFingerInsteadOfReturningTowardItsStart() {
         XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -600, predicted: -650, heights: heights), 2)
         XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 600, predicted: 650, heights: heights), 0)

@@ -1,4 +1,4 @@
-import { handleRequest, type PlacePhotoDependencies } from "./handler.ts";
+import { fetchWithTimeout, handleRequest, type PlacePhotoDependencies } from "./handler.ts";
 
 const fixedNow = new Date("2026-08-14T05:30:00.000Z");
 
@@ -392,4 +392,259 @@ function assertStartsWith(actual: string, expectedPrefix: string): void {
   if (!actual.startsWith(expectedPrefix)) {
     throw new Error(`expected ${actual} to start with ${expectedPrefix}`);
   }
+}
+
+
+Deno.test("place-photo batch preserves ready metadata when another provider request throws", async () => {
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow,
+    env: (name) => ({
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "publishable-key",
+      WANDER_GOOGLE_PLACES_API_KEY: "google-key",
+    })[name],
+    // deno-lint-ignore require-await
+    fetch: async (input, init) => {
+      const url = input.toString();
+      if (url.endsWith("/rest/v1/rpc/current_profile")) return Response.json({ id: "profile" });
+      if (url.endsWith("/places/ready")) {
+        return Response.json({ id: "ready", currentOpeningHours: { openNow: true } });
+      }
+      if (url.includes("places.googleapis.com")) throw new Error("synthetic_provider_timeout");
+      throw new Error(`unexpected method ${init?.method}`);
+    },
+  };
+  const response = await handleRequest(providerTestRequest({ requests: [
+    { name: "Ready", source_provider: "google", source_provider_place_id: "ready", requires_photo: false },
+    { name: "Unavailable", source_provider: "google", source_provider_place_id: "unavailable", requires_photo: false },
+  ] }), dependencies);
+  const body = await response.json();
+  assertEquals(response.status, 200);
+  assertEquals(body.results[0].photo.provider_open_now, true);
+  assertEquals(body.results[0].photo.photo_url, "");
+  assertEquals(body.results[1].photo, null);
+  assertEquals(body.results[1].error, "provider_unavailable");
+});
+
+Deno.test("metadata-only hours neither require a photo nor erase a concurrent image cache write", async () => {
+  let cacheWrite: Record<string, unknown> | null = null;
+  let mediaRequests = 0;
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow,
+    env: (name) => ({
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "publishable-key",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+      WANDER_GOOGLE_PLACES_API_KEY: "google-key",
+    })[name],
+    // deno-lint-ignore require-await
+    fetch: async (input, init) => {
+      const url = input.toString();
+      if (url.endsWith("/rest/v1/rpc/current_profile")) return Response.json({ id: "profile" });
+      if (url.includes("/rest/v1/google_place_photo_cache")) {
+        if ((init?.method ?? "GET") === "GET") return Response.json([]);
+        cacheWrite = JSON.parse(String(init?.body));
+        return new Response(null, { status: 201 });
+      }
+      if (url.endsWith("/places/photo-less")) {
+        return Response.json({ id: "photo-less", displayName: { text: "Photo-less Cafe" },
+          currentOpeningHours: { openNow: false, nextOpenTime: "2026-08-14T15:00:00Z" }, utcOffsetMinutes: -420 });
+      }
+      mediaRequests += 1;
+      throw new Error("metadata_must_not_request_image");
+    },
+  };
+  const response = await handleRequest(providerTestRequest({
+    name: "Photo-less Cafe", source_provider: "google", source_provider_place_id: "photo-less", requires_photo: false,
+  }), dependencies);
+  const body = await response.json();
+  assertEquals(response.status, 200);
+  assertEquals(body.provider_open_now, false);
+  assertEquals(body.provider_next_open_time, "2026-08-14T15:00:00Z");
+  assertEquals(body.photo_url, "");
+  assertEquals(mediaRequests, 0);
+  const written = cacheWrite as Record<string, unknown> | null;
+  assert(written !== null, "metadata write missing");
+  assertEquals(written.provider_open_now, false);
+  // All non-null columns are supplied, including those with defaults. Omitted
+  // image fields and the retired expires_at column are nullable on insertion.
+  for (const field of ["cache_key", "provider_place_id", "provider_types", "fetched_at", "last_accessed_at"]) {
+    assert(written[field] !== undefined && written[field] !== null, `required column ${field} missing`);
+  }
+  for (const field of ["object_path", "content_type", "byte_size", "source_photo_url", "width", "height"]) {
+    assert(!(field in written), `metadata must preserve concurrent image field ${field}`);
+  }
+});
+
+Deno.test("stale metadata refresh preserves a concurrent image write after its cache read", async () => {
+  let refreshed = false;
+  let imageRow: Record<string, unknown> = {};
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow,
+    env: (name) => ({
+      SUPABASE_URL: "https://example.supabase.co", SUPABASE_ANON_KEY: "publishable-key",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-key", WANDER_GOOGLE_PLACES_API_KEY: "google-key",
+    })[name],
+    // deno-lint-ignore require-await
+    fetch: async (input, init) => {
+      const url = input.toString();
+      if (url.endsWith("/rest/v1/rpc/current_profile")) return Response.json({ id: "profile" });
+      if (url.includes("/rest/v1/google_place_photo_cache")) {
+        if ((init?.method ?? "GET") === "GET") {
+          const keys = (new URL(url).searchParams.get("cache_key") ?? "").slice(4, -1).split(",");
+          return Response.json(keys.map((cache_key) => ({
+            cache_key, provider_place_id: "stale", object_path: null,
+            provider_types: [], provider_open_now: true, fetched_at: "2026-08-13T01:00:00Z",
+            content_type: null, byte_size: null, source_photo_url: null,
+          })));
+        }
+        const body = JSON.parse(String(init?.body));
+        for (const field of ["object_path", "content_type", "byte_size", "source_photo_url", "width", "height"]) {
+          assert(!(field in body), `stale metadata must not overwrite concurrent image field ${field}`);
+        }
+        imageRow = { ...imageRow, ...body };
+        refreshed = true;
+        return new Response(null, { status: 201 });
+      }
+      if (url.endsWith("/places/stale")) {
+        // The image request commits after metadata read the old metadata-only row.
+        imageRow = { object_path: "new.img", content_type: "image/jpeg", byte_size: 100,
+          source_photo_url: "https://www.google.com/maps/example", width: 640, height: 480 };
+        return Response.json({ id: "stale", currentOpeningHours: { openNow: false } });
+      }
+      throw new Error("unexpected request");
+    },
+  };
+  const response = await handleRequest(providerTestRequest({ requests: [
+    { name: "Stale", source_provider: "google", source_provider_place_id: "stale", requires_photo: false },
+  ] }), dependencies);
+  const body = await response.json();
+  assertEquals(body.results[0].photo.provider_open_now, false);
+  assertEquals(refreshed, true);
+  assertEquals(imageRow.object_path, "new.img");
+  assertEquals(imageRow.byte_size, 100);
+  assertEquals(imageRow.width, 640);
+  assertEquals(imageRow.provider_open_now, false);
+});
+
+Deno.test("network deadline covers stalled response bodies and aborts upstream work", async () => {
+  let signal: AbortSignal | null = null;
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow, env: () => undefined,
+    // deno-lint-ignore require-await
+    fetch: async (_input, init) => {
+      signal = init?.signal ?? null;
+      return new Response(new ReadableStream({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => controller.error(new Error("aborted")), { once: true });
+        },
+      }));
+    },
+  };
+  let timedOut = false;
+  try {
+    await fetchWithTimeout("https://example.com/slow-body", {}, 10, dependencies,
+      async (response) => await response.arrayBuffer());
+  } catch { timedOut = true; }
+  assertEquals(timedOut, true);
+  assertEquals((signal as AbortSignal | null)?.aborted, true);
+});
+
+Deno.test("network deadline bounds a request that never returns headers", async () => {
+  let signal: AbortSignal | null = null;
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow, env: () => undefined,
+    fetch: (_input, init) => {
+      signal = init?.signal ?? null;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      });
+    },
+  };
+  let timedOut = false;
+  try {
+    await fetchWithTimeout("https://example.com/slow-headers", {}, 10, dependencies,
+      async (response) => await response.json());
+  } catch { timedOut = true; }
+  assertEquals(timedOut, true);
+  assertEquals((signal as AbortSignal | null)?.aborted, true);
+});
+
+Deno.test("a later photo with its own source link remains available when the first lacks one", async () => {
+  let mediaCalls = 0;
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow,
+    env: (name) => ({ SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "publishable-key", WANDER_GOOGLE_PLACES_API_KEY: "google-key" })[name],
+    // deno-lint-ignore require-await
+    fetch: async (input) => {
+      const url = input.toString();
+      if (url.endsWith("/rest/v1/rpc/current_profile")) return Response.json({ id: "profile" });
+      if (url.endsWith("/places/venue")) return Response.json({
+        id: "venue", photos: [
+          { name: "places/venue/photos/missing-source", widthPx: 1000, heightPx: 1000,
+            authorAttributions: [{ displayName: "First Author" }] },
+          { name: "places/venue/photos/available", widthPx: 1600, heightPx: 1200,
+            googleMapsUri: "//www.google.com/maps/photo/available",
+            flagContentUri: "https://www.google.com/maps/report/available",
+            authorAttributions: [{ displayName: "Available Author",
+              uri: "https://www.google.com/maps/contrib/available",
+              photoUri: "https://lh3.googleusercontent.com/available-avatar" }] },
+        ],
+      });
+      if (url.includes("/photos/available/media?")) {
+        mediaCalls += 1;
+        return Response.json({ photoUri: "https://lh3.googleusercontent.com/available" });
+      }
+      throw new Error("unexpected request");
+    },
+  };
+  const response = await handleRequest(providerTestRequest({
+    name: "Venue", source_provider: "google", source_provider_place_id: "venue", requires_photo: true,
+  }), dependencies);
+  const body = await response.json();
+  assertEquals(response.status, 200);
+  assertEquals(mediaCalls, 1);
+  assertEquals(body.photo_url, "https://lh3.googleusercontent.com/available");
+  assertEquals(body.source_photo_url, "https://www.google.com/maps/photo/available");
+  assertEquals(body.author_name, "Available Author");
+  assertEquals(body.author_profile_url, "https://www.google.com/maps/contrib/available");
+  assertEquals(body.author_avatar_url, "https://lh3.googleusercontent.com/available-avatar");
+  assertEquals(body.flag_content_url, "https://www.google.com/maps/report/available");
+});
+
+Deno.test("a place or gallery link does not substitute for every photo missing its own source", async () => {
+  let mediaCalls = 0;
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow,
+    env: (name) => ({ SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "publishable-key", WANDER_GOOGLE_PLACES_API_KEY: "google-key" })[name],
+    // deno-lint-ignore require-await
+    fetch: async (input) => {
+      const url = input.toString();
+      if (url.endsWith("/rest/v1/rpc/current_profile")) return Response.json({ id: "profile" });
+      if (url.endsWith("/places/venue")) return Response.json({
+        id: "venue", googleMapsUri: "https://www.google.com/maps/place/venue",
+        googleMapsLinks: { photosUri: "https://www.google.com/maps/gallery/venue" },
+        photos: [{ name: "places/venue/photos/no-source", widthPx: 1000, heightPx: 1000,
+          authorAttributions: [{ displayName: "Photo Author" }] }],
+      });
+      if (url.includes("/media?")) mediaCalls += 1;
+      throw new Error("unexpected request");
+    },
+  };
+  const response = await handleRequest(providerTestRequest({
+    name: "Venue", source_provider: "google", source_provider_place_id: "venue", requires_photo: true,
+  }), dependencies);
+  const body = await response.json();
+  assertEquals(response.status, 404);
+  assertEquals(body.error, "photo_attribution_unavailable");
+  assertEquals(mediaCalls, 0);
+});
+
+function providerTestRequest(body: Record<string, unknown>): Request {
+  return new Request("https://example.supabase.co/functions/v1/place-photo", {
+    method: "POST", headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }

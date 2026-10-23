@@ -3,6 +3,31 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testSharedPostCompanionsUseExistingAuthorizedContextAndClearOnDeclinedRefresh() async throws {
+        let rpc = RecordingRPC()
+        let row = """
+        {"group_id":"group","comment_activity_id":"source","visit_id":"visit-source",
+         "activity":{"id":"source","event_type":"place_been","occurred_at":"2026-10-20T12:00:00Z",
+           "actor":{"id":"alex","handle":"alex","display_name":"Alex Example"},"place":null,"list":null,
+           "note":"Synthetic note","rating":null,"media":[]}}
+        """
+        rpc.responses["shared_visit_posts"] = Data("[\(row)]".utf8)
+        rpc.responses["feed_shared_visit_context"] = Data("""
+        [{"activity_id":"source","visit_id":"visit-source","group_id":"group","companions":[
+          {"status":"pending","profile":{"id":"sam","handle":"sam","display_name":"Sam Example"}}]}]
+        """.utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc)
+        let collection = try await repository.sharedVisitPosts(activityID: "source")
+        XCTAssertEqual(collection?.companions.first?.status, .pending)
+        XCTAssertEqual(collection?.posts.count, 1, "An invitation never adds an unaccepted contribution")
+        XCTAssertEqual(rpc.calls.map(\.name), ["shared_visit_posts", "feed_shared_visit_context"])
+        XCTAssertEqual(Set(rpc.rawBodies[0].keys), ["input_activity_id"])
+        XCTAssertEqual(Set(rpc.rawBodies[1].keys), ["input_activity_ids"])
+        rpc.responses["feed_shared_visit_context"] = Data("[]".utf8)
+        let declined = try await repository.sharedVisitPosts(activityID: "source")
+        XCTAssertNil(declined, "A no-longer-authorized group must not reuse its prior identities")
+    }
+
     func testSearchRatingsSendPublicProviderIdentityWithoutViewerOrActivityContent() async throws {
         let rpc = RecordingRPC()
         rpc.responses["place_rating_summaries"] = Data("""

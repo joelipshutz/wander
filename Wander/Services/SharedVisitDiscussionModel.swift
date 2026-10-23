@@ -6,8 +6,10 @@ struct SharedVisitPostCollection {
     let groupID: String
     let commentActivityID: String
     let posts: [FeedActivity]
+    let companions: [FeedSharedVisitCompanion]
+    let visitIDs: [String]
 
-    init?(groupID: String, commentActivityID: String, posts: [FeedActivity]) {
+    init?(groupID: String, commentActivityID: String, posts: [FeedActivity], companions: [FeedSharedVisitCompanion] = [], visitIDs: [String] = []) {
         guard !groupID.isEmpty, !posts.isEmpty, posts.count <= 20,
               Set(posts.map(\.id)).count == posts.count,
               posts.allSatisfy({ $0.kind == .placeBeen }),
@@ -15,6 +17,8 @@ struct SharedVisitPostCollection {
         self.groupID = groupID
         self.commentActivityID = commentActivityID
         self.posts = posts
+        self.companions = companions
+        self.visitIDs = Array(Set(visitIDs + posts.compactMap { $0.sharedVisit?.visitID })).sorted()
     }
 
     var commentTarget: FeedActivity? { posts.first { $0.id == commentActivityID } }

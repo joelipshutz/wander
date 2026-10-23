@@ -14410,17 +14410,22 @@ struct MapPlaceSaveEditor: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 ZStack {
                     Circle().fill(WanderTheme.terracottaTint.color)
-                    Text("✨").font(.system(size: 20))
-                    Capsule().fill(astirBrandMode.accent)
-                        .frame(width: 28, height: 3)
-                        .rotationEffect(.degrees(-45))
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                    Capsule().fill(WanderTheme.terracottaTint.color)
+                        .frame(width: 28, height: 5)
+                        .rotationEffect(.degrees(45))
+                    Capsule().fill(WanderTheme.terracotta.color)
+                        .frame(width: 28, height: 2)
+                        .rotationEffect(.degrees(45))
                 }
                 .frame(width: 38, height: 38)
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("Remove from Wanna")
                         .font(.system(size: 14, weight: .bold))
-                    Text("After this check-in saves, remove all your existing Wannas for this place. New Wannas, check-ins, and lists stay.")
+                    Text("Remove your existing Wanna for this place. New Wannas will not be impacted.")
                         .font(.system(size: 13, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
                 }

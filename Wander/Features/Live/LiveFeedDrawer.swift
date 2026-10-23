@@ -14,11 +14,12 @@ enum LiveDrawerDragPolicy {
         guard abs(travel) >= 24 else { return start }
         let currentHeight = height(base: heights[start], translation: translation,
                                    minimum: heights[0], maximum: heights[2])
-        let projectedHeight = flick ? currentHeight - remainingTravel : currentHeight
         // Choose from detents beyond the finger's current position. A long drag
         // can cross both detents without snapping back against its release.
+        // Velocity supplies direction, not a license for a tiny flick to skip
+        // the middle stop. Only finger travel can cross an intermediate detent.
         let candidates = heights.indices.filter { travel < 0 ? heights[$0] > currentHeight : heights[$0] < currentHeight }
-        return candidates.min { abs(heights[$0] - projectedHeight) < abs(heights[$1] - projectedHeight) }
+        return candidates.min { abs(heights[$0] - currentHeight) < abs(heights[$1] - currentHeight) }
             ?? (travel < 0 ? 2 : 0)
     }
 }
@@ -35,13 +36,14 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
     let onDetent: (Int) -> Void
     @ViewBuilder var header: () -> Header
     @ViewBuilder var content: () -> Content
-    @GestureState private var translation: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.3))) private var translation: CGFloat = 0
     var body: some View {
         VStack(spacing: 0) {
             header()
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 3)
+                .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global)
                     .updating($translation) { value, state, transaction in
                         guard enabled else { return }
                         transaction.animation = nil
@@ -55,8 +57,14 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
                     })
             content()
         }
+        // Keep the expensive Feed viewport stable during touch samples. Only
+        // the outer reveal window changes; the Feed resizes at the next detent.
+        .frame(height: height, alignment: .top)
         .frame(height: enabled ? LiveDrawerDragPolicy.height(base: height, translation: translation,
                                                               minimum: minimum, maximum: maximum) : height,
                alignment: .top)
+        .transaction { transaction in
+            if reduceMotion { transaction.animation = nil; transaction.disablesAnimations = true }
+        }
     }
 }

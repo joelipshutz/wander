@@ -235,19 +235,71 @@ final class LiveExperienceUITests: XCTestCase {
         let second = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000012"].firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 10))
         XCTAssertTrue(second.waitForExistence(timeout: 10))
+        let attribution = app.staticTexts["sharedVisit.review.postcard.companions"]
+        XCTAssertTrue(attribution.waitForExistence(timeout: 5))
+        XCTAssertEqual(attribution.label, "Alex checked-in with Sam")
+        XCTAssertFalse(app.staticTexts["Invitation pending"].exists)
+        XCTAssertFalse(app.staticTexts["Invitations pending"].exists)
+        XCTAssertFalse(app.buttons["View activity"].exists)
+        XCTAssertFalse(app.buttons["Hide activity"].exists)
+        XCTAssertFalse(app.staticTexts["Comments"].exists)
         capture("shared-check-in-postcard-example")
+
+        // Alex owns photos 1 and 3; Sam owns photo 2. The one pile opens all
+        // three authorized originals without opening either profile or place.
+        let photos = app.buttons["sharedVisit.review.postcard.photos"]
+        for _ in 0..<4 where !photos.isHittable { app.swipeUp() }
+        XCTAssertTrue(photos.isHittable)
+        XCTAssertEqual(photos.value as? String, "3 photos")
+        photos.tap()
+        let photoBack = app.buttons["activity.photos.back"]
+        let position = app.staticTexts["activity.photos.position"]
+        XCTAssertTrue(photoBack.waitForExistence(timeout: 10))
+        XCTAssertTrue(position.waitForExistence(timeout: 5))
+        XCTAssertEqual(position.label, "1 of 3")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Photo of Sample check-in photo 1"))
+            .firstMatch.waitForExistence(timeout: 5))
+        for page in 2...3 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).press(
+                forDuration: 0.1,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)))
+            let nextPhoto = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "label == %@", "\(page) of 3"), object: position)
+            XCTAssertEqual(XCTWaiter.wait(for: [nextPhoto], timeout: 5), .completed)
+        }
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Photo of Sample check-in photo 2"))
+            .firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Photo unavailable"].exists)
+        capture("shared-check-in-combined-photos")
+        photoBack.tap()
+        XCTAssertTrue(photoBack.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(attribution.waitForExistence(timeout: 10))
+        XCTAssertEqual(attribution.label, "Alex checked-in with Sam")
+        XCTAssertTrue(first.exists)
+        XCTAssertTrue(second.exists)
+
         let comments = app.buttons["Open comments"]
         for _ in 0..<6 where !comments.isHittable { app.swipeUp() }
         XCTAssertTrue(comments.isHittable)
+        XCTAssertEqual(app.buttons.matching(identifier: "Open comments").count, 1)
+        XCTAssertEqual(comments.staticTexts.count, 0, "The comment action uses an icon, without a visible text label.")
         comments.tap()
+        let header = app.descendants(matching: .any)["comments.activity.postcard"].firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["comments.activity.postcard.companions"].label, "Alex checked-in with Sam")
+        XCTAssertFalse(app.buttons["View activity"].exists)
+        XCTAssertFalse(app.staticTexts["On Alex’s check-in"].exists)
+        XCTAssertFalse(app.staticTexts["On Sam’s check-in"].exists)
         let mine = app.staticTexts["Happy we finally made it here."]
         let theirs = app.staticTexts["Count me in for another visit."]
-        XCTAssertTrue(mine.waitForExistence(timeout: 10))
-        XCTAssertTrue(theirs.waitForExistence(timeout: 10))
-        for _ in 0..<4 where !theirs.isHittable { app.swipeUp() }
-        XCTAssertTrue(theirs.isHittable)
+        // Plain List rows are created as they enter the viewport; reveal each
+        // original comment before asserting it instead of awaiting an offscreen row.
+        for comment in [mine, theirs] {
+            for _ in 0..<8 where !comment.isHittable { app.swipeUp() }
+            XCTAssertTrue(comment.waitForExistence(timeout: 5))
+            XCTAssertTrue(comment.isHittable)
+        }
         XCTAssertTrue(app.buttons["activity.comment.send"].exists)
-        app.swipeUp()
         XCTAssertTrue(theirs.isHittable)
         capture("shared-check-in-comments-example")
     }

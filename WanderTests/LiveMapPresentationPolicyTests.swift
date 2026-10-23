@@ -210,7 +210,8 @@ final class LivePinPhotoResolverTests: XCTestCase {
             if await task.value != nil { resolved += 1 }
         }
         XCTAssertEqual(resolved, 45, "Expanded pins must not stop after the first successful photos.")
-        XCTAssertLessThan(repository.batches.count, 10, "Use batched metadata, not one request per pin.")
+        XCTAssertLessThanOrEqual(repository.batches.count, 12, "Use bounded batches, not one request per pin.")
+        XCTAssertTrue(repository.batches.allSatisfy { $0.count <= 8 })
         XCTAssertEqual(Set(repository.attempts.keys), Set(requests.map(\.canonicalPhotoCacheKey)))
         for request in requests {
             let expected = request.name == "pin-0" ? 1 : 2

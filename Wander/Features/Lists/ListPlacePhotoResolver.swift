@@ -341,6 +341,8 @@ final class ListPlacePhotoBatcher {
         let backendScopeID: UUID
         let eligibleUserIDs: [String]?
         let authorizationScopeKey: String
+        let renderVariant: PlacePhotoRenderVariant
+        let requiresPhoto: Bool
     }
 
     private final class PendingBatch {
@@ -351,10 +353,15 @@ final class ListPlacePhotoBatcher {
     static let shared = ListPlacePhotoBatcher()
 
     private let debounceNanoseconds: UInt64
+    private let maximumBatchSize: Int
+    private let requestLimiter: PlacePhotoDownloadLimiter
     private var pendingBatches: [GroupKey: PendingBatch] = [:]
 
-    init(debounceNanoseconds: UInt64 = 12_000_000) {
+    init(debounceNanoseconds: UInt64 = 12_000_000, maximumBatchSize: Int = 8,
+         maximumConcurrentBatches: Int = 3) {
         self.debounceNanoseconds = debounceNanoseconds
+        self.maximumBatchSize = max(1, min(32, maximumBatchSize))
+        self.requestLimiter = PlacePhotoDownloadLimiter(limit: maximumConcurrentBatches)
     }
 
     func photo(
@@ -367,14 +374,23 @@ final class ListPlacePhotoBatcher {
         let groupKey = GroupKey(
             backendScopeID: backend.photoCacheScopeID,
             eligibleUserIDs: normalizedEligibleUserIDs,
-            authorizationScopeKey: authorizationScopeKey
+            authorizationScopeKey: authorizationScopeKey,
+            renderVariant: request.renderVariant,
+            requiresPhoto: request.requiresPhoto
         )
-        let pending = pendingBatches[groupKey] ?? PendingBatch()
+        // Publish bounded groups independently. A city's last cold-cache photo
+        // must not hold every already-ready pin behind one giant Task.value.
+        let existing = pendingBatches[groupKey]
+        let pending = existing.flatMap {
+            $0.requests.count < maximumBatchSize || $0.requests[request.canonicalPhotoCacheKey] != nil ? $0 : nil
+        } ?? PendingBatch()
         pending.requests[request.canonicalPhotoCacheKey] = request
         pendingBatches[groupKey] = pending
 
         if pending.task == nil {
             let debounceNanoseconds = self.debounceNanoseconds
+            let sessionRevision = backend.photoSessionRevision
+            let viewerID = backend.photoViewerID
             pending.task = Task { @MainActor [weak self, weak pending] in
                 if debounceNanoseconds > 0 {
                     try? await Task.sleep(nanoseconds: debounceNanoseconds)
@@ -386,11 +402,19 @@ final class ListPlacePhotoBatcher {
                 if self.pendingBatches[groupKey] === pending {
                     self.pendingBatches[groupKey] = nil
                 }
-                return await self.resolve(
-                    requests: requests,
-                    eligibleUserIDs: normalizedEligibleUserIDs,
-                    backend: backend
-                )
+                do { try await self.requestLimiter.acquire() }
+                catch { return self.cancelledResolutions(for: requests) }
+                guard !Task.isCancelled, sessionRevision == backend.photoSessionRevision,
+                      viewerID == backend.photoViewerID else {
+                    await self.requestLimiter.release()
+                    return self.cancelledResolutions(for: requests)
+                }
+                let resolutions = await self.resolve(requests: requests,
+                    eligibleUserIDs: normalizedEligibleUserIDs, backend: backend)
+                await self.requestLimiter.release()
+                guard !Task.isCancelled, sessionRevision == backend.photoSessionRevision,
+                      viewerID == backend.photoViewerID else { return self.cancelledResolutions(for: requests) }
+                return resolutions
             }
         }
 

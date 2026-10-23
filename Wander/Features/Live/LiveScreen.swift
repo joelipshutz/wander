@@ -684,7 +684,7 @@ struct LiveScreen: View {
                     }
                 }
                 .onPreferenceChange(LiveDrawerHeaderHeightKey.self) { height in
-                    if height.isFinite, height > 0 { drawerHeaderHeight = ceil(height) }
+                    if height.isFinite, height > 0, drawerHeaderHeight != ceil(height) { drawerHeaderHeight = ceil(height) }
                 }
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .combine)

@@ -95,8 +95,14 @@ private struct LivePinPrimaryPhoto: View {
 /// through the existing batch infrastructure, while keeping provider-first pins.
 @MainActor
 enum LivePinPhotoResolver {
+    // Each expanded pin publishes independently; a cold miss cannot hold ready
+    // siblings in the same response. Keep requests bounded across the city.
+    static let pinBatcher = ListPlacePhotoBatcher(maximumBatchSize: 1, maximumConcurrentBatches: 6)
+    // A tapped card must not queue behind background pin metadata batches.
+    static let previewBatcher = ListPlacePhotoBatcher(maximumBatchSize: 1, maximumConcurrentBatches: 1)
+
     static func resolve(request: PlacePhotoRequest, authorizationScopeKey: String,
-                        backend: WanderBackend, batcher: ListPlacePhotoBatcher = .shared,
+                        backend: WanderBackend, batcher: ListPlacePhotoBatcher = pinBatcher,
                         retryDelayNanoseconds: UInt64 = 300_000_000) async -> PlacePhoto? {
         let session = backend.photoSessionRevision, access = backend.photoAccessRevision
         let viewer = backend.photoViewerID
@@ -124,7 +130,7 @@ enum LivePinPhotoResolver {
 
     static func resolveImage(request: PlacePhotoRequest, authorizationScopeKey: String,
                              backend: WanderBackend, targetPixelSize: Int,
-                             batcher: ListPlacePhotoBatcher = .shared,
+                             batcher: ListPlacePhotoBatcher = pinBatcher,
                              retryDelayNanoseconds: UInt64 = 300_000_000) async -> ListPlaceResolvedPhoto? {
         let session = backend.photoSessionRevision, access = backend.photoAccessRevision
         let viewer = backend.photoViewerID
@@ -159,7 +165,7 @@ enum LivePinPhotoResolver {
                 // The existing backend validates protected media and bounds all
                 // image downloads. Keep that boundary on every retry.
                 let data = try await backend.placePhotoImageData(for: photo,
-                    canonicalPlaceKey: request.canonicalPhotoCacheKey, variant: .listThumbnail)
+                    canonicalPlaceKey: request.canonicalPhotoCacheKey, variant: request.renderVariant)
                 guard isCurrent(),
                       let image = await PlacePhotoImagePipeline.shared.image(from: data,
                         canonicalPlaceKey: request.canonicalPhotoCacheKey, photoKey: photo.cacheKey,
