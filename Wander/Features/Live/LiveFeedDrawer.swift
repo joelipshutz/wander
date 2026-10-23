@@ -4,10 +4,22 @@ enum LiveDrawerDragPolicy {
     static func height(base: CGFloat, translation: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {
         min(maximum, max(minimum, base - translation))
     }
-    static func target(start: Int, translation: CGFloat, predicted: CGFloat) -> Int {
-        let travel = abs(predicted) > abs(translation) ? predicted : translation
+    static func target(start: Int, translation: CGFloat, predicted: CGFloat, heights: [CGFloat]) -> Int {
+        guard heights.count == 3, heights.indices.contains(start),
+              heights.allSatisfy(\.isFinite), translation.isFinite, predicted.isFinite,
+              heights[0] <= heights[1], heights[1] <= heights[2] else { return start }
+        let remainingTravel = predicted - translation
+        let flick = abs(remainingTravel) >= 24
+        let travel = flick ? remainingTravel : (abs(predicted) > abs(translation) ? predicted : translation)
         guard abs(travel) >= 24 else { return start }
-        return min(2, max(0, start + (travel < 0 ? 1 : -1)))
+        let currentHeight = height(base: heights[start], translation: translation,
+                                   minimum: heights[0], maximum: heights[2])
+        let projectedHeight = flick ? currentHeight - remainingTravel : currentHeight
+        // Choose from detents beyond the finger's current position. A long drag
+        // can cross both detents without snapping back against its release.
+        let candidates = heights.indices.filter { travel < 0 ? heights[$0] > currentHeight : heights[$0] < currentHeight }
+        return candidates.min { abs(heights[$0] - projectedHeight) < abs(heights[$1] - projectedHeight) }
+            ?? (travel < 0 ? 2 : 0)
     }
 }
 
@@ -16,6 +28,7 @@ enum LiveDrawerDragPolicy {
 struct LiveFeedDrawer<Header: View, Content: View>: View {
     let height: CGFloat
     let minimum: CGFloat
+    let middle: CGFloat
     let maximum: CGFloat
     let detent: Int
     let enabled: Bool
@@ -37,7 +50,8 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
                     .onEnded { value in
                         guard enabled else { return }
                         onDetent(LiveDrawerDragPolicy.target(start: detent,
-                            translation: value.translation.height, predicted: value.predictedEndTranslation.height))
+                            translation: value.translation.height, predicted: value.predictedEndTranslation.height,
+                            heights: [minimum, middle, maximum]))
                     })
             content()
         }

@@ -1655,7 +1655,7 @@ private struct FeedActivityModule: View {
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
             showsEngagementActions: engagementContext != nil,
-            activityGroup: group.isCombined ? group : nil,
+            activityGroup: group.isCombined || group.sharedVisitGroupID != nil ? group : nil,
             openActivityList: openList,
             sharedVisitCompanions: visibleCompanions,
             sharedVisitCurrentUserID: store.currentUser.id,

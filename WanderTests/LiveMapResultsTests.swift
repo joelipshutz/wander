@@ -163,6 +163,80 @@ final class LiveMapResultsTests: XCTestCase {
         XCTAssertEqual(received, 0)
     }
 
+    func testPinKeepsCheckInBadgeWhenFilteredEventsOnlyContainANewerWannaOrListUpdate() {
+        let visited = place("visited")
+        let wanna = FeedActivity(id: "wanna", kind: .placeWannaGo,
+            actor: ProfileShell(id: "person", handle: "person", displayName: "Person", avatarURL: nil,
+                                bio: nil, relationship: .mutual), place: visited, occurredAt: now)
+        let list = FeedActivity(id: "list", kind: .listItemAdded, actor: wanna.actor,
+            place: visited, occurredAt: now)
+        XCTAssertEqual(LivePlacePin(id: visited.place.id, place: visited, activities: [wanna]).kind, .checkIn)
+        XCTAssertEqual(LivePlacePin(id: visited.place.id, place: visited, activities: [list]).kind, .checkIn)
+        XCTAssertEqual(wanna.resolvedTicketKind, .wanna, "The pin badge must not rewrite activity identity.")
+        XCTAssertEqual(list.resolvedTicketKind, .list)
+
+        visited.userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        visited.userPlace.visitedAt = now.addingTimeInterval(-86_400)
+        XCTAssertEqual(LivePlacePin(id: visited.place.id, place: visited, activities: [wanna]).kind, .checkIn)
+        visited.userPlace.visitedAt = nil
+        XCTAssertEqual(LivePlacePin(id: visited.place.id, place: visited, activities: [wanna]).kind, .wanna)
+        XCTAssertEqual(LivePlacePin(id: visited.place.id, place: visited, activities: [list]).kind, .list)
+        visited.userPlace.visitedAt = now.addingTimeInterval(-86_400)
+        visited.userPlace.deletedAt = now
+        XCTAssertEqual(LivePlacePin(id: visited.place.id, place: visited, activities: [wanna]).kind, .wanna,
+                       "Deleted saves cannot supply prior-check-in evidence.")
+    }
+
+    func testPriorOwnVisitOnCanonicalDuplicateParentWinsWithoutAddingFilteredActivity() {
+        let active = place("active-wanna"), prior = place("old-check-in")
+        active.userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        for row in [active, prior] {
+            row.place.canonicalName = "Same Cafe"
+            row.place.address = "10 Main Street"
+            row.place.sourceProviderPlaceID = row.place.id
+        }
+        let wanna = FeedActivity(id: "current-wanna", kind: .placeWannaGo,
+            actor: ProfileShell(id: "person", handle: "person", displayName: "Person", avatarURL: nil,
+                                bio: nil, relationship: .mutual), place: active, occurredAt: now)
+        let pins = LiveMapProjection.pins(activities: [wanna], featured: [], ownCheckInPlaces: [prior])
+        XCTAssertEqual(pins.map(\.id), [active.place.id])
+        XCTAssertEqual(pins.first?.activities.map(\.id), [wanna.id])
+        XCTAssertEqual(pins.first?.kind, .checkIn)
+        XCTAssertEqual(wanna.resolvedTicketKind, .wanna)
+
+        prior.userPlace.deletedAt = now
+        XCTAssertEqual(LiveMapProjection.pins(activities: [wanna], featured: [],
+            ownCheckInPlaces: [prior]).first?.kind, .wanna)
+        prior.userPlace.deletedAt = nil
+        prior.owner.deletedAt = now
+        XCTAssertEqual(LiveMapProjection.pins(activities: [wanna], featured: [],
+            ownCheckInPlaces: [prior]).first?.kind, .wanna)
+        prior.owner.deletedAt = nil
+        prior.userPlace.userID = "unrelated-owner"
+        XCTAssertEqual(LiveMapProjection.pins(activities: [wanna], featured: [],
+            ownCheckInPlaces: [prior]).first?.kind, .wanna)
+        prior.userPlace.userID = prior.owner.id
+        prior.place.address = "20 Main Street"
+        XCTAssertEqual(LiveMapProjection.pins(activities: [wanna], featured: [],
+            ownCheckInPlaces: [prior]).first?.kind, .wanna,
+            "A nearby same-name branch with a conflicting street is not a prior visit.")
+    }
+
+    func testExactProviderCheckInEvidenceSurvivesRenamingWithoutFuzzyMatchingOtherNames() {
+        let active = place("active"), prior = place("prior")
+        active.userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        active.place.sourceProviderPlaceID = "same-provider-place"
+        prior.place.sourceProviderPlaceID = "same-provider-place"
+        let wanna = FeedActivity(id: "current-wanna", kind: .placeWannaGo,
+            actor: ProfileShell(id: "person", handle: "person", displayName: "Person", avatarURL: nil,
+                                bio: nil, relationship: .mutual), place: active, occurredAt: now)
+        XCTAssertEqual(LiveMapProjection.pins(activities: [wanna], featured: [],
+            ownCheckInPlaces: [prior]).first?.kind, .checkIn)
+        prior.place.sourceProviderPlaceID = "different-provider-place"
+        XCTAssertEqual(LiveMapProjection.pins(activities: [wanna], featured: [],
+            ownCheckInPlaces: [prior]).first?.kind, .wanna)
+    }
+
     private func request(userID: String = "viewer") -> LiveMapRequest {
         LiveMapRequest(userID: userID, audience: .everyone,
             query: LiveFeedQuery(occurredBefore: now), featured: true, viewport: nil, refresh: 0)

@@ -64,20 +64,8 @@ struct LivePlaceFullProfileScreen: View {
     }
 
     private func openSave() {
-        let own = currentUserSave
-        let wanna = own.flatMap { store.wannaSaves(for: $0.userPlace).first }
-        if let own, own.userPlace.status == .wannaGo || wanna != nil {
-            saveContext = .addFromExistingWanna(own, attributes: store.attributes(for: own.userPlace.id),
-                latestVisit: store.visits(for: own.userPlace.id).first, wanna: wanna)
-        } else if let own {
-            saveContext = .existingCurrentUserSave(own, attributes: store.attributes(for: own.userPlace.id),
-                latestVisit: store.visits(for: own.userPlace.id).first)
-        } else if let visiblePlace {
-            saveContext = .addVisiblePlace(visiblePlace, defaultVisibility: store.effectiveDefaultVisibility)
-        } else {
-            saveContext = .addCandidate(candidate, sourceType: .manual,
-                defaultVisibility: store.effectiveDefaultVisibility)
-        }
+        saveContext = LivePlaceSaveContinuation.context(candidate: candidate,
+            visiblePlace: visiblePlace, store: store)
         store.saveFlowDidPresent(.saveSheet)
     }
 

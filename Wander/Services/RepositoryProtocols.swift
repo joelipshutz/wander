@@ -2077,6 +2077,7 @@ extension FeedRepository {
 
 @MainActor
 protocol ActivityEngagementRepository {
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection?
     func activity(id: String) async throws -> FeedActivity
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary]
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch]
@@ -2088,6 +2089,8 @@ protocol ActivityEngagementRepository {
 }
 
 extension ActivityEngagementRepository {
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection? { nil }
+
     func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
         throw WanderRemoteError.notImplemented("comment likes")
     }

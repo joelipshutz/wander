@@ -38,7 +38,17 @@ struct ActivityPostcardReviewRoot: View {
         )
     }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        #if targetEnvironment(simulator)
+        if ActivityPostcardPhotoUITestFixtures.isSharedReviewEnabled(arguments: ProcessInfo.processInfo.arguments) {
+            SharedVisitReviewRoot()
+        } else { ordinaryBody }
+        #else
+        ordinaryBody
+        #endif
+    }
+
+    private var ordinaryBody: some View {
         NavigationStack {
             ScrollView {
                 ActivityPostcardView(
@@ -134,9 +144,19 @@ enum ActivityPostcardPhotoUITestFixtures {
 
     static func livePhoto(matching preview: FeedMediaPreview,
                           arguments: [String] = ProcessInfo.processInfo.arguments) -> ActivityEngagementMedia? {
-        guard isLiveEnabled(arguments: arguments), preview.urlString == nil,
+        guard (isLiveEnabled(arguments: arguments) || isSharedReviewEnabled(arguments: arguments)), preview.urlString == nil,
               preview.storageBucket == nil, preview.storagePath == nil else { return nil }
         return photos().first { $0.id == preview.id && $0.accessibilityLabel == preview.accessibilityLabel }
+    }
+
+    static func isSharedReviewEnabled(arguments: [String]) -> Bool {
+        #if targetEnvironment(simulator)
+        let args = Set(arguments)
+        return args.contains("-WanderFeedPhotoStackUITest") && args.contains("-WanderSharedVisitReview")
+            && !args.contains("-WanderUseLiveAuth") && !args.contains("-WanderForceSignedOut")
+        #else
+        return false
+        #endif
     }
 
     private static func preparePhotos() -> [FixturePhoto] {

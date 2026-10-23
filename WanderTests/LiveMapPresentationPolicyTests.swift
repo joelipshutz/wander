@@ -1,4 +1,5 @@
 import MapKit
+import UIKit
 import XCTest
 @testable import Wander
 
@@ -188,5 +189,174 @@ final class LiveMapPresentationPolicyTests: XCTestCase {
         let scale = region.span.longitudeDelta / 360 * MKMapRect.world.width / size.width
         return CGPoint(x: size.width / 2 + (point.x - center.x) / scale,
                        y: size.height / 2 + (point.y - center.y) / scale)
+    }
+}
+
+@MainActor
+final class LivePinPhotoResolverTests: XCTestCase {
+    func testExpandedPinsBatchBeyondTwentyAndRetryOnlyMissingProviderPhotos() async {
+        let repository = LivePinPhotoTestRepository()
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let batcher = ListPlacePhotoBatcher()
+        let requests = (0..<45).map { request("pin-\($0)") }
+        let tasks = requests.map { request in
+            Task { @MainActor in
+                await LivePinPhotoResolver.resolve(request: request, authorizationScopeKey: "viewer",
+                    backend: backend, batcher: batcher, retryDelayNanoseconds: 0)
+            }
+        }
+        var resolved = 0
+        for task in tasks {
+            if await task.value != nil { resolved += 1 }
+        }
+        XCTAssertEqual(resolved, 45, "Expanded pins must not stop after the first successful photos.")
+        XCTAssertLessThan(repository.batches.count, 10, "Use batched metadata, not one request per pin.")
+        XCTAssertEqual(Set(repository.attempts.keys), Set(requests.map(\.canonicalPhotoCacheKey)))
+        for request in requests {
+            let expected = request.name == "pin-0" ? 1 : 2
+            XCTAssertEqual(repository.attempts[request.canonicalPhotoCacheKey], expected)
+        }
+        XCTAssertEqual(repository.visibleUserRequests, 0, "Available provider photos remain the primary pin image.")
+    }
+
+    func testUnavailablePhotoStopsAfterOneRetryAndKeepsAnHonestEmptyResult() async {
+        let repository = LivePinPhotoTestRepository()
+        repository.alwaysMissing = true
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let request = request("missing")
+        let photo = await LivePinPhotoResolver.resolve(request: request, authorizationScopeKey: "viewer",
+            backend: backend, batcher: ListPlacePhotoBatcher(debounceNanoseconds: 0), retryDelayNanoseconds: 0)
+        XCTAssertNil(photo)
+        XCTAssertEqual(repository.attempts[request.canonicalPhotoCacheKey], 2)
+        XCTAssertEqual(repository.visibleUserRequests, 1)
+    }
+
+    func testTransientImageDownloadRetriesOnceBeforeUsingFallback() async {
+        let repository = LivePinPhotoTestRepository()
+        repository.metadataImmediatelyAvailable = true
+        repository.transientImageFailures = 1
+        repository.imagePayload = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).pngData { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let image = await LivePinPhotoResolver.resolveImage(request: request("bytes-\(UUID())"),
+            authorizationScopeKey: "viewer", backend: backend, targetPixelSize: 34,
+            batcher: ListPlacePhotoBatcher(debounceNanoseconds: 0), retryDelayNanoseconds: 0)
+        XCTAssertNotNil(image)
+        XCTAssertEqual(repository.imageRequests, 2)
+        XCTAssertEqual(repository.visibleUserRequests, 0)
+    }
+
+    func testPersistentTransientImageFailureStopsAfterOneRetry() async {
+        let repository = LivePinPhotoTestRepository()
+        repository.metadataImmediatelyAvailable = true
+        repository.transientImageFailures = 3
+        let image = await LivePinPhotoResolver.resolveImage(request: request("failed-bytes-\(UUID())"),
+            authorizationScopeKey: "viewer", backend: WanderBackend(placePhotoRepository: repository),
+            targetPixelSize: 34, batcher: ListPlacePhotoBatcher(debounceNanoseconds: 0), retryDelayNanoseconds: 0)
+        XCTAssertNil(image)
+        XCTAssertEqual(repository.imageRequests, 2)
+        XCTAssertEqual(repository.visibleUserRequests, 1)
+    }
+
+    func testCancellationDoesNotRetryImageOrRequestAnotherPhoto() async {
+        let repository = LivePinPhotoTestRepository()
+        repository.metadataImmediatelyAvailable = true
+        repository.imageError = CancellationError()
+        let image = await LivePinPhotoResolver.resolveImage(request: request("cancelled-bytes-\(UUID())"),
+            authorizationScopeKey: "viewer", backend: WanderBackend(placePhotoRepository: repository),
+            targetPixelSize: 34, batcher: ListPlacePhotoBatcher(debounceNanoseconds: 0), retryDelayNanoseconds: 0)
+        XCTAssertNil(image)
+        XCTAssertEqual(repository.imageRequests, 1)
+        XCTAssertEqual(repository.visibleUserRequests, 0)
+    }
+
+    func testImageRetryClassifierAcceptsOnlyTransportAndExactPublicDownloadFailures() {
+        XCTAssertTrue(LivePinPhotoResolver.isTransientImageError(URLError(.networkConnectionLost)))
+        XCTAssertTrue(LivePinPhotoResolver.isTransientImageError(
+            WanderRemoteError.invalidResponse("Place photo download failed")))
+        let permanentErrors: [Error] = [
+            WanderRemoteError.notAuthenticated,
+            WanderRemoteError.notConfigured,
+            WanderRemoteError.invalidResponse("photo_not_visible"),
+            WanderRemoteError.invalidResponse("Place photo has no readable source"),
+            WanderRemoteError.invalidResponse("Place photo download failed: unauthorized"),
+            URLError(.userAuthenticationRequired),
+            CancellationError(),
+            NSError(domain: "test", code: 403,
+                    userInfo: [NSLocalizedDescriptionKey: "Place photo download failed"])
+        ]
+        for error in permanentErrors {
+            XCTAssertFalse(LivePinPhotoResolver.isTransientImageError(error))
+        }
+    }
+
+    func testPermanentImageFailureIsNotRetried() async {
+        let repository = LivePinPhotoTestRepository()
+        repository.metadataImmediatelyAvailable = true
+        repository.imageError = WanderRemoteError.invalidResponse("photo_not_visible")
+        let image = await LivePinPhotoResolver.resolveImage(request: request("denied-bytes-\(UUID())"),
+            authorizationScopeKey: "viewer", backend: WanderBackend(placePhotoRepository: repository),
+            targetPixelSize: 34, batcher: ListPlacePhotoBatcher(debounceNanoseconds: 0), retryDelayNanoseconds: 0)
+        XCTAssertNil(image)
+        XCTAssertEqual(repository.imageRequests, 1)
+        XCTAssertEqual(repository.visibleUserRequests, 1)
+    }
+
+    private func request(_ id: String) -> PlacePhotoRequest {
+        PlacePhotoRequest(placeID: id, name: id, address: nil, latitude: 34, longitude: -118,
+                          sourceProvider: "google", sourceProviderPlaceID: id, renderVariant: .listThumbnail)
+    }
+}
+
+@MainActor
+private final class LivePinPhotoTestRepository: PlacePhotoRepository {
+    var batches: [[PlacePhotoRequest]] = []
+    var attempts: [String: Int] = [:]
+    var visibleUserRequests = 0
+    var alwaysMissing = false
+    var metadataImmediatelyAvailable = false
+    var imagePayload: Data?
+    var imageRequests = 0
+    var transientImageFailures = 0
+    var imageError: Error?
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        XCTFail("Expanded pin metadata should use the batch path.")
+        throw WanderRemoteError.invalidResponse("missing_test_photo")
+    }
+
+    func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        batches.append(requests)
+        return requests.compactMap { request in
+            let key = request.canonicalPhotoCacheKey
+            attempts[key, default: 0] += 1
+            guard !alwaysMissing, metadataImmediatelyAvailable || request.name == "pin-0" || attempts[key] == 2 else { return nil }
+            let photo = PlacePhoto(provider: "google_places", providerPlaceID: request.name,
+                photoURLString: "", width: nil, height: nil, authorName: nil, authorProfileURLString: nil,
+                authorAvatarURLString: nil, sourcePhotoURLString: nil, flagContentURLString: nil,
+                storageBucket: nil, storagePath: nil, localAssetRef: nil)
+            return PlacePhotoBatchResult(canonicalPlaceKey: key, photo: photo)
+        }
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        visibleUserRequests += 1
+        throw WanderRemoteError.invalidResponse("missing_test_photo")
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        imageRequests += 1
+        if transientImageFailures > 0 {
+            transientImageFailures -= 1
+            throw URLError(.networkConnectionLost)
+        }
+        if let imageError { throw imageError }
+        guard let imagePayload else {
+            XCTFail("Metadata resolution must not download image data.")
+            throw WanderRemoteError.invalidResponse("missing_test_photo")
+        }
+        return imagePayload
     }
 }

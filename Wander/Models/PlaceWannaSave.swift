@@ -16,6 +16,13 @@ struct PlaceWannaSave: Identifiable, Codable, Equatable {
     var isHistoricalOriginal: Bool? = nil
     /// Durable deletion revision; retained to reject stale reads and retries.
     var deletedAt: Date? = nil
+    /// A queued removal waits for this replacement check-in, including when
+    /// canonical duplicate place records have different parent IDs. Missing in
+    /// older persisted records means no additional dependency.
+    var replacementVisitID: String? = nil
+    /// True only when removal captured a parent with no remote write or visit
+    /// history. Nil in older snapshots conservatively requires a remote ACK.
+    var parentWasNeverUploaded: Bool? = nil
 }
 
 @MainActor

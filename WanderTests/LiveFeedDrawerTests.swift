@@ -2,6 +2,7 @@ import XCTest
 @testable import Wander
 
 final class LiveFeedDrawerTests: XCTestCase {
+    private let heights: [CGFloat] = [80, 390, 780]
     func testHeightTracksEveryDragSampleInBothDirections() {
         let upward: [CGFloat] = [0, -1, -12, -40, -100]
         XCTAssertEqual(upward.map { LiveDrawerDragPolicy.height(base: 300, translation: $0, minimum: 80, maximum: 700) },
@@ -19,22 +20,42 @@ final class LiveFeedDrawerTests: XCTestCase {
     }
 
     func testReleaseAdvancesOneDetentInEitherDirectionAndClamps() {
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -80, predicted: -120), 1)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -80, predicted: -120), 2)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: -80, predicted: -120), 2)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 80, predicted: 120), 1)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 80, predicted: 120), 0)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: 80, predicted: 120), 0)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -80, predicted: -120, heights: heights), 1)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -80, predicted: -120, heights: heights), 2)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: -80, predicted: -120, heights: heights), 2)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 80, predicted: 120, heights: heights), 1)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 80, predicted: 120, heights: heights), 0)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: 80, predicted: 120, heights: heights), 0)
     }
 
     func testShortDragsStayPutWhileIntentionalFlickUsesProjectedTravel() {
         for start in 0...2 {
-            XCTAssertEqual(LiveDrawerDragPolicy.target(start: start, translation: 23, predicted: 10), start)
-            XCTAssertEqual(LiveDrawerDragPolicy.target(start: start, translation: -23, predicted: -10), start)
+            XCTAssertEqual(LiveDrawerDragPolicy.target(start: start, translation: 23, predicted: 10, heights: heights), start)
+            XCTAssertEqual(LiveDrawerDragPolicy.target(start: start, translation: -23, predicted: -10, heights: heights), start)
         }
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -4, predicted: -24), 2)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 4, predicted: 24), 0)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -30, predicted: -5), 2)
-        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 30, predicted: 5), 0)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -4, predicted: -24, heights: heights), 2)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 4, predicted: 24, heights: heights), 0)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -30, predicted: -5, heights: heights), 1)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 30, predicted: 5, heights: heights), 1)
+    }
+
+    func testLongDragChoosesADetentBeyondTheFingerInsteadOfReturningTowardItsStart() {
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -600, predicted: -650, heights: heights), 2)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 600, predicted: 650, heights: heights), 0)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -250, predicted: -280,
+                                                  heights: [100, 300, 500]), 2)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 250, predicted: 280,
+                                                  heights: [100, 300, 500]), 0)
+    }
+
+    func testReleaseFlickWinsAgainstAnEarlierLongDragInTheOtherDirection() {
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: 160, predicted: 80, heights: heights), 1,
+                       "An upward release expands even when the drag started downward.")
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -160, predicted: -80, heights: heights), 1,
+                       "A downward release collapses even when the drag started upward.")
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 2, translation: 160, predicted: 80, heights: heights), 2)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 0, translation: -160, predicted: -80, heights: heights), 0)
+        XCTAssertEqual(LiveDrawerDragPolicy.target(start: 1, translation: -80, predicted: -75, heights: heights), 2,
+                       "A small release wobble must not overturn a deliberate drag.")
     }
 }

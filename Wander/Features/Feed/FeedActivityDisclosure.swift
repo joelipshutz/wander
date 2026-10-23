@@ -74,7 +74,7 @@ struct FeedActivityDisclosure: View {
             Button {
                 guard let context = event.activityEngagementContext else { return }
                 auth.requireSignIn(for: .socialActivity) {
-                    activityNavigation.openComments(context: context, visiblePlace: event.place)
+                    activityNavigation.openComments(context: context, visiblePlace: event.place, sharedVisitGroupID: group.sharedVisitGroupID)
                 }
             } label: {
                 HStack(alignment: .top, spacing: WanderTheme.spacing2) {

@@ -65,12 +65,53 @@ final class CommonGroundEvidenceIndexTests: XCTestCase {
         XCTAssertTrue(LivePlanPeoplePolicy.canShare(cached, store: store))
         let foreign = store.visiblePlaces(for: partnerID).filter { VisiblePlaceGrouping.matches($0, source) }
         for row in foreign { row.userPlace.visibilityRaw = PlaceVisibility.selfOnly.rawValue }
-        XCTAssertNil(LivePlanPeoplePolicy.revalidatedCandidate(cached, source: source,
+        let ownOnly = try XCTUnwrap(LivePlanPeoplePolicy.revalidatedCandidate(cached, source: source,
             store: store, sourceContext: .placeProfile))
-        XCTAssertFalse(LivePlanPeoplePolicy.canShare(cached, store: store))
+        XCTAssertTrue(ownOnly.isOneSidedRecommendation)
+        XCTAssertEqual(ownOnly.joeEvidence.visitCount, 0)
+        XCTAssertEqual(ownOnly.joeEvidence.wannaCount, 0)
+        XCTAssertTrue(LivePlanPeoplePolicy.canShare(cached, store: store))
         for row in foreign { row.userPlace.visibilityRaw = PlaceVisibility.mutuals.rawValue }
         store.unfollow(userID: partnerID)
         XCTAssertNil(LivePlanPeoplePolicy.revalidatedCandidate(cached, source: source,
             store: store, sourceContext: .placeProfile))
+        XCTAssertFalse(LivePlanPeoplePolicy.canShare(cached, store: store))
+    }
+
+    func testCachedPlanRemainsShareableAfterNoteAndRatingRefresh() throws {
+        let store = WanderStore(fixtures: .seed())
+        let partnerID = "user_ryan"
+        let cached = try XCTUnwrap(CommonGroundLiveData.places(store: store, profileID: partnerID)
+            .first { !$0.isOneSidedRecommendation && $0.youEvidence.visitCount > 0 })
+        let source = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.id == cached.sourcePlaceID })
+        let refreshedRating = cached.youRating == 1 ? 5.0 : 1.0
+        source.userPlace.note = "Updated check-in note"
+        source.userPlace.ratingScore = refreshedRating
+        for visit in store.visits(for: source.userPlace.id) { visit.ratingScore = refreshedRating }
+
+        let refreshed = try XCTUnwrap(LivePlanPeoplePolicy.revalidatedCandidate(cached, source: source,
+            store: store, sourceContext: .placeProfile))
+        XCTAssertNotEqual(refreshed.youRating, cached.youRating)
+        XCTAssertTrue(LivePlanPeoplePolicy.canShare(cached, store: store))
+    }
+
+    func testCachedOwnOnlyPlanRejectsDeletedSource() throws {
+        let store = WanderStore(fixtures: .seed())
+        let partnerID = "user_ryan"
+        let candidate = PlaceCandidate(id: "own-only-plan", name: "Own Only Plan Cafe", category: "coffee",
+            latitude: 34, longitude: -118, sourceProvider: "test", sourceProviderPlaceID: "own-only-plan", confidence: 1)
+        let result = store.saveCandidate(candidate, status: .wannaGo, visibility: .selfOnly,
+            note: nil, sourceType: .manual)
+        let source = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID })
+        let cached = try XCTUnwrap(CommonGroundLiveData.snapshot(store: store, profileID: partnerID,
+            evidence: CommonGroundEvidenceIndex(store: store), includeOneSidedPlaces: true).places
+            .first { $0.sourcePlaceID == source.id })
+        XCTAssertTrue(cached.isOneSidedRecommendation)
+        XCTAssertTrue(LivePlanPeoplePolicy.canShare(cached, store: store))
+
+        source.userPlace.deletedAt = .now
+        XCTAssertNil(LivePlanPeoplePolicy.revalidatedCandidate(cached, source: source,
+            store: store, sourceContext: .placeProfile))
+        XCTAssertFalse(LivePlanPeoplePolicy.canShare(cached, store: store))
     }
 }

@@ -177,11 +177,8 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertTrue(friend.label.contains("Ryan"))
         friend.tap()
-        let save = app.buttons["live.plan.saveWanna"]
-        XCTAssertTrue(save.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Share invitation"].exists)
-        capture("wanna-plan-recovery")
-        save.tap()
+        XCTAssertFalse(app.buttons["live.plan.saveWanna"].exists)
         XCTAssertTrue(app.staticTexts["common-ground.invitation.heading"].waitForExistence(timeout: 8))
         let when = app.buttons["common-ground.invitation.when"]
         for _ in 0..<4 where !when.isHittable { app.swipeUp() }
@@ -199,6 +196,93 @@ final class LiveExperienceUITests: XCTestCase {
         capture("wanna-demo-invitation")
         invitation.tap()
         XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 5))
+    }
+
+    func testSavePlaceTitleStaysVisibleWhileScrollingBothModes() {
+        let app = launch()
+        let pin = app.buttons["live.pin.place_noodles"]
+        XCTAssertTrue(pin.waitForExistence(timeout: 15))
+        pin.tap()
+        let add = app.buttons["live.placePreview.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        for status in ["Check in", "Wanna go"] {
+            add.tap()
+            let header = app.descendants(matching: .any)["save.placeHeader"].firstMatch
+            XCTAssertTrue(header.waitForExistence(timeout: 5))
+            let choice = app.scrollViews["save.editorScroll"].buttons[status]
+            XCTAssertTrue(choice.waitForExistence(timeout: 5))
+            choice.tap()
+            let scroll = app.scrollViews["save.editorScroll"]
+            XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+            for _ in 0..<3 { scroll.swipeUp() }
+            XCTAssertTrue(header.isHittable)
+            XCTAssertTrue(header.staticTexts["Larchmont Noodles"].isHittable)
+            XCTAssertTrue(app.buttons["save.close"].isHittable)
+            capture(status == "Check in" ? "pinned-check-in-title" : "pinned-wanna-title")
+            app.buttons["save.close"].tap()
+            XCTAssertTrue(add.waitForExistence(timeout: 5))
+        }
+    }
+
+    /// Use production postcard/discussion views with isolated synthetic content.
+    func testSharedVisitPostcardAndCombinedCommentsExample() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderFeedPhotoStackUITest", "-WanderSharedVisitReview",
+                               "-WanderDisableWalkthroughs"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["sharedVisit.review.postcard"].firstMatch.waitForExistence(timeout: 15))
+        let first = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000011"].firstMatch
+        let second = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000012"].firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        capture("shared-check-in-postcard-example")
+        let comments = app.buttons["Open comments"]
+        for _ in 0..<6 where !comments.isHittable { app.swipeUp() }
+        XCTAssertTrue(comments.isHittable)
+        comments.tap()
+        let mine = app.staticTexts["Happy we finally made it here."]
+        let theirs = app.staticTexts["Count me in for another visit."]
+        XCTAssertTrue(mine.waitForExistence(timeout: 10))
+        XCTAssertTrue(theirs.waitForExistence(timeout: 10))
+        for _ in 0..<4 where !theirs.isHittable { app.swipeUp() }
+        XCTAssertTrue(theirs.isHittable)
+        XCTAssertTrue(app.buttons["activity.comment.send"].exists)
+        app.swipeUp()
+        XCTAssertTrue(theirs.isHittable)
+        capture("shared-check-in-comments-example")
+    }
+
+    /// Exercise the production destination, not the detached demo route. Fixture
+    /// places have no server UUID, so sharing remains correctly sync-disabled.
+    func testPlaceProfilePlansOpensProductionComposerForOneSidedPlace() {
+        let app = launch(extraArguments: ["-WanderLivePlanComposerUITest"])
+        let pin = app.buttons["live.pin.place_noodles"]
+        XCTAssertTrue(pin.waitForExistence(timeout: 15))
+        pin.tap()
+        let open = app.buttons["live.placePreview.open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        open.tap()
+        XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 10))
+        let plans = app.buttons["place-profile.plans"]
+        revealFully(plans, in: app.scrollViews["place-profile.scroll"], app: app)
+        plans.tap()
+        let friend = app.buttons["live.plan.person.user_ryan"]
+        XCTAssertTrue(friend.waitForExistence(timeout: 10))
+        friend.tap()
+        XCTAssertTrue(app.staticTexts["common-ground.invitation.heading"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["live.plan.demo"].exists)
+        let share = app.buttons["common-ground.invitation.messages"]
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+        XCTAssertEqual(share.label, "Share invitation")
+        XCTAssertFalse(share.isEnabled, "Synthetic place IDs must never create real invitations.")
+        let when = app.buttons["common-ground.invitation.when"]
+        for _ in 0..<4 where !when.isHittable { app.swipeUp() }
+        XCTAssertTrue(when.isHittable)
+        when.tap()
+        let useDate = app.buttons["common-ground.invitation.use-date"]
+        XCTAssertTrue(useDate.waitForExistence(timeout: 5))
+        useDate.tap()
+        capture("production-plan-composer")
     }
 
     func testNearbyRadiusIsStagedAndRetainedAcrossTabs() {

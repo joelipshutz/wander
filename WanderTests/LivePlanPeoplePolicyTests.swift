@@ -47,10 +47,13 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
         XCTAssertTrue(candidate.joeWanna)
     }
 
-    func testFriendWannaWithoutViewerSaveNeedsExplicitSaveBeforePlan() {
+    func testFriendWannaCanOpenInvitationWithoutInventingViewerSave() throws {
         let viewer = profile("viewer"), partner = profile("friend")
         let theirs = row("theirs", owner: partner)
-        XCTAssertNil(match(theirs, viewer: viewer, partner: partner, rows: [theirs]))
+        let candidate = try XCTUnwrap(match(theirs, viewer: viewer, partner: partner, rows: [theirs]))
+        XCTAssertFalse(candidate.youWanna)
+        XCTAssertTrue(candidate.joeWanna)
+        XCTAssertTrue(candidate.isOneSidedRecommendation)
         XCTAssertFalse(LivePlanPeoplePolicy.hasViewerSave(for: theirs, authorizedPlaces: [theirs], viewerID: viewer.id))
         let mine = row("mine", owner: viewer)
         XCTAssertTrue(LivePlanPeoplePolicy.hasViewerSave(for: theirs, authorizedPlaces: [mine], viewerID: viewer.id))
@@ -66,11 +69,14 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
         XCTAssertNil(match(theirs, viewer: viewer, partner: partner, rows: [mine, theirs]))
     }
 
-    func testDeletedAndPrivatePartnerRowsCannotProduceAnInvitation() {
+    func testPrivatePartnerEvidenceCannotBeBorrowedAndDeletedSourceCannotInvite() throws {
         let viewer = profile("viewer"), partner = profile("friend")
         let mine = row("mine", owner: viewer), theirs = row("theirs", owner: partner)
         theirs.userPlace.visibilityRaw = PlaceVisibility.selfOnly.rawValue
-        XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs]))
+        let ownOnly = try XCTUnwrap(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs]))
+        XCTAssertEqual(ownOnly.joeEvidence.wannaCount, 0)
+        XCTAssertEqual(ownOnly.joeEvidence.visitCount, 0)
+        XCTAssertTrue(ownOnly.isOneSidedRecommendation)
         theirs.userPlace.visibilityRaw = PlaceVisibility.followers.rawValue
         mine.userPlace.deletedAt = .now
         XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs]))
@@ -84,7 +90,7 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
             XCTAssertFalse(LivePlanDemoPolicy.isEnabled(arguments: required.filter { $0 != flag }, isDebugSimulator: true))
         }
         XCTAssertFalse(LivePlanDemoPolicy.isEnabled(arguments: required, isDebugSimulator: false))
-        for flag in ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest", "-WanderOnboardingUITestSignedOut"] {
+        for flag in ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest", "-WanderOnboardingUITestSignedOut", "-WanderLivePlanComposerUITest"] {
             XCTAssertFalse(LivePlanDemoPolicy.isEnabled(arguments: required + [flag], isDebugSimulator: true))
         }
     }
@@ -136,7 +142,10 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
         XCTAssertFalse(result.joeWanna)
         XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine, theirs],
             relationship: .follower, sourceContext: .placeProfile))
-        XCTAssertNil(match(mine, viewer: viewer, partner: partner, rows: [mine], sourceContext: .placeProfile))
+        let ownOnly = try XCTUnwrap(match(mine, viewer: viewer, partner: partner, rows: [mine], sourceContext: .placeProfile))
+        XCTAssertTrue(ownOnly.isOneSidedRecommendation)
+        XCTAssertFalse(ownOnly.joeWanna)
+        XCTAssertEqual(ownOnly.joeVisits, 0)
     }
 
     func testSharedActivityRankingCountsAuthorizedEventsAndExcludesIntroductions() {
@@ -186,7 +195,7 @@ final class LivePlanPeoplePolicyTests: XCTestCase {
                        rows: [VisiblePlace], relationship: ViewerRelationship = .mutual,
                        sourceContext: LivePlanSourceContext = .wannaActivity) -> CommonGroundMockPlace? {
         let candidates = CommonGroundLiveData.snapshot(viewerProfile: viewer, partnerProfile: partner,
-            authorizedPlaces: rows, visitsForUserPlace: { _ in [] }, shouldShowLegacyCheckInSummary: { _ in false }).places
+            authorizedPlaces: rows, visitsForUserPlace: { _ in [] }, shouldShowLegacyCheckInSummary: { _ in false }, includeOneSidedPlaces: true).places
         return LivePlanPeoplePolicy.matchingPlace(for: requested, candidates: candidates, authorizedPlaces: rows,
                                                 viewerID: viewer.id, partnerID: partner.id, relationship: relationship, sourceContext: sourceContext)
     }

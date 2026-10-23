@@ -526,6 +526,17 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
     }
 }
 
+struct RemoteSharedVisitPostDTO: Decodable {
+    let groupID: String
+    let commentActivityID: String
+    let visitID: String
+    let activity: RemoteFeedActivityDTO
+    enum CodingKeys: String, CodingKey {
+        case groupID = "group_id", commentActivityID = "comment_activity_id"
+        case visitID = "visit_id", activity
+    }
+}
+
 struct RemoteFeedSharedVisitContextDTO: Decodable {
     let activityID: String
     let visitID: String

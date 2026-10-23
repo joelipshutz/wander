@@ -125,8 +125,23 @@ struct LivePlacePin: Identifiable {
     let id: String
     let place: VisiblePlace
     let activities: [FeedActivity]
+    let hasPriorOwnCheckIn: Bool
+
+    init(id: String, place: VisiblePlace, activities: [FeedActivity], hasPriorOwnCheckIn: Bool = false) {
+        self.id = id
+        self.place = place
+        self.activities = activities
+        self.hasPriorOwnCheckIn = hasPriorOwnCheckIn
+    }
+
     var kind: LivePinKind {
-        if activities.isEmpty || activities.contains(where: { $0.resolvedTicketKind == .checkIn }) { return .checkIn }
+        if hasPriorOwnCheckIn || activities.isEmpty || activities.contains(where: { $0.resolvedTicketKind == .checkIn })
+            || ([place] + activities.compactMap(\.place)).contains(where: { visible in
+                visible.owner.deletedAt == nil && visible.userPlace.deletedAt == nil
+                    && visible.owner.id == visible.userPlace.userID
+                    && (visible.userPlace.status == .been || visible.userPlace.visitedAt != nil
+                        || visible.userPlace.recommendedCount > 0)
+            }) { return .checkIn }
         if activities.contains(where: { $0.resolvedTicketKind == .wanna }) { return .wanna }
         return .list
     }
@@ -138,17 +153,42 @@ struct LivePlacePin: Identifiable {
 }
 
 enum LiveMapProjection {
-    static func pins(activities: [FeedActivity], featured: [VisiblePlace]) -> [LivePlacePin] {
+    /// The caller supplies only current-user parents with real visit evidence.
+    /// They affect the badge, without adding activity outside the active filters.
+    static func pins(activities: [FeedActivity], featured: [VisiblePlace],
+                     ownCheckInPlaces: [VisiblePlace] = []) -> [LivePlacePin] {
+        let ownEvidence = ownCheckInPlaces.filter {
+            $0.owner.deletedAt == nil && $0.userPlace.deletedAt == nil && $0.owner.id == $0.userPlace.userID
+        }
+        // Exact IDs are O(1); canonical fallback only examines same-name rows.
+        // Never perform a full own-history scan for every pin in a busy city.
+        let ownExactAliases = Set(ownEvidence.flatMap { exactAliases(for: $0.place) })
+        let ownByName = Dictionary(grouping: ownEvidence) {
+            VisiblePlaceGrouping.normalizedText($0.place.canonicalName)
+        }
         let groups = Dictionary(grouping: activities.filter { $0.place != nil }) { $0.place!.place.id }
         var result = groups.compactMap { id, events -> LivePlacePin? in
             guard let place = events.first?.place,
                   CLLocationCoordinate2DIsValid(.init(latitude: place.place.latitude, longitude: place.place.longitude)) else { return nil }
-            return LivePlacePin(id: id, place: place, activities: FeedPresentation.newestFirst(events))
+            let candidate = PlaceSheetPlace(visiblePlace: place).saveCandidate
+            let name = VisiblePlaceGrouping.normalizedText(place.place.canonicalName)
+            let priorOwnCheckIn = !ownExactAliases.isDisjoint(with: exactAliases(for: place.place))
+                || (ownByName[name] ?? []).contains {
+                    VisiblePlaceGrouping.matches($0, candidate: candidate, allowingProviderIdentityFallback: true)
+                }
+            return LivePlacePin(id: id, place: place, activities: FeedPresentation.newestFirst(events),
+                                hasPriorOwnCheckIn: priorOwnCheckIn)
         }
         var seen = Set(result.map(\.id))
         for place in featured where CLLocationCoordinate2DIsValid(.init(latitude: place.place.latitude, longitude: place.place.longitude)) && seen.insert(place.place.id).inserted {
             result.append(LivePlacePin(id: place.place.id, place: place, activities: []))
         }
         return result.sorted { $0.id < $1.id }
+    }
+
+    private static func exactAliases(for place: LocalPlace) -> Set<String> {
+        VisiblePlaceGrouping.groupingAliases(for: place).filter {
+            $0.hasPrefix("id:") || ($0.hasPrefix("provider:") && !$0.hasPrefix("provider::"))
+        }
     }
 }

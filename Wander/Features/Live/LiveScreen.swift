@@ -318,7 +318,8 @@ struct LiveScreen: View {
             mapActivity = mapActivity.map { enriched[$0.id] ?? $0 }.filter { event in
                 store.liveFeedQuery?.includes(event) == true && store.canDisplayLiveMapActivity(event)
             }
-            mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces)
+            mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
+                ownCheckInPlaces: ownCheckInPlaces)
         }
         .onChange(of: store.presentationRevision) { _, _ in
             mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
@@ -665,7 +666,8 @@ struct LiveScreen: View {
     }
 
     private func drawer(height: CGFloat) -> some View {
-        LiveFeedDrawer(height: height, minimum: max(70, drawerHeaderHeight), maximum: max(height, mapSize.height),
+        LiveFeedDrawer(height: height, minimum: max(70, drawerHeaderHeight),
+                       middle: self.height(for: 1, available: mapSize.height), maximum: max(height, mapSize.height),
                        detent: detent, enabled: !showsFeedDestination, onDetent: { changeDetent($0) }) {
             if !showsFeedDestination {
                 VStack(spacing: 8) {
@@ -1113,11 +1115,22 @@ struct LiveScreen: View {
             limit: Int.max)
     }
 
+    /// Build history evidence once per projection, never during a drag sample or
+    /// by scanning every visit again for every rendered pin.
+    private var ownCheckInPlaces: [VisiblePlace] {
+        let visitParents = Set(store.placeVisits.filter { $0.deletedAt == nil }.map(\.userPlaceID))
+        return store.currentUserVisiblePlaces.filter {
+            $0.userPlace.status == .been || !visitParents.isDisjoint(with:
+                Set([$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }))
+        }
+    }
+
     private func rebuildMapProjection() {
         mapActivity = mapResults.activities.filter {
             store.liveFeedQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
         }
-        mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces)
+        mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
+                ownCheckInPlaces: ownCheckInPlaces)
     }
 
     private var activeFilterCount: Int {
@@ -1275,17 +1288,9 @@ struct LiveScreen: View {
 
     private func openPlace(_ pin: LivePlacePin, add: Bool = false) {
         if add {
-            let own = store.visiblePlaces().first { $0.owner.id == store.currentUser.id && $0.place.id == pin.place.place.id }
-            if let own, own.userPlace.status == .wannaGo || store.wannaSaves(for: own.userPlace).first != nil {
-                previewSaveContext = .addFromExistingWanna(own,
-                    attributes: store.attributes(for: own.userPlace.id), latestVisit: store.visits(for: own.userPlace.id).first,
-                    wanna: store.wannaSaves(for: own.userPlace).first)
-            } else if let own {
-                previewSaveContext = .existingCurrentUserSave(own,
-                    attributes: store.attributes(for: own.userPlace.id), latestVisit: store.visits(for: own.userPlace.id).first)
-            } else {
-                previewSaveContext = .addVisiblePlace(pin.place, defaultVisibility: store.effectiveDefaultVisibility)
-            }
+            previewSaveContext = LivePlaceSaveContinuation.context(
+                candidate: PlaceSheetPlace(visiblePlace: pin.place).saveCandidate,
+                visiblePlace: pin.place, store: store)
             store.saveFlowDidPresent(.saveSheet)
         } else {
             rememberFeedPresentation()
@@ -1324,16 +1329,7 @@ struct LiveScreen: View {
     }
 
     private func saveNativePlace(_ candidate: PlaceCandidate) {
-        let own = store.currentUserVisiblePlaces.first { VisiblePlaceGrouping.matches($0, candidate: candidate) }
-        if let own, own.userPlace.status == .wannaGo || store.wannaSaves(for: own.userPlace).first != nil {
-            previewSaveContext = .addFromExistingWanna(own, attributes: store.attributes(for: own.userPlace.id),
-                latestVisit: store.visits(for: own.userPlace.id).first, wanna: store.wannaSaves(for: own.userPlace).first)
-        } else if let own {
-            previewSaveContext = .existingCurrentUserSave(own, attributes: store.attributes(for: own.userPlace.id),
-                latestVisit: store.visits(for: own.userPlace.id).first)
-        } else {
-            previewSaveContext = .addCandidate(candidate, sourceType: .manual, defaultVisibility: store.effectiveDefaultVisibility)
-        }
+        previewSaveContext = LivePlaceSaveContinuation.context(candidate: candidate, store: store)
         store.saveFlowDidPresent(.saveSheet)
     }
 

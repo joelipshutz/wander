@@ -31,6 +31,31 @@ import XCTest
         XCTAssertEqual(LivePlacePreviewPresentation.highlight(for: activity), "Original visit with friends")
     }
 
+    func testProviderHoursAndRatingSurviveImageFallbackWithoutInventingMissingFacts() {
+        var details = LivePlacePreviewProviderDetails()
+        XCTAssertNil(details.hours)
+        XCTAssertNil(details.photo)
+        let provider = previewPhoto(provider: "google_places", open: true, rating: 4.7)
+        details.receive(provider)
+        XCTAssertEqual(details.hours?.statusText, "Open")
+        XCTAssertEqual(details.photo?.providerRating, 4.7)
+
+        details.receive(previewPhoto(provider: "visit_photo", open: nil, rating: nil))
+        XCTAssertEqual(details.hours?.statusText, "Open", "An image fallback cannot erase provider facts.")
+        XCTAssertEqual(details.photo?.providerRating, 4.7)
+        details = LivePlacePreviewProviderDetails()
+        details.receive(previewPhoto(provider: "visit_photo", open: nil, rating: nil))
+        XCTAssertNil(details.hours, "A different place or account starts without inherited facts.")
+        XCTAssertNil(details.photo)
+    }
+
+    private func previewPhoto(provider: String, open: Bool?, rating: Double?) -> PlacePhoto {
+        PlacePhoto(provider: provider, providerPlaceID: "preview-photo", providerRating: rating,
+            providerOpenNow: open, photoURLString: "", width: nil, height: nil, authorName: nil,
+            authorProfileURLString: nil, authorAvatarURLString: nil, sourcePhotoURLString: nil,
+            flagContentURLString: nil, storageBucket: nil, storagePath: nil, localAssetRef: nil)
+    }
+
     private func place(_ id: String) -> VisiblePlace {
         let owner = LocalProfile(localID: "owner", handle: "owner", displayName: "Owner")
         let place = LocalPlace(localID: id, canonicalName: id, category: "Coffee", latitude: 34, longitude: -118)

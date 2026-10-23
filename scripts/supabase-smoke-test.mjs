@@ -152,6 +152,12 @@ async function main() {
         await client.query("rollback to savepoint private_messages_smoke");
         await client.query("release savepoint private_messages_smoke");
         console.log("ok - private messages enforce mutuals, context revocation, idempotency, quotas, pagination and receipts");
+        await client.query("savepoint shared_feed_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/feed_shared_visit_context.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint shared_feed_smoke");
+        await client.query("release savepoint shared_feed_smoke");
+        console.log("ok - shared Feed preserves legacy provenance, original content and viewer privacy");
         await client.query("savepoint live_feed_smoke");
         await client.query(transactionBody(readFileSync(
           new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback"));
@@ -2833,6 +2839,10 @@ savepoint private_messages_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/private_contextual_messages.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint private_messages_smoke;
 release savepoint private_messages_smoke;
+savepoint shared_feed_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/feed_shared_visit_context.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint shared_feed_smoke;
+release savepoint shared_feed_smoke;
 savepoint live_feed_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_feed_smoke;

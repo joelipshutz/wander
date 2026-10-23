@@ -19,6 +19,8 @@ struct LivePlacePreviewCard: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @State private var photo: PlacePhoto?
+    @State private var providerDetails = LivePlacePreviewProviderDetails()
+    @State private var providerDetailsKey: String?
     @State private var failedGooglePhotoID: String?
     @State private var photoViewer: LivePreviewPhotoRoute?
     @State private var hydratedActivity: [String: FeedActivity] = [:]
@@ -60,6 +62,12 @@ struct LivePlacePreviewCard: View {
     private var activityHydrationKey: String {
         "\(sheetPlace.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoAccessRevision)|\(scenePhase)|"
             + selectedActivity.map { "\($0.id):\(store.activityAccessGeneration(for: $0.id))" }.joined(separator: ",")
+    }
+    private var providerDetailsRequestKey: String {
+        "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(backend.photoSessionRevision)"
+    }
+    private var currentProviderDetails: LivePlacePreviewProviderDetails {
+        providerDetailsKey == providerDetailsRequestKey ? providerDetails : LivePlacePreviewProviderDetails()
     }
     private var photoResolutionKey: String {
         "\(sheetPlace.photoLookupKey)|\(store.currentUser.id)|\(backend.photoSessionRevision)|\(backend.photoAccessRevision)|\(scenePhase)|\(failedGooglePhotoID ?? "ready")"
@@ -343,17 +351,15 @@ struct LivePlacePreviewCard: View {
             tasteSaves: [], currentUserID: store.currentUser.id
         )
         return PlaceCardPresentation.rating(
-            providerScore: photo?.providerRating, providerCount: photo?.providerUserRatingCount,
+            providerScore: currentProviderDetails.photo?.providerRating,
+            providerCount: currentProviderDetails.photo?.providerUserRatingCount,
             recmeRating: presentation.overallRating ?? presentation.ownRating,
-            providerName: photo?.provider, isUnratedFeatured: presentation.isUnratedFeatured
+            providerName: currentProviderDetails.photo?.provider, isUnratedFeatured: presentation.isUnratedFeatured
         )
     }
 
     private var hours: PlaceCardHoursPresentation? {
-        PlaceCardPresentation.hours(isOpen: photo?.providerOpenNow,
-                                    nextOpenTimeString: photo?.providerNextOpenTimeString,
-                                    nextCloseTimeString: photo?.providerNextCloseTimeString,
-                                    utcOffsetMinutes: photo?.providerUTCOffsetMinutes)
+        currentProviderDetails.hours
     }
 
     private func initials(_ name: String) -> String {
@@ -380,18 +386,26 @@ struct LivePlacePreviewCard: View {
     }
 
     private func resolvePhoto() async {
+        let detailsKey = providerDetailsRequestKey
+        if providerDetailsKey != detailsKey {
+            providerDetails = LivePlacePreviewProviderDetails()
+            providerDetailsKey = detailsKey
+        }
         photo = nil
         guard scenePhase == .active else { return }
         let key = photoResolutionKey
         let request = sheetPlace.photoRequest.rendering(.card)
         if let cached = backend.cachedPlacePhoto(for: request),
            !(cached.isGooglePlacesPhoto && cached.providerPlaceID == failedGooglePhotoID) {
+            providerDetails.receive(cached)
             photo = cached
             return
         }
         do {
             let candidate = try await backend.placePhoto(for: request)
             try Task.checkCancellation()
+            guard key == photoResolutionKey else { return }
+            providerDetails.receive(candidate)
             let resolved: PlacePhoto
             if candidate.isGooglePlacesPhoto && candidate.providerPlaceID == failedGooglePhotoID {
                 resolved = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
@@ -459,5 +473,23 @@ enum LivePlacePreviewPresentation {
         }
         if activity.resolvedTicketKind == .list, let list = activity.list { return list.name }
         return actionLabel(for: activity)
+    }
+}
+
+/// Provider facts remain valid when image delivery fails or a user photo is used.
+/// The card resets this state for a different place or account/session.
+struct LivePlacePreviewProviderDetails {
+    private(set) var photo: PlacePhoto?
+
+    mutating func receive(_ photo: PlacePhoto) {
+        guard photo.isGooglePlacesPhoto else { return }
+        self.photo = photo
+    }
+
+    var hours: PlaceCardHoursPresentation? {
+        PlaceCardPresentation.hours(isOpen: photo?.providerOpenNow,
+            nextOpenTimeString: photo?.providerNextOpenTimeString,
+            nextCloseTimeString: photo?.providerNextCloseTimeString,
+            utcOffsetMinutes: photo?.providerUTCOffsetMinutes)
     }
 }

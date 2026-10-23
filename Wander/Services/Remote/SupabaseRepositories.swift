@@ -911,6 +911,23 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
         self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection? {
+        let rows: [RemoteSharedVisitPostDTO] = try await rpc.call(
+            "shared_visit_posts", params: ActivityDetailParams(activityID: activityID))
+        guard let first = rows.first else { return nil }
+        guard rows.count <= 20, rows.allSatisfy({ $0.groupID == first.groupID
+            && $0.commentActivityID == first.commentActivityID }) else {
+            throw WanderRemoteError.invalidResponse("Invalid shared visit projection")
+        }
+        var posts: [FeedActivity] = []
+        for row in rows {
+            try Task.checkCancellation()
+            posts.append(try await row.activity.activity(storage: storage))
+        }
+        return SharedVisitPostCollection(groupID: first.groupID,
+            commentActivityID: first.commentActivityID, posts: posts)
+    }
+
     func activity(id: String) async throws -> FeedActivity {
         let response: RemoteFeedActivityDTO = try await rpc.call(
             "activity_detail",
@@ -920,9 +937,13 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
             "activity_media",
             params: ActivityEngagementSummariesParams(activityIDs: [id])
         )) ?? []
+        let contexts: [RemoteFeedSharedVisitContextDTO] = (try? await rpc.call(
+            "feed_shared_visit_context", params: ActivityEngagementSummariesParams(activityIDs: [id]))) ?? []
+        try Task.checkCancellation()
         return try await response.activity(
             storage: storage,
-            mediaOverride: mediaRows.first(where: { $0.activityID == id })?.media
+            mediaOverride: mediaRows.first(where: { $0.activityID.lowercased() == id.lowercased() })?.media,
+            sharedVisit: contexts.first(where: { $0.activityID.lowercased() == id.lowercased() })?.context
         )
     }
 

@@ -5,7 +5,7 @@ enum LivePlanDemoPolicy {
                           isDebugSimulator: Bool = isDebugSimulatorBuild) -> Bool {
         #if DEBUG && targetEnvironment(simulator)
         let required: Set<String> = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderUnifiedLiveUITest"]
-        let excluded: Set<String> = ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest", "-WanderOnboardingUITestSignedOut"]
+        let excluded: Set<String> = ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest", "-WanderOnboardingUITestSignedOut", "-WanderLivePlanComposerUITest"]
         return isDebugSimulator && required.isSubset(of: Set(arguments)) && excluded.isDisjoint(with: arguments)
         #else
         return false

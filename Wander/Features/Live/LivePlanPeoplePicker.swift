@@ -14,7 +14,10 @@ struct LivePlanPeoplePicker: View {
     @State private var notice: String?
     @State private var needsOwnSave = false
     @State private var requestID = UUID()
-    @State private var demoPlan: CommonGroundMockPlace?
+    // A distinct route prevents this demo destination from shadowing the
+    // production composer registered by the parent NavigationStack.
+    private struct DemoRoute: Hashable { let place: CommonGroundMockPlace }
+    @State private var demoPlan: DemoRoute?
     @State private var people: [LivePlanPeoplePolicy.PersonChoice] = []
     @State private var peopleViewerID: String?
 
@@ -51,7 +54,7 @@ struct LivePlanPeoplePicker: View {
                     Text(targetFriendID == nil ? "Who’s coming?" : "Go together")
                         .font(AstirTypography.screenTitle).foregroundStyle(brand.primaryText)
                     Text(targetFriendID == nil
-                         ? "Make a plan for \(place.place.canonicalName) with a mutual friend who has this place in common."
+                         ? "Make a plan for \(place.place.canonicalName) with a mutual friend."
                          : "Make a plan for \(place.place.canonicalName) with \(place.owner.displayName).")
                         .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
                     Text("You’ll choose the details before sharing an invitation.")
@@ -64,7 +67,7 @@ struct LivePlanPeoplePicker: View {
                         Text(targetFriendID == nil ? "Find someone to go with" : "A plan between mutual friends")
                             .font(AstirTypography.cardTitle)
                         Text(targetFriendID == nil
-                             ? "Friends appear when you follow each other. An invitation is available when this place is in your shared places."
+                             ? "Friends appear when you follow each other. Choose someone to invite to this place."
                              : "You need to follow each other before making this plan. This person may also no longer be available.")
                             .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                         if let onFindPeople {
@@ -99,7 +102,7 @@ struct LivePlanPeoplePicker: View {
         .navigationTitle("Make a plan").navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $demoPlan) { plan in
             #if DEBUG && targetEnvironment(simulator)
-            LivePlanDemoComposer(place: plan)
+            LivePlanDemoComposer(place: plan.place)
             #else
             EmptyView()
             #endif
@@ -132,7 +135,7 @@ struct LivePlanPeoplePicker: View {
                              avatarURL: isDemo ? nil : friend.avatarURL, size: 44).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(friend.displayName).font(AstirTypography.cardTitle).foregroundStyle(brand.primaryText)
-                    Text(available ? "Place in common · choose details" : "Check shared places")
+                    Text(available ? "Choose invitation details" : "Check place availability")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }
                 Spacer(minLength: 8)
@@ -141,7 +144,7 @@ struct LivePlanPeoplePicker: View {
             }.frame(maxWidth: .infinity, minHeight: 72, alignment: .leading).padding(.vertical, 8).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(checkingID != nil)
             .accessibilityIdentifier("live.plan.person.\(friend.id)")
-            .accessibilityHint("Checks current shared-place access before opening invitation details")
+            .accessibilityHint("Opens invitation details without sending anything")
     }
 
     private func candidate(for partnerID: String) -> CommonGroundMockPlace? {
@@ -206,13 +209,13 @@ struct LivePlanPeoplePicker: View {
             } else if targetFriendID != nil {
                 notice = "This Wanna isn’t available in your shared places right now. Refresh to check again. Nothing has been sent."
             } else {
-                notice = "This place isn’t available in your shared places with this friend. Choose someone else, or try again after you’ve both saved it."
+                notice = "This place is no longer available. Save it to your Wannas or refresh and try again. Nothing has been sent."
             }
             return
         }
         #if DEBUG && targetEnvironment(simulator)
         if isDemo {
-            demoPlan = LivePlanDemoPolicy.detachedPreview(selected)
+            demoPlan = DemoRoute(place: LivePlanDemoPolicy.detachedPreview(selected))
             return
         }
         #endif
@@ -230,7 +233,7 @@ struct LivePlanPeoplePicker: View {
         let rowsByFriend = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, own + store.visiblePlaces(for: $0.id)) })
         people = LivePlanPeoplePolicy.peopleSnapshot(profiles: profiles, project: { friend in
             CommonGroundLiveData.snapshot(store: store, profileID: friend.id, evidence: evidence,
-                                          authorizedPlaces: rowsByFriend[friend.id] ?? []).places
+                                          authorizedPlaces: rowsByFriend[friend.id] ?? [], includeOneSidedPlaces: true).places
         }, requestedPlace: { friend, candidates in
             LivePlanPeoplePolicy.matchingPlace(for: place, candidates: candidates,
                 authorizedPlaces: rowsByFriend[friend.id] ?? [],
@@ -244,7 +247,7 @@ struct LivePlanPeoplePicker: View {
         #if DEBUG && targetEnvironment(simulator)
         if isDemo {
             demoPlan = LivePlanDemoPolicy.savedWannaPreview(source: place, viewer: store.currentUser,
-                relationship: store.relationship(to: place.owner.id))
+                relationship: store.relationship(to: place.owner.id)).map { DemoRoute(place: $0) }
             return
         }
         #endif
@@ -290,7 +293,7 @@ enum LivePlanPeoplePolicy {
         // to this one physical place.
         let rows = group.places
         let candidates = CommonGroundLiveData.snapshot(store: store, profileID: cached.partner.id,
-            evidence: CommonGroundEvidenceIndex(store: store), authorizedPlaces: rows).places
+            evidence: CommonGroundEvidenceIndex(store: store), authorizedPlaces: rows, includeOneSidedPlaces: true).places
         return matchingPlace(for: source, candidates: candidates, authorizedPlaces: rows,
             viewerID: store.currentUser.id, partnerID: cached.partner.id,
             relationship: store.relationship(to: cached.partner.id), sourceContext: sourceContext)
@@ -303,7 +306,11 @@ enum LivePlanPeoplePolicy {
         guard let source = rows.first(where: {
             $0.id == candidate.sourcePlaceID || ($0.place.serverID != nil && $0.place.serverID == candidate.photoReference?.placeID)
         }) else { return false }
-        return revalidatedCandidate(candidate, source: source, store: store, sourceContext: .placeProfile) == candidate
+        guard let current = revalidatedCandidate(candidate, source: source, store: store, sourceContext: .placeProfile) else { return false }
+        // Ratings, counts, and avatars may refresh while composing. They are
+        // presentation data, not permission to invite a different person/place.
+        return current.viewer.id == candidate.viewer.id && current.partner.id == candidate.partner.id
+            && current.photoReference?.placeID == candidate.photoReference?.placeID
     }
 
     /// Rank only from currently authorized shared-place evidence. One-sided
@@ -346,7 +353,7 @@ enum LivePlanPeoplePolicy {
         return candidates.first {
             $0.viewer.id == viewerID && $0.partner.id == partnerID
                 && (sourceContext == .placeProfile
-                    ? !$0.isOneSidedRecommendation : (isOwnSource ? $0.youWanna : $0.joeWanna))
+                    ? true : (isOwnSource ? $0.youWanna : $0.joeWanna))
                 && ($0.id == group.key || $0.sourcePlaceID.map(sourceIDs.contains) == true)
         }
     }
