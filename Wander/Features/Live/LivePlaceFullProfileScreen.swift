@@ -6,6 +6,7 @@ struct LivePlaceFullProfileScreen: View {
     private let visiblePlace: VisiblePlace?
     private let candidate: PlaceCandidate
     private let sheetPlace: PlaceSheetPlace
+    private let identity: LivePlaceIdentity?
     let activities: [FeedActivity]
     let onBack: () -> Void
     @EnvironmentObject private var store: WanderStore
@@ -14,10 +15,12 @@ struct LivePlaceFullProfileScreen: View {
     @Environment(\.astirBrandMode) private var brand
     @State private var saveContext: MapPlaceSaveContext?
 
-    init(place: VisiblePlace, activities: [FeedActivity], onBack: @escaping () -> Void) {
+    init(place: VisiblePlace, activities: [FeedActivity], identity: LivePlaceIdentity? = nil,
+         onBack: @escaping () -> Void) {
         let sheetPlace = PlaceSheetPlace(visiblePlace: place)
         visiblePlace = place
         self.sheetPlace = sheetPlace
+        self.identity = identity
         candidate = sheetPlace.saveCandidate
         self.activities = activities
         self.onBack = onBack
@@ -25,6 +28,7 @@ struct LivePlaceFullProfileScreen: View {
 
     init(candidate: PlaceCandidate, onBack: @escaping () -> Void) {
         visiblePlace = nil
+        identity = nil
         sheetPlace = PlaceSheetPlace(candidate: candidate)
         self.candidate = candidate
         activities = []
@@ -32,10 +36,7 @@ struct LivePlaceFullProfileScreen: View {
     }
 
     private var currentUserSave: VisiblePlace? {
-        store.currentUserVisiblePlaces.first { visible in
-            if let visiblePlace { return VisiblePlaceGrouping.matches(visible, visiblePlace) }
-            return VisiblePlaceGrouping.matches(visible, candidate: candidate)
-        }
+        LivePlaceSaveContinuation.matchingOwnPlaces(candidate: candidate, identity: identity, store: store).first
     }
 
     var body: some View {
@@ -65,7 +66,7 @@ struct LivePlaceFullProfileScreen: View {
 
     private func openSave() {
         saveContext = LivePlaceSaveContinuation.context(candidate: candidate,
-            visiblePlace: visiblePlace, store: store)
+            visiblePlace: visiblePlace, identity: identity, store: store)
         store.saveFlowDidPresent(.saveSheet)
     }
 
@@ -76,7 +77,7 @@ struct LivePlaceFullProfileScreen: View {
         }
         let matching: [VisiblePlace]
         if let visiblePlace {
-            matching = LivePlaceFullProfilePresentation.matchingSaves(selected: visiblePlace,
+            matching = LivePlaceFullProfilePresentation.matchingSaves(selected: visiblePlace, identity: identity,
                 authorizedPlaces: visible, viewerID: store.currentUser.id)
         } else {
             matching = LivePlaceFullProfilePresentation.matchingSaves(candidate: candidate,
@@ -93,9 +94,10 @@ struct LivePlaceFullProfileScreen: View {
 
 @MainActor
 enum LivePlaceFullProfilePresentation {
-    static func matchingSaves(selected: VisiblePlace, authorizedPlaces: [VisiblePlace], viewerID: String) -> [VisiblePlace] {
+    static func matchingSaves(selected: VisiblePlace, identity: LivePlaceIdentity? = nil,
+                              authorizedPlaces: [VisiblePlace], viewerID: String) -> [VisiblePlace] {
         matchingSaves(authorizedPlaces: authorizedPlaces, viewerID: viewerID, selectedID: selected.id) {
-            VisiblePlaceGrouping.matches($0, selected)
+            identity?.matches($0.place) ?? VisiblePlaceGrouping.matches($0, selected)
         }
     }
 

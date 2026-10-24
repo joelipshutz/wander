@@ -164,6 +164,12 @@ async function main() {
         await client.query("rollback to savepoint live_feed_smoke");
         await client.query("release savepoint live_feed_smoke");
         console.log("ok - Live filters precede pagination and cursors remain account/query scoped without widening visibility");
+        await client.query("savepoint live_place_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint live_place_smoke");
+        await client.query("release savepoint live_place_smoke");
+        console.log("ok - place preview activity expands explicit aliases without widening visibility and binds pagination to account/scope");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -2847,6 +2853,10 @@ savepoint live_feed_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_feed_smoke;
 release savepoint live_feed_smoke;
+savepoint live_place_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint live_place_smoke;
+release savepoint live_place_smoke;
 savepoint repeat_wanna_smoke;
 savepoint sender_notifications_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/sender_notification_controls.sql", import.meta.url), "utf8"), "rollback")}

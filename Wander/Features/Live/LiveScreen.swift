@@ -177,7 +177,7 @@ struct LiveScreen: View {
         .background(brand.background)
         .recentPlaceListAddPresentation(recentListAdd)
         .fullScreenCover(item: $fullProfilePin, onDismiss: modalDidDismiss) { pin in
-            LivePlaceFullProfileScreen(place: pin.place, activities: activity,
+            LivePlaceFullProfileScreen(place: pin.place, activities: activity, identity: pin.identity,
                 onBack: { fullProfilePin = nil })
                 .modifier(modalLifecycle)
         }
@@ -319,7 +319,7 @@ struct LiveScreen: View {
                 store.liveFeedQuery?.includes(event) == true && store.canDisplayLiveMapActivity(event)
             }
             mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
-                ownCheckInPlaces: ownCheckInPlaces)
+                ownCheckInPlaces: ownCheckInPlaces, previousPins: previousPinIdentities)
         }
         .onChange(of: store.presentationRevision) { _, _ in
             mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
@@ -439,8 +439,8 @@ struct LiveScreen: View {
                 ForEach(pins) { pin in
                     Annotation(pin.place.place.canonicalName, coordinate: coordinate(pin.place)) {
                         Button { selectPin(pin) } label: {
-                            LivePhotoMapPinView(place: pin.place, kind: pin.kind, selected: pin.id == selectedPlaceID,
-                                viewed: LiveViewedPinHistory.isViewed(pin.id, dates: viewedPins),
+                            LiveMapPinView(kind: pin.kind, selected: pin.id == selectedPlaceID,
+                                viewed: pin.isViewed(dates: viewedPins),
                                 compact: compactIDs.contains(pin.id))
                         }
                         .buttonStyle(.plain)
@@ -770,7 +770,7 @@ struct LiveScreen: View {
 
     @ViewBuilder private var placePreviewContent: some View {
         if let pin = selectedPin {
-            LivePlacePreviewCard(place: pin.place, activities: pin.activities,
+            LivePlacePreviewCard(place: pin.place, activities: pin.activities, identity: pin.identity,
                 onOpen: { openPlace(pin) }, onAdd: { openPlace(pin, add: true) },
                 onShare: { sharePlace(pin) },
                 onAddToList: { recentListAdd.add(.visiblePlace(pin.place), store: store, backend: backend, analyticsSurface: "map") },
@@ -1125,12 +1125,17 @@ struct LiveScreen: View {
         }
     }
 
+    private var previousPinIdentities: [LivePlacePin] {
+        guard let selected = selectedPin else { return mapPins }
+        return [selected] + mapPins.filter { $0.id != selected.id }
+    }
+
     private func rebuildMapProjection() {
         mapActivity = mapResults.activities.filter {
             store.liveFeedQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
         }
         mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
-                ownCheckInPlaces: ownCheckInPlaces)
+                ownCheckInPlaces: ownCheckInPlaces, previousPins: previousPinIdentities)
     }
 
     private var activeFilterCount: Int {
@@ -1236,7 +1241,7 @@ struct LiveScreen: View {
         clearNativePlaceSelection()
         if cardMapOrigin == nil { cardMapOrigin = drawerMapOrigin ?? viewport }
         previewCameraAdjusted = false
-        viewedPins[pin.id] = .now
+        for id in pin.identity.placeIDs.union([pin.id]) { viewedPins[id] = .now }
         LiveViewedPinHistory.save(viewedPins, userID: store.currentUser.id)
         mapSearch.rebaseForPresentationChange()
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
@@ -1267,11 +1272,19 @@ struct LiveScreen: View {
     }
 
     private func dismissPlacePreview() {
+        let closedCoordinate = previewCoordinate
         clearNativePlaceSelection()
         mapSearch.rebaseForPresentationChange()
+        let restoredOrigin = (cardMapOrigin ?? drawerMapOrigin).map { origin in
+            let layout = LiveMapSearchLayout(size: mapSize, controlsHeight: mapControlsHeight,
+                drawerHeight: height(for: 0, available: mapSize.height))
+            guard let exposed = layout.visibleRect else { return origin }
+            return LiveMapViewportPolicy.restoredRegion(origin, keeping: closedCoordinate,
+                size: mapSize, exposedRect: exposed)
+        }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
             selectedPlaceID = nil; detent = 0
-            if let origin = cardMapOrigin ?? drawerMapOrigin { camera = .region(origin) }
+            if let restoredOrigin { camera = .region(restoredOrigin) }
         }
         cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
     }
@@ -1290,7 +1303,7 @@ struct LiveScreen: View {
         if add {
             previewSaveContext = LivePlaceSaveContinuation.context(
                 candidate: PlaceSheetPlace(visiblePlace: pin.place).saveCandidate,
-                visiblePlace: pin.place, store: store)
+                visiblePlace: pin.place, identity: pin.identity, store: store)
             store.saveFlowDidPresent(.saveSheet)
         } else {
             rememberFeedPresentation()

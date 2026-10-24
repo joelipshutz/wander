@@ -4,6 +4,35 @@ import XCTest
 final class LiveExperienceUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testRestoredPinOpensPreviewWithVisibleTitleAndAllControls() {
+        let app = launch()
+        let pin = app.buttons["live.pin.place_noodles"]
+        XCTAssertTrue(pin.waitForExistence(timeout: 15))
+        XCTAssertTrue(pin.isHittable)
+        pin.tap()
+        let open = app.buttons["live.placePreview.open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        XCTAssertEqual(open.label, "Open Larchmont Noodles")
+        XCTAssertTrue(open.isHittable, "The place title must remain visible and tappable")
+        for identifier in ["add", "share", "list", "close"] {
+            let control = app.buttons["live.placePreview.\(identifier)"]
+            XCTAssertTrue(control.waitForExistence(timeout: 5), identifier)
+            XCTAssertTrue(control.isHittable, identifier)
+            XCTAssertTrue(app.frame.contains(control.frame), "\(identifier) must stay inside the screen")
+        }
+        capture("preview-title-all-controls-width-\(Int(app.frame.width))")
+        app.buttons["live.placePreview.close"].tap()
+        XCTAssertTrue(open.waitForNonExistence(timeout: 5))
+        // MapKit restores the collapsed-map camera asynchronously after the
+        // card is removed. Wait for the interactive annotation, not just the card.
+        let restoredPin = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in pin.isHittable }, object: nil)
+        let restoration = XCTWaiter.wait(for: [restoredPin], timeout: 5)
+        capture("preview-closed-width-\(Int(app.frame.width))")
+        XCTAssertEqual(restoration, .completed)
+        XCTAssertTrue(pin.isHittable)
+    }
+
     func testThreeTabsAndProfileContinuity() {
         let app = launch()
         XCTAssertTrue(app.tabBars.buttons["Live"].waitForExistence(timeout: 30))

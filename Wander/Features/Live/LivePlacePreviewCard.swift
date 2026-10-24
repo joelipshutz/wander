@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// A preview of a selected Live pin. The caller supplies only currently authorized,
-/// filter-matching events; opening the preview does not fetch unrelated activity.
+/// place events; discovery filters do not reorder the selected place’s history.
 struct LivePlacePreviewCard: View {
     private let visiblePlace: VisiblePlace?
     private let sheetPlace: PlaceSheetPlace
+    private let identity: LivePlaceIdentity?
     let activities: [FeedActivity]
     let onOpen: () -> Void
     let onAdd: () -> Void
@@ -25,12 +26,18 @@ struct LivePlacePreviewCard: View {
     @State private var photoViewer: LivePreviewPhotoRoute?
     @State private var hydratedActivity: [FeedActivity] = []
     @State private var hydratedActivityKey: String?
+    @State private var hydratedAccessGenerations: [String: Int] = [:]
+    @State private var activityLoadFailed = false
+    @State private var activityRetry = 0
+    @State private var activityDisplayLease = LiveFeedDisplayLease()
+    @State private var activityLeaseRevision: UInt64 = 0
 
-    init(place: VisiblePlace, activities: [FeedActivity], onOpen: @escaping () -> Void,
+    init(place: VisiblePlace, activities: [FeedActivity], identity: LivePlaceIdentity? = nil, onOpen: @escaping () -> Void,
          onAdd: @escaping () -> Void, onShare: @escaping () -> Void,
          onAddToList: @escaping () -> Void, onClose: @escaping () -> Void) {
         visiblePlace = place
         sheetPlace = PlaceSheetPlace(visiblePlace: place)
+        self.identity = identity ?? LivePlaceIdentity(places: [place.place])
         self.activities = activities
         self.onOpen = onOpen
         self.onAdd = onAdd
@@ -44,6 +51,7 @@ struct LivePlacePreviewCard: View {
          onAddToList: @escaping () -> Void, onClose: @escaping () -> Void) {
         visiblePlace = nil
         sheetPlace = PlaceSheetPlace(candidate: candidate)
+        identity = nil
         // A native POI has no authorized activity or save of its own.
         activities = []
         self.onOpen = onOpen
@@ -54,14 +62,21 @@ struct LivePlacePreviewCard: View {
     }
 
     private var selectedActivity: [FeedActivity] {
-        LivePlacePreviewPresentation.hydrationCandidates(activities, placeID: sheetPlace.id)
+        LivePlacePreviewPresentation.hydrationCandidates(activities, placeID: sheetPlace.id, identity: identity)
     }
     private var recentActivity: [FeedActivity] {
-        let rows = hydratedActivityKey == activityHydrationKey ? hydratedActivity : selectedActivity
-        return LivePlacePreviewPresentation.recentActivity(rows, placeID: sheetPlace.id)
+        let isHydrated = hydratedActivityKey == activityHydrationKey
+        let rows = LivePlacePreviewPresentation.displayableActivity(
+            isHydrated ? hydratedActivity : selectedActivity, viewerID: store.currentUser.id,
+            lease: isHydrated ? activityDisplayLease : LiveFeedDisplayLease(), at: .now).filter {
+                store.canDisplayPlaceActivity($0) && (!isHydrated
+                    || hydratedAccessGenerations[$0.id] == store.activityAccessGeneration(for: $0.id))
+            }
+        let rowIdentity = isHydrated ? LivePlaceIdentity(places: rows.compactMap { $0.place?.place }) : identity
+        return LivePlacePreviewPresentation.recentActivity(rows, placeID: sheetPlace.id, identity: rowIdentity)
     }
     private var activityHydrationKey: String {
-        "\(sheetPlace.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoAccessRevision)|\(scenePhase)|"
+        "\(identity?.cacheKey ?? sheetPlace.id)|\(store.currentUser.id)|\(auth.state.session?.userID ?? "signed-out")|\(backend.photoSessionRevision)|\(backend.photoAccessRevision)|\(scenePhase)|\(activityRetry)|"
             + selectedActivity.map { "\($0.id):\(store.activityAccessGeneration(for: $0.id))" }.joined(separator: ",")
     }
     private var providerDetailsRequestKey: String {
@@ -92,6 +107,7 @@ struct LivePlacePreviewCard: View {
         .task(id: photoResolutionKey) { await resolvePhoto() }
         .task(id: "\(providerDetailsRequestKey)|\(scenePhase)") { await resolveProviderDetails() }
         .task(id: activityHydrationKey) { await hydrateSelectedActivity() }
+        .task(id: "\(activityHydrationKey)|\(activityLeaseRevision)") { await expireActivityLease() }
         .onDisappear {
             if resolvedPhoto?.photo.requiresAccessCheck == true {
                 resolvedPhoto = nil; resolvedPhotoKey = nil
@@ -103,82 +119,10 @@ struct LivePlacePreviewCard: View {
     }
 
     private var photoHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-            ZStack {
-                LinearGradient(colors: [brand.raisedBackground, brand.secondaryText.opacity(0.22)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 54, weight: .light))
-                    .foregroundStyle(brand.secondaryText.opacity(0.5))
-                if resolvedPhotoKey == photoResolutionKey, let resolvedPhoto {
-                    Image(uiImage: resolvedPhoto.image).resizable().scaledToFill()
-                }
-            }
-            .accessibilityHidden(true)
-
-            LinearGradient(colors: [.clear, .black.opacity(0.78)],
-                           startPoint: .center, endPoint: .bottom)
-                .allowsHitTesting(false)
-
-            Button(action: onOpen) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Spacer(minLength: 0)
-                    Text(sheetPlace.name)
-                        .font(AstirTypography.sheetTitle)
-                        .foregroundStyle(.white)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
-                        .multilineTextAlignment(.leading)
-                        .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                }
-                .padding(.leading, 16)
-                .padding(.trailing, 68)
-                .padding(.bottom, 15)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(sheetPlace.name)")
-            .accessibilityHint("Opens the full place page")
-            .accessibilityIdentifier("live.placePreview.open")
-
-            actionRail
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(10)
-            action("Close place preview", symbol: "xmark", identifier: "close", perform: onClose)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(10)
-        }
-        .frame(height: dynamicTypeSize.isAccessibilitySize ? 236 : 196)
-        .clipped()
-    }
-
-    private var actionRail: some View {
-        VStack(spacing: 0) {
-            action("Save place", symbol: "plus", identifier: "add", signal: true, perform: onAdd)
-            action("Share place", symbol: "square.and.arrow.up", identifier: "share", perform: onShare)
-            action("Add place to list", symbol: "text.badge.plus", identifier: "list", perform: onAddToList)
-        }
-    }
-
-    private func action(_ title: String, symbol: String, identifier: String,
-                        signal: Bool = false, perform: @escaping () -> Void) -> some View {
-        Button(action: perform) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(signal ? brand.accentForeground : brand.primaryText)
-                .frame(width: 34, height: 34)
-                // A photo can be much darker/lighter than the selected app theme.
-                // Keep the glyph's backing legible while retaining the glass edge.
-                .background(signal ? brand.accent : brand.raisedBackground.opacity(0.88), in: Circle())
-                .astirGlassSurface(cornerRadius: 17, castsShadow: true,
-                                   interactive: true, accentAction: signal)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .environment(\.colorScheme, brand.prefersDarkInterface ? .dark : .light)
-        .accessibilityLabel(title)
-        .accessibilityIdentifier("live.placePreview.\(identifier)")
+        LivePlacePreviewHeader(name: sheetPlace.name,
+            image: resolvedPhotoKey == photoResolutionKey ? resolvedPhoto?.image : nil,
+            onOpen: onOpen, onAdd: onAdd, onShare: onShare,
+            onAddToList: onAddToList, onClose: onClose)
     }
 
     private var details: some View {
@@ -203,6 +147,18 @@ struct LivePlacePreviewCard: View {
             .buttonStyle(.plain)
             .accessibilityHint("Opens the full place page")
 
+            if activityLoadFailed, recentActivity.isEmpty {
+                HStack {
+                    Text("Recent activity couldn’t load.")
+                        .font(AstirTypography.caption)
+                        .foregroundStyle(brand.secondaryText)
+                    Spacer(minLength: 4)
+                    Button("Try again") { activityRetry += 1 }
+                        .font(AstirTypography.label)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("live.placePreview.retryActivity")
+                }
+            }
             if !recentActivity.isEmpty {
                 Rectangle().fill(brand.border.opacity(0.7)).frame(height: 0.5)
                     .accessibilityHidden(true)
@@ -368,23 +324,87 @@ struct LivePlacePreviewCard: View {
 
     private func hydrateSelectedActivity() async {
         let key = activityHydrationKey
+        let userID = store.currentUser.id
+        let usesRemoteHistory = backend.feedRepository != nil && !(identity?.persistedPlaceIDs.isEmpty ?? true)
         hydratedActivity = []; hydratedActivityKey = key
+        hydratedAccessGenerations = [:]; activityLoadFailed = false
+        activityDisplayLease = LiveFeedDisplayLease(); activityLeaseRevision &+= 1
         guard scenePhase == .active, auth.isSignedIn else { return }
-        // Candidate identity is independent of hydrated notes/media. Resolve a
-        // bounded prefix until three distinct, still-authorized rows are ready.
-        await LivePlacePreviewPresentation.hydrateRecentActivity(
-            selectedActivity, placeID: sheetPlace.id,
-            isCurrent: { key == activityHydrationKey },
-            resolve: { event in
-                guard UUID(uuidString: event.id) != nil else { return event }
-                guard event.activityEngagementContext != nil,
-                      let fresh = await store.activity(id: event.id, backend: backend, authSession: auth),
-                      store.canDisplayLiveMapActivity(fresh), store.liveFeedQuery?.includes(fresh) ?? true
-                else { return nil }
-                return fresh
-            },
-            onUpdate: { hydratedActivity = $0 }
-        )
+        func isCurrent() -> Bool {
+            !Task.isCancelled && key == activityHydrationKey && auth.isSignedIn
+                && auth.state.session?.userID == userID && store.currentUser.id == userID
+                && (!usesRemoteHistory || auth.isSessionValidated)
+        }
+        var generations: [String: Int] = [:]
+        func resolve(_ event: FeedActivity) async -> FeedActivity? {
+            let generation = store.activityAccessGeneration(for: event.id)
+            let fresh: FeedActivity
+            if UUID(uuidString: event.id) != nil {
+                guard let repository = backend.activityEngagementRepository else { return nil }
+                do {
+                    fresh = try await repository.activity(id: event.id)
+                    guard fresh.activityEngagementContext != nil else { return nil }
+                } catch {
+                    if isCurrent() { activityLoadFailed = true }
+                    return nil
+                }
+            } else { fresh = event }
+            guard isCurrent(), fresh.id == event.id,
+                  generation == store.activityAccessGeneration(for: event.id),
+                  store.canDisplayPlaceActivity(fresh) else { return nil }
+            generations[fresh.id] = generation
+            if fresh.actor.id != userID {
+                // Only this successful source read renews this row's receipt.
+                // Publishing later siblings must not extend older authorization.
+                activityDisplayLease.accept(activityIDs: [fresh.id], at: .now, replacing: false)
+                activityLeaseRevision &+= 1
+            }
+            return fresh
+        }
+        func publish(_ rows: [FeedActivity]) {
+            guard isCurrent() else { return }
+            hydratedAccessGenerations = generations
+            hydratedActivity = rows.filter {
+                generations[$0.id] == store.activityAccessGeneration(for: $0.id)
+                    && store.canDisplayPlaceActivity($0)
+            }
+        }
+        do {
+            if let repository = backend.feedRepository, let identity, !identity.persistedPlaceIDs.isEmpty {
+                try await auth.ensureSessionValidated(for: userID)
+                guard isCurrent(), auth.isSessionValidated else { return }
+                try await LivePlacePreviewPresentation.loadRecentActivity(
+                    placeID: sheetPlace.id, identity: identity, isCurrent: isCurrent,
+                    loadPage: { cursor in
+                        try await repository.placeActivity(placeIDs: identity.persistedPlaceIDs,
+                            before: cursor, limit: LivePlacePreviewPresentation.maximumHydrationCandidates)
+                    }, resolve: resolve, onUpdate: publish)
+            } else {
+                // Fixture/native-local rows do not have persisted venue IDs.
+                await LivePlacePreviewPresentation.hydrateRecentActivity(
+                    selectedActivity, placeID: sheetPlace.id, identity: identity,
+                    isCurrent: isCurrent, resolve: resolve, onUpdate: publish)
+            }
+        } catch {
+            guard isCurrent() else { return }
+            activityLoadFailed = true
+        }
+    }
+
+    private func expireActivityLease() async {
+        guard scenePhase == .active, let expiry = activityDisplayLease.nextExpiry(after: .now) else { return }
+        let key = activityHydrationKey
+        let revision = activityLeaseRevision
+        do { try await ContinuousClock().sleep(until: expiry) } catch { return }
+        guard !Task.isCancelled, scenePhase == .active, key == activityHydrationKey,
+              revision == activityLeaseRevision else { return }
+        let allowed = LivePlacePreviewPresentation.displayableActivity(hydratedActivity,
+            viewerID: store.currentUser.id, lease: activityDisplayLease, at: .now)
+        let expired = allowed.count != hydratedActivity.count
+        hydratedActivity = allowed
+        // Re-arm for later receipts even if the expired row was deduplicated.
+        activityLeaseRevision &+= 1
+        if expired { activityRetry += 1 }
     }
 
     private func resolvePhoto() async {
@@ -423,6 +443,104 @@ struct LivePlacePreviewCard: View {
 
 }
 
+/// Background image dimensions cannot displace the title or action controls.
+struct LivePlacePreviewHeader: View {
+    let name: String
+    let image: UIImage?
+    let onOpen: () -> Void
+    let onAdd: () -> Void
+    let onShare: () -> Void
+    let onAddToList: () -> Void
+    let onClose: () -> Void
+    @Environment(\.astirBrandMode) private var brand
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Color.clear
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? 236 : 196)
+            .background {
+                GeometryReader { geometry in
+                    ZStack {
+                        LinearGradient(colors: [brand.raisedBackground, brand.secondaryText.opacity(0.22)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 54, weight: .light))
+                            .foregroundStyle(brand.secondaryText.opacity(0.5))
+                        if let image {
+                            Image(uiImage: image).resizable().scaledToFill()
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .clipped()
+                        }
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+            }
+            .overlay {
+                LinearGradient(colors: [.clear, .black.opacity(0.78)],
+                               startPoint: .center, endPoint: .bottom)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottomLeading) {
+                Button(action: onOpen) {
+                    Text(name)
+                        .font(AstirTypography.sheetTitle)
+                        .foregroundStyle(.white)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                        .multilineTextAlignment(.leading)
+                        .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(.top, 54)
+                        .padding(.leading, 16)
+                        .padding(.trailing, 68)
+                        .padding(.bottom, 15)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(name)")
+                .accessibilityHint("Opens the full place page")
+                .accessibilityIdentifier("live.placePreview.open")
+            }
+            .overlay(alignment: .topTrailing) { actionRail.padding(10) }
+            .overlay(alignment: .topLeading) {
+                action("Close place preview", symbol: "xmark", identifier: "close", perform: onClose)
+                    .padding(10)
+            }
+            .clipped()
+    }
+
+    private var actionRail: some View {
+        VStack(spacing: 0) {
+            action("Save place", symbol: "plus", identifier: "add", signal: true, perform: onAdd)
+            action("Share place", symbol: "square.and.arrow.up", identifier: "share", perform: onShare)
+            action("Add place to list", symbol: "text.badge.plus", identifier: "list", perform: onAddToList)
+        }
+    }
+
+    private func action(_ title: String, symbol: String, identifier: String,
+                        signal: Bool = false, perform: @escaping () -> Void) -> some View {
+        Button(action: perform) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(signal ? brand.accentForeground : brand.primaryText)
+                .frame(width: 34, height: 34)
+                // A photo can be much darker/lighter than the selected app theme.
+                // Keep the glyph's backing legible while retaining the glass edge.
+                .background(signal ? brand.accent : brand.raisedBackground.opacity(0.88), in: Circle())
+                .astirGlassSurface(cornerRadius: 17, castsShadow: true,
+                                   interactive: true, accentAction: signal)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .environment(\.colorScheme, brand.prefersDarkInterface ? .dark : .light)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("live.placePreview.\(identifier)")
+    }
+
+}
+
 private struct LivePreviewPhotoRoute: Identifiable {
     let id = UUID()
     let context: ActivityEngagementContext
@@ -431,38 +549,93 @@ private struct LivePreviewPhotoRoute: Identifiable {
 
 enum LivePlacePreviewPresentation {
     static let maximumHydrationCandidates = 20
+    static let maximumHistoryPages = 3
     private static let maximumRecentActivity = 3
+
+    /// The continuous-time lease also gates the first foreground frame before
+    /// its refresh task resumes; cached payload timestamps grant no extension.
+    static func displayableActivity(_ activities: [FeedActivity], viewerID: String,
+                                    lease: LiveFeedDisplayLease, at now: ContinuousClock.Instant) -> [FeedActivity] {
+        activities.filter { lease.permits(activityID: $0.id, isOwn: $0.actor.id == viewerID, at: now) }
+    }
 
     /// Map rows do not yet carry authoritative media. Only event identity and
     /// ordering choose the hydration candidates; content dedup happens later.
-    static func hydrationCandidates(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
-        Array(sortedUniqueActivities(activities, placeID: placeID).prefix(maximumHydrationCandidates))
+    static func hydrationCandidates(_ activities: [FeedActivity], placeID: String,
+                                    identity: LivePlaceIdentity? = nil) -> [FeedActivity] {
+        Array(sortedUniqueActivities(activities, placeID: placeID, identity: identity).prefix(maximumHydrationCandidates))
     }
 
     @MainActor
     @discardableResult
     static func hydrateRecentActivity(
-        _ activities: [FeedActivity], placeID: String,
+        _ activities: [FeedActivity], placeID: String, identity: LivePlaceIdentity? = nil,
         isCurrent: @MainActor () -> Bool,
         resolve: @MainActor (FeedActivity) async -> FeedActivity?,
         onUpdate: @MainActor ([FeedActivity]) -> Void = { _ in }
     ) async -> [FeedActivity] {
         var accepted: [FeedActivity] = []
         var rows: [FeedActivity] = []
-        for candidate in hydrationCandidates(activities, placeID: placeID) {
+        for candidate in hydrationCandidates(activities, placeID: placeID, identity: identity) {
             guard !Task.isCancelled, isCurrent() else { return [] }
             let fresh = await resolve(candidate)
             guard !Task.isCancelled, isCurrent() else { return [] }
-            if let fresh, fresh.place?.place.id == placeID { accepted.append(fresh) }
-            rows = recentActivity(accepted, placeID: placeID)
+            if let fresh, matches(fresh, placeID: placeID, identity: identity) { accepted.append(fresh) }
+            rows = recentActivity(accepted, placeID: placeID, identity: identity)
             onUpdate(rows)
             if rows.count == maximumRecentActivity { break }
         }
         return rows
     }
 
-    static func recentActivity(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
-        let matching = sortedUniqueActivities(activities, placeID: placeID)
+    /// This bounded read is independent of map discovery filters and never
+    /// inserts history into the map or the shared Feed’s pagination state.
+    @MainActor
+    @discardableResult
+    static func loadRecentActivity(
+        placeID: String, identity: LivePlaceIdentity,
+        isCurrent: @MainActor () -> Bool,
+        loadPage: @MainActor (String?) async throws -> FollowedFeedPage,
+        resolve: @MainActor (FeedActivity) async -> FeedActivity?,
+        onUpdate: @MainActor ([FeedActivity]) -> Void = { _ in }
+    ) async throws -> [FeedActivity] {
+        guard !identity.aliases.isEmpty else { return [] }
+        var accepted: [FeedActivity] = []
+        var rows: [FeedActivity] = []
+        var cursor: String?
+        var requestedCursors = Set<String>()
+        var seenEvents = Set<String>()
+        for _ in 0..<maximumHistoryPages {
+            guard !Task.isCancelled, isCurrent() else { return [] }
+            let page = try await loadPage(cursor)
+            guard !Task.isCancelled, isCurrent() else { return [] }
+            // The endpoint has already resolved the complete canonical place
+            // component. A transitive server alias may be absent from the pin.
+            let pageIdentity = LivePlaceIdentity(places: page.activity.compactMap { $0.place?.place })
+            for candidate in hydrationCandidates(page.activity, placeID: placeID, identity: pageIdentity)
+                where seenEvents.insert(candidate.id).inserted {
+                guard !Task.isCancelled, isCurrent() else { return [] }
+                let fresh = await resolve(candidate)
+                guard !Task.isCancelled, isCurrent() else { return [] }
+                // Hydration may not retarget an authorized event to a different
+                // venue or event while the request is in flight.
+                if let fresh, fresh.id == candidate.id,
+                   let sourcePlaceID = candidate.place?.place.id,
+                   fresh.place?.place.id == sourcePlaceID { accepted.append(fresh) }
+                let acceptedIdentity = LivePlaceIdentity(places: accepted.compactMap { $0.place?.place })
+                rows = recentActivity(accepted, placeID: placeID, identity: acceptedIdentity)
+                onUpdate(rows)
+                if rows.count == maximumRecentActivity { return rows }
+            }
+            guard let next = page.nextCursor, requestedCursors.insert(next).inserted else { break }
+            cursor = next
+        }
+        return rows
+    }
+
+    static func recentActivity(_ activities: [FeedActivity], placeID: String,
+                               identity: LivePlaceIdentity? = nil) -> [FeedActivity] {
+        let matching = sortedUniqueActivities(activities, placeID: placeID, identity: identity)
         let originals = Set(matching.filter {
             $0.kind == .placeBeen || $0.kind == .placeWannaGo || $0.kind == .placeSaved
         }.compactMap(listEchoKey))
@@ -475,17 +648,21 @@ enum LivePlacePreviewPresentation {
         }.prefix(maximumRecentActivity))
     }
 
-    private static func sortedUniqueActivities(_ activities: [FeedActivity], placeID: String) -> [FeedActivity] {
+    private static func sortedUniqueActivities(_ activities: [FeedActivity], placeID: String,
+                                               identity: LivePlaceIdentity?) -> [FeedActivity] {
         var seen = Set<String>()
         return activities.filter {
-            $0.place?.place.id == placeID && seen.insert($0.id).inserted
+            matches($0, placeID: placeID, identity: identity) && seen.insert($0.id).inserted
         }.sorted { lhs, rhs in
-            let lhsFollowed = lhs.actor.relationship == .follower || lhs.actor.relationship == .mutual
-            let rhsFollowed = rhs.actor.relationship == .follower || rhs.actor.relationship == .mutual
-            if lhsFollowed != rhsFollowed { return lhsFollowed }
             if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
-            return lhs.id < rhs.id
+            return lhs.id > rhs.id
         }
+    }
+
+    private static func matches(_ activity: FeedActivity, placeID: String,
+                                identity: LivePlaceIdentity?) -> Bool {
+        guard let place = activity.place?.place else { return false }
+        return identity?.matches(place) ?? (place.id == placeID)
     }
 
     private struct ListEchoKey: Hashable {

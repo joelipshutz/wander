@@ -130,6 +130,54 @@ final class LivePlaceSaveContinuationTests: XCTestCase {
         }
     }
 
+    func testMergedPinIdentityEditsOwnTransitiveWannaWithoutCreatingAnotherParent() throws {
+        let store = WanderStore(fixtures: .seed())
+        let saved = store.saveCandidate(candidate(id: "historic-native", name: "Original name", address: "45 Former Road"),
+            status: .wannaGo, visibility: .selfOnly, note: "Existing plan", sourceType: .manual)
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID })
+        let current = LocalPlace(localID: "99000000-0000-4000-8000-000000000011", canonicalName: "Current name",
+            category: "restaurant", address: "10 Current Street", latitude: 34, longitude: -118,
+            sourceProvider: "mapkit", sourceProviderPlaceID: "native-current")
+        let bridge = LocalPlace(localID: "99000000-0000-4000-8000-000000000012", canonicalName: "Intermediate name",
+            category: "restaurant", latitude: 34, longitude: -118,
+            sourceProvider: "mapkit", sourceProviderPlaceID: current.id)
+        own.place.sourceProviderPlaceID = bridge.id
+        let identity = LivePlaceIdentity(places: [current, bridge, own.place])
+        let selected = PlaceCandidate(id: current.id, name: current.canonicalName, category: "restaurant",
+            address: current.address, latitude: 34, longitude: -118,
+            sourceProvider: "mapkit", sourceProviderPlaceID: "native-current", confidence: 1)
+        XCTAssertFalse(VisiblePlaceGrouping.matches(own, candidate: selected, allowingProviderIdentityFallback: true))
+        XCTAssertEqual(LivePlaceSaveContinuation.matchingOwnPlaces(candidate: selected, identity: identity, store: store)
+            .map(\.id), [own.id])
+        let before = store.currentUserVisiblePlaces.map(\.id)
+        let context = LivePlaceSaveContinuation.context(candidate: selected, identity: identity, store: store)
+        guard case .editWant(let existing) = context.mode else { return XCTFail("The merged pin must edit its existing own Wanna") }
+        XCTAssertEqual(existing.userPlace.id, own.userPlace.id)
+        XCTAssertEqual(context.initialNote, "Existing plan")
+        XCTAssertEqual(store.currentUserVisiblePlaces.map(\.id), before)
+        own.userPlace.deletedAt = .now
+        XCTAssertTrue(LivePlaceSaveContinuation.matchingOwnPlaces(candidate: selected, identity: identity, store: store).isEmpty,
+            "A retained pin identity must not revive a deleted own save.")
+    }
+
+    func testExplicitPinIdentityCannotFallBackToCaseInsensitiveProviderMatch() throws {
+        let store = WanderStore(fixtures: .seed())
+        let saved = store.saveCandidate(candidate(id: "PlaceTokenA", name: "Old cafe", address: "20 Other Street"),
+            status: .wannaGo, visibility: .selfOnly, note: "Existing plan", sourceType: .manual)
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID })
+        own.place.sourceProvider = "mapkit"
+        own.place.sourceProviderPlaceID = "PlaceTokenA"
+        let different = LocalPlace(localID: "separate-venue", canonicalName: "Another cafe",
+            category: "restaurant", address: "10 Different Street", latitude: 35, longitude: -118,
+            sourceProvider: "mapkit", sourceProviderPlaceID: "placetokena")
+        let selected = PlaceCandidate(id: different.id, name: different.canonicalName, category: "restaurant",
+            address: different.address, latitude: 35, longitude: -118,
+            sourceProvider: "mapkit", sourceProviderPlaceID: "placetokena", confidence: 1)
+        XCTAssertTrue(LivePlaceSaveContinuation.matchingOwnPlaces(candidate: selected,
+            identity: LivePlaceIdentity(places: [different]), store: store).isEmpty,
+            "An explicit pin identity must not borrow another venue's existing Wanna.")
+    }
+
     private func candidate(id: String, name: String, address: String? = nil, latitude: Double = 34) -> PlaceCandidate {
         PlaceCandidate(id: id, name: name, category: "restaurant", address: address,
             locality: "Test City", region: "CA", country: "US", latitude: latitude, longitude: -118,

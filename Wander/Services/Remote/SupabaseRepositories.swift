@@ -696,6 +696,22 @@ struct SupabaseFeedRepository: FeedRepository {
         self.includesFeaturedPlaces = includesFeaturedPlaces
     }
 
+    func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage {
+        let ids = Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })
+        guard !ids.isEmpty, ids.count <= 100,
+              placeIDs.allSatisfy({ UUID(uuidString: $0) != nil }) else {
+            throw WanderRemoteError.invalidResponse("Invalid place activity scope")
+        }
+        let response: RemoteFollowedFeedPageDTO = try await rpc.call(
+            "live_place_activity", params: LivePlaceActivityParams(
+                input_place_ids: ids.sorted(), input_before: before,
+                input_limit: min(max(limit, 1), 50)))
+        try Task.checkCancellation()
+        // The card hydrates only its three displayed activities through fresh
+        // authorized reads. This request must not mutate or page the main Feed.
+        return try await response.followedFeedPage()
+    }
+
     func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
         guard query.isValid else { throw WanderRemoteError.invalidResponse("Invalid Live query") }
         return try await loadFeed(audience: audience, before: before, limit: limit, query: query,
@@ -3861,6 +3877,12 @@ private struct ActivityFeedParams: Encodable {
         case before = "input_before"
         case limit = "input_limit"
     }
+}
+
+private struct LivePlaceActivityParams: Encodable {
+    let input_place_ids: [String]
+    let input_before: String?
+    let input_limit: Int
 }
 
 private struct LiveActivityFeedParams: Encodable {

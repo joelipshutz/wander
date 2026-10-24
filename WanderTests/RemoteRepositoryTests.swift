@@ -1463,6 +1463,34 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 50)
     }
 
+    func testPlaceActivityUsesCanonicalScopeAndIndependentPagination() async throws {
+        let rpc = RecordingRPC()
+        let first = "63600000-0000-0000-0000-00000000000a"
+        let second = "63600000-0000-0000-0000-00000000000b"
+        rpc.responses["live_place_activity"] = Data(#"{"activity":[],"featured_places":[],"next_cursor":"place-next","fetched_at":"2026-10-23T12:00:00Z"}"#.utf8)
+        let page = try await SupabaseFeedRepository(rpc: rpc).placeActivity(
+            placeIDs: [second, first.uppercased(), first], before: "place-cursor", limit: 200)
+        XCTAssertEqual(page.nextCursor, "place-next")
+        XCTAssertEqual(rpc.calls.map(\.name), ["live_place_activity"])
+        XCTAssertEqual(rpc.calls[0].body["input_place_ids"] as? [String], [first, second])
+        XCTAssertEqual(rpc.calls[0].body["input_before"] as? String, "place-cursor")
+        XCTAssertEqual(rpc.calls[0].body["input_limit"] as? Int, 50)
+        XCTAssertNil(rpc.calls[0].body["input_audience"])
+        XCTAssertNil(rpc.calls[0].body["input_activity_type"])
+    }
+
+    func testPlaceActivityRejectsInvalidOrUnboundedScopeBeforeNetwork() async {
+        let rpc = RecordingRPC()
+        let repository = SupabaseFeedRepository(rpc: rpc)
+        for ids in [[], ["not-a-place-id"], (0..<101).map { _ in UUID().uuidString }] {
+            do {
+                _ = try await repository.placeActivity(placeIDs: ids, before: nil, limit: 20)
+                XCTFail("Invalid scope must fail closed")
+            } catch { }
+        }
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
+
     func testLiveMapPageHasNoPendingMediaAndSkipsMediaAndCompanionRequests() async throws {
         let rpc = RecordingRPC()
         let eventID = "63600000-0000-0000-0000-000000000010"

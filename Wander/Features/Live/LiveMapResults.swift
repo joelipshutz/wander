@@ -121,17 +121,154 @@ final class LiveMapResults: ObservableObject {
     }
 }
 
+/// A presentation identity for an already-authorized place. Coordinate overlap
+/// alone never joins venues, people, or activity records.
+struct LivePlaceIdentity: Hashable {
+    let aliases: Set<String>
+    let placeIDs: Set<String>
+    fileprivate let members: Set<Member>
+    private let membersByAlias: [String: Set<Member>]
+
+    init(places: [LocalPlace]) {
+        let members = Set(places.map(Member.init))
+        self.members = members
+        aliases = Set(members.flatMap(\.lookupKeys))
+        // An unverified provider UUID must not become an independent RPC seed.
+        // Validated target rows enter this set as members of the map component.
+        placeIDs = Set(members.flatMap(\.ids))
+        var index: [String: Set<Member>] = [:]
+        for member in members {
+            for key in member.lookupKeys { index[key, default: []].insert(member) }
+        }
+        membersByAlias = index
+    }
+
+    var persistedPlaceIDs: [String] {
+        Array(Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })).sorted()
+    }
+
+    var cacheKey: String { members.map(\.cacheKey).sorted().map(Self.field).joined() }
+
+    func matches(_ place: LocalPlace) -> Bool { matches(Member(place)) }
+
+    func intersects(_ other: LivePlaceIdentity) -> Bool {
+        other.members.contains { matches($0) }
+    }
+
+    private func matches(_ member: Member) -> Bool {
+        var checked = Set<Member>()
+        return member.lookupKeys.contains { key in
+            (membersByAlias[key] ?? []).contains { candidate in
+                checked.insert(candidate).inserted && candidate.matches(member)
+            }
+        }
+    }
+
+    static func aliases(for place: LocalPlace) -> Set<String> { Member(place).lookupKeys }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.members == rhs.members }
+    func hash(into hasher: inout Hasher) { hasher.combine(members) }
+    private static func field(_ value: String) -> String { "\(value.utf8.count):\(value)" }
+
+    /// Immutable identity evidence: old pin identity must not mutate when a
+    /// refreshed SwiftData object corrects its provider or address metadata.
+    fileprivate struct Member: Hashable {
+        let ids: Set<String>
+        let provider: String
+        let providerID: String
+        let referenceID: String?
+        let name: String
+        let street: String
+        let locality: String
+        let region: String
+        let country: String
+        let latitude: Double?
+        let longitude: Double?
+
+        init(_ place: LocalPlace) {
+            ids = Set([place.id, place.localID, place.serverID].compactMap { value in
+                guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+                return UUID(uuidString: value)?.uuidString.lowercased() ?? value
+            })
+            provider = place.sourceProvider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            providerID = (place.sourceProviderPlaceID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            referenceID = UUID(uuidString: providerID)?.uuidString.lowercased()
+            func text(_ value: String?) -> String {
+                VisiblePlaceGrouping.normalizedText(value, locale: Locale(identifier: "en_US_POSIX"))
+            }
+            name = text(place.canonicalName)
+            let suffixes = ["avenue": "ave", "boulevard": "blvd", "circle": "cir", "court": "ct",
+                "drive": "dr", "highway": "hwy", "lane": "ln", "parkway": "pkwy", "place": "pl",
+                "road": "rd", "street": "st", "terrace": "ter"]
+            street = text(place.address).split(separator: " ").map { suffixes[String($0)] ?? String($0) }.joined(separator: " ")
+            locality = text(place.locality); region = text(place.region); country = text(place.country)
+            let valid = place.latitude.isFinite && place.longitude.isFinite
+                && CLLocationCoordinate2DIsValid(.init(latitude: place.latitude, longitude: place.longitude))
+            latitude = valid ? (place.latitude == 0 ? 0 : place.latitude) : nil
+            longitude = valid ? (place.longitude == 0 ? 0 : place.longitude) : nil
+        }
+
+        var strongKeys: Set<String> {
+            var keys = Set(ids.map { "id:\($0)" })
+            // UUID-valued provider IDs are historical references, so their
+            // geography/name corroboration cannot be bypassed as a strong key.
+            if referenceID == nil, !provider.isEmpty, !providerID.isEmpty {
+                keys.insert("provider:" + LivePlaceIdentity.field(provider) + LivePlaceIdentity.field(providerID))
+            }
+            return keys
+        }
+
+        var weakKeys: Set<String> {
+            var keys = Set(ids.map { "reference:\($0)" })
+            if let referenceID { keys.insert("reference:\(referenceID)") }
+            if !name.isEmpty, !street.isEmpty, !locality.isEmpty {
+                keys.insert("address:" + [name, street, locality, region, country].map(LivePlaceIdentity.field).joined())
+            }
+            return keys
+        }
+
+        var lookupKeys: Set<String> { strongKeys.union(weakKeys) }
+        var cacheKey: String {
+            (ids.sorted() + [provider, providerID, name, street, locality, region, country,
+                latitude.map { String($0) } ?? "", longitude.map { String($0) } ?? ""]).map(LivePlaceIdentity.field).joined()
+        }
+
+        func matches(_ other: Member) -> Bool {
+            if !strongKeys.isDisjoint(with: other.strongKeys) { return true }
+            guard let latitude, let longitude, let otherLatitude = other.latitude, let otherLongitude = other.longitude,
+                  CLLocation(latitude: latitude, longitude: longitude).distance(from:
+                    CLLocation(latitude: otherLatitude, longitude: otherLongitude)) <= 100 else { return false }
+            let sameName = !name.isEmpty && name == other.name
+            let sameStreetLocality = !street.isEmpty && !locality.isEmpty
+                && street == other.street && locality == other.locality
+            let sameReferenceToken = referenceID != nil && referenceID == other.referenceID
+                && !provider.isEmpty && provider == other.provider && providerID == other.providerID
+            let references = (referenceID.map { other.ids.contains($0) } ?? false)
+                || (other.referenceID.map { ids.contains($0) } ?? false) || sameReferenceToken
+            if references { return sameName || sameStreetLocality }
+            return sameName && sameStreetLocality && region == other.region && country == other.country
+        }
+    }
+}
+
 struct LivePlacePin: Identifiable {
     let id: String
     let place: VisiblePlace
     let activities: [FeedActivity]
     let hasPriorOwnCheckIn: Bool
+    let identity: LivePlaceIdentity
 
-    init(id: String, place: VisiblePlace, activities: [FeedActivity], hasPriorOwnCheckIn: Bool = false) {
+    init(id: String, place: VisiblePlace, activities: [FeedActivity], hasPriorOwnCheckIn: Bool = false,
+         identity: LivePlaceIdentity? = nil) {
         self.id = id
         self.place = place
         self.activities = activities
         self.hasPriorOwnCheckIn = hasPriorOwnCheckIn
+        self.identity = identity ?? LivePlaceIdentity(places: [place.place] + activities.compactMap { $0.place?.place })
+    }
+
+    func isViewed(dates: [String: Date], now: Date = .now) -> Bool {
+        identity.placeIDs.union([id]).contains { LiveViewedPinHistory.isViewed($0, dates: dates, now: now) }
     }
 
     var kind: LivePinKind {
@@ -153,42 +290,118 @@ struct LivePlacePin: Identifiable {
 }
 
 enum LiveMapProjection {
-    /// The caller supplies only current-user parents with real visit evidence.
-    /// They affect the badge, without adding activity outside the active filters.
+    /// Own history changes only badge evidence, never the filtered activity set.
     static func pins(activities: [FeedActivity], featured: [VisiblePlace],
-                     ownCheckInPlaces: [VisiblePlace] = []) -> [LivePlacePin] {
-        let ownEvidence = ownCheckInPlaces.filter {
+                     ownCheckInPlaces: [VisiblePlace] = [], previousPins: [LivePlacePin] = []) -> [LivePlacePin] {
+        let ownIdentity = LivePlaceIdentity(places: ownCheckInPlaces.filter {
             $0.owner.deletedAt == nil && $0.userPlace.deletedAt == nil && $0.owner.id == $0.userPlace.userID
+        }.map(\.place))
+        var seenEvents = Set<String>()
+        let events = activities.filter { $0.place != nil && seenEvents.insert($0.id).inserted }
+        let places = events.compactMap(\.place) + featured
+        guard !places.isEmpty else { return [] }
+        var parents = Array(places.indices)
+        func root(_ index: Int) -> Int {
+            var current = index
+            while parents[current] != current {
+                parents[current] = parents[parents[current]]
+                current = parents[current]
+            }
+            return current
         }
-        // Exact IDs are O(1); canonical fallback only examines same-name rows.
-        // Never perform a full own-history scan for every pin in a busy city.
-        let ownExactAliases = Set(ownEvidence.flatMap { exactAliases(for: $0.place) })
-        let ownByName = Dictionary(grouping: ownEvidence) {
-            VisiblePlaceGrouping.normalizedText($0.place.canonicalName)
+        func join(_ lhs: Int, _ rhs: Int) {
+            let left = root(lhs), right = root(rhs)
+            if left != right { parents[max(left, right)] = min(left, right) }
         }
-        let groups = Dictionary(grouping: activities.filter { $0.place != nil }) { $0.place!.place.id }
-        var result = groups.compactMap { id, events -> LivePlacePin? in
-            guard let place = events.first?.place,
-                  CLLocationCoordinate2DIsValid(.init(latitude: place.place.latitude, longitude: place.place.longitude)) else { return nil }
-            let candidate = PlaceSheetPlace(visiblePlace: place).saveCandidate
-            let name = VisiblePlaceGrouping.normalizedText(place.place.canonicalName)
-            let priorOwnCheckIn = !ownExactAliases.isDisjoint(with: exactAliases(for: place.place))
-                || (ownByName[name] ?? []).contains {
-                    VisiblePlaceGrouping.matches($0, candidate: candidate, allowingProviderIdentityFallback: true)
+        var evidenceByObject: [ObjectIdentifier: LivePlaceIdentity.Member] = [:]
+        let evidence = places.map { visible in
+            let key = ObjectIdentifier(visible.place)
+            if let member = evidenceByObject[key] { return member }
+            let member = LivePlaceIdentity.Member(visible.place)
+            evidenceByObject[key] = member
+            return member
+        }
+        var firstByMember: [LivePlaceIdentity.Member: Int] = [:]
+        var firstByStrongKey: [String: Int] = [:]
+        var indicesByWeakKey: [String: [Int]] = [:]
+        for (index, member) in evidence.enumerated() {
+            if let first = firstByMember[member] { join(first, index); continue }
+            firstByMember[member] = index
+            for key in member.strongKeys {
+                if let first = firstByStrongKey[key] { join(first, index) }
+                else { firstByStrongKey[key] = index }
+            }
+            // Candidate indexes avoid comparing every venue in the city. Only
+            // shared address/reference keys need the stricter geographic check.
+            var checked = Set<Int>()
+            for key in member.weakKeys {
+                for candidate in indicesByWeakKey[key] ?? [] where checked.insert(candidate).inserted {
+                    if member.matches(evidence[candidate]) { join(candidate, index) }
                 }
-            return LivePlacePin(id: id, place: place, activities: FeedPresentation.newestFirst(events),
-                                hasPriorOwnCheckIn: priorOwnCheckIn)
+                indicesByWeakKey[key, default: []].append(index)
+            }
         }
-        var seen = Set(result.map(\.id))
-        for place in featured where CLLocationCoordinate2DIsValid(.init(latitude: place.place.latitude, longitude: place.place.longitude)) && seen.insert(place.place.id).inserted {
-            result.append(LivePlacePin(id: place.place.id, place: place, activities: []))
+        let members = Dictionary(grouping: places.indices, by: root)
+        var result: [LivePlacePin] = []
+        for indices in members.values {
+            let groupEvents = indices.filter { $0 < events.count }.map { events[$0] }
+            let groupPlaces = indices.map { places[$0] }
+            let valid = groupPlaces.filter {
+                $0.place.latitude.isFinite && $0.place.longitude.isFinite
+                    && CLLocationCoordinate2DIsValid(.init(latitude: $0.place.latitude, longitude: $0.place.longitude))
+            }
+            let eventPlaceIDs = Set(groupEvents.compactMap { $0.place?.id })
+            guard let place = valid.sorted(by: { lhs, rhs in
+                let lhsEvent = eventPlaceIDs.contains(lhs.id), rhsEvent = eventPlaceIDs.contains(rhs.id)
+                if lhsEvent != rhsEvent { return lhsEvent }
+                if lhs.place.id != rhs.place.id { return lhs.place.id < rhs.place.id }
+                return lhs.id < rhs.id
+            }).first else { continue }
+            let identity = LivePlaceIdentity(places: groupPlaces.map(\.place))
+            result.append(LivePlacePin(id: place.place.id, place: place,
+                activities: FeedPresentation.newestFirst(groupEvents),
+                hasPriorOwnCheckIn: identity.intersects(ownIdentity), identity: identity))
         }
-        return result.sorted { $0.id < $1.id }
-    }
-
-    private static func exactAliases(for place: LocalPlace) -> Set<String> {
-        VisiblePlaceGrouping.groupingAliases(for: place).filter {
-            $0.hasPrefix("id:") || ($0.hasPrefix("provider:") && !$0.hasPrefix("provider::"))
+        result.sort { $0.id < $1.id }
+        var previousByAlias: [String: Set<Int>] = [:]
+        for (index, pin) in previousPins.enumerated() {
+            for alias in pin.identity.aliases { previousByAlias[alias, default: []].insert(index) }
         }
+        let previousMatches = result.map { pin in
+            Set(pin.identity.aliases.flatMap { previousByAlias[$0] ?? [] }).filter {
+                pin.identity.intersects(previousPins[$0].identity)
+            }.sorted()
+        }
+        var assigned: [Int: String] = [:]
+        var used = Set<String>()
+        // Give a surviving original its own identifier before offering that old
+        // component's identifier to another component after an alias correction.
+        for index in result.indices {
+            if let previous = previousMatches[index].first(where: {
+                result[index].identity.placeIDs.contains(previousPins[$0].id) && !used.contains(previousPins[$0].id)
+            }) {
+                let id = previousPins[previous].id
+                assigned[index] = id; used.insert(id)
+            }
+        }
+        let currentIDs = Set(result.map(\.id))
+        for index in result.indices where assigned[index] == nil {
+            if let previous = previousMatches[index].first(where: {
+                !used.contains(previousPins[$0].id) && !currentIDs.contains(previousPins[$0].id)
+            }) {
+                let id = previousPins[previous].id
+                assigned[index] = id; used.insert(id)
+            }
+        }
+        return result.enumerated().map { index, pin in
+            var id = assigned[index] ?? pin.id
+            if assigned[index] == nil {
+                var suffix = 0
+                while used.contains(id) { suffix += 1; id = "\(pin.id):component:\(suffix)" }
+                used.insert(id)
+            }
+            return LivePlacePin(id: id, place: pin.place, activities: pin.activities,
+                hasPriorOwnCheckIn: pin.hasPriorOwnCheckIn, identity: pin.identity)
+        }.sorted { $0.id < $1.id }
     }
 }

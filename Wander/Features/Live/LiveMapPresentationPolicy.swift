@@ -172,6 +172,36 @@ enum LiveMapViewportPolicy {
         return MKCoordinateRegion(rect)
     }
 
+    /// Restore the original geographic focus without clipping the place just
+    /// closed. A half-sheet may expose pins outside the tighter full-map frame;
+    /// widen only enough to keep that pin's tap target inside the exposed map.
+    static func restoredRegion(_ region: MKCoordinateRegion, keeping coordinate: CLLocationCoordinate2D?,
+                               size: CGSize, exposedRect: CGRect, padding: CGFloat = 30) -> MKCoordinateRegion {
+        guard let coordinate, CLLocationCoordinate2DIsValid(coordinate),
+              CLLocationCoordinate2DIsValid(region.center),
+              size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
+              region.span.longitudeDelta.isFinite, region.span.longitudeDelta > 0,
+              region.span.longitudeDelta < 180 else { return region }
+        let safe = exposedRect.insetBy(dx: padding, dy: padding)
+        let centerPoint = CGPoint(x: size.width / 2, y: size.height / 2)
+        guard safe.minX < centerPoint.x, safe.maxX > centerPoint.x,
+              safe.minY < centerPoint.y, safe.maxY > centerPoint.y else { return region }
+        let center = MKMapPoint(region.center), pin = MKMapPoint(coordinate)
+        let world = MKMapRect.world.width
+        let dx = (pin.x - center.x + world * 1.5).truncatingRemainder(dividingBy: world) - world / 2
+        let dy = pin.y - center.y
+        let units = region.span.longitudeDelta / 360 * world / size.width
+        let horizontalRoom = dx < 0 ? centerPoint.x - safe.minX : safe.maxX - centerPoint.x
+        let verticalRoom = dy < 0 ? centerPoint.y - safe.minY : safe.maxY - centerPoint.y
+        let scale = max(1, abs(dx) / (units * horizontalRoom), abs(dy) / (units * verticalRoom))
+        guard scale.isFinite, scale > 1, region.span.longitudeDelta * scale < 180 else { return region }
+        let width = units * size.width * scale, height = units * size.height * scale
+        var restored = MKCoordinateRegion(MKMapRect(x: center.x - width / 2, y: center.y - height / 2,
+                                                    width: width, height: height))
+        restored.center = region.center
+        return restored
+    }
+
     static func revealOffset(pin: CGPoint, exposedRect: CGRect, padding: CGFloat = 24) -> CGSize {
         let safe = exposedRect.insetBy(dx: padding, dy: padding)
         guard safe.width > 0, safe.height > 0 else { return .zero }

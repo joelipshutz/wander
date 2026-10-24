@@ -147,6 +147,45 @@ final class LiveMapPresentationPolicyTests: XCTestCase {
         XCTAssertEqual(restored.span.longitudeDelta, initial.span.longitudeDelta, accuracy: 0.000_01)
     }
 
+    func testClosingEdgePreviewKeepsItsTapTargetVisibleWithoutRecentering() throws {
+        let size = CGSize(width: 402, height: 730)
+        let exposed = CGRect(x: 0, y: 100, width: 402, height: 540)
+        let region = MKCoordinateRegion(center: .init(latitude: 34, longitude: -118),
+                                        span: .init(latitudeDelta: 0.2, longitudeDelta: 0.2))
+        for point in [CGPoint(x: 8, y: 320), CGPoint(x: 398, y: 320), CGPoint(x: 201, y: 633),
+                      CGPoint(x: 8, y: 105), CGPoint(x: 398, y: 635)] {
+            let pin = mapPoint(at: point, region: region, size: size)
+            let restored = LiveMapViewportPolicy.restoredRegion(region, keeping: pin.coordinate,
+                size: size, exposedRect: exposed)
+            XCTAssertEqual(restored.center.latitude, region.center.latitude)
+            XCTAssertEqual(restored.center.longitude, region.center.longitude)
+            XCTAssertGreaterThan(restored.span.longitudeDelta, region.span.longitudeDelta)
+            let result = screenPoint(pin, region: restored, size: size)
+            XCTAssertTrue(exposed.insetBy(dx: 29.9, dy: 29.9).contains(result))
+        }
+        let unchanged = LiveMapViewportPolicy.restoredRegion(region, keeping: region.center,
+            size: size, exposedRect: exposed)
+        XCTAssertEqual(unchanged.span.longitudeDelta, region.span.longitudeDelta)
+        XCTAssertEqual(unchanged.span.latitudeDelta, region.span.latitudeDelta)
+    }
+
+    func testPreviewRestorationHandlesDatelineAndInvalidGeometry() {
+        let region = MKCoordinateRegion(center: .init(latitude: 10, longitude: 179.95),
+                                        span: .init(latitudeDelta: 0.1, longitudeDelta: 0.1))
+        let coordinate = CLLocationCoordinate2D(latitude: 10, longitude: -179.99)
+        let size = CGSize(width: 390, height: 780)
+        let exposed = CGRect(x: 0, y: 100, width: 390, height: 580)
+        let restored = LiveMapViewportPolicy.restoredRegion(region, keeping: coordinate,
+            size: size, exposedRect: exposed)
+        XCTAssertEqual(restored.center.longitude, region.center.longitude)
+        XCTAssertGreaterThan(restored.span.longitudeDelta, 0.1)
+        XCTAssertLessThan(restored.span.longitudeDelta, 0.2, "Use the nearby wrapped pin, not the long way around Earth")
+        for invalid in [CGRect.zero, CGRect(x: 0, y: 500, width: 390, height: 100)] {
+            XCTAssertEqual(LiveMapViewportPolicy.restoredRegion(region, keeping: coordinate,
+                size: size, exposedRect: invalid).span.longitudeDelta, region.span.longitudeDelta)
+        }
+    }
+
     func testPinRevealMovesOnlyCoveredPinsByTheMinimumAmount() {
         let exposed = CGRect(x: 0, y: 100, width: 390, height: 300)
         XCTAssertEqual(LiveMapViewportPolicy.revealOffset(pin: CGPoint(x: 195, y: 200), exposedRect: exposed), .zero)

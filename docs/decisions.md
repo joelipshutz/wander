@@ -952,3 +952,14 @@ Shared check-ins use one postcard header with slightly overlapping participant a
 Expanded photo pins publish independently through a bounded queue; a selected preview has its own queue and loads hours independently of image availability. Provider metadata refreshes preserve cached image fields. Per-place failures are isolated and provider/image requests have finite deadlines. A provider photo must retain its own source and attribution; unavailable photos keep an honest placeholder rather than borrowing another venue's image.
 
 The preview suppresses list echoes only for the same actor, canonical place and source save with identical normalized note and media IDs. Up to 20 stable candidates are hydrated, with fresh-content deduplication and refill until three distinct authorized rows are found. Distinct visits, source saves and contributions remain separate. Drawer touch tracking uses global coordinates and fixed inner Feed layout; the outer reveal follows the finger, then settles in the release direction.
+
+
+## REC-636 — fifth feedback round, 2026-10-23
+
+This supersedes photo annotations: Live uses the compact R5 symbol pins, with one pin per canonical place before density reduction. Explicit persisted aliases and qualified provider IDs can join rows; UUID references require nearby corroborating identity, and address fallback requires name, street, locality, region and country agreement. Opaque provider IDs remain case-sensitive. A prior own check-in takes precedence over Wanna/list presentation without deleting either history.
+
+Opening a place reads the newest three distinct currently authorized activities across people and types, independent of discovery filters. The new authenticated read endpoint preserves current source/list/profile/block/canonical-event authorization and uses account/scope-bound pagination. It does not merge or rewrite original records. Individual authoritative reads grant the existing 15-minute cache lease; another activity's refresh cannot renew an older row. Selection, session and access changes invalidate stale results.
+
+The preview image is bounded by the card's proposed width, so portrait/panoramic imagery cannot push the name and action buttons offscreen. Images and hours remain independent. Google photo signing normalizes both object and transformed-image storage paths. Hours refresh uses identity-validated Details for a known Google place and enriches sparse search results with same-place Details. Missing provider data stays unknown; an identity change never relabels cached bytes as a different venue.
+
+Closing a preview restores its original geographic center and, only when needed, minimally widens the map to keep the selected place's tap target visible. It does not recenter on the place or change drawer-fitting behavior.

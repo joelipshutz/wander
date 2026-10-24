@@ -4,19 +4,21 @@ import Foundation
 /// saves before choosing an editor. No public place is turned into a fake save.
 @MainActor
 enum LivePlaceSaveContinuation {
-    static func matchingOwnPlaces(candidate: PlaceCandidate, store: WanderStore) -> [VisiblePlace] {
+    static func matchingOwnPlaces(candidate: PlaceCandidate, identity: LivePlaceIdentity? = nil,
+                                  store: WanderStore) -> [VisiblePlace] {
         var seen = Set<String>()
         return store.currentUserVisiblePlaces.filter {
             $0.owner.id == store.currentUser.id && $0.userPlace.userID == store.currentUser.id
                 && $0.owner.deletedAt == nil && $0.userPlace.deletedAt == nil
-                && VisiblePlaceGrouping.matches($0, candidate: candidate, allowingProviderIdentityFallback: true)
+                && (identity?.matches($0.place)
+                    ?? VisiblePlaceGrouping.matches($0, candidate: candidate, allowingProviderIdentityFallback: true))
                 && seen.insert($0.userPlace.id).inserted
         }.sorted { $0.userPlace.id < $1.userPlace.id }
     }
 
     static func context(candidate: PlaceCandidate, visiblePlace: VisiblePlace? = nil,
-                        store: WanderStore) -> MapPlaceSaveContext {
-        let ownPlaces = matchingOwnPlaces(candidate: candidate, store: store)
+                        identity: LivePlaceIdentity? = nil, store: WanderStore) -> MapPlaceSaveContext {
+        let ownPlaces = matchingOwnPlaces(candidate: candidate, identity: identity, store: store)
         let sources = ownPlaces.compactMap { place -> (VisiblePlace, PlaceWannaSave?, Date)? in
             let wanna = latestWanna(for: place, store: store)
             guard let date = wanna?.occurredAt ?? originalWannaDate(for: place, store: store) else { return nil }

@@ -2031,6 +2031,8 @@ extension PlaceRepository {
 
 @MainActor
 protocol FeedRepository {
+    /// Authorized place history, independent of the map's discovery filters.
+    func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage
     /// Complete map enumeration uses the same authorized query, without gallery hydration.
     func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage
     func liveFeed(
@@ -2051,6 +2053,10 @@ protocol FeedRepository {
 }
 
 extension FeedRepository {
+    func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage {
+        throw WanderRemoteError.notImplemented("Place activity history")
+    }
+
     func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
         try await liveFeed(audience: audience, query: query, before: before, limit: limit, onContent: { _ in })
     }

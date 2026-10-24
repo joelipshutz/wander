@@ -20,6 +20,7 @@ export type PlacePhotoDependencies = {
   fetch: typeof fetch;
   env: (name: string) => string | undefined;
   now: () => Date;
+  diagnostic?: (event: Record<string, string | boolean>) => void;
 };
 
 type SupabaseConfiguration = {
@@ -120,6 +121,7 @@ export async function handleRequest(
     supabase,
     dependencies,
   );
+  reportResolution(input, resolution, dependencies);
   return resolutionResponse(resolution);
 }
 
@@ -155,27 +157,19 @@ async function handleBatchRequest(
     : new Map<string, CachedPhotoRow>();
 
   const resolved = await mapWithConcurrency(keyedInputs, 4, async (item) => {
+    let resolution: PlacePhotoResolution;
     try {
-      return {
-        index: item.index,
-        resolution: await resolvePhotoPayload(
-          item.input,
-          supabase,
-          dependencies,
-          item.cacheKey,
-          cachedRows.get(item.cacheKey) ?? null,
-          item.input.requiresPhoto,
-        ),
-      };
+      resolution = await resolvePhotoPayload(
+        item.input, supabase, dependencies, item.cacheKey,
+        cachedRows.get(item.cacheKey) ?? null, item.input.requiresPhoto,
+      );
     } catch {
       // One provider timeout must not discard successful sibling manifests.
-      // Preserve a per-item failure without logging request/place content.
       console.warn("place_photo_batch_item_failed");
-      return {
-        index: item.index,
-        resolution: { status: 503, error: "provider_unavailable" } as PlacePhotoResolution,
-      };
+      resolution = { status: 503, error: "provider_unavailable" };
     }
+    reportResolution(item.input, resolution, dependencies);
+    return { index: item.index, resolution };
   });
   const resolutionsByIndex = new Map(
     resolved.map((item) => [item.index, item.resolution]),
@@ -212,7 +206,8 @@ async function resolvePhotoPayload(
     : supabase.serviceRoleKey
     ? await readCachedPhoto(cacheKey, supabase, dependencies)
     : null;
-  if (cached && businessMetadataIsFresh(cached, dependencies.now())) {
+  if (cached && businessMetadataIsFresh(cached, dependencies.now()) &&
+      (input.requiresPhoto || typeof cached.provider_open_now === "boolean")) {
     const payload = await cachedPayload(
       cached,
       input,
@@ -227,31 +222,31 @@ async function resolvePhotoPayload(
 
   const apiKey = googlePlacesAPIKey(dependencies);
   if (cached) {
+    let canReuseCachedImage = true;
     if (!skipsStaleBusinessRefresh && apiKey && supabase.serviceRoleKey) {
       try {
         const refreshedPlace = await resolvePlace(
           { ...input, requiresPhoto: false },
           apiKey,
           dependencies,
+          cached.provider_place_id,
         );
         if (refreshedPlace?.id) {
-          const refreshedRow = refreshingBusinessMetadata(
-            cached,
-            placePayload(refreshedPlace),
-            dependencies.now(),
-          );
-          await writeCachedMetadata(
-            cacheKey, placePayload(refreshedPlace), supabase, dependencies,
-          );
-          const payload = await cachedPayload(
-            refreshedRow,
-            input,
-            supabase,
-            dependencies,
-          );
-          if (payload) {
-            console.log("place_photo_business_metadata_refreshed");
-            return { status: 200, payload };
+          const refreshedPayload = placePayload(refreshedPlace);
+          if (refreshedPlace.id !== cached.provider_place_id) {
+            // Do not relabel the old provider's image when a native alias now
+            // matches a different provider identity. Photo requests must load
+            // that identity's own image before replacing the cache row.
+            canReuseCachedImage = false;
+            if (!input.requiresPhoto) return { status: 200, payload: refreshedPayload };
+          } else {
+            const refreshedRow = refreshingBusinessMetadata(cached, refreshedPayload, dependencies.now());
+            await writeCachedMetadata(cacheKey, refreshedPayload, supabase, dependencies);
+            const payload = await cachedPayload(refreshedRow, input, supabase, dependencies);
+            if (payload) {
+              console.log("place_photo_business_metadata_refreshed");
+              return { status: 200, payload };
+            }
           }
         }
       } catch (error) {
@@ -262,12 +257,9 @@ async function resolvePhotoPayload(
       }
     }
 
-    const payload = await cachedPayload(
-      omittingStaleOpeningHours(cached),
-      input,
-      supabase,
-      dependencies,
-    );
+    const payload = canReuseCachedImage ? await cachedPayload(
+      omittingStaleOpeningHours(cached), input, supabase, dependencies,
+    ) : null;
     if (payload) {
       console.log("place_photo_cache_hit_without_current_hours");
       return { status: 200, payload };
@@ -361,57 +353,113 @@ async function resolvePlace(
   input: PlacePhotoInput,
   apiKey: string,
   dependencies: PlacePhotoDependencies,
+  cachedProviderPlaceID?: string,
 ): Promise<GooglePlace | null> {
-  const directFieldMask = input.requiresPhoto
-    ? "id,displayName,formattedAddress,location,primaryType,types,rating,userRatingCount,currentOpeningHours,utcOffsetMinutes,photos"
-    : "id,displayName,formattedAddress,location,primaryType,types,rating,userRatingCount,currentOpeningHours,utcOffsetMinutes";
-  const searchFieldMask = input.requiresPhoto
-    ? "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.currentOpeningHours,places.utcOffsetMinutes,places.photos"
-    : "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.currentOpeningHours,places.utcOffsetMinutes";
-
-  if (isGoogleProvider(input.sourceProvider) && input.sourceProviderPlaceID) {
+  const commonFields = "id,displayName,formattedAddress,location,primaryType,types,rating,userRatingCount,currentOpeningHours,utcOffsetMinutes,businessStatus,movedPlaceId";
+  const directFieldMask = input.requiresPhoto ? `${commonFields},photos` : commonFields;
+  const searchFieldMask = directFieldMask.split(",").map((field) => `places.${field}`).join(",");
+  const details = (id: string) => fetchJSON<GooglePlace>(
+    `${googlePlacesBaseURL}/places/${encodeURIComponent(id)}`,
+    { method: "GET", headers: googleHeaders(apiKey, directFieldMask) }, dependencies,
+  );
+  const requestedGoogleID = isGoogleProvider(input.sourceProvider) ? input.sourceProviderPlaceID : null;
+  const directID = requestedGoogleID ?? cleanString(cachedProviderPlaceID);
+  let directFallback: GooglePlace | null = null;
+  if (directID) {
     try {
-      const directPlace = await fetchJSON<GooglePlace>(
-        `${googlePlacesBaseURL}/places/${
-          encodeURIComponent(input.sourceProviderPlaceID)
-        }`,
-        { method: "GET", headers: googleHeaders(apiKey, directFieldMask) },
-        dependencies,
+      const directPlace = await details(directID);
+      // A previously matched native alias can move or be repurposed. Validate
+      // its current identity before reusing it; current search handles changes.
+      const accepted = requestedGoogleID || (
+        directPlace.businessStatus !== "CLOSED_PERMANENTLY" && !directPlace.movedPlaceId &&
+        selectGooglePlace([directPlace], { ...input, requiresPhoto: false }) !== null
       );
-      if (!input.requiresPhoto || representativePhoto(directPlace)) {
-        return directPlace;
+      reportProviderLookup(requestedGoogleID ? "provider_details" : "cached_details",
+        accepted ? "matched" : "stale_identity", directPlace, dependencies);
+      if (accepted && directPlace.id) {
+        if (!input.requiresPhoto || representativePhoto(directPlace)) return directPlace;
+        directFallback = directPlace;
       }
-    } catch (error) {
-      console.warn(
-        "place_photo_direct_lookup_failed",
-        error instanceof Error ? error.message : "unknown_error",
-      );
+    } catch {
+      reportProviderLookup(requestedGoogleID ? "provider_details" : "cached_details",
+        "unavailable", null, dependencies);
     }
   }
 
   const searchBody: Record<string, unknown> = {
-    textQuery: [input.name, input.address].filter(Boolean).join(" "),
-    pageSize: 5,
+    textQuery: [input.name, input.address].filter(Boolean).join(" "), pageSize: 5,
   };
   if (input.latitude !== null && input.longitude !== null) {
     searchBody.locationBias = {
-      circle: {
-        center: { latitude: input.latitude, longitude: input.longitude },
-        radius: 1_000,
-      },
+      circle: { center: { latitude: input.latitude, longitude: input.longitude }, radius: 1_000 },
     };
   }
-
   const search = await fetchJSON<{ places?: GooglePlace[] }>(
     `${googlePlacesBaseURL}/places:searchText`,
-    {
-      method: "POST",
-      headers: googleHeaders(apiKey, searchFieldMask),
-      body: JSON.stringify(searchBody),
-    },
+    { method: "POST", headers: googleHeaders(apiKey, searchFieldMask), body: JSON.stringify(searchBody) },
     dependencies,
   );
-  return selectGooglePlace(search.places ?? [], input);
+  // Match identity before requiring imagery; a sparse search result can omit
+  // hours/photos that Place Details supplies for that same provider ID.
+  const matched = selectGooglePlace(search.places ?? [], { ...input, requiresPhoto: false });
+  reportProviderLookup("search", matched ? "matched" : "no_match", matched, dependencies);
+  if (!matched?.id) return directFallback;
+  const needsDetails = typeof matched.currentOpeningHours?.openNow !== "boolean" ||
+    (input.requiresPhoto && !representativePhoto({
+      ...matched, photos: matched.photos?.filter((photo) => absoluteGoogleURL(photo.googleMapsUri)),
+    }));
+  if (needsDetails) {
+    try {
+      const enriched = await details(matched.id);
+      // Details must belong to the selected provider identity. Do not attach
+      // another venue's hours or image to this place after an ID redirect.
+      if (enriched.id === matched.id && !enriched.movedPlaceId) {
+        const resolved = { ...matched, ...enriched };
+        reportProviderLookup("search_details", "matched", resolved, dependencies);
+        return resolved;
+      }
+      reportProviderLookup("search_details", "stale_identity", enriched, dependencies);
+    } catch {
+      reportProviderLookup("search_details", "unavailable", null, dependencies);
+    }
+  }
+  return matched;
+}
+
+function reportProviderLookup(
+  lookup: "provider_details" | "cached_details" | "search" | "search_details",
+  result: "matched" | "no_match" | "stale_identity" | "unavailable",
+  place: GooglePlace | null,
+  dependencies: PlacePhotoDependencies,
+): void {
+  const event = {
+    event: "place_photo_provider_lookup", lookup, result,
+    has_current_hours: typeof place?.currentOpeningHours?.openNow === "boolean",
+    has_photo: Boolean(place && representativePhoto(place)),
+    has_moved_place: Boolean(place?.movedPlaceId),
+  };
+  if (dependencies.diagnostic) dependencies.diagnostic(event);
+  else console.log(JSON.stringify(event));
+}
+
+function reportResolution(
+  input: PlacePhotoInput,
+  resolution: PlacePhotoResolution,
+  dependencies: PlacePhotoDependencies,
+): void {
+  const photo = resolution.payload;
+  const event = {
+    event: "place_photo_resolution",
+    request_kind: input.requiresPhoto ? "photo" : "metadata",
+    result_kind: photo ? (photo.photo_url ? "photo_ready" : "metadata_ready")
+      : resolution.status === 404 ? "not_found" : "unavailable",
+    failure_kind: resolution.error ?? "none",
+    has_current_hours: typeof photo?.provider_open_now === "boolean",
+    has_image_url: Boolean(photo?.photo_url),
+    has_source_link: Boolean(photo?.source_photo_url),
+  };
+  if (dependencies.diagnostic) dependencies.diagnostic(event);
+  else console.log(JSON.stringify(event));
 }
 
 async function readCachedPhoto(
@@ -766,7 +814,10 @@ async function signedStorageURL(
     const signedURL = cleanString(body.signedURL) ??
       cleanString(body.signedUrl);
     if (!signedURL) throw new Error("cache_sign_missing_url");
-    const normalizedURL = signedURL.startsWith("/object/")
+    // Storage returns service-relative paths for both originals and image
+    // transforms. Resolving /render/image directly against the project origin
+    // drops /storage/v1 and creates a manifest whose image always 404s.
+    const normalizedURL = signedURL.startsWith("/object/") || signedURL.startsWith("/render/image/")
       ? `/storage/v1${signedURL}`
       : signedURL;
     return new URL(normalizedURL, `${supabase.url}/`).toString();

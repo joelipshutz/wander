@@ -106,6 +106,7 @@
 		254E0C67E1289AD31E64BF5E /* EventsComingSoonScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E08E04FA98522BED26BC649 /* EventsComingSoonScreen.swift */; };
 		25D95FE2C19A7AC94B8FAF01 /* PlaceProfilePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C27E1F825871B306B970668 /* PlaceProfilePresentationTests.swift */; };
 		2604E0DAFD86E91BFF2D60DA /* FoundersWelcomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4361DC3A67CE670FD8D2FDF7 /* FoundersWelcomeUITests.swift */; };
+		2627EE1553F9D4D1C05531D0 /* LivePlacePreviewLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D894AE197A2C92569AD575F /* LivePlacePreviewLayoutTests.swift */; };
 		26573736780BA54719E0F7EC /* LinkPlaceParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */; };
 		268207FAA4721BCE51516935 /* rec-228-bulk-status-coupling-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 7C1FAD2B72A87F4F90201955 /* rec-228-bulk-status-coupling-pre.json */; };
 		26A4FC286256CA2B75180305 /* FeedConsolidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7F2ECA92D571F269A882AD /* FeedConsolidationTests.swift */; };
@@ -974,6 +975,7 @@
 		8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitPhotoLocalFileStore.swift; sourceTree = "<group>"; };
 		8C7C9A64136058A77698E28D /* InCommonDesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InCommonDesignMockups.swift; sourceTree = "<group>"; };
 		8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-test-streak-control-visible-pre.json"; sourceTree = "<group>"; };
+		8D894AE197A2C92569AD575F /* LivePlacePreviewLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePlacePreviewLayoutTests.swift; sourceTree = "<group>"; };
 		8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfilePresentation.swift; sourceTree = "<group>"; };
 		8DD1494583D1D618F46C9279 /* LiveMapPresentationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMapPresentationPolicyTests.swift; sourceTree = "<group>"; };
 		8E6A268BD0E4A465862C243C /* ClipStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipStore.swift; sourceTree = "<group>"; };
@@ -1630,6 +1632,7 @@
 				F8C41EBDD8846F86105F31E1 /* LiveMapSearchPolicyTests.swift */,
 				886245458FDBA180A5FAE069 /* LivePlaceFullProfilePresentationTests.swift */,
 				4858204C198246491AAFADE8 /* LivePlacePreviewDedupTests.swift */,
+				8D894AE197A2C92569AD575F /* LivePlacePreviewLayoutTests.swift */,
 				DB4663DF6D6085016FBB299C /* LivePlacePreviewPresentationTests.swift */,
 				B79660B01128F5A142CB9E53 /* LivePlaceSaveContinuationTests.swift */,
 				A2BA08161B94ED9EBA510686 /* LivePlanPeoplePolicyTests.swift */,
@@ -2950,6 +2953,7 @@
 				BDFF0FC761E1996E9FAF1083 /* LiveMapSearchPolicyTests.swift in Sources */,
 				3B6C9E96D334AE2C278CAB7C /* LivePlaceFullProfilePresentationTests.swift in Sources */,
 				CEF19D2DC0AF36531EFFDDC0 /* LivePlacePreviewDedupTests.swift in Sources */,
+				2627EE1553F9D4D1C05531D0 /* LivePlacePreviewLayoutTests.swift in Sources */,
 				853DF22EB2525AD5B4266194 /* LivePlacePreviewPresentationTests.swift in Sources */,
 				0ED363EE2EF0D510F1B926BC /* LivePlaceSaveContinuationTests.swift in Sources */,
 				512FE8B4CD8D20BF9376F4ED /* LivePlanPeoplePolicyTests.swift in Sources */,

@@ -39,6 +39,8 @@ export type GooglePlace = {
     nextCloseTime?: string;
   };
   utcOffsetMinutes?: number;
+  businessStatus?: string;
+  movedPlaceId?: string;
   photos?: GooglePhoto[];
 };
 

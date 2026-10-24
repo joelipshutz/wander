@@ -237,6 +237,235 @@ final class LiveMapResultsTests: XCTestCase {
             ownCheckInPlaces: [prior]).first?.kind, .wanna)
     }
 
+    func testCanonicalPinCombinesAllActorsAndKindsBeforeDensityWithoutChangingActivityCount() throws {
+        let source = place("canonical"), alias = place("alias"), third = place("third")
+        for value in [source, alias, third] {
+            value.place.sourceProvider = "mapkit"
+            value.place.sourceProviderPlaceID = "same-venue"
+            value.userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        }
+        let visit = groupedEvent("visit", place: source, actorID: "alex", kind: .placeBeen)
+        let wanna = groupedEvent("wanna", place: alias, actorID: "sam", kind: .placeWannaGo)
+        let list = groupedEvent("list", place: third, actorID: "pat", kind: .listItemAdded)
+        let rows = [visit, wanna, list]
+        let pins = LiveMapProjection.pins(activities: rows, featured: [alias, third])
+        let pin = try XCTUnwrap(pins.first)
+        XCTAssertEqual(pins.count, 1)
+        XCTAssertEqual(Set(pin.activities.map(\.id)), Set(rows.map(\.id)))
+        XCTAssertEqual(Set(pin.activities.map { $0.actor.id }), ["alex", "sam", "pat"])
+        XCTAssertEqual(pin.kind, .checkIn)
+        XCTAssertEqual(LiveMapPaging.countText(rows.count, complete: true), "3 activities")
+        XCTAssertTrue(LivePinDensity.compactIDs(points: pins.map { ($0.id, CGPoint(x: 10, y: 10)) }, selectedID: nil).isEmpty,
+            "Several records for one venue must not leave a second density dot.")
+    }
+
+    func testExplicitCanonicalUUIDReferencesJoinTransitivelyAcrossHistoricalPlaceRows() throws {
+        let source = place("97000000-0000-4000-8000-000000000001")
+        let alias = place("97000000-0000-4000-8000-000000000002")
+        let third = place("97000000-0000-4000-8000-000000000003")
+        for value in [source, alias, third] { value.place.canonicalName = "Coffee House" }
+        source.place.sourceProvider = "mapkit"; source.place.sourceProviderPlaceID = "native-venue"
+        alias.place.sourceProvider = "mapkit"; alias.place.sourceProviderPlaceID = source.place.id
+        third.place.sourceProvider = "mapkit"; third.place.sourceProviderPlaceID = alias.place.id
+        let rows = [source, alias, third].enumerated().map {
+            groupedEvent("event-\($0.offset)", place: $0.element, actorID: "person-\($0.offset)", kind: .placeBeen)
+        }
+        let pins = LiveMapProjection.pins(activities: rows, featured: [source])
+        let pin = try XCTUnwrap(pins.first)
+        XCTAssertEqual(pins.count, 1)
+        XCTAssertEqual(pin.activities.count, 3)
+        XCTAssertEqual(pin.identity.persistedPlaceIDs, [source.place.id, alias.place.id, third.place.id])
+        XCTAssertEqual(pin.identity.cacheKey, LivePlaceIdentity(places: [third.place, source.place, alias.place]).cacheKey)
+        for value in [source, alias, third] { XCTAssertTrue(pin.identity.matches(value.place)) }
+        let reversed = try XCTUnwrap(LiveMapProjection.pins(activities: Array(rows.reversed()), featured: [third]).first)
+        XCTAssertEqual(pin.id, reversed.id)
+        XCTAssertEqual(pin.identity, reversed.identity)
+        XCTAssertEqual(pin.activities.map(\.id), reversed.activities.map(\.id))
+    }
+
+    func testCanonicalNameStreetAliasesJoinButCoincidentDifferentVenuesStaySeparate() {
+        let first = place("one"), second = place("two"), otherBranch = place("branch"), otherVenue = place("other")
+        first.place.canonicalName = "Example Café"; first.place.address = "10 Main Street"
+        second.place.canonicalName = "example cafe"; second.place.address = "10 Main St"
+        otherBranch.place.canonicalName = "Example Café"; otherBranch.place.address = "12 Main Street"
+        otherVenue.place.canonicalName = "Another business"; otherVenue.place.address = "10 Main Street"
+        let rows = [first, second, otherBranch, otherVenue].enumerated().map {
+            groupedEvent("event-\($0.offset)", place: $0.element, actorID: "person", kind: .placeWannaGo)
+        }
+        let pins = LiveMapProjection.pins(activities: rows, featured: [])
+        XCTAssertEqual(pins.count, 3)
+        XCTAssertEqual(pins.first { $0.identity.matches(first.place) }?.activities.count, 2)
+        first.place.address = nil; second.place.address = nil
+        XCTAssertEqual(LiveMapProjection.pins(activities: Array(rows.prefix(2)), featured: []).count, 2,
+            "Same-name coordinates alone are not canonical identity evidence.")
+    }
+
+    func testExistingSelectedPinAndViewedAliasSurviveLaterCanonicalPage() throws {
+        let original = place("z-original"), later = place("a-later")
+        for value in [original, later] {
+            value.place.sourceProvider = "mapkit"; value.place.sourceProviderPlaceID = "canonical"
+        }
+        let originalEvent = groupedEvent("original", place: original, actorID: "alex", kind: .placeBeen)
+        let laterEvent = groupedEvent("later", place: later, actorID: "sam", kind: .placeWannaGo)
+        let old = LiveMapProjection.pins(activities: [originalEvent], featured: [])
+        let pin = try XCTUnwrap(LiveMapProjection.pins(activities: [laterEvent, originalEvent], featured: [], previousPins: old).first)
+        XCTAssertEqual(pin.id, old.first?.id, "Pagination must preserve the mounted selection.")
+        XCTAssertTrue(pin.isViewed(dates: [original.place.id: now], now: now))
+        XCTAssertTrue(pin.isViewed(dates: [later.place.id: now], now: now))
+        XCTAssertFalse(pin.isViewed(dates: [original.place.id: now.addingTimeInterval(-86_400)], now: now))
+        let afterRevocation = LiveMapProjection.pins(activities: [laterEvent], featured: [], previousPins: [pin])
+        XCTAssertEqual(afterRevocation.first?.id, pin.id,
+            "Selection survives when the old representative disappears but a valid alias remains.")
+        XCTAssertEqual(afterRevocation.first?.place.place.id, later.place.id)
+        XCTAssertFalse(afterRevocation.first?.identity.placeIDs.contains(original.place.id) == true)
+        XCTAssertEqual(afterRevocation.first?.activities.map(\.id), [laterEvent.id],
+            "Retaining a pin ID must never retain a revoked actor's activity.")
+        XCTAssertTrue(LiveMapProjection.pins(activities: [], featured: [], previousPins: [pin]).isEmpty)
+    }
+
+    func testCanonicalProjectionUsesValidCoordinateAndRetainsEveryAuthorizedOriginal() throws {
+        let missing = place("a-missing"), valid = place("z-valid")
+        for value in [missing, valid] {
+            value.place.sourceProvider = "mapkit"; value.place.sourceProviderPlaceID = "same-place"
+        }
+        missing.place.latitude = .nan
+        let rows = [groupedEvent("one", place: missing, actorID: "alex", kind: .placeBeen),
+                    groupedEvent("two", place: valid, actorID: "sam", kind: .placeWannaGo)]
+        let pins = LiveMapProjection.pins(activities: rows, featured: [])
+        XCTAssertEqual(pins.count, 1)
+        let pin = try XCTUnwrap(pins.first)
+        XCTAssertEqual(pin.place.place.id, valid.place.id)
+        XCTAssertEqual(Set(pin.activities.map(\.id)), ["one", "two"])
+    }
+
+    func testMergedPinSplittingAfterAliasCorrectionCannotReuseOneIdentifierTwice() {
+        let first = place("first"), second = place("second")
+        for value in [first, second] {
+            value.place.sourceProvider = "mapkit"; value.place.sourceProviderPlaceID = "same-place"
+        }
+        let rows = [groupedEvent("one", place: first, actorID: "alex", kind: .placeBeen),
+                    groupedEvent("two", place: second, actorID: "sam", kind: .placeWannaGo)]
+        let old = LiveMapProjection.pins(activities: rows, featured: [])
+        second.place.sourceProviderPlaceID = "corrected-separate-place"
+        let refreshed = LiveMapProjection.pins(activities: rows, featured: [], previousPins: old)
+        XCTAssertEqual(refreshed.count, 2)
+        XCTAssertEqual(Set(refreshed.map(\.id)).count, 2)
+        XCTAssertEqual(Set(refreshed.flatMap(\.activities).map(\.id)), ["one", "two"])
+    }
+
+    func testServerAndLocalIdentityAliasesRemainOnePinWithoutSendingLocalFixtureIDs() throws {
+        let synced = place("local-original"), remote = place("98000000-0000-4000-8000-000000000001")
+        synced.place.serverID = remote.place.id
+        let rows = [groupedEvent("one", place: synced, actorID: "alex", kind: .placeBeen),
+                    groupedEvent("two", place: remote, actorID: "sam", kind: .placeWannaGo)]
+        let pins = LiveMapProjection.pins(activities: rows, featured: [])
+        XCTAssertEqual(pins.count, 1)
+        let identity = try XCTUnwrap(pins.first?.identity)
+        XCTAssertEqual(identity.persistedPlaceIDs, [remote.place.id])
+        XCTAssertTrue(identity.placeIDs.contains("local-original"))
+        XCTAssertTrue(identity.matches(synced.place))
+        XCTAssertTrue(identity.matches(remote.place))
+    }
+
+    func testOpaqueProviderIDsKeepCaseWhileProviderNamespacesNormalize() {
+        let upper = place("upper"), same = place("same"), lower = place("lower")
+        upper.place.sourceProvider = "mapkit"; upper.place.sourceProviderPlaceID = "PlaceTokenA"
+        same.place.sourceProvider = " MAPKIT "; same.place.sourceProviderPlaceID = "PlaceTokenA"
+        lower.place.sourceProvider = "mapkit"; lower.place.sourceProviderPlaceID = "placetokena"
+        let identity = LivePlaceIdentity(places: [upper.place])
+        XCTAssertTrue(identity.matches(same.place))
+        XCTAssertTrue(identity.intersects(LivePlaceIdentity(places: [same.place])))
+        XCTAssertFalse(identity.matches(lower.place))
+        XCTAssertFalse(identity.intersects(LivePlaceIdentity(places: [lower.place])))
+        let rows = [upper, same, lower].enumerated().map {
+            groupedEvent("case-\($0.offset)", place: $0.element, actorID: "person", kind: .placeBeen)
+        }
+        XCTAssertEqual(LiveMapProjection.pins(activities: rows, featured: []).count, 2)
+    }
+
+    func testWeakStreetIdentityRequiresNonblankLocalityAndNearbyCoordinates() {
+        let first = place("first"), second = place("second")
+        for value in [first, second] {
+            value.place.canonicalName = "Coffee House"; value.place.address = "10 Main Street"
+        }
+        second.place.address = "10 Main St."
+        let identity = LivePlaceIdentity(places: [first.place])
+        XCTAssertTrue(identity.matches(second.place))
+        second.place.locality = nil
+        XCTAssertFalse(identity.matches(second.place))
+        second.place.locality = "Sampleton"; second.place.latitude += 0.01
+        XCTAssertFalse(identity.matches(second.place), "Same name/street/locality across town is insufficient")
+        second.place.latitude = first.place.latitude + 0.0004
+        XCTAssertTrue(identity.matches(second.place))
+        second.place.region = "Other Region"
+        XCTAssertFalse(identity.matches(second.place))
+        first.place.locality = nil; second.place.locality = nil; second.place.region = "CA"
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+    }
+
+    func testUUIDReferenceRequiresNearbyNameOrStreetEvidenceAndCannotSeedAnUnverifiedTarget() {
+        let target = place("97000000-0000-4000-8000-000000000021")
+        let alias = place("97000000-0000-4000-8000-000000000022")
+        target.place.canonicalName = "Coffee House"
+        alias.place.sourceProviderPlaceID = target.place.id.uppercased()
+        let initial = LivePlaceIdentity(places: [alias.place])
+        XCTAssertEqual(initial.persistedPlaceIDs, [alias.place.id])
+        XCTAssertFalse(initial.matches(target.place), "A nearby UUID reference with unrelated metadata is insufficient")
+        alias.place.canonicalName = target.place.canonicalName
+        XCTAssertTrue(LivePlaceIdentity(places: [alias.place]).matches(target.place))
+        alias.place.latitude += 0.01
+        XCTAssertFalse(LivePlaceIdentity(places: [alias.place]).matches(target.place))
+        alias.place.latitude = target.place.latitude
+        alias.place.canonicalName = "Renamed Coffee House"
+        target.place.address = "10 Main Street"; alias.place.address = "10 Main St"
+        XCTAssertTrue(LivePlaceIdentity(places: [alias.place]).matches(target.place))
+        alias.place.locality = nil
+        XCTAssertFalse(LivePlaceIdentity(places: [alias.place]).matches(target.place))
+    }
+
+    func testSharedUUIDProviderTokenCannotBypassLocationCorroboration() {
+        let first = place("first"), second = place("second")
+        for value in [first, second] {
+            value.place.canonicalName = "Coffee House"
+            value.place.sourceProviderPlaceID = "97000000-0000-4000-8000-000000000031"
+        }
+        second.place.latitude += 0.01
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+        second.place.latitude = first.place.latitude
+        XCTAssertTrue(LivePlaceIdentity(places: [first.place]).matches(second.place))
+        second.place.sourceProvider = "another-provider"
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+    }
+
+    func testRemovedRepresentativeAndLaterSplitRetainOneSelectionWithoutRevokedPayload() throws {
+        let original = place("a-original"), second = place("b-second"), third = place("c-third")
+        for value in [original, second, third] { value.place.sourceProviderPlaceID = "same-venue" }
+        let rows = [original, second, third].enumerated().map {
+            groupedEvent("split-\($0.offset)", place: $0.element, actorID: "person-\($0.offset)", kind: .placeBeen)
+        }
+        let previous = LiveMapProjection.pins(activities: rows, featured: [])
+        let old = try XCTUnwrap(previous.first)
+        let oldKey = old.identity.cacheKey
+        second.place.sourceProviderPlaceID = "corrected-second"
+        third.place.sourceProviderPlaceID = "corrected-third"
+        XCTAssertEqual(old.identity.cacheKey, oldKey, "Previous identity must be immutable evidence")
+        let current = LiveMapProjection.pins(activities: Array(rows.dropFirst()), featured: [], previousPins: previous)
+        XCTAssertEqual(current.count, 2)
+        XCTAssertEqual(Set(current.map(\.id)).count, 2)
+        XCTAssertEqual(current.filter { $0.id == old.id }.count, 1)
+        XCTAssertEqual(Set(current.flatMap(\.activities).map(\.id)), ["split-1", "split-2"])
+        XCTAssertTrue(current.allSatisfy { $0.place.place.id != original.place.id })
+        XCTAssertTrue(current.allSatisfy { !$0.identity.placeIDs.contains(original.place.id) })
+        let reversed = LiveMapProjection.pins(activities: Array(rows.dropFirst().reversed()), featured: [], previousPins: previous)
+        XCTAssertEqual(current.map(\.id), reversed.map(\.id))
+    }
+
+    private func groupedEvent(_ id: String, place: VisiblePlace, actorID: String, kind: FeedActivityKind) -> FeedActivity {
+        FeedActivity(id: id, kind: kind,
+            actor: ProfileShell(id: actorID, handle: actorID, displayName: actorID, avatarURL: nil, bio: nil, relationship: .mutual),
+            place: place, occurredAt: Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
     private func request(userID: String = "viewer") -> LiveMapRequest {
         LiveMapRequest(userID: userID, audience: .everyone,
             query: LiveFeedQuery(occurredBefore: now), featured: true, viewport: nil, refresh: 0)
@@ -251,7 +480,8 @@ final class LiveMapResultsTests: XCTestCase {
             place: visible, occurredAt: date ?? now.addingTimeInterval(Double(index) - 200))
     }
     private func place(_ id: String) -> VisiblePlace {
-        let local = LocalPlace(localID: id, canonicalName: id, category: "coffee", latitude: 34.05, longitude: -118.24)
+        let local = LocalPlace(localID: id, canonicalName: id, category: "coffee", locality: "Sampleton", region: "CA", country: "US",
+            latitude: 34.05, longitude: -118.24)
         let owner = LocalProfile(localID: "person", handle: "person", displayName: "Person")
         let save = LocalUserPlace(localID: "save-\(id)", userID: owner.id, placeID: local.id,
             status: .been, visibility: .mutuals, sourceType: "manual")

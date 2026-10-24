@@ -2,7 +2,7 @@ import XCTest
 @testable import Wander
 
 @MainActor final class LivePlacePreviewPresentationTests: XCTestCase {
-    func testPreviewUsesOnlySelectedPlaceDeduplicatesAndPrioritizesFollowedPeople() {
+    func testPreviewUsesOnlySelectedPlaceDeduplicatesAndOrdersByRecency() {
         let selectedPlace = place("selected")
         let followed = event("followed", place: selectedPlace, relationship: .follower, age: 300)
         let mutual = event("mutual", place: selectedPlace, relationship: .mutual, age: 200)
@@ -12,7 +12,16 @@ import XCTest
         let result = LivePlacePreviewPresentation.recentActivity(
             [recent, old, followed, unrelated, mutual, followed], placeID: "selected"
         )
-        XCTAssertEqual(result.map(\.id), ["mutual", "followed", "recent"])
+        XCTAssertEqual(result.map(\.id), ["recent", "old", "mutual"])
+    }
+
+    func testEqualTimeActivitiesFollowServerKeysetOrderBeforeTakingThree() {
+        let selected = place("selected")
+        let rows = ["a", "d", "b", "c"].map {
+            event($0, place: selected, relationship: .nonFollower, age: 0)
+        }
+        XCTAssertEqual(LivePlacePreviewPresentation.recentActivity(rows, placeID: "selected").map(\.id),
+                       ["d", "c", "b"])
     }
 
     func testListActivityKeepsItsIdentityEvenWhenCompanionSaveIsWanna() {

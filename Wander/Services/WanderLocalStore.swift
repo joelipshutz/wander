@@ -2236,6 +2236,11 @@ final class WanderStore: ObservableObject {
             currentUserID: currentUser.id, relationship: relationship(to: activity.actor.id))
     }
 
+    /// Place history uses authorization guards, without a discovery audience filter.
+    func canDisplayPlaceActivity(_ activity: FeedActivity) -> Bool {
+        canDisplayActivity(activity)
+    }
+
     private func canDisplayActivity(_ activity: FeedActivity) -> Bool {
         guard !isBlockedBetweenCurrentUser(and: activity.actor.id) else { return false }
         guard activity.actor.id == currentUser.id
