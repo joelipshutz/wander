@@ -261,6 +261,15 @@ async function main() {
           await client.query("rollback to savepoint sender_notifications_smoke");
           await client.query("release savepoint sender_notifications_smoke");
         }
+        await client.query("savepoint historical_wanna_smoke");
+        try {
+          await client.query(transactionBody(readFileSync(
+            new URL("../supabase/tests/historical_wanna_notes.sql", import.meta.url), "utf8"), "rollback"));
+          console.log("ok - historical Wanna notes never borrow later check-in notes");
+        } finally {
+          await client.query("rollback to savepoint historical_wanna_smoke");
+          await client.query("release savepoint historical_wanna_smoke");
+        }
         await client.query("savepoint repeat_wanna_smoke");
         try {
           await client.query(transactionBody(
@@ -1522,8 +1531,9 @@ function runLinkedSmokeChecks(
 }
 
 function loadMigrationTestSQL(fileURL) {
-  // This suite raises SQL exceptions directly and does not require pgTAP.
-  if (fileURL.pathname.endsWith("/sender_notification_controls.sql")) {
+  // These suites raise SQL exceptions directly and do not require pgTAP.
+  if (["/sender_notification_controls.sql", "/historical_wanna_notes.sql"]
+    .some((name) => fileURL.pathname.endsWith(name))) {
     return readFileSync(fileURL, "utf8");
   }
   return loadStrictPgTapSQL(fileURL);
@@ -2857,6 +2867,10 @@ savepoint live_place_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_place_smoke;
 release savepoint live_place_smoke;
+savepoint historical_wanna_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/historical_wanna_notes.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint historical_wanna_smoke;
+release savepoint historical_wanna_smoke;
 savepoint repeat_wanna_smoke;
 savepoint sender_notifications_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/sender_notification_controls.sql", import.meta.url), "utf8"), "rollback")}
