@@ -1,0 +1,95 @@
+name: Live location validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Wander/Features/Live/LiveScreen.swift'
+      - 'Wander/Features/Live/LiveMapPolicy.swift'
+      - 'Wander/Services/MapKitPlaceResolver.swift'
+      - 'WanderTests/LiveMapLaunchLocationTests.swift'
+      - 'WanderUITests/LiveLocationUITests.swift'
+      - '.github/workflows/live-location-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-location-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  location:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+      - name: Generate project and select simulators
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID'),
+                             (('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+              for name in names:
+                  choices = [(tuple(map(int, re.findall(r'\d+', runtime))), device)
+                             for runtime, rows in devices.items() if 'iOS' in runtime
+                             for device in rows if device['name'] == name]
+                  if choices:
+                      device = sorted(choices, key=lambda item: item[0])[-1][1]
+                      break
+              else:
+                  raise RuntimeError(f'No supported simulator for {key}')
+              with open(os.environ['GITHUB_ENV'], 'a') as output:
+                  output.write(f'{key}={device["udid"]}\n')
+              print('Testing on', device['name'])
+          PY
+      - name: Location policy and native current-location UI on large phone
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderTests/LiveMapLaunchLocationTests
+          -only-testing:WanderUITests/LiveLocationUITests
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/large-location.xcresult"
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Native current-location UI on smaller phone
+        if: success() || failure()
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveLocationUITests
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 600
+          -maximum-test-execution-time-allowance 900
+          -resultBundlePath "$RUNNER_TEMP/small-location.xcresult"
+          CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Export location screenshots
+        if: success() || failure()
+        run: |
+          for size in large small; do
+            if test -d "$RUNNER_TEMP/$size-location.xcresult"; then
+              xcrun xcresulttool export attachments \
+                --path "$RUNNER_TEMP/$size-location.xcresult" \
+                --output-path "$RUNNER_TEMP/location-evidence/$size"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: live-location-evidence
+          path: |
+            ${{ runner.temp }}/large-location.xcresult
+            ${{ runner.temp }}/small-location.xcresult
+            ${{ runner.temp }}/location-evidence
+          retention-days: 7
