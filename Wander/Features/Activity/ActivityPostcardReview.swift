@@ -21,8 +21,9 @@ struct ActivityPostcardReviewRoot: View {
     init() {
         let arguments = ProcessInfo.processInfo.arguments
         let hasLongTitle = arguments.contains("-WanderFeedPhotoStackLongTitle")
+        let reportReview = arguments.contains("-WanderActivityReportMenuUITest")
         context = ActivityEngagementContext(
-            activityID: "fixture-feed-photo-stack",
+            activityID: reportReview ? "65200000-0000-0000-0000-000000000001" : "fixture-feed-photo-stack",
             actor: ProfileShell(
                 id: "user_ryan", handle: "ryan", displayName: "Ryan Lieblein",
                 avatarURL: nil, bio: nil, relationship: .follower

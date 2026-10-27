@@ -32,6 +32,7 @@ struct ActivityEngagementActionRow: View {
     var isEngagementEnabled = true
     var resolveContext: (@MainActor () async -> ActivityEngagementContext?)?
     var reportSubjectOverride: CommunityReportSubject?
+    var onPrivateReply: (() -> Void)?
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     @State private var wannaSaveContext: MapPlaceSaveContext?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
@@ -50,9 +51,7 @@ struct ActivityEngagementActionRow: View {
 
             shareButton
 
-            if context.actor.id != store.currentUser.id, resolvedReportSubject != nil {
-                reportMenu
-            }
+            activityMenu
 
             Spacer(minLength: WanderTheme.spacing3)
 
@@ -184,23 +183,16 @@ struct ActivityEngagementActionRow: View {
         .accessibilityValue(sharedVisitGroupID == nil ? "\(engagement.commentCount) comments" : "All readable shared check-in discussions")
     }
 
-    private var reportMenu: some View {
-        Menu {
-            Button {
+    private var activityMenu: some View {
+        ActivityActionsMenu(
+            activityID: context.activityID,
+            onPrivateReply: onPrivateReply,
+            onReport: context.actor.id != store.currentUser.id && resolvedReportSubject != nil ? {
                 auth.requireSignIn(for: .reportContent) {
                     reportSubject = resolvedReportSubject
                 }
-            } label: {
-                Label("Report activity", systemImage: "exclamationmark.bubble")
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(primaryColor)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .accessibilityLabel("Activity actions")
+            } : nil
+        )
     }
 
     private var resolvedReportSubject: CommunityReportSubject? {
@@ -356,6 +348,41 @@ enum ActivityPostcardTypographyPolicy {
     }
 }
 
+/// Keep the menu visible even when this activity has no eligible actions.
+/// Report eligibility and presentation remain owned by the engagement row.
+struct ActivityActionsMenu: View {
+    @Environment(\.activityPostcardVisualStyle) private var visualStyle
+    @Environment(\.astirBrandMode) private var brand
+    let activityID: String
+    var onPrivateReply: (() -> Void)?
+    var onReport: (() -> Void)?
+
+    var body: some View {
+        Menu {
+            if let onPrivateReply {
+                Button("Reply privately", systemImage: "bubble.left", action: onPrivateReply)
+            }
+            if let onReport {
+                Button(action: onReport) {
+                    Label("Report activity", systemImage: "exclamationmark.bubble")
+                }
+            }
+            if onPrivateReply == nil && onReport == nil {
+                Button("No additional actions", action: {}).disabled(true)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(visualStyle == .astir ? brand.primaryText : WanderTheme.textInk.color)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .menuOrder(.fixed)
+        .accessibilityLabel("Activity actions")
+        .accessibilityIdentifier("activity.\(activityID).actions")
+    }
+}
+
 struct ActivityPostcardView: View {
     @Environment(\.activityPostcardVisualStyle) private var visualStyle
     @Environment(\.astirBrandMode) private var astirBrandMode
@@ -387,6 +414,8 @@ struct ActivityPostcardView: View {
     var artworkAccessibilityHint: String? = nil
     var showsCommentButton = true
     var showsEngagementActions = true
+    var showsActivityMenu = false
+    var onPrivateReply: (() -> Void)?
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     var activityGroup: FeedActivityGroup? = nil
     var openActivityList: ((LocalPlaceList) -> Void)? = nil
@@ -476,8 +505,13 @@ struct ActivityPostcardView: View {
                         visiblePlace: visiblePlace,
                         sharedVisitGroupID: activeSharedGroupID,
                         showsCommentButton: showsCommentButton,
+                        onPrivateReply: onPrivateReply,
                         onSharePreviewPresentation: onSharePreviewPresentation
                     )
+                } else if showsActivityMenu {
+                    // An activity without place/list context previously had no
+                    // engagement row. Give it the same menu without adding reporting.
+                    ActivityActionsMenu(activityID: context.activityID, onPrivateReply: onPrivateReply)
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)

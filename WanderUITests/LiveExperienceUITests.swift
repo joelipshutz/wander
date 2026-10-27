@@ -166,6 +166,30 @@ final class LiveExperienceUITests: XCTestCase {
         capture("private-demo-reply")
     }
 
+    func testActivityMenuOpensPrivateReplyForSelectedActivity() {
+        let app = launch()
+        let handle = app.staticTexts.matching(identifier: "live.drawerHandle").element
+        XCTAssertTrue(handle.waitForExistence(timeout: 15))
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
+        let expanded = app.staticTexts.matching(identifier: "live.drawerHandle")
+            .matching(NSPredicate(format: "label == %@", "Activity drawer, expanded")).firstMatch
+        XCTAssertTrue(expanded.waitForExistence(timeout: 10))
+        let feed = app.scrollViews["feed.places.scroll"]
+        let actions = app.buttons["activity.fixture-feed-ryan-wanna-noodles.actions"]
+        revealFully(actions, in: feed, app: app)
+        actions.tap()
+        let reply = app.buttons["Reply privately"].firstMatch
+        XCTAssertTrue(reply.waitForExistence(timeout: 5))
+        capture("activity-menu-private-reply")
+        reply.tap()
+        XCTAssertTrue(app.textFields["messaging.composer"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["About Larchmont Noodles"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Ryan"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Demo friend"].exists)
+        capture("activity-menu-private-reply-context")
+    }
+
     func testWannaOffersContextualReplyAndHonestPlanRecovery() {
         let app = launch()
         let pin = app.buttons["live.pin.place_noodles"]
@@ -176,22 +200,29 @@ final class LiveExperienceUITests: XCTestCase {
         pin.tap()
         let activity = app.descendants(matching: .any)["live.placePreview.activity.fixture-feed-ryan-wanna-noodles"].firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
-        XCTAssertTrue(activity.label.contains("Ryan"))
-        XCTAssertTrue(activity.label.contains("Wanna"))
-        XCTAssertTrue(activity.label.contains("5h ago"))
+        let activitySummary = activity.buttons.firstMatch
+        XCTAssertTrue(activitySummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(activitySummary.label.contains("Ryan"))
+        XCTAssertTrue(activitySummary.label.contains("Wanna"))
+        XCTAssertTrue(activitySummary.label.contains("5h ago"))
         app.buttons["live.placePreview.close"].tap()
         setDrawer("expanded", in: app)
         let feed = app.scrollViews["feed.places.scroll"]
         let destination = app.buttons["feed.activity.fixture-feed-ryan-wanna-noodles.place"]
         revealFully(destination, in: feed, app: app)
         XCTAssertTrue(destination.label.contains("Larchmont Noodles"))
-        destination.press(forDuration: 1)
+        let actions = app.buttons["activity.fixture-feed-ryan-wanna-noodles.actions"]
+        revealFully(actions, in: feed, app: app)
+        XCTAssertTrue(actions.isHittable)
+        actions.tap()
         let reply = app.buttons["Reply privately"].firstMatch
         XCTAssertTrue(reply.waitForExistence(timeout: 5))
+        capture("wanna-activity-actions")
         reply.tap()
         let composer = app.textFields["messaging.composer"]
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Larchmont Noodles"].exists)
+        XCTAssertTrue(app.buttons["About Larchmont Noodles"].waitForExistence(timeout: 5),
+                      "The reply must retain a link to the selected activity's place.")
         XCTAssertTrue(app.staticTexts["Ryan"].waitForExistence(timeout: 5), "The private reply must retain the selected activity’s recipient.")
         XCTAssertFalse(app.staticTexts["Demo friend"].exists)
         capture("wanna-contextual-reply")

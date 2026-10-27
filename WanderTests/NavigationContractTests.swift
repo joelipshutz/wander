@@ -921,7 +921,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("ActivityPostcardView("))
         XCTAssertTrue(activityEngagement.contains("Text(\"\\(context.actor.displayName) \\(context.attributionAction)\")"))
-        XCTAssertTrue(activityEngagement.contains("Text(context.placeName)"))
+        XCTAssertTrue(activityEngagement.contains("Text(displayContext.placeName)"))
         XCTAssertTrue(activityEngagement.contains("private var primaryDestinationTitle: some View"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
         XCTAssertFalse(activityModule.contains("private var actionButton"))
@@ -5494,7 +5494,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertEqual(
             feed.components(separatedBy: "FeedSectionHeading(title: \"Activity\"").count - 1,
-            4
+            5
         )
         XCTAssertEqual(
             feed.components(separatedBy: ".walkthroughTarget(.feedActivity)").count - 1,
