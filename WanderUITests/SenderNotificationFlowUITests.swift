@@ -396,7 +396,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
         let responseStartedAt = ProcessInfo.processInfo.systemUptime
         var responseReads = 0
         var lastReadFinishedAt: TimeInterval?
-        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        func observeExpanded() -> Bool {
             guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             responseReads += 1
             let snapshot = try? editor.snapshot()
@@ -407,9 +407,20 @@ final class SenderNotificationFlowUITests: XCTestCase {
                 && finite(after)
                 && after.minY <= admitted.editor.minY - 44
                 && after.height >= admitted.editor.height + 44
-        }, object: nil)
-        let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
-        let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        }
+        // The predicate wait's first poll can fall outside a sub-second remainder.
+        // Observe immediately, keeping both the read and any retry inside the
+        // original five-second deadline.
+        let result: XCTWaiter.Result
+        if observeExpanded() {
+            result = .completed
+        } else {
+            let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeExpanded()
+            }, object: nil)
+            let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+            result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        }
         let observation = XCTAttachment(string: "readinessResult=\(readinessResult.rawValue); responseReads=\(responseReads); helperElapsed=\(ProcessInfo.processInfo.systemUptime - helperStartedAt); postActionObservationElapsed=\(ProcessInfo.processInfo.systemUptime - responseStartedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
         observation.name = "REC-636-save-editor-expansion-observation"
         observation.lifetime = .keepAlways
