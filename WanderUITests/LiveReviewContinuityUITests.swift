@@ -121,7 +121,13 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("original-place-from-pin-preview")
         placeBack.tap()
         XCTAssertTrue(placeBack.waitForNonExistence(timeout: 5))
-        waitDrawer("half expanded", in: app)
+        // A full-screen place profile returns to the selected map pin. Unlike
+        // leaving the Live tab, this does not reset the underlying drawer.
+        waitDrawer("collapsed", in: app)
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        XCTAssertEqual(open.label, "Open Larchmont Noodles")
+        app.buttons["live.placePreview.close"].tap()
+        XCTAssertTrue(open.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
         expandDrawer(in: app)
 
@@ -343,8 +349,9 @@ final class LiveReviewContinuityUITests: XCTestCase {
     private func collapseDrawerToHalf(in app: XCUIApplication) {
         let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         waitHittable(handle)
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)),
+                    withVelocity: .slow, thenHoldForDuration: 0.1)
         waitDrawer("half expanded", in: app)
         waitHittable(app.buttons["live.draw"])
     }
@@ -733,8 +740,11 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(filtersBack.isHittable)
         filtersBack.tap()
         XCTAssertTrue(app.navigationBars["Filters"].waitForExistence(timeout: 5))
-        reveal(app.buttons["25 km"], in: form, direction: .down, app: app)
-        app.buttons["25 km"].tap()
+        let radius = app.segmentedControls["live.filter.radius"].buttons["25 km"]
+        reveal(radius, in: form, direction: .down, app: app)
+        radius.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
+        let radiusSelected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: radius)
+        XCTAssertEqual(XCTWaiter.wait(for: [radiusSelected], timeout: 5), .completed)
         setOn(app.switches["live.filter.category.restaurants_food"], in: form, app: app)
         setOn(app.switches["live.filter.person.user_ryan"], in: form, app: app)
         let workEducation = app.switches["live.filter.category.work_education"]
@@ -925,15 +935,19 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let handle = drawer(in: app)
         waitHittable(handle)
         let endY: CGFloat = direction == .up ? 0.12 : 0.85
+        let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        // Long drags legitimately cross both detents. A transition to the
+        // middle detent needs a short drag from either end of the drawer.
+        let end = state == "half expanded"
+            ? start.withOffset(CGVector(dx: 0, dy: direction == .up ? -80 : 80))
+            : app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY))
         captureState("drawer-before-native-drag", in: app, observations: [
             "expectedState=\(state); expectedLoadedCount=\(count); endNormalizedY=\(endY)",
             "handleFrame=\(handle.frame); handleLabel=\(handle.label); handleValue=\(String(describing: handle.value)); handleHittable=\(handle.isHittable)",
             "preDragSystemUptime=\(ProcessInfo.processInfo.systemUptime)"
         ])
         // Use deliberate native input for the existing single drawer transition.
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY)),
-                   withVelocity: .slow, thenHoldForDuration: 0.1)
+        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         assertDrawer(state, count: count, in: app, postInputCapture: "drawer-after-native-drag")
     }
 

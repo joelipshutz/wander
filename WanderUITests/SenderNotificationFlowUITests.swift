@@ -198,7 +198,12 @@ final class SenderNotificationFlowUITests: XCTestCase {
             XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
             guard nativeSwitchReady else { return }
             capture("checkIn-dark-silent-before-press")
-            nativeSwitch.tap()
+            // Drag the native off thumb onto its on position, as in the
+            // other sender flows. A center tap did not change this control
+            // in the large-text sheet on either CI phone.
+            nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
+                .press(forDuration: 0.2, thenDragTo: nativeSwitch.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)))
         }
         // Observe a fresh native snapshot: the CI value predicate reused its
         // pre-press snapshot. Every read shares the original five-second budget.
