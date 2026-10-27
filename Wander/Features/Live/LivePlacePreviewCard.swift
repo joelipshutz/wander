@@ -213,9 +213,15 @@ struct LivePlacePreviewCard: View {
                             Text(activity.actor.displayName)
                                 .font(AstirTypography.label)
                                 .lineLimit(1)
-                            Text(LivePlacePreviewPresentation.emoji(for: activity))
-                                .font(.caption)
-                                .accessibilityLabel(LivePlacePreviewPresentation.actionLabel(for: activity))
+                            Group {
+                                if activity.resolvedTicketKind == .wanna {
+                                    Image(systemName: LivePinKind.wanna.symbol)
+                                } else {
+                                    Text(LivePlacePreviewPresentation.emoji(for: activity))
+                                }
+                            }
+                            .font(.caption)
+                            .accessibilityLabel(LivePlacePreviewPresentation.actionLabel(for: activity))
                             Spacer(minLength: 0)
                             Text(FeedPresentation.timestampText(for: activity.occurredAt))
                                 .font(AstirTypography.caption)
@@ -684,7 +690,7 @@ enum LivePlacePreviewPresentation {
     static func emoji(for activity: FeedActivity) -> String {
         switch activity.resolvedTicketKind {
         case .checkIn: "📍"
-        case .wanna: "✨"
+        case .wanna: "🔖"
         case .list: "📋"
         case .saved: "🔖"
         }
