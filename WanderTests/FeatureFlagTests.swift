@@ -15,6 +15,7 @@ final class FeatureFlagTests: XCTestCase {
                 "place_profile_action_variant",
                 "profile_feedback_v1",
                 "notification_reprompt_campaign",
+                "unified_live_v1",
             ]
         )
         XCTAssertEqual(FeatureFlagKey.placeProfileSaveTrayV1.definition.valueKind, .boolean)
@@ -37,6 +38,30 @@ final class FeatureFlagTests: XCTestCase {
         XCTAssertEqual(FeatureFlagKey.notificationRepromptCampaign.definition.integerRange, 0 ... 1_000_000)
         XCTAssertTrue(FeatureFlagKey.notificationRepromptCampaign.definition.allowsRemoteAccountOverride)
         XCTAssertTrue(FeatureFlagKey.notificationRepromptCampaign.definition.isEditableOnDevice)
+        XCTAssertEqual(FeatureFlagKey.unifiedLiveV1.definition.bundledDefault, .boolean(false))
+        XCTAssertTrue(FeatureFlagKey.unifiedLiveV1.definition.isEditableOnDevice)
+        XCTAssertTrue(FeatureFlagKey.unifiedLiveV1.definition.allowsRemoteAccountOverride)
+    }
+
+    func testLiveOverrideIsAccountScopedWaitsForRestartAndResetsToRemote() async throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let overrides = FeatureFlagOverrideStore(defaults: defaults)
+        let remote = FeatureFlagTestRepository(values: [.unifiedLiveV1: .init(isEnabled: true, source: .globalDefault)])
+        let original = WanderBackend(featureFlagRepository: remote, featureFlagDeviceOverrides: overrides.launchSnapshot())
+        await original.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(original.featureFlag(.unifiedLiveV1, for: "user_a"), true)
+        overrides.setOverride(.boolean(false), for: .unifiedLiveV1, userID: "user_a")
+        XCTAssertEqual(original.featureFlag(.unifiedLiveV1, for: "user_a"), true)
+        let restarted = WanderBackend(featureFlagRepository: remote, featureFlagDeviceOverrides: overrides.launchSnapshot())
+        await restarted.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(restarted.resolvedFeatureFlag(.unifiedLiveV1, for: "user_a"), .init(isEnabled: false, source: .deviceOverride))
+        XCTAssertNil(overrides.override(for: .unifiedLiveV1, userID: "user_b"))
+        overrides.clearOverride(for: .unifiedLiveV1, userID: "user_a")
+        XCTAssertEqual(restarted.featureFlag(.unifiedLiveV1, for: "user_a"), false)
+        let reset = WanderBackend(featureFlagRepository: remote, featureFlagDeviceOverrides: overrides.launchSnapshot())
+        await reset.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(reset.resolvedFeatureFlag(.unifiedLiveV1, for: "user_a"), .init(isEnabled: true, source: .globalDefault))
     }
 
     func testRemoteNotificationCampaignFailsClosedAndDeviceOverrideWaitsForRestart() async throws {

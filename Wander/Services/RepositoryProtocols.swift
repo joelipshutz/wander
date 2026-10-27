@@ -1103,6 +1103,13 @@ struct PlacePhotoRequest: Encodable, Equatable {
         )
     }
 
+    func metadataOnly() -> PlacePhotoRequest {
+        PlacePhotoRequest(placeID: placeID, name: name, address: address,
+            latitude: latitude, longitude: longitude, sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID, requiresPhoto: false,
+            eligibleUserIDs: eligibleUserIDs, renderVariant: renderVariant)
+    }
+
     func rendering(_ variant: PlacePhotoRenderVariant) -> PlacePhotoRequest {
         PlacePhotoRequest(
             placeID: placeID,
@@ -2024,6 +2031,14 @@ extension PlaceRepository {
 
 @MainActor
 protocol FeedRepository {
+    /// Authorized place history, independent of the map's discovery filters.
+    func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage
+    /// Complete map enumeration uses the same authorized query, without gallery hydration.
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage
     func activityFeed(
         audience: FeedAudience, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
@@ -2038,6 +2053,22 @@ protocol FeedRepository {
 }
 
 extension FeedRepository {
+    func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage {
+        throw WanderRemoteError.notImplemented("Place activity history")
+    }
+
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
+        try await liveFeed(audience: audience, query: query, before: before, limit: limit, onContent: { _ in })
+    }
+
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        // A legacy page cannot prove complete filtered pagination. Fail visibly.
+        throw WanderRemoteError.notImplemented("Live feed query")
+    }
+
     func activityFeed(
         audience: FeedAudience, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
@@ -2059,6 +2090,7 @@ extension FeedRepository {
 
 @MainActor
 protocol ActivityEngagementRepository {
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection?
     func activity(id: String) async throws -> FeedActivity
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary]
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch]
@@ -2070,6 +2102,8 @@ protocol ActivityEngagementRepository {
 }
 
 extension ActivityEngagementRepository {
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection? { nil }
+
     func setCommentLike(commentID: String, isLiked: Bool) async throws -> ActivityCommentLikeSummary {
         throw WanderRemoteError.notImplemented("comment likes")
     }

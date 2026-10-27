@@ -1,0 +1,302 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0B8798A612CCFE402624FA6B /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71BD4AC693EB3FE41430EB8 /* LiveView.swift */; };
+		46CDF57FFE6EB0D9E6B13454 /* SecondaryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EE2148595A853EB62A568B /* SecondaryViews.swift */; };
+		557DD5FDBA47DEA01E9CBB00 /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 543F1CEFD4A5C5C068DD4852 /* Design.swift */; };
+		BC2282BBDD8255DBBEBA23CA /* ReviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B3D3CC7D8EC2E9B1F8FE76C /* ReviewModel.swift */; };
+		C3003B269F5CF0B4534D4CFA /* AstirLiveReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0D0A9E5014FCBF7249EDC4 /* AstirLiveReviewUITests.swift */; };
+		E0C8E8B77EF50997105031B1 /* ProfileAndLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6828E6CDC6BBA96F42422BE8 /* ProfileAndLists.swift */; };
+		EB605B1AB7203251C947CEAF /* AstirLiveReviewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECBCB17245F088517097840 /* AstirLiveReviewApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8C49DA910829FB864A15520C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4426A498243AF1CF6329BCFE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE4FC76E5FD342C7024C4975;
+			remoteInfo = AstirLiveReview;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		11EE2148595A853EB62A568B /* SecondaryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondaryViews.swift; sourceTree = "<group>"; };
+		189054CF072763FB8DD5558E /* AstirLiveReview.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AstirLiveReview.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1ECBCB17245F088517097840 /* AstirLiveReviewApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLiveReviewApp.swift; sourceTree = "<group>"; };
+		543F1CEFD4A5C5C068DD4852 /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
+		56BF6555C942CEC340059A05 /* AstirLiveReviewUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AstirLiveReviewUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5B3D3CC7D8EC2E9B1F8FE76C /* ReviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewModel.swift; sourceTree = "<group>"; };
+		6828E6CDC6BBA96F42422BE8 /* ProfileAndLists.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAndLists.swift; sourceTree = "<group>"; };
+		6D0D0A9E5014FCBF7249EDC4 /* AstirLiveReviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLiveReviewUITests.swift; sourceTree = "<group>"; };
+		B71BD4AC693EB3FE41430EB8 /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		411CDC63992096B2AC3304D1 = {
+			isa = PBXGroup;
+			children = (
+				C17AFEACAD2420C6EAFA8587 /* Sources */,
+				7A49C7619CF26945D092ED41 /* UITests */,
+				8DEC4AAE5BD2DCD7F63C993A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7A49C7619CF26945D092ED41 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				6D0D0A9E5014FCBF7249EDC4 /* AstirLiveReviewUITests.swift */,
+			);
+			name = UITests;
+			path = Checks/UITests;
+			sourceTree = "<group>";
+		};
+		8DEC4AAE5BD2DCD7F63C993A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				189054CF072763FB8DD5558E /* AstirLiveReview.app */,
+				56BF6555C942CEC340059A05 /* AstirLiveReviewUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C17AFEACAD2420C6EAFA8587 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				1ECBCB17245F088517097840 /* AstirLiveReviewApp.swift */,
+				543F1CEFD4A5C5C068DD4852 /* Design.swift */,
+				B71BD4AC693EB3FE41430EB8 /* LiveView.swift */,
+				6828E6CDC6BBA96F42422BE8 /* ProfileAndLists.swift */,
+				5B3D3CC7D8EC2E9B1F8FE76C /* ReviewModel.swift */,
+				11EE2148595A853EB62A568B /* SecondaryViews.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		403598F90417E7F71847DFEF /* AstirLiveReviewUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8247EF392213736028C5CCC9 /* Build configuration list for PBXNativeTarget "AstirLiveReviewUITests" */;
+			buildPhases = (
+				671C7BEFDBBBB9947FA4AAB9 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				336604F5DCE37265CCD78906 /* PBXTargetDependency */,
+			);
+			name = AstirLiveReviewUITests;
+			packageProductDependencies = (
+			);
+			productName = AstirLiveReviewUITests;
+			productReference = 56BF6555C942CEC340059A05 /* AstirLiveReviewUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		AE4FC76E5FD342C7024C4975 /* AstirLiveReview */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01C28655660458DEEB4D0FD0 /* Build configuration list for PBXNativeTarget "AstirLiveReview" */;
+			buildPhases = (
+				8E80180E49E3255E72645284 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AstirLiveReview;
+			packageProductDependencies = (
+			);
+			productName = AstirLiveReview;
+			productReference = 189054CF072763FB8DD5558E /* AstirLiveReview.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4426A498243AF1CF6329BCFE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					403598F90417E7F71847DFEF = {
+						TestTargetID = AE4FC76E5FD342C7024C4975;
+					};
+				};
+			};
+			buildConfigurationList = A44DC6B0985531D6DD621648 /* Build configuration list for PBXProject "AstirLiveReview" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 411CDC63992096B2AC3304D1;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8DEC4AAE5BD2DCD7F63C993A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AE4FC76E5FD342C7024C4975 /* AstirLiveReview */,
+				403598F90417E7F71847DFEF /* AstirLiveReviewUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		671C7BEFDBBBB9947FA4AAB9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C3003B269F5CF0B4534D4CFA /* AstirLiveReviewUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E80180E49E3255E72645284 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EB605B1AB7203251C947CEAF /* AstirLiveReviewApp.swift in Sources */,
+				557DD5FDBA47DEA01E9CBB00 /* Design.swift in Sources */,
+				0B8798A612CCFE402624FA6B /* LiveView.swift in Sources */,
+				E0C8E8B77EF50997105031B1 /* ProfileAndLists.swift in Sources */,
+				BC2282BBDD8255DBBEBA23CA /* ReviewModel.swift in Sources */,
+				46CDF57FFE6EB0D9E6B13454 /* SecondaryViews.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		336604F5DCE37265CCD78906 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE4FC76E5FD342C7024C4975 /* AstirLiveReview */;
+			targetProxy = 8C49DA910829FB864A15520C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		000246BFEDB7239C3D6356EE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				COPY_PHASE_STRIP = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Astir Review";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		038A7A37F4551A5F46BCB682 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grayline.astirlivereview;
+			};
+			name = Debug;
+		};
+		07993E7CA20AF1684A3A5419 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.grayline.astirlivereview.uitests;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = AstirLiveReview;
+			};
+			name = Release;
+		};
+		18444DCCB73FB94EF8938650 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.grayline.astirlivereview.uitests;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = AstirLiveReview;
+			};
+			name = Debug;
+		};
+		47F7DCED6E5F73973323355F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				COPY_PHASE_STRIP = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Astir Review";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		83760D65DCB3A82770A04473 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grayline.astirlivereview;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		01C28655660458DEEB4D0FD0 /* Build configuration list for PBXNativeTarget "AstirLiveReview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				038A7A37F4551A5F46BCB682 /* Debug */,
+				83760D65DCB3A82770A04473 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8247EF392213736028C5CCC9 /* Build configuration list for PBXNativeTarget "AstirLiveReviewUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				18444DCCB73FB94EF8938650 /* Debug */,
+				07993E7CA20AF1684A3A5419 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A44DC6B0985531D6DD621648 /* Build configuration list for PBXProject "AstirLiveReview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				47F7DCED6E5F73973323355F /* Debug */,
+				000246BFEDB7239C3D6356EE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4426A498243AF1CF6329BCFE /* Project object */;
+}

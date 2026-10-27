@@ -16,6 +16,7 @@ struct PersonMentionField: View {
     var minimumLines = 1
     var maximumLines = 4
     var isSearch = false
+    var isVisible = true
     var submitOnReturn = false
     var suggestionPlacement: SuggestionPlacement = .keyboard
     var onSubmit: () -> Void = {}
@@ -42,7 +43,7 @@ struct PersonMentionField: View {
     private var mentionBinding: Binding<[PersonMention]> { mentions ?? $internalMentions }
     private var focusBinding: Binding<Bool> { focus ?? $internalFocus }
     private var query: PersonMentionQuery? {
-        guard focusBinding.wrappedValue else { return nil }
+        guard isVisible, focusBinding.wrappedValue else { return nil }
         return PersonMentionDraft(text: text, mentions: mentionBinding.wrappedValue).query(at: selection)
     }
     private var requestID: String {
@@ -69,7 +70,7 @@ struct PersonMentionField: View {
                 editor: editor,
                 primaryColor: UIColor(brand.primaryText), accentColor: UIColor(brand.accentText),
                 placeholderColor: UIColor(brand.secondaryText),
-                minimumLines: minimumLines, maximumLines: maximumLines, isSearch: isSearch, submitOnReturn: submitOnReturn,
+                minimumLines: minimumLines, maximumLines: maximumLines, isSearch: isSearch, isVisible: isVisible, submitOnReturn: submitOnReturn,
                 suggestions: AnyView(suggestions.environment(\.astirBrandMode, brand)),
                 suggestionHeight: suggestionPlacement == .keyboard ? suggestionHeight : 0,
                 onSubmit: onSubmit, onFocus: onFocus, onCompletionRequest: complete
@@ -101,6 +102,12 @@ struct PersonMentionField: View {
         .onChange(of: text) { _, value in
             let valid = mentionBinding.wrappedValue.filter { $0.isValid(in: value) }
             if valid != mentionBinding.wrappedValue { mentionBinding.wrappedValue = valid }
+        }
+        .onChange(of: isVisible) { _, visible in
+            guard !visible else { return }
+            results.cancelCompletions()
+            focusBinding.wrappedValue = false
+            onQueryChange(false)
         }
         .onChange(of: auth.isSignedIn) { _, _ in results.cancelCompletions() }
         .onDisappear { results.cancelCompletions(); onQueryChange(false) }
@@ -204,6 +211,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
     let minimumLines: Int
     let maximumLines: Int
     let isSearch: Bool
+    var isVisible = true
     let submitOnReturn: Bool
     let suggestions: AnyView
     let suggestionHeight: CGFloat
@@ -213,8 +221,9 @@ struct PersonMentionNativeInput: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> MentionTextView {
+    func makeUIView(context: Context) -> InputContainerView {
         let view = MentionTextView()
+        let container = InputContainerView(textView: view)
         view.backgroundColor = .clear
         view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
         view.textContainer.lineFragmentPadding = 0
@@ -231,10 +240,12 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         view.autocapitalizationType = isSearch ? .none : .sentences
         view.returnKeyType = isSearch ? .search : (submitOnReturn ? .send : .default)
         view.allowsEditingTextAttributes = false
-        return view
+        context.coordinator.setInputVisibility(isVisible, for: view)
+        return container
     }
 
-    static func dismantleUIView(_ view: MentionTextView, coordinator: Coordinator) {
+    static func dismantleUIView(_ container: InputContainerView, coordinator: Coordinator) {
+        let view = container.textView
         coordinator.accessoryUpdateTask?.cancel()
         if coordinator.parent.editor.view === view {
             coordinator.parent.editor.view = nil
@@ -242,23 +253,30 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
     }
 
-    func updateUIView(_ view: MentionTextView, context: Context) {
-        guard !context.coordinator.updating else { return }
+    func updateUIView(_ container: InputContainerView, context: Context) {
+        update(container.textView, coordinator: context.coordinator)
+    }
+
+    func update(_ view: MentionTextView, coordinator: Coordinator) {
+        // Visibility must not wait for SwiftUI to catch up with native typing
+        // or for an IME composition to finish. Keep the editor itself mounted.
+        coordinator.setInputVisibility(isVisible, for: view)
+        guard !coordinator.updating else { return }
         // Parent forms can render an earlier snapshot after UIKit has already
         // published newer keystrokes. Wait for that publication to be reflected
         // before accepting a replacement, otherwise the last character is lost.
-        if let pending = context.coordinator.pendingText {
-            guard text == pending || replacementID != context.coordinator.parent.replacementID else { return }
-            context.coordinator.pendingText = nil
+        if let pending = coordinator.pendingText {
+            guard text == pending || replacementID != coordinator.parent.replacementID else { return }
+            coordinator.pendingText = nil
         }
-        context.coordinator.parent = self
+        coordinator.parent = self
         guard view.markedTextRange == nil else { return }
-        context.coordinator.updating = true
-        defer { context.coordinator.updating = false }
+        coordinator.updating = true
+        defer { coordinator.updating = false }
         let replacesText = view.text != text
         if replacesText {
             view.text = text
-            context.coordinator.lastText = text
+            coordinator.lastText = text
         }
         let font = regularFont
         if view.font == nil { view.font = font }
@@ -269,17 +287,17 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         view.placeholder.font = font
         view.placeholder.textColor = placeholderColor
         view.placeholder.isHidden = !text.isEmpty
-        context.coordinator.style(view)
+        coordinator.style(view)
         // Native selection is authoritative during typing. Only apply a caret
         // supplied with an external replacement, such as choosing a person.
         if replacesText, selection.location >= 0, selection.location <= text.utf16.count,
            selection.length <= text.utf16.count - selection.location {
             view.selectedRange = selection
         }
-        context.coordinator.synchronizeFocus(view)
+        coordinator.synchronizeFocus(view)
         if replacesText { view.invalidateIntrinsicContentSize() }
         view.setNeedsLayout()
-        context.coordinator.updateSuggestions(for: view)
+        coordinator.updateSuggestions(for: view)
     }
 
     private var regularFont: UIFont { inputFont(bold: false) }
@@ -292,14 +310,48 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         return UIFontMetrics(forTextStyle: style).scaledFont(for: font)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: MentionTextView, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: InputContainerView, context: Context) -> CGSize? {
         guard let width = proposal.width, width > 0 else { return nil }
+        let view = uiView.textView
         let lineHeight = regularFont.lineHeight
-        let desired = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let desired = view.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
         let minimum = lineHeight * CGFloat(minimumLines) + 12
         let maximum = lineHeight * CGFloat(maximumLines) + 12
-        if uiView.isScrollEnabled != (desired > maximum) { uiView.isScrollEnabled = desired > maximum }
+        if view.isScrollEnabled != (desired > maximum) { view.isScrollEnabled = desired > maximum }
         return CGSize(width: width, height: max(minimum, min(maximum, desired)))
+    }
+
+    /// The Map host can export a represented UITextView even while its native
+    /// visibility flags exclude it. Keep the editor as a persistent child of a
+    /// plain represented view so UIKit controls that child's accessibility tree.
+    final class InputContainerView: UIView {
+        let textView: MentionTextView
+
+        init(textView: MentionTextView) {
+            self.textView = textView
+            super.init(frame: .zero)
+            backgroundColor = .clear
+            isAccessibilityElement = false
+            setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(textView)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            textView.frame = bounds
+        }
+
+        override var intrinsicContentSize: CGSize { textView.intrinsicContentSize }
+        override func sizeThatFits(_ size: CGSize) -> CGSize { textView.sizeThatFits(size) }
+
+        func setInputVisibility(_ visible: Bool) {
+            isUserInteractionEnabled = visible
+            accessibilityElementsHidden = !visible
+            accessibilityElements = visible ? [textView] : []
+        }
     }
 
     final class MentionTextView: UITextView {
@@ -314,6 +366,10 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             addSubview(placeholder)
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func invalidateIntrinsicContentSize() {
+            super.invalidateIntrinsicContentSize()
+            (superview as? InputContainerView)?.invalidateIntrinsicContentSize()
+        }
         override func deleteBackward() {
             if markedTextRange == nil {
                 let selection = selectedRange
@@ -345,17 +401,42 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         private var proposedEdit: (originalText: String, draft: PersonMentionDraft)?
         var updating = false
         var focusUpdatePending = false
+        private(set) var isVisible: Bool
         var accessoryUpdateTask: Task<Void, Never>?
+        private(set) var accessoryUpdateRequestID: UUID?
         let accessory = MentionKeyboardAccessory()
         init(_ parent: PersonMentionNativeInput) {
             self.parent = parent
+            isVisible = parent.isVisible
             lastText = parent.text
+        }
+
+        func setInputVisibility(_ visible: Bool, for view: UITextView) {
+            // Do not rely on parent here: pendingText can intentionally retain
+            // an older parent snapshot until the latest keystroke publishes.
+            isVisible = visible
+            (view.superview as? InputContainerView)?.setInputVisibility(visible)
+            view.isHidden = !visible
+            view.isUserInteractionEnabled = visible
+            view.isAccessibilityElement = visible
+            view.accessibilityElementsHidden = !visible
+            guard !visible else { return }
+            accessoryUpdateTask?.cancel()
+            accessoryUpdateTask = nil
+            accessoryUpdateRequestID = nil
+            accessory.host.rootView = AnyView(EmptyView())
+            accessory.host.view.isHidden = true
+            accessory.contentHeight = 0
+            accessory.heightConstraint.constant = 0
+            accessory.frame.size.height = 0
+            view.inputAccessoryView = nil
+            synchronizeFocus(view)
         }
 
         /// Async completion must transform UIKit's current draft. A SwiftUI
         /// snapshot can be a few keystrokes behind when the lookup returns.
         func complete(_ request: PersonMentionCompletionRequest, person: ProfileShell, in view: UITextView) -> Bool {
-            guard !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
+            guard isVisible, !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
             var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
             draft.reconcile(view.text)
             guard let caret = draft.complete(request, person: person, at: view.selectedRange) else { return false }
@@ -363,7 +444,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
 
         func select(_ person: ProfileShell, query: PersonMentionQuery, in view: UITextView) -> Bool {
-            guard !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
+            guard isVisible, !updating, view.isFirstResponder, view.markedTextRange == nil else { return false }
             var draft = PersonMentionDraft(text: lastText, mentions: parent.mentions)
             draft.reconcile(view.text)
             guard let current = draft.query(at: view.selectedRange),
@@ -397,18 +478,28 @@ struct PersonMentionNativeInput: UIViewRepresentable {
         }
 
         func updateSuggestions(for view: UITextView) {
+            guard isVisible else { return }
             accessory.host.rootView = parent.suggestionHeight > 0 ? parent.suggestions : AnyView(EmptyView())
             accessory.host.view.isHidden = parent.suggestionHeight == 0
             guard accessory.contentHeight != parent.suggestionHeight, accessoryUpdateTask == nil else { return }
+            let requestID = UUID()
+            accessoryUpdateRequestID = requestID
             accessoryUpdateTask = Task { [weak self, weak view] in
                 guard let self, let view else { return }
-                defer { self.accessoryUpdateTask = nil }
+                defer {
+                    // A rapid hide/show may already have scheduled a replacement.
+                    if self.accessoryUpdateRequestID == requestID {
+                        self.accessoryUpdateTask = nil
+                        self.accessoryUpdateRequestID = nil
+                    }
+                }
                 // Height transitions wait for the current input burst to
                 // settle, including punctuation that closes a query. A stable
                 // open height lets filtering update without keyboard reloads.
                 do { try await self.parent.editor.waitForTypingPause(for: .milliseconds(250)) }
                 catch { return }
-                guard !Task.isCancelled, view.isFirstResponder, view.markedTextRange == nil else { return }
+                guard !Task.isCancelled, self.accessoryUpdateRequestID == requestID,
+                      self.isVisible, view.isFirstResponder, view.markedTextRange == nil else { return }
                 let height = self.parent.suggestionHeight
                 guard self.accessory.contentHeight != height else { return }
                 self.accessory.contentHeight = height
@@ -435,8 +526,9 @@ struct PersonMentionNativeInput: UIViewRepresentable {
                 guard let self else { return }
                 self.focusUpdatePending = false
                 guard let view, view.window != nil else { return }
-                if self.parent.focus, !view.isFirstResponder { view.becomeFirstResponder() }
-                if !self.parent.focus, view.isFirstResponder { view.resignFirstResponder() }
+                let shouldFocus = self.isVisible && !view.isHidden && view.isUserInteractionEnabled && self.parent.focus
+                if shouldFocus, !view.isFirstResponder { view.becomeFirstResponder() }
+                if !shouldFocus, view.isFirstResponder { view.resignFirstResponder() }
             }
         }
 
@@ -461,7 +553,7 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             parent.selection = textView.selectedRange
             if textView.markedTextRange == nil { style(textView) }
             textView.invalidateIntrinsicContentSize()
-            if textView.markedTextRange == nil,
+            if isVisible, textView.markedTextRange == nil,
                let request = PersonMentionCompletionRequest(draft: draft, selection: textView.selectedRange) {
                 parent.onCompletionRequest(request)
             }
@@ -475,7 +567,10 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             parent.selection = textView.selectedRange
         }
 
+        func textViewShouldBeginEditing(_ textView: UITextView) -> Bool { isVisible }
+
         func textViewDidBeginEditing(_ textView: UITextView) {
+            guard isVisible else { synchronizeFocus(textView); return }
             parent.focus = true
             parent.onFocus()
         }
@@ -514,15 +609,21 @@ struct PersonMentionNativeInput: UIViewRepresentable {
             updating = true
             defer { updating = wasUpdating }
             let normal: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: parent.primaryColor]
-            view.textStorage.beginEditing()
-            view.textStorage.setAttributes(normal, range: NSRange(location: 0, length: view.text.utf16.count))
+            let styled = NSMutableAttributedString(string: view.text, attributes: normal)
             let bold = parent.inputFont(bold: true)
             for mention in parent.mentions where mention.isValid(in: view.text) {
-                view.textStorage.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.nameRange)
+                styled.addAttributes([.font: bold, .foregroundColor: parent.accentColor], range: mention.nameRange)
             }
-            view.textStorage.endEditing()
-            if view.selectedRange != caret { view.selectedRange = caret }
-            view.typingAttributes = normal
+            // Answer and tag changes rerender the containing save form. Rewriting
+            // unchanged text storage asks UIKit to lay out/reveal the caret again,
+            // pulling its enclosing ScrollView back toward the note field.
+            if !view.textStorage.isEqual(to: styled) {
+                view.textStorage.setAttributedString(styled)
+                if view.selectedRange != caret { view.selectedRange = caret }
+            }
+            if !NSDictionary(dictionary: view.typingAttributes).isEqual(to: normal) {
+                view.typingAttributes = normal
+            }
         }
     }
 

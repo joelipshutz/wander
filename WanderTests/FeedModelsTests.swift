@@ -4,6 +4,34 @@ import XCTest
 final class FeedModelsTests: XCTestCase {
     private let groupingNow = Date(timeIntervalSince1970: 1_800_000_000)
 
+    #if DEBUG && targetEnvironment(simulator)
+    func testEmbeddedLivePhotosRequireIsolatedExplicitLaunch() {
+        let required = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture", "-WanderLiveFeedPhotosUITest"]
+        XCTAssertTrue(ActivityPostcardPhotoUITestFixtures.isLiveEnabled(arguments: required))
+        for missing in required {
+            XCTAssertFalse(ActivityPostcardPhotoUITestFixtures.isLiveEnabled(
+                arguments: required.filter { $0 != missing }))
+        }
+        for excluded in ["-WanderUseLiveAuth", "-WanderForceSignedOut", "-WanderAuthUITest",
+            "-WanderOnboardingUITestSignedOut", "-WanderFeedPhotoStackUITest",
+            "-WanderUseStorefrontFixtures", "-WanderUsePerformanceFixtures", "-WanderUseEphemeralEmptyFixtures"] {
+            XCTAssertFalse(ActivityPostcardPhotoUITestFixtures.isLiveEnabled(arguments: required + [excluded]))
+        }
+        XCTAssertEqual(ActivityPostcardPhotoUITestFixtures.liveFeedMedia(arguments: []), [])
+        let protectedPhoto = FeedMediaPreview(id: "64000000-0000-0000-0000-000000000641",
+            storageBucket: "visit-photos", storagePath: "owner/visit/photo.jpg",
+            accessibilityLabel: "Sample check-in photo 1")
+        XCTAssertNil(ActivityPostcardPhotoUITestFixtures.livePhoto(matching: protectedPhoto, arguments: required))
+        let urlPhoto = FeedMediaPreview(id: protectedPhoto.id, urlString: "https://example.invalid/photo.jpg",
+            accessibilityLabel: protectedPhoto.accessibilityLabel)
+        XCTAssertNil(ActivityPostcardPhotoUITestFixtures.livePhoto(matching: urlPhoto, arguments: required))
+        XCTAssertNil(ActivityPostcardPhotoUITestFixtures.livePhoto(
+            matching: FeedMediaPreview(id: "remote-photo", storageBucket: "visit-photos",
+                storagePath: "owner/visit/photo.jpg", accessibilityLabel: "Photo"), arguments: []))
+    }
+    #endif
+
     @MainActor
     func testDecodedRepeatCheckInsKeepDistinctAndEmptyMetadata() async throws {
         let decoder = JSONDecoder()
@@ -87,6 +115,85 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(context.media.map(\.id), ["visit-photo-1", "visit-photo-2"])
         let laterGroup = try XCTUnwrap(groups.first { $0.id == laterVisit.id })
         XCTAssertEqual(laterGroup.primaryActivity.activityEngagementContext?.media.map(\.id), ["later-photo"])
+    }
+
+    func testAcceptedSharedVisitPostsConsolidateByExactGroupAcrossPeopleAndTime() throws {
+        let source = sharedEvent("owner-post", actorID: "owner", seconds: 0, groupID: "shared-group")
+        let accepted = sharedEvent("accepted-post", actorID: "recipient", seconds: 2_400, groupID: "shared-group")
+        let independent = groupingEvent("independent", .placeBeen, 2_401, actorID: "recipient")
+        let groups = FeedPresentation.groupedActivity([accepted, independent, source], relativeTo: groupingNow)
+        XCTAssertEqual(groups.count, 2)
+        let shared = try XCTUnwrap(groups.first { $0.sharedVisitGroupID == "shared-group" })
+        XCTAssertEqual(shared.id, "shared-visit:shared-group")
+        XCTAssertEqual(shared.activities.map(\.id), ["owner-post", "accepted-post"])
+        XCTAssertEqual(shared.primaryActivity.id, "owner-post")
+        XCTAssertEqual(shared.primaryActivity.note, "owner-post original note")
+        XCTAssertEqual(shared.activities.map(\.note), ["owner-post original note", "accepted-post original note"])
+    }
+
+    func testSharedVisitIdentityIsStableWhenTheOtherAuthorizedPostArrives() throws {
+        let source = sharedEvent("source", actorID: "owner", seconds: 0, groupID: "group")
+        let accepted = sharedEvent("accepted", actorID: "recipient", seconds: 60, groupID: "group")
+        let before = try XCTUnwrap(FeedPresentation.groupedActivity([accepted], relativeTo: groupingNow).first)
+        let after = try XCTUnwrap(FeedPresentation.groupedActivity([accepted, source], relativeTo: groupingNow).first)
+        XCTAssertEqual(before.id, after.id)
+        XCTAssertEqual(before.activities.map(\.id), ["accepted"], "Never reconstruct an absent or unauthorized source post")
+        XCTAssertEqual(after.activities.map(\.id), ["source", "accepted"])
+    }
+
+    func testSimilarVisitsAndDifferentAcceptedGroupsDoNotMerge() {
+        let events = [sharedEvent("a", actorID: "owner", seconds: 0, groupID: "first-group"),
+            sharedEvent("b", actorID: "recipient", seconds: 0, groupID: "second-group"),
+            groupingEvent("c", .placeBeen, 0, actorID: "third")]
+        XCTAssertEqual(FeedPresentation.groupedActivity(events, relativeTo: groupingNow).count, 3)
+        XCTAssertEqual(FeedPresentation.groupedActivity(events.map { event in
+            FeedActivity(id: event.id, kind: event.kind, actor: event.actor, place: event.place,
+                         occurredAt: event.occurredAt, note: "Same note")
+        }, relativeTo: groupingNow).count, 3, "Names, venue, note and timestamps are not shared-visit provenance")
+    }
+
+    func testSharedCoVisitDoesNotPromoteUnfilteredParticipantPostAboveDisclosure() throws {
+        let source = sharedEvent("source", actorID: "owner", seconds: 120, groupID: "group")
+        // An earlier participant event would otherwise become the headline.
+        let participant = sharedEvent("participant", actorID: "recipient", seconds: 0, groupID: "group")
+        let independent = groupingEvent("independent", .placeBeen, 60, actorID: "recipient")
+        let query = LiveFeedQuery(occurredAfter: groupingNow.addingTimeInterval(-7 * 86_400), personIDs: ["owner"])
+        let sections = FeedPresentation.stagedActivitySections([participant, independent, source],
+            query: query, through: .allActivity, relativeTo: groupingNow)
+        XCTAssertEqual(sections.map(\.stage), [.selected, .older, .allActivity])
+        XCTAssertEqual(sections[0].groups.flatMap(\.activities).map(\.id), ["source"])
+        XCTAssertEqual(sections[0].groups.first?.primaryActivity.note, "source original note")
+        XCTAssertEqual(sections[0].groups.first?.primaryActivity.sharedVisit?.companions.map(\.profile.id), ["recipient"])
+        XCTAssertEqual(sections[2].groups.flatMap(\.activities).map(\.id), ["independent"])
+        XCTAssertEqual(sections.flatMap(\.groups).filter { $0.sharedVisitGroupID == "group" }.count, 1)
+    }
+
+    func testOrdinaryActionsStayInTheirFilterStages() {
+        let wanna = groupingEvent("wanna", .placeWannaGo, 0)
+        let list = groupingEvent("list", .listItemAdded, 60)
+        let query = LiveFeedQuery(activityType: .wannas)
+        let sections = FeedPresentation.stagedActivitySections([list, wanna], query: query,
+            through: .allActivity, relativeTo: groupingNow)
+        XCTAssertEqual(sections.map(\.stage), [.selected, .allActivity])
+        XCTAssertEqual(sections[0].groups.flatMap(\.activities).map(\.id), ["wanna"])
+        XCTAssertEqual(sections[1].groups.flatMap(\.activities).map(\.id), ["list"])
+    }
+
+    func testNonCheckInIgnoresSharedVisitMetadata() {
+        let source = sharedEvent("source", actorID: "owner", seconds: 0, groupID: "group")
+        let wanna = FeedActivity(id: "wanna", kind: .placeWannaGo, actor: source.actor,
+            place: source.place, occurredAt: source.occurredAt, sharedVisit: source.sharedVisit)
+        XCTAssertNil(wanna.sharedVisit)
+    }
+
+    private func sharedEvent(_ id: String, actorID: String, seconds: TimeInterval, groupID: String) -> FeedActivity {
+        let event = groupingEvent(id, .placeBeen, seconds, actorID: actorID)
+        let companion = ProfileShell(id: actorID == "owner" ? "recipient" : "owner", handle: "companion",
+            displayName: "Companion", avatarURL: nil, bio: nil, relationship: .mutual)
+        return FeedActivity(id: event.id, kind: event.kind, actor: event.actor, place: event.place,
+            occurredAt: event.occurredAt, note: "\(id) original note",
+            sharedVisit: FeedSharedVisitContext(groupID: groupID, visitID: "visit-\(id)",
+                companions: [FeedSharedVisitCompanion(profile: companion, status: .accepted)]))
     }
 
     func testGroupingWindowIncludesThirtyMinutesButDoesNotSlide() {

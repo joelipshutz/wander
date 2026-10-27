@@ -1,6 +1,16 @@
 import CryptoKit
 import Foundation
 
+/// Image bytes can stay cached; signed delivery URLs and live business facts cannot.
+enum PlacePhotoManifestCachePolicy {
+    static let freshness: TimeInterval = 5 * 60
+
+    static func isFresh(cachedAt: Date, now: Date) -> Bool {
+        let age = now.timeIntervalSince(cachedAt)
+        return age >= 0 && age < freshness
+    }
+}
+
 struct PlacePhotoDataCacheMetrics: Equatable, Sendable {
     let memoryHits: Int
     let diskHits: Int

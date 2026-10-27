@@ -1,0 +1,255 @@
+{
+  "candidate_label": "V12 final native candidate",
+  "tested_head_commit": "f3f08b3dd0a058eab4f0eecd9494b01e4846110b",
+  "branch": "codex/live-experience-review",
+  "base_commit": "d9f827353648bab91a17187721b5ea41e65e1a42",
+  "xcode_version": "26.6 (iOS 26.5 Simulator)",
+  "signing": "Ad-hoc Simulator signing",
+  "packaging_head_commit": "f3f08b3dd0a058eab4f0eecd9494b01e4846110b",
+  "swift_source_count": 392,
+  "swift_source_set_sha256": "861caebb6501fe9eb475d337d38b6fad1de8b2497d91993e282aaefc0a0f6c6f",
+  "build_input_hashes": {
+    "Wander.xcodeproj/project.pbxproj": "e562be924fd367a83a19e2c7d22e48b0e98c61d6bff283af745434b7912f9ee7",
+    "Wander.xcodeproj/xcshareddata/xcschemes/Live Experience Review.xcscheme": "61fe5f1a5dd4c7149416e470fc08a7021366a890fd79f2278200ddf3da6f648a",
+    "Wander.xcodeproj/xcshareddata/xcschemes/Wander.xcscheme": "3b5ae93e74941a365c28dca040c21d3a81b2f2187b6905dde008b6a48886f1a7",
+    "Wander/Resources/Wander.entitlements": "2014d7d0b6cda9d070852001ff8bd9631834d68c3680313d8117bd5ede26a40c",
+    "WanderShareExtension/WanderShareExtension.entitlements": "739551afed7b839ea6b8aec864202bb2a5d5b7d6cd0f3c49bbdf5222e913ca07",
+    "project.yml": "e78221b0c3010663d5dce496fd69694d90eca4c9ff3ca005b3322adb212e1099"
+  },
+  "conversion": {
+    "max_edge": 1100,
+    "jpeg_quality": 65
+  },
+  "captures": [
+    {
+      "device": "large",
+      "caption": "Live landing \u00b7 large phone",
+      "name": "large-live-home.jpg",
+      "test_identifier": "LiveExperienceUITests/testThreeTabsAndProfileContinuity()",
+      "original_exported_filename": "4FC5450D-D791-4B58-81CB-F8D385C125AB.png",
+      "attachment_name": "REC-636-live-home_0_F6BEFE20-F128-49B1-8882-DEB6138D7C11.png",
+      "captured_at_utc": "2026-10-11T21:15:59.907000+00:00",
+      "original_sha256": "6941f59c96ecbf95fba8a9a078158a4db5c82cdda4f91e2584247b429c14768f",
+      "review_sha256": "ca2906213356c62ece496b07b1995cc66e9b5ace87b424bf3101f642bc44cae8",
+      "bytes": 122505
+    },
+    {
+      "device": "compact",
+      "caption": "Live landing \u00b7 compact phone",
+      "name": "compact-live-home.jpg",
+      "test_identifier": "LiveExperienceUITests/testThreeTabsAndProfileContinuity()",
+      "original_exported_filename": "4C6ACCCA-02D5-44E0-AD33-E514F259FDEA.png",
+      "attachment_name": "REC-636-live-home_0_A7E85D36-1572-4C0A-8713-E804023F1B93.png",
+      "captured_at_utc": "2026-10-11T21:23:02.933000+00:00",
+      "original_sha256": "ea0183f6747db1de693a03df61c7a14133ed3174aff6d814430d6eca79226808",
+      "review_sha256": "b49f02e793af228f6a353679046f28076362a1d21b347fd8c78328c88d9d5885",
+      "bytes": 121660
+    },
+    {
+      "device": "large",
+      "caption": "Expanded drawer \u00b7 existing Feed modules",
+      "name": "large-feed-expanded.jpg",
+      "test_identifier": "LiveExperienceUITests/testDrawerDragAndExistingFeedSections()",
+      "original_exported_filename": "F394F477-D909-496C-90D2-B9C17BBA6144.png",
+      "attachment_name": "REC-636-feed-expanded_0_2723B486-EA92-4707-92B0-C4B3AD0A6DC1.png",
+      "captured_at_utc": "2026-10-11T21:13:21.481000+00:00",
+      "original_sha256": "f480a44fe61619c8c0ad22516294f9326d0149352603260176235f198a989827",
+      "review_sha256": "dd4a2ab875f34ad675bab482e68fcdc6bbc7df5cc3b8c987fba25642d609f023",
+      "bytes": 71187
+    },
+    {
+      "device": "compact",
+      "caption": "Existing activity card \u00b7 compact phone",
+      "name": "compact-existing-activity-card.jpg",
+      "test_identifier": "LiveExperienceUITests/testDrawerDragAndExistingFeedSections()",
+      "original_exported_filename": "A51C72CA-584F-4C44-A61C-B33EA35AE38A.png",
+      "attachment_name": "REC-636-existing-activity-card_0_57BF857A-E809-4413-AF96-2DBC91D80309.png",
+      "captured_at_utc": "2026-10-11T21:20:31.340000+00:00",
+      "original_sha256": "0880928293dc88257ec4e857bcffcf2d8cdfc72879ea7ade21fcb08a8d10d458",
+      "review_sha256": "8ab3670d7cab418ff7f65f731dfd7632ae629d9da76b042de9ea3a9fb06409b4",
+      "bytes": 62116
+    },
+    {
+      "device": "compact",
+      "caption": "Drawing review \u00b7 largest accessibility text",
+      "name": "compact-draw-accessibility-text.jpg",
+      "test_identifier": "LiveExperienceUITests/testAccessibleDrawingControlsRemainReachable()",
+      "original_exported_filename": "75F9AF7A-DD4E-41CF-9CEE-EB4AF3F64946.png",
+      "attachment_name": "REC-636-draw-accessibility-text_0_95FD4F76-05A6-4F35-9122-D52E711A8696.png",
+      "captured_at_utc": "2026-10-11T21:19:48.772000+00:00",
+      "original_sha256": "7afcf598b66282aaccb51a5d8fe41bfb9e9293b633c6c4ddc9a5751d28b4a616",
+      "review_sha256": "9c2c9f480bf6832b8c6370e161e34c237d331f890dfa145c5557ddcb73a56f32",
+      "bytes": 122726
+    },
+    {
+      "device": "large",
+      "caption": "Staged Nearby radius",
+      "name": "large-nearby-radius-filters.jpg",
+      "test_identifier": "LiveExperienceUITests/testNearbyRadiusIsStagedAndRetainedAcrossTabs()",
+      "original_exported_filename": "96D33623-87CD-4DEE-8692-AEDD051BBADC.png",
+      "attachment_name": "REC-636-nearby-radius-filters_0_3DB904E6-B46A-4B21-B928-F70BE566BBE2.png",
+      "captured_at_utc": "2026-10-11T21:14:47.024000+00:00",
+      "original_sha256": "3dc743cfca969354ac09771617fac5bcf417199d5653a170ec894c78c6468799",
+      "review_sha256": "3ce39accf31a139d796682449f2ad1eeb8865cb55941378335645a828426ab54",
+      "bytes": 67005
+    },
+    {
+      "device": "large",
+      "caption": "Wanna \u2192 contextual private reply",
+      "name": "large-wanna-contextual-reply.jpg",
+      "test_identifier": "LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery()",
+      "original_exported_filename": "DD56944F-2382-43DD-AD6C-B70F29F149A2.png",
+      "attachment_name": "REC-636-wanna-contextual-reply_0_6C9D9639-E112-466B-8DD9-F1DB1D2CFD11.png",
+      "captured_at_utc": "2026-10-11T21:16:41.913000+00:00",
+      "original_sha256": "fb0cbf47cc0f10d706904e6bb7daeef2ab5a01a5572229739456046f22bdd462",
+      "review_sha256": "291d466404dbdb9c1255267cf094d9c6603a72f779ca594c0e8f0de1b133365c",
+      "bytes": 56436
+    },
+    {
+      "device": "compact",
+      "caption": "Private reply \u00b7 compact keyboard",
+      "name": "compact-private-reply-keyboard.jpg",
+      "test_identifier": "LiveExperienceUITests/testPrivateDemoReplyAndForegroundPreserveDraft()",
+      "original_exported_filename": "3B3EE275-6D41-453F-B6F3-47B4AE84EC5E.png",
+      "attachment_name": "REC-636-private-reply-keyboard_0_65595C41-0FE9-4737-8E74-9E2339A4A21F.png",
+      "captured_at_utc": "2026-10-11T21:22:12.299000+00:00",
+      "original_sha256": "6721bdd92e2c580444198815b45b536669dbb9694fa3face680f1a5130261fd0",
+      "review_sha256": "af0db90311672f2c74da4f6ca8d51e94fa95e2fd1e9f727ef7829423e1619862",
+      "bytes": 76853
+    },
+    {
+      "device": "large",
+      "caption": "Existing plan invitation editor",
+      "name": "large-wanna-demo-plan.jpg",
+      "test_identifier": "LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery()",
+      "original_exported_filename": "0FA88151-F7DB-4514-B735-A0EA767137E2.png",
+      "attachment_name": "REC-636-wanna-demo-plan_0_2EB7E12C-04EF-43F1-A716-C4AA93AE1DD9.png",
+      "captured_at_utc": "2026-10-11T21:16:52.134000+00:00",
+      "original_sha256": "4a62191e835522aaa54d914f82c1060b860719e390d4590c66d50de821260ce2",
+      "review_sha256": "e9403f3178167997e3220ec635e37f308c361a5d6dff88e0be0ce685256d309a",
+      "bytes": 63219
+    },
+    {
+      "device": "compact",
+      "caption": "Invitation rehearsal preview",
+      "name": "compact-wanna-demo-invitation.jpg",
+      "test_identifier": "LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery()",
+      "original_exported_filename": "BF747F31-E2B0-486A-9102-DDC35F1DBC86.png",
+      "attachment_name": "REC-636-wanna-demo-invitation_0_9ED9F7DE-38F3-461B-B156-1FB66BC2D00D.png",
+      "captured_at_utc": "2026-10-11T21:23:58.079000+00:00",
+      "original_sha256": "3653a0f15da6a2c4811bcd1cfb17a8fbf9fec116528edb29851f485a2a7d19ce",
+      "review_sha256": "7cbfb589530f10f025195e6daf7ad35387ac0cdb45333a14bc42ac6549a018e3",
+      "bytes": 71009
+    },
+    {
+      "device": "large",
+      "caption": "Upcoming received invitations",
+      "name": "large-upcoming-invitations.jpg",
+      "test_identifier": "LiveExperienceUITests/testUpcomingInvitationKeepsExistingRecipientAndInboxRoutes()",
+      "original_exported_filename": "2E9F109B-F9F3-4F82-AC2F-2D6E6CB050E8.png",
+      "attachment_name": "REC-636-upcoming-invitations_0_966A3C7E-3654-4021-A979-8E42B47713D8.png",
+      "captured_at_utc": "2026-10-11T21:16:19.293000+00:00",
+      "original_sha256": "0ff2a730b55608f1563a34ad1870632e531dc00888eeac4f809112e339defa79",
+      "review_sha256": "7d64a94435a69241cfd8e27a33724a0755a9b5d1bcde22c620ea1a1680867dbe",
+      "bytes": 39488
+    },
+    {
+      "device": "compact",
+      "caption": "Existing invitation recipient",
+      "name": "compact-upcoming-invitation-detail.jpg",
+      "test_identifier": "LiveExperienceUITests/testUpcomingInvitationKeepsExistingRecipientAndInboxRoutes()",
+      "original_exported_filename": "0A46B1E0-BE01-4758-B9E8-FF7D60A754F3.png",
+      "attachment_name": "REC-636-upcoming-invitation-detail_0_40CB8EF3-B829-49DB-89FE-6F221E664418.png",
+      "captured_at_utc": "2026-10-11T21:23:23.894000+00:00",
+      "original_sha256": "eac920d90bd66e9c983e8ddec6b78104264ebc3c04535a0b0d4e73c763b03cc3",
+      "review_sha256": "d85b61e817162df6f3b07691709ce0c559aab78d2a18515bfd7e8d84f490caed",
+      "bytes": 50754
+    },
+    {
+      "device": "compact",
+      "caption": "Profile continuity",
+      "name": "compact-profile-preserved.jpg",
+      "test_identifier": "LiveExperienceUITests/testThreeTabsAndProfileContinuity()",
+      "original_exported_filename": "38007070-7C92-4515-ABB0-C83C4E3C5261.png",
+      "attachment_name": "REC-636-profile-preserved_0_2D8A97F5-6F1E-483A-B6D0-4E92F879731D.png",
+      "captured_at_utc": "2026-10-11T21:23:06.045000+00:00",
+      "original_sha256": "d3da1dd566ea50c7667f737c1a50b598a5b10ac69dfe2a10bbf3f2ae54e28f3b",
+      "review_sha256": "a186153d291f41a42d5a719e4f28b9d185fbcdb04bb0c33ccaf003f2d5cd02fe",
+      "bytes": 65242
+    },
+    {
+      "device": "compact",
+      "caption": "Settings guide replay",
+      "name": "compact-migration-guide.jpg",
+      "test_identifier": "LiveExperienceUITests/testSettingsCanReplayTheLiveGuide()",
+      "original_exported_filename": "9B1F9A94-7686-4273-ABD2-A4156E148B65.png",
+      "attachment_name": "REC-636-migration-guide_0_E6787848-106E-4FC7-B478-0A075D330BE7.png",
+      "captured_at_utc": "2026-10-11T21:22:49.658000+00:00",
+      "original_sha256": "d3fe419bd3e7936d545a594dca9c3688820a206aaed461f82c8728b8b62a6031",
+      "review_sha256": "9d9171c4a6793c3b315df8f5e08bb39dfbe05ddc5b68550ffc8c532b6a3b58ad",
+      "bytes": 59634
+    }
+  ],
+  "runs": {
+    "large": {
+      "result_bundle": "live-v12-final-large.xcresult",
+      "summary_result": "Passed",
+      "started_at": 1791753069.985,
+      "finished_at": 1791753428.403,
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "21FFD105-FF94-44D6-82F0-2DF1DF4A6724",
+        "deviceName": "REC636 Live Large",
+        "modelName": "iPhone 17 Pro",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "live_ui_cases": [
+        "LiveExperienceUITests/testAccessibleDrawingControlsRemainReachable()",
+        "LiveExperienceUITests/testCommittedPeopleFilterSurvivesTabReturn()",
+        "LiveExperienceUITests/testDrawerDragAndExistingFeedSections()",
+        "LiveExperienceUITests/testDrawingRequiresApplyAndCanBeCleared()",
+        "LiveExperienceUITests/testFilterResetCanBeCancelledBeforeApply()",
+        "LiveExperienceUITests/testNearbyRadiusIsStagedAndRetainedAcrossTabs()",
+        "LiveExperienceUITests/testPrivateDemoReplyAndForegroundPreserveDraft()",
+        "LiveExperienceUITests/testSettingsCanReplayTheLiveGuide()",
+        "LiveExperienceUITests/testThreeTabsAndProfileContinuity()",
+        "LiveExperienceUITests/testUpcomingInvitationKeepsExistingRecipientAndInboxRoutes()",
+        "LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery()"
+      ],
+      "source_manifest_sha256": "970739987876fa3b105bcee25c370010dcdab90a1848e813ca49bd10129c8944",
+      "attachment_manifest_sha256": "115209102f73811840a415e632b4a5b156535ec440e38bc4add94b59ab137ce0"
+    },
+    "compact": {
+      "result_bundle": "live-v12-final-compact.xcresult",
+      "summary_result": "Passed",
+      "started_at": 1791753567.851,
+      "finished_at": 1791753850.504,
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "6B09D343-A62A-49CE-9F44-81754B6DBE5F",
+        "deviceName": "REC636 Live Compact",
+        "modelName": "iPhone SE (3rd generation)",
+        "osBuildNumber": "23F77",
+        "osVersion": "26.5",
+        "platform": "iOS Simulator"
+      },
+      "live_ui_cases": [
+        "LiveExperienceUITests/testAccessibleDrawingControlsRemainReachable()",
+        "LiveExperienceUITests/testCommittedPeopleFilterSurvivesTabReturn()",
+        "LiveExperienceUITests/testDrawerDragAndExistingFeedSections()",
+        "LiveExperienceUITests/testDrawingRequiresApplyAndCanBeCleared()",
+        "LiveExperienceUITests/testFilterResetCanBeCancelledBeforeApply()",
+        "LiveExperienceUITests/testNearbyRadiusIsStagedAndRetainedAcrossTabs()",
+        "LiveExperienceUITests/testPrivateDemoReplyAndForegroundPreserveDraft()",
+        "LiveExperienceUITests/testSettingsCanReplayTheLiveGuide()",
+        "LiveExperienceUITests/testThreeTabsAndProfileContinuity()",
+        "LiveExperienceUITests/testUpcomingInvitationKeepsExistingRecipientAndInboxRoutes()",
+        "LiveExperienceUITests/testWannaOffersContextualReplyAndHonestPlanRecovery()"
+      ],
+      "source_manifest_sha256": "970739987876fa3b105bcee25c370010dcdab90a1848e813ca49bd10129c8944",
+      "attachment_manifest_sha256": "83ec2fc3593ed465e27808247a69a94588939ab23fc85d3c10320103c9dfaa9a"
+    }
+  }
+}

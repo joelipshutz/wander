@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 enum DiscoverOpinion: String, Codable, Equatable {
     case favorite
@@ -1004,11 +1005,14 @@ enum VisiblePlaceGrouping {
         return aliases
     }
 
-    static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate) -> Bool {
-        matches(visiblePlace.place, candidate: candidate)
+    static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate,
+                        allowingProviderIdentityFallback: Bool = false) -> Bool {
+        matches(visiblePlace.place, candidate: candidate,
+                allowingProviderIdentityFallback: allowingProviderIdentityFallback)
     }
 
-    static func matches(_ place: LocalPlace, candidate: PlaceCandidate) -> Bool {
+    static func matches(_ place: LocalPlace, candidate: PlaceCandidate,
+                        allowingProviderIdentityFallback: Bool = false) -> Bool {
         let candidateID = normalizedIdentifier(candidate.id)
         let placeIDs = [place.id, place.localID, place.serverID]
             .map(normalizedIdentifier)
@@ -1027,7 +1031,8 @@ enum VisiblePlaceGrouping {
            placeProvider == candidateProvider,
            !placeProviderID.isEmpty,
            !candidateProviderID.isEmpty {
-            return placeProviderID == candidateProviderID
+            if placeProviderID == candidateProviderID { return true }
+            guard allowingProviderIdentityFallback else { return false }
         }
 
         let name = normalizedText(place.canonicalName)
@@ -1054,6 +1059,18 @@ enum VisiblePlaceGrouping {
         guard let latitude = candidate.latitude,
               let longitude = candidate.longitude
         else { return false }
+        if allowingProviderIdentityFallback {
+            // Native MapKit IDs can change when provider coordinates are refined.
+            // A same-name nearby branch with a conflicting street is not an alias.
+            let street = normalizedAddressText(place.address)
+            let candidateStreet = normalizedAddressText(candidate.address)
+            if !street.isEmpty, !candidateStreet.isEmpty, street != candidateStreet { return false }
+            let original = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+            let proposed = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            guard CLLocationCoordinate2DIsValid(original), CLLocationCoordinate2DIsValid(proposed) else { return false }
+            return CLLocation(latitude: place.latitude, longitude: place.longitude)
+                .distance(from: CLLocation(latitude: latitude, longitude: longitude)) <= 35
+        }
         return coordinateBucket(latitude: place.latitude, longitude: place.longitude)
             == coordinateBucket(latitude: latitude, longitude: longitude)
     }

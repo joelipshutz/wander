@@ -232,11 +232,19 @@ final class WanderBackend: ObservableObject {
     let sharedVisitRepository: (any SharedVisitRepository)?
     let shareCardPreviewRepository: (any ShareCardPreviewRepository)?
     let placePlanInvitationRepository: (any PlacePlanInvitationRepository)?
+    let privateMessageRepository: (any PrivateMessageRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
     private var inFlightFeatureFlagRefreshes: [String: InFlightFeatureFlagRefresh] = [:]
     private let featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot
-    private var placePhotoCache: [String: PlacePhoto] = [:]
+    private struct CachedPlacePhoto {
+        let photo: PlacePhoto
+        let cachedAt: Date
+        let sessionRevision: Int
+        let viewerID: String?
+    }
+    private var placePhotoCache: [String: CachedPlacePhoto] = [:]
+    private var photoMetadataNow: () -> Date = Date.init
     private var placePhotoCacheRecency: [String] = []
     private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
     private let placePhotoDataDiskCache: PlacePhotoDataDiskCache
@@ -289,6 +297,7 @@ final class WanderBackend: ObservableObject {
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
             self.shareCardPreviewRepository = SupabaseShareCardPreviewRepository(rpc: client, storage: client, authSession: authSession)
             self.placePlanInvitationRepository = SupabasePlacePlanInvitationRepository(rpc: client, storage: client)
+            self.privateMessageRepository = SupabasePrivateMessageRepository(configuration: configuration, authSession: authSession)
         } else {
             self.feedbackRepository = nil
             self.featureFlagRepository = nil
@@ -319,6 +328,7 @@ final class WanderBackend: ObservableObject {
             self.sharedVisitRepository = nil
             self.shareCardPreviewRepository = nil
             self.placePlanInvitationRepository = nil
+            self.privateMessageRepository = nil
         }
         observePhotoSession()
     }
@@ -354,6 +364,7 @@ final class WanderBackend: ObservableObject {
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
         shareCardPreviewRepository: (any ShareCardPreviewRepository)? = nil,
         placePlanInvitationRepository: (any PlacePlanInvitationRepository)? = nil,
+        privateMessageRepository: (any PrivateMessageRepository)? = nil,
         eventsInterestRepository: (any EventsInterestRepository)? = nil,
         accountContactDetailsRepository: (any AccountContactDetailsRepository)? = nil,
         eventsAccessRepository: (any EventsAccessRepository)? = nil,
@@ -361,7 +372,8 @@ final class WanderBackend: ObservableObject {
         featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
         photoAuthSession: (any AuthSessionProviding)? = nil,
         placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
-        placePhotoDownloadLimiter: PlacePhotoDownloadLimiter = .shared
+        placePhotoDownloadLimiter: PlacePhotoDownloadLimiter = .shared,
+        photoMetadataNow: @escaping () -> Date = Date.init
     ) {
         self.configuration = configuration
         self.photoAuthSession = photoAuthSession
@@ -369,8 +381,10 @@ final class WanderBackend: ObservableObject {
         self.featureFlagDeviceOverrides = featureFlagDeviceOverrides
         self.shareCardPreviewRepository = shareCardPreviewRepository
         self.placePlanInvitationRepository = placePlanInvitationRepository
+        self.privateMessageRepository = privateMessageRepository
         self.placePhotoDataDiskCache = placePhotoDataDiskCache
         self.placePhotoDownloadLimiter = placePhotoDownloadLimiter
+        self.photoMetadataNow = photoMetadataNow
         self.featureFlagRepository = featureFlagRepository
         self.profileRepository = profileRepository
         self.contactDiscovery = contactDiscovery ?? ContactDiscoveryService(repository: nil, activeUserID: { nil })
@@ -406,6 +420,10 @@ final class WanderBackend: ObservableObject {
             for await _ in photoAuthSession.sessionChanges() {
                 guard !Task.isCancelled, let self else { return }
                 self.photoSessionRevision += 1
+                self.placePhotoCache.removeAll()
+                self.placePhotoCacheRecency.removeAll()
+                self.placePhotoTasks.values.forEach { $0.cancel() }
+                self.placePhotoTasks.removeAll()
                 self.placePhotoImageCache.removeAllObjects()
                 self.placePhotoImageTasks.values.forEach { $0.cancel() }
                 self.placePhotoImageTasks.removeAll()
@@ -596,25 +614,27 @@ final class WanderBackend: ObservableObject {
             throw WanderRemoteError.notConfigured
         }
         let key = request.lookupKey
-        if let cached = placePhotoCache[key] {
-            markPlacePhotoRecentlyUsed(key)
-            return cached
-        }
-        if let existingTask = placePhotoTasks[key] {
-            return try await existingTask.value
+        if let cached = cachedPlacePhoto(for: request) { return cached }
+        let sessionRevision = photoSessionRevision, viewerID = photoViewerID
+        let taskKey = "\(sessionRevision)|\(viewerID ?? "local")|\(key)"
+        if let existingTask = placePhotoTasks[taskKey] {
+            let photo = try await existingTask.value
+            guard sessionRevision == photoSessionRevision, viewerID == photoViewerID else { throw CancellationError() }
+            return photo
         }
 
         let task = Task { @MainActor in
             try await placePhotoRepository.photo(for: request)
         }
-        placePhotoTasks[key] = task
+        placePhotoTasks[taskKey] = task
         do {
             let photo = try await task.value
-            placePhotoTasks[key] = nil
+            placePhotoTasks[taskKey] = nil
+            guard sessionRevision == photoSessionRevision, viewerID == photoViewerID else { throw CancellationError() }
             cachePlacePhoto(photo, for: key)
             return photo
         } catch {
-            placePhotoTasks[key] = nil
+            placePhotoTasks[taskKey] = nil
             throw error
         }
     }
@@ -629,9 +649,8 @@ final class WanderBackend: ObservableObject {
         )
         var results: [PlacePhotoBatchResult] = []
         var misses: [PlacePhotoRequest] = []
-        for (key, request) in uniqueRequests {
-            if let cached = placePhotoCache[key] {
-                markPlacePhotoRecentlyUsed(key)
+        for (_, request) in uniqueRequests {
+            if let cached = cachedPlacePhoto(for: request) {
                 results.append(
                     PlacePhotoBatchResult(
                         canonicalPlaceKey: request.canonicalPhotoCacheKey,
@@ -644,9 +663,13 @@ final class WanderBackend: ObservableObject {
         }
         guard !misses.isEmpty else { return results }
 
+        let sessionRevision = photoSessionRevision, viewerID = photoViewerID
         let startedAt = ContinuousClock.now
         let fetched = try await placePhotoRepository.photos(for: misses)
         await PlacePhotoPerformanceMonitor.shared.record(.metadataBatch, startedAt: startedAt)
+        guard !Task.isCancelled, sessionRevision == photoSessionRevision, viewerID == photoViewerID else {
+            throw CancellationError()
+        }
         let requestsByCanonicalKey = Dictionary(
             misses.map { ($0.canonicalPhotoCacheKey, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -661,9 +684,15 @@ final class WanderBackend: ObservableObject {
 
     func cachedPlacePhoto(for request: PlacePhotoRequest) -> PlacePhoto? {
         let key = request.lookupKey
-        guard let photo = placePhotoCache[key] else { return nil }
+        guard let cached = placePhotoCache[key] else { return nil }
+        guard cached.sessionRevision == photoSessionRevision, cached.viewerID == photoViewerID,
+              PlacePhotoManifestCachePolicy.isFresh(cachedAt: cached.cachedAt, now: photoMetadataNow()) else {
+            placePhotoCache[key] = nil
+            placePhotoCacheRecency.removeAll { $0 == key }
+            return nil
+        }
         markPlacePhotoRecentlyUsed(key)
-        return photo
+        return cached.photo
     }
 
     func visibleUserPlacePhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -840,7 +869,8 @@ final class WanderBackend: ObservableObject {
     }
 
     private func cachePlacePhoto(_ photo: PlacePhoto, for key: String) {
-        placePhotoCache[key] = photo
+        placePhotoCache[key] = CachedPlacePhoto(photo: photo, cachedAt: photoMetadataNow(),
+            sessionRevision: photoSessionRevision, viewerID: photoViewerID)
         markPlacePhotoRecentlyUsed(key)
 
         while placePhotoCache.count > Self.placePhotoMetadataCacheLimit,

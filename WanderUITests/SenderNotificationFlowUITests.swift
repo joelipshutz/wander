@@ -182,14 +182,87 @@ final class SenderNotificationFlowUITests: XCTestCase {
     func testLargeTextAndDarkNativeControls() {
         let app = launch("checkIn", extra: ["-WanderSenderDark", "-UIPreferredContentSizeCategoryName", UIContentSizeCategory.accessibilityExtraLarge.rawValue])
         let silent = app.switches["save.silent"]
+        guard expandNativeSaveEditor(app) else { return }
         reveal(silent, app: app)
         XCTAssertTrue(silent.isHittable)
-        activate(silent)
+        // Target the native control within the label-spanning Silent row.
+        // Reject ambiguity instead of selecting another form switch.
+        if silent.value as? String != "1" {
+            let nativeSwitches = silent.descendants(matching: .switch)
+                .matching(NSPredicate(format: "value == %@ OR value == %@ OR value == 0 OR value == 1", "0", "1"))
+            let nativeSwitchCount = nativeSwitches.count
+            XCTAssertEqual(nativeSwitchCount, 1, "Expected one Boolean native switch within Silent.")
+            guard nativeSwitchCount == 1 else { return }
+            let nativeSwitch = nativeSwitches.element(boundBy: 0)
+            let nativeSwitchReady = nativeSwitch.exists && nativeSwitch.isEnabled && nativeSwitch.isHittable
+            XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
+            guard nativeSwitchReady else { return }
+            capture("checkIn-dark-silent-before-press")
+            nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.2)
+        }
+        // Observe a fresh native snapshot: the CI value predicate reused its
+        // pre-press snapshot. Every read shares the original five-second budget.
+        let activationStartedAt = ProcessInfo.processInfo.systemUptime
+        let activationDeadline = activationStartedAt + 5
+        var activationReads: [String] = []
+        func observeSilentEnabled() -> Bool {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            guard startedAt <= activationDeadline else { return false }
+            let snapshot = try? silent.snapshot()
+            let finishedAt = ProcessInfo.processInfo.systemUptime
+            let value = snapshot?.value as? String
+            let accepted = finishedAt <= activationDeadline && value == "1"
+            activationReads.append("started=\(startedAt - activationStartedAt); finished=\(finishedAt - activationStartedAt); value=\(value ?? "unavailable"); acceptedWithinDeadline=\(accepted)")
+            return accepted
+        }
+        let activationResult: XCTWaiter.Result
+        if observeSilentEnabled() {
+            activationResult = .completed
+        } else {
+            let remaining = max(0, activationDeadline - ProcessInfo.processInfo.systemUptime)
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeSilentEnabled()
+            }, object: nil)
+            activationResult = remaining > 0 ? XCTWaiter.wait(for: [enabled], timeout: remaining) : .timedOut
+        }
+        let activationEvidence = XCTAttachment(string: activationReads.joined(separator: "\n"))
+        activationEvidence.name = "REC-636-sender-silent-fresh-observation"
+        activationEvidence.lifetime = .keepAlways
+        add(activationEvidence)
+        if activationResult != .completed {
+            // Preserve the five-second outcome before collecting later evidence.
+            capture("checkIn-dark-silent-after-timeout")
+            var observations = ["waitResult=\(activationResult.rawValue)"]
+            if let row = try? silent.snapshot() {
+                observations.append("rowValue=\(String(describing: row.value)); rowEnabled=\(row.isEnabled); rowFrame=\(row.frame)")
+            } else {
+                observations.append("rowSnapshotAvailable=false")
+            }
+            if let editor = try? app.scrollViews["save.editorScroll"].snapshot() {
+                @MainActor
+                func recordSwitches(_ node: any XCUIElementSnapshot) {
+                    if node.elementType == .switch {
+                        observations.append("editorSwitchID=\(node.identifier); value=\(String(describing: node.value)); enabled=\(node.isEnabled); frame=\(node.frame)")
+                    }
+                    for child in node.children { recordSwitches(child) }
+                }
+                recordSwitches(editor)
+            } else {
+                observations.append("editorSnapshotAvailable=false")
+            }
+            let observation = XCTAttachment(string: observations.joined(separator: "\n"))
+            observation.name = "REC-636-sender-silent-post-timeout-observation"
+            observation.lifetime = .keepAlways
+            add(observation)
+        }
+        XCTAssertEqual(activationResult, .completed, "Silent must enable within the original five seconds.")
         reveal(app.staticTexts["save.silentHelp"], app: app)
         XCTAssertTrue(app.buttons["save.submit"].isHittable)
         capture("checkIn-dark-accessibility-text")
         press(app.buttons["save.submit"])
         expectState(app, contains: "submitted=true")
+        expectState(app, contains: "visits=1;silentVisits=1;")
     }
 
     func testDiscoverQuickWannaDialogPersistsSilentChoice() {
@@ -266,10 +339,95 @@ final class SenderNotificationFlowUITests: XCTestCase {
     private func press(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
     }
+    private func expandNativeSaveEditor(_ app: XCUIApplication) -> Bool {
+        // One unchanged 5s helper deadline covers readiness, native input and
+        // viewport response. Consolidate geometry without extending that clock.
+        let helperStartedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = helperStartedAt + 5
+        let editor = app.scrollViews["save.editorScroll"]
+        let grabber = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ OR label == %@", "Sheet Grabber", "Sheet Grabber")
+        ).element
+        var admitted: (app: CGRect, editor: CGRect, grabber: CGRect)?
+        func finite(_ frame: CGRect) -> Bool {
+            !frame.isNull && !frame.isEmpty && !frame.isInfinite
+                && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
+        }
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline,
+                  let snapshot = try? app.snapshot() else { return false }
+            var editors: [XCUIElementSnapshot] = []
+            var grabbers: [XCUIElementSnapshot] = []
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .scrollView && node.identifier == "save.editorScroll" { editors.append(node) }
+                if node.identifier == "Sheet Grabber" || node.label == "Sheet Grabber" { grabbers.append(node) }
+                for child in node.children { visit(child) }
+            }
+            visit(snapshot)
+            guard editors.count == 1, grabbers.count == 1 else { return false }
+            let appFrame = snapshot.frame
+            let before = editors[0].frame.intersection(appFrame)
+            let grabberFrame = grabbers[0].frame
+            let target = CGPoint(x: grabberFrame.midX, y: appFrame.minY + 22)
+            guard finite(appFrame), finite(before), finite(grabberFrame),
+                  editors[0].isEnabled, grabbers[0].isEnabled,
+                  appFrame.contains(grabberFrame), appFrame.contains(target),
+                  grabberFrame.midY - target.y >= 44,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            guard editor.isHittable, grabber.isHittable,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            admitted = (appFrame, before, grabberFrame)
+            return true
+        }, object: nil)
+        let readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        guard readinessResult == .completed, let admitted else {
+            capture("save-editor-native-grabber-not-ready")
+            XCTFail("Expected one enabled native editor and Sheet Grabber with a visible in-app upward path.")
+            return false
+        }
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let contact = CGPoint(x: admitted.grabber.midX - admitted.app.minX,
+                              y: admitted.grabber.midY - admitted.app.minY)
+        let target = CGPoint(x: admitted.grabber.midX - admitted.app.minX, y: 22)
+        origin.withOffset(CGVector(dx: contact.x, dy: contact.y))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)))
+        // Use only the remainder of the same entry deadline after native input.
+        // The later Silent activation retains its separate original 5s clock.
+        let responseStartedAt = ProcessInfo.processInfo.systemUptime
+        var responseReads = 0
+        var lastReadFinishedAt: TimeInterval?
+        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            responseReads += 1
+            let snapshot = try? editor.snapshot()
+            lastReadFinishedAt = ProcessInfo.processInfo.systemUptime
+            guard let snapshot else { return false }
+            let after = snapshot.frame.intersection(admitted.app)
+            return ProcessInfo.processInfo.systemUptime <= deadline
+                && finite(after)
+                && after.minY <= admitted.editor.minY - 44
+                && after.height >= admitted.editor.height + 44
+        }, object: nil)
+        let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+        let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        let observation = XCTAttachment(string: "readinessResult=\(readinessResult.rawValue); responseReads=\(responseReads); helperElapsed=\(ProcessInfo.processInfo.systemUptime - helperStartedAt); postActionObservationElapsed=\(ProcessInfo.processInfo.systemUptime - responseStartedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
+        observation.name = "REC-636-save-editor-expansion-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
+        if result != .completed { capture("save-editor-native-expansion-failed") }
+        XCTAssertEqual(result, .completed, "The actual save-editor viewport must expand before content scrolling.")
+        return result == .completed
+    }
     private func reveal(_ element: XCUIElement, app: XCUIApplication, down: Bool = false) {
         _ = element.waitForExistence(timeout: 5)
+        let requiresSaveEditor = app.scrollViews["save.editorScroll"].exists && element.identifier.hasPrefix("save.")
         for _ in 0..<16 {
             let editor = app.scrollViews["save.editorScroll"]
+            if requiresSaveEditor && (!editor.exists || !editor.isHittable) {
+                capture("save-editor-route-lost")
+                XCTFail("The original save editor must remain visible while scrolling its control.")
+                return
+            }
             let usesEditor = editor.exists && editor.isHittable && element.identifier.hasPrefix("save.")
             let surface = usesEditor ? editor : (app.scrollViews.allElementsBoundByIndex.max { $0.frame.height < $1.frame.height } ?? app.scrollViews.firstMatch)
             let surfaceFrame = surface.exists ? surface.frame : .null
@@ -278,7 +436,8 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let validFrame = !surfaceFrame.isEmpty && !surfaceFrame.isNull
                 && surfaceFrame.minX.isFinite && surfaceFrame.minY.isFinite
                 && surfaceFrame.width.isFinite && surfaceFrame.height.isFinite
-            var viewport = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
+            let scrollBounds = (validFrame ? surfaceFrame : app.frame).intersection(app.frame)
+            var viewport = scrollBounds
             if !usesEditor { viewport = viewport.intersection(app.frame.insetBy(dx: 0, dy: 100)) }
             for identifier in ["save.submit", "import.save", "map-list-picker.apply"] {
                 let submit = app.buttons[identifier]
@@ -295,12 +454,82 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let up = frame.isEmpty ? !down : frame.midY >= viewport.midY
             if viewport.height > 80 {
                 let origin = app.coordinate(withNormalizedOffset: .zero)
-                let lower = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.78))
-                let upper = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.22))
-                (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+                if usesEditor {
+                    // AX rectangles are not a guarantee of the complete hit target.
+                    // Keep both endpoints 22pt away as a conservative test margin;
+                    // the recognized scroll may cross controls between endpoints.
+                    let margin: CGFloat = 22
+                    let controlTypes: [XCUIElement.ElementType] = [
+                        .button, .switch, .textField, .secureTextField, .textView,
+                        .slider, .segmentedControl, .picker, .pickerWheel, .datePicker, .link
+                    ]
+                    guard let snapshot = try? editor.snapshot() else {
+                        capture("save-editor-scroll-snapshot-missing")
+                        XCTFail("Expected one native save-editor snapshot to plan safe scroll input.")
+                        return
+                    }
+                    var controls: [CGRect] = []
+                    var controlDescriptions: [String] = []
+                    func collectControls(_ node: any XCUIElementSnapshot) {
+                        if controlTypes.contains(node.elementType) {
+                            let rect = node.frame
+                            let finite = !rect.isNull && !rect.isInfinite
+                                && rect.minX.isFinite && rect.minY.isFinite
+                                && rect.width.isFinite && rect.height.isFinite
+                            if finite && !rect.isEmpty { controls.append(rect) }
+                            controlDescriptions.append("\(node.identifier):\(rect)")
+                        }
+                        for child in node.children { collectControls(child) }
+                    }
+                    collectControls(snapshot)
+                    let endpoints = validFrame
+                        ? editorScrollEndpoints(in: viewport, avoiding: controls, margin: margin) : nil
+                    let diagnostic = XCTAttachment(string: "editorFrame=\(surfaceFrame); validFrame=\(validFrame); viewport=\(viewport); target=\(element.identifier); targetFrame=\(frame); margin=\(margin); endpoints=\(String(describing: endpoints)); up=\(up); controls=\(controlDescriptions.joined(separator: "|"))")
+                    diagnostic.name = "REC589-save-editor-scroll-geometry"
+                    diagnostic.lifetime = .keepAlways
+                    add(diagnostic)
+                    guard let endpoints else {
+                        capture("save-editor-scroll-corridor-missing")
+                        XCTFail("Expected native scroll endpoints inside the save editor and at least 22pt clear of its controls.")
+                        return
+                    }
+                    let lower = origin.withOffset(CGVector(dx: endpoints.lower.x, dy: endpoints.lower.y))
+                    let upper = origin.withOffset(CGVector(dx: endpoints.upper.x, dy: endpoints.upper.y))
+                    (up ? lower : upper).press(forDuration: 0, thenDragTo: up ? upper : lower, withVelocity: .default, thenHoldForDuration: 0)
+                } else {
+                    let lower = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.78))
+                    let upper = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.minY + viewport.height * 0.22))
+                    (up ? lower : upper).press(forDuration: 0.05, thenDragTo: up ? upper : lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+                }
             } else if up { surface.swipeUp(velocity: .slow) } else { surface.swipeDown(velocity: .slow) }
         }
+        let editor = app.scrollViews["save.editorScroll"]
+        if requiresSaveEditor && (!editor.exists || !editor.isHittable) {
+            capture("save-editor-route-lost")
+            XCTFail("The original save editor must remain visible while scrolling its control.")
+            return
+        }
         XCTAssertTrue(element.isHittable, "Control must be reachable: \(element.identifier)")
+    }
+    private func editorScrollEndpoints(in viewport: CGRect, avoiding controls: [CGRect], margin: CGFloat) -> (lower: CGPoint, upper: CGPoint)? {
+        let bounds = viewport.insetBy(dx: 2, dy: 2)
+        guard !bounds.isEmpty, !bounds.isNull, !bounds.isInfinite else { return nil }
+        let excluded = controls.map { $0.insetBy(dx: -margin, dy: -margin) }
+        // Include obstacle boundaries so a valid short drag cannot fall between grid samples.
+        let candidateYs = ([bounds.minY, bounds.maxY]
+            + excluded.flatMap { [$0.minY - 1, $0.maxY + 1] })
+            .filter { $0 >= bounds.minY && $0 <= bounds.maxY }.sorted()
+        var best: (lower: CGPoint, upper: CGPoint)?
+        for x in [bounds.midX, bounds.minX, bounds.maxX] {
+            let safe = candidateYs.map { CGPoint(x: x, y: $0) }
+                .filter { point in !excluded.contains { $0.contains(point) } }
+            guard let upper = safe.first, let lower = safe.last,
+                  lower.y - upper.y >= 44 else { continue }
+            if best == nil || lower.y - upper.y > best!.lower.y - best!.upper.y {
+                best = (lower, upper)
+            }
+        }
+        return best
     }
     private func stateField(_ key: String, app: XCUIApplication) -> String {
         let value = app.staticTexts["sender-review.state"].value as? String ?? ""

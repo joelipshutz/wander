@@ -2242,6 +2242,7 @@ struct MapScreen: View {
                                         query: $mapQuery,
                                         personMentions: $mapPersonMentions,
                                         isFocused: $isMapSearchFocused,
+                                        isVisible: !isMoreFiltersPresented,
                                         focusRequestID: mapSearchFocusRequestID,
                                         onFocusRequestHandled: { requestID in
                                             guard mapSearchFocusRequestID == requestID else { return }
@@ -5857,11 +5858,22 @@ struct MapScreen: View {
                     photoCopyFailed = true
                 }
             }
+            guard auth.state.session?.userID == acceptingSession.userID,
+                  store.currentUser.id == acceptingSession.userID else { return nil }
             if photoCopyFailed {
                 mapSearchMessage = "Checked in. One shared photo will retry when you reopen Astir."
             }
             await store.refreshSharedVisitInbox(backend: backend)
+            guard auth.state.session?.userID == acceptingSession.userID,
+                  store.currentUser.id == acceptingSession.userID else { return nil }
             await store.refreshRemoteVisiblePlaces(backend: backend)
+            guard auth.state.session?.userID == acceptingSession.userID,
+                  store.currentUser.id == acceptingSession.userID else { return nil }
+            // Acceptance changes the exact shared-group attribution even when
+            // the cached Feed is fresh. Refresh once for this completed action.
+            await store.refreshFeedSurface(backend: backend, force: true)
+            guard auth.state.session?.userID == acceptingSession.userID,
+                  store.currentUser.id == acceptingSession.userID else { return nil }
             return persistPrivateCheckInAnswers(result: SaveResult(userPlaceID: result.userPlaceID, syncState: .synced), submission: submission, visit: visit, store: store)
         } catch {
             mapSearchMessage = "That shared check-in changed before it reached your map. Open the invitation again."
@@ -9443,6 +9455,7 @@ private struct SearchBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var query: String
     let isFocused: Binding<Bool>
+    let isVisible: Bool
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
     let onQueryEdited: () -> Void
@@ -9458,6 +9471,7 @@ private struct SearchBar: View {
         query: Binding<String>,
         personMentions: Binding<[PersonMention]>,
         isFocused: Binding<Bool>,
+        isVisible: Bool = true,
         focusRequestID: UUID?,
         onFocusRequestHandled: @escaping (UUID) -> Void,
         onQueryEdited: @escaping () -> Void,
@@ -9467,6 +9481,7 @@ private struct SearchBar: View {
         _query = query
         _personMentions = personMentions
         self.isFocused = isFocused
+        self.isVisible = isVisible
         self.focusRequestID = focusRequestID
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onQueryEdited = onQueryEdited
@@ -9480,17 +9495,15 @@ private struct SearchBar: View {
             text: $draftQuery, mentions: $personMentions,
             focus: isFocused,
             placeholder: "search your map or people...", accessibilityLabel: "Search your map or people",
-            accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true,
+            accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true, isVisible: isVisible,
             onSubmit: {
                 let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText
                 commitDraftQuery(draftQuery)
                 onSubmit(requestedQuery)
             }, decorateInput: { input in AnyView(searchChrome(input)) }
         )
-        .task(id: focusRequestID) { await focusIfRequested() }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active, focusRequestID != nil else { return }
-            Task { await focusIfRequested() }
+        .task(id: "\(focusRequestID?.uuidString ?? "")|\(isVisible)|\(scenePhase == .active)") {
+            await focusIfRequested()
         }
         .animation(
             reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
@@ -9507,7 +9520,12 @@ private struct SearchBar: View {
         }
         .onChange(of: isFocused.wrappedValue) { _, focused in
             guard !focused else { return }
-            cancelPendingQueryCommitAndSyncDraft()
+            if isVisible {
+                cancelPendingQueryCommitAndSyncDraft()
+            } else {
+                // Hiding the dock must retain the latest debounced search edit.
+                commitDraftQuery(draftQuery)
+            }
         }
         .onDisappear {
             queryCommitTask?.cancel()
@@ -9516,11 +9534,14 @@ private struct SearchBar: View {
 
     private func searchChrome(_ input: AnyView) -> some View {
         HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(astirBrandMode.secondaryText)
+            if isVisible {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(astirBrandMode.secondaryText)
+                    .accessibilityHidden(true)
+            }
             input
             Spacer()
-            if !draftQuery.isEmpty {
+            if isVisible && !draftQuery.isEmpty {
                 Button {
                     queryCommitTask?.cancel()
                     draftQuery = ""
@@ -9530,14 +9551,18 @@ private struct SearchBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(astirBrandMode.secondaryText)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Clear map search")
                 .accessibilityIdentifier("map.searchClear")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
-        .contentShape(Rectangle())
+        // Keep hit shapes on the controls: a row-wide shape expands Clear's
+        // accessibility frame across the native editor.
         .mapSearchCapsuleSurface()
         .overlay {
             if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {
@@ -9576,7 +9601,7 @@ private struct SearchBar: View {
 
     @MainActor
     private func focusIfRequested() async {
-        guard let focusRequestID, scenePhase == .active else { return }
+        guard isVisible, let focusRequestID, scenePhase == .active else { return }
 
         // Run from the TextField's own lifecycle so the selected Map tab and
         // its navigation hierarchy are attached before becoming first
@@ -11500,6 +11525,12 @@ struct MapPlaceSaveContext: Identifiable {
     let initialVisitedAt: Date?
     let calendarReservationID: String?
     var editedWanna: PlaceWannaSave? = nil
+    /// The Live + entry edits this Wanna or creates a separate check-in.
+    var isAddFromWanna = false
+    /// Live + may create a new Wanna even when the place already has visits.
+    /// Ordinary history editors keep their existing status restrictions.
+    var offersNewWanna = false
+    var wannaRemovalTarget: MapPlaceWannaRemovalTarget? = nil
 
     init(
         candidate: PlaceCandidate,
@@ -11560,6 +11591,7 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     var startsOnDetails: Bool {
+        if isAddFromWanna { return true }
         if case .add = mode {
             return true
         }
@@ -11567,7 +11599,7 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     var allowsWannaGoSelection: Bool {
-        existingCurrentUserSave?.userPlace.status != .been
+        offersNewWanna || isAddFromWanna || existingCurrentUserSave?.userPlace.status != .been
     }
 
     var allowsPhotoAttachments: Bool {
@@ -11580,7 +11612,7 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     var showsRemoveControl: Bool {
-        if editedWanna != nil { return false }
+        if isAddFromWanna || editedWanna != nil { return false }
         return switch mode {
         case .editVisit, .editWant:
             true
@@ -11855,7 +11887,90 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
+    /// Live + starts a new memory; a prior visit never disables a future Wanna.
+    static func addToExistingPlaceFromLive(
+        _ visiblePlace: VisiblePlace,
+        attributes: [LocalPlaceAttribute],
+        latestVisit: LocalPlaceVisit?
+    ) -> MapPlaceSaveContext {
+        var ownPlace = visiblePlace
+        ownPlace.attributes = attributes
+        var result = MapPlaceSaveContext(
+            candidate: candidate(from: ownPlace), mode: .add(.manual),
+            requiresStatusConfirmation: true, preselectsInitialStatus: true,
+            hasPriorCheckIn: ownPlace.userPlace.status == .been || latestVisit != nil,
+            initialStatus: .been, initialVisibility: ownPlace.userPlace.visibility,
+            initialRatingScore: nil, initialNote: "", initialPlannedDate: nil,
+            initialAnswers: [:], initialPersonalLabels: [], initialCuisine: nil,
+            initialPhotoAttachments: [], existingCurrentUserSave: ownPlace,
+            existingLatestVisit: latestVisit)
+        result.offersNewWanna = true
+        return result
+    }
+
+    /// Preserve the viewer's saved details while keeping both status choices.
+    /// Saving Wanna edits that memory; choosing Check-in creates a separate visit.
+    static func addFromExistingWanna(
+        _ visiblePlace: VisiblePlace,
+        attributes: [LocalPlaceAttribute],
+        latestVisit: LocalPlaceVisit?,
+        wanna: PlaceWannaSave? = nil
+    ) -> MapPlaceSaveContext {
+        let sourceIDs = Set([visiblePlace.userPlace.id, visiblePlace.userPlace.localID, visiblePlace.userPlace.serverID].compactMap { $0 })
+        let suppliedWanna = wanna.flatMap {
+            $0.ownerID == visiblePlace.userPlace.userID && sourceIDs.contains($0.userPlaceID) && $0.deletedAt == nil ? $0 : nil
+        }
+        let historicalWanna: PlaceWannaSave? = if visiblePlace.userPlace.status == .been,
+            let wantedAt = visiblePlace.userPlace.historicalWantedAt {
+            PlaceWannaSave(id: UUID().uuidString.lowercased(), ownerID: visiblePlace.userPlace.userID,
+                userPlaceID: visiblePlace.userPlace.id, occurredAt: wantedAt,
+                note: visiblePlace.userPlace.historicalWantNote, visibility: visiblePlace.userPlace.visibility,
+                attributeAnswersJSON: visiblePlace.userPlace.historicalWantAttributeAnswersJSON ?? "[]",
+                isHistoricalOriginal: true)
+        } else { nil }
+        let ownedWanna = suppliedWanna ?? historicalWanna
+        let defaults = ownedWanna.map { editWanna($0, visiblePlace: visiblePlace) }
+            ?? editWant(visiblePlace, attributes: attributes)
+        var result = MapPlaceSaveContext(
+            candidate: defaults.candidate, mode: .editWant(visiblePlace),
+            requiresStatusConfirmation: true, preselectsInitialStatus: true,
+            hasPriorCheckIn: latestVisit != nil, initialStatus: .wannaGo,
+            initialVisibility: defaults.initialVisibility, initialRatingScore: nil,
+            initialNote: defaults.initialNote, initialPlannedDate: defaults.initialPlannedDate,
+            initialAnswers: defaults.initialAnswers, initialPersonalLabels: defaults.initialPersonalLabels,
+            initialCuisine: defaults.initialCuisine, initialPhotoAttachments: [],
+            existingCurrentUserSave: visiblePlace, existingLatestVisit: latestVisit,
+            originalAttributes: ownedWanna.map { VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON) }
+                ?? defaults.originalAttributes)
+        result.isAddFromWanna = true
+        result.editedWanna = ownedWanna
+        result.wannaRemovalTarget = MapPlaceWannaRemovalTarget(
+            ownerID: visiblePlace.userPlace.userID, userPlaceID: visiblePlace.userPlace.id,
+            wannaID: ownedWanna?.id, isOriginal: ownedWanna.map { $0.isHistoricalOriginal == true } ?? true,
+            occurredAt: ownedWanna?.occurredAt ?? visiblePlace.userPlace.historicalWantedAt ?? visiblePlace.userPlace.savedAt)
+        return result
+    }
+
     func resolvingExistingSave(selection: PlaceStatus) -> MapPlaceSaveContext {
+        if offersNewWanna, let existingCurrentUserSave {
+            if selection == .wannaGo { return freshWannaContext() }
+            return .addVisitVisiblePlace(existingCurrentUserSave,
+                attributes: existingCurrentUserSave.attributes, latestVisit: existingLatestVisit,
+                initialPhotoAttachments: initialPhotoAttachments)
+        }
+        if isAddFromWanna, let existingCurrentUserSave {
+            guard selection == .been else { return self }
+            var visit = MapPlaceSaveContext(
+                candidate: candidate, mode: .addVisit(existingCurrentUserSave),
+                requiresStatusConfirmation: false, hasPriorCheckIn: hasPriorCheckIn,
+                initialStatus: .been, initialVisibility: initialVisibility, initialRatingScore: nil,
+                initialNote: initialNote, initialPlannedDate: nil, initialAnswers: initialAnswers,
+                initialPersonalLabels: initialPersonalLabels, initialCuisine: initialCuisine,
+                initialPhotoAttachments: [], existingCurrentUserSave: existingCurrentUserSave,
+                existingLatestVisit: existingLatestVisit, originalAttributes: originalAttributes)
+            visit.wannaRemovalTarget = wannaRemovalTarget
+            return visit
+        }
         guard case .add = mode,
               let existingCurrentUserSave
         else { return self }
@@ -12262,6 +12377,11 @@ struct MapPlaceSaveSubmission {
     var ownerUserID: String? = nil
     var wannaOperationID: UUID? = nil
     var senderNotificationPolicy: SenderNotificationPolicy = .standard
+    var removesSourceWannaAfterCheckIn = false
+    /// Captured once at submission, before any asynchronous persistence.
+    var priorWannaRemovalTargets: [MapPlaceWannaRemovalTarget]? = nil
+    var priorWannaHistoryOwnerID: String? = nil
+    var priorWannaHistoryGeneration: UUID? = nil
 
     func withSenderNotificationPolicy(_ policy: SenderNotificationPolicy) -> Self {
         var copy = self
@@ -12635,6 +12755,9 @@ func persistScopedVisitOrWantSubmission(
     store: WanderStore,
     backend: WanderBackend?
 ) async -> (SaveResult?, LocalPlaceVisit?) {
+    guard let submission = try? await submission.preparingPriorWannaRemoval(in: store, backend: backend) else {
+        return (nil, nil)
+    }
     guard validatesPrivateCheckInDraft(submission, store: store),
           CommunityContentPolicy.allows(submission.note),
           submission.attributes.allSatisfy({ attribute in
@@ -12661,7 +12784,9 @@ func persistScopedVisitOrWantSubmission(
             store: store,
             backend: backend
         )
-        return (persistPrivateCheckInAnswers(result: SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), submission: submission, visit: visit, store: store), visit)
+        let result = persistPrivateCheckInAnswers(result: SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), submission: submission, visit: visit, store: store)
+        return (await completeSourceWannaRemovalAfterCheckIn(result, visit: visit,
+            submission: submission, store: store, backend: backend), visit)
     case .editVisit(_, let visit):
         guard let updatedVisit = store.updateVisit(
             visitID: visit.id,
@@ -13489,6 +13614,7 @@ struct MapPlaceSaveEditor: View {
     @State private var didLoadPrivateAnswers: Bool
     @State private var completedSaveWithWarning: SaveResult?
     @State private var silentNotifications: Bool?
+    @State private var removesSourceWannaAfterCheckIn = false
     @State private var selectedListIDs: Set<String>
     @State private var isChoosingLists = false
     @State private var completedPlaceSaveForLists: SaveResult?
@@ -13787,7 +13913,8 @@ struct MapPlaceSaveEditor: View {
                 || (didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id),
             ownerUserID: editorOwnerID,
             wannaOperationID: draftID ?? context.id,
-            senderNotificationPolicy: SenderNotificationPolicy(silent: effectiveSilentNotifications)
+            senderNotificationPolicy: SenderNotificationPolicy(silent: effectiveSilentNotifications),
+            removesSourceWannaAfterCheckIn: selectedStatus == .been && removesSourceWannaAfterCheckIn
         )
     }
 
@@ -13868,7 +13995,6 @@ struct MapPlaceSaveEditor: View {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: isReadyForDetails ? WanderTheme.spacing3 : WanderTheme.spacing4) {
-                        header
                         singleScreenContent
                             .disabled(isSaving || completedPlaceSaveForLists != nil)
                     }
@@ -13885,6 +14011,12 @@ struct MapPlaceSaveEditor: View {
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("save.editorScroll")
                 .background(editorBackground)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    header
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .padding(.vertical, WanderTheme.spacing3)
+                        .background(editorBackground)
+                }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
                     guard noteFocused else { return }
                     // The keyboard accessory changes the viewport without
@@ -14028,6 +14160,7 @@ struct MapPlaceSaveEditor: View {
                 selectedInviteeUserIDs = []
                 completedSaveWithWarning = nil
                 selectedListIDs = []
+                removesSourceWannaAfterCheckIn = false
                 isChoosingLists = false
                 completedPlaceSaveForLists = nil
                 showsListSaveResult = false
@@ -14262,10 +14395,50 @@ struct MapPlaceSaveEditor: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
+            if selectedStatus == .been, sourceContext.wannaRemovalTarget != nil {
+                sourceWannaRemovalChoice
+            }
+
             if context.showsRemoveControl && presentation != .inlineStaging {
                 removeSaveSection
             }
         }
+    }
+
+    private var sourceWannaRemovalChoice: some View {
+        Toggle(isOn: $removesSourceWannaAfterCheckIn) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                ZStack {
+                    Circle().fill(WanderTheme.terracottaTint.color)
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                    Capsule().fill(WanderTheme.terracottaTint.color)
+                        .frame(width: 28, height: 5)
+                        .rotationEffect(.degrees(45))
+                    Capsule().fill(WanderTheme.terracotta.color)
+                        .frame(width: 28, height: 2)
+                        .rotationEffect(.degrees(45))
+                }
+                .frame(width: 38, height: 38)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text("Remove from Wanna")
+                        .font(.system(size: 14, weight: .bold))
+                    Text("Remove your existing Wanna for this place. New Wannas will not be impacted.")
+                        .font(.system(size: 13, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(WanderTheme.textInk.color)
+        .frame(minHeight: WanderTheme.tapMinimum)
+        .accessibilityIdentifier("save.removeSourceWanna")
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private var visitParticipationSections: some View {
@@ -15613,7 +15786,7 @@ struct MapPlaceSaveEditor: View {
         isSaving = true
         errorMessage = nil
 
-        let submission = currentSubmission
+        let pendingSubmission = currentSubmission
         let listIDsToSave = offersListSelection ? selectedListIDs : []
         let analyticsMode = analyticsSaveMode
         store.productAnalytics.track(SaveFlowAnalyticsTracker.event(
@@ -15621,6 +15794,19 @@ struct MapPlaceSaveEditor: View {
 
         Task {
             guard editorOwnerID == store.currentUser.id else { return }
+            let submission: MapPlaceSaveSubmission
+            do {
+                submission = try await pendingSubmission.preparingPriorWannaRemoval(in: store,
+                    backend: auth.isSignedIn ? backend : nil)
+            } catch {
+                guard editorOwnerID == store.currentUser.id else { return }
+                isSaving = false
+                saveAttemptedAt = nil
+                errorMessage = error.localizedDescription
+                resetWalkthroughAutoSaveForRetry()
+                return
+            }
+            guard editorOwnerID == store.currentUser.id, !Task.isCancelled else { return }
             let result = await onSave(submission)
             if let result, !listIDsToSave.isEmpty, editorOwnerID == store.currentUser.id {
                 completedPlaceSaveForLists = result

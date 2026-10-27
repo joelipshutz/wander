@@ -152,6 +152,7 @@ final class PlaceProfileHistoryRefreshState: ObservableObject {
 }
 
 struct PlaceProfileFullScreen: View {
+    @Environment(\.liveExperienceEnabled) private var liveExperienceEnabled
     private static let edgeSwipeActivationWidth: CGFloat = 28
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
     private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
@@ -190,6 +191,9 @@ struct PlaceProfileFullScreen: View {
     @StateObject private var historyRefresh = PlaceProfileHistoryRefreshState()
     @State private var localSaveContext: MapPlaceSaveContext?
     @State private var localListTarget: MapPlaceListTarget?
+    @StateObject private var recentListAdd = RecentPlaceListAddController()
+    @State private var showsPlans = false
+    @State private var planSource: VisiblePlace?
     @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
     init(
@@ -323,14 +327,14 @@ struct PlaceProfileFullScreen: View {
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
-            onAddToList: onAddToList ?? {
-                if let visible = resolvedSaves.first?.visiblePlace {
-                    localListTarget = .visiblePlace(visible)
-                } else {
-                    localListTarget = .candidate(place.saveCandidate)
-                }
-            },
-            onFloatingAction: handleSaveAction
+            onAddToList: addToList,
+            onFloatingAction: handleSaveAction,
+            onPlans: liveExperienceEnabled ? {
+                let current = resolvedSaves
+                planSource = current.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
+                    ?? current.first?.visiblePlace
+                showsPlans = true
+            } : nil
         )
         .overlay(alignment: .top) {
             if historyRefresh.hasFailed {
@@ -378,6 +382,11 @@ struct PlaceProfileFullScreen: View {
                 localListTarget = nil
             }
         }
+        .recentPlaceListAddPresentation(recentListAdd)
+        .modifier(PlaceProfilePlanPresentation(isPresented: $showsPlans, source: planSource) {
+            handleSaveAction(PlaceProfileSaveAction(kind: .wanna, title: "Wanna", isSelected: false,
+                destinationStatus: .wannaGo))
+        })
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
@@ -387,6 +396,18 @@ struct PlaceProfileFullScreen: View {
                   snapshot.presentation != .empty
             else { return }
             saveActionSnapshot = snapshot.refreshingPresentation(for: state)
+        }
+    }
+
+    private func addToList() {
+        let target = resolvedSaves.first.map { MapPlaceListTarget.visiblePlace($0.visiblePlace) }
+            ?? .candidate(place.saveCandidate)
+        if liveExperienceEnabled {
+            recentListAdd.add(target, store: store, backend: backend)
+        } else if let onAddToList {
+            onAddToList()
+        } else {
+            localListTarget = target
         }
     }
 
@@ -482,6 +503,18 @@ struct PlaceProfileFullScreen: View {
         }
         guard let status = action.destinationStatus else { return }
         let own = resolvedSaves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace
+        let wanna = own.flatMap { store.wannaSaves(for: $0.userPlace).first }
+        if liveExperienceEnabled, let own, own.userPlace.status == .wannaGo || wanna != nil {
+            // Both explicit actions reuse the active Wanna's details. Check-in
+            // starts in its chosen mode and keeps optional Wanna removal; the
+            // Wanna action keeps the two-choice form with Wanna preselected.
+            localSaveContext = MapPlaceSaveContext.addFromExistingWanna(own,
+                attributes: store.attributes(for: own.userPlace.id),
+                latestVisit: store.visits(for: own.userPlace.id).first, wanna: wanna)
+                .resolvingExistingSave(selection: status)
+            store.saveFlowDidPresent(.saveSheet)
+            return
+        }
         let context: MapPlaceSaveContext
         if let own {
             context = .existingCurrentUserSave(
@@ -1739,6 +1772,7 @@ private struct PlaceProfileFullView: View {
     let onAction: () -> Void
     let onAddToList: (() -> Void)?
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    let onPlans: (() -> Void)?
     @Environment(\.nuxPlaceIntroductionIsFocused) private var nuxPlaceIntroductionIsFocused
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
@@ -1790,7 +1824,7 @@ private struct PlaceProfileFullView: View {
                                 primaryPlaceAction
                             }
 
-                            if !actionItems.isEmpty {
+                            if onPlans != nil || !actionItems.isEmpty {
                                 actionRow
                                     .id(WalkthroughTargetID.placeActions)
                                     .walkthroughTarget(.placeActions)
@@ -2188,6 +2222,7 @@ private struct PlaceProfileFullView: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WanderTheme.spacing2) {
+                    if let onPlans { plansActionButton(onPlans) }
                     ForEach(actionItems) { item in
                         standardActionButton(item)
                     }
@@ -2197,6 +2232,20 @@ private struct PlaceProfileFullView: View {
             }
             .padding(.horizontal, -WanderTheme.spacing4)
         }
+    }
+
+    private func plansActionButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label("Plans", systemImage: "calendar.badge.plus")
+                .font(AstirTypography.label)
+                .frame(width: 136, height: 48)
+                .foregroundStyle(astirBrandMode.primaryText)
+                .contentShape(Rectangle())
+                .astirOutlinedSurface()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("place-profile.plans")
+        .accessibilityHint("Choose a mutual friend and make a plan for this place")
     }
 
     private func standardActionButton(_ item: PlaceExternalAction) -> some View {

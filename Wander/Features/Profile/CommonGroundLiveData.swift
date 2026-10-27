@@ -18,18 +18,24 @@ enum CommonGroundLiveData {
     }
 
     static func snapshot(store: WanderStore, profileID: String) -> Snapshot {
+        snapshot(store: store, profileID: profileID, evidence: CommonGroundEvidenceIndex(store: store))
+    }
+
+    static func snapshot(store: WanderStore, profileID: String, evidence: CommonGroundEvidenceIndex,
+                         authorizedPlaces: [VisiblePlace]? = nil, includeOneSidedPlaces: Bool = false) -> Snapshot {
         guard let partner = store.profile(for: profileID),
               partner.id != store.currentUser.id,
               partner.deletedAt == nil,
-              store.profileState(for: profileID)?.isBlocked == false
+              !store.isBlockedBetweenCurrentUser(and: profileID)
         else { return Snapshot(places: [], availableCities: []) }
         return snapshot(
             viewerProfile: store.currentUser,
             partnerProfile: partner,
-            authorizedPlaces: store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID),
-            visitsForUserPlace: { store.visits(for: $0) },
+            authorizedPlaces: authorizedPlaces ?? (store.currentUserVisiblePlaces + store.visiblePlaces(for: profileID)),
+            visitsForUserPlace: evidence.visits,
             shouldShowLegacyCheckInSummary: { store.shouldShowLegacyCheckInSummary(for: $0) },
-            eligibleWannaEventIDs: { store.wannaSaves(for: $0).map(\.id) }
+            eligibleWannaEventIDs: evidence.wannaIDs,
+            includeOneSidedPlaces: includeOneSidedPlaces
         )
     }
 
@@ -43,7 +49,8 @@ enum CommonGroundLiveData {
         authorizedPlaces: [VisiblePlace],
         visitsForUserPlace: (String) -> [LocalPlaceVisit],
         shouldShowLegacyCheckInSummary: (String) -> Bool,
-        eligibleWannaEventIDs: (LocalUserPlace) -> [String] = { _ in [] }
+        eligibleWannaEventIDs: (LocalUserPlace) -> [String] = { _ in [] },
+        includeOneSidedPlaces: Bool = false
     ) -> Snapshot {
         guard viewerProfile.id != partnerProfile.id else {
             return Snapshot(places: [], availableCities: [])
@@ -106,7 +113,7 @@ enum CommonGroundLiveData {
                 sourcePlaceID: primary.id,
                 isOneSidedRecommendation: !isShared
             )
-            if isShared {
+            if isShared || includeOneSidedPlaces {
                 places.append(place)
             } else if place.viewerLoves || place.partnerLoves {
                 introductions.append(place)

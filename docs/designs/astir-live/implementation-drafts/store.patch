@@ -1,0 +1,366 @@
+--- a/Wander/Services/WanderLocalStore.swift
++++ b/Wander/Services/WanderLocalStore.swift
+@@ -316,6 +316,7 @@
+     @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
+     private var syncingWannaIDs = Set<String>()
+     @Published private(set) var feedAudience: FeedAudience = .everyone
++    @Published private(set) var liveFeedQuery: LiveFeedQuery?
+     @Published private(set) var followedFeedPage: FollowedFeedPage? {
+         didSet { groupedFeedActivity = feedGroups(in: followedFeedPage) }
+     }
+@@ -1289,6 +1290,7 @@
+             || feedRefreshTask != nil
+             || followedFeedPage != nil
+             || feedAudience != .everyone
++            || liveFeedQuery != nil
+             || feedLoadState != .idle
+             || lastFeedRefreshAt != nil
+             || !activityEngagementByID.isEmpty
+@@ -1319,6 +1321,7 @@
+             feedRefreshCompletedAt = nil
+             feedRefreshCompletedRevision = nil
+             feedAudience = .everyone
++            liveFeedQuery = nil
+             followedFeedPage = nil
+             feedLoadState = .idle
+             lastFeedRefreshAt = nil
+@@ -1624,6 +1627,7 @@
+         feedRefreshCompletedAt = nil
+         feedRefreshCompletedRevision = nil
+         feedAudience = .everyone
++        liveFeedQuery = nil
+         followedFeedPage = nil
+         feedLoadState = .idle
+         lastFeedRefreshAt = nil
+@@ -1768,6 +1772,21 @@
+         feedAudience = audience
+     }
+
++    /// A committed Live query is session-only and independent of Profile data.
++    /// Cancel before replacement; explicit nil restores the legacy Feed API.
++    func selectLiveFeedQuery(_ query: LiveFeedQuery?) {
++        guard liveFeedQuery != query else { return }
++        resetFeedPagination()
++        feedRefreshTask?.task.cancel()
++        feedRefreshTask = nil
++        feedRefreshCompletedAt = nil
++        feedRefreshCompletedRevision = nil
++        followedFeedPage = nil
++        feedLoadState = .idle
++        lastFeedRefreshAt = nil
++        liveFeedQuery = query
++    }
++
+     /// Recommendations can publish while posts are waiting on the network, and
+     /// posts can publish while recommendations are still pending.
+     func refreshFeedSurface(
+@@ -1848,11 +1867,14 @@
+         if followedFeedPage == nil { feedLoadState = .loading }
+
+         let audience = feedAudience
++        let query = liveFeedQuery
++        guard query?.isValid != false else { feedLoadState = .failed; return false }
+         if let backend, let repository = backend.feedRepository {
+             do {
+-                let page = try await loadFollowedFeed(from: repository, audience: audience) { [weak self] content in
++                let page = try await loadFollowedFeed(from: repository, audience: audience, query: query) { [weak self] content in
+                     guard let self, !Task.isCancelled,
+                           self.currentUser.id == requestUserID,
++                          self.feedAudience == audience, self.liveFeedQuery == query,
+                           self.feedRefreshTask?.id == requestID,
+                           self.followedFeedPage == nil
+                     else { return }
+@@ -1861,6 +1883,7 @@
+                     self.lastFeedRefreshAt = content.fetchedAt
+                 }
+                 guard !Task.isCancelled, currentUser.id == requestUserID,
++                      feedAudience == audience, liveFeedQuery == query,
+                       feedRefreshTask?.id == requestID else { return false }
+                 let resolvedPage = await mergingPinnedActivity(
+                     into: displayableFeedPage(page),
+@@ -1868,6 +1891,7 @@
+                     backend: backend
+                 )
+                 guard !Task.isCancelled, currentUser.id == requestUserID,
++                      feedAudience == audience, liveFeedQuery == query,
+                       feedRefreshTask?.id == requestID else { return false }
+                 followedFeedPage = resolvedPage
+                 feedLoadState = .loaded
+@@ -1880,6 +1904,7 @@
+                 return true
+             } catch {
+                 guard !Task.isCancelled, currentUser.id == requestUserID,
++                      feedAudience == audience, liveFeedQuery == query,
+                       feedRefreshTask?.id == requestID else { return false }
+                 lastRemoteError = remoteErrorMessage(error)
+                 feedLoadState = followedFeedPage == nil ? .failed : .stale
+@@ -1893,6 +1918,7 @@
+             activity: fixture.activity.filter {
+                 audience.includes(actorID: $0.actor.id, currentUserID: currentUser.id,
+                                   relationship: relationship(to: $0.actor.id))
++                    && (query?.includes($0) ?? true)
+             },
+             featuredPlaces: fixture.featuredPlaces, nextCursor: nil, fetchedAt: fixture.fetchedAt
+         )
+@@ -1944,7 +1970,8 @@
+             return refreshedPage
+         }
+         guard feedAudience.includes(actorID: validatedActivity.actor.id, currentUserID: currentUser.id,
+-                                    relationship: validatedActivity.actor.relationship) else { return refreshedPage }
++                                    relationship: validatedActivity.actor.relationship),
++              liveFeedQuery?.includes(validatedActivity) ?? true else { return refreshedPage }
+
+         return FollowedFeedPage(
+             activity: FeedPresentation.newestFirst(refreshedPage.activity + [validatedActivity]),
+@@ -1991,12 +2018,12 @@
+             let mergedActivity = FeedPresentation.newestFirst(
+                 [activity] + (currentPage?.activity ?? []).filter { $0.id != activity.id }
+             )
+-            followedFeedPage = FollowedFeedPage(
++            followedFeedPage = displayableFeedPage(FollowedFeedPage(
+                 activity: mergedActivity,
+                 featuredPlaces: currentPage?.featuredPlaces ?? [],
+                 nextCursor: currentPage?.nextCursor,
+                 fetchedAt: currentPage?.fetchedAt ?? .now
+-            )
++            ))
+             // Comments supply engagement themselves; do not delay navigation on
+             // an unrelated summary request.
+             activityEngagementErrorByID[activityID] = nil
+@@ -2075,7 +2102,7 @@
+
+     private func displayableFeedPage(_ page: FollowedFeedPage) -> FollowedFeedPage {
+         FollowedFeedPage(
+-            activity: page.activity.filter(canDisplayActivity),
++            activity: page.activity.filter { canDisplayActivity($0) && (liveFeedQuery?.includes($0) ?? true) },
+             featuredPlaces: page.featuredPlaces.filter { canDisplayRemotePlace($0.visiblePlace) },
+             nextCursor: page.nextCursor,
+             fetchedAt: page.fetchedAt
+@@ -2697,6 +2724,7 @@
+         let requestID = UUID()
+         let userID = currentUser.id
+         let audience = feedAudience
++        let query = liveFeedQuery
+         let targetCount = feedVisibleTileLimit + FeedPagination.pageSize
+         isLoadingMoreFeed = true
+         feedPaginationFailed = false
+@@ -2711,11 +2739,12 @@
+                 var page = currentPage
+                 if let repository = backend?.feedRepository {
+                     page = try await self.fillFeedPage(
+-                        page, through: targetCount, from: repository, audience: audience
++                        page, through: targetCount, from: repository, audience: audience, query: query
+                     )
+                 }
+                 try Task.checkCancellation()
+                 guard self.currentUser.id == userID, self.feedAudience == audience,
++                      self.liveFeedQuery == query,
+                       self.feedPageTask?.id == requestID else { return false }
+                 // Keep edits/removals made while the request was suspended.
+                 // Only previously unseen events come from this older snapshot.
+@@ -2732,10 +2761,10 @@
+                     backend: backend
+                 )
+                 return !Task.isCancelled && self.currentUser.id == userID
+-                    && self.feedAudience == audience && self.feedPageTask?.id == requestID
++                    && self.feedAudience == audience && self.liveFeedQuery == query && self.feedPageTask?.id == requestID
+             } catch {
+                 guard !Task.isCancelled, self.currentUser.id == userID,
+-                      self.feedAudience == audience, self.feedPageTask?.id == requestID
++                      self.feedAudience == audience, self.liveFeedQuery == query, self.feedPageTask?.id == requestID
+                 else { return false }
+                 self.feedPaginationFailed = true
+                 return false
+@@ -2753,18 +2782,26 @@
+     private func loadFollowedFeed(
+         from repository: any FeedRepository,
+         audience: FeedAudience,
++        query: LiveFeedQuery?,
+         onContent: @MainActor (FollowedFeedPage) -> Void
+     ) async throws -> FollowedFeedPage {
+-        let first = try await requestFeedPage(from: repository, audience: audience, before: nil,
++        let first = try await requestFeedPage(from: repository, audience: audience, query: query, before: nil,
+                                               onContent: onContent)
++        if query != nil { return first }
+         return try await fillFeedPage(first, through: FeedPagination.pageSize,
+-                                      from: repository, audience: audience)
++                                      from: repository, audience: audience, query: nil)
+     }
+
+     private func fillFeedPage(
+         _ initial: FollowedFeedPage, through tileCount: Int,
+-        from repository: any FeedRepository, audience: FeedAudience
++        from repository: any FeedRepository, audience: FeedAudience, query: LiveFeedQuery?
+     ) async throws -> FollowedFeedPage {
++        if let query {
++            // One explicit Load more fetches one server page in either Live mode.
++            guard let cursor = initial.nextCursor else { return initial }
++            let next = try await requestFeedPage(from: repository, audience: audience, query: query, before: cursor)
++            return FeedPagination.appending(next, to: initial)
++        }
+         var page = initial
+         var cursors = Set<String>()
+         while feedGroups(in: displayableFeedPage(page)).count < tileCount,
+@@ -2772,7 +2809,7 @@
+             try Task.checkCancellation()
+             // A broken/repeated cursor is retryable, never an unbounded request loop.
+             guard cursors.insert(cursor).inserted else { throw URLError(.badServerResponse) }
+-            let next = try await requestFeedPage(from: repository, audience: audience, before: cursor)
++            let next = try await requestFeedPage(from: repository, audience: audience, query: nil, before: cursor)
+             try Task.checkCancellation()
+             page = FeedPagination.appending(next, to: page)
+         }
+@@ -2783,15 +2820,23 @@
+     /// Supabase bearer token is available. Retry that narrow startup race once;
+     /// ordinary transport and server failures remain visible to the caller.
+     private func requestFeedPage(
+-        from repository: any FeedRepository, audience: FeedAudience, before: String?,
++        from repository: any FeedRepository, audience: FeedAudience, query: LiveFeedQuery?, before: String?,
+         onContent: @MainActor (FollowedFeedPage) -> Void = { _ in }
+     ) async throws -> FollowedFeedPage {
+         do {
++            if let query {
++                return try await repository.liveFeed(audience: audience, query: query, before: before,
++                                                     limit: FeedPagination.pageSize, onContent: onContent)
++            }
+             return try await repository.activityFeed(audience: audience, before: before,
+                                                      limit: FeedPagination.pageSize, onContent: onContent)
+         } catch {
+             guard Self.shouldRetryFollowedFeed(after: error) else { throw error }
+             try await Task.sleep(for: .milliseconds(300))
++            if let query {
++                return try await repository.liveFeed(audience: audience, query: query, before: before,
++                                                     limit: FeedPagination.pageSize, onContent: onContent)
++            }
+             return try await repository.activityFeed(audience: audience, before: before,
+                                                      limit: FeedPagination.pageSize, onContent: onContent)
+         }
+--- /dev/null
++++ b/WanderTests/LiveFeedStoreTests.swift
+@@ -0,0 +1,126 @@
++import XCTest
++@testable import Wander
++
++@MainActor
++final class LiveFeedStoreTests: XCTestCase {
++    func testLateContentAndCompletionCannotCrossCommittedQuery() async {
++        let store = WanderStore(fixtures: .seed())
++        let first = LiveFeedQuery(activityType: .checkIns)
++        let second = LiveFeedQuery(activityType: .wannas)
++        let repository = LiveStoreRepository(pages: [emptyPage(1), emptyPage(2)])
++        let backend = WanderBackend(feedRepository: repository)
++        repository.suspendedCall = 1
++        store.selectLiveFeedQuery(first)
++        let old = Task { await store.refreshFollowedFeed(backend: backend) }
++        await waitFor(repository, calls: 1)
++        store.selectLiveFeedQuery(second)
++        XCTAssertNil(store.followedFeedPage)
++        XCTAssertEqual(store.feedLoadState, .idle)
++        _ = await store.refreshFollowedFeed(backend: backend)
++        repository.suspendedCall = nil
++        let accepted = await old.value
++        XCTAssertFalse(accepted)
++        XCTAssertEqual(store.liveFeedQuery, second)
++        XCTAssertEqual(store.followedFeedPage?.fetchedAt, Date(timeIntervalSince1970: 2))
++        XCTAssertEqual(repository.queries, [first, second])
++    }
++
++    func testLiveLoadsExactlyOneServerPageEvenWhenActivitiesGroup() async throws {
++        let store = WanderStore(fixtures: .seed())
++        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first)
++        let actor = store.shell(for: store.currentUser)
++        func page(_ start: Int, cursor: String) -> FollowedFeedPage {
++            FollowedFeedPage(activity: (start..<(start+20)).map {
++                FeedActivity(id: "live-group-\($0)", kind: .listItemAdded, actor: actor,
++                             place: place, occurredAt: Date(timeIntervalSince1970: Double(1000-$0)))
++            }, featuredPlaces: [], nextCursor: cursor, fetchedAt: .now)
++        }
++        let repository = LiveStoreRepository(pages: [page(0,cursor:"second"),page(20,cursor:"third")])
++        let backend = WanderBackend(feedRepository: repository)
++        store.selectLiveFeedQuery(LiveFeedQuery())
++        let refreshed = await store.refreshFollowedFeed(backend: backend)
++        XCTAssertTrue(refreshed)
++        XCTAssertEqual(repository.cursors, [nil])
++        XCTAssertEqual(store.followedFeedPage?.activity.count, 20)
++        let appended = await store.loadMoreFeed(backend: backend)
++        XCTAssertTrue(appended)
++        XCTAssertEqual(repository.cursors, [nil,"second"])
++        XCTAssertEqual(store.followedFeedPage?.activity.count, 40)
++        XCTAssertTrue(store.hasMoreFeed)
++    }
++
++    func testPendingPageCannotAppendAfterQuerySwitch() async {
++        let store = WanderStore(fixtures: .seed())
++        let firstPage = FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: "next", fetchedAt: Date(timeIntervalSince1970: 1))
++        let repository = LiveStoreRepository(pages: [firstPage, emptyPage(2), emptyPage(3)])
++        let backend = WanderBackend(feedRepository: repository)
++        store.selectLiveFeedQuery(LiveFeedQuery())
++        _ = await store.refreshFollowedFeed(backend: backend)
++        repository.suspendedCall = 2
++        let old = Task { await store.loadMoreFeed(backend: backend) }
++        await waitFor(repository, calls: 2)
++        store.selectLiveFeedQuery(LiveFeedQuery(activityType: .wannas))
++        _ = await store.refreshFollowedFeed(backend: backend)
++        repository.suspendedCall = nil
++        let accepted = await old.value
++        XCTAssertFalse(accepted)
++        XCTAssertEqual(store.followedFeedPage?.fetchedAt, Date(timeIntervalSince1970: 3))
++        XCTAssertFalse(store.isLoadingMoreFeed)
++        XCTAssertFalse(store.feedPaginationFailed)
++    }
++
++    func testNilRestoresLegacyAndAccountResetClearsQueryBeforeLoad() async {
++        let store = WanderStore(fixtures: .seed())
++        let repository = LiveStoreRepository(pages: [emptyPage(1)])
++        let backend = WanderBackend(feedRepository: repository)
++        store.selectLiveFeedQuery(LiveFeedQuery())
++        _ = await store.refreshFollowedFeed(backend: backend)
++        store.selectLiveFeedQuery(nil)
++        _ = await store.refreshFollowedFeed(backend: backend)
++        XCTAssertEqual(repository.legacyCalls, 1)
++        let emptyStore = WanderStore(fixtures: .empty())
++        emptyStore.selectLiveFeedQuery(LiveFeedQuery(activityType: .wannas))
++        emptyStore.apply(authState: .signedOut)
++        XCTAssertNil(emptyStore.liveFeedQuery)
++    }
++
++    func testDemoFixtureUsesCommittedQuery() async {
++        let store = WanderStore(fixtures: .seed())
++        store.selectLiveFeedQuery(LiveFeedQuery(occurredAfter: Date.now.addingTimeInterval(365*86_400)))
++        let loaded = await store.refreshFollowedFeed(backend: nil)
++        XCTAssertTrue(loaded)
++        XCTAssertEqual(store.followedFeedPage?.activity.count, 0)
++        XCTAssertNil(store.followedFeedPage?.nextCursor)
++    }
++
++    private func emptyPage(_ timestamp: TimeInterval) -> FollowedFeedPage {
++        FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: Date(timeIntervalSince1970: timestamp))
++    }
++    private func waitFor(_ repository: LiveStoreRepository, calls: Int) async {
++        for _ in 0..<200 where repository.queries.count < calls { await Task.yield() }
++        XCTAssertEqual(repository.queries.count, calls)
++    }
++}
++
++@MainActor private final class LiveStoreRepository: FeedRepository {
++    var queries: [LiveFeedQuery] = []
++    var cursors: [String?] = []
++    var suspendedCall: Int?
++    var legacyCalls = 0
++    let pages: [FollowedFeedPage]
++    init(pages: [FollowedFeedPage]) { self.pages = pages }
++    func liveFeed(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
++                  onContent: @MainActor (FollowedFeedPage) -> Void) async throws -> FollowedFeedPage {
++        queries.append(query); cursors.append(before)
++        let call = queries.count
++        let page = pages[min(call-1,pages.count-1)]
++        // Intentionally ignore cancellation to verify the store's scope fence.
++        while suspendedCall == call { await Task.yield() }
++        onContent(page)
++        return page
++    }
++    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
++        legacyCalls += 1
++        return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
++    }
++}

@@ -146,6 +146,30 @@ async function main() {
         await client.query("rollback to savepoint follow_inbox_smoke");
         await client.query("release savepoint follow_inbox_smoke");
         console.log("ok - follow inbox survives disabled push and enforces recipient and actor privacy");
+        await client.query("savepoint private_messages_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/private_contextual_messages.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint private_messages_smoke");
+        await client.query("release savepoint private_messages_smoke");
+        console.log("ok - private messages enforce mutuals, context revocation, idempotency, quotas, pagination and receipts");
+        await client.query("savepoint shared_feed_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/feed_shared_visit_context.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint shared_feed_smoke");
+        await client.query("release savepoint shared_feed_smoke");
+        console.log("ok - shared Feed preserves legacy provenance, original content and viewer privacy");
+        await client.query("savepoint live_feed_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint live_feed_smoke");
+        await client.query("release savepoint live_feed_smoke");
+        console.log("ok - Live filters precede pagination and cursors remain account/query scoped without widening visibility");
+        await client.query("savepoint live_place_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint live_place_smoke");
+        await client.query("release savepoint live_place_smoke");
+        console.log("ok - place preview activity expands explicit aliases without widening visibility and binds pagination to account/scope");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -2454,6 +2478,9 @@ end
 $stranger$;
 
 reset role;
+create temporary table smoke_shared_feed_events(activity_id uuid primary key) on commit drop;
+insert into smoke_shared_feed_events select id from public.feed_events where visit_id='${smokeVisitID}'::uuid and event_type='place_been';
+grant select on smoke_shared_feed_events to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -2504,6 +2531,12 @@ begin
   if selected_invitee_id is distinct from ${collaboratorUser} then
     raise exception 'shared visit invitee listing failed';
   end if;
+
+  if not exists (
+    select 1 from public.feed_shared_visit_context(array(select activity_id from smoke_shared_feed_events)) context,
+      jsonb_array_elements(context.companions) companion
+    where companion->>'status'='pending' and companion->'profile'->>'id'=${collaboratorUser}
+  ) then raise exception 'shared Feed pending owner attribution failed'; end if;
 end
 $shared_owner_pending$;
 
@@ -2586,6 +2619,31 @@ begin
 end
 $shared_accept$;
 
+reset role;
+insert into smoke_shared_feed_events select id from public.feed_events
+  where visit_id='58000000-0000-0000-0000-000000000003'::uuid and event_type='place_been';
+set local role authenticated;
+do $shared_feed_accepted$
+declare context_rows jsonb;
+begin
+  select jsonb_agg(to_jsonb(context)) into context_rows
+    from public.feed_shared_visit_context(array(select activity_id from smoke_shared_feed_events)) context;
+  if jsonb_array_length(context_rows) is distinct from 2
+    or (select count(distinct c->>'group_id') from jsonb_array_elements(context_rows) c)<>1
+    or exists(select 1 from jsonb_array_elements(context_rows) c,
+      jsonb_array_elements(c->'companions') companion where companion->>'status' not in('owner','accepted'))
+  then raise exception 'accepted shared Feed posts do not resolve to one exact authorized group'; end if;
+end
+$shared_feed_accepted$;
+select set_config('request.jwt.claim.sub', ${strangerUser}, true);
+do $shared_feed_stranger$
+begin
+  if exists(select 1 from public.feed_shared_visit_context(array(select activity_id from smoke_shared_feed_events)))
+  then raise exception 'shared Feed context exposed mutuals-only visits to stranger'; end if;
+end
+$shared_feed_stranger$;
+select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
+
 do $shared_companion$
 declare
   companion_id text;
@@ -2629,6 +2687,12 @@ begin
   end if;
 end
 $shared_remove$;
+do $shared_feed_removed$
+begin
+  if exists(select 1 from public.feed_shared_visit_context(array(select activity_id from smoke_shared_feed_events)))
+  then raise exception 'removed shared Feed membership retained attribution'; end if;
+end
+$shared_feed_removed$;
 
 reset role;
 do $shared_remove_persistence$
@@ -2777,6 +2841,22 @@ savepoint follow_inbox_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/follow_notification_inbox.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint follow_inbox_smoke;
 release savepoint follow_inbox_smoke;
+savepoint private_messages_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/private_contextual_messages.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint private_messages_smoke;
+release savepoint private_messages_smoke;
+savepoint shared_feed_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/feed_shared_visit_context.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint shared_feed_smoke;
+release savepoint shared_feed_smoke;
+savepoint live_feed_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint live_feed_smoke;
+release savepoint live_feed_smoke;
+savepoint live_place_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint live_place_smoke;
+release savepoint live_place_smoke;
 savepoint repeat_wanna_smoke;
 savepoint sender_notifications_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/sender_notification_controls.sql", import.meta.url), "utf8"), "rollback")}
@@ -5045,6 +5125,20 @@ async function runSurfaceSnapshotSmokeChecks(
   collaboratorUserID,
   strangerUserID,
 ) {
+  await expectQuery(client, "shared Feed context RPC metadata", `
+    select p.prosecdef as security_definer, p.provolatile='s' as stable,
+      'search_path=pg_catalog, public, app'=any(p.proconfig) as pinned_search_path,
+      has_function_privilege('authenticated',p.oid,'execute') as authenticated_execute,
+      not has_function_privilege('anon',p.oid,'execute') as anon_denied,
+      not exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
+        where grantee=0 and privilege_type='EXECUTE') as public_denied
+    from pg_proc p where p.oid='public.feed_shared_visit_context(uuid[])'::regprocedure
+  `, [], result => {
+    const row = result.rows[0];
+    return row?.security_definer === true && row?.stable === true && row?.pinned_search_path === true
+      && row?.authenticated_execute === true && row?.anon_denied === true && row?.public_denied === true;
+  });
+
   await expectQuery(
     client,
     "activity media RPC metadata",

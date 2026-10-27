@@ -696,8 +696,38 @@ struct SupabaseFeedRepository: FeedRepository {
         self.includesFeaturedPlaces = includesFeaturedPlaces
     }
 
+    func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage {
+        let ids = Set(placeIDs.compactMap { UUID(uuidString: $0)?.uuidString.lowercased() })
+        guard !ids.isEmpty, ids.count <= 100,
+              placeIDs.allSatisfy({ UUID(uuidString: $0) != nil }) else {
+            throw WanderRemoteError.invalidResponse("Invalid place activity scope")
+        }
+        let response: RemoteFollowedFeedPageDTO = try await rpc.call(
+            "live_place_activity", params: LivePlaceActivityParams(
+                input_place_ids: ids.sorted(), input_before: before,
+                input_limit: min(max(limit, 1), 50)))
+        try Task.checkCancellation()
+        // The card hydrates only its three displayed activities through fresh
+        // authorized reads. This request must not mutate or page the main Feed.
+        return try await response.followedFeedPage()
+    }
+
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
+        guard query.isValid else { throw WanderRemoteError.invalidResponse("Invalid Live query") }
+        return try await loadFeed(audience: audience, before: before, limit: limit, query: query,
+                                  includeMedia: false, onContent: { _ in })
+    }
+
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
         try await followedFeed(before: before, limit: limit, onContent: { _ in })
+    }
+
+    func liveFeed(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
+        onContent: @MainActor (FollowedFeedPage) -> Void
+    ) async throws -> FollowedFeedPage {
+        guard query.isValid else { throw WanderRemoteError.invalidResponse("Invalid Live query") }
+        return try await loadFeed(audience: audience, before: before, limit: limit, query: query, onContent: onContent)
     }
 
     func followedFeed(
@@ -717,10 +747,22 @@ struct SupabaseFeedRepository: FeedRepository {
 
     private func loadFeed(
         audience: FeedAudience?, before: String?, limit: Int,
+        query: LiveFeedQuery? = nil, includeMedia: Bool = true,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         let boundedLimit = min(max(limit, 1), 50)
-        let response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
+        let response: RemoteFollowedFeedPageDTO
+        if let query, let audience {
+            response = try await rpc.call("live_activity_feed", params: LiveActivityFeedParams(
+                input_audience: audience.rawValue, input_after: LiveFeedQuery.timestamp(query.occurredAfter),
+                input_until: LiveFeedQuery.timestamp(query.occurredBefore), input_activity_type: query.activityType.rawValue,
+                input_polygon: query.polygon, input_before: before, input_limit: boundedLimit,
+                input_center_latitude: query.center?.latitude, input_center_longitude: query.center?.longitude,
+                input_radius_meters: query.radiusMeters, input_category_ids: query.categoryIDs,
+                input_person_ids: query.personIDs))
+        } else {
+            response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
+        }
         // Reserve the artwork slot while the separate authorized-media read is
         // pending. A non-renderable marker prevents the card from starting a
         // provider-photo fallback that would be replaced by visit media later.
@@ -746,6 +788,7 @@ struct SupabaseFeedRepository: FeedRepository {
         )
         try Task.checkCancellation()
         onContent(content)
+        guard includeMedia else { return try await response.followedFeedPage() }
         let activityIDs = Array(
             Set(response.activity.compactMap { item in
                 UUID(uuidString: item.id)?.uuidString.lowercased()
@@ -755,6 +798,7 @@ struct SupabaseFeedRepository: FeedRepository {
             return try await response.followedFeedPage()
         }
 
+        async let sharedVisits = sharedVisitContexts(for: response.activity)
         let mediaRows: [RemoteActivityMediaDTO]
         do {
             mediaRows = try await rpc.call(
@@ -766,7 +810,10 @@ struct SupabaseFeedRepository: FeedRepository {
             // Keep the verified text page and neutral artwork placeholders.
             // Falling back to an unrelated provider image here would make a
             // later refresh visibly swap the wrong photo for the visit photo.
-            return content
+            return try await response.followedFeedPage(
+                mediaByActivityID: pendingMediaByActivityID,
+                sharedVisitsByActivityID: await sharedVisits
+            )
         }
         let mediaByActivityID = Dictionary(
             mediaRows.map { ($0.activityID.lowercased(), $0.media) },
@@ -774,8 +821,33 @@ struct SupabaseFeedRepository: FeedRepository {
         )
         return try await response.followedFeedPage(
             storage: storage,
-            mediaByActivityID: mediaByActivityID
+            mediaByActivityID: mediaByActivityID,
+            sharedVisitsByActivityID: await sharedVisits
         )
+    }
+
+    private func sharedVisitContexts(for activity: [RemoteFeedActivityDTO]) async -> [String: FeedSharedVisitContext] {
+        let ids = Set(activity.filter { $0.eventType == FeedActivityKind.placeBeen.rawValue }
+            .compactMap { UUID(uuidString: $0.id)?.uuidString.lowercased() })
+        guard !ids.isEmpty else { return [:] }
+        do {
+            let rows: [RemoteFeedSharedVisitContextDTO] = try await rpc.call(
+                "feed_shared_visit_context",
+                params: ActivityEngagementSummariesParams(activityIDs: Array(ids).sorted())
+            )
+            guard !Task.isCancelled else { return [:] }
+            return Dictionary(rows.compactMap { row in
+                guard ids.contains(row.activityID.lowercased()),
+                      UUID(uuidString: row.groupID) != nil, UUID(uuidString: row.visitID) != nil,
+                      !row.companions.isEmpty else { return nil }
+                return (row.activityID.lowercased(), row.context)
+            }, uniquingKeysWith: { first, _ in first })
+        } catch {
+            // Attribution is additive. A missing migration or unavailable read
+            // leaves separately authorized original posts; never infer a group
+            // from local people/place/timing, and never reuse stale companions.
+            return [:]
+        }
     }
 
     private func followedFeedResponse(
@@ -855,6 +927,33 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
         self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection? {
+        let rows: [RemoteSharedVisitPostDTO] = try await rpc.call(
+            "shared_visit_posts", params: ActivityDetailParams(activityID: activityID))
+        guard let first = rows.first else { return nil }
+        guard rows.count <= 20, rows.allSatisfy({ $0.groupID == first.groupID
+            && $0.commentActivityID == first.commentActivityID }) else {
+            throw WanderRemoteError.invalidResponse("Invalid shared visit projection")
+        }
+        var posts: [FeedActivity] = []
+        for row in rows {
+            try Task.checkCancellation()
+            posts.append(try await row.activity.activity(storage: storage))
+        }
+        // Pending identity is supplied only by the existing owner-authorized
+        // context RPC. It never supplies an unaccepted member's contributions.
+        let contexts: [RemoteFeedSharedVisitContextDTO] = try await rpc.call(
+            "feed_shared_visit_context", params: ActivityEngagementSummariesParams(activityIDs: [activityID]))
+        try Task.checkCancellation()
+        guard let context = contexts.first(where: { $0.activityID == activityID && $0.groupID == first.groupID }) else { return nil }
+        guard let requestedActorID = rows.first(where: { $0.visitID == context.visitID })?.activity.actor.id else { return nil }
+        let memberIDs = Set(context.companions.filter { $0.status == .owner || $0.status == .accepted }.map { $0.profile.id })
+            .union([requestedActorID])
+        return SharedVisitPostCollection(groupID: first.groupID,
+            commentActivityID: first.commentActivityID, posts: posts.filter { memberIDs.contains($0.actor.id) },
+            companions: context.context.companions, visitIDs: rows.map(\.visitID))
+    }
+
     func activity(id: String) async throws -> FeedActivity {
         let response: RemoteFeedActivityDTO = try await rpc.call(
             "activity_detail",
@@ -864,9 +963,13 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
             "activity_media",
             params: ActivityEngagementSummariesParams(activityIDs: [id])
         )) ?? []
+        let contexts: [RemoteFeedSharedVisitContextDTO] = (try? await rpc.call(
+            "feed_shared_visit_context", params: ActivityEngagementSummariesParams(activityIDs: [id]))) ?? []
+        try Task.checkCancellation()
         return try await response.activity(
             storage: storage,
-            mediaOverride: mediaRows.first(where: { $0.activityID == id })?.media
+            mediaOverride: mediaRows.first(where: { $0.activityID.lowercased() == id.lowercased() })?.media,
+            sharedVisit: contexts.first(where: { $0.activityID.lowercased() == id.lowercased() })?.context
         )
     }
 
@@ -3774,6 +3877,27 @@ private struct ActivityFeedParams: Encodable {
         case before = "input_before"
         case limit = "input_limit"
     }
+}
+
+private struct LivePlaceActivityParams: Encodable {
+    let input_place_ids: [String]
+    let input_before: String?
+    let input_limit: Int
+}
+
+private struct LiveActivityFeedParams: Encodable {
+    let input_audience: String
+    let input_after: String?
+    let input_until: String?
+    let input_activity_type: String
+    let input_polygon: [LiveFeedQuery.Vertex]?
+    let input_before: String?
+    let input_limit: Int
+    let input_center_latitude: Double?
+    let input_center_longitude: Double?
+    let input_radius_meters: Int?
+    let input_category_ids: [String]
+    let input_person_ids: [String]
 }
 
 private struct FollowedFeedParams: Encodable {

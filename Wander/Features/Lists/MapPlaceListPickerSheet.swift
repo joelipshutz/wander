@@ -117,6 +117,8 @@ struct MapPlaceListPickerResult: Equatable {
     let alreadyInListCount: Int
     let deniedCount: Int
     let companionSave: ListPlaceAddResult.CompanionSave
+    var destinationListIDs: [String] = []
+    var newlyAddedListIDs: Set<String> = []
 
     var message: String {
         guard addedCount > 0 else {
@@ -185,6 +187,7 @@ struct MapPlaceListPickerSheet: View {
     var analyticsSurface: String = "map"
     let onComplete: (MapPlaceListPickerResult) -> Void
     @State private var silentNotifications = false
+    @State private var lastSelectedListID: String?
     @State private var selection = MapPlaceListPickerSelection(existingListIDs: [])
     @State private var didLoadMembership = false
     @State private var isApplying = false
@@ -461,6 +464,7 @@ struct MapPlaceListPickerSheet: View {
         return Button {
             guard !isExisting else { return }
             selection.togglePending(listID: list.id)
+            if selection.pendingListIDs.contains(list.id) { lastSelectedListID = list.id }
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: PlaceListSymbol.systemImage)
@@ -587,18 +591,35 @@ struct MapPlaceListPickerSheet: View {
         let notificationPolicy = SenderNotificationPolicy(silent: silentNotifications)
         isApplying = true
         errorMessage = nil
+        let viewerID = store.currentUser.id
+        var successfulLists: [LocalPlaceList] = []
+        var newlyAddedLists: [LocalPlaceList] = []
         var results: [ListPlaceAddResult] = []
         for list in lists {
             for target in targets {
-                results.append(await target.add(to: list, store: store, backend: backend,
+                guard store.currentUser.id == viewerID else { return }
+                let result = await target.add(to: list, store: store, backend: backend,
                     analyticsSurface: analyticsSurface, keepNewCompanionPrivate: keepNewCompanionPrivate,
-                    senderNotificationPolicy: notificationPolicy))
+                    senderNotificationPolicy: notificationPolicy)
+                results.append(result)
+                if result.outcome == .added || result.outcome == .alreadyInList { successfulLists.append(list) }
+                if result.outcome == .added { newlyAddedLists.append(list) }
             }
         }
         isApplying = false
         refreshPresentation()
 
-        let summary = MapPlaceListPickerResult.summarize(results)
+        guard store.currentUser.id == viewerID else { return }
+        var summary = MapPlaceListPickerResult.summarize(results)
+        summary.destinationListIDs = Array(Set(successfulLists.map { selected in
+            store.visiblePlaceLists.first(where: { $0.localID == selected.localID })?.id ?? selected.id
+        })).sorted()
+        summary.newlyAddedListIDs = Set(newlyAddedLists.map { selected in
+            store.visiblePlaceLists.first(where: { $0.localID == selected.localID })?.id ?? selected.id
+        })
+        if let chosen = successfulLists.first(where: { $0.id == lastSelectedListID }) ?? successfulLists.last {
+            RecentPlaceListChoice.shared.remember(chosen, accountID: viewerID, notificationPolicy: notificationPolicy)
+        }
         guard summary.addedCount > 0 || summary.alreadyInListCount > 0 else {
             errorMessage = summary.message
             return
@@ -627,22 +648,30 @@ struct MapPlaceListPickerSheet: View {
             return
         }
         let notificationPolicy = SenderNotificationPolicy(silent: silentNotifications)
+        let viewerID = store.currentUser.id
         isApplying = true
         Task { @MainActor in
             var results: [ListPlaceAddResult] = []
             for target in targets {
+                guard store.currentUser.id == viewerID else { return }
                 results.append(await target.add(to: list, store: store, backend: backend, analyticsSurface: analyticsSurface,
                     senderNotificationPolicy: notificationPolicy))
             }
             _ = await store.syncPendingPlaceLists(backend: backend)
             isApplying = false
             refreshPresentation()
-            let summary = MapPlaceListPickerResult.summarize(results)
+            guard store.currentUser.id == viewerID else { return }
+            var summary = MapPlaceListPickerResult.summarize(results)
+            summary.destinationListIDs = [store.visiblePlaceLists.first(where: { $0.localID == list.localID })?.id ?? list.id]
+            if results.contains(where: { $0.outcome == .added }) {
+                summary.newlyAddedListIDs = Set(summary.destinationListIDs)
+            }
             guard summary.addedCount > 0 || summary.alreadyInListCount > 0 else {
                 errorMessage = summary.message
                 return
             }
 
+            RecentPlaceListChoice.shared.remember(list, accountID: viewerID, notificationPolicy: notificationPolicy)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onComplete(summary)
             try? await Task.sleep(for: .milliseconds(250))

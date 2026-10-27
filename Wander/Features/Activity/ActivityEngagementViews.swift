@@ -26,6 +26,7 @@ struct ActivityEngagementActionRow: View {
     @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
+    var sharedVisitGroupID: String? = nil
     var showsCommentButton = true
     var showsWannaButton = true
     var isEngagementEnabled = true
@@ -157,7 +158,7 @@ struct ActivityEngagementActionRow: View {
         Button {
             auth.requireSignIn(for: .socialActivity) {
                 performResolvedAction { resolved in
-                    activityNavigation.openComments(context: resolved, visiblePlace: visiblePlace)
+                    activityNavigation.openComments(context: resolved, visiblePlace: visiblePlace, sharedVisitGroupID: sharedVisitGroupID)
                 }
             }
         } label: {
@@ -166,10 +167,12 @@ struct ActivityEngagementActionRow: View {
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(primaryColor)
 
-                Text(engagement.commentCount.formatted())
-                    .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(primaryColor)
+                if sharedVisitGroupID == nil {
+                    Text(engagement.commentCount.formatted())
+                        .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(primaryColor)
+                }
             }
             .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
@@ -178,7 +181,7 @@ struct ActivityEngagementActionRow: View {
         .disabled(!canAttemptEngagement || isResolvingAction)
         .opacity(canAttemptEngagement ? 1 : 0.45)
         .accessibilityLabel("Open comments")
-        .accessibilityValue("\(engagement.commentCount) comments")
+        .accessibilityValue(sharedVisitGroupID == nil ? "\(engagement.commentCount) comments" : "All readable shared check-in discussions")
     }
 
     private var reportMenu: some View {
@@ -357,6 +360,14 @@ struct ActivityPostcardView: View {
     @Environment(\.activityPostcardVisualStyle) private var visualStyle
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.activityPresentationHandoff) private var handoff
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    @StateObject private var sharedModel = SharedVisitDiscussionModel()
+    @State private var sharedRenderedKey: String?
+    @State private var sharedKnownVisitIDs: Set<String> = []
+    @State private var sharedRetry = 0
     @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
@@ -380,6 +391,33 @@ struct ActivityPostcardView: View {
     var activityGroup: FeedActivityGroup? = nil
     var openActivityList: ((LocalPlaceList) -> Void)? = nil
     var openPhotos: (() -> Void)? = nil
+    var sharedVisitCompanions: [FeedSharedVisitCompanion] = []
+    var sharedVisitCurrentUserID: String = ""
+    var openSharedVisitProfile: ((String) -> Void)? = nil
+    var sharedPostCollection: SharedVisitPostCollection? = nil
+    var sharedGroupID: String? = nil
+
+    private var activeSharedGroupID: String? { sharedGroupID ?? activityGroup?.sharedVisitGroupID }
+    private var sharedMembershipKey: String {
+        let known = Array(sharedKnownVisitIDs) + (activityGroup?.activities.compactMap { $0.sharedVisit?.visitID } ?? [])
+            + (sharedPostCollection?.visitIDs ?? [])
+        return SharedVisitMembershipSnapshot.key(visitIDs: known, cache: store.sharedVisitCompanionsByVisitID)
+    }
+    private var sharedAccessKey: String {
+        guard let groupID = activeSharedGroupID else { return "ordinary" }
+        return "\(groupID):\(context.activityID):\(store.currentUser.id):\(auth.isSignedIn):\(ActivitySessionReadiness(auth: auth)):\(scenePhase):\(store.presentationRevision):\(sharedRetry):\(sharedMembershipKey)"
+    }
+    private var sharedPresentation: SharedVisitPostcardPresentation? {
+        guard activeSharedGroupID != nil, scenePhase == .active else { return nil }
+        let collection = sharedPostCollection ?? (sharedRenderedKey == sharedAccessKey ? sharedModel.collection : nil)
+        guard let collection else { return nil }
+        return SharedVisitPostcardPresentation(collection: collection, viewerID: store.currentUser.id) { profile in
+            SharedVisitLocalVisibility.permitsAuthor(authorID: profile.id, viewerID: store.currentUser.id,
+                blocked: store.isBlockedBetweenCurrentUser(and: profile.id), muted: store.isMuted(userID: profile.id),
+                privateProfile: profile.isPrivateProfile == true || store.isProfilePrivate(profile.id))
+        }
+    }
+    private var displayContext: ActivityEngagementContext { sharedPresentation?.context ?? context }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -398,12 +436,12 @@ struct ActivityPostcardView: View {
 
                 HStack(spacing: WanderTheme.spacing2) {
                     actorAttribution
-                    if let firstPhoto = context.media.first {
+                    if let firstPhoto = displayContext.media.first {
                         photoStack(firstPhoto: firstPhoto)
                     }
                 }
 
-                if let note = context.note {
+                if activeSharedGroupID == nil, let note = displayContext.note {
                     Text("“\(note)”")
                         .font(visualStyle == .astir ? AstirTypography.bodySmall : .system(.subheadline, design: .serif, weight: .medium))
                         .foregroundStyle(primaryText)
@@ -421,7 +459,11 @@ struct ActivityPostcardView: View {
                         .accessibilityLabel("Note: \(note)")
                 }
 
-                if let activityGroup {
+                if activeSharedGroupID != nil {
+                    sharedNotes
+                }
+
+                if let activityGroup, activeSharedGroupID == nil {
                     FeedActivityDisclosure(group: activityGroup, openList: openActivityList)
                 }
 
@@ -430,8 +472,9 @@ struct ActivityPostcardView: View {
                         .overlay(borderColor)
 
                     ActivityEngagementActionRow(
-                        context: context,
+                        context: displayContext,
                         visiblePlace: visiblePlace,
+                        sharedVisitGroupID: activeSharedGroupID,
                         showsCommentButton: showsCommentButton,
                         onSharePreviewPresentation: onSharePreviewPresentation
                     )
@@ -465,13 +508,30 @@ struct ActivityPostcardView: View {
             WanderRootPresentationLifecycle(
                 surface: .activityPhoto, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
             ) {
-                ActivityPhotoViewerScreen(context: context, initialMediaID: route.mediaID)
+                if let groupID = activeSharedGroupID {
+                    SharedVisitPhotoViewerScreen(activityID: context.activityID, groupID: groupID, initialMediaID: route.mediaID)
+                } else {
+                    ActivityPhotoViewerScreen(context: context, initialMediaID: route.mediaID)
+                }
             }
         }
         .onChange(of: handoff.resetID) { _, resetID in
             if resetID != nil { photoViewerRoute = nil }
         }
         .onChange(of: context.activityID) { _, _ in photoViewerRoute = nil }
+        .task(id: sharedAccessKey) {
+            guard activeSharedGroupID != nil, sharedPostCollection == nil else { return }
+            sharedModel.invalidate()
+            guard scenePhase == .active, auth.isSignedIn, ActivitySessionReadiness(auth: auth) == .ready,
+                  let groupID = activeSharedGroupID, let repository = backend.activityEngagementRepository else { return }
+            let key = sharedAccessKey
+            sharedRenderedKey = key
+            await sharedModel.load(activityID: context.activityID, groupID: groupID, repository: repository,
+                includeComments: false, isCurrent: { key == sharedAccessKey })
+            guard key == sharedAccessKey else { return }
+            sharedKnownVisitIDs.formUnion(sharedModel.collection?.visitIDs ?? [])
+        }
+        .onDisappear { sharedModel.invalidate(); sharedRenderedKey = nil }
     }
 
     @ViewBuilder
@@ -496,14 +556,14 @@ struct ActivityPostcardView: View {
     private var postcardArtwork: some View {
         ActivityPostcardArtwork(
             visiblePlace: visiblePlace,
-            media: context.media,
+            media: displayContext.media,
             fallbackIcon: metadataIcon,
             usesAstirPhotoFallback: visualStyle == .astir
         )
     }
 
     private var ticketBadge: some View {
-        Label(context.ticketEyebrow, systemImage: ticketIcon)
+        Label(displayContext.ticketEyebrow, systemImage: ticketIcon)
             .font(visualStyle == .astir ? AstirTypography.metadata : .system(size: ticketBadgeFontSize, weight: .black, design: .rounded))
             .tracking(0.7)
             .foregroundStyle(visualStyle == .astir ? astirBrandMode.background : WanderTheme.textInk.color)
@@ -520,16 +580,16 @@ struct ActivityPostcardView: View {
                     style: .continuous
                 )
             )
-            .accessibilityLabel(context.ticketEyebrow.localizedCapitalized)
+            .accessibilityLabel(displayContext.ticketEyebrow.localizedCapitalized)
             .accessibilityIdentifier("\(postcardAccessibilityIdentifier).badge")
     }
 
     private var ticketBadgeFontSize: CGFloat {
-        ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: context.ticketKind)
+        ActivityPostcardTypographyPolicy.ticketBadgeFontSize(for: displayContext.ticketKind)
     }
 
     private var ticketIcon: String {
-        switch context.ticketKind {
+        switch displayContext.ticketKind {
         case .checkIn: "checkmark"
         case .wanna: "plus"
         case .list: PlaceListSymbol.systemImage
@@ -551,7 +611,7 @@ struct ActivityPostcardView: View {
                 destinationTitle
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(destinationAccessibilityLabel ?? "Open \(context.placeName)")
+            .accessibilityLabel(destinationAccessibilityLabel ?? "Open \(displayContext.placeName)")
             .accessibilityIdentifier(destinationAccessibilityIdentifier)
         } else {
             destinationTitle
@@ -559,7 +619,7 @@ struct ActivityPostcardView: View {
     }
 
     private var destinationTitle: some View {
-        Text(context.placeName)
+        Text(displayContext.placeName)
             .font(visualStyle == .astir ? AstirTypography.sectionTitle : WanderTypography.editorialTitle)
             .foregroundStyle(primaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -569,7 +629,7 @@ struct ActivityPostcardView: View {
 
     @ViewBuilder
     private var ratingBadge: some View {
-        if let rating = context.rating {
+        if let rating = displayContext.rating {
             HStack(spacing: 5) {
                 Image(systemName: "star.fill")
                     .accessibilityHidden(true)
@@ -594,7 +654,7 @@ struct ActivityPostcardView: View {
     private var compactMetadata: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: WanderTheme.spacing1) {
-                Label(context.placeDetail, systemImage: metadataIcon)
+                Label(displayContext.placeDetail, systemImage: metadataIcon)
                     .lineLimit(1)
 
                 if secondaryMetadataTitle != nil {
@@ -605,7 +665,7 @@ struct ActivityPostcardView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Label(context.placeDetail, systemImage: metadataIcon)
+                Label(displayContext.placeDetail, systemImage: metadataIcon)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -639,7 +699,9 @@ struct ActivityPostcardView: View {
 
     @ViewBuilder
     private var actorAttribution: some View {
-        if let openProfile {
+        if let presentation = sharedPresentation {
+            sharedActorAttribution(presentation)
+        } else if let openProfile {
             Button(action: openProfile) {
                 actorContent
             }
@@ -679,21 +741,81 @@ struct ActivityPostcardView: View {
         .contentShape(Rectangle())
     }
 
+    private func sharedActorAttribution(_ presentation: SharedVisitPostcardPresentation) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            HStack(spacing: -20) {
+                ForEach(Array(([presentation.context.actor] + presentation.companions).prefix(2))) { profile in
+                    Button {
+                        if profile.id == context.actor.id { openProfile?() }
+                        else { openSharedVisitProfile?(profile.id) }
+                    } label: {
+                        WanderAvatar(initials: activityInitials(for: profile.displayName), avatarURL: profile.avatarURL,
+                            size: 32, color: WanderTheme.skyTint.color)
+                            .overlay(Circle().stroke(cardBackground, lineWidth: 2))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(profile.displayName)’s profile")
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(presentation.attribution)
+                    .font(visualStyle == .astir ? AstirTypography.bodySmall : .system(size: 14, weight: .bold))
+                    .foregroundStyle(primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("\(postcardAccessibilityIdentifier).companions")
+                Text(FeedPresentation.timestampText(for: presentation.context.occurredAt))
+                    .font(visualStyle == .astir ? AstirTypography.metadata : .caption.weight(.medium))
+                    .foregroundStyle(secondaryText)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(actorAccessibilityIdentifier)
+    }
+
+    @ViewBuilder private var sharedNotes: some View {
+        if let presentation = sharedPresentation {
+            ForEach(presentation.posts) { post in
+                if let note = post.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(post.actor.displayName).font(AstirTypography.label)
+                        Text("“\(note)”").font(AstirTypography.bodySmall)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(primaryText)
+                    .padding(.horizontal, WanderTheme.spacing3).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(noteBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sharedVisit.post.\(post.id)")
+                }
+            }
+        } else if sharedModel.failed {
+            Button("Shared check-ins couldn’t load. Try again") { sharedRetry += 1 }
+                .font(AstirTypography.caption).frame(minHeight: 44)
+        } else {
+            ProgressView("Loading shared check-ins…").font(AstirTypography.caption)
+        }
+    }
+
     private var actorAccessibilityLabel: String {
-        "\(context.actor.displayName) \(context.attributionAction), "
-            + FeedPresentation.timestampText(for: context.occurredAt)
+        "\(displayContext.actor.displayName) \(displayContext.attributionAction), "
+            + FeedPresentation.timestampText(for: displayContext.occurredAt)
     }
 
     private func photoStack(firstPhoto: ActivityEngagementMedia) -> some View {
         Button {
-            if let openPhotos {
+            if activeSharedGroupID == nil, let openPhotos {
                 openPhotos()
             } else {
                 photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstPhoto.id)
             }
         } label: {
             ZStack {
-                if context.media.count > 1 {
+                if displayContext.media.count > 1 {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(primaryText.opacity(0.16))
                         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -717,7 +839,7 @@ struct ActivityPostcardView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "photo.on.rectangle.angled")
                             .font(.system(size: 8, weight: .semibold))
-                        Text("\(context.media.count)")
+                        Text("\(displayContext.media.count)")
                             .font(.custom("AvenirNext-DemiBold", size: 10))
                     }
                     .foregroundStyle(.white)
@@ -731,8 +853,8 @@ struct ActivityPostcardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("View \(context.media.count == 1 ? "photo" : "photos") from \(context.actor.displayName)’s \(context.ticketKind == .checkIn ? "check-in" : "save")")
-        .accessibilityValue(context.media.count == 1 ? "1 photo" : "\(context.media.count) photos")
+        .accessibilityLabel("View \(displayContext.media.count == 1 ? "photo" : "photos") from \(displayContext.actor.displayName)’s \(displayContext.ticketKind == .checkIn ? "check-in" : "save")")
+        .accessibilityValue(displayContext.media.count == 1 ? "1 photo" : "\(displayContext.media.count) photos")
         .accessibilityHint("Opens a full-screen photo viewer")
         .accessibilityIdentifier("\(postcardAccessibilityIdentifier).photos")
     }
@@ -1421,7 +1543,7 @@ private struct ActivityCommentsPhotoViewerRoute: Identifiable {
 
 /// Both Feed and comments must re-resolve the exact activity before mounting
 /// its media. A cached card is not authorization to display protected photos.
-private struct ActivityPhotoViewerScreen: View {
+struct ActivityPhotoViewerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore
@@ -1509,6 +1631,72 @@ private struct ActivityPhotoViewerScreen: View {
     }
 }
 
+/// Reauthorize every original before presenting a combined photo pile.
+private struct SharedVisitPhotoViewerScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let activityID: String
+    let groupID: String
+    let initialMediaID: String
+    @StateObject private var model = SharedVisitDiscussionModel()
+    @State private var renderedKey: String?
+    @State private var knownVisitIDs: Set<String> = []
+    @State private var retry = 0
+    private var membershipKey: String {
+        SharedVisitMembershipSnapshot.key(visitIDs: Array(knownVisitIDs), cache: store.sharedVisitCompanionsByVisitID)
+    }
+    private var accessKey: String {
+        "\(activityID):\(store.currentUser.id):\(auth.isSignedIn):\(ActivitySessionReadiness(auth: auth)):\(scenePhase):\(store.presentationRevision):\(backend.photoSessionRevision):\(backend.photoAccessRevision):\(retry):\(membershipKey)"
+    }
+    private var presentation: SharedVisitPostcardPresentation? {
+        guard scenePhase == .active, renderedKey == accessKey, let collection = model.collection else { return nil }
+        return SharedVisitPostcardPresentation(collection: collection, viewerID: store.currentUser.id) { profile in
+            SharedVisitLocalVisibility.permitsAuthor(authorID: profile.id, viewerID: store.currentUser.id,
+                blocked: store.isBlockedBetweenCurrentUser(and: profile.id), muted: store.isMuted(userID: profile.id),
+                privateProfile: profile.isPrivateProfile == true || store.isProfilePrivate(profile.id))
+        }
+    }
+    var body: some View {
+        Group {
+            if let presentation, !presentation.context.media.isEmpty {
+                ActivityCommentsPhotoViewer(media: presentation.context.media, initialMediaID: initialMediaID,
+                    reportedUserID: presentation.context.actor.id, reportedUserName: presentation.context.actor.displayName,
+                    placeName: presentation.context.placeName, mediaAuthors: presentation.mediaAuthors)
+            } else {
+                ZStack(alignment: .topLeading) {
+                    Color.black.ignoresSafeArea()
+                    if model.failed || model.collection != nil {
+                        ContentUnavailableView("Photos unavailable", systemImage: "photo",
+                            description: Text("These photos are no longer available, or couldn’t be checked."))
+                            .safeAreaInset(edge: .bottom) { Button("Try again") { retry += 1 }.frame(minHeight: 44) }
+                            .accessibilityIdentifier("activity.photos.unavailable")
+                    } else { ProgressView("Opening photos…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+                    WanderGlassActionButton(systemImage: "chevron.left", accessibilityLabel: "Back",
+                        tone: .darkOverlay, action: dismiss.callAsFunction)
+                        .accessibilityIdentifier("activity.photos.back")
+                        .padding(.horizontal, WanderTheme.spacing4).padding(.top, WanderTheme.spacing3)
+                }
+            }
+        }
+        .preferredColorScheme(.dark).blocksProductUpsells(while: true, preservesForegroundEntry: true)
+        .task(id: accessKey) {
+            model.invalidate()
+            guard scenePhase == .active, auth.isSignedIn, ActivitySessionReadiness(auth: auth) == .ready,
+                  let repository = backend.activityEngagementRepository else { return }
+            let key = accessKey
+            renderedKey = key
+            await model.load(activityID: activityID, groupID: groupID, repository: repository,
+                includeComments: false, isCurrent: { key == accessKey })
+            guard key == accessKey else { return }
+            knownVisitIDs.formUnion(model.collection?.visitIDs ?? [])
+        }
+        .onDisappear { model.invalidate(); renderedKey = nil }
+    }
+}
+
 private struct ActivityCommentsPhotoViewer: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -1518,6 +1706,7 @@ private struct ActivityCommentsPhotoViewer: View {
     let reportedUserID: String
     let reportedUserName: String
     let placeName: String
+    let mediaAuthors: [String: ProfileShell]
     @State private var selectedMediaID: String
     @State private var reportSubject: CommunityReportSubject?
 
@@ -1526,12 +1715,14 @@ private struct ActivityCommentsPhotoViewer: View {
         initialMediaID: String,
         reportedUserID: String,
         reportedUserName: String,
-        placeName: String
+        placeName: String,
+        mediaAuthors: [String: ProfileShell] = [:]
     ) {
         self.media = media
         self.reportedUserID = reportedUserID
         self.reportedUserName = reportedUserName
         self.placeName = placeName
+        self.mediaAuthors = mediaAuthors
         _selectedMediaID = State(initialValue: media.contains(where: { $0.id == initialMediaID })
             ? initialMediaID : (media.first?.id ?? initialMediaID))
     }
@@ -1599,7 +1790,9 @@ private struct ActivityCommentsPhotoViewer: View {
     }
 
     private var reportableSelectedPhoto: CommunityReportSubject? {
-        guard reportedUserID != store.currentUser.id,
+        let authorID = mediaAuthors[selectedMediaID]?.id ?? reportedUserID
+        let authorName = mediaAuthors[selectedMediaID]?.displayName ?? reportedUserName
+        guard authorID != store.currentUser.id,
               UUID(uuidString: selectedMediaID) != nil
         else {
             return nil
@@ -1607,8 +1800,8 @@ private struct ActivityCommentsPhotoViewer: View {
         return CommunityReportSubject(
             kind: .visitPhoto,
             subjectID: selectedMediaID,
-            reportedUserID: reportedUserID,
-            context: "Report \(reportedUserName)’s photo from \(placeName)."
+            reportedUserID: authorID,
+            context: "Report \(authorName)’s photo from \(placeName)."
         )
     }
 
@@ -1655,7 +1848,10 @@ struct ActivityCommentsRouteScreen: View {
 
     var body: some View {
         ZStack {
-            if let route = currentRoute, let context = route.context {
+            if let route = currentRoute, let groupID = route.sharedVisitGroupID {
+                SharedVisitCommentsScreen(activityID: route.activityID, groupID: groupID,
+                    openProfile: openProfile, openPlace: openPlace)
+            } else if let route = currentRoute, let context = route.context {
                 ActivityCommentsScreen(
                     context: context,
                     visiblePlace: route.visiblePlace,
@@ -1855,4 +2051,267 @@ private func activityInitials(for name: String) -> String {
         .map(String.init)
         .joined()
         .uppercased()
+}
+
+/// One page over original discussions. Writes keep the original endpoint/ID;
+/// supplemental originals never become synthetic merged comments or counts.
+struct SharedVisitCommentsScreen: View {
+    @Environment(\.activityPresentationHandoff) private var handoff
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.astirBrandMode) private var brandMode
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let activityID: String
+    let groupID: String
+    let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
+    @StateObject private var model = SharedVisitDiscussionModel()
+    @State private var draft = ""
+    @State private var mentions: [PersonMention] = []
+    @State private var focused = false
+    @State private var posting = false
+    @State private var error: String?
+    @State private var reportSubject: CommunityReportSubject?
+    @State private var retry = 0
+    @State private var renderedKey: String?
+    @State private var knownVisitIDs: Set<String> = []
+    private var membershipKey: String {
+        SharedVisitMembershipSnapshot.key(visitIDs: Array(knownVisitIDs), cache: store.sharedVisitCompanionsByVisitID)
+    }
+    private var accessKey: String {
+        "\(activityID):\(store.currentUser.id):\(auth.isSignedIn):\(ActivitySessionReadiness(auth: auth)):\(scenePhase):\(store.presentationRevision):\(retry):\(membershipKey)"
+    }
+
+    private func permits(_ post: FeedActivity) -> Bool {
+        SharedVisitLocalVisibility.permitsAuthor(authorID: post.actor.id, viewerID: store.currentUser.id,
+            blocked: store.isBlockedBetweenCurrentUser(and: post.actor.id),
+            muted: store.isMuted(userID: post.actor.id),
+            privateProfile: post.actor.isPrivateProfile == true || store.isProfilePrivate(post.actor.id))
+    }
+
+    private var permittedCollection: SharedVisitPostCollection? {
+        guard let collection = model.collection, let target = collection.commentTarget,
+              permits(target) else { return nil }
+        return collection
+    }
+
+    private func visiblePosts(_ collection: SharedVisitPostCollection) -> [FeedActivity] {
+        collection.posts.filter(permits)
+    }
+
+    private func visibleComments(_ collection: SharedVisitPostCollection) -> [ActivityComment] {
+        let ids = Set(visiblePosts(collection).map(\.id))
+        return model.comments.filter {
+            SharedVisitLocalVisibility.permitsComment($0, visibleActivityIDs: ids,
+                blocked: store.isBlockedBetweenCurrentUser(and: $0.author.id),
+                muted: store.isMuted(userID: $0.author.id))
+        }
+    }
+
+    var body: some View {
+        Group {
+            if scenePhase == .active, renderedKey == accessKey, let collection = permittedCollection {
+                ScrollViewReader { proxy in
+                    List {
+                        activityHeader(collection)
+                            .listRowInsets(EdgeInsets(top: WanderTheme.spacing3, leading: WanderTheme.spacing4,
+                                bottom: WanderTheme.spacing2, trailing: WanderTheme.spacing4))
+                            .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                        if model.isLoading && visibleComments(collection).isEmpty {
+                            ProgressView("Loading comments…")
+                                .font(AstirTypography.bodySmall).tint(brandMode.accent)
+                                .frame(maxWidth: .infinity, minHeight: 140)
+                                .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                        } else {
+                            ForEach(visibleComments(collection)) { comment in
+                                commentRow(comment)
+                                    .id(comment.id)
+                                    .padding(.horizontal, WanderTheme.spacing4)
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                            }
+                        }
+                        if model.hasMore {
+                            Button(model.isLoading ? "Loading…" : "Load earlier comments") { Task { await loadMore() } }
+                                .disabled(model.isLoading).frame(minHeight: 44)
+                                .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                        }
+                        if let error {
+                            Text(error).font(AstirTypography.caption).foregroundStyle(WanderTheme.stateError.color)
+                                .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                        }
+                    }
+                    .listStyle(.plain).scrollContentBackground(.hidden)
+                    .contentMargins(.bottom, WanderTheme.spacing8, for: .scrollContent)
+                    .scrollDismissesKeyboard(.interactively)
+                    .onChange(of: model.comments.map(\.id)) { _, ids in
+                        guard let newestID = ids.last, focused else { return }
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(newestID, anchor: .bottom) }
+                    }
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) { composerInput }
+            } else if model.failed || model.collection != nil {
+                ContentUnavailableView("Shared check-in unavailable", systemImage: "lock",
+                    description: Text("The shared check-in couldn’t be verified. Try again when connected."))
+                    .safeAreaInset(edge: .bottom) { Button("Try again") { retry += 1 }.padding() }
+            } else { ProgressView("Opening shared check-in…") }
+        }
+        .background(brandMode.background.ignoresSafeArea())
+        .task(id: accessKey) { await reload() }
+        .onChange(of: model.collection?.visitIDs ?? []) { _, ids in knownVisitIDs.formUnion(ids) }
+        .refreshable { await reload() }
+        .onChange(of: store.currentUser.id) { _, _ in draft = ""; mentions = []; posting = false; model.invalidate() }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { model.invalidate() } }
+        .onDisappear { model.invalidate() }
+        .sheet(item: $reportSubject, onDismiss: { handoff.onDidDismiss(.activityReport) }) { subject in
+            WanderRootPresentationLifecycle(surface: .activityReport, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss) {
+                CommunityReportSheet(subject: subject).environmentObject(backend)
+            }
+        }
+        .onChange(of: handoff.resetID) { _, resetID in
+            guard resetID != nil else { return }
+            focused = false; reportSubject = nil
+        }
+    }
+
+    @ViewBuilder private func activityHeader(_ collection: SharedVisitPostCollection) -> some View {
+        if let post = collection.commentTarget, let context = post.activityEngagementContext {
+            ActivityPostcardView(context: context, visiblePlace: post.place,
+                metadataIcon: post.place.map { categorySymbol(for: $0.effectiveCategory) } ?? "mappin",
+                secondaryMetadataTitle: nil, secondaryMetadataAction: nil, secondaryMetadataAccessibilityLabel: nil,
+                artworkAction: post.place.map { place in { openPlace(place) } },
+                artworkAccessibilityLabel: "Open \(context.placeName)",
+                destinationAction: post.place.map { place in { openPlace(place) } },
+                destinationAccessibilityLabel: "Open \(context.placeName)",
+                openProfile: { openProfile(post.actor) }, actorAccessibilityIdentifier: "comments.activity.actor",
+                destinationAccessibilityIdentifier: "comments.activity.place", postcardAccessibilityIdentifier: "comments.activity.postcard",
+                showsCommentButton: false, sharedVisitCurrentUserID: store.currentUser.id,
+                openSharedVisitProfile: { userID in
+                    if let profile = collection.posts.map(\.actor).first(where: { $0.id == userID })
+                        ?? collection.companions.first(where: { $0.profile.id == userID })?.profile { openProfile(profile) }
+                }, sharedPostCollection: collection, sharedGroupID: groupID)
+                .environment(\.activityPostcardVisualStyle, .astir)
+        }
+    }
+
+    private func commentRow(_ comment: ActivityComment) -> some View {
+        ActivityCommentRow(comment: comment,
+            canLike: !comment.isPending && !store.isBlockedBetweenCurrentUser(and: comment.author.id),
+            isLikePending: model.pendingCommentIDs.contains(comment.id),
+            onLike: { updateComment(comment, deleting: false) },
+            onDelete: store.canDeleteActivityComment(comment) ? { updateComment(comment, deleting: true) } : nil,
+            onReport: comment.author.id == store.currentUser.id ? nil : { presentReport(comment) })
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if store.canDeleteActivityComment(comment) {
+                Button(role: .destructive) { updateComment(comment, deleting: true) } label: { Label("Delete", systemImage: "trash") }
+                    .accessibilityLabel("Delete comment")
+            } else if comment.author.id != store.currentUser.id {
+                Button { presentReport(comment) } label: { Label("Report", systemImage: "exclamationmark.bubble") }
+                    .tint(WanderTheme.stateWarning.color).accessibilityLabel("Report comment")
+            }
+        }
+    }
+
+    private func presentReport(_ comment: ActivityComment) {
+        reportSubject = CommunityReportSubject(kind: .comment, subjectID: comment.id,
+            reportedUserID: comment.author.id, context: "Report comment")
+    }
+
+    private var composerInput: some View {
+        PersonMentionField(text: $draft, mentions: $mentions, focus: $focused,
+            placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
+            accessibilityIdentifier: "activity.comment.input", submitOnReturn: true,
+            suggestionPlacement: .aboveInput, onSubmit: post,
+            decorateInput: { AnyView(composerRow($0)) })
+    }
+
+    private func composerRow(_ input: AnyView) -> some View {
+        VStack(spacing: 0) {
+            Divider().overlay(brandMode.border)
+            HStack(alignment: .bottom, spacing: WanderTheme.spacing2) {
+                WanderAvatar(initials: activityInitials(for: store.currentUser.displayName), avatarURL: store.currentUser.avatarURL,
+                    size: 36, color: brandMode.accentWash)
+                input.padding(.horizontal, WanderTheme.spacing3).padding(.vertical, 10)
+                    .background(brandMode.raisedBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(brandMode.border, lineWidth: 1))
+                Button(action: post) {
+                    Group {
+                        if posting { ProgressView().tint(brandMode.accentForeground) }
+                        else { Image(systemName: "arrow.up").font(.system(size: 19, weight: .semibold)) }
+                    }
+                    .frame(width: 36, height: 36).foregroundStyle(brandMode.accentForeground)
+                    .background(brandMode.accent.opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1), in: Circle())
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).accessibilityLabel(posting ? "Sending comment" : "Send comment")
+                .accessibilityIdentifier("activity.comment.send")
+                .disabled(posting || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 1_000)
+            }
+            .padding(.horizontal, WanderTheme.spacing3).padding(.vertical, WanderTheme.spacing2)
+        }
+        .background(brandMode.background).accessibilityElement(children: .contain)
+        .accessibilityIdentifier("activity.comment.composer")
+    }
+
+    private func reload() async {
+        model.invalidate()
+        guard scenePhase == .active, auth.isSignedIn,
+              ActivitySessionReadiness(auth: auth) != .validating,
+              let repository = backend.activityEngagementRepository else { return }
+        let key = accessKey
+        renderedKey = key
+        await model.load(activityID: activityID, groupID: groupID, repository: repository,
+            includeComments: true, isCurrent: { key == accessKey })
+        if key == accessKey {
+            renderedKey = key
+            knownVisitIDs.formUnion(model.collection?.visitIDs ?? [])
+        }
+    }
+
+    private func loadMore() async {
+        guard let repository = backend.activityEngagementRepository else { return }
+        let key = accessKey
+        await model.loadMore(repository: repository, isCurrent: { key == accessKey })
+    }
+
+    private func post() {
+        let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let target = permittedCollection?.commentActivityID, !posting, !body.isEmpty, body.count <= 1_000 else { return }
+        do { try CommunityContentPolicy.validate(body) } catch { self.error = error.localizedDescription; return }
+        let key = accessKey
+        posting = true
+        Task {
+            guard key == accessKey, renderedKey == key, !Task.isCancelled,
+                  permittedCollection?.commentActivityID == target else { posting = false; return }
+            let success = await store.addActivityComment(activityID: target, body: body, backend: backend)
+            guard key == accessKey, !Task.isCancelled else { posting = false; return }
+            posting = false
+            if success { draft = ""; mentions = []; await reload() }
+            else { error = "Your comment couldn’t post. Try again." }
+        }
+    }
+
+    private func updateComment(_ comment: ActivityComment, deleting: Bool) {
+        guard let repository = backend.activityEngagementRepository,
+              let collection = permittedCollection,
+              visibleComments(collection).contains(where: { $0.id == comment.id }) else { return }
+        let key = accessKey
+        Task {
+            guard key == accessKey, renderedKey == key, let collection = permittedCollection,
+                  visibleComments(collection).contains(where: { $0.id == comment.id }) else { return }
+            let success = await model.update(comment, deleting: deleting, repository: repository,
+                isCurrent: { key == accessKey })
+            guard key == accessKey, !Task.isCancelled else { return }
+            if !success { error = "The comment couldn’t update. Try again." }
+            else if !deleting {
+                let liked = !comment.viewerHasLiked
+                store.productAnalytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.activityCommentLikeChanged,
+                    properties: ["is_liked": liked ? "true" : "false", "outcome": "succeeded"]))
+                if liked { store.productAnalytics.track(.engagement(need: .connect, action: .activityCommentLiked,
+                    surface: "activity_comments", properties: ["outcome": "succeeded"])) }
+            }
+        }
+    }
 }

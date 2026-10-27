@@ -38,7 +38,11 @@ import XCTest
         try await Task.sleep(for: .milliseconds(30))
         XCTAssertNil(view.player)
         view.update(policy: active)
-        try await Task.sleep(for: .milliseconds(50))
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while view.player == nil && clock.now < deadline {
+            await Task.yield()
+        }
         let player = try XCTUnwrap(view.player)
         for _ in 0..<20 {
             view.update(policy: inactive)

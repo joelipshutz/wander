@@ -155,6 +155,7 @@ final class ProfilePresentationCache {
 }
 
 struct ProfileScreen: View {
+    @Environment(\.liveExperienceEnabled) private var liveExperienceEnabled
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var planInbox: PlacePlanInvitationInbox
     @EnvironmentObject private var notificationBadge: NotificationBadgeStore
@@ -184,6 +185,7 @@ struct ProfileScreen: View {
     @State private var handledPresentationResetRequestID: UUID?
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
     @State private var showsYourMapPrototype = false
+    @State private var showsMessages = false
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     private let presentationResetRequest: WanderPresentationResetRequest?
@@ -266,8 +268,11 @@ struct ProfileScreen: View {
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest,
-                feedbackAction: isFeedbackEnabled ? { showsFeedback = true } : nil
+                feedbackAction: isFeedbackEnabled ? { showsFeedback = true } : nil,
+                messagesAction: liveExperienceEnabled
+                    ? { showsMessages = true } : nil
             )
+                .modifier(ProfilePrivateMessagesPresentation(isPresented: $showsMessages))
                 .sheet(isPresented: $showsFeedback) {
                     FeedbackSheet(repository: feedbackRepository, analytics: store.productAnalytics)
                 }
@@ -434,6 +439,7 @@ struct ProfileScreen: View {
     }
 
     private func resetProfilePresentations() {
+        showsMessages = false
         showsFeedback = false
         activeCalendarLaunchRequest = nil
         visitInvitationInboxRequestID = nil

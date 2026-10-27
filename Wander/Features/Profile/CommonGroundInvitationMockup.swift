@@ -12,6 +12,7 @@ struct CommonGroundInvitationMockup: View {
     @State private var shareContent: WanderShareContent?
     @State private var isPreparingShare = false
     @State private var shareFailed = false
+    @State private var shareFailureMessage = "Your draft is still here. Please try again in a moment."
     @AccessibilityFocusState private var postcardFocused: Bool
     @FocusState private var noteFocused: Bool
     let opensEnvelope: Bool
@@ -86,7 +87,7 @@ struct CommonGroundInvitationMockup: View {
         .alert("Couldn’t create this invitation", isPresented: $shareFailed) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Your draft is still here. Please try again in a moment")
+            Text(shareFailureMessage)
         }
         .onChange(of: sourcePlace) { _, place in
             if liveSharing {
@@ -222,7 +223,11 @@ struct CommonGroundInvitationMockup: View {
         VStack(spacing: 8) {
             Button {
                 noteFocused = false
-                guard !liveSharing || canShare(draft.place) else { return }
+                guard !liveSharing || canShare(draft.place) else {
+                    shareFailureMessage = "This place or friendship is no longer available. Your draft is still here; return to Plans and refresh before sharing."
+                    shareFailed = true
+                    return
+                }
                 if liveSharing {
                     Task { await createInvitation() }
                 } else {
@@ -250,17 +255,27 @@ struct CommonGroundInvitationMockup: View {
 
     @MainActor
     private func createInvitation() async {
-        guard !isPreparingShare, let prepareShare, canShare(draft.place) else { return }
+        guard !isPreparingShare else { return }
+        guard let prepareShare, canShare(draft.place) else {
+            shareFailureMessage = "This invitation is no longer available to share. Your draft is still here; return to Plans and refresh."
+            shareFailed = true
+            return
+        }
         let sharedDraft = draft
         isPreparingShare = true
         defer { isPreparingShare = false }
         do {
             let content = try await prepareShare(sharedDraft)
-            guard canShare(sharedDraft.place), draft == sharedDraft else { return }
+            guard canShare(sharedDraft.place), draft == sharedDraft else {
+                shareFailureMessage = "Your draft or access changed while preparing the invitation. Review the details and try again."
+                shareFailed = true
+                return
+            }
             analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.placePlanCreated, properties: [:]))
             shareContent = content
             showsMessages = true
         } catch {
+            shareFailureMessage = "Your draft is still here. Please try again in a moment."
             shareFailed = true
         }
     }

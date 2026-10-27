@@ -80,6 +80,20 @@ struct FeedMediaPreview: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Profiles and membership returned by the viewer-authorized shared-visit RPC.
+/// Pending companions are sender-only and never establish a second Feed post.
+struct FeedSharedVisitCompanion: Equatable, Identifiable {
+    let profile: ProfileShell
+    let status: SharedVisitParticipantStatus
+    var id: String { profile.id }
+}
+
+struct FeedSharedVisitContext: Equatable {
+    let groupID: String
+    let visitID: String
+    let companions: [FeedSharedVisitCompanion]
+}
+
 /// An event envelope resolved through the viewer's current visibility rules.
 /// `place` and `list` are intentionally optional: source data can disappear
 /// between an event being committed and a later page refresh.
@@ -93,6 +107,7 @@ struct FeedActivity: Identifiable {
     let note: String?
     let rating: Double?
     let media: [FeedMediaPreview]
+    let sharedVisit: FeedSharedVisitContext?
 
     init(
         id: String,
@@ -103,7 +118,8 @@ struct FeedActivity: Identifiable {
         occurredAt: Date,
         note: String? = nil,
         rating: Double? = nil,
-        media: [FeedMediaPreview] = []
+        media: [FeedMediaPreview] = [],
+        sharedVisit: FeedSharedVisitContext? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -114,6 +130,7 @@ struct FeedActivity: Identifiable {
         self.note = note
         self.rating = kind.supportsRating ? rating : nil
         self.media = media
+        self.sharedVisit = kind == .placeBeen ? sharedVisit : nil
     }
 
     /// `place_saved` is the legacy event name for saving from another person's
@@ -145,7 +162,10 @@ struct FeedActivityGroup: Identifiable {
         activities = [activity]
     }
 
-    var id: String { firstActivity.id }
+    var sharedVisitGroupID: String? {
+        activities.compactMap(\.sharedVisit?.groupID).first
+    }
+    var id: String { sharedVisitGroupID.map { "shared-visit:\($0)" } ?? firstActivity.id }
     var occurredAt: Date { firstActivity.occurredAt }
     var isCombined: Bool { activities.count > 1 }
 
@@ -288,11 +308,49 @@ enum FeedPresentation {
             }
         }
 
-        return groups.sorted {
+        // A shared group is immutable server provenance. Never infer a co-visit
+        // from matching people, place, note, photos, or timestamps. Each event
+        // keeps its original discussion target inside the combined postcard.
+        var sharedGroupIndices: [String: Int] = [:]
+        var consolidated: [FeedActivityGroup] = []
+        for group in groups {
+            if let groupID = group.sharedVisitGroupID,
+               let index = sharedGroupIndices[groupID],
+               consolidated[index].primaryActivity.place?.place.id == group.primaryActivity.place?.place.id {
+                for event in group.activities { consolidated[index].append(event) }
+            } else {
+                if let groupID = group.sharedVisitGroupID { sharedGroupIndices[groupID] = consolidated.count }
+                consolidated.append(group)
+            }
+        }
+        return consolidated.sorted {
             let lhs = safeSortDate($0.occurredAt, relativeTo: now)
             let rhs = safeSortDate($1.occurredAt, relativeTo: now)
             if lhs != rhs { return lhs > rhs }
             return $0.id < $1.id
+        }
+    }
+
+    /// Keep selected posts above their disclosure boundary. An accepted
+    /// co-visit appears once, in its earliest matching stage, but an unfiltered
+    /// participant's note/post must not be promoted into the filtered card.
+    /// Authorized companion attribution is independent of discovery filters.
+    static func stagedActivitySections(
+        _ activity: [FeedActivity], query: LiveFeedQuery,
+        through stage: LiveFeedExpansionStage, relativeTo now: Date = .now
+    ) -> [LiveFeedActivitySection] {
+        let eligible = activity.filter { query.includes($0, through: stage) }
+        var representedSharedGroups: Set<String> = []
+        return LiveFeedExpansionStage.allCases.filter {
+            $0.rawValue <= stage.rawValue && ($0 != .older || query.occurredAfter != nil)
+        }.map { sectionStage in
+            let groups = groupedActivity(eligible.filter {
+                query.expansionStage(for: $0) == sectionStage
+            }, relativeTo: now).filter { group in
+                guard let sharedID = group.sharedVisitGroupID else { return true }
+                return representedSharedGroups.insert(sharedID).inserted
+            }
+            return LiveFeedActivitySection(stage: sectionStage, groups: groups)
         }
     }
 

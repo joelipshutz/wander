@@ -1,5 +1,7 @@
 # Decisions
 
+Last updated: 2026-10-20
+
 ## 2026-10-18 — Contextual link previews are deliberate copies (REC-647)
 
 Explicitly sharing one's own profile/map, activity, list or invitation publishes
@@ -26,9 +28,96 @@ snapshots require an updated app and a new explicit share. Apple controls the
 native footer layout and caching; preserve essential context in the title.
 
 
-Last updated: 2026-10-08
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
+
+## Live integration and Profile continuity (REC-636, October 10)
+
+Ryan accepted **Live / Lists / Profile** as the primary tabs, with Add as an
+action. Live combines the map and existing Feed through a directly draggable
+drawer. Remove the redundant Live/place memories/your people header and the
+separate drawer arrow, while retaining accessible alternatives. Initial camera
+framing responds to authorized activity density and then respects user pan.
+Wanna pins use a muted outlined bookmark with a distinct shape from Check-ins.
+
+**October 20 map-area refinement:** after a user pans or zooms, a floating
+Liquid Glass **Search this area** button offers an explicit query change.
+Movement alone preserves the current pins, loaded-update count and Feed. Tapping
+commits the exposed map area to their shared query and replaces earlier drawn
+or Nearby city/radius bounds; audience, activity type, time, categories and
+people remain selected. The camera stays where the user put it. The summary
+identifies **Map area**, separate from a freehand **Drawn area**. Both are
+session-only, survive tab/detail return, and clear on reset or account change.
+Programmatic framing and drawer resizing do not offer a new search. Recent
+activity cards, module order and pagination behavior remain unchanged. **Past
+7 days** stays the default: reaching the end never silently widens the period.
+
+D2/D3 query presets and defaults are explicitly accepted. Following uses the
+existing authorized audience and defaults to seven days. Nearby begins at 5 km
+with explicit expansion up to 25 km; it never expands social visibility. Controls use an explicitly selected public city center, category/person choices
+and 24-hour/7-day/30-day/all-time ranges. Committed fields now reach the Live
+repository through the store, with stable bounds and cursor/account fencing.
+SQL applies every predicate before pagination; installation and post-install
+hosted verification remain pending.
+Current-location centering and separately eligible discovery remain distinct work.
+
+Recent activity must remain the current Feed experience: the existing cards,
+grouping and actions, with **Invite people to Astir → People worth following →
+Activity** in their existing order. Profile retains identity/social, streak,
+recent activity, Your Map and calendar. **Only area drawing is reused from Your
+Map.** Full owner/member maps, Patterns, history, lenses, Snapshot, sharing and
+return routes stay in Profile; no wholesale or additional owner-map relocation
+is approved.
+
+D6/D7 approve production private messaging with a **mutual-only baseline**.
+Implement actual access, block/report, delivery/retry and privacy contracts;
+existing public comments are not private replies. Wanna planning reuses the
+existing place-plan invitation composer/repository and its truthful share/inbox
+outcome. It does not invent acceptance, attendance or a new planning backend.
+D9's dismissible account/version migration teaching and D10's separately labelled
+Upcoming plans/events are accepted. Events retains its own lifecycle and access
+contracts.
+
+The D10 source now provides a compact Upcoming invitations entry and a separate
+sheet with at most three dated invitations, ascending by suggested time. It
+reuses the account's latest 100 received invitations and existing recipient/full
+inbox routes. This is not a complete calendar, sent-plan list or RSVP/attendance
+system. Undated invitations remain in the ordinary inbox. Real Events discovery is still separate work.
+
+The map and drawer share authorized loaded Live query data. The native query
+integration is implemented. SQL packaging and rolled-back hosted previews pass;
+the dormant backend installation remains pending.
+The visible count is
+“N updates shown,” with accessibility label “N loaded updates”; neither is a
+server total. Current tabs stay visible at every drawer detent; full height exits
+through handle drag or VoiceOver adjustment, without a Map pill. This differs
+from the earlier hidden-peek-tabs/Map-pill target and is not evidence that target
+was completed. Earlier standalone-prototype captures do not validate the current
+integrated app. The [integrated validation report](designs/astir-live/review/integrated-validation.md)
+is the single authority for candidate identity, native results and outstanding
+validation. D9 recovery and messaging's inactive-scene cover are implemented;
+release evidence must establish their behavior, including rollback and replay
+privacy. Production release and hosted validation remain separate gates.
+
+Freehand drawing uses explicit Apply/Cancel and account-session area retention.
+The committed area survives tab/detail return; it is not persisted across accounts
+or launches. Ryan approved D11's **15-minute** display lease for other people's
+Live activity. Each row uses a monotonic authorized-response receipt captured
+before media work. Suspension counts; wall-clock changes cannot extend access.
+Only successful authorization renews the returned rows; expired rows disappear
+until revalidated. Owner content and Profile/shared-cache
+history retain their existing policy.
+
+Ryan delegated the first messaging rollout choice. The initial rollout is limited
+to internal testers: both participants must have explicit server-side account
+`unified_live_v1` enablement, in addition to mutual friendship and current access.
+A global flag or device override alone cannot grant messaging access. Broad rollout
+still requires message reporting and explicit soft-delete retention/export rules;
+no public rollout is authorized by this review. Soft deletion denies access;
+physical profile deletion cascades stored conversations/messages.
+
+See the [current contract](designs/astir-live/product-spec.md) and
+[remaining questions](open-questions.md#live-experience-review-rec-636).
 
 ## Shared-link App Clip (REC-408)
 
@@ -801,3 +890,103 @@ Ordinary CI UI runs use screenshots instead of automatic video encoding and
 retain system failure diagnostics. Explicit test attachments remain unchanged.
 This keeps long UI shards from accumulating an unrelated video-encoding workload
 while preserving screenshots and hierarchies needed to investigate failures.
+
+
+## REC-636 — map and Feed feedback pass, 2026-10-22
+
+Live keeps one stable Map surface below its controls and activity drawer. A map drag
+collapses overlays and stages a search; only the full-map state offers the floating
+Liquid Glass **Search this area** action. Committing the visible area has no drawn
+rectangle. Freehand drawings retain their outline and Apply/Cancel contract.
+
+The Feed expands automatically in three labeled stages: selected time and filters,
+older activity with the same filters, then authorized activity outside the discovery
+filters. The last stage includes a small explicit disclosure above **Showing all
+activity**. Audience authorization, blocks, privacy, account binding, and the existing
+15-minute social-content lease apply to every stage. The map/count remain scoped to
+the committed selection. Ordinary Feed cards, invitations and follow suggestions remain.
+
+Selecting a pin presents a separate photo-led place preview. It never recenters an
+already visible pin; only a card-covered pin receives the minimum visibility adjustment.
+Closing restores the full-map pose. Drawer expansion fits the same geographic content
+into the exposed map, and collapse restores the prior pose. Notifications/search return
+to the half drawer unless a scrolled Feed is being resumed within 30 minutes.
+
+Viewed-pin treatment expires after 24 hours and is account-scoped on the device.
+Recent list choice expires after 30 minutes, is account-scoped and session-only, and
+provides **Change** after automatic addition. These are explicit Astir review defaults,
+not claims of a universal industry standard. Change preserves the original membership
+until the replacement succeeds; collaborator permissions are unchanged.
+
+Messages moves to Profile beside Notifications. Plans leads the place-profile action
+row and ranks mutual friends by currently authorized shared activity. Profile retains
+Your Map, history, Patterns and its existing owner tools.
+
+The three previously unresolved native cases and instrumentation gap remain open.
+This pass uses compilation, focused changed-behavior checks, visual inspection and a
+new manual device review. It does not restart their old CI diagnostic sequence or
+claim that manual interaction supplies missing internal instrumentation evidence.
+
+
+## REC-636 — second feedback round, 2026-10-22
+
+Live defaults to Featured and All time. Featured reuses the established recommendation
+source/ranking. Authorized map activity is enumerated independently from Feed's visible
+page window; the drawer formats counts at 100+ without truncating map membership.
+The drawer tracks touch movement within a lightweight full-width header shell, while
+map framing changes at the committed detent.
+
+Map pins use the place's primary photo plus an activity badge, with lightweight dots
+for overlap. Place previews open the current full profile directly, use vertical-only
+entrance overshoot, and put Close at the upper left. Plans uses one indexed evidence
+snapshot per refresh and focused current-visibility checks on selection/sharing.
+
+An existing Wanna opens the full prefilled editor and can become a new check-in.
+Remove from Wanna? defaults No. Choosing Yes removes only the captured source Wanna
+after the replacement check-in is durable; other visits, Wannas and lists remain.
+
+Accepted shared check-ins combine only through exact server-authorized shared-visit
+identity. Pending companions are sender-only and labeled invited. Original event IDs
+retain their discussion targets. A shared card belongs to the earliest matching Feed
+stage and never promotes another participant's outside-filter note across the divider.
+Attribution enriches already-authorized Feed posts; it does not merge stored visits or
+their discussion histories. The additive read endpoint is installed as
+`20261022233153_feed_shared_visit_context`, with atomic targeted privacy and core smoke
+verification and authenticated-only access. Live remains globally Off.
+
+
+### REC-636: native map discovery alongside Live activity
+
+Live keeps MapKit’s public points of interest visible at the map’s normal zoom-dependent density. Native labels are independent of the authorized activity query and count. Tapping an unsaved place opens the same current Astir preview, full profile and save/list actions, using a provider candidate rather than inventing a user save. MapKit detail lookup is cancellable; account changes, map gestures and another selection invalidate late results. Only an explicit save or list action persists anything.
+
+## REC-636 — third feedback round, 2026-10-22
+
+This supersedes the second round's single-Wanna removal and per-original discussion presentation. The Live + action edits the latest existing own Wanna, with a separate Check-in path. A prior check-in wins the map badge while remaining/future Wannas remain independent memories. Remove from Wanna defaults Off and captures every existing own Wanna identity at check-in submission; only those records are removed after a durable replacement visit. Future Wannas, visits and lists are retained. Queued removals across canonical duplicate parents depend on the exact replacement visit syncing first.
+
+Plans may open for a mutual friend when either participant has an authorized save of the place; both people need not save first. This is explicit to Plans, preserves the existing In Common ranking/collection contract, and retains server invitation authorization. Demo navigation uses a separate type from the production composer. Refreshed presentation metadata cannot silently invalidate an otherwise unchanged person/place invitation.
+
+A shared postcard includes each currently readable participant's notes and photos, identified by author. Its unified comments screen pages the original discussions and preserves their IDs, authorship, likes and deletion rules. New comments attach to the readable source original, otherwise a stable readable original chosen by the server. Local denial immediately hides content even before remote synchronization. Account/access changes discard late responses. Supplemental contributions do not become additional matching Feed rows or alter filter counts. Historical grouping requires exact accepted-visit provenance; coincident same-place/time records are not inferred to belong together.
+
+Drawer detents use the finger's physical height and release direction. Expanded photo annotations use the existing batch/cache/download infrastructure, with one bounded transient retry; absent authorized images keep an honest placeholder. Place hours are independent of photo fallback and card animation. The save form's place name stays above its scroll region.
+
+- REC-636 third-round removal completeness: the explicit remove-all choice refreshes authoritative own history before capturing IDs and saving; an unavailable or potentially truncated history stops submission. Connectivity loss after preparation preserves the replacement-visit dependency. Never-uploaded duplicates can finish locally only with durable proof; uncertain in-flight creates remain pending. Live + on a visited place without a Wanna still offers a fresh Wanna while preserving the prior check-ins.
+
+
+## REC-636 — fourth feedback round, 2026-10-23
+
+Shared check-ins use one postcard header with slightly overlapping participant avatars, a checked-in-with sentence, each readable contributor's note and one combined photo pile. The original comments layout surrounds this enhanced postcard. Pending companion identity is visible only to the source owner without a pending-status label; declined membership disappears on refresh. Only accepted, currently authorized originals contribute notes/photos/comments. Membership changes invalidate open cards, discussion and photo viewing, including while comments are loading. No record rewrite or inferred historical grouping is introduced.
+
+Expanded photo pins publish independently through a bounded queue; a selected preview has its own queue and loads hours independently of image availability. Provider metadata refreshes preserve cached image fields. Per-place failures are isolated and provider/image requests have finite deadlines. A provider photo must retain its own source and attribution; unavailable photos keep an honest placeholder rather than borrowing another venue's image.
+
+The preview suppresses list echoes only for the same actor, canonical place and source save with identical normalized note and media IDs. Up to 20 stable candidates are hydrated, with fresh-content deduplication and refill until three distinct authorized rows are found. Distinct visits, source saves and contributions remain separate. Drawer touch tracking uses global coordinates and fixed inner Feed layout; the outer reveal follows the finger, then settles in the release direction.
+
+
+## REC-636 — fifth feedback round, 2026-10-23
+
+This supersedes photo annotations: Live uses the compact R5 symbol pins, with one pin per canonical place before density reduction. Explicit persisted aliases and qualified provider IDs can join rows; UUID references require nearby corroborating identity, and address fallback requires name, street, locality, region and country agreement. Opaque provider IDs remain case-sensitive. A prior own check-in takes precedence over Wanna/list presentation without deleting either history.
+
+Opening a place reads the newest three distinct currently authorized activities across people and types, independent of discovery filters. The new authenticated read endpoint preserves current source/list/profile/block/canonical-event authorization and uses account/scope-bound pagination. It does not merge or rewrite original records. Individual authoritative reads grant the existing 15-minute cache lease; another activity's refresh cannot renew an older row. Selection, session and access changes invalidate stale results.
+
+The preview image is bounded by the card's proposed width, so portrait/panoramic imagery cannot push the name and action buttons offscreen. Images and hours remain independent. Google photo signing normalizes both object and transformed-image storage paths. Hours refresh uses identity-validated Details for a known Google place and enriches sparse search results with same-place Details. Missing provider data stays unknown; an identity change never relabels cached bytes as a different venue.
+
+Closing a preview restores its original geographic center and, only when needed, minimally widens the map to keep the selected place's tap target visible. It does not recenter on the place or change drawer-fitting behavior.

@@ -5,16 +5,31 @@ on:
     branches: [main]
     paths:
       - 'Wander/DesignSystem/PlaceRatingExplanation.swift'
+      - 'Wander/DesignSystem/PersonMentionField.swift'
       - 'Wander/Features/Activity/ActivityEngagementViews.swift'
+      - 'Wander/Features/Live/LiveScreen.swift'
+      - 'Wander/Features/Messaging/**'
+      - 'Wander/Models/PrivateMessageModels.swift'
+      - 'Wander/Services/Remote/PrivateMessage*.swift'
+      - 'Wander/Services/PostHogAnalyticsClient.swift'
+      - 'WanderTests/PrivateMessag*Tests.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderUITests/LiveMigrationAndPrivacyUITests.swift'
       - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
       - 'WanderTests/TrustedPlaceSearchTests.swift'
       - 'WanderTests/WanderPlaceCategoryTests.swift'
-      - 'WanderTests/ReplayMaskingTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/record-replay-compiler-flags.py'
+      - 'scripts/test_record_replay_compiler_flags.py'
       - '.github/workflows/privacy-validation.yml'
   workflow_dispatch:
+    inputs:
+      compact_privacy_recovery_only:
+        description: 'Run only the two original compact Inbox and Thread privacy flows'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,12 +66,14 @@ jobs:
               print('Using', name, device['udid'])
           PY
       - name: Initialize Pro simulator
+        if: ${{ !inputs.compact_privacy_recovery_only }}
         run: |
           xcrun simctl bootstatus "$PRO_DEVICE_ID" -b
           open -a Simulator --args -CurrentDeviceUDID "$PRO_DEVICE_ID"
       # Wall-clock benchmarks use their controlled reference run; their data/cache
       # contracts still run here. Replay owns global observers and runs separately.
       - name: Unit contracts and privacy layouts on iPhone 17
+        if: ${{ !inputs.compact_privacy_recovery_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
@@ -68,35 +85,115 @@ jobs:
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Verify replay masking in an isolated process
-        if: success() || failure()
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderTests/ReplayMaskingTests
-          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
-          -maximum-test-execution-time-allowance 180
-          -resultBundlePath "$RUNNER_TEMP/replay.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Prepare isolated Replay test products once
+        id: replay-products
+        if: ${{ !inputs.compact_privacy_recovery_only && (success() || failure()) }}
+        # Use production-style C size optimization while keeping Swift Debug and C DEBUG assertions.
+        run: |
+          test ! -e "$RUNNER_TEMP/ReplayDerivedData"
+          test ! -L "$RUNNER_TEMP/ReplayDerivedData"
+          python3 -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
+            -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID" \
+            -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
+            -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
+            -only-testing:WanderTests/ReplayMaskingTests \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
+            GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
+          python3 scripts/record-replay-compiler-flags.py \
+            --derived-data "$RUNNER_TEMP/ReplayDerivedData" --test-products "$RUNNER_TEMP/Replay.xctestproducts" \
+            --checkout "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/screens/replay-compiler-flags.json"
+      # Replay owns process-wide SDK state; each scenario starts a fresh host.
+      - name: Verify private-message replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-private"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["PRO_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+              "-maximum-test-execution-time-allowance", "180",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Verify credential replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-credentials"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["PRO_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+              "-maximum-test-execution-time-allowance", "180",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
       - name: Release Pro simulator and wait for compact startup
-        if: success() || failure()
+        if: ${{ !inputs.compact_privacy_recovery_only && (success() || failure()) }}
         run: |
           if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["PRO_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
             xcrun simctl shutdown "$PRO_DEVICE_ID"
           fi
           xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
           open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
+      - name: Initialize compact simulator for privacy recovery
+        if: ${{ inputs.compact_privacy_recovery_only && (success() || failure()) }}
+        run: |
+          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
       - name: Repeat native screen flows on compact iPhone 16e
-        if: success() || failure()
+        if: ${{ !inputs.compact_privacy_recovery_only && (success() || failure()) }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$COMPACT_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
+          -test-timeouts-enabled YES -default-test-execution-time-allowance 120
+          -maximum-test-execution-time-allowance 180
+          -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Verify remaining Inbox and Thread privacy flows on compact iPhone 16e
+        if: ${{ inputs.compact_privacy_recovery_only && (success() || failure()) }}
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$COMPACT_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateInboxAppSwitcherSnapshotHidesParticipantAndPreview
+          -only-testing:WanderUITests/LiveMigrationAndPrivacyUITests/testPrivateThreadAppSwitcherSnapshotHidesDraftAndRetainsItOnReturn
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
@@ -104,7 +201,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact replay; do
+          for device in pro compact replay-private replay-credentials; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
@@ -125,16 +222,21 @@ jobs:
           path: |
             ${{ runner.temp }}/pro.xcresult
             ${{ runner.temp }}/compact.xcresult
-            ${{ runner.temp }}/replay.xcresult
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
+            ${{ runner.temp }}/replay-private-host.json
+            ${{ runner.temp }}/replay-private-host
+            ${{ runner.temp }}/replay-credentials-host.json
+            ${{ runner.temp }}/replay-credentials-host
           retention-days: 14
       - name: Package simulator app for local review
-        if: always()
+        if: ${{ always() && !inputs.compact_privacy_recovery_only }}
         run: |
           if [ -d "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" ]; then
             ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" "$RUNNER_TEMP/Wander-simulator.zip"
           fi
       - name: Save simulator app
-        if: always()
+        if: ${{ always() && !inputs.compact_privacy_recovery_only }}
         uses: actions/upload-artifact@v4
         with:
           name: privacy-simulator-app
