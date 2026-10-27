@@ -1012,7 +1012,6 @@ private struct PlaceProfilePreviewCard: View {
                     content: shareContent,
                     completion: { completed in store.trackPlaceShareCompletion(completed: completed) },
                     loadImages: {
-                        if let preparedImage { return ShareCardImages(photos: [preparedImage]) }
                         return ShareCardImages(photos: await ShareCardRenderer.placeImages([place.photoRequest], backend: backend))
                     }
                 )

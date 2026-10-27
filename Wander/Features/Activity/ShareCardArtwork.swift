@@ -250,9 +250,13 @@ enum ShareCardRenderer {
     }
 
     static func activityImages(_ context: ActivityEngagementContext, backend: WanderBackend) async -> ShareCardImages {
+        let viewerID = backend.photoViewerID
         let avatar = await ActivityShareArtworkRenderer.resolveAvatarImage(avatarURL: context.actor.avatarURL)
         var photo: UIImage?
         for media in context.media.prefix(4) {
+            let ownsLocalCapture = viewerID != nil && context.actor.id == viewerID
+                && media.storagePath == nil && media.localAssetRef != nil
+            guard ownsLocalCapture || canExport(media.placePhoto, viewerID: viewerID) else { continue }
             if media.storagePath == nil, let path = media.localAssetRef, let data = VisitPhotoLocalFileStore.data(from: path) {
                 photo = await decode(data)
             } else if let data = try? await backend.placePhotoImageData(
@@ -282,12 +286,33 @@ enum ShareCardRenderer {
         var images: [UIImage?] = []
         for request in requests.prefix(4) {
             guard !Task.isCancelled else { return [] }
-            if let photo = try? await backend.placePhoto(for: request),
+            if let photo = await exportablePlacePhoto(for: request, backend: backend),
                let data = try? await backend.placePhotoImageData(for: photo, canonicalPlaceKey: request.canonicalPhotoCacheKey, variant: .card) {
                 images.append(await decode(data))
             } else { images.append(nil) }
         }
         return images
+    }
+
+    /// In-app visibility does not authorize a public copy of somebody else's photo.
+    static func canExport(_ photo: PlacePhoto, viewerID: String?) -> Bool {
+        if photo.isGooglePlacesPhoto && !photo.requiresAccessCheck { return true }
+        guard let viewerID, !viewerID.isEmpty, photo.storageBucket == "visit-photos" else { return false }
+        return photo.storagePath?.hasPrefix(viewerID + "/") == true
+    }
+
+    private static func exportablePlacePhoto(for request: PlacePhotoRequest, backend: WanderBackend) async -> PlacePhoto? {
+        let viewerID = backend.photoViewerID
+        if let photo = try? await backend.placePhoto(for: request),
+           !Task.isCancelled, backend.photoViewerID == viewerID, canExport(photo, viewerID: viewerID) {
+            return photo
+        }
+        // The normal photo cache can contain a friend's visible photo. Bypass it
+        // for the owner-only fallback, then verify the returned storage owner too.
+        guard !Task.isCancelled, let viewerID, backend.photoViewerID == viewerID,
+              let photo = try? await backend.visibleUserPlacePhoto(for: request.restrictingVisibleUserPhotos(to: [viewerID])),
+              !Task.isCancelled, backend.photoViewerID == viewerID, canExport(photo, viewerID: viewerID) else { return nil }
+        return photo
     }
 }
 

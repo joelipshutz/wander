@@ -208,7 +208,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         let transport = CardTransport()
         let repo = repository(transport)
         let original = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan Example", handle: "ryan")!
-        let shared = try await repo.publish(content: original, previewPNG: png)
+        let shared = try await repo.publish(content: original, previewPNG: { self.png })
         XCTAssertTrue(transport.bucket.isEmpty)
         XCTAssertTrue(transport.path.isEmpty)
         XCTAssertEqual(transport.params["input_image_path"], "")
@@ -229,7 +229,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         let transport = CardTransport()
         transport.fail = true
         do {
-            _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!, previewPNG: png)
+            _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!, previewPNG: { self.png })
             XCTFail("Publication must fail")
         } catch { XCTAssertFalse(transport.deleted) }
     }
@@ -238,12 +238,174 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         let transport = CardTransport()
         transport.token = "../evil"
         let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
-        do { _ = try await repository(transport).publish(content: content, previewPNG: png); XCTFail() }
+        do { _ = try await repository(transport).publish(content: content, previewPNG: { self.png }); XCTFail() }
         catch { XCTAssertFalse(transport.deleted) }
         let invalid = CardTransport()
-        do { _ = try await repository(invalid).publish(content: content, previewPNG: Data()) }
+        do { _ = try await repository(invalid).publish(content: content, previewPNG: { Data() }) }
         catch { XCTFail("Generic links need no image: \(error)") }
         XCTAssertTrue(invalid.path.isEmpty)
+    }
+
+    func testOwnerSharePublishesSelectedContextAndImageForEveryRoute() async throws {
+        let id = "41000000-0000-0000-0000-000000000001"
+        let cards: [WanderShareContent] = [
+            .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!,
+            .place(serverID: id, name: "Coffee House", message: "Coffee · Los Angeles")!,
+            .activity(activityID: id, placeName: "Ryan checked in · Coffee House", message: "October 18")!,
+            .list(serverID: id, name: "Weekend places")!,
+            .listInvite(token: String(repeating: "b", count: 48), name: "Weekend places")!
+        ]
+        for content in cards {
+            let transport = CardTransport()
+            transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+            var renders = 0
+            let shared = try await ShareCardLinkPreparation.prepare(content: content, repository: repository(transport)) {
+                renders += 1
+                return self.png
+            }
+            XCTAssertEqual(renders, 1)
+            XCTAssertEqual(transport.bucket, "shared-link-snapshots")
+            XCTAssertEqual(transport.publishedParams["input_title"], content.subject)
+            XCTAssertEqual(transport.publishedParams["input_description"], content.message)
+            XCTAssertEqual(shared.subject, content.subject)
+            XCTAssertEqual(shared.items, [shared.item])
+            XCTAssertEqual(shared.message, "")
+            XCTAssertEqual(WanderDeepLinkRoute.parse(shared.item), WanderDeepLinkRoute.parse(content.item))
+        }
+    }
+
+    func testSnapshotFinalizationFailureCleansUpUploadAndReturnsNoLink() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        transport.failPublication = true
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await repository(transport).publish(content: content) { self.png }
+            XCTFail("A failed snapshot must not silently send a generic preview")
+        } catch { XCTAssertTrue(transport.deleted) }
+    }
+
+    func testForeignSnapshotPathIsRejectedBeforeRenderingOrUploading() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "another_user/11111111-2222-4333-8444-555555555555/preview.png"
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await repository(transport).publish(content: content) {
+                XCTFail("Foreign path must be rejected first")
+                return self.png
+            }
+            XCTFail("Foreign path accepted")
+        } catch { XCTAssertTrue(transport.path.isEmpty) }
+    }
+
+    func testInvalidSnapshotImageIsNotUploaded() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+        do {
+            _ = try await repository(transport).publish(content: content) { Data([1, 2, 3]) }
+            XCTFail("Invalid image accepted")
+        } catch {
+            XCTAssertEqual(error as? ShareCardPreparationError, .artwork)
+            XCTAssertTrue(transport.path.isEmpty)
+        }
+    }
+
+    func testPreviewDescriptionIsBoundedAndNeverBecomesAMessageAttachment() {
+        let content = WanderShareContent.profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!
+            .withPreviewDescription(String(repeating: "🌎", count: 501))
+        XCTAssertLessThanOrEqual(content.message.utf16.count, 500)
+        XCTAssertEqual(content.withLink(content.item).message, "")
+    }
+
+    func testShareArtworkReplacesCachedFriendPhotoWithOwnerOnlyFallback() async throws {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: "friend"), data: png)
+        source.ownerPhoto = artworkPhoto(owner: "user_ryan")
+        let backend = artworkBackend(source)
+        let request = artworkRequest
+        _ = try await backend.placePhoto(for: request)
+        let images = await ShareCardRenderer.placeImages([request], backend: backend)
+        XCTAssertNotNil(images.first ?? nil)
+        XCTAssertEqual(source.fallbackRequests.first?.eligibleUserIDs, ["user_ryan"])
+        XCTAssertEqual(source.downloadedPaths, [source.ownerPhoto!.storagePath!])
+    }
+
+    func testShareArtworkNeverDownloadsAnotherPersonsProtectedFallback() async {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: "friend"), data: png)
+        source.ownerPhoto = artworkPhoto(owner: "user_ryan_other")
+        let images = await ShareCardRenderer.placeImages([artworkRequest], backend: artworkBackend(source))
+        XCTAssertEqual(images.count, 1)
+        XCTAssertNil(images[0])
+        XCTAssertTrue(source.downloadedPaths.isEmpty)
+    }
+
+    func testShareArtworkKeepsPublicProviderPhotoWithoutUserPhotoFallback() async {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: nil), data: png)
+        let images = await ShareCardRenderer.placeImages([artworkRequest], backend: artworkBackend(source))
+        XCTAssertNotNil(images.first ?? nil)
+        XCTAssertTrue(source.fallbackRequests.isEmpty)
+        XCTAssertEqual(source.downloadedPaths, ["public-provider"])
+    }
+
+    func testActivityExportSkipsForeignMediaBeforeReadingOwnerMedia() async {
+        let source = ShareArtworkPhotoRepository(photo: artworkPhoto(owner: "friend"), data: png)
+        let ownPath = "user_ryan/\(UUID().uuidString)/own.jpg"
+        let context = ActivityEngagementContext(activityID: "event",
+            actor: ProfileShell(id: "user_ryan", handle: "ryan", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .owner),
+            placeName: "Coffee", placeServerID: nil, placeDetail: "", status: .been, occurredAt: Date(),
+            media: [
+                ActivityEngagementMedia(id: "foreign", storageBucket: "visit-photos", storagePath: "friend/photo.jpg", accessibilityLabel: "Friend photo"),
+                ActivityEngagementMedia(id: "own", storageBucket: "visit-photos", storagePath: ownPath, accessibilityLabel: "Own photo")
+            ])
+        let images = await ShareCardRenderer.activityImages(context, backend: artworkBackend(source))
+        XCTAssertNotNil(images.photos.first ?? nil)
+        XCTAssertEqual(source.downloadedPaths, [ownPath])
+    }
+
+    func testCancellationAfterUploadFinishesCleanupOutsideCancelledTask() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        transport.onUpload = { withUnsafeCurrentTask { $0?.cancel() } }
+        let repo = repository(transport)
+        let task = Task {
+            try await repo.publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!) { self.png }
+        }
+        do { _ = try await task.value; XCTFail("Cancelled publication returned a link") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.deleted)
+        XCTAssertFalse(transport.deleteWasCancelled)
+        XCTAssertTrue(transport.publishedParams.isEmpty)
+    }
+
+    func testUploadResponseLossStillCleansUpTheAttemptedPublicObject() async {
+        let transport = CardTransport()
+        transport.snapshotPath = "user_ryan/11111111-2222-4333-8444-555555555555/preview.png"
+        transport.uploadError = CancellationError()
+        do {
+            _ = try await repository(transport).publish(content: .profile(serverID: "user_ryan", displayName: "Ryan", handle: "ryan")!) { self.png }
+            XCTFail("An incomplete upload returned a link")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(transport.deleted)
+        XCTAssertFalse(transport.deleteWasCancelled)
+        XCTAssertTrue(transport.publishedParams.isEmpty)
+    }
+
+    private var artworkRequest: PlacePhotoRequest {
+        PlacePhotoRequest(placeID: UUID().uuidString, name: "Coffee", address: nil,
+            latitude: nil, longitude: nil, sourceProvider: nil, sourceProviderPlaceID: nil)
+    }
+
+    private func artworkPhoto(owner: String?) -> PlacePhoto {
+        PlacePhoto(provider: owner == nil ? "google_places" : "visit_photo", providerPlaceID: UUID().uuidString,
+            photoURLString: "", width: nil, height: nil, authorName: nil, authorProfileURLString: nil,
+            authorAvatarURLString: nil, sourcePhotoURLString: nil, flagContentURLString: nil,
+            storageBucket: owner == nil ? nil : "visit-photos",
+            storagePath: owner.map { "\($0)/\(UUID().uuidString)/photo.jpg" }, localAssetRef: nil)
+    }
+
+    private func artworkBackend(_ repository: ShareArtworkPhotoRepository) -> WanderBackend {
+        WanderBackend(placePhotoRepository: repository,
+            photoAuthSession: PreviewAuthSessionProvider(state: .signedIn(AuthSession(userID: "user_ryan", displayName: "Ryan", handle: "ryan"))))
     }
 
     private var png: Data { UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }.pngData()! }
@@ -258,19 +420,59 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
     var path = ""
     var params: [String: String] = [:]
     var fail = false
+    var failPublication = false
+    var snapshotPath: String?
+    var publishedParams: [String: String] = [:]
     var deleted = false
+    var deleteWasCancelled = false
+    var onUpload: (() -> Void)?
+    var uploadError: Error?
     var token = String(repeating: "a", count: 48)
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
+        if name == "publish_share_card_snapshot" {
+            publishedParams = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(params))
+            if failPublication { throw WanderRemoteError.invalidResponse("share_target_unavailable") }
+            return try decoder.decode(Value.self, from: JSONEncoder().encode(["published": true]))
+        }
         XCTAssertEqual(name, "create_share_card_preview")
         self.params = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(params))
         if fail { throw WanderRemoteError.notAuthenticated }
-        return try decoder.decode(Value.self, from: JSONEncoder().encode(["token": token]))
+        var response = ["token": token]
+        if let snapshotPath { response["snapshot_path"] = snapshotPath }
+        return try decoder.decode(Value.self, from: JSONEncoder().encode(response))
     }
     func uploadObject(bucket: String, path: String, data: Data, contentType: String, upsert: Bool) async throws {
         self.bucket = bucket; self.path = path
         XCTAssertFalse(upsert); XCTAssertEqual(contentType, "image/png")
+        onUpload?()
+        if let uploadError { throw uploadError }
     }
-    func deleteObject(bucket: String, path: String) async throws { deleted = true; XCTAssertEqual(path, self.path) }
+    func deleteObject(bucket: String, path: String) async throws {
+        deleteWasCancelled = Task.isCancelled
+        try Task.checkCancellation()
+        deleted = true
+        XCTAssertEqual(path, self.path)
+    }
     func downloadObject(bucket: String, path: String) async throws -> Data { throw WanderRemoteError.notConfigured }
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL { throw WanderRemoteError.notConfigured }
+}
+
+@MainActor private final class ShareArtworkPhotoRepository: PlacePhotoRepository {
+    let photo: PlacePhoto
+    let data: Data
+    var ownerPhoto: PlacePhoto?
+    var downloadedPaths: [String] = []
+    var fallbackRequests: [PlacePhotoRequest] = []
+    init(photo: PlacePhoto, data: Data) { self.photo = photo; self.data = data }
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto { photo }
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        fallbackRequests.append(request)
+        guard let ownerPhoto else { throw WanderRemoteError.notConfigured }
+        return ownerPhoto
+    }
+    func validateAccess(to photo: PlacePhoto) async throws {}
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        downloadedPaths.append(photo.storagePath ?? "public-provider")
+        return data
+    }
 }
