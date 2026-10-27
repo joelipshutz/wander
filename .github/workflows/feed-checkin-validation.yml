@@ -41,6 +41,10 @@ on:
       - '.github/workflows/feed-checkin-validation.yml'
   workflow_dispatch:
     inputs:
+      compact_only:
+        description: Run compact native coverage separately after large-phone and Replay validation
+        type: boolean
+        default: false
       unpassed_only:
         description: Run the remaining REC-636 corrected native and isolated Replay checks
         type: boolean
@@ -66,7 +70,7 @@ jobs:
   # The native and Replay suite uses its own bounded runner. A generic build
   # must not lose its remaining time to earlier Simulator test execution.
   generic-simulator:
-    if: ${{ !inputs.unpassed_only && !inputs.continuity_only && !inputs.continuity_remaining_only }}
+    if: ${{ !inputs.compact_only && !inputs.unpassed_only && !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -125,7 +129,7 @@ jobs:
       # continuity: XCTest's animation-idle waits count toward this allowance.
       # Element assertions and measured performance budgets remain unchanged.
       - name: Unit suite and native Feed scrolling
-        if: ${{ !inputs.unpassed_only }}
+        if: ${{ !inputs.compact_only && !inputs.unpassed_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
@@ -151,7 +155,7 @@ jobs:
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Verify remaining corrected native checks on large phone
-        if: ${{ inputs.unpassed_only }}
+        if: ${{ !inputs.compact_only && inputs.unpassed_only }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID"
@@ -164,7 +168,7 @@ jobs:
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Prepare isolated Replay test products once
         id: replay-products
-        if: success() || failure()
+        if: ${{ (success() || failure()) && !inputs.compact_only }}
         # Use production-style C size optimization while keeping Swift Debug and C DEBUG assertions.
         run: |
           test ! -e "$RUNNER_TEMP/ReplayDerivedData"
@@ -259,7 +263,7 @@ jobs:
         if: ${{ always() && steps.replay-fixture.outcome == 'skipped' }}
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
       - name: Verify scrolling on a compact phone
-        if: ${{ (success() || failure()) && !inputs.unpassed_only }}
+        if: ${{ (success() || failure()) && (inputs.compact_only || !inputs.unpassed_only) }}
         run: >-
           xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
@@ -300,7 +304,7 @@ jobs:
           retention-days: 14
 
   live-continuity:
-    if: ${{ !inputs.unpassed_only || inputs.continuity_only || inputs.continuity_remaining_only }}
+    if: ${{ !inputs.compact_only && (!inputs.unpassed_only || inputs.continuity_only || inputs.continuity_remaining_only) }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
