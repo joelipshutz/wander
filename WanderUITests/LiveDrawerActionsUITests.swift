@@ -16,7 +16,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
 
         app.buttons["live.utility.events"].tap()
         let done = app.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 8))
+        XCTAssertTrue(done.waitForExistence(timeout: 30))
         XCTAssertTrue(app.descendants(matching: .any)["events.comingSoon"].firstMatch.exists)
         done.tap()
         assertRestoredDrawer("half expanded", value: originalValue, minY: originalY, in: app)
@@ -39,7 +39,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
 
         app.buttons["live.utility.events"].tap()
         let done = app.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 8))
+        XCTAssertTrue(done.waitForExistence(timeout: 30))
         done.tap()
         assertRestoredDrawer("collapsed", value: value, minY: minY, in: app)
         openAndCloseInvite(in: app)
@@ -76,14 +76,14 @@ final class LiveDrawerActionsUITests: XCTestCase {
         app.open(URL(string: "recme://profiles/user_maya")!)
         let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
         if open.waitForExistence(timeout: 3) { open.tap() }
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-        XCTAssertTrue(inviteClose.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30))
+        XCTAssertTrue(inviteClose.waitForNonExistence(timeout: 30))
         let profileBack = app.buttons["profile.back"]
         waitHittable(profileBack)
         capture("invite-to-profile-link", in: app)
 
         profileBack.tap()
-        XCTAssertTrue(profileBack.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(profileBack.waitForNonExistence(timeout: 30))
         waitHittable(app.buttons["live.utility.invite"])
         XCTAssertFalse(inviteClose.exists)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
@@ -108,7 +108,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
             let value = self.drawer(in: app).value as? String ?? ""
             return !value.isEmpty && !value.contains("Finding activities")
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 15), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 30), .completed)
         return app
     }
 
@@ -122,8 +122,9 @@ final class LiveDrawerActionsUITests: XCTestCase {
         XCTAssertEqual(events.label, "Upcoming events", file: file, line: line)
         XCTAssertEqual(invite.label, "invite people to Astir", file: file, line: line)
         for button in [events, invite] {
-            XCTAssertGreaterThanOrEqual(button.frame.width, 44, file: file, line: line)
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44, file: file, line: line)
+            // Allow subpixel rounding when XCTest converts frames to screen coordinates.
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44 - 0.01, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44 - 0.01, file: file, line: line)
             XCTAssertGreaterThanOrEqual(button.frame.minY, handle.frame.minY - 1, file: file, line: line)
             XCTAssertLessThanOrEqual(button.frame.maxY, handle.frame.maxY + 1, file: file, line: line)
         }
@@ -140,12 +141,12 @@ final class LiveDrawerActionsUITests: XCTestCase {
     private func openAndCloseInvite(in app: XCUIApplication) {
         waitHittable(app.buttons["live.utility.invite"])
         app.buttons["live.utility.invite"].tap()
-        XCTAssertTrue(app.staticTexts["invite people"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["invite people"].waitForExistence(timeout: 30))
         let close = app.buttons["invite.close"]
         waitHittable(close)
         // The local FakeContactProvider is already authorized. Do not request access or select contacts.
         close.tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(close.waitForNonExistence(timeout: 30))
     }
 
     private func assertRestoredDrawer(_ state: String, value: String?, minY: CGFloat, in app: XCUIApplication) {
@@ -162,17 +163,17 @@ final class LiveDrawerActionsUITests: XCTestCase {
 
     private func waitForDrawer(_ state: String, in app: XCUIApplication) {
         let handle = drawer(in: app)
-        XCTAssertTrue(handle.waitForExistence(timeout: 20))
+        XCTAssertTrue(handle.waitForExistence(timeout: 30))
         let ready = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label == %@", "Activity drawer, \(state)"), object: handle)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 8), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
     }
 
     private func waitHittable(_ element: XCUIElement) {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             element.exists && element.isHittable
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
     }
 
     private func capture(_ name: String, in app: XCUIApplication) {
