@@ -990,3 +990,8 @@ Opening a place reads the newest three distinct currently authorized activities 
 The preview image is bounded by the card's proposed width, so portrait/panoramic imagery cannot push the name and action buttons offscreen. Images and hours remain independent. Google photo signing normalizes both object and transformed-image storage paths. Hours refresh uses identity-validated Details for a known Google place and enriches sparse search results with same-place Details. Missing provider data stays unknown; an identity change never relabels cached bytes as a different venue.
 
 Closing a preview restores its original geographic center and, only when needed, minimally widens the map to keep the selected place's tap target visible. It does not recenter on the place or change drawer-fitting behavior.
+
+
+## REC-654 — compact Live drawer actions, 2026-10-27
+
+Upcoming events and inviting people to Astir use icon buttons on the left and right of the Live activity summary. Both retain 44 pt tap targets and full accessibility labels. Their former Events row and invitation card no longer occupy the embedded Feed, reclaiming approximately 122 pt at default text size. Events keeps its existing availability rule; invitations keep the existing contact sheet and analytics surface. Received plan invitations and standalone Feed behavior remain unchanged.

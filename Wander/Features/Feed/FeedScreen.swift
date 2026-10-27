@@ -87,6 +87,7 @@ struct FeedScreen: View {
     private let onWillDismiss: (WanderDeepLinkPresentationToken) -> Void
     private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
     private let isEmbedded: Bool
+    private let showsInviteEntry: Bool
     private let isEmbeddedFeedVisible: Bool
     private let filteredActivityIDs: Set<String>?
     private let activityFocusRequest: FeedActivityFocusRequest?
@@ -104,6 +105,7 @@ struct FeedScreen: View {
         onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         isEmbedded: Bool = false,
+        showsInviteEntry: Bool = true,
         isEmbeddedFeedVisible: Bool = true,
         filteredActivityIDs: Set<String>? = nil,
         activityFocusRequest: FeedActivityFocusRequest? = nil,
@@ -121,6 +123,7 @@ struct FeedScreen: View {
         self.onWillDismiss = onWillDismiss
         self.onDidDismiss = onDidDismiss
         self.isEmbedded = isEmbedded
+        self.showsInviteEntry = showsInviteEntry
         self.isEmbeddedFeedVisible = isEmbeddedFeedVisible
         self.filteredActivityIDs = filteredActivityIDs
         self.activityFocusRequest = activityFocusRequest
@@ -716,7 +719,7 @@ struct FeedScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        FeedInviteSection()
+        if showsInviteEntry { FeedInviteSection() }
         if !FeedPresentation.showsFeaturedPlaces {
             peopleRail
         }

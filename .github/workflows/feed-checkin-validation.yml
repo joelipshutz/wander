@@ -9,6 +9,7 @@ on:
       - 'Wander/Features/Add/PlaceSaveAttributePolicy.swift'
       - 'Wander/Features/Map/MapScreen.swift'
       - 'Wander/Features/Live/LiveScreen.swift'
+      - 'Wander/Features/Live/LiveDrawerActions.swift'
       - 'Wander/DesignSystem/PersonMentionField.swift'
       - 'WanderTests/PersonMention*Tests.swift'
       - 'Wander/Services/FeedModels.swift'
@@ -29,6 +30,7 @@ on:
       - 'scripts/test_replay_simulator_fixture.py'
       - 'WanderUITests/FeedActivityGroupingUITests.swift'
       - 'WanderUITests/LiveReviewContinuityUITests.swift'
+      - 'WanderUITests/LiveDrawerActionsUITests.swift'
       - 'WanderUITests/SenderNotificationFlowUITests.swift'
       - 'WanderUITests/YourMapPrototypeUITests.swift'
       - '.github/workflows/feed-checkin-validation.yml'
@@ -128,6 +130,7 @@ jobs:
           -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/LiveDrawerActionsUITests
           -only-testing:WanderUITests/FeedAudienceUITests
           -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
@@ -256,6 +259,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/LiveDrawerActionsUITests
           -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
