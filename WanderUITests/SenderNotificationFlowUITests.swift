@@ -198,8 +198,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
             XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
             guard nativeSwitchReady else { return }
             capture("checkIn-dark-silent-before-press")
-            nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .press(forDuration: 0.2)
+            nativeSwitch.tap()
         }
         // Observe a fresh native snapshot: the CI value predicate reused its
         // pre-press snapshot. Every read shares the original five-second budget.
@@ -353,7 +352,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
             !frame.isNull && !frame.isEmpty && !frame.isInfinite
                 && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
         }
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        func observeReady() -> Bool {
             guard ProcessInfo.processInfo.systemUptime <= deadline,
                   let snapshot = try? app.snapshot() else { return false }
             var editors: [XCUIElementSnapshot] = []
@@ -378,8 +377,16 @@ final class SenderNotificationFlowUITests: XCTestCase {
                   ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             admitted = (appFrame, before, grabberFrame)
             return true
-        }, object: nil)
-        let readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        }
+        let readinessResult: XCTWaiter.Result
+        if observeReady() {
+            readinessResult = .completed
+        } else {
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeReady()
+            }, object: nil)
+            readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        }
         guard readinessResult == .completed, let admitted else {
             capture("save-editor-native-grabber-not-ready")
             XCTFail("Expected one enabled native editor and Sheet Grabber with a visible in-app upward path.")

@@ -103,9 +103,10 @@ final class LiveReviewContinuityUITests: XCTestCase {
         pin.tap()
         let activity = app.descendants(matching: .any)["live.placePreview.activity.fixture-feed-ryan-wanna-noodles"].firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
-        XCTAssertTrue(activity.label.contains("Ryan"))
-        XCTAssertTrue(activity.label.contains("Wanna"))
-        XCTAssertTrue(activity.label.contains("5h ago"))
+        let activityAction = activity.buttons.matching(NSPredicate(
+            format: "label CONTAINS %@ AND label CONTAINS %@", "Ryan", "Wanna")).element
+        XCTAssertTrue(activityAction.exists)
+        XCTAssertTrue(activityAction.label.contains("5h ago"))
         let open = app.buttons["live.placePreview.open"]
         captureRouteDiagnostics("pin-selected-before-open", in: app, startedAt: diagnosticStart,
             queries: [("selected-place-open", app.buttons.matching(identifier: "live.placePreview.open")),
@@ -188,7 +189,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let drawer = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         let committedDrawerValue = drawer.value as? String
         XCTAssertNotNil(committedDrawerValue)
-        XCTAssertTrue(committedDrawerValue?.hasPrefix("4 loaded updates.") == true)
+        XCTAssertTrue(committedDrawerValue?.hasPrefix("4 activities.") == true)
         waitDrawer("expanded", in: app)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
         photos.tap()
@@ -287,9 +288,8 @@ final class LiveReviewContinuityUITests: XCTestCase {
         assertEmbeddedDestinationFillsViewport(searchBack, in: app, topLimit: destinationTopLimit)
         searchBack.tap()
         XCTAssertTrue(searchBack.waitForNonExistence(timeout: 5))
-        waitDrawer("expanded", in: app)
+        waitDrawer("half expanded", in: app)
 
-        collapseDrawerToHalf(in: app)
         app.buttons["Notifications"].tap()
         let inbox = app.navigationBars["Notifications"]
         XCTAssertTrue(inbox.waitForExistence(timeout: 10))
@@ -298,9 +298,8 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("notifications-from-live")
         tapNavigationBack(inbox)
         XCTAssertTrue(inbox.waitForNonExistence(timeout: 5))
-        waitDrawer("expanded", in: app)
+        waitDrawer("half expanded", in: app)
 
-        collapseDrawerToHalf(in: app)
         app.buttons["Add a place"].tap()
         let close = app.buttons["Close add place"]
         XCTAssertTrue(close.waitForExistence(timeout: 10))
@@ -780,7 +779,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(outsideCard.frame.minY, allBoundary.frame.maxY,
                                     "An outside-filter list addition belongs below its explicit disclosure.")
         assertFeedCount(2, in: app)
-        XCTAssertEqual(drawer(in: app).value as? String, "1 loaded update. \(combinedSummary)",
+        XCTAssertEqual(drawer(in: app).value as? String, "1 activity. \(combinedSummary)",
                        "Broadening Feed discovery must not broaden the committed map count or filters.")
         for forbiddenID in ["fixture-feed-maya-been-bar-nido", "fixture-feed-maya-created-sunset-list",
                             "fixture-feed-demo-saved-fern-desk"] {
@@ -826,7 +825,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
         assertDrawer("half expanded", count: 2, in: app)
         XCTAssertEqual(summary(in: app).label, "All time")
-        XCTAssertEqual(drawer(in: app).value as? String, "2 loaded updates. Featured · All time · Only Friends")
+        XCTAssertEqual(drawer(in: app).value as? String, "2 activities. Featured · All time · Only Friends")
         XCTAssertEqual(app.buttons["Filters"].value as? String, "1 active filters")
         assertPins(["place_noodles", "place_juniper_table"], in: app)
         dragDrawer(.up, to: "expanded", count: 2, in: app)
@@ -871,7 +870,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
                               postInputCapture: String? = nil) {
-        let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
+        let loadedCount = count == 1 ? "1 activity." : "\(count) activities."
         // Read only the uniquely identified native drawer snapshot. Keep query
         // resolution inside the timed predicate; .element rejects ambiguity.
         let observationStart = ProcessInfo.processInfo.systemUptime
@@ -1041,7 +1040,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func assertCombinedResult(in app: XCUIApplication, drawerState: String = "half expanded") {
         assertDrawer(drawerState, count: 1, in: app)
         XCTAssertEqual(summary(in: app).label, "Past 1 day")
-        XCTAssertEqual(drawer(in: app).value as? String, "1 loaded update. \(combinedSummary)")
+        XCTAssertEqual(drawer(in: app).value as? String, "1 activity. \(combinedSummary)")
         XCTAssertEqual(app.buttons["Filters"].value as? String, "6 active filters")
         assertPins(["place_noodles"], in: app)
         let pin = app.buttons["live.pin.place_noodles"]
@@ -1112,7 +1111,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                             direction: Direction = .down, app: XCUIApplication,
                             selected: @escaping (XCUIElementSnapshot) -> Bool) {
         reveal(picker, in: form, direction: direction, app: app)
-        picker.tap()
+        // Native menu pickers expose the entire row, but the trailing value
+        // owns the popup interaction. Tap that visible control once.
+        picker.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         // Native Picker options live in the popup collection; the retained
         // Live header can expose an identically labeled Nearby button.
         let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
