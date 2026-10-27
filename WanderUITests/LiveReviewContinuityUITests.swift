@@ -174,13 +174,16 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let app = launchLive(extraArguments: ["-WanderLiveFeedPhotosUITest"])
         expandDrawer(in: app)
         let feed = app.scrollViews["feed.places.scroll"]
-        let invite = app.buttons["invite people to Astir"]
+        let invite = app.buttons["live.utility.invite"]
         let people = app.staticTexts["People worth following"].firstMatch
         let activity = app.staticTexts.matching(NSPredicate(format: "label == %@", "Activity")).firstMatch
         reveal(people, in: feed, app: app)
-        XCTAssertTrue(physicallyVisible(invite, in: feed, app: app))
+        waitHittable(invite)
+        XCTAssertTrue(app.frame.contains(invite.frame))
+        XCTAssertFalse(feed.buttons["live.utility.invite"].exists)
+        XCTAssertLessThanOrEqual(invite.frame.maxY, feed.frame.minY + 1)
         XCTAssertLessThan(invite.frame.maxY, people.frame.minY)
-        capture("embedded-invite-before-people")
+        capture("drawer-invite-above-people")
         reveal(activity, in: feed, app: app)
         XCTAssertTrue(physicallyVisible(people, in: feed, app: app))
         XCTAssertLessThan(people.frame.maxY, activity.frame.minY)
@@ -330,6 +333,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture",
             "-WanderInitialTab", "discover",
+            "-astir.live.introduction.v1.user_joe.acknowledged", "YES",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
         app.launchArguments += extraArguments
@@ -843,7 +847,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         dragDrawer(.up, to: "expanded", count: 2, in: app)
         assertFeedCount(2, in: app)
         let resetFeed = app.scrollViews["feed.places.scroll"]
-        reveal(app.buttons["invite people to Astir"], in: resetFeed, direction: .up, app: app)
+        waitHittable(app.buttons["live.utility.invite"])
+        reveal(app.staticTexts["Activity"].firstMatch, in: resetFeed, direction: .up, app: app)
         for (activityID, name) in [("fixture-feed-ryan-wanna-noodles", "Larchmont Noodles"),
                                    ("fixture-feed-ryan-added-juniper-list", "Juniper Table")] {
             let destination = app.buttons["feed.activity.\(activityID).place"]

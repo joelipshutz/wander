@@ -58,6 +58,20 @@ final class FeedAudienceUITests: XCTestCase {
         XCTAssertEqual(menu.value as? String, "Everyone")
     }
 
+    func testOwnActivityKeepsEllipsisWithoutReportOrPrivateReply() {
+        let app = launch()
+        let actions = app.buttons["activity.fixture-feed-own.actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 20))
+        for _ in 0..<6 where !actions.isHittable { app.swipeUp() }
+        XCTAssertTrue(actions.isHittable)
+        XCTAssertEqual(actions.frame.height, 44, accuracy: 0.001)
+        actions.tap()
+        XCTAssertTrue(app.buttons["No additional actions"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Report activity"].exists)
+        XCTAssertFalse(app.buttons["Reply privately"].exists)
+        capture("REC-652-own-activity-menu")
+    }
+
     func testLargeTextKeepsMenuVisibleAndHittable() {
         let app = launch(largeText: true)
         let menu = app.descendants(matching: .any)["feed.audience"].firstMatch

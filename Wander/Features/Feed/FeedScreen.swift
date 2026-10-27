@@ -88,6 +88,7 @@ struct FeedScreen: View {
     private let onWillDismiss: (WanderDeepLinkPresentationToken) -> Void
     private let onDidDismiss: (WanderDeepLinkPresentationSurface) -> Void
     private let isEmbedded: Bool
+    private let showsInviteEntry: Bool
     private let isEmbeddedFeedVisible: Bool
     private let filteredActivityIDs: Set<String>?
     private let activityFocusRequest: FeedActivityFocusRequest?
@@ -105,6 +106,7 @@ struct FeedScreen: View {
         onWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
         onDidDismiss: @escaping (WanderDeepLinkPresentationSurface) -> Void = { _ in },
         isEmbedded: Bool = false,
+        showsInviteEntry: Bool = true,
         isEmbeddedFeedVisible: Bool = true,
         filteredActivityIDs: Set<String>? = nil,
         activityFocusRequest: FeedActivityFocusRequest? = nil,
@@ -122,6 +124,7 @@ struct FeedScreen: View {
         self.onWillDismiss = onWillDismiss
         self.onDidDismiss = onDidDismiss
         self.isEmbedded = isEmbedded
+        self.showsInviteEntry = showsInviteEntry
         self.isEmbeddedFeedVisible = isEmbeddedFeedVisible
         self.filteredActivityIDs = filteredActivityIDs
         self.activityFocusRequest = activityFocusRequest
@@ -718,7 +721,7 @@ struct FeedScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        FeedInviteSection()
+        if showsInviteEntry { FeedInviteSection() }
         if !FeedPresentation.showsFeaturedPlaces {
             peopleRail
         }
@@ -1590,15 +1593,9 @@ private struct FeedActivityList: View {
                     group: group,
                     openProfile: openProfile,
                     openPlace: openPlace,
-                    openList: openList
+                    openList: openList,
+                    onPrivateReply: onPrivateReply
                 )
-                .contextMenu {
-                    if let onPrivateReply, group.primaryActivity.actor.relationship == .mutual {
-                        Button("Reply privately", systemImage: "bubble.left") {
-                            onPrivateReply(group.primaryActivity)
-                        }
-                    }
-                }
                 .id(group.id)
                 .background {
                     if group.id == focusedGroupID, let focusRequestID {
@@ -1638,6 +1635,7 @@ private struct FeedActivityModule: View {
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
+    var onPrivateReply: ((FeedActivity) -> Void)?
 
     var body: some View {
         let engagementContext = activity.activityEngagementContext
@@ -1657,6 +1655,8 @@ private struct FeedActivityModule: View {
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
             showsEngagementActions: engagementContext != nil,
+            showsActivityMenu: true,
+            onPrivateReply: privateReplyAction,
             activityGroup: group.isCombined || group.sharedVisitGroupID != nil ? group : nil,
             openActivityList: openList,
             sharedVisitCompanions: visibleCompanions,
@@ -1668,6 +1668,12 @@ private struct FeedActivityModule: View {
             }
         )
         .environment(\.activityPostcardVisualStyle, .astir)
+    }
+
+    private var privateReplyAction: (() -> Void)? {
+        guard activity.actor.id != store.currentUser.id,
+              activity.actor.relationship == .mutual, let onPrivateReply else { return nil }
+        return { onPrivateReply(activity) }
     }
 
     private var visibleCompanions: [FeedSharedVisitCompanion] {

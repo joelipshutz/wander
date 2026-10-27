@@ -82,7 +82,7 @@ enum LiveIntroductionStep: String, CaseIterable, Identifiable, Sendable {
         case .mapAndFeed: "Drag the activity drawer up to read your Feed, or down to explore its map. Pins show shared activity, not someone’s live location."
         case .drawArea: "Filters lets you choose your existing Feed audience, Check-ins or Wannas, and a time range. Apply commits your choices; Cancel keeps the previous ones. Draw area adds a boundary, or use the visible area. Your Map’s other tools stay in Profile."
         case .activity: "Your activity cards and their Like, Comment, Save and Share actions are still here. Check-ins and outlined Wanna bookmarks describe different actions. Counts show what’s loaded."
-        case .searchAndPeople: "Search from Live to find places and people. Your existing Feed audience choices still control whose activity you see. Invites and people worth following remain in the Feed."
+        case .searchAndPeople: "Search from Live to find places and people. Your existing Feed audience choices still control whose activity you see. Invite people from the person-plus icon beside the activity count. People worth following remain in the Feed."
         case .addPlace: "Use + in Live to add a Check-in or Wanna, search for a place, or open your existing import flow. You choose what to share."
         case .yourMap: "Open Profile, then Your Map, for your full place history, Patterns, filters, Snapshot and sharing. Your calendar, streak and recent activity stay in Profile too."
         }
