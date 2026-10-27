@@ -153,9 +153,11 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("original-wanna-activity-from-pin")
         tapNavigationBack(app.navigationBars.firstMatch)
         XCTAssertTrue(send.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        waitDrawer("half expanded", in: app)
+        expandDrawer(in: app)
 
         reveal(destination, in: feed, app: app)
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
         waitHittable(destination)
         destination.tap()
         XCTAssertTrue(placeBack.waitForExistence(timeout: 10))
@@ -881,47 +883,14 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
                               postInputCapture: String? = nil) {
         let loadedCount = count == 1 ? "1 activity." : "\(count) activities."
-        // Read only the uniquely identified native drawer snapshot. Keep query
-        // resolution inside the timed predicate; .element rejects ambiguity.
-        let observationStart = ProcessInfo.processInfo.systemUptime
-        let observationDeadline = observationStart + 5
-        var evaluations = 0
-        var matchingHandles = 0
-        var matchingValues = 0
-        var snapshotAvailable = false
-        var snapshotStartedAt: TimeInterval?
-        var snapshotFinishedAt: TimeInterval?
-        let predicate = NSPredicate { _, _ in
-            guard ProcessInfo.processInfo.systemUptime <= observationDeadline else { return false }
-            evaluations += 1
-            matchingHandles = 0
-            matchingValues = 0
-            snapshotAvailable = false
-            snapshotStartedAt = ProcessInfo.processInfo.systemUptime
-            let handle = app.staticTexts.matching(
-                NSPredicate(format: "identifier == %@", "live.drawerHandle")).element
-            let snapshot = try? handle.snapshot()
-            snapshotFinishedAt = ProcessInfo.processInfo.systemUptime
-            guard let snapshot else { return false }
-            snapshotAvailable = true
-            if snapshot.elementType == .staticText && snapshot.identifier == "live.drawerHandle" {
-                matchingHandles = 1
-                if snapshot.label == "Activity drawer, \(state)"
-                    && (snapshot.value as? String)?.hasPrefix(loadedCount) == true {
-                    matchingValues = 1
-                }
-            }
-            return matchingHandles == 1 && matchingValues == 1
-                && ProcessInfo.processInfo.systemUptime <= observationDeadline
-        }
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
-        let snapshotElapsed = snapshotStartedAt.flatMap { start in snapshotFinishedAt.map { $0 - start } }
-        let snapshotWithinDeadline = snapshotFinishedAt.map { $0 <= observationDeadline }
-        let observation = XCTAttachment(string: "expectedState=\(state); expectedLoadedCount=\(loadedCount); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingHandles=\(matchingHandles); matchingValues=\(matchingValues); querySnapshotElapsed=\(String(describing: snapshotElapsed)); snapshotWithinDeadline=\(String(describing: snapshotWithinDeadline)); elapsed=\(ProcessInfo.processInfo.systemUptime - observationStart); waitResult=\(result.rawValue)")
-        observation.name = "REC-636-drawer-native-observation"
-        observation.lifetime = .keepAlways
-        add(observation)
+        // Match the expected state in the native query. Calling snapshot() on
+        // a temporarily absent handle retries internally and can consume the
+        // entire observation window before the first predicate evaluation.
+        let handle = app.staticTexts.matching(NSPredicate(
+            format: "identifier == %@ AND label == %@ AND value BEGINSWITH %@",
+            "live.drawerHandle", "Activity drawer, \(state)", loadedCount)).element
+        let result = handle.waitForExistence(timeout: 5) ? XCTWaiter.Result.completed : .timedOut
+
         if let postInputCapture {
             captureState(postInputCapture, in: app, observations: [
                 "expectedState=\(state); expectedLoadedCount=\(loadedCount); waitResult=\(result)",
@@ -1168,29 +1137,26 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             diagnostic.lifetime = .keepAlways
             self.add(diagnostic)
         })
-        choice.tap()
+        choice.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         let deadline = ProcessInfo.processInfo.systemUptime + 5
-        wait(NSPredicate { _, _ in
+        let selectionObserved = NSPredicate { _, _ in
             guard ProcessInfo.processInfo.systemUptime <= deadline,
-                  let snapshot = try? app.snapshot() else { return false }
-            // Resolve once, then observe popup absence and the exact selected
-            // field in the same native tree within the original five seconds.
-            var popupChoicePresent = false
+                  let snapshot = try? form.snapshot() else { return false }
+            // Scope the snapshot to the foreground form. Reading the retained
+            // map and Feed hierarchy can exhaust the five-second observation.
             var selectedPickerCount = 0
             @MainActor
-            func visit(_ node: XCUIElementSnapshot, inCollection: Bool, inForm: Bool) {
-                let collection = inCollection || node.elementType == .collectionView
-                let form = inForm || node.identifier == "live.filters.form"
-                if node.elementType == .button {
-                    if collection && node.label == option { popupChoicePresent = true }
-                    if form && selected(node) { selectedPickerCount += 1 }
-                }
-                for child in node.children { visit(child, inCollection: collection, inForm: form) }
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == .button && selected(node) { selectedPickerCount += 1 }
+                for child in node.children { visit(child) }
             }
-            visit(snapshot, inCollection: false, inForm: false)
-            return !popupChoicePresent && selectedPickerCount == 1
+            visit(snapshot)
+            return selectedPickerCount == 1 && !choice.exists
                 && ProcessInfo.processInfo.systemUptime <= deadline
-        })
+        }
+        if !selectionObserved.evaluate(with: nil) {
+            wait(selectionObserved, timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        }
     }
 
     private func resetFilters(in app: XCUIApplication) {
@@ -1320,11 +1286,12 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                                            dy: contact.y - confirmed.app.minY)).press(forDuration: 0.2)
                 return
             }
-            // Keep the original reveal path and maximum of sixteen drags.
+            // Reset is the first section, above the current filter controls.
+            // Swipe down to reveal it, retaining the sixteen-drag bound.
             guard attempt < 16 else { break }
             let from = CGPoint(x: observed.form.maxX - 8,
-                               y: observed.viewport.minY + observed.viewport.height * 0.75)
-            let to = CGPoint(x: from.x, y: observed.viewport.minY + observed.viewport.height * 0.45)
+                               y: observed.viewport.minY + observed.viewport.height * 0.45)
+            let to = CGPoint(x: from.x, y: observed.viewport.minY + observed.viewport.height * 0.75)
             XCTAssertTrue(observed.form.contains(from) && observed.form.contains(to))
             let origin = app.coordinate(withNormalizedOffset: .zero)
             origin.withOffset(CGVector(dx: from.x - observed.app.minX, dy: from.y - observed.app.minY))
