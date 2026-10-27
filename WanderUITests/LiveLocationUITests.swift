@@ -39,8 +39,9 @@ final class LiveLocationUITests: XCTestCase {
 
     private func assertVisibleLocation(in app: XCUIApplication, capture name: String) {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
-        let dot = app.maps.descendants(matching: .any).matching(
-            NSPredicate(format: "label IN %@", ["Current Location", "My Location", "Your location"])
+        let dot = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                        "current location", "my location", "your location", "user location")
         ).firstMatch
         let visible = NSPredicate { _, _ in
             guard dot.exists else { return false }
@@ -50,11 +51,18 @@ final class LiveLocationUITests: XCTestCase {
             return !frame.isEmpty && frame.midX > 0 && frame.midX < app.frame.width
                 && frame.midY > top && frame.midY < bottom
         }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: visible, object: nil)], timeout: 25), .completed,
-                       "The actual device-location dot must be inside the exposed map, not at the home city.")
+        let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: visible, object: nil)], timeout: 25)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        if result != .completed {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "\(name)-accessibility"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        XCTAssertEqual(result, .completed,
+                       "The actual device-location dot must be inside the exposed map, not at the home city.")
     }
 }
