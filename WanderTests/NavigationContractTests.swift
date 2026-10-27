@@ -5494,8 +5494,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertEqual(
             feed.components(separatedBy: "FeedSectionHeading(title: \"Activity\"").count - 1,
-            5,
-            "Live, standard, empty, loading, and recovery states each retain the Activity heading."
+            5
         )
         XCTAssertEqual(
             feed.components(separatedBy: ".walkthroughTarget(.feedActivity)").count - 1,

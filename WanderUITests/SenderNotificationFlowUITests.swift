@@ -198,12 +198,8 @@ final class SenderNotificationFlowUITests: XCTestCase {
             XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
             guard nativeSwitchReady else { return }
             capture("checkIn-dark-silent-before-press")
-            // Drag the native off thumb onto its on position, as in the
-            // other sender flows. A center tap did not change this control
-            // in the large-text sheet on either CI phone.
-            nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
-                .press(forDuration: 0.2, thenDragTo: nativeSwitch.coordinate(
-                    withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)))
+            nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.2)
         }
         // Observe a fresh native snapshot: the CI value predicate reused its
         // pre-press snapshot. Every read shares the original five-second budget.
@@ -357,7 +353,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
             !frame.isNull && !frame.isEmpty && !frame.isInfinite
                 && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
         }
-        func observeReady() -> Bool {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard ProcessInfo.processInfo.systemUptime <= deadline,
                   let snapshot = try? app.snapshot() else { return false }
             var editors: [XCUIElementSnapshot] = []
@@ -382,16 +378,8 @@ final class SenderNotificationFlowUITests: XCTestCase {
                   ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             admitted = (appFrame, before, grabberFrame)
             return true
-        }
-        let readinessResult: XCTWaiter.Result
-        if observeReady() {
-            readinessResult = .completed
-        } else {
-            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                observeReady()
-            }, object: nil)
-            readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
-        }
+        }, object: nil)
+        let readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
         guard readinessResult == .completed, let admitted else {
             capture("save-editor-native-grabber-not-ready")
             XCTFail("Expected one enabled native editor and Sheet Grabber with a visible in-app upward path.")
@@ -408,7 +396,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
         let responseStartedAt = ProcessInfo.processInfo.systemUptime
         var responseReads = 0
         var lastReadFinishedAt: TimeInterval?
-        func observeExpanded() -> Bool {
+        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             responseReads += 1
             let snapshot = try? editor.snapshot()
@@ -419,20 +407,9 @@ final class SenderNotificationFlowUITests: XCTestCase {
                 && finite(after)
                 && after.minY <= admitted.editor.minY - 44
                 && after.height >= admitted.editor.height + 44
-        }
-        // The predicate wait's first poll can fall outside a sub-second remainder.
-        // Observe immediately, keeping both the read and any retry inside the
-        // original five-second deadline.
-        let result: XCTWaiter.Result
-        if observeExpanded() {
-            result = .completed
-        } else {
-            let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-                observeExpanded()
-            }, object: nil)
-            let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
-            result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
-        }
+        }, object: nil)
+        let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+        let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
         let observation = XCTAttachment(string: "readinessResult=\(readinessResult.rawValue); responseReads=\(responseReads); helperElapsed=\(ProcessInfo.processInfo.systemUptime - helperStartedAt); postActionObservationElapsed=\(ProcessInfo.processInfo.systemUptime - responseStartedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
         observation.name = "REC-636-save-editor-expansion-observation"
         observation.lifetime = .keepAlways
