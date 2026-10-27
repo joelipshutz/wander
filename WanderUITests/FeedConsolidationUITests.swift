@@ -1,12 +1,13 @@
 import XCTest
 
 @MainActor final class FeedConsolidationUITests: XCTestCase {
-    private func launch() -> XCUIApplication {
+    private func launch(extraArguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
                                "-WanderInitialTab", "discover", "-WanderResetNotificationBadge", "-WanderFollowNotificationUITest",
                                "-WanderCompactPeopleUITest"]
+        app.launchArguments += extraArguments
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
         return app
@@ -75,6 +76,34 @@ import XCTest
         let profileBell = app.buttons["profile.checkInInvitations"]
         XCTAssertTrue(profileBell.waitForExistence(timeout: 8))
         XCTAssertEqual(profileBell.value as? String, "No new notifications")
+    }
+
+    func testRecentActivityOpensConversationAndAcknowledgesSharedBadge() {
+        let app = launch(extraArguments: ["-WanderActivityNotificationUITest"])
+        let bell = app.buttons["feed.notifications"]
+        XCTAssertTrue(bell.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "value != %@", "No new notifications"), evaluatedWith: bell)
+        waitForExpectations(timeout: 10)
+        bell.tap()
+        let row = app.buttons["notifications.activity.65300000-0000-0000-0000-000000000001"]
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Recent activity"].exists)
+        XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].exists)
+        XCTAssertGreaterThanOrEqual(row.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(row.frame.minX, app.frame.minX)
+        XCTAssertLessThanOrEqual(row.frame.maxX, app.frame.maxX)
+        capture("REC-653 recent notification activity")
+        let grouped = app.buttons["notifications.activity.65300000-0000-0000-0000-000000000002"]
+        XCTAssertTrue(grouped.exists)
+        XCTAssertFalse(app.staticTexts["Stored import details"].exists)
+        grouped.tap()
+        XCTAssertTrue(bell.waitForExistence(timeout: 5))
+        XCTAssertEqual(bell.value as? String, "No new notifications")
+        bell.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.textViews["activity.comment.input"].waitForExistence(timeout: 10))
+        capture("REC-653 notification conversation")
     }
 
     private func capture(_ name: String) {

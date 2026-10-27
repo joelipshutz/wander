@@ -225,6 +225,9 @@ struct WanderApp: App {
                 followNotificationRepository: SimulatorFollowNotificationRepository(
                     includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderFollowNotificationUITest")
                 ),
+                activityNotificationRepository: SimulatorActivityNotificationRepository(
+                    includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderActivityNotificationUITest")
+                ),
                 placePlanInvitationRepository: SimulatorPlacePlanInvitationRepository(
                     includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest"),
                     suggestedAt: ProcessInfo.processInfo.arguments.contains("-WanderLiveUpcomingUITest")

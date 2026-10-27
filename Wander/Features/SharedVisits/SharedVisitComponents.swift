@@ -469,11 +469,14 @@ private struct FollowNotificationProfileRoute: Identifiable {
 
 struct SharedVisitInvitationInboxScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @ObservedObject var planInbox: PlacePlanInvitationInbox
     @ObservedObject var notificationBadge: NotificationBadgeStore
     @EnvironmentObject private var followInbox: FollowNotificationInbox
+    @EnvironmentObject private var activityInbox: ActivityNotificationInbox
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var selectedFollower: FollowNotificationProfileRoute?
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
@@ -490,12 +493,17 @@ struct SharedVisitInvitationInboxScreen: View {
         return followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) }
     }
 
+    private var activity: [ActivityNotification] {
+        activityInbox.visibleNotifications(userID: store.currentUser.id, isBlocked: { store.isBlockedBetweenCurrentUser(and: $0) })
+    }
+
     private var refreshError: String? {
         NotificationInboxRefreshStatus.errorMessage(
             userID: store.currentUser.id,
             plans: planInbox,
             follows: followInbox,
-            checkInFailureUserID: store.sharedVisitInboxFailureUserID
+            checkInFailureUserID: store.sharedVisitInboxFailureUserID,
+            activity: activityInbox
         )
     }
 
@@ -504,15 +512,16 @@ struct SharedVisitInvitationInboxScreen: View {
             userID: store.currentUser.id,
             plans: plans,
             checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : [],
-            follows: follows
+            follows: follows,
+            activity: activity
         )
     }
 
-    private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty && follows.isEmpty }
+    private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty && follows.isEmpty && activity.isEmpty }
 
     var body: some View {
         Group {
-            if isEmpty, !isRefreshing, !planInbox.isLoading, !followInbox.isLoading {
+            if isEmpty, !isRefreshing, !planInbox.isLoading, !followInbox.isLoading, !activityInbox.isLoading {
                 emptyState
             } else {
                 ScrollView(showsIndicators: false) {
@@ -521,6 +530,18 @@ struct SharedVisitInvitationInboxScreen: View {
                             refreshErrorRow(refreshError)
                         }
 
+                        if !activity.isEmpty {
+                            Text("Recent activity").font(AstirTypography.sectionTitle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ForEach(activity) { notification in
+                                ActivityNotificationRow(notification: notification) {
+                                    guard let destination = notification.destination else { return }
+                                    if let event = notification.openedEvent { store.productAnalytics.track(event) }
+                                    if destination == .discover { dismiss() }
+                                    pushNotifications.route(to: destination)
+                                }
+                            }
+                        }
                         if !follows.isEmpty {
                             Text("Followers").font(AstirTypography.sectionTitle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -583,7 +604,7 @@ struct SharedVisitInvitationInboxScreen: View {
             }
         }
         .overlay {
-            if isRefreshing || planInbox.isLoading || followInbox.isLoading, isEmpty {
+            if isRefreshing || planInbox.isLoading || followInbox.isLoading || activityInbox.isLoading, isEmpty {
                 ProgressView("Loading notifications…")
                     .font(AstirTypography.label)
                     .tint(brandMode.accent)
@@ -626,7 +647,7 @@ struct SharedVisitInvitationInboxScreen: View {
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
             Text("No notifications yet")
                 .font(AstirTypography.sectionTitle)
-            Text("New followers, plans, and check-in invitations will show up here")
+            Text("Activity from your people, new followers, plans, and check-in invitations will show up here")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -667,6 +688,8 @@ struct SharedVisitInvitationInboxScreen: View {
         isRefreshing = true
         defer { isRefreshing = false }
         let userID = store.currentUser.id
+        await activityInbox.refresh(userID: userID, repository: backend.activityNotificationRepository)
+        guard store.currentUser.id == userID, !Task.isCancelled else { return }
         await store.refreshSharedVisitInbox(backend: backend)
         guard store.currentUser.id == userID, !Task.isCancelled else { return }
         await planInbox.refresh(userID: userID, repository: backend.placePlanInvitationRepository)

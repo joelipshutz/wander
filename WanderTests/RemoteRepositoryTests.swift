@@ -3,6 +3,31 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testActivityNotificationHistoryUsesRecipientRLSAndIndependentDeliveryStates() async throws {
+        let table = RecordingTable()
+        table.responses["GET:notification_events"] = Data("""
+        [{"id":"65300000-0000-0000-0000-000000000001","actor_user_id":"actor",
+          "notification_type":"activity_liked","title":"A like","body":"Your activity",
+          "created_at":"2026-10-26T12:00:00Z","data":{"activity_id":"activity","extra":42}}]
+        """.utf8)
+        let rows = try await SupabaseActivityNotificationRepository(table: table).receivedActivity(userID: "recipient")
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.destination, .activityComments(id: "activity"))
+        let call = try XCTUnwrap(table.calls.first)
+        XCTAssertEqual(call.table, "notification_events")
+        let query = Dictionary(uniqueKeysWithValues: call.queryItems.map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(query["recipient_user_id"], "eq.recipient")
+        XCTAssertEqual(query["status"], "in.(pending,claimed,sent,failed)")
+        XCTAssertTrue(query["not_before"]?.hasPrefix("lte.") == true)
+        XCTAssertEqual(query["order"], "created_at.desc,id.desc")
+        XCTAssertEqual(query["limit"], "100")
+        XCTAssertFalse(query["select"]?.contains("recipient_user_id") == true)
+        XCTAssertFalse(query["select"]?.contains("deeplink_url") == true)
+        XCTAssertTrue(query["notification_type"]?.contains("activity_liked") == true)
+        XCTAssertFalse(query["notification_type"]?.contains("mutual_follow") == true)
+        XCTAssertFalse(query["notification_type"]?.contains("shared_visit") == true)
+    }
+
     func testSharedPostCompanionsUseExistingAuthorizedContextAndClearOnDeclinedRefresh() async throws {
         let rpc = RecordingRPC()
         let row = """
