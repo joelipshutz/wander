@@ -1591,15 +1591,9 @@ private struct FeedActivityList: View {
                     group: group,
                     openProfile: openProfile,
                     openPlace: openPlace,
-                    openList: openList
+                    openList: openList,
+                    onPrivateReply: onPrivateReply
                 )
-                .contextMenu {
-                    if let onPrivateReply, group.primaryActivity.actor.relationship == .mutual {
-                        Button("Reply privately", systemImage: "bubble.left") {
-                            onPrivateReply(group.primaryActivity)
-                        }
-                    }
-                }
                 .id(group.id)
                 .background {
                     if group.id == focusedGroupID, let focusRequestID {
@@ -1639,6 +1633,7 @@ private struct FeedActivityModule: View {
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
+    var onPrivateReply: ((FeedActivity) -> Void)?
 
     var body: some View {
         let engagementContext = activity.activityEngagementContext
@@ -1658,6 +1653,8 @@ private struct FeedActivityModule: View {
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
             showsEngagementActions: engagementContext != nil,
+            showsActivityMenu: true,
+            onPrivateReply: privateReplyAction,
             activityGroup: group.isCombined || group.sharedVisitGroupID != nil ? group : nil,
             openActivityList: openList,
             sharedVisitCompanions: visibleCompanions,
@@ -1669,6 +1666,12 @@ private struct FeedActivityModule: View {
             }
         )
         .environment(\.activityPostcardVisualStyle, .astir)
+    }
+
+    private var privateReplyAction: (() -> Void)? {
+        guard activity.actor.id != store.currentUser.id,
+              activity.actor.relationship == .mutual, let onPrivateReply else { return nil }
+        return { onPrivateReply(activity) }
     }
 
     private var visibleCompanions: [FeedSharedVisitCompanion] {

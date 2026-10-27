@@ -266,6 +266,27 @@ final class FeedActivityGroupingUITests: XCTestCase {
     }
 
     @MainActor
+    func testActivityMenuPreservesReportForNonMutualAuthor() {
+        let app = launchPhotoStackFixture(extraArguments: ["-WanderActivityReportMenuUITest"])
+        let actions = app.buttons["activity.65200000-0000-0000-0000-000000000001.actions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 10))
+        for _ in 0..<5 where !actions.isHittable { app.swipeUp() }
+        XCTAssertTrue(actions.isHittable)
+        XCTAssertEqual(actions.frame.height, 44, accuracy: 0.001)
+        actions.tap()
+        let report = app.buttons["Report activity"]
+        XCTAssertTrue(report.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Reply privately"].exists)
+        capture("REC-652-nonmutual-activity-menu")
+        report.tap()
+        let submit = app.buttons["communityReport.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
+        XCTAssertFalse(submit.isEnabled, "Reporting must still require a reason before submission.")
+        capture("REC-652-existing-report-sheet")
+        // Do not submit a moderation report from this fixture.
+    }
+
+    @MainActor
     private func launchPhotoStackFixture(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [

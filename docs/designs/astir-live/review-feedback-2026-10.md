@@ -107,7 +107,7 @@ This revision uses the reviewed single-phone sequence: the second account sends 
 | --- | --- | --- |
 | M1 — Admit session/fixture | Stay on the first account while the agent confirms the installed candidate and fresh private fixture. Confirm the expected Profile identity; no credentials enter evidence. | |
 | M2 — Guided second-account switch | Only when prompted, sign out normally and sign into the second account. Its Profile shows Messages beside Notifications. No first-account inbox, draft or private preview carries across. | |
-| M3 — Contextual entry | Open the agent-designated synthetic activity and Reply privately. Confirm the other participant and quoted place/activity context. Opening alone must not send a message. | |
+| M3 — Contextual entry | Open the agent-designated synthetic activity’s ellipsis menu and choose Reply privately. Confirm the other participant and quoted place/activity context. Opening alone must not send a message. | |
 | M4 — First send | Enter the prepared short test text and tap Send once. Leave the screen open for the agent to verify acknowledgment and exactly one message. A spinner/uncertain state is not confirmation and is not a reason to tap Send again. | |
 | M5 — Profile inbox | Close the thread, open Profile → Messages and return to the conversation. It appears once and contains the same acknowledged message/context. Check keyboard/composer reachability without another send. | |
 | M6 — Guided first-account read | After the first send is verified, switch back only when prompted. Open Profile → Messages and visibly read the incoming message. Leave it visible for the agent's read-state check; badges alone do not prove read status. | |

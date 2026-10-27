@@ -212,7 +212,7 @@ Fresh first visits now pass an explicit orientation context to the optional guid
 
 ### J2 — Activity becomes a reason to connect
 
-Open a pin or card → person, action, timestamp, place and shared context → existing Like/Comment/Save actions → **Reply privately** for an eligible mutual friend. The composer quotes only content the sender may currently access and explicitly names the recipient. Send requires an explicit tap. Production send must use the private-message repository and truthful pending/sent/failed states. The older prototype’s local Demo reply is not delivery evidence.
+Open a pin or card → person, action, timestamp, place and shared context → activity-card **ellipsis** → **Reply privately** for an eligible mutual friend, above **Report activity** when reporting is available. Every activity card retains the ellipsis; a card with no eligible actions shows “No additional actions.” Report eligibility and behavior are unchanged. The composer quotes only content the sender may currently access and explicitly names the recipient. Send requires an explicit tap. Production send must use the private-message repository and truthful pending/sent/failed states. The older prototype’s local Demo reply is not delivery evidence.
 
 The integrated client uses `PrivateMessageRepository`, memory-only inbox/thread state and an account-fenced ephemeral transport. It preserves a stable client ID for unconfirmed retries, displays Sending/Not confirmed/Sent, and does not claim delivered/read. Private content has replay masking in source; release evidence must include actual replay and two-account hosted checks. No durable offline outbox, message push delivery or completed message deletion/retention policy is claimed.
 
