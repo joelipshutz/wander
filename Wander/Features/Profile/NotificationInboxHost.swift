@@ -8,6 +8,7 @@ struct NotificationInboxHost: ViewModifier {
     @ObservedObject var store: WanderStore
     @StateObject private var plans = PlacePlanInvitationInbox()
     @StateObject private var follows = FollowNotificationInbox()
+    @StateObject private var activity = ActivityNotificationInbox()
     @StateObject private var badge = NotificationBadgeStore()
     @State private var refreshRevision = 0
 
@@ -15,6 +16,7 @@ struct NotificationInboxHost: ViewModifier {
         content
             .environmentObject(plans)
             .environmentObject(follows)
+            .environmentObject(activity)
             .environmentObject(badge)
             .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveRemoteNotification)) { _ in
                 refreshRevision += 1
@@ -25,14 +27,16 @@ struct NotificationInboxHost: ViewModifier {
                 if plans.userID != userID { badge.close() }
                 plans.reset(for: userID)
                 follows.reset(for: userID)
+                activity.reset(for: userID)
                 guard let userID, scenePhase == .active else { badge.close(); return }
                 // Foreground refresh also supports people who turn push off.
                 // This task cancels when the app backgrounds or identity changes.
                 repeat {
                     async let planRefresh: Void = refreshPlans(userID: userID)
                     async let followRefresh: Void = refreshFollows(userID: userID)
+                    async let activityRefresh: Void = refreshActivity(userID: userID)
                     async let checkInRefresh = store.refreshSharedVisitInbox(backend: backend)
-                    _ = await (planRefresh, followRefresh, checkInRefresh)
+                    _ = await (planRefresh, followRefresh, activityRefresh, checkInRefresh)
                     do { try await Task.sleep(for: .seconds(60)) } catch { return }
                 } while !Task.isCancelled
             }
@@ -42,6 +46,10 @@ struct NotificationInboxHost: ViewModifier {
     // evaluating those arguments inside an async-let child task.
     @MainActor private func refreshPlans(userID: String) async {
         await plans.refresh(userID: userID, repository: backend.placePlanInvitationRepository)
+    }
+
+    @MainActor private func refreshActivity(userID: String) async {
+        await activity.refresh(userID: userID, repository: backend.activityNotificationRepository)
     }
 
     @MainActor private func refreshFollows(userID: String) async {
@@ -56,14 +64,16 @@ enum NotificationInboxRefreshStatus {
         userID: String,
         plans: PlacePlanInvitationInbox,
         follows: FollowNotificationInbox,
-        checkInFailureUserID: String?
+        checkInFailureUserID: String?,
+        activity: ActivityNotificationInbox? = nil
     ) -> String? {
         var sources: [String] = []
+        if activity?.userID == userID, activity?.failed == true { sources.append("recent activity") }
         if follows.userID == userID, follows.failed { sources.append("follower notifications") }
         if plans.userID == userID, plans.failed { sources.append("plan invitations") }
         if checkInFailureUserID == userID { sources.append("check-in invitations") }
         guard !sources.isEmpty else { return nil }
-        if sources.count == 3 { return "Couldn’t refresh notifications" }
+        if sources.count == (activity == nil ? 3 : 4) { return "Couldn’t refresh notifications" }
         return "Couldn’t refresh \(sources.joined(separator: " and "))"
     }
 }

@@ -366,3 +366,10 @@ For every analytics change:
   by sending recipient IDs or per-recipient rows to PostHog.
 
 Place invitation opens from Notifications use `notification_type=place_plan_invitation`, `delivery_channel=in_app`, and `route=place_plan`. Emit only after the recipient resolver succeeds. Reopening is a new open; refreshes and failed/unavailable requests emit nothing. No invitation ID, token, sender, place, date, message, or artwork URL is sent. These in-app opens are excluded from the existing remote push-delivery funnel.
+
+Recent-activity inbox opens also emit `notification_opened` with the existing
+social `notification_type`, `delivery_channel=in_app`, and the existing coarse
+`route` (`activity_comments`, `place`, `list`, or `discover`). Only a routable row
+tap emits the event; refresh, badge acknowledgement, and unavailable rows do not.
+Notification copy, identifiers and routing payloads are never analytics properties.
+These opens remain outside the remote push-delivery funnel.

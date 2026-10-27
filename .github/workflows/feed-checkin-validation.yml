@@ -129,6 +129,7 @@ jobs:
           -skip-testing:WanderTests/ReplayMaskingTests
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/FeedAudienceUITests
+          -only-testing:WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge
           -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
@@ -256,6 +257,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge
           -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace

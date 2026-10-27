@@ -160,6 +160,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var planInbox: PlacePlanInvitationInbox
     @EnvironmentObject private var notificationBadge: NotificationBadgeStore
     @EnvironmentObject private var followInbox: FollowNotificationInbox
+    @EnvironmentObject private var activityInbox: ActivityNotificationInbox
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -425,7 +426,8 @@ struct ProfileScreen: View {
             plans: planInbox.userID == store.currentUser.id ? planInbox.invitations : [],
             checkIns: store.sharedVisitInboxUserID == store.currentUser.id ? store.sharedVisitInvitations : [],
             follows: followInbox.userID == store.currentUser.id
-                ? followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) } : []
+                ? followInbox.notifications.filter { !store.isBlockedBetweenCurrentUser(and: $0.actorID) } : [],
+            activity: activityInbox.visibleNotifications(userID: store.currentUser.id, isBlocked: { store.isBlockedBetweenCurrentUser(and: $0) })
         ))
     }
 
