@@ -79,6 +79,11 @@ enum LiveTimeFilter: Int, CaseIterable, Identifiable {
 }
 
 enum LiveMapCameraPolicy {
+    /// Launch stays local even when saved places or a home city are far away.
+    static func locationRegion(_ coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion {
+        MKCoordinateRegion(center: coordinate, latitudinalMeters: 10_000, longitudinalMeters: 10_000)
+    }
+
     /// The eighth-nearest authorized place sets density. Sparse networks expand
     /// naturally; dense local networks remain local. Never rerun after user pan.
     static func region(coordinates: [CLLocationCoordinate2D], anchor: CLLocationCoordinate2D?) -> MKCoordinateRegion? {
@@ -89,6 +94,56 @@ enum LiveMapCameraPolicy {
         let distance = distances.isEmpty ? 2_500 : distances[min(7, distances.count - 1)]
         let span = min(20_000_000, max(4_000, distance * 2.8))
         return MKCoordinateRegion(center: center, latitudinalMeters: span, longitudinalMeters: span)
+    }
+}
+
+/// One launch/foreground fix, superseded by any explicit camera choice.
+/// Reuses the legacy map's permission-free current → remembered → fallback path.
+@MainActor
+final class LiveMapLaunchLocation {
+    private let resolver: MapLaunchLocationResolver
+    private let useFixtures: Bool
+    private var state = MapInitialCameraState()
+    private var authorizationStatus: CLAuthorizationStatus?
+    private(set) var region: MKCoordinateRegion
+
+    init(history: LastSharedLocationStore = LastSharedLocationStore(),
+         provider: (any CurrentLocationProviding)? = nil,
+         useFixtures: Bool = MapScreen.usesLocationFixtures) {
+        resolver = MapLaunchLocationResolver(history: history, provider: provider)
+        self.useFixtures = useFixtures
+        region = Self.initialRegion(history: history, useFixtures: useFixtures)
+    }
+
+    static func initialRegion(history: LastSharedLocationStore = LastSharedLocationStore(),
+                              useFixtures: Bool = MapScreen.usesLocationFixtures) -> MKCoordinateRegion {
+        LiveMapCameraPolicy.locationRegion(MapScreen.initialMapRegion(history: history, useFixtures: useFixtures).center)
+    }
+
+    static func showsUserLocation(_ status: CLAuthorizationStatus) -> Bool {
+        status == .authorizedAlways || status == .authorizedWhenInUse
+    }
+
+    func userDidChooseCamera() { state.resolve() }
+    func reset() { state.reset() }
+
+    func updateAuthorization(_ status: CLAuthorizationStatus) {
+        if let authorizationStatus, authorizationStatus != status { reset() }
+        authorizationStatus = status
+    }
+
+    func resolve(hasExplicitGeographicScope: Bool = false) async -> MKCoordinateRegion? {
+        guard !hasExplicitGeographicScope, !state.isResolved else { return nil }
+        let revision = state.revision
+        let coordinate: CLLocationCoordinate2D
+        do {
+            if useFixtures { coordinate = region.center }
+            else { coordinate = try await resolver.location().coordinate }
+        } catch { return nil }
+        guard !Task.isCancelled, state.allowsLocationResult(for: revision) else { return nil }
+        state.resolve()
+        region = LiveMapCameraPolicy.locationRegion(coordinate)
+        return region
     }
 }
 
