@@ -78,6 +78,7 @@ struct LiveScreen: View {
     @State private var wantsPeopleSearch = false
     @State private var selectedPlan: CommonGroundMockPlace?
     @State private var showsEvents = false
+    @State private var showsContactInvites = false
     @State private var showsUpcomingInvitations = false
     @State private var receivedPlan: ReceivedPlacePlanInvitation?
     @State private var queuedReceivedPlan: ReceivedPlacePlanInvitation?
@@ -126,6 +127,11 @@ struct LiveScreen: View {
     }
 
     var body: some View {
+        liveContent.modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
+            onDismiss: modalDidDismiss, lifecycle: modalLifecycle))
+    }
+
+    private var livePresentedContent: some View {
         GeometryReader { geometry in
             let drawerHeight = showsFeedDestination ? geometry.size.height
                 : drawing || hasPlacePreview ? 0 : height(for: detent, available: geometry.size.height)
@@ -303,6 +309,10 @@ struct LiveScreen: View {
                 planInbox.markOpened(id: plan.id, userID: recipientID, analytics: store.productAnalytics)
             }.modifier(modalLifecycle)
         }
+    }
+
+    private var liveContent: some View {
+        livePresentedContent
         .task(id: mapRequest) {
             guard let request = mapRequest else { return }
             let repository = auth.isSignedIn ? backend.feedRepository : nil
@@ -312,17 +322,7 @@ struct LiveScreen: View {
                 permits: { event in store.currentUser.id == request.userID && store.canDisplayLiveMapActivity(event) })
         }
         .onChange(of: mapResults.revision) { _, _ in rebuildMapProjection() }
-        .onReceive(store.$followedFeedPage) { page in
-            // Merge only enriched copies of already enumerated event IDs.
-            // Optional Feed media does not determine map membership.
-            guard let page else { return }
-            let enriched = Dictionary(page.activity.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-            mapActivity = mapActivity.map { enriched[$0.id] ?? $0 }.filter { event in
-                store.liveFeedQuery?.includes(event) == true && store.canDisplayLiveMapActivity(event)
-            }
-            mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
-                ownCheckInPlaces: ownCheckInPlaces, previousPins: previousPinIdentities)
-        }
+        .onReceive(store.$followedFeedPage) { page in refreshEnrichedMapActivity(page) }
         .onChange(of: store.presentationRevision) { _, _ in
             mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
             if isMapCovered || !isActive { mapRefreshDeferred = true }
@@ -342,7 +342,7 @@ struct LiveScreen: View {
             launchLocation = LiveMapLaunchLocation()
             mapSearch = LiveMapSearchState(); camera = .region(launchLocation.region)
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
-            planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false
+            planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false; showsContactInvites = false
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
             draftArea = nil; drawPoints = []; drawCoordinates = []
             selection = LiveBrowseSelection(); draftSelection = selection; detent = 1
@@ -359,7 +359,7 @@ struct LiveScreen: View {
             isFeedDestinationActive = false
             filtersPresented = false; showsMessages = false; replyTarget = nil
             selectedPlan = nil; planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false
-            showsEvents = false; drawing = false; showsIntroductionGuide = false
+            showsEvents = false; showsContactInvites = false; drawing = false; showsIntroductionGuide = false
             previewSaveContext = nil; previewSharePlace = nil
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
         }
@@ -397,6 +397,24 @@ struct LiveScreen: View {
         }
     }
 
+    private func refreshEnrichedMapActivity(_ page: FollowedFeedPage?) {
+        // Merge only enriched copies of already enumerated event IDs.
+        // Keep the projection typed outside the large SwiftUI result builder.
+        guard let page else { return }
+        let enriched: [String: FeedActivity] = Dictionary(
+            page.activity.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        var refreshed: [FeedActivity] = []
+        for existing in mapActivity {
+            let event: FeedActivity = enriched[existing.id] ?? existing
+            guard let query = store.liveFeedQuery, query.includes(event) else { continue }
+            guard store.canDisplayLiveMapActivity(event) else { continue }
+            refreshed.append(event)
+        }
+        mapActivity = refreshed
+        mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
+            ownCheckInPlaces: ownCheckInPlaces, previousPins: previousPinIdentities)
+    }
+
     private struct LocationActivation: Equatable {
         let isActive: Bool
         let accountID: String
@@ -411,7 +429,7 @@ struct LiveScreen: View {
     private var isMapCovered: Bool {
         fullProfilePin != nil || fullProfileCandidate != nil || planSource != nil || selectedPlan != nil || filtersPresented
             || previewSaveContext != nil || previewSharePlace != nil || showsFeedDestination
-            || showsMessages || replyTarget != nil || showsEvents || showsUpcomingInvitations
+            || showsMessages || replyTarget != nil || showsEvents || showsContactInvites || showsUpcomingInvitations
             || receivedPlan != nil || showsIntroductionGuide
     }
     private func resumeDeferredMapRefresh() {
@@ -699,6 +717,10 @@ struct LiveScreen: View {
     }
 
     private func drawer(height: CGFloat) -> some View {
+        drawerContent(height: height).overlay(alignment: .top) { drawerHeaderActions }
+    }
+
+    private func drawerContent(height: CGFloat) -> some View {
         LiveFeedDrawer(height: height, minimum: max(70, drawerHeaderHeight),
                        middle: self.height(for: 1, available: mapSize.height), maximum: max(height, mapSize.height),
                        detent: detent, enabled: !showsFeedDestination, onDetent: { changeDetent($0) }) {
@@ -708,7 +730,8 @@ struct LiveScreen: View {
                     drawerUpdateCount
                     drawerFilterSummary
                 }
-                .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 12)
+                .padding(.horizontal, 64)
+                .padding(.top, 10).padding(.bottom, 12)
                 .frame(minHeight: 64)
                 .fixedSize(horizontal: false, vertical: true)
                 .background {
@@ -757,12 +780,6 @@ struct LiveScreen: View {
                         })
                         .padding(.horizontal, 16).padding(.bottom, 8)
                     }
-                    if eventsAvailable {
-                        Button { showsEvents = true } label: {
-                            Label("Upcoming events", systemImage: "calendar").font(AstirTypography.bodySmall)
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }.padding(.horizontal, 20)
-                    }
                     if upcomingInvitationCount > 0 {
                         Button { showsUpcomingInvitations = true } label: {
                             Label("Upcoming invitations (\(upcomingInvitationCount))", systemImage: "envelope")
@@ -775,6 +792,7 @@ struct LiveScreen: View {
                     isFeedTabActive: isActive, presentationResetRequest: presentationResetRequest,
                     onPresentation: onPresentation, onWillDismiss: onWillDismiss, onDidDismiss: onDidDismiss,
                     isEmbedded: true,
+                    showsInviteEntry: false,
                     isEmbeddedFeedVisible: isActive && detent > 0 && selectedPin == nil && !showsFeedDestination,
                     filteredActivityIDs: Set(activity.map(\.id)),
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
@@ -799,6 +817,15 @@ struct LiveScreen: View {
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
             topTrailingRadius: showsFeedDestination ? 0 : 26))
         .shadow(color: .black.opacity(0.12), radius: 12, y: -3)
+    }
+
+    @ViewBuilder private var drawerHeaderActions: some View {
+        if !showsFeedDestination, !hasPlacePreview, !drawing {
+            LiveDrawerActions(eventsAvailable: eventsAvailable,
+                onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true })
+                .padding(.horizontal, 16)
+                .frame(height: max(64, drawerHeaderHeight))
+        }
     }
 
     @ViewBuilder private var placePreviewContent: some View {
@@ -1521,5 +1548,21 @@ private struct LivePlaceShareRoute: Identifiable {
         if UUID(uuidString: place.id) != nil { return WanderDeepLinkRoute.sharedPlace(placeID: place.id).url }
         guard let latitude = place.latitude, let longitude = place.longitude else { return nil }
         return PlaceExternalLinks.directionsAction(placeName: place.name, latitude: latitude, longitude: longitude)?.url
+    }
+}
+
+/// Isolate the invitation presentation from Live's large view expression.
+private struct LiveContactInvitePresentation: ViewModifier {
+    @EnvironmentObject private var store: WanderStore
+    @Binding var presented: Bool
+    let onDismiss: () -> Void
+    let lifecycle: LiveModalLifecycle
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: $presented, onDismiss: onDismiss) {
+            ContactInviteSheet(surface: .feedPeople, contactProvider: store.contactProvider,
+                               senderProfileID: store.currentUser.id, analytics: store.productAnalytics)
+                .modifier(lifecycle)
+        }
     }
 }
