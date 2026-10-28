@@ -9,6 +9,18 @@ enum MapPinLabStyle: String, CaseIterable {
     case bookmark
     case ticket
     case compass
+    case cutout
+    case wayfinder
+    case letterpress
+    case totem
+    case contour
+
+    var isSecondPass: Bool {
+        switch self {
+        case .cutout, .wayfinder, .letterpress, .totem, .contour: true
+        default: false
+        }
+    }
 
     static func resolve(arguments: [String]) -> Self? {
         guard arguments.contains("-WanderMapCapture"),
@@ -26,6 +38,16 @@ enum MapPinLabStyle: String, CaseIterable {
 enum MapPinDesignLab {
     static let style = MapPinLabStyle.resolve(arguments: ProcessInfo.processInfo.arguments)
 
+    static func cacheSuffix(
+        for descriptor: NativeMapAnnotationDescriptor,
+        style: MapPinLabStyle? = MapPinDesignLab.style
+    ) -> String {
+        // Letterpress uses the place initial even before selection. Include the
+        // source title so otherwise identical categories cannot share an initial.
+        guard style == .letterpress else { return "" }
+        return "|letterpress|\(descriptor.title)"
+    }
+
     static func image(for descriptor: NativeMapAnnotationDescriptor, isDark: Bool) -> UIImage? {
         guard let style else { return nil }
         return render(for: descriptor, isDark: isDark, style: style)
@@ -37,7 +59,7 @@ enum MapPinDesignLab {
     }
 
     /// MapKit offsets the image's midpoint; compensate for the selected title
-    /// so the emoji, map coordinate, and native hit-test center remain aligned.
+    /// so the glyph, map coordinate, and native hit-test center remain aligned.
     static func offset(for descriptor: NativeMapAnnotationDescriptor) -> CGPoint {
         let metrics = MapPinCanvasMetrics.resolve(for: descriptor)
         return CGPoint(x: 0, y: metrics.size.height / 2 - metrics.pinCenter.y)
@@ -92,7 +114,7 @@ private struct MapPinLabCanvas: View {
                     .position(center)
             }
 
-            MapPinLabGlyph(descriptor: descriptor, style: style, isDark: isDark)
+            glyph
                 // The existing 1.45 enlargement would crowd the title and exceed
                 // the coordinate-centered 34pt tap radius with these silhouettes.
                 .scaleEffect(descriptor.isSelected ? 1.18 : MapPinSelectionMotionStyle.inactiveScale)
@@ -116,6 +138,15 @@ private struct MapPinLabCanvas: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var glyph: some View {
+        if style.isSecondPass {
+            MapPinSecondPassGlyph(descriptor: descriptor, style: style, isDark: isDark)
+        } else {
+            MapPinLabGlyph(descriptor: descriptor, style: style, isDark: isDark)
+        }
+    }
 }
 
 private struct MapPinLabGlyph: View {
@@ -136,6 +167,7 @@ private struct MapPinLabGlyph: View {
         case .bookmark: 29
         case .ticket: 25
         case .compass: 30
+        case .cutout, .wayfinder, .letterpress, .totem, .contour: 30
         }
     }
 
@@ -148,6 +180,7 @@ private struct MapPinLabGlyph: View {
         case .porcelain, .signal: MapPinVisualMetrics.emojiDiameter
         case .bookmark, .compass: 22
         case .ticket: 20
+        case .cutout, .wayfinder, .letterpress, .totem, .contour: 22
         }
     }
 
@@ -279,6 +312,9 @@ private struct MapPinLabGlyph: View {
                     .frame(width: 26, height: 26)
             }
             .frame(width: 50, height: 50)
+
+        case .cutout, .wayfinder, .letterpress, .totem, .contour:
+            EmptyView()
         }
     }
 }

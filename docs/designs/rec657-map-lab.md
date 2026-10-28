@@ -1,11 +1,51 @@
 # REC-657: native map design lab
 
-Five pin families and five MapKit treatments, rendered in the existing Astir Map
+Ten pin families across two rounds and five MapKit treatments, rendered in the existing Astir Map
 with fictional storefront fixtures. This is an unselected design exploration.
 Release and device builds exclude the lab. Ordinary simulator launches keep the
 current map and pins.
 
-## Pin families
+## Second pass: five new visual systems
+
+The first round was rejected. This round removes displayed emoji and the large
+concentric status rings. Each family changes the visual language of the mark,
+instead of changing only the container around the same category emoji.
+
+| Family | Visual language | Assessment |
+| --- | --- | --- |
+| Cutout | Custom vector objects with a sticker edge | Most illustrative; assess category recognition at map scale |
+| Wayfinder | Filled cartographic marker with a white native pictogram | Strong silhouette; assess density and category clarity |
+| Letterpress | Editorial serif place initial on an ink stamp | Prioritizes place identity; initials can repeat |
+| Totem | Upright pictogram tile with a separate status footing | Strong vertical rhythm; assess visual weight |
+| Contour | Floating outline pictogram with a white keyline | Lightest footprint; assess legibility over detailed geography |
+
+Ownership and Been/Wanna state move into compact solid/dotted rails, with split
+segments for mixed state. Both ownerships remain visible when applicable.
+Featured remains anonymous. No new person identities, counts, rankings, or live
+location meanings are invented. Category lookup uses existing metadata; unknown
+categories get a neutral place pictogram. Letterpress includes the title in the
+review-only image and annotation reuse keys so unrelated places cannot share a
+cached initial.
+
+Capture this round with `scripts/capture-map-design-lab.py --second-pass` and the
+same device/app/output arguments. Add `--compact` for all five smaller-phone
+overviews. Generate the local comparison with
+`scripts/map-pin-second-pass-gallery.py`. All captures are real simulator output
+from the existing Map screen. No production family has been selected.
+
+Second-pass validation on iOS 26.5: the final native suite passed 3,117 tests,
+with no failures or skips, on iPhone 17e. The five-family physical tap,
+selected-card, place-profile, and return scenarios also passed on iPhone 17e.
+Fifteen screenshots cover overview and selected states on iPhone 17 Pro plus
+five compact overviews. Actual captures prompted smaller pictograms in
+Wayfinder/Totem and a lighter Contour outline. The initial full run caught an
+emoji presentation selector being accepted as a Letterpress initial; explicit
+Unicode letter/number categories fixed it, and the full suite was rerun.
+The gallery includes CSS magnifications of the unchanged native screenshots.
+Python/embedded JavaScript syntax, image references, diff whitespace, and review
+storage checks pass. Browser interaction with the local HTML is not verified.
+
+## First pass: retained for reference
 
 | Family | Intent | Tradeoff |
 | --- | --- | --- |
@@ -73,7 +113,8 @@ Build Debug for an iOS simulator. The lab requires all of these fixture flags:
 -WanderMapDesign quiet
 ```
 
-Pin values: `porcelain`, `signal`, `bookmark`, `ticket`, `compass`.
+Pin values, second pass: `cutout`, `wayfinder`, `letterpress`, `totem`, `contour`.
+Pin values, first pass: `porcelain`, `signal`, `bookmark`, `ticket`, `compass`.
 Map values: `quiet`, `atlas`, `night`, `dimension`, `hybrid`.
 Use simulator system Dark appearance for `night`.
 Add `-WanderMapPlace "Hearthline Coffee"` for the selected place state.
@@ -86,7 +127,7 @@ the selected-title canvas uses a compensating offset. The lab shares production 
 labels, activation, hit testing, reuse, visibility, and adaptive dots remain in
 the native annotation implementation.
 
-## Validation
+## First-pass validation
 
 `MapDesignLabTests` covers fixture-only activation, native configuration/POI
 contracts, rendering across semantic states, and coordinate anchoring.

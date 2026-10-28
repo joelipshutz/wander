@@ -6,6 +6,7 @@ import subprocess
 import time
 
 PINS = ("porcelain", "signal", "bookmark", "ticket", "compass")
+SECOND_PASS_PINS = ("cutout", "wayfinder", "letterpress", "totem", "contour")
 MAPS = ("quiet", "atlas", "night", "dimension", "hybrid")
 BASE = [
     "-WanderMapCapture", "-WanderUseStorefrontFixtures",
@@ -24,6 +25,7 @@ def main():
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compact", action="store_true")
+    parser.add_argument("--second-pass", action="store_true", help="Capture the five non-emoji pin families")
     parser.add_argument("--only", help="Capture one filename stem, e.g. map-dimension")
     parser.add_argument("--settle", type=float, default=8)
     args = parser.parse_args()
@@ -33,19 +35,21 @@ def main():
            "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
            "--batteryState", "charged", "--batteryLevel", "100")
 
-    captures = [("baseline", [], "light")]
-    for pin in PINS:
+    pins = SECOND_PASS_PINS if args.second_pass else PINS
+    captures = [] if args.second_pass else [("baseline", [], "light")]
+    for pin in pins:
         for state in ("overview", "selected"):
             flags = ["-WanderPinDesign", pin, "-WanderMapDesign", "quiet"]
             if state == "selected":
                 flags += ["-WanderMapPlace", "Hearthline Coffee"]
             captures.append((f"pin-{pin}-{state}", flags, "light"))
-    for style in MAPS:
+    for style in (() if args.second_pass else MAPS):
         captures.append((f"map-{style}",
                          ["-WanderPinDesign", "porcelain", "-WanderMapDesign", style],
                          "dark" if style == "night" else "light"))
     if args.compact:
-        captures = [("compact-porcelain", ["-WanderPinDesign", "porcelain"], "light")]
+        captures = [(f"compact-{pin}", ["-WanderPinDesign", pin], "light")
+                    for pin in (pins if args.second_pass else ("porcelain",))]
     if args.only:
         captures = [capture for capture in captures if capture[0] == args.only]
         if not captures:

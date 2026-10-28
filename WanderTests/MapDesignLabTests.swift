@@ -50,6 +50,81 @@ final class MapDesignLabTests: XCTestCase {
         }
     }
 
+    func testSecondPassCategorySymbolsExistInTheNativeSymbolCatalog() {
+        for category in MapPinSecondPassCategory.allCases {
+            XCTAssertNotNil(UIImage(systemName: category.symbolName),
+                            "Missing filled category symbol for \(category)")
+            XCTAssertNotNil(UIImage(systemName: category.outlineSymbolName),
+                            "Missing outline category symbol for \(category)")
+        }
+    }
+
+    func testSecondPassCategoryMappingNormalizesPresentationAndFallsBackSafely() {
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "☕️"), .coffee)
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "☕"), .coffee)
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "🍽️"), .dining)
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "🍽"), .dining)
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "🍸"), .bar)
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "🥾"), .trail)
+        XCTAssertEqual(MapPinSecondPassCategory.resolve(emoji: "🌳"), .nature)
+        for unknown in ["", "unrecognized category", "🧪"] {
+            let category = MapPinSecondPassCategory.resolve(emoji: unknown)
+            XCTAssertEqual(category, .place)
+            XCTAssertEqual(category.symbolName, "location.fill")
+            XCTAssertEqual(category.outlineSymbolName, "location")
+        }
+    }
+
+    func testLetterpressInitialsCannotReintroduceEmojiFromPlaceTitles() {
+        for (title, expected) in [
+            ("Cedar Coffee", "C"),
+            ("☕️ Café", "C"),
+            ("ℹ️ Museum", "M"),
+            ("🍕 Pizza Place", "P"),
+            ("  — 7th Street", "7"),
+            ("1️⃣ Pizza", "1"),
+            ("éclair", "É"),
+            ("🧪", "P"),
+            ("…", "P"),
+            ("", "P")
+        ] {
+            XCTAssertEqual(MapPinSecondPassGlyph.letterpressInitial(for: title), expected)
+        }
+    }
+
+    func testLetterpressCacheDistinguishesInactivePlaceTitlesOnlyForItsOwnFamily() {
+        let first = descriptor(state: .ownBeen, title: "Cedar Coffee")
+        let second = descriptor(state: .ownBeen, title: "Maple Coffee")
+        // Production inactive pins intentionally share images across place
+        // titles. Letterpress initials introduce a new visual input.
+        XCTAssertEqual(first.renderSignature, second.renderSignature)
+        XCTAssertNotEqual(
+            MapPinDesignLab.cacheSuffix(for: first, style: .letterpress),
+            MapPinDesignLab.cacheSuffix(for: second, style: .letterpress)
+        )
+        for style in MapPinLabStyle.allCases where style != .letterpress {
+            XCTAssertEqual(
+                MapPinDesignLab.cacheSuffix(for: first, style: style),
+                MapPinDesignLab.cacheSuffix(for: second, style: style),
+                "Only title-dependent imagery needs separate inactive cache entries"
+            )
+        }
+        XCTAssertEqual(MapPinDesignLab.cacheSuffix(for: first, style: nil), "")
+    }
+
+    func testLetterpressPlaceInitialsRenderBeforeSelection() throws {
+        let first = try XCTUnwrap(MapPinDesignLab.render(
+            for: descriptor(state: .ownBeen, title: "Cedar Coffee"),
+            isDark: false, style: .letterpress
+        ))
+        let second = try XCTUnwrap(MapPinDesignLab.render(
+            for: descriptor(state: .ownBeen, title: "Maple Coffee"),
+            isDark: false, style: .letterpress
+        ))
+        XCTAssertNotEqual(try XCTUnwrap(first.pngData()), try XCTUnwrap(second.pngData()),
+                          "Place initials must survive the inactive pin renderer")
+    }
+
     func testBasemapOptionsPreserveNativePointsOfInterestAndDisableTraffic() throws {
         // An unknown category also remains included: the lab must not narrow
         // native POIs to the categories known when these tests were written.
@@ -222,15 +297,19 @@ final class MapDesignLabTests: XCTestCase {
         }
     }
 
-    private func descriptor(state: PinState, selected: Bool = false) -> NativeMapAnnotationDescriptor {
+    private func descriptor(
+        state: PinState,
+        selected: Bool = false,
+        title: String = "Neighborhood Coffee"
+    ) -> NativeMapAnnotationDescriptor {
         NativeMapAnnotationDescriptor(
             id: "lab-fixture", kind: state == .search ? .search("fixture") : .saved("fixture"),
-            title: "Neighborhood Coffee", emoji: "☕️",
+            title: title, emoji: "☕️",
             coordinate: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
             outlines: state.outlines, isSearchResult: state == .search, isSelected: selected,
             opacity: 1, animatesEntrance: false, entranceDelay: 0,
             accessibilityLabel: MapPinAccessibility.label(
-                outlines: state.outlines, category: "Coffee", placeName: "Neighborhood Coffee"
+                outlines: state.outlines, category: "Coffee", placeName: title
             ),
             bounceRevision: 0
         )

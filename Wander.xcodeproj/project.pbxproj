@@ -157,6 +157,7 @@
 		362C9156D4DD179D4268FA5F /* WanderNearbyWidgetSnapshotPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC4B12C27D4BFE72E5AC0B2F /* WanderNearbyWidgetSnapshotPublisher.swift */; };
 		36FE6DA85A0AA106D8EF364D /* SenderNotificationFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220EB732D9C5E8C57E5DE1E7 /* SenderNotificationFlowUITests.swift */; };
 		3709094602EBE546D4531749 /* PeopleSearchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B244A3D380024216ACE3C8 /* PeopleSearchModel.swift */; };
+		3757059A89EB9E9349B733A3 /* MapPinSecondPassGlyphs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0166534514345310B7000ECC /* MapPinSecondPassGlyphs.swift */; };
 		3778DF9FA9A95AC4DF07FA5E /* ContactDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9317F5DBBB1D5B4B198A9E7 /* ContactDiscoveryTests.swift */; };
 		378615C2CBE931B6273D3BC1 /* InCommonDesignMockupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F90BDBE304312EA5EAE4F4 /* InCommonDesignMockupTests.swift */; };
 		37A3B036E352B26708C11E31 /* PlaceCheckInObservationProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F454C1F63367AD9A420BC986 /* PlaceCheckInObservationProjectionTests.swift */; };
@@ -678,6 +679,7 @@
 		00E90DEE7C218143EF3F3CFC /* LiveFeedQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveFeedQuery.swift; sourceTree = "<group>"; };
 		00EAE08EF86AAB6428F14701 /* rec-303-map-pin-entrance-bounce-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-303-map-pin-entrance-bounce-pre.json"; sourceTree = "<group>"; };
 		01334D3026016C41CA12F59A /* PlaceCheckInQuestionCatalog+CoreProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlaceCheckInQuestionCatalog+CoreProfiles.swift"; sourceTree = "<group>"; };
+		0166534514345310B7000ECC /* MapPinSecondPassGlyphs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPinSecondPassGlyphs.swift; sourceTree = "<group>"; };
 		017799A23EA134B7B0F5198E /* PlaceCheckInObservationProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCheckInObservationProjection.swift; sourceTree = "<group>"; };
 		028330A25B17ACAD18F7F886 /* AstirOceanParkLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirOceanParkLabel.swift; sourceTree = "<group>"; };
 		02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkAuthService.swift; sourceTree = "<group>"; };
@@ -1472,6 +1474,7 @@
 				D404DBD0F276EA2D226486E0 /* MapAdaptivePinDetail.swift */,
 				95AF74491DB7770C274A48AB /* MapKitDesignLab.swift */,
 				04EB829C242A9B06D44EA0F6 /* MapPinDesignLab.swift */,
+				0166534514345310B7000ECC /* MapPinSecondPassGlyphs.swift */,
 				CF55A883DB97E39A4A2D85F2 /* MapScreen.swift */,
 				D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */,
 				A1989A2162AE02769ADE7449 /* PlaceCardPresentation.swift */,
@@ -2721,6 +2724,7 @@
 				9F814E301B1400EAA644ACE4 /* MapKitDesignLab.swift in Sources */,
 				9783D57D5D22581B19B01C05 /* MapKitPlaceResolver.swift in Sources */,
 				13E4B4093D9890406A935228 /* MapPinDesignLab.swift in Sources */,
+				3757059A89EB9E9349B733A3 /* MapPinSecondPassGlyphs.swift in Sources */,
 				0D5062F6E898BDCC9574879F /* MapPlaceListPickerSheet.swift in Sources */,
 				D8168C5C8CD334CAD8BE852D /* MapPlaceWannaRemoval.swift in Sources */,
 				AD4AA98EFE3113857F5A9854 /* MapRegionFitter.swift in Sources */,

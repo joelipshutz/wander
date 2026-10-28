@@ -8,6 +8,12 @@ final class MapDesignLabUITests: XCTestCase {
         }
     }
 
+    func testSecondPassPinFamiliesKeepPhysicalSelectionAndPlaceNavigation() {
+        for style in ["cutout", "wayfinder", "letterpress", "totem", "contour"] {
+            verifyMap(pin: style, map: "quiet")
+        }
+    }
+
     func testEveryMapTreatmentKeepsPhysicalSelectionAndPlaceNavigation() {
         for style in ["quiet", "atlas", "night", "dimension", "hybrid"] {
             verifyMap(pin: "porcelain", map: style)
