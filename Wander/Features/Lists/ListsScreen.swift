@@ -1801,7 +1801,7 @@ private struct ListAddPlacesScreen: View {
     @StateObject private var placeSearch = ListPlaceSearchModel()
     @State private var searchAttempt = 0
     @State private var isLoadingSuggestions = false
-    @State private var selectedPlace: ListPlaceMock?
+    @State private var selectedPlace: PlaceSelection?
     @State private var pendingSearchCandidateIDs = Set<String>()
     @State private var pendingAddition: MapPlaceListTarget?
     @State private var showsAdditionNotificationChoice = false
@@ -1942,10 +1942,10 @@ private struct ListAddPlacesScreen: View {
                             currentUserID: store.currentUser.id,
                             isAdding: suggestionBatch.isAdding(suggestionID: suggestion.id),
                             onOpen: {
-                                selectedPlace = ListPlaceMock(
+                                selectedPlace = .suggested(ListPlaceMock(
                                     visiblePlace: suggestion.visiblePlace,
                                     currentUserID: store.currentUser.id
-                                )
+                                ))
                             },
                             onAdd: {
                                 pendingAddition = .visiblePlace(suggestion.visiblePlace)
@@ -1998,6 +1998,7 @@ private struct ListAddPlacesScreen: View {
                             candidate: candidate,
                             supportingText: candidate.previewSubtitle(),
                             isAdding: pendingSearchCandidateIDs.contains(candidate.id),
+                            onOpen: { selectedPlace = .search(candidate) },
                             onAdd: {
                                 pendingAddition = .candidate(candidate)
                                 showsAdditionNotificationChoice = true
@@ -2032,6 +2033,11 @@ private struct ListAddPlacesScreen: View {
         let userID: String
     }
 
+    private enum PlaceSelection {
+        case suggested(ListPlaceMock)
+        case search(PlaceCandidate)
+    }
+
     private struct SearchRequest: Equatable {
         let query: String
         let attempt: Int
@@ -2054,10 +2060,17 @@ private struct ListAddPlacesScreen: View {
 
     @ViewBuilder
     private var selectedPlaceDestination: some View {
-        if let selectedPlace {
-            ListPlaceProfileDestination(place: selectedPlace) {
-                self.selectedPlace = nil
+        switch selectedPlace {
+        case .suggested(let place):
+            ListPlaceProfileDestination(place: place) {
+                selectedPlace = nil
             }
+        case .search(let candidate):
+            LivePlaceFullProfileScreen(candidate: candidate) {
+                selectedPlace = nil
+            }
+        case nil:
+            EmptyView()
         }
     }
 
@@ -2398,6 +2411,8 @@ private struct ListVisiblePlaceAddRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("lists.openPlace.\(visiblePlace.id)")
+            .accessibilityHint("Opens the full place profile")
 
             Button(action: onAdd) {
                 Group {
@@ -2430,6 +2445,7 @@ private struct ListPlaceCandidateAddRow: View {
     let candidate: PlaceCandidate
     let supportingText: String
     let isAdding: Bool
+    let onOpen: () -> Void
     let onAdd: () -> Void
 
     private var subtitle: String {
@@ -2445,27 +2461,33 @@ private struct ListPlaceCandidateAddRow: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            HStack(spacing: WanderTheme.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                        .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
-                    WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
-                }
-                .frame(width: 48, height: 48)
+            Button(action: onOpen) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                            .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
+                        WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
+                    }
+                    .frame(width: 48, height: 48)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(candidate.name)
-                        .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-                    Text(subtitle.isEmpty ? "Map search" : subtitle)
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .lineLimit(2)
-                }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(candidate.name)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
+                            .lineLimit(1)
+                        Text(subtitle.isEmpty ? "Map search" : subtitle)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .lineLimit(2)
+                    }
 
-                Spacer(minLength: WanderTheme.spacing2)
+                    Spacer(minLength: WanderTheme.spacing2)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("lists.openSearchPlace.\(candidate.id)")
+            .accessibilityHint("Opens the full place profile")
 
             Button(action: onAdd) {
                 Group {
