@@ -391,7 +391,8 @@ struct WanderApp: App {
         WanderBackend(
             placeRepository: WanderRootView.resolvedFixtureMode() == .storefront
                 ? StorefrontPlaceResolver() : nil,
-            placePhotoRepository: MapCapturePlacePhotoRepository()
+            placePhotoRepository: MapCapturePlacePhotoRepository(),
+            placePhotoDataDiskCache: MapCapturePlacePhotoRepository.testsDiskCache ? .shared : .disabled
         )
     }
     #endif
@@ -608,6 +609,15 @@ struct SimulatorNotificationRepository: NotificationRepository {
 /// weakening the authenticated production `place-photo` boundary.
 @MainActor
 struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
+    static var testsDiskCache: Bool {
+        #if targetEnvironment(simulator)
+        Set(["-WanderMapCapture", "-WanderAuthenticatedUITest", "-WanderPhotoDiskCacheUITest"])
+            .isSubset(of: Set(ProcessInfo.processInfo.arguments))
+        #else
+        false
+        #endif
+    }
+
     private static let assetName = "PlaceCarouselPhotos"
     private static let tileCount = 4
     private static var croppedImageCache: [Int: UIImage] = [:]
@@ -719,6 +729,9 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func imageData(for photo: PlacePhoto) async throws -> Data {
+        if Self.testsDiskCache, ProcessInfo.processInfo.arguments.contains("-WanderPhotoDiskCacheOffline") {
+            throw URLError(.notConnectedToInternet)
+        }
         let tileIndex = Self.tileIndex(from: photo.providerPlaceID)
         if let data = Self.encodedImageCache[tileIndex] {
             return data
