@@ -115,10 +115,18 @@ final class LiveTotemUITests: XCTestCase {
         capture("19-save-featured-as-wanna")
         app.buttons["save.submit"].tap()
         XCTAssertTrue(app.buttons["save.submit"].waitForNonExistence(timeout: 15))
+        let celebration = app.buttons["Got it"]
+        if celebration.waitForExistence(timeout: 3) {
+            wait(celebration)
+            celebration.tap()
+            XCTAssertTrue(celebration.waitForNonExistence(timeout: 5))
+        }
         let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             featured.exists && featured.label.contains("You, Wanna") && !featured.label.contains("Featured")
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 15), .completed)
+        wait(featured)
+        settle(featured)
         assertUniquePins(app)
         capture("20-featured-becomes-wanna")
     }
@@ -166,11 +174,20 @@ final class LiveTotemUITests: XCTestCase {
 
     private func visibleButton(_ title: String, in app: XCUIApplication) -> XCUIElement {
         let matches = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title))
+        func visibleMatches() -> [XCUIElement] {
+            matches.allElementsBoundByIndex.filter { element in
+                // A native menu also exposes a noninteractive accessibility
+                // container. On compact iOS it has no activation point.
+                guard [.button, .staticText, .menuItem].contains(element.elementType),
+                      !element.frame.isEmpty, app.frame.intersects(element.frame) else { return false }
+                return element.isHittable
+            }
+        }
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            matches.allElementsBoundByIndex.contains { $0.isHittable }
+            !visibleMatches().isEmpty
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
-        return matches.allElementsBoundByIndex.first { $0.isHittable } ?? matches.firstMatch
+        return visibleMatches().first ?? matches.firstMatch
     }
 
     /// MapKit restores the camera after a card closes. Hittability can become

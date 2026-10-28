@@ -32,6 +32,7 @@ from urllib.parse import quote
 
 BASELINE = "aa2182a8c0"
 SCENARIOS = {
+    "zoomed-overview": ("additional", "Earlier zoomed overview", "Additional earlier native zoomed capture, retained for visual context; not a final test result."),
     "01-live-with-feed": ("overview", "Live, with the feed", "The Totem markers in the existing Live layout."),
     "02-all-states-map": ("overview", "Eight states, one map", "The fictional fixture places together on native MapKit."),
     "03-you-been-persistent-list": ("states", "Your Been · in a list", "Coral solid rail and the persistent list marker."),
@@ -219,7 +220,7 @@ section{padding:48px 0 50px;border-bottom:1px solid var(--line);scroll-margin-to
 <body><div class="shell">
 <header class="masthead"><a class="brand" href="#top">astir<span>.</span></a><span class="issue">REC-657 · Native Live review</span></header>
 <main id="top">
-<div class="hero"><div><span class="eyebrow">Totem · production integration</span><h1>A place, with<br><em>meaning.</em></h1>
+<div class="hero"><div><span class="eyebrow">Totem · Live integration review</span><h1>A place, with<br><em>meaning.</em></h1>
 <p class="lede">The approved Totem direction, brought into Live. Category leads. Personal and social saves keep their color. Current list membership stays visible.</p></div>
 <aside class="hero-note"><p><strong>Actual native SwiftUI + MapKit.</strong> Simulator screenshots exported from the UI test result bundle, using fictional, memory-only fixtures.</p><p>This is a visual review of the integration. Test outcomes appear only when a validation manifest is supplied.</p></aside></div>
 <div class="provenance"><span>Integration baseline · latest main <code>__BASELINE__</code></span><span>__COUNT__ native PNG captures · original source pixels preserved</span></div>

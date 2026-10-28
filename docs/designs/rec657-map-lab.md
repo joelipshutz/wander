@@ -62,13 +62,18 @@ persisted. Backend installation and hosted smoke validation remain separate gate
 
 ## Live validation and review status
 
-The final native suite passes all 3,191 tests on iPhone 17e (iOS 26.5),
-including immediate pending-own save/list feedback. Native UI capture validation,
-the gallery and video evidence are in progress.
+App implementation `15197e3` passed all 3,191 native tests on iPhone 17e (iOS 26.5),
+with zero failures or skips, including immediate pending-own save/list feedback.
+The final v7 native UI journey passed on iPhone 17 Pro and iPhone 17e, both on
+iOS 26.5. It captured 22 original screenshots per device and a simulator video
+covering all eight states, colored filters, Lists, persistent membership under
+a 24-hour window, place navigation and Featured changing to Wanna. Final media
+and the local gallery are in the shared `outputs/rec657/live-totem` directory
+outside this worktree and Git.
 Earlier lab results below do not validate the integrated Live change.
 
 Hosted validation remains incomplete: the Lists smoke test reached an unresolved
-source-deletion assertion, and the diagnostic connector failed. The pin-state RPC
+source-deletion assertion, then the follow-up diagnostic connector expired. The pin-state RPC
 hosted test has not run. Neither migration has been deployed.
 
 The current tests cover status/list precedence, authoritative deletion, incomplete
