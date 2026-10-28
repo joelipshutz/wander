@@ -513,7 +513,7 @@ struct LiveScreen: View {
                         .stroke(brand.accent.opacity(0.7), lineWidth: 1.5)
                 }
             }
-            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .all))
+            .modifier(LiveMapStyleReview())
             .mapFeatureSelectionDisabled { drawing || $0.kind != .pointOfInterest }
             .modifier(LiveMapNativeAccessory())
             .onChange(of: nativeFeature) { _, feature in
