@@ -8,7 +8,7 @@ declare
   followee text := 'user_codex_pin_state_followee'; stranger text := 'user_codex_pin_state_stranger';
   private_owner text := 'user_codex_pin_state_private'; blocked text := 'user_codex_pin_state_blocked';
   deleted_owner text := 'user_codex_pin_state_deleted';
-  result jsonb; state jsonb; saved jsonb; proc record; requested uuid[];
+  result jsonb; state jsonb; saved jsonb; proc record; requested uuid[]; removed_visit_id uuid;
 begin
   perform set_config('request.jwt.claim.sub','',true);
   perform set_config('request.jwt.claim.canonical_user_id','',true);
@@ -57,10 +57,8 @@ begin
       case when n in(1,2,3,4,5,6,7,14) then 'self' when n=8 then 'mutuals' else 'followers' end,
       'manual','PIN STATE CONTENT MUST NOT BE RETURNED'
     from generate_series(1,16) n;
-  -- The real parent trigger supplies active backfilled visits for Been. A
-  -- soft-deleted backfill keeps stale parent.status=been to catch unsafe fallback.
-  update public.place_visits set deleted_at=now()
-    where user_place_id='657b1000-0000-0000-0000-000000000003';
+  -- The real parent trigger supplies active backfilled visits for Been. The
+  -- last visit at fixture 3 is removed below, after its list membership exists.
   update public.user_places set deleted_at=now() where id='657b1000-0000-0000-0000-000000000015';
   update public.profiles set deleted_at=now() where id=deleted_owner;
   -- Retain a list-only parent after deleting its last Wanna identity.
@@ -123,10 +121,22 @@ begin
       ('657b1000-0000-0000-0000-'||lpad(place_number::text,12,'0'))::uuid,
       case list_number when 1 then viewer when 4 then blocked when 5 then private_owner else friend end,
       case when list_number=7 then now() else null end
-    from (values (1,1,4),(2,1,5),(3,1,17),(4,2,18),(5,3,19),(6,4,20),(7,5,21),(8,6,22),(9,7,23),(10,8,24),(11,2,25),(12,2,26))
+    from (values (1,1,4),(2,1,5),(3,1,17),(4,2,18),(5,3,19),(6,4,20),(7,5,21),(8,6,22),(9,7,23),(10,8,24),(11,2,25),(12,2,26),(13,1,3))
       fixture(n,list_number,place_number);
 
+  select id into strict removed_visit_id from public.place_visits
+    where user_place_id='657b1000-0000-0000-0000-000000000003' and deleted_at is null;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer,'role','authenticated')::text,true);
+  set local role authenticated;
+  perform public.delete_own_check_in(removed_visit_id);
+  reset role;
+  -- Last-ticket deletion deliberately retains a list companion. Its summary
+  -- says Wanna for storage compatibility, but that is not active Wanna intent.
+  if not exists(select 1 from public.user_places
+      where id='657b1000-0000-0000-0000-000000000003' and deleted_at is null and status='wanna_go')
+    or exists(select 1 from public.place_visits
+      where user_place_id='657b1000-0000-0000-0000-000000000003' and deleted_at is null)
+  then raise exception 'last-visit fixture did not retain only its list companion'; end if;
   set local role authenticated;
   select array_agg(('657b0000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid order by n) into requested
     from generate_series(1,30) n;
@@ -191,6 +201,7 @@ begin
   then raise exception 'fresh legacy social-save Wanna was omitted'; end if;
   for state in select value from jsonb_array_elements(result->'states') loop
     if (state->'has_list_membership'='true'::jsonb) is distinct from (state->>'place_id' in(
+      '657b0000-0000-0000-0000-000000000003',
       '657b0000-0000-0000-0000-000000000004','657b0000-0000-0000-0000-000000000005',
       '657b0000-0000-0000-0000-000000000017','657b0000-0000-0000-0000-000000000018',
       '657b0000-0000-0000-0000-000000000021',

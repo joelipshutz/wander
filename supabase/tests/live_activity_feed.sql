@@ -418,12 +418,19 @@ begin
   if jsonb_array_length(public.live_activity_feed('everyone',input_activity_type=>'lists')->'activity')<>2
   then raise exception 'Lists ignored current source-save privacy'; end if;
   reset role;
-  update public.user_places set deleted_at=now() where id='65710000-0000-0000-0000-000000000001';
+  -- Use the authenticated deletion flow: it removes visits before tombstoning
+  -- the parent. Directly updating a Been parent first invokes the backfilled
+  -- visit's soft-delete trigger, which intentionally retains a list companion.
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'role','authenticated')::text,true);
+  set local role authenticated;
+  perform public.delete_own_user_place('65710000-0000-0000-0000-000000000001');
+  reset role;
   -- Verify the fixture's tombstone after all parent/visit triggers before
   -- attributing a surviving event to the Live projection.
   if not exists(select 1 from public.user_places
       where id='65710000-0000-0000-0000-000000000001' and deleted_at is not null)
   then raise exception 'Lists fixture source tombstone did not persist'; end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer,'role','authenticated')::text,true);
   set local role authenticated;
   page:=public.live_activity_feed('everyone',input_activity_type=>'lists');
   if exists(select 1 from jsonb_array_elements(page->'activity') entry
