@@ -18,6 +18,7 @@ struct LiveScreen: View {
     @State private var launchLocation = LiveMapLaunchLocation()
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
     @StateObject private var mapResults = LiveMapResults()
+    @StateObject private var pinStateLoader = LiveMapPinStateLoader()
     @State private var mapActivity: [FeedActivity] = []
     @State private var mapPins: [LivePlacePin] = []
     @State private var committedMapBoundary: LiveDrawnArea?
@@ -108,6 +109,18 @@ struct LiveScreen: View {
     private var authorizedActivity: [FeedActivity] { mapActivity }
     private var activity: [FeedActivity] { mapActivity }
     private var pins: [LivePlacePin] { mapPins }
+    private var usesTotemReviewFixture: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if LiveTotemUITestFixtures.isEnabled { return true }
+        #endif
+        return false
+    }
+    private var pinStateRequest: LiveMapPinStateRequest? {
+        guard !usesTotemReviewFixture, let request = mapRequest else { return nil }
+        return LiveMapPinStateRequest(map: request,
+            placeIDs: Array(Set(mapPins.flatMap { $0.identity.persistedPlaceIDs })).sorted(),
+            resultRevision: mapResults.revision, storeRevision: store.presentationRevision)
+    }
     private var mapRequest: LiveMapRequest? {
         guard let query = store.liveFeedQuery else { return nil }
         return LiveMapRequest(userID: store.currentUser.id, audience: store.feedAudience,
@@ -206,6 +219,9 @@ struct LiveScreen: View {
         }
         .background(brand.background)
         .recentPlaceListAddPresentation(recentListAdd)
+        // These profiles return to the selected preview. A Feed departure
+        // snapshot here would outlive that preview and override the next
+        // actual Feed destination's scroll position.
         .fullScreenCover(item: $fullProfilePin, onDismiss: modalDidDismiss) { pin in
             LivePlaceFullProfileScreen(place: pin.place, activities: activity, identity: pin.identity,
                 onBack: { fullProfilePin = nil })
@@ -344,8 +360,14 @@ struct LiveScreen: View {
                 permits: { event in store.currentUser.id == request.userID && store.canDisplayLiveMapActivity(event) })
         }
         .onChange(of: mapResults.revision) { _, _ in rebuildMapProjection() }
+        .task(id: pinStateRequest) {
+            await pinStateLoader.load(request: pinStateRequest,
+                repository: auth.isSignedIn ? backend.feedRepository as? any LiveMapPinStateRepository : nil)
+        }
+        .onChange(of: pinStateLoader.revision) { _, _ in rebuildMapProjection() }
         .onReceive(store.$followedFeedPage) { page in refreshEnrichedMapActivity(page) }
         .onChange(of: store.presentationRevision) { _, _ in
+            pinStateLoader.reset()
             mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
             if isMapCovered || !isActive { mapRefreshDeferred = true }
             else { mapRefresh &+= 1 }
@@ -356,6 +378,7 @@ struct LiveScreen: View {
         }
         .onChange(of: store.followedFeedPage?.fetchedAt, initial: true) { _, _ in frameInitialMap() }
         .onChange(of: store.currentUser.id) { _, _ in
+            pinStateLoader.reset()
             isFeedDestinationActive = false
             clearNativePlaceSelection()
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
@@ -400,6 +423,7 @@ struct LiveScreen: View {
         }
         .onChange(of: introductionContext) { _, _ in updateIntroduction() }
         .onChange(of: isActive) { _, active in
+            if active { pinStateLoader.revalidate() }
             if active { resumeDeferredMapRefresh() }
             if active { restoreFeedPresentation(); updateIntroduction() }
             else { rememberFeedPresentation(); clearNativePlaceSelection() }
@@ -411,6 +435,7 @@ struct LiveScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { launchLocation.reset() }
             if phase == .active {
+                pinStateLoader.revalidate()
                 locationPermission.refreshAuthorizationStatus()
                 store.refreshLiveFeedDisplayLease()
                 mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
@@ -434,7 +459,11 @@ struct LiveScreen: View {
         }
         mapActivity = refreshed
         mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
-            ownCheckInPlaces: ownCheckInPlaces, previousPins: previousPinIdentities)
+            ownCheckInPlaces: ownCheckInPlaces,
+            totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
+                currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
+                allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
+            previousPins: previousPinIdentities)
     }
 
     private struct LocationActivation: Equatable {
@@ -511,7 +540,8 @@ struct LiveScreen: View {
                 ForEach(pins) { pin in
                     Annotation(pin.place.place.canonicalName, coordinate: coordinate(pin.place)) {
                         Button { selectPin(pin) } label: {
-                            LiveMapPinView(kind: pin.kind, selected: pin.id == selectedPlaceID,
+                            LiveTotemPinView(state: pin.totemState, categoryEmoji: pin.place.categoryEmoji,
+                                selected: pin.id == selectedPlaceID,
                                 viewed: pin.isViewed(dates: viewedPins),
                                 compact: compactIDs.contains(pin.id))
                         }
@@ -707,7 +737,7 @@ struct LiveScreen: View {
                 commitSelection(next)
             }
                 .font(AstirTypography.bodySmall.weight(selection.scope == .featured ? .bold : .regular))
-                .foregroundStyle(selection.scope == .featured ? brand.accentText : brand.primaryText)
+                .foregroundStyle(LiveFilterTint.featured(brand: brand))
                 .frame(minHeight: 44)
                 .accessibilityAddTraits(selection.scope == .featured ? .isSelected : [])
                 .accessibilityIdentifier("live.scope.featured")
@@ -859,7 +889,7 @@ struct LiveScreen: View {
                 onClose: dismissPlacePreview)
         } else if let candidate = selectedCandidate {
             LivePlacePreviewCard(candidate: candidate,
-                onOpen: { rememberFeedPresentation(); fullProfileCandidate = candidate },
+                onOpen: { fullProfileCandidate = candidate },
                 onAdd: { saveNativePlace(candidate) },
                 onShare: { previewSharePlace = LivePlaceShareRoute(place: PlaceSheetPlace(candidate: candidate)) },
                 onAddToList: { recentListAdd.add(.candidate(candidate), store: store, backend: backend, analyticsSurface: "map") },
@@ -946,14 +976,15 @@ struct LiveScreen: View {
                         .accessibilityIdentifier("live.filter.reset")
                 }
                 Section {
-                    Picker("People", selection: $draftAudience) {
-                        ForEach(FeedAudience.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
+                    LiveSemanticPicker(title: "People", selection: $draftAudience,
+                        options: FeedAudience.allCases.map {
+                            .init(value: $0, title: $0.title, color: LiveFilterTint.people($0, brand: brand))
+                        })
                     .accessibilityIdentifier("live.filter.people")
                     .accessibilityValue(draftAudience.title)
                     Picker("Activity", selection: $draftSelection.activityType) {
                         ForEach(LiveActivityFilter.allCases) { Text($0.rawValue).tag($0) }
-                    }
+                    }.accessibilityIdentifier("live.filter.activity")
                     Picker("When", selection: $draftSelection.time) {
                         ForEach(LiveTimeFilter.allCases) { Text($0.title).tag($0) }
                     }.accessibilityIdentifier("live.filter.time")
@@ -991,9 +1022,11 @@ struct LiveScreen: View {
 
     private var nearbyFilterSection: some View {
         Section("Area") {
-            Picker("Scope", selection: $draftSelection.scope) {
-                ForEach(LiveBrowseSelection.Scope.allCases) { Text($0.rawValue).tag($0) }
-            }.accessibilityIdentifier("live.filter.scope")
+            LiveSemanticPicker(title: "Scope", selection: $draftSelection.scope,
+                options: LiveBrowseSelection.Scope.allCases.map {
+                    .init(value: $0, title: $0.rawValue,
+                        color: $0 == .featured ? LiveFilterTint.featured(brand: brand) : brand.primaryText)
+                }).accessibilityIdentifier("live.filter.scope")
             if draftSelection.scope == .nearby {
                 Picker("Area center", selection: Binding(get: {
                     draftSelection.nearbyCenter == nil ? draftSelection.cityID : nil
@@ -1175,9 +1208,10 @@ struct LiveScreen: View {
 
     private func featuredMapPlaces(request: LiveMapRequest) async -> [VisiblePlace] {
         guard request.featured, request.audience == .everyone, request.query.personIDs.isEmpty,
-              request.query.activityType != .wannas, let viewport = request.viewport else { return [] }
+              request.query.activityType != .wannas, request.query.activityType != .lists,
+              let viewport = request.viewport else { return [] }
         let candidates = await store.fetchRemoteFeaturedViewportPlaces(in: viewport, backend: auth.isSignedIn ? backend : nil)
-            ?? (auth.isSignedIn ? [] : store.visiblePlaces())
+            ?? (usesTotemReviewFixture || !auth.isSignedIn ? store.visiblePlaces() : [])
         guard !Task.isCancelled, request.userID == store.currentUser.id else { return [] }
         let region = MKCoordinateRegion(center: .init(latitude: (viewport.minLatitude + viewport.maxLatitude)/2,
             longitude: (viewport.minLongitude + viewport.maxLongitude)/2),
@@ -1213,7 +1247,11 @@ struct LiveScreen: View {
             store.liveFeedQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
         }
         mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
-                ownCheckInPlaces: ownCheckInPlaces, previousPins: previousPinIdentities)
+                ownCheckInPlaces: ownCheckInPlaces,
+                totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
+                    currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
+                    allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
+                previousPins: previousPinIdentities)
     }
 
     private var activeFilterCount: Int {
@@ -1385,7 +1423,6 @@ struct LiveScreen: View {
                 visiblePlace: pin.place, identity: pin.identity, store: store)
             store.saveFlowDidPresent(.saveSheet)
         } else {
-            rememberFeedPresentation()
             fullProfilePin = pin
         }
     }

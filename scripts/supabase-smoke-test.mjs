@@ -170,6 +170,12 @@ async function main() {
         await client.query("rollback to savepoint live_place_smoke");
         await client.query("release savepoint live_place_smoke");
         console.log("ok - place preview activity expands explicit aliases without widening visibility and binds pagination to account/scope");
+        await client.query("savepoint live_pin_states_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/live_map_pin_states.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint live_pin_states_smoke");
+        await client.query("release savepoint live_pin_states_smoke");
+        console.log("ok - current pin states preserve source, list and account privacy with complete bounded scope");
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
         await runCommunityModerationSmokeChecks(
@@ -2867,6 +2873,10 @@ savepoint live_place_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_place_smoke;
 release savepoint live_place_smoke;
+savepoint live_pin_states_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/live_map_pin_states.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint live_pin_states_smoke;
+release savepoint live_pin_states_smoke;
 savepoint historical_wanna_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/historical_wanna_notes.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint historical_wanna_smoke;

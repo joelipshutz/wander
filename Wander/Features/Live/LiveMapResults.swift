@@ -257,14 +257,16 @@ struct LivePlacePin: Identifiable {
     let activities: [FeedActivity]
     let hasPriorOwnCheckIn: Bool
     let identity: LivePlaceIdentity
+    let totemState: LiveTotemState
 
     init(id: String, place: VisiblePlace, activities: [FeedActivity], hasPriorOwnCheckIn: Bool = false,
-         identity: LivePlaceIdentity? = nil) {
+         identity: LivePlaceIdentity? = nil, totemState: LiveTotemState = .empty) {
         self.id = id
         self.place = place
         self.activities = activities
         self.hasPriorOwnCheckIn = hasPriorOwnCheckIn
         self.identity = identity ?? LivePlaceIdentity(places: [place.place] + activities.compactMap { $0.place?.place })
+        self.totemState = totemState
     }
 
     func isViewed(dates: [String: Date], now: Date = .now) -> Bool {
@@ -283,16 +285,20 @@ struct LivePlacePin: Identifiable {
         return .list
     }
     var accessibilityLabel: String {
-        guard let latest = activities.first else { return "\(place.place.canonicalName), Featured" }
+        let stateSummary = totemState.accessibilitySummary
+        guard let latest = activities.first else {
+            return [place.place.canonicalName, stateSummary].filter { !$0.isEmpty }.joined(separator: ", ")
+        }
         let summary = "\(latest.actor.displayName), \(LiveActivityPresentation.title(for: latest)), \(FeedPresentation.timestampText(for: latest.occurredAt))"
-        return "\(place.place.canonicalName), \(summary)"
+        return [place.place.canonicalName, stateSummary, summary].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
 
 enum LiveMapProjection {
     /// Own history changes only badge evidence, never the filtered activity set.
     static func pins(activities: [FeedActivity], featured: [VisiblePlace],
-                     ownCheckInPlaces: [VisiblePlace] = [], previousPins: [LivePlacePin] = []) -> [LivePlacePin] {
+                     ownCheckInPlaces: [VisiblePlace] = [], totemContext: LiveTotemContext? = nil,
+                     previousPins: [LivePlacePin] = []) -> [LivePlacePin] {
         let ownIdentity = LivePlaceIdentity(places: ownCheckInPlaces.filter {
             $0.owner.deletedAt == nil && $0.userPlace.deletedAt == nil && $0.owner.id == $0.userPlace.userID
         }.map(\.place))
@@ -300,7 +306,8 @@ enum LiveMapProjection {
         let events = activities.filter { $0.place != nil && seenEvents.insert($0.id).inserted }
         let places = events.compactMap(\.place) + featured
         guard !places.isEmpty else { return [] }
-        var parents = Array(places.indices)
+        let identityPlaces = places.map(\.place) + (totemContext?.identityPlaces ?? [])
+        var parents = Array(identityPlaces.indices)
         func root(_ index: Int) -> Int {
             var current = index
             while parents[current] != current {
@@ -314,10 +321,10 @@ enum LiveMapProjection {
             if left != right { parents[max(left, right)] = min(left, right) }
         }
         var evidenceByObject: [ObjectIdentifier: LivePlaceIdentity.Member] = [:]
-        let evidence = places.map { visible in
-            let key = ObjectIdentifier(visible.place)
+        let evidence = identityPlaces.map { place in
+            let key = ObjectIdentifier(place)
             if let member = evidenceByObject[key] { return member }
-            let member = LivePlaceIdentity.Member(visible.place)
+            let member = LivePlaceIdentity.Member(place)
             evidenceByObject[key] = member
             return member
         }
@@ -341,11 +348,11 @@ enum LiveMapProjection {
                 indicesByWeakKey[key, default: []].append(index)
             }
         }
-        let members = Dictionary(grouping: places.indices, by: root)
+        let members = Dictionary(grouping: identityPlaces.indices, by: root)
         var result: [LivePlacePin] = []
         for indices in members.values {
             let groupEvents = indices.filter { $0 < events.count }.map { events[$0] }
-            let groupPlaces = indices.map { places[$0] }
+            let groupPlaces = indices.filter { $0 < places.count }.map { places[$0] }
             let valid = groupPlaces.filter {
                 $0.place.latitude.isFinite && $0.place.longitude.isFinite
                     && CLLocationCoordinate2DIsValid(.init(latitude: $0.place.latitude, longitude: $0.place.longitude))
@@ -357,10 +364,14 @@ enum LiveMapProjection {
                 if lhs.place.id != rhs.place.id { return lhs.place.id < rhs.place.id }
                 return lhs.id < rhs.id
             }).first else { continue }
-            let identity = LivePlaceIdentity(places: groupPlaces.map(\.place))
+            let identity = LivePlaceIdentity(places: indices.map { identityPlaces[$0] })
+            let featuredPlaces = indices.filter { $0 >= events.count && $0 < places.count }.map { places[$0] }
+            let isFeatured = featuredPlaces.contains { $0.userPlace.deletedAt == nil && $0.owner.deletedAt == nil }
             result.append(LivePlacePin(id: place.place.id, place: place,
                 activities: FeedPresentation.newestFirst(groupEvents),
-                hasPriorOwnCheckIn: identity.intersects(ownIdentity), identity: identity))
+                hasPriorOwnCheckIn: identity.intersects(ownIdentity), identity: identity,
+                totemState: totemContext?.state(for: identity, activities: groupEvents, featured: isFeatured,
+                    additionalSavedPlaces: featuredPlaces, hasPriorOwnCheckIn: identity.intersects(ownIdentity)) ?? .empty))
         }
         result.sort { $0.id < $1.id }
         var previousByAlias: [String: Set<Int>] = [:]
@@ -401,7 +412,7 @@ enum LiveMapProjection {
                 used.insert(id)
             }
             return LivePlacePin(id: id, place: pin.place, activities: pin.activities,
-                hasPriorOwnCheckIn: pin.hasPriorOwnCheckIn, identity: pin.identity)
+                hasPriorOwnCheckIn: pin.hasPriorOwnCheckIn, identity: pin.identity, totemState: pin.totemState)
         }.sorted { $0.id < $1.id }
     }
 }

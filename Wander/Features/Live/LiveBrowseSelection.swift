@@ -55,6 +55,7 @@ struct LiveBrowseSelection: Equatable {
         case .all: .all
         case .checkIns: .checkIns
         case .wannas: .wannas
+        case .lists: .lists
         }
         return LiveFeedQuery(occurredAfter: occurredAfter, occurredBefore: occurredBefore,
             activityType: type, polygon: area?.vertices.map { .init(latitude: $0.latitude, longitude: $0.longitude) },

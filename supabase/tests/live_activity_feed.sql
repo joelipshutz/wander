@@ -312,4 +312,146 @@ begin
 end;
 $refinements$;
 
+-- Lists must page over immutable list actions, not infer Wanna/Been from a
+-- mutable source save. The sixty newer nonmatches make page-local filtering
+-- fail, while tied list timestamps exercise the existing opaque keyset cursor.
+do $lists$
+declare
+  viewer text := 'user_codex_live_lists_viewer'; actor text := 'user_codex_live_lists_actor';
+  page jsonb; cursor text; first_cursor text; item jsonb; ids uuid[] := '{}';
+  until_time timestamptz := now()+interval '5 minutes';
+  list_time timestamptz := now()-interval '2 days';
+begin
+  perform set_config('request.jwt.claim.sub','',true);
+  perform set_config('request.jwt.claim.canonical_user_id','',true);
+  perform set_config('request.jwt.claims','{}',true);
+  insert into public.profiles(id,handle,display_name,is_private_profile) values
+    (viewer,'codex_live_lists_viewer','Lists Viewer',false),
+    (actor,'codex_live_lists_actor','Lists Actor',false);
+  delete from public.follows where follower_user_id in(viewer,actor) and source='signup_default';
+  insert into public.follows(follower_user_id,followed_user_id,source) values
+    (viewer,actor,'username'),(actor,viewer,'username');
+  insert into public.places(id,canonical_name,category,latitude,longitude,source_provider,source_provider_place_id)
+    select ('65700000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,
+      'Lists fixture '||n,'coffee',0,0,'manual','rec657-lists-'||n from generate_series(1,4) n;
+  insert into public.user_places(id,user_id,place_id,status,visibility,source_type,deleted_at)
+    select ('65710000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,actor,
+      ('65700000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,
+      case when n=2 then 'wanna_go' else 'been' end,
+      case when n=3 then 'self' else 'followers' end,'manual',
+      case when n=4 then now() else null end from generate_series(1,4) n;
+  insert into public.place_lists(id,owner_user_id,name,visibility)
+    select ('65730000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,actor,
+      'Lists fixture '||n,case when n=3 then 'stealth' else 'followers' end from generate_series(1,3) n;
+  insert into public.place_list_items(id,list_id,place_id,owner_user_place_id,source_user_place_id,added_by_user_id)
+    select ('65740000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,
+      ('65730000-0000-0000-0000-'||lpad(list_number::text,12,'0'))::uuid,
+      ('65700000-0000-0000-0000-'||lpad(place_number::text,12,'0'))::uuid,
+      ('65710000-0000-0000-0000-'||lpad(place_number::text,12,'0'))::uuid,
+      ('65710000-0000-0000-0000-'||lpad(place_number::text,12,'0'))::uuid,actor
+    from (values (1,1,1),(2,1,2),(3,1,3),(4,1,4),(5,2,1),(6,2,2),(7,3,1)) fixture(n,list_number,place_number);
+  delete from public.feed_events where actor_user_id in(viewer,actor);
+  insert into public.feed_events(id,actor_user_id,event_type,user_place_id,place_id,occurred_at)
+    select ('65720000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,actor,
+      case when n%2=0 then 'place_been' else 'place_want_to_go' end,
+      ('65710000-0000-0000-0000-'||lpad((1+n%2)::text,12,'0'))::uuid,
+      ('65700000-0000-0000-0000-'||lpad((1+n%2)::text,12,'0'))::uuid,
+      now()-interval '1 hour' from generate_series(1,60) n;
+  insert into public.feed_events(id,actor_user_id,event_type,list_id,occurred_at)
+    select ('65750000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,actor,'list_created',
+      ('65730000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,list_time from generate_series(1,3) n;
+  insert into public.feed_events(id,actor_user_id,event_type,user_place_id,place_id,list_id,list_item_id,occurred_at)
+    select ('65760000-0000-0000-0000-'||lpad(row_number() over(order by source.id)::text,12,'0'))::uuid,
+      actor,'list_item_added',source.owner_user_place_id,source.place_id,source.list_id,source.id,list_time
+    from public.place_list_items source where source.added_by_user_id=actor;
+
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer,'role','authenticated')::text,true);
+  set local role authenticated;
+  page := public.live_activity_feed('everyone',input_until=>until_time,input_activity_type=>'lists',input_limit=>50);
+  if jsonb_array_length(page->'activity')<>6 or page->>'next_cursor' is not null
+  then raise exception 'Lists did not filter before the page cap or exposed a private/deleted source'; end if;
+  if (select count(*) from jsonb_array_elements(page->'activity') e where e->>'event_type'='list_created')<>2
+    or (select count(*) from jsonb_array_elements(page->'activity') e where e->>'event_type'='list_item_added')<>4
+  then raise exception 'Lists conflated source save status with list actions'; end if;
+  if (select count(distinct e->'place'->>'place_id') from jsonb_array_elements(page->'activity') e where e->>'event_type'='list_item_added')<>2
+  then raise exception 'Multiple lists changed canonical place identity'; end if;
+  page := public.live_activity_feed('everyone',input_until=>until_time,input_activity_type=>'lists',input_limit=>2);
+  first_cursor := page->>'next_cursor';
+  if first_cursor is null then raise exception 'Lists omitted its next-page cursor'; end if;
+  loop
+    for item in select value from jsonb_array_elements(page->'activity') loop
+      if (item->>'id')::uuid=any(ids) then raise exception 'Lists repeated an event across pages'; end if;
+      ids:=array_append(ids,(item->>'id')::uuid);
+    end loop;
+    cursor:=page->>'next_cursor';
+    exit when cursor is null;
+    if cardinality(ids)>6 then raise exception 'Lists pagination did not terminate'; end if;
+    page:=public.live_activity_feed('everyone',input_until=>until_time,input_activity_type=>'lists',input_before=>cursor,input_limit=>2);
+  end loop;
+  if cardinality(ids)<>6 then raise exception 'Lists lost tied-timestamp events across pages'; end if;
+  begin
+    perform public.live_activity_feed('everyone',input_until=>until_time,input_activity_type=>'wannas',input_before=>first_cursor,input_limit=>2);
+    raise exception 'Lists cursor accepted by Wannas';
+  exception when invalid_parameter_value then null; end;
+  if jsonb_array_length(public.live_activity_feed('only_friends',input_activity_type=>'lists')->'activity')<>6
+    or public.live_activity_feed('only_me',input_activity_type=>'lists')->'activity'<>'[]'::jsonb
+  then raise exception 'Lists widened the selected audience'; end if;
+  if jsonb_array_length(public.live_activity_feed('everyone',input_activity_type=>'lists',
+      input_center_latitude=>0,input_center_longitude=>0,input_radius_meters=>100,input_person_ids=>array[actor])->'activity')<>4
+  then raise exception 'Mapped Lists lost additions or included unmapped list creation'; end if;
+  if public.live_activity_feed('everyone',input_activity_type=>'lists',input_person_ids=>array[viewer])->'activity'<>'[]'::jsonb
+  then raise exception 'Lists ignored selected people'; end if;
+  if exists(select 1 from jsonb_array_elements(public.live_activity_feed('everyone',input_activity_type=>'wannas',input_limit=>50)->'activity') e
+      where e->>'event_type' in('list_created','list_item_added'))
+    or exists(select 1 from jsonb_array_elements(public.live_activity_feed('everyone',input_activity_type=>'check_ins',input_limit=>50)->'activity') e
+      where e->>'event_type' in('list_created','list_item_added'))
+  then raise exception 'List additions leaked into Wanna or Check-in filtering'; end if;
+  reset role;
+
+  update public.place_lists set visibility='stealth' where id='65730000-0000-0000-0000-000000000001';
+  set local role authenticated;
+  if jsonb_array_length(public.live_activity_feed('everyone',input_activity_type=>'lists')->'activity')<>3
+  then raise exception 'Lists ignored current list privacy'; end if;
+  reset role;
+  update public.user_places set visibility='self' where id='65710000-0000-0000-0000-000000000002';
+  set local role authenticated;
+  if jsonb_array_length(public.live_activity_feed('everyone',input_activity_type=>'lists')->'activity')<>2
+  then raise exception 'Lists ignored current source-save privacy'; end if;
+  reset role;
+  -- Use the authenticated deletion flow: it removes visits before tombstoning
+  -- the parent. Directly updating a Been parent first invokes the backfilled
+  -- visit's soft-delete trigger, which intentionally retains a list companion.
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'role','authenticated')::text,true);
+  set local role authenticated;
+  perform public.delete_own_user_place('65710000-0000-0000-0000-000000000001');
+  reset role;
+  -- Verify the fixture's tombstone after all parent/visit triggers before
+  -- attributing a surviving event to the Live projection.
+  if not exists(select 1 from public.user_places
+      where id='65710000-0000-0000-0000-000000000001' and deleted_at is not null)
+  then raise exception 'Lists fixture source tombstone did not persist'; end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer,'role','authenticated')::text,true);
+  set local role authenticated;
+  page:=public.live_activity_feed('everyone',input_activity_type=>'lists');
+  if exists(select 1 from jsonb_array_elements(page->'activity') entry
+      where entry->>'event_type'='list_item_added')
+  then raise exception 'Lists retained an addition after source deletion: % events, kinds %',
+    jsonb_array_length(page->'activity'),
+    (select jsonb_agg(entry->>'event_type') from jsonb_array_elements(page->'activity') entry); end if;
+  -- The readable list's own creation remains a valid container event even
+  -- when its additions no longer have a readable active source save.
+  if jsonb_array_length(page->'activity') is distinct from 1
+    or page->'activity'->0->>'id' is distinct from '65750000-0000-0000-0000-000000000002'
+  then raise exception 'Lists container creation changed after source deletion: % events, kinds %',
+    jsonb_array_length(page->'activity'),
+    (select jsonb_agg(entry->>'event_type') from jsonb_array_elements(page->'activity') entry); end if;
+  reset role;
+  insert into public.blocks(blocker_user_id,blocked_user_id) values(actor,viewer);
+  set local role authenticated;
+  if public.live_activity_feed('everyone',input_activity_type=>'lists')->'activity'<>'[]'::jsonb
+  then raise exception 'Lists ignored a hard block'; end if;
+  reset role;
+end;
+$lists$;
+
 rollback;
