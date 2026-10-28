@@ -86,6 +86,12 @@ def make_data(captures: Path, output: Path) -> list[dict]:
                 "src": quote(relative, safe="/"),
                 "available": (captures / filename).is_file(),
             }
+        if item["id"] == "totem":
+            featured = captures / "totem-featured-selected.png"
+            item["featured"] = {
+                "src": quote(Path(os.path.relpath(featured, output.parent)).as_posix(), safe="/"),
+                "available": featured.is_file(),
+            }
         data.append(item)
     return data
 
@@ -114,12 +120,19 @@ def cards_markup(data: list[dict]) -> str:
             f'<div class="detail-pending"{" hidden" if available else ""}>Overview capture pending</div>'
             '<p class="detail-source">Overview capture · enlarged view</p></div>'
         )
+        featured = item.get("featured", {})
+        featured_link = (
+            f'<p class="direction-description"><a href="{esc(featured["src"])}" target="_blank" rel="noopener">'
+            'View solid green Featured state ↗</a><br>Green appears only when neither you nor your social map '
+            'has a Been or Wanna save.</p>'
+        ) if featured.get("available") else ""
         cards.append(
             f'<article class="direction-card" data-direction="{item["id"]}">'
             f'<header class="card-heading"><span class="direction-number">{number:02d}</span>'
             f'<h3>{esc(item["name"])}</h3><p>{esc(item["language"])}</p></header>'
             f'{detail}<div class="capture-container">{image}</div>'
             f'<p class="direction-description">{esc(item["description"])}</p>'
+            f'{featured_link}'
             f'<button class="pick-button" type="button" data-pick="{item["id"]}" aria-pressed="false">'
             '<span class="pick-mark" aria-hidden="true">+</span> Compare</button></article>'
         )

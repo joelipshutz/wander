@@ -995,3 +995,12 @@ Closing a preview restores its original geographic center and, only when needed,
 ## REC-654 — compact Live drawer actions, 2026-10-27
 
 Upcoming events and inviting people to Astir use icon buttons on the left and right of the Live activity summary. Both retain 44 pt tap targets and full accessibility labels. Their former Events row and invitation card no longer occupy the embedded Feed, reclaiming approximately 122 pt at default text size. Events keeps its existing availability rule; invitations keep the existing contact sheet and analytics surface. Received plan invitations and standalone Feed behavior remain unchanged.
+
+## REC-657 — Featured pin status, 2026-10-27
+
+Featured-only pins use a solid green status mark when neither the viewer nor the
+visible social graph has an active Been or Wanna save for the place. Any personal
+or social save replaces that fallback with the existing coral/blue status marks.
+Green does not imply an identified contributor or the viewer's visit. This is an
+approved semantic direction in the native pin mockups; a production pin family
+has not yet been selected.

@@ -211,6 +211,25 @@ final class MapDesignLabTests: XCTestCase {
         }
     }
 
+    func testFeaturedTotemRailIsGreenWithoutRecoloringPersonalOrSocialSaves() throws {
+        for dark in [false, true] {
+            for state in PinState.allCases {
+                let image = try XCTUnwrap(MapPinDesignLab.render(
+                    for: descriptor(state: state), isDark: dark, style: .totem
+                ))
+                let pixels = try rgbaPixels(image)
+                let hasGreenRail = stride(from: 0, to: pixels.count, by: 4).contains { index in
+                    let red = Int(pixels[index])
+                    let green = Int(pixels[index + 1])
+                    let blue = Int(pixels[index + 2])
+                    return pixels[index + 3] > 250 && green > red + 35 && green > blue + 35
+                }
+                XCTAssertEqual(hasGreenRail, state == .featured,
+                               "Only the Featured-only fallback should have a green rail: \(state)")
+            }
+        }
+    }
+
     func testSelectedTitlesDoNotMoveThePinAwayFromItsCoordinate() throws {
         for style in MapPinLabStyle.allCases {
             for state in PinState.allCases {

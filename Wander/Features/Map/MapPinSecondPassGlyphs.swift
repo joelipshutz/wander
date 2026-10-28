@@ -103,7 +103,9 @@ struct MapPinSecondPassGlyph: View {
     }
     private var ink: Color { MapPinSecondPassPalette.ink }
     private var paper: Color { MapPinSecondPassPalette.paper }
-    private var primaryColor: Color { descriptor.outlines.first?.color ?? ink }
+    private var primaryColor: Color {
+        descriptor.outlines.first.map { MapPinSecondPassStatusStyle.color(for: $0.ownership) } ?? ink
+    }
 
     var body: some View {
         ZStack {
@@ -227,6 +229,18 @@ private enum MapPinSecondPassPalette {
     }
 }
 
+/// Review-approved Featured color. The existing outline builder supplies this
+/// fallback only when no active personal or social Been/Wanna save exists.
+enum MapPinSecondPassStatusStyle {
+    static func color(for ownership: MapPinSaveOwnership) -> Color {
+        switch ownership {
+        case .currentUser: WanderTheme.pinYou.color
+        case .social: WanderTheme.pinSocial.color
+        case .featured: MapPinSecondPassPalette.color(0x6FB985)
+        }
+    }
+}
+
 /// Ownership occupies separate rails. Each status uses the same solid/dotted
 /// distinction as the production rings; mixed saves split one rail in two.
 private struct MapPinSecondPassStatusRails: View {
@@ -238,9 +252,12 @@ private struct MapPinSecondPassStatusRails: View {
         VStack(spacing: 2.8) {
             ForEach(Array(outlines.enumerated()), id: \.offset) { _, outline in
                 HStack(spacing: 3) {
-                    segment(status: outline.status, color: outline.color)
-                    if let secondary = outline.secondaryStatus {
-                        segment(status: secondary, color: outline.color)
+                    segment(
+                        status: outline.ownership == .featured ? .been : outline.status,
+                        color: MapPinSecondPassStatusStyle.color(for: outline.ownership)
+                    )
+                    if outline.ownership != .featured, let secondary = outline.secondaryStatus {
+                        segment(status: secondary, color: MapPinSecondPassStatusStyle.color(for: outline.ownership))
                     }
                 }
                 .frame(width: width, height: 2.6)

@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compact", action="store_true")
     parser.add_argument("--second-pass", action="store_true", help="Capture the five non-emoji pin families")
+    parser.add_argument("--featured-totem", action="store_true", help="Capture Totem's green Featured-only state")
     parser.add_argument("--only", help="Capture one filename stem, e.g. map-dimension")
     parser.add_argument("--settle", type=float, default=8)
     args = parser.parse_args()
@@ -50,6 +51,12 @@ def main():
     if args.compact:
         captures = [(f"compact-{pin}", ["-WanderPinDesign", pin], "light")
                     for pin in (pins if args.second_pass else ("porcelain",))]
+    launch_base = BASE.copy()
+    if args.featured_totem:
+        launch_base[-1] = "featured"
+        name = "compact-totem-featured-selected" if args.compact else "totem-featured-selected"
+        captures = [(name, ["-WanderPinDesign", "totem", "-WanderMapDesign", "quiet",
+                            "-WanderFeaturedRatingFixture", "-WanderMapPlace", "Featured Coffee QA"], "light")]
     if args.only:
         captures = [capture for capture in captures if capture[0] == args.only]
         if not captures:
@@ -58,7 +65,7 @@ def main():
     for name, flags, appearance in captures:
         simctl("ui", args.device, "appearance", appearance)
         simctl("launch", "--terminate-running-process", args.device,
-               "com.grayline.wander", *BASE, *flags)
+               "com.grayline.wander", *launch_base, *flags)
         time.sleep(args.settle)
         simctl("io", args.device, "screenshot", str(args.output / f"{name}.png"))
         print(f"Captured {name}", flush=True)

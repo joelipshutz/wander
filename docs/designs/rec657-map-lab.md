@@ -27,11 +27,26 @@ categories get a neutral place pictogram. Letterpress includes the title in the
 review-only image and annotation reuse keys so unrelated places cannot share a
 cached initial.
 
+Approved status refinement: Featured-only marks use solid green (`#6FB985`) in
+the second-pass mockups. Green is a fallback only when the viewer and visible
+social graph have no active Been or Wanna save for that place. The existing
+outline builder already enforces this precedence; personal coral and social blue
+replace Featured completely. Green is never dotted. This review change does not
+select a production pin family or alter production rendering.
+Validation for this refinement: 3,118 native tests passed, with no failures or
+skips, including the existing Featured/save precedence coverage and a rendered
+Totem color regression in Light and Dark. Featured-only selected captures were
+reviewed on iPhone 17 Pro and iPhone 17e.
+
 Capture this round with `scripts/capture-map-design-lab.py --second-pass` and the
 same device/app/output arguments. Add `--compact` for all five smaller-phone
 overviews. Generate the local comparison with
 `scripts/map-pin-second-pass-gallery.py`. All captures are real simulator output
 from the existing Map screen. No production family has been selected.
+
+Use `--featured-totem` with the capture script for the green Featured-only
+selected pin; combine with `--compact` for the smaller phone. This uses the
+existing anonymous Featured fixture and does not fabricate a personal save.
 
 Second-pass validation on iOS 26.5: the final native suite passed 3,117 tests,
 with no failures or skips, on iPhone 17e. The five-family physical tap,
