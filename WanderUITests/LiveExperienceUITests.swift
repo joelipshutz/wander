@@ -63,8 +63,84 @@ final class LiveExperienceUITests: XCTestCase {
         app.tabBars.buttons["Lists"].tap()
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].exists)
-        app.buttons["live.clearArea"].tap()
-        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        tapSettled(app.buttons["live.clearArea"], in: app)
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
+    }
+
+    func testDrawingAfterSearchDoesNotReplaySearch() {
+        verifyDrawingDoesNotReplayDestination("Search")
+    }
+
+    func testDrawingAfterNotificationsDoesNotReplayNotifications() {
+        verifyDrawingDoesNotReplayDestination("Notifications")
+    }
+
+    private func verifyDrawingDoesNotReplayDestination(_ destination: String) {
+        let app = launch()
+        for action in ["Apply", "Cancel"] {
+            // Each explicit request must still work, including after drawing.
+            app.buttons[destination].tap()
+            let back: XCUIElement
+            if destination == "Search" {
+                back = app.buttons["discover.searchBack"]
+            } else {
+                let inbox = app.navigationBars["Notifications"]
+                XCTAssertTrue(inbox.waitForExistence(timeout: 10))
+                back = inbox.buttons.element(boundBy: 0)
+            }
+            XCTAssertTrue(back.waitForExistence(timeout: 10))
+            let keyboardTutorial = app.otherElements["UIContinuousPathIntroductionView"]
+            let explanation = keyboardTutorial.staticTexts[
+                "Speed up your typing by sliding your finger across the letters to compose a word."]
+            if explanation.waitForExistence(timeout: 1) {
+                keyboardTutorial.buttons["Continue"].tap()
+                XCTAssertTrue(explanation.waitForNonExistence(timeout: 5))
+            }
+            tapSettled(back, in: app)
+            XCTAssertTrue(back.waitForNonExistence(timeout: 5))
+            if app.buttons["live.showMap"].exists { app.buttons["live.showMap"].tap() }
+            let draw = app.buttons["live.draw"]
+            waitForCondition { draw.isHittable }
+            draw.tap()
+            XCTAssertTrue(app.buttons["live.applyArea"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["live.applyArea"].isEnabled)
+            XCTAssertTrue(app.descendants(matching: .any)["live.drawerHandle"].firstMatch.waitForNonExistence(timeout: 5),
+                           "The retained drawer must be hidden from accessibility while drawing.")
+            app.buttons["Use visible area"].tap()
+            XCTAssertTrue(app.buttons["live.applyArea"].isEnabled)
+            app.buttons[action == "Apply" ? "live.applyArea" : "Cancel"].tap()
+            XCTAssertTrue(app.buttons["live.applyArea"].waitForNonExistence(timeout: 5))
+            waitForCondition { draw.isHittable }
+            XCTAssertFalse(app.buttons["discover.searchBack"].exists,
+                           "Returning from drawing must not replay a previous Search request.")
+            XCTAssertFalse(app.navigationBars["Notifications"].exists,
+                           "Returning from drawing must not replay a previous Notifications request.")
+            XCTAssertTrue(app.buttons["live.clearArea"].exists,
+                          "Apply commits the area; cancelling a redraw preserves it.")
+            capture("draw-after-\(destination.lowercased())-\(action.lowercased())")
+        }
+        app.tabBars.buttons["Lists"].tap()
+        app.tabBars.buttons["Live"].tap()
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForExistence(timeout: 5))
+        tapSettled(app.buttons["live.clearArea"], in: app)
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
+    }
+
+    private func tapSettled(_ element: XCUIElement, in app: XCUIApplication) {
+        var previousFrame = CGRect.null
+        var stableSince = ProcessInfo.processInfo.systemUptime
+        waitForCondition {
+            guard element.exists, element.isEnabled, element.isHittable else { return false }
+            let frame = element.frame
+            guard !frame.isEmpty, app.frame.contains(frame) else { return false }
+            if frame != previousFrame {
+                previousFrame = frame
+                stableSince = ProcessInfo.processInfo.systemUptime
+                return false
+            }
+            return ProcessInfo.processInfo.systemUptime - stableSince >= 0.5
+        }
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     func testDrawerDragAndExistingFeedSections() {
