@@ -49,6 +49,30 @@ do not establish real-device bandwidth, battery or rendering performance parity.
 
 The recommendations are design judgments, not measured performance claims.
 
+## Validation
+
+The full native suite passed: 3,114 tests, zero failures or skips. The simulator
+build, gallery syntax check and review-storage check also passed.
+
+All five styles on iPhone 17 Pro and iPhone 17e completed physical pin selection,
+preview controls, close/reselect, full place-profile navigation, filter apply and
+cancel, and physical panning. Those combined UI runs then failed a synthetic zoom
+distance assertion, including Atlas (the existing basemap). Targeted double-tap
+retries also failed. This remains an unresolved validation gap; the combined UI
+runs are not passing, and the screenshots do not establish zoom correctness.
+The final capture harness keeps pan coverage and tests area apply/clear separately
+so the unproven zoom assertion cannot prevent other checks. No production gesture
+or camera code was changed to accommodate the harness.
+
+The independent area run captured all five polygon previews and applied each area,
+but its Clear disappearance assertion also failed across the styles, including
+Atlas. Retaining those failures is deliberate: this is a design review lab, not a
+production-adoption approval. A zero-test discovery run is excluded from validation.
+
+Native POI selection, device performance, battery and network usage have not been
+validated by this comparison. A chosen production style needs those focused checks
+before adoption. The simulator-only lab itself does not change normal app behavior.
+
 ## Reproduce
 
 Build the Wander scheme in Debug for a simulator, then launch with:
