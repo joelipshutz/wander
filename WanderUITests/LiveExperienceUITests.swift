@@ -547,6 +547,136 @@ final class LiveExperienceUITests: XCTestCase {
         capture("search-area-reset")
     }
 
+    func testLiveFeedKeepsItsPositionDuringDownwardScrolling() throws {
+        try checkLiveFeedScrollPosition()
+    }
+
+    func testLiveFeedKeepsItsPositionWhenSharedVisitsFinishLoading() throws {
+        try checkLiveFeedScrollPosition(extraArguments: ["-WanderFeedHydrationScrollUITest"], paginated: false)
+    }
+
+    private func checkLiveFeedScrollPosition(extraArguments: [String] = [], paginated: Bool = true) throws {
+        continueAfterFailure = true
+        executionTimeAllowance = 900
+        let app = launch(extraArguments: (paginated ? ["-WanderFeedPaginationUITest"] : []) + extraArguments)
+        for _ in 0..<3 where liveState(in: app)?.label != "Activity drawer, expanded" {
+            app.staticTexts["live.drawerHandle"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.1,
+                       thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)),
+                       withVelocity: .slow, thenHoldForDuration: 1)
+            let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                self.liveState(in: app)?.label == "Activity drawer, expanded"
+            }, object: nil)
+            _ = XCTWaiter.wait(for: [expanded], timeout: 5)
+        }
+        XCTAssertEqual(liveState(in: app)?.label, "Activity drawer, expanded")
+        // The introduction is only mounted after expanding the drawer.
+        let introduction = app.buttons["live.introduction.notNow"]
+        if introduction.exists { introduction.tap() }
+        if paginated { waitFeedCount(20, in: app) }
+        let firstCard = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@", "feed.activity.", ".postcard")).firstMatch
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 60))
+        var observations: [String] = []
+        defer {
+            let attachment = XCTAttachment(string: observations.joined(separator: "\n"))
+            attachment.name = "live-feed-scroll-position"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            capture("live-feed-scroll-position-final")
+        }
+
+        struct Position {
+            let appFrame: CGRect
+            let viewport: CGRect
+            let cards: [String: CGRect]
+            let count: String
+            let terminalDivider: CGRect?
+        }
+        func position() throws -> Position {
+            let root = try app.snapshot()
+            var feed: XCUIElementSnapshot?
+            var tabTop = root.frame.maxY
+            var cards: [String: CGRect] = [:]
+            var terminalDivider: CGRect?
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.identifier == "feed.places.scroll" { feed = node }
+                if node.elementType == .tabBar, root.frame.intersects(node.frame) {
+                    tabTop = min(tabTop, node.frame.minY)
+                }
+                if node.identifier == "feed.allActivity" { terminalDivider = node.frame }
+                if node.identifier.hasPrefix("feed.activity."),
+                   node.identifier.hasSuffix(".postcard"), !node.frame.isEmpty {
+                    cards[node.identifier] = node.frame
+                }
+                for child in node.children { visit(child) }
+            }
+            visit(root)
+            let scroll = try XCTUnwrap(feed)
+            var viewport = scroll.frame.intersection(root.frame)
+            viewport.size.height = min(viewport.maxY, tabTop) - viewport.minY
+            return Position(appFrame: root.frame, viewport: viewport, cards: cards,
+                            count: scroll.value as? String ?? "", terminalDivider: terminalDivider)
+        }
+        func visibleCards(_ position: Position) -> [String: CGRect] {
+            position.cards.filter { $0.value.intersection(position.viewport).height > 40 }
+        }
+
+        var reachedEnd = false
+        var before = try position()
+        for step in 0..<120 {
+            let distance = min(400, before.viewport.height * 0.6)
+            XCTAssertGreaterThan(distance, 80)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            // Keep the entire drag clear of the floating Map button and the
+            // native scrollbar, so only Feed content receives the gesture.
+            let start = origin.withOffset(CGVector(dx: before.viewport.minX + 64 - before.appFrame.minX,
+                dy: before.viewport.maxY - 32 - before.appFrame.minY))
+            start.press(forDuration: 0.1,
+                        thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)),
+                        withVelocity: .slow, thenHoldForDuration: 1)
+            let after = try position()
+            observations.append("step=\(step) viewport=\(before.viewport) after=\(after.viewport)")
+            let anchors = visibleCards(before).keys.filter { after.cards[$0] != nil }
+            XCTAssertFalse(anchors.isEmpty, "A partial-screen drag must retain a visible activity")
+            if anchors.isEmpty { return }
+            for id in anchors {
+                let shift = try XCTUnwrap(after.cards[id]).minY - (try XCTUnwrap(before.cards[id])).minY
+                observations.append("step=\(step) count=\(after.count) card=\(id) drag=\(distance) shift=\(shift)")
+                XCTAssertLessThanOrEqual(shift, 24, "Downward browsing must not jump back to earlier activity")
+                XCTAssertGreaterThanOrEqual(shift, -distance - 50, "A controlled drag must not skip ahead in the feed")
+                if shift > 24 || shift < -distance - 50 { return }
+            }
+            // No touch or inertia remains. Appending a page or resolving lazy
+            // row sizes must preserve the currently visible card's position.
+            Thread.sleep(forTimeInterval: 0.8)
+            let settled = try position()
+            for (id, frame) in visibleCards(after) {
+                let settledFrame = try XCTUnwrap(settled.cards[id], "Visible card disappeared while idle")
+                let drift = settledFrame.minY - frame.minY
+                observations.append("step=\(step) idle card=\(id) drift=\(drift)")
+                XCTAssertEqual(drift, 0, accuracy: 12, "The feed must stay put after the finger stops")
+                if abs(drift) > 12 { return }
+            }
+            if !paginated, let terminal = settled.terminalDivider,
+               settled.viewport.contains(terminal), !terminal.isEmpty {
+                reachedEnd = true
+                break
+            }
+            if paginated, settled.count == "44 activities loaded",
+               let last = settled.cards["feed.activity.fixture-feed-page-44.postcard"],
+               last.maxY <= settled.viewport.maxY + 1, last.maxY > settled.viewport.minY + 44 {
+                reachedEnd = true
+                break
+            }
+            before = settled
+        }
+        XCTAssertTrue(reachedEnd, "Continuous downward scrolling must reach the final activity")
+        if extraArguments.contains("-WanderFeedHydrationScrollUITest") {
+            waitFeedCount(17, in: app)
+        }
+    }
+
     /// Exercises automatic bottom continuation of the existing local buffer.
     func testLiveAutomaticPaginationReachesTerminalBufferedPage() {
         executionTimeAllowance = 300

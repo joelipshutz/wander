@@ -217,7 +217,10 @@ struct WanderApp: App {
                     usesSystemProvider: ProcessInfo.processInfo.arguments.contains("-WanderContactDiscoverySystemPermissionTest")
                 ),
                 followRepository: contactTestRepository,
-                feedRepository: LiveManualPaginationUITestRepository.make(
+                feedRepository: LiveScrollPositionUITestRepository.make(
+                    arguments: ProcessInfo.processInfo.arguments,
+                    authenticatedUserID: authStore.state.session?.userID
+                ) ?? LiveManualPaginationUITestRepository.make(
                     arguments: ProcessInfo.processInfo.arguments,
                     authenticatedUserID: authStore.state.session?.userID
                 ),

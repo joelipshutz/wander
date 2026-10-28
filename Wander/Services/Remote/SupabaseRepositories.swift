@@ -763,6 +763,26 @@ struct SupabaseFeedRepository: FeedRepository {
         } else {
             response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
         }
+        guard includeMedia else { return try await response.followedFeedPage() }
+        let activityIDs = Array(
+            Set(response.activity.compactMap { item in
+                UUID(uuidString: item.id)?.uuidString.lowercased()
+            })
+        ).sorted()
+        guard !activityIDs.isEmpty else {
+            let page = try await response.followedFeedPage()
+            try Task.checkCancellation()
+            onContent(page)
+            return page
+        }
+
+        // Companion provenance determines card identity and grouping. Publishing
+        // without it can collapse/reorder cards above the reader when it arrives.
+        // Resolve it before first content, while the independent media read runs.
+        async let sharedVisitRequest = sharedVisitContexts(for: response.activity)
+        async let mediaRequest = activityMedia(for: activityIDs)
+        let sharedVisits = await sharedVisitRequest
+        try Task.checkCancellation()
         // Reserve the artwork slot while the separate authorized-media read is
         // pending. A non-renderable marker prevents the card from starting a
         // provider-photo fallback that would be replaced by visit media later.
@@ -784,27 +804,14 @@ struct SupabaseFeedRepository: FeedRepository {
         // This projection uses the same server-authorized rows. Media arrives
         // later, so slow storage/signing cannot hold up the first Feed cards.
         let content = try await response.followedFeedPage(
-            mediaByActivityID: pendingMediaByActivityID
+            mediaByActivityID: pendingMediaByActivityID, sharedVisitsByActivityID: sharedVisits
         )
         try Task.checkCancellation()
         onContent(content)
-        guard includeMedia else { return try await response.followedFeedPage() }
-        let activityIDs = Array(
-            Set(response.activity.compactMap { item in
-                UUID(uuidString: item.id)?.uuidString.lowercased()
-            })
-        ).sorted()
-        guard !activityIDs.isEmpty else {
-            return try await response.followedFeedPage()
-        }
-
-        async let sharedVisits = sharedVisitContexts(for: response.activity)
         let mediaRows: [RemoteActivityMediaDTO]
         do {
-            mediaRows = try await rpc.call(
-                "activity_media",
-                params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
-            )
+            mediaRows = try await mediaRequest
+            try Task.checkCancellation()
         } catch {
             if Task.isCancelled { throw CancellationError() }
             // Keep the verified text page and neutral artwork placeholders.
@@ -812,7 +819,7 @@ struct SupabaseFeedRepository: FeedRepository {
             // later refresh visibly swap the wrong photo for the visit photo.
             return try await response.followedFeedPage(
                 mediaByActivityID: pendingMediaByActivityID,
-                sharedVisitsByActivityID: await sharedVisits
+                sharedVisitsByActivityID: sharedVisits
             )
         }
         let mediaByActivityID = Dictionary(
@@ -822,8 +829,12 @@ struct SupabaseFeedRepository: FeedRepository {
         return try await response.followedFeedPage(
             storage: storage,
             mediaByActivityID: mediaByActivityID,
-            sharedVisitsByActivityID: await sharedVisits
+            sharedVisitsByActivityID: sharedVisits
         )
+    }
+
+    private func activityMedia(for activityIDs: [String]) async throws -> [RemoteActivityMediaDTO] {
+        try await rpc.call("activity_media", params: ActivityEngagementSummariesParams(activityIDs: activityIDs))
     }
 
     private func sharedVisitContexts(for activity: [RemoteFeedActivityDTO]) async -> [String: FeedSharedVisitContext] {

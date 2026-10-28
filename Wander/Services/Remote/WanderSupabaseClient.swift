@@ -484,7 +484,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         switch name {
         case "own_account_contact_details", "save_own_account_contact_details":
             12
-        case "followed_feed", "activity_feed":
+        case "followed_feed", "activity_feed", "feed_shared_visit_context":
             followedFeedTimeout
         case "activity_media":
             activityMediaTimeout
