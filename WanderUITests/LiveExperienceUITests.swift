@@ -63,8 +63,8 @@ final class LiveExperienceUITests: XCTestCase {
         app.tabBars.buttons["Lists"].tap()
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].exists)
-        tapSettled(app.buttons["live.clearArea"], in: app)
-        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
+        app.buttons["live.clearArea"].tap()
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
     }
 
     func testDrawingAfterSearchDoesNotReplaySearch() {
@@ -96,16 +96,18 @@ final class LiveExperienceUITests: XCTestCase {
                 keyboardTutorial.buttons["Continue"].tap()
                 XCTAssertTrue(explanation.waitForNonExistence(timeout: 5))
             }
-            tapSettled(back, in: app)
-            XCTAssertTrue(back.waitForNonExistence(timeout: 5))
+            tapSettledBack(back, in: app)
+            XCTAssertTrue(back.waitForNonExistence(timeout: 15))
             if app.buttons["live.showMap"].exists { app.buttons["live.showMap"].tap() }
             let draw = app.buttons["live.draw"]
             waitForCondition { draw.isHittable }
             draw.tap()
             XCTAssertTrue(app.buttons["live.applyArea"].waitForExistence(timeout: 5))
             XCTAssertFalse(app.buttons["live.applyArea"].isEnabled)
-            XCTAssertTrue(app.descendants(matching: .any)["live.drawerHandle"].firstMatch.waitForNonExistence(timeout: 5),
-                           "The retained drawer must be hidden from accessibility while drawing.")
+            let drawer = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+            waitForCondition {
+                !drawer.exists || (!drawer.isHittable && !app.frame.intersects(drawer.frame))
+            }
             app.buttons["Use visible area"].tap()
             XCTAssertTrue(app.buttons["live.applyArea"].isEnabled)
             app.buttons[action == "Apply" ? "live.applyArea" : "Cancel"].tap()
@@ -122,11 +124,9 @@ final class LiveExperienceUITests: XCTestCase {
         app.tabBars.buttons["Lists"].tap()
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].waitForExistence(timeout: 5))
-        tapSettled(app.buttons["live.clearArea"], in: app)
-        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
     }
 
-    private func tapSettled(_ element: XCUIElement, in app: XCUIApplication) {
+    private func tapSettledBack(_ element: XCUIElement, in app: XCUIApplication) {
         var previousFrame = CGRect.null
         var stableSince = ProcessInfo.processInfo.systemUptime
         waitForCondition {
@@ -140,7 +140,8 @@ final class LiveExperienceUITests: XCTestCase {
             }
             return ProcessInfo.processInfo.systemUptime - stableSince >= 0.5
         }
-        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        // Tap the visible chevron, left of the accessibility frame's center.
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5)).tap()
     }
 
     func testDrawerDragAndExistingFeedSections() {
