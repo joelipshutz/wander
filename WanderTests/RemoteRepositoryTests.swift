@@ -1699,30 +1699,65 @@ final class RemoteRepositoryTests: XCTestCase {
           }]
         }]
         """.data(using: .utf8)
+        let groupID = "63610000-0000-0000-0000-000000000001"
+        rpc.responses["feed_shared_visit_context"] = Data("""
+        [{"activity_id":"\(activityID)","group_id":"\(groupID)",
+          "visit_id":"63620000-0000-0000-0000-000000000001","companions":[
+          {"status":"accepted","profile":{"id":"companion","handle":"companion","display_name":"Companion","relationship":"mutual"}}]}]
+        """.utf8)
         let repository = SupabaseFeedRepository(rpc: rpc, storage: storage)
-
-        rpc.delays = ["followed_feed": .milliseconds(100), "activity_media": .milliseconds(400)]
-        let start = ContinuousClock.now
-        var firstContentMilliseconds: Double?
-        let page = try await repository.followedFeed(before: nil, limit: 25) { content in
-            let elapsed = start.duration(to: .now).components
-            firstContentMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
-            XCTAssertEqual(content.activity.map(\.id), [activityID])
-            XCTAssertEqual(content.activity[0].media.map(\.id), ["pending:\(activityID)"])
-            XCTAssertNil(content.activity[0].media[0].urlString)
-            XCTAssertEqual(rpc.calls.first?.name, "followed_feed")
-            XCTAssertTrue(rpc.calls.contains { $0.name == "feed_shared_visit_context" })
-            XCTAssertTrue(storage.signedURLs.isEmpty)
+        let mediaRequested = expectation(description: "Media response is held")
+        let contentPublished = expectation(description: "First content arrives while media is held")
+        var mediaResponseReleased = false
+        var mediaContinuations: [CheckedContinuation<Void, Never>] = []
+        rpc.beforeResponse = { name in
+            guard name == "activity_media", !mediaResponseReleased else { return }
+            await withCheckedContinuation { continuation in
+                mediaContinuations.append(continuation)
+                if mediaContinuations.count == 1 { mediaRequested.fulfill() }
+            }
         }
-        let elapsed = start.duration(to: .now).components
-        let completeMilliseconds = Double(elapsed.seconds) * 1_000 + Double(elapsed.attoseconds) / 1e15
-        let contentMilliseconds = try XCTUnwrap(firstContentMilliseconds)
-        XCTAssertGreaterThan(completeMilliseconds - contentMilliseconds, 350)
-        let measurement = "REC441_PERF feed_first_content_ms=\(contentMilliseconds) legacy_media_gated_content_ms=\(completeMilliseconds)"
-        print(measurement)
-        let attachment = XCTAttachment(string: measurement)
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        let releaseMedia = {
+            mediaResponseReleased = true
+            // Release duplicate requests too, so the call-count assertion can
+            // report the regression without leaving the feed task suspended.
+            let continuations = mediaContinuations
+            mediaContinuations.removeAll()
+            continuations.forEach { $0.resume() }
+        }
+        var firstContent: FollowedFeedPage?
+        var finalPage: FollowedFeedPage?
+        var completed = false
+        let pending = Task { @MainActor in
+            defer { completed = true }
+            finalPage = try await repository.followedFeed(before: nil, limit: 25) { content in
+                XCTAssertFalse(mediaResponseReleased, "First content must not wait for media")
+                firstContent = content
+                XCTAssertEqual(content.activity.map(\.id), [activityID])
+                XCTAssertEqual(content.activity.first?.media.map(\.id), ["pending:\(activityID)"])
+                XCTAssertNil(content.activity.first?.media.first?.urlString)
+                XCTAssertEqual(content.activity.first?.sharedVisit?.groupID, groupID)
+                XCTAssertEqual(content.activity.first?.sharedVisit?.companions.map(\.profile.id), ["companion"])
+                XCTAssertEqual(rpc.calls.first?.name, "followed_feed")
+                XCTAssertTrue(storage.signedURLs.isEmpty)
+                contentPublished.fulfill()
+            }
+        }
+        defer {
+            releaseMedia()
+            pending.cancel()
+        }
+        // Media and companion reads run in parallel. Control response ordering
+        // directly instead of assuming a wall-clock gap under CI scheduling.
+        await fulfillment(of: [mediaRequested, contentPublished], timeout: 10)
+        XCTAssertFalse(completed, "The final page must still be waiting for media")
+        releaseMedia()
+        try await pending.value
+        let page = try XCTUnwrap(finalPage)
+        let content = try XCTUnwrap(firstContent)
+        XCTAssertEqual(content.activity.first?.sharedVisit, page.activity.first?.sharedVisit)
+        XCTAssertEqual(FeedPresentation.groupedActivity(content.activity).map(\.id),
+                       FeedPresentation.groupedActivity(page.activity).map(\.id))
 
         XCTAssertEqual(page.activity.first?.media.first?.id, "55000000-0000-0000-0000-000000000386")
         XCTAssertEqual(rpc.calls.first?.name, "followed_feed")
@@ -1731,7 +1766,7 @@ final class RemoteRepositoryTests: XCTestCase {
         for call in rpc.calls.dropFirst() {
             XCTAssertEqual(call.body["input_activity_ids"] as? [String], [activityID])
         }
-        XCTAssertNil(page.activity.first?.sharedVisit, "Missing attribution RPC keeps the authorized original post")
+        XCTAssertEqual(page.activity.first?.sharedVisit?.groupID, groupID)
         XCTAssertTrue(storage.signedURLs.isEmpty)
         XCTAssertEqual(page.activity.first?.media.first?.storagePath, "user_ryan/visit_dudley/photo.jpg")
         XCTAssertNil(page.activity.first?.media.first?.urlString)
@@ -5839,6 +5874,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
     var responses: [String: Data] = [:]
     var responseQueues: [String: [Data]] = [:]
     var delays: [String: Duration] = [:]
+    var beforeResponse: (@MainActor (String) async -> Void)?
     var errors: [Error] = []
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
@@ -5851,6 +5887,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
         let body = try encodedObject(params)
         rawBodies.append(body)
         calls.append(Call(name: name, body: anyHashableBody(body)))
+        await beforeResponse?(name)
         if let delay = delays[name] { try await Task.sleep(for: delay) }
         if !errors.isEmpty { throw errors.removeFirst() }
 

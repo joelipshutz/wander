@@ -18,6 +18,23 @@ import XCTest
         XCTAssertFalse(selection.includes(event("future", offset: 1)))
     }
 
+    func testListsSelectionCommitsItsOwnQueryAndSummaryWithoutChangingScope() {
+        var selection = LiveBrowseSelection(now: now)
+        selection.activityType = .lists
+        XCTAssertTrue(LiveActivityFilter.allCases.contains(.lists))
+        XCTAssertEqual(selection.summary, "Featured · All time · Lists")
+        XCTAssertEqual(selection.activeFilterCount, 1)
+        XCTAssertEqual(selection.query().activityType, .lists)
+        XCTAssertTrue(selection.includes(event("creation", kind: .listCreated)))
+        XCTAssertTrue(selection.includes(event("addition", place: place("listed"), kind: .listItemAdded)))
+        XCTAssertFalse(selection.includes(event("wanna", kind: .placeWannaGo)))
+        XCTAssertFalse(selection.includes(event("check-in", kind: .placeBeen)))
+        let committed = selection.committed(at: now.addingTimeInterval(60))
+        selection.activityType = .wannas
+        XCTAssertEqual(committed.query().activityType, .lists)
+        XCTAssertEqual(committed.query().occurredBefore, now.addingTimeInterval(60))
+    }
+
     func testExplicitSevenDayFilterKeepsInclusiveStableBounds() {
         var selection = LiveBrowseSelection(now: now)
         selection.time = .week

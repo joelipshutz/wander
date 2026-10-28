@@ -173,6 +173,9 @@ struct WanderFixtures {
             contactProvider: contacts
         )
         #if DEBUG
+        #if targetEnvironment(simulator)
+        if LiveTotemUITestFixtures.isEnabled { return LiveTotemUITestFixtures.fixtures(base: fixtures) }
+        #endif
         if ProcessInfo.processInfo.arguments.contains("-WanderFeaturedRatingFixture") {
             return fixtures.addingFeaturedRatingFixture()
         }

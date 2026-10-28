@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-10-20
+Last updated: 2026-10-28
 
 ## 2026-10-18 — Contextual link previews are deliberate copies (REC-647)
 
@@ -995,3 +995,55 @@ Closing a preview restores its original geographic center and, only when needed,
 ## REC-654 — compact Live drawer actions, 2026-10-27
 
 Upcoming events and inviting people to Astir use icon buttons on the left and right of the Live activity summary. Both retain 44 pt tap targets and full accessibility labels. Their former Events row and invitation card no longer occupy the embedded Feed, reclaiming approximately 122 pt at default text size. Events keeps its existing availability rule; invitations keep the existing contact sheet and analytics surface. Received plan invitations and standalone Feed behavior remain unchanged.
+
+## REC-657 — Totem Live pins and current place state, 2026-10-28
+
+Totem is the accepted Live pin family: a category pictogram tile, compact status
+rails, and an 11pt circular list badge at the upper-right corner of full pins only.
+Pictograms stay
+within the cream body above the footing; solid and dotted rails have equal
+visible side insets within the black footing. This supersedes the earlier Live photo/activity
+badge proposal and the unselected lab status. Profile's Your Map remains a
+separate surface. Own status is coral; authorized social status is blue. Been is
+solid and Wanna dotted; the Wanna segment of a mixed social Been/Wanna rail has
+three dots. Selection, viewed treatment and density change presentation without creating another place pin.
+
+Dense circles use coral for own saves, blue for readable social saves, green for
+proven Featured-only state, and black when no status rail is currently displayed.
+A coral/blue split represents both ownerships. Black is neutral, including list-only,
+filtered-out or unknown status; it does not mean a visit or a person. Dense circles
+have no list badge. Selection reveals the full pin and its 11pt badge when current
+membership qualifies, while list precedence remains unchanged at every density.
+
+Solid green Featured requires complete current evidence that the canonical
+place has neither any readable own/social Been or Wanna nor any readable current
+list membership. Discovery filters cannot make a saved place green. List-only
+membership takes precedence over Featured; its badge persists outside the
+selected event window and disappears when current readable membership ends.
+A list event alone proves neither present membership nor a Wanna save.
+A bare private-list companion summary also supplies no Wanna rail; its persistent
+marker does not erase a later explicit Wanna or visit. Active own saves awaiting
+sync or retry immediately show the matching coral Been/Wanna rail under the
+selected People/Activity filters. Viewer-added active entries in currently readable
+lists keep their badge while awaiting sync or retry. These trusted local writes
+also prevent green before the server knows them. Synced stale, other-user,
+deleted, removing and server-denied rows do not receive that exception.
+
+Activity includes Lists, filtering list creation and place-added-to-list events
+before pagination. All filters retain one pin per matching canonical place;
+aliases, actors, event kinds and multiple lists never create duplicate pins or
+synthetic activity counts. People/Activity choices refine displayed status rails
+without changing the broader evidence that suppresses Featured. People and Scope
+dropdowns retain coral Only Me, blue Only Friends, green Featured, and neutral
+Everyone, with readable text variants and explicit selection indicators.
+
+Authenticated Live uses complete, currently authorized place-state snapshots.
+Their scope covers every requested canonical identity; current empty/false
+results override stale saves, list items and prior check-in evidence. Account,
+query and authorization changes invalidate snapshots. The existing 15-minute
+social lease is bounded by the oldest response batch; foreground and Live-tab
+re-entry synchronously revalidate expiry. Missing, incomplete, failed, invalidated
+or expired state renders neutral status except for those trusted own pending
+writes; it never resurrects stale/social cached associations or proves Featured. Deterministic offline
+review fixtures may explicitly declare complete state. See the
+[REC-657 design record](designs/rec657-map-lab.md) for validation and evidence status.

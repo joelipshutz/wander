@@ -18,6 +18,37 @@ final class LiveFeedQueryTests: XCTestCase {
         XCTAssertTrue(LiveFeedQuery().includes(FeedActivity(id: "list", kind: .listCreated, actor: actor, occurredAt: date)))
     }
 
+    func testListsMatchActionsRegardlessOfSourceStatusAndStayDistinctDuringExpansion() throws {
+        let store = WanderStore(fixtures: .seed())
+        let actor = store.shell(for: store.currentUser)
+        let been = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.status == .been })
+        let wanna = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.status == .wannaGo })
+        let start = Date(timeIntervalSince1970: 1_000)
+        let query = LiveFeedQuery(occurredAfter: start, occurredBefore: start.addingTimeInterval(10), activityType: .lists)
+        let creation = FeedActivity(id: "creation", kind: .listCreated, actor: actor, occurredAt: start)
+        let beenAddition = FeedActivity(id: "been-list", kind: .listItemAdded, actor: actor, place: been, occurredAt: start)
+        let wannaAddition = FeedActivity(id: "wanna-list", kind: .listItemAdded, actor: actor, place: wanna, occurredAt: start)
+        for activity in [creation, beenAddition, wannaAddition] {
+            XCTAssertTrue(query.includes(activity))
+            XCTAssertTrue(LiveActivityFilter.lists.includes(activity))
+            XCTAssertFalse(LiveActivityFilter.wannas.includes(activity))
+            XCTAssertFalse(LiveActivityFilter.checkIns.includes(activity))
+        }
+        for kind in [FeedActivityKind.placeBeen, .placeWannaGo, .placeSaved] {
+            let activity = FeedActivity(id: kind.rawValue, kind: kind, actor: actor, place: wanna, occurredAt: start)
+            XCTAssertFalse(query.includes(activity))
+            XCTAssertFalse(LiveActivityFilter.lists.includes(activity))
+            XCTAssertEqual(query.expansionStage(for: activity), .allActivity)
+        }
+        let oldAddition = FeedActivity(id: "old-list", kind: .listItemAdded, actor: actor, place: been,
+                                       occurredAt: start.addingTimeInterval(-1))
+        XCTAssertEqual(query.expansionStage(for: oldAddition), .older)
+        XCTAssertEqual(query.expandedQuery(for: .older).activityType, .lists)
+        XCTAssertEqual(query.expandedQuery(for: .allActivity).activityType, .all)
+        XCTAssertFalse(LiveFeedQuery(activityType: .lists).includesFeatured(been),
+                       "An anonymous check-in aggregate does not establish a list action")
+    }
+
     func testPolygonMatchesBoundaryAndAntimeridianWithoutUnmappedRows() {
         let query = LiveFeedQuery(polygon: [
             .init(latitude: -1, longitude: 179), .init(latitude: -1, longitude: -179),
@@ -71,6 +102,40 @@ final class LiveFeedQueryTests: XCTestCase {
         XCTAssertEqual(transport.parameters?["input_category_ids"] as? [String], ["coffee_tea_sweets", "restaurants_food"])
         XCTAssertEqual(transport.parameters?["input_person_ids"] as? [String], ["person-a", "person-b"])
         XCTAssertEqual(contentCalls, 1)
+    }
+
+    func testListsFeedAndMapKeepCommittedFiltersAcrossOpaqueCursorPages() async throws {
+        let transport = LiveQueryTransport()
+        transport.nextCursors = ["feed|timestamp|id", nil, "map|timestamp|id", nil]
+        let repository = SupabaseFeedRepository(rpc: transport)
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 1_000),
+            occurredBefore: Date(timeIntervalSince1970: 2_000), activityType: .lists,
+            center: .init(latitude: 34.05, longitude: -118.24), radiusMeters: 10_000,
+            categoryIDs: ["restaurants_food"], personIDs: ["selected-person"])
+        let firstFeedPage = try await repository.liveFeed(audience: .onlyFriends, query: query,
+            before: nil, limit: 2, onContent: { _ in })
+        let lastFeedPage = try await repository.liveFeed(audience: .onlyFriends, query: query,
+            before: firstFeedPage.nextCursor, limit: 2, onContent: { _ in })
+        let firstMapPage = try await repository.liveMapActivity(audience: .onlyFriends, query: query, before: nil, limit: 2)
+        let lastMapPage = try await repository.liveMapActivity(audience: .onlyFriends, query: query,
+            before: firstMapPage.nextCursor, limit: 2)
+        XCTAssertEqual(firstFeedPage.nextCursor, "feed|timestamp|id")
+        XCTAssertEqual(firstMapPage.nextCursor, "map|timestamp|id")
+        XCTAssertNil(lastFeedPage.nextCursor)
+        XCTAssertNil(lastMapPage.nextCursor)
+        XCTAssertEqual(transport.names, Array(repeating: "live_activity_feed", count: 4))
+        XCTAssertEqual(transport.parameterHistory.map { $0["input_before"] as? String },
+                       [nil, "feed|timestamp|id", nil, "map|timestamp|id"])
+        for parameters in transport.parameterHistory {
+            XCTAssertEqual(parameters["input_activity_type"] as? String, "lists")
+            XCTAssertEqual(parameters["input_audience"] as? String, "only_friends")
+            XCTAssertEqual(parameters["input_after"] as? String, LiveFeedQuery.timestamp(query.occurredAfter))
+            XCTAssertEqual(parameters["input_until"] as? String, LiveFeedQuery.timestamp(query.occurredBefore))
+            XCTAssertEqual(parameters["input_limit"] as? Int, 2)
+            XCTAssertEqual(parameters["input_radius_meters"] as? Int, 10_000)
+            XCTAssertEqual(parameters["input_person_ids"] as? [String], ["selected-person"])
+            XCTAssertEqual(parameters["input_category_ids"] as? [String], ["restaurants_food"])
+        }
     }
 
     func testRadiusRequiresCompleteFiniteBoundedCenterAndFilterArraysAreBounded() {
@@ -167,12 +232,18 @@ final class LiveFeedQueryTests: XCTestCase {
 @MainActor private final class LiveQueryTransport: RemoteProcedureCalling {
     var names: [String] = []
     var parameters: [String: Any]?
+    var parameterHistory: [[String: Any]] = []
+    var nextCursors: [String?] = []
     var failure: WanderRemoteError?
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params, decoder: JSONDecoder) async throws -> Value {
         names.append(name)
         parameters = try JSONSerialization.jsonObject(with: JSONEncoder().encode(params)) as? [String: Any]
+        if let parameters { parameterHistory.append(parameters) }
         if let failure { throw failure }
-        return try decoder.decode(Value.self, from: Data(#"{"activity":[],"featured_places":[],"next_cursor":null,"fetched_at":"2026-10-10T00:00:00Z"}"#.utf8))
+        let cursor = nextCursors.isEmpty ? nil : nextCursors.removeFirst()
+        let response: [String: Any] = ["activity": [], "featured_places": [],
+            "next_cursor": cursor as Any? ?? NSNull(), "fetched_at": "2026-10-10T00:00:00Z"]
+        return try decoder.decode(Value.self, from: JSONSerialization.data(withJSONObject: response))
     }
 }
 
