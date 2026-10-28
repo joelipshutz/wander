@@ -1591,51 +1591,11 @@ struct AddScreen: View {
     }
 
     @MainActor
-    private func resolveManualCandidates(inline: Bool = false) async {
-        selectedSource = .manual
-        resolutionMessage = nil
-        isShowingInlineCandidateResults = false
-        isResolvingCandidates = true
-        defer { isResolvingCandidates = false }
-
-        do {
-            candidates = try await store.manualCandidates(
-                name: manualName,
-                areaHint: nil,
-                category: nil
-            )
-            selectedCandidateID = candidates.first?.id
-            guard !candidates.isEmpty else {
-                resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
-                return
-            }
-            isShowingInlineCandidateResults = inline
-            step = inline ? .source : .confirm
-            if inline {
-                walkthroughs.perform(.addSearch)
-            }
-        } catch {
-            candidates = []
-            selectedCandidateID = nil
-            resolutionMessage = resolutionCopy(for: error)
-        }
-    }
-
-    @MainActor
     private func resolveQuickAddQuery() async {
         let query = quickAddQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
-        if let coordinate = Self.coordinate(from: query) {
-            await resolveCoordinateCandidates(coordinate)
-        } else {
-            manualName = query
-            await resolveManualCandidates(inline: true)
-        }
-    }
-
-    @MainActor
-    private func resolveCoordinateCandidates(_ coordinate: CLLocationCoordinate2D) async {
+        manualName = query
         selectedSource = .manual
         resolutionMessage = nil
         isShowingInlineCandidateResults = false
@@ -1643,7 +1603,7 @@ struct AddScreen: View {
         defer { isResolvingCandidates = false }
 
         do {
-            candidates = try await store.photoLocationCandidates(near: coordinate)
+            candidates = try await store.quickSearchCandidates(for: query)
             selectedCandidateID = candidates.first?.id
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
@@ -1651,6 +1611,7 @@ struct AddScreen: View {
             }
             isShowingInlineCandidateResults = true
             step = .source
+            walkthroughs.perform(.addSearch)
         } catch {
             candidates = []
             selectedCandidateID = nil
@@ -1667,23 +1628,6 @@ struct AddScreen: View {
         withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
             selectedDetent = restingDetent
         }
-    }
-
-    static func coordinate(from value: String) -> CLLocationCoordinate2D? {
-        let pattern = #"[-+]?\d{1,3}(?:\.\d+)?"#
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let range = NSRange(value.startIndex..<value.endIndex, in: value)
-        let values = expression.matches(in: value, range: range).compactMap { match -> Double? in
-            guard let swiftRange = Range(match.range, in: value) else { return nil }
-            return Double(value[swiftRange])
-        }
-        guard values.count == 2 else { return nil }
-
-        let uppercased = value.uppercased()
-        let latitude = uppercased.contains("S") ? -abs(values[0]) : values[0]
-        let longitude = uppercased.contains("W") ? -abs(values[1]) : values[1]
-        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
     @MainActor
