@@ -2558,10 +2558,15 @@ struct MapScreen: View {
         // Native presentations belong to the stable map root. The sliding
         // profile's hosting controller can reset sheets and repeatedly recreate
         // photo covers as presentation environment actions change.
-        .fullScreenCover(item: $placePhotoGallery) { presentation in
-            PlacePhotoGalleryPresentationView(presentation: presentation) {
-                placePhotoGallery = nil
-            }
+        // Isolate the cover's environment from the map content and tab controls.
+        .background {
+            Color.clear
+                .frame(width: 0, height: 0)
+                .fullScreenCover(item: $placePhotoGallery) { presentation in
+                    PlacePhotoGalleryPresentationView(presentation: presentation) {
+                        placePhotoGallery = nil
+                    }
+                }
         }
         .sheet(item: attachedMapSaveSheetContext) { context in
             MapPlaceSaveFlowSheet(
