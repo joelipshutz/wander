@@ -1776,6 +1776,7 @@ private struct PlaceProfileFullView: View {
     @Environment(\.nuxPlaceIntroductionIsFocused) private var nuxPlaceIntroductionIsFocused
     @Environment(\.astirBrandMode) private var astirBrandMode
     @Environment(\.openURL) private var openURL
+    @Environment(\.presentPlacePhotoGallery) private var presentPlacePhotoGallery
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.placeProfileFloatingActionVariant) private var floatingActionVariant
     @EnvironmentObject private var backend: WanderBackend
@@ -1788,6 +1789,7 @@ private struct PlaceProfileFullView: View {
     @State private var isLoadingGallery = false
     @State private var selectedHeaderPhotoID: String?
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
+    @StateObject private var presentedGallery = PlacePhotoGalleryState()
     @State private var discoveredReservationAction: PlaceExternalAction?
     @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
     @State private var floatingActivityScrollRequest = 0
@@ -1805,7 +1807,7 @@ private struct PlaceProfileFullView: View {
                             selectedPhotoID: $selectedHeaderPhotoID,
                             topInset: headerTopInset,
                             onOpenPhoto: { photoID in
-                                viewerRoute = PlacePhotoGalleryViewerRoute(photoID: photoID)
+                                openPhotoGallery(photoID: photoID)
                             },
                             onNearEnd: loadMoreIfNeeded,
                             onPhotoLoadFailure: handlePhotoLoadFailure
@@ -1906,6 +1908,9 @@ private struct PlaceProfileFullView: View {
             guard requestedSurface == .map || requestedSurface == .feed else { return }
             onBack()
         }
+        .onChange(of: galleryItems) { _, items in
+            presentedGallery.update(items)
+        }
         .fullScreenCover(item: $viewerRoute) { route in
             PlacePhotoGalleryViewer(
                 canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
@@ -1914,11 +1919,33 @@ private struct PlaceProfileFullView: View {
                 photos: galleryItems,
                 initialPhotoID: route.photoID,
                 currentUserID: currentUserID,
+                onClose: { viewerRoute = nil },
                 onNearEnd: loadMoreIfNeeded,
                 onRefresh: reloadVisibleUserPhotos,
                 onPhotoLoadFailure: handlePhotoLoadFailure
             )
         }
+    }
+
+    private func openPhotoGallery(photoID: String) {
+        let items = galleryItems
+        guard items.contains(where: { $0.id == photoID }) else { return }
+        guard let presentPlacePhotoGallery else {
+            viewerRoute = PlacePhotoGalleryViewerRoute(photoID: photoID)
+            return
+        }
+        presentedGallery.update(items)
+        presentPlacePhotoGallery(PlacePhotoGalleryPresentation(
+            gallery: presentedGallery,
+            canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+            placeName: place.name,
+            photoRequest: place.photoRequest,
+            initialPhotoID: photoID,
+            currentUserID: currentUserID,
+            onNearEnd: loadMoreIfNeeded,
+            onRefresh: reloadVisibleUserPhotos,
+            onPhotoLoadFailure: handlePhotoLoadFailure
+        ))
     }
 
     private func headerNavigationControls(topInset: CGFloat) -> some View {
@@ -2173,6 +2200,7 @@ private struct PlaceProfileFullView: View {
     }
 
     private func reconcileSelectedPhoto() {
+        presentedGallery.update(galleryItems)
         let ids = Set(galleryItems.map(\.id))
         if let selectedHeaderPhotoID, ids.contains(selectedHeaderPhotoID) {
             return
@@ -2862,6 +2890,69 @@ private struct PlaceProfileFloatingActionSurface: ViewModifier {
     }
 }
 
+/// Keep gallery updates live when the viewer is presented outside the sliding
+/// profile host, including removals after an access check fails.
+@MainActor
+final class PlacePhotoGalleryState: ObservableObject {
+    @Published private(set) var photos: [PlacePhotoGalleryItem] = []
+
+    func update(_ photos: [PlacePhotoGalleryItem]) {
+        guard self.photos != photos else { return }
+        self.photos = photos
+    }
+}
+
+struct PlacePhotoGalleryPresentation: Identifiable {
+    let id = UUID()
+    let gallery: PlacePhotoGalleryState
+    let canonicalPlaceKey: String
+    let placeName: String
+    let photoRequest: PlacePhotoRequest
+    let initialPhotoID: String
+    let currentUserID: String
+    let onNearEnd: (String) -> Void
+    let onRefresh: @MainActor () async -> Void
+    let onPhotoLoadFailure: (PlacePhoto) -> Void
+}
+
+private struct PlacePhotoGalleryPresenterKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (PlacePhotoGalleryPresentation) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var presentPlacePhotoGallery: (@MainActor (PlacePhotoGalleryPresentation) -> Void)? {
+        get { self[PlacePhotoGalleryPresenterKey.self] }
+        set { self[PlacePhotoGalleryPresenterKey.self] = newValue }
+    }
+}
+
+struct PlacePhotoGalleryPresentationView: View {
+    let presentation: PlacePhotoGalleryPresentation
+    let onClose: () -> Void
+    @ObservedObject private var gallery: PlacePhotoGalleryState
+
+    init(presentation: PlacePhotoGalleryPresentation, onClose: @escaping () -> Void) {
+        self.presentation = presentation
+        self.onClose = onClose
+        self.gallery = presentation.gallery
+    }
+
+    var body: some View {
+        PlacePhotoGalleryViewer(
+            canonicalPlaceKey: presentation.canonicalPlaceKey,
+            placeName: presentation.placeName,
+            photoRequest: presentation.photoRequest,
+            photos: gallery.photos,
+            initialPhotoID: presentation.initialPhotoID,
+            currentUserID: presentation.currentUserID,
+            onClose: onClose,
+            onNearEnd: presentation.onNearEnd,
+            onRefresh: presentation.onRefresh,
+            onPhotoLoadFailure: presentation.onPhotoLoadFailure
+        )
+    }
+}
+
 private struct PlacePhotoGalleryViewerRoute: Identifiable {
     let photoID: String
 
@@ -2873,8 +2964,8 @@ private struct PlacePhotoContributorProfileRoute: Identifiable {
 }
 
 private struct PlacePhotoGalleryViewer: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.astirBrandMode) private var brandMode
+    // The viewer always has a black backdrop, independently of the map theme.
+    private let brandMode = AstirBrandMode.editorial
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
@@ -2884,6 +2975,7 @@ private struct PlacePhotoGalleryViewer: View {
     let photoRequest: PlacePhotoRequest
     let photos: [PlacePhotoGalleryItem]
     let currentUserID: String
+    let onClose: () -> Void
     let onNearEnd: (String) -> Void
     let onRefresh: @MainActor () async -> Void
     let onPhotoLoadFailure: (PlacePhoto) -> Void
@@ -2899,6 +2991,7 @@ private struct PlacePhotoGalleryViewer: View {
         photos: [PlacePhotoGalleryItem],
         initialPhotoID: String,
         currentUserID: String,
+        onClose: @escaping () -> Void,
         onNearEnd: @escaping (String) -> Void,
         onRefresh: @escaping @MainActor () async -> Void,
         onPhotoLoadFailure: @escaping (PlacePhoto) -> Void
@@ -2908,6 +3001,7 @@ private struct PlacePhotoGalleryViewer: View {
         self.photoRequest = photoRequest
         self.photos = photos
         self.currentUserID = currentUserID
+        self.onClose = onClose
         self.onNearEnd = onNearEnd
         self.onRefresh = onRefresh
         self.onPhotoLoadFailure = onPhotoLoadFailure
@@ -2921,7 +3015,7 @@ private struct PlacePhotoGalleryViewer: View {
 
                 VStack(spacing: 0) {
                     HStack {
-                        viewerButton(systemImage: "xmark", action: dismiss.callAsFunction)
+                        viewerButton(systemImage: "xmark", action: onClose)
                         Spacer()
                         if let selectedItem,
                            let contributor = selectedItem.contributor,
@@ -2966,6 +3060,7 @@ private struct PlacePhotoGalleryViewer: View {
                 }
             }
         }
+        .environment(\.astirBrandMode, brandMode)
         .preferredColorScheme(.dark)
         .task {
             await onRefresh()
@@ -2980,7 +3075,7 @@ private struct PlacePhotoGalleryViewer: View {
         }
         .onChange(of: photos.map(\.id)) { _, ids in
             guard !ids.isEmpty else {
-                dismiss()
+                onClose()
                 return
             }
             if let selectedPhotoID, ids.contains(selectedPhotoID) {

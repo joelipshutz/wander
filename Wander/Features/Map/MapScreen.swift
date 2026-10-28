@@ -1416,6 +1416,7 @@ struct MapScreen: View {
     @State private var activePinBounceRevision: UInt64 = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var mapActivityEditFlow: PlaceActivityEditPresentation?
+    @State private var placePhotoGallery: PlacePhotoGalleryPresentation?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var placeProfileBackSwipeOffset: CGFloat = 0
     @State private var mapPlaceListTarget: MapPlaceListTarget?
@@ -2375,6 +2376,7 @@ struct MapScreen: View {
                 Task { await refreshMapCardViewerLocation() }
             }
             .onChange(of: compactSelectionIdentity, initial: true) { previous, current in
+                if previous != current { placePhotoGallery = nil }
                 handleCompactSelectionIdentityChange(from: previous, to: current)
             }
             .onChange(of: isMapTabActive) { _, isActive in
@@ -2554,8 +2556,14 @@ struct MapScreen: View {
         .overlay {
             selectedPlaceProfileOverlay
         }
-        // Present from the map's stable SwiftUI root. Presenting inside the
-        // sliding profile's UIHostingController resets nested confirmations.
+        // Native presentations belong to the stable map root. The sliding
+        // profile's hosting controller can reset sheets and repeatedly recreate
+        // photo covers as presentation environment actions change.
+        .fullScreenCover(item: $placePhotoGallery) { presentation in
+            PlacePhotoGalleryPresentationView(presentation: presentation) {
+                placePhotoGallery = nil
+            }
+        }
         .sheet(item: attachedMapSaveSheetContext) { context in
             MapPlaceSaveFlowSheet(
                 context: context,
@@ -2607,6 +2615,7 @@ struct MapScreen: View {
         }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
+            placePhotoGallery = nil
             isPlaceProfilePresented = false
             isPlaceProfileMounted = false
             placeProfilePresentationID = nil
@@ -4101,6 +4110,9 @@ struct MapScreen: View {
                 .environment(\.presentPlaceActivityEdit, { presentation in
                     mapActivityEditFlow = presentation
                 })
+                .environment(\.presentPlacePhotoGallery, { presentation in
+                    placePhotoGallery = presentation
+                })
                 .environment(
                     \.placeProfileFloatingActionVariant,
                     placeProfileFloatingActionVariant
@@ -4137,7 +4149,7 @@ struct MapScreen: View {
         // visually mounted behind it. Keeping both modal traps sheet actions.
         isPlaceProfilePresented && attachedMapSaveFlow == nil
             && mapSaveFlow == nil && mapActivityEditFlow == nil
-            && mapPlaceListTarget == nil
+            && mapPlaceListTarget == nil && placePhotoGallery == nil
     }
 
     private func presentWalkthroughPlaceMemory() {

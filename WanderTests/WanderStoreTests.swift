@@ -6955,16 +6955,16 @@ final class WanderStoreTests: XCTestCase {
     }
 
     func testQuickAddCoordinateParserAcceptsDecimalAndCardinalCoordinates() throws {
-        let decimal = try XCTUnwrap(AddScreen.coordinate(from: "34.0522, -118.2437"))
+        let decimal = try XCTUnwrap(QuickPlaceSearch.coordinate(from: "34.0522, -118.2437"))
         XCTAssertEqual(decimal.latitude, 34.0522, accuracy: 0.000_001)
         XCTAssertEqual(decimal.longitude, -118.2437, accuracy: 0.000_001)
 
-        let cardinal = try XCTUnwrap(AddScreen.coordinate(from: "34.0522 N, 118.2437 W"))
+        let cardinal = try XCTUnwrap(QuickPlaceSearch.coordinate(from: "34.0522 N, 118.2437 W"))
         XCTAssertEqual(cardinal.latitude, 34.0522, accuracy: 0.000_001)
         XCTAssertEqual(cardinal.longitude, -118.2437, accuracy: 0.000_001)
 
-        XCTAssertNil(AddScreen.coordinate(from: "Los Angeles"))
-        XCTAssertNil(AddScreen.coordinate(from: "123.0, -118.2"))
+        XCTAssertNil(QuickPlaceSearch.coordinate(from: "Los Angeles"))
+        XCTAssertNil(QuickPlaceSearch.coordinate(from: "123.0, -118.2"))
     }
 
     @MainActor
