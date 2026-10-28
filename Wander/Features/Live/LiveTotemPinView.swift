@@ -65,7 +65,7 @@ enum MapCategoryPictogram: String, CaseIterable {
 }
 
 /// A single place tile. Ownership and save status live in the footing; list
-/// membership is a separate cap mark, never another tile or invented count.
+/// membership is a circular corner badge, never another tile or invented count.
 struct LiveTotemPinView: View {
     let state: LiveTotemState
     let categoryEmoji: String
@@ -82,6 +82,7 @@ struct LiveTotemPinView: View {
     private var tileWidth: CGFloat { selected ? 32 : 29 }
     private var tileHeight: CGFloat { selected ? 44 : 40 }
     private var footingHeight: CGFloat { 10 }
+    private var bodyHeight: CGFloat { tileHeight - footingHeight }
     private var footingCenter: CGFloat { (tileHeight - footingHeight) / 2 }
     private var category: MapCategoryPictogram { .resolve(emoji: categoryEmoji) }
     private var selectionColor: Color { isDark ? AstirTheme.paperRaised.color : AstirTheme.ink.color }
@@ -90,6 +91,10 @@ struct LiveTotemPinView: View {
         ZStack {
             if isCompact {
                 compactDot
+                if state.hasListMembership {
+                    listBadge(diameter: 7.5, glyphSize: 4.5)
+                        .offset(x: 6, y: -6)
+                }
             } else {
                 if selected {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -103,8 +108,8 @@ struct LiveTotemPinView: View {
                 tile
             }
         }
-        // The density fallback changes only the drawing, never its tap target
-        // or the map coordinate at the center of the category pictogram.
+        // Density and list membership change only the drawing, never the
+        // 44pt tap target or the annotation's geographic anchor.
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
         .accessibilityHidden(true) // The annotation Button supplies place + semantic state.
@@ -134,22 +139,40 @@ struct LiveTotemPinView: View {
             Image(systemName: category.symbolName)
                 .resizable()
                 .scaledToFit()
-                .font(.system(size: selected ? 22 : 20, weight: .medium))
+                .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(AstirTheme.ink.color.opacity(isSoftened ? 0.58 : 1))
-                .frame(width: tileWidth - 7, height: selected ? 22 : 20)
-
-            if state.hasListMembership {
-                Image(systemName: PlaceListSymbol.systemImage)
-                    .font(.system(size: selected ? 7.5 : 7, weight: .heavy))
-                    .foregroundStyle(AstirTheme.ink.color)
-                    .offset(y: selected ? -16.5 : -14.5)
-            }
+                .frame(width: min(20, tileWidth - 8), height: min(20, bodyHeight - 8))
+                .clipped()
+                .frame(width: tileWidth, height: bodyHeight)
+                .clipped()
+                .offset(y: -footingHeight / 2)
 
             LiveTotemStatusRails(outlines: state.rails)
                 .frame(width: selected ? 22 : 20)
                 .offset(y: footingCenter)
         }
         .frame(width: tileWidth, height: tileHeight)
+        .overlay {
+            if state.hasListMembership {
+                listBadge(diameter: 11, glyphSize: 6.5)
+                    .offset(x: tileWidth / 2 - 1, y: -tileHeight / 2 + 2)
+            }
+        }
+    }
+
+    private func listBadge(diameter: CGFloat, glyphSize: CGFloat) -> some View {
+        Circle()
+            .fill(LiveTotemPinPalette.body(isDark: isDark, softened: false))
+            .overlay { Circle().strokeBorder(AstirTheme.ink.color.opacity(0.45), lineWidth: 0.6) }
+            .overlay {
+                Image(systemName: PlaceListSymbol.systemImage)
+                    .resizable()
+                    .scaledToFit()
+                    .font(.system(size: glyphSize, weight: .bold))
+                    .foregroundStyle(AstirTheme.ink.color)
+                    .frame(width: glyphSize, height: glyphSize)
+            }
+            .frame(width: diameter, height: diameter)
     }
 
     private var compactDot: some View {
@@ -201,36 +224,45 @@ enum LiveTotemPinPalette {
 
 private struct LiveTotemStatusRails: View {
     let outlines: [MapPinOutline]
+    private let thickness: CGFloat = 2.5
+    private let spacing: CGFloat = 2.5
 
     var body: some View {
-        VStack(spacing: 2.5) {
-            ForEach(Array(outlines.enumerated()), id: \.offset) { _, outline in
-                HStack(spacing: 3) {
-                    segment(outline.status, ownership: outline.ownership)
-                    if let secondary = outline.secondaryStatus {
-                        segment(secondary, ownership: outline.ownership)
-                    }
+        Canvas { context, size in
+            for (index, outline) in outlines.enumerated() {
+                let row = CGRect(x: 0, y: CGFloat(index) * (thickness + spacing),
+                                 width: size.width, height: thickness)
+                let color = LiveTotemPinPalette.color(for: outline.ownership)
+                if let secondary = outline.secondaryStatus {
+                    let segmentWidth = (row.width - 3) / 2
+                    let first = CGRect(x: row.minX, y: row.minY, width: segmentWidth, height: thickness)
+                    let second = CGRect(x: row.maxX - segmentWidth, y: row.minY,
+                                        width: segmentWidth, height: thickness)
+                    draw(outline.status, in: first, color: color, context: &context)
+                    draw(secondary, in: second, color: color, context: &context)
+                } else {
+                    draw(outline.status, in: row, color: color, context: &context)
                 }
-                .frame(height: 2.5)
             }
         }
+        .frame(height: CGFloat(outlines.count) * thickness + CGFloat(max(0, outlines.count - 1)) * spacing)
     }
 
-    private func segment(_ status: PlaceStatus, ownership: MapPinSaveOwnership) -> some View {
-        LiveTotemRailLine()
-            .stroke(LiveTotemPinPalette.color(for: ownership), style: StrokeStyle(
-                lineWidth: 2.5,
-                lineCap: .round,
-                dash: status == .wannaGo ? [0.1, 3.8] : []
-            ))
-    }
-}
-
-private struct LiveTotemRailLine: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX + 1.25, y: rect.midY))
-            path.addLine(to: CGPoint(x: rect.maxX - 1.25, y: rect.midY))
+    private func draw(_ status: PlaceStatus, in rect: CGRect, color: Color,
+                      context: inout GraphicsContext) {
+        if status == .wannaGo {
+            // Anchor both endpoint dots to the same visible bounds as a solid
+            // capsule. Distributing the interior dots avoids dash-phase drift.
+            let diameter = min(thickness, rect.width)
+            let count = max(2, Int((rect.width - diameter) / 4) + 1)
+            let step = (rect.width - diameter) / CGFloat(count - 1)
+            for index in 0..<count {
+                let dot = CGRect(x: rect.minX + CGFloat(index) * step, y: rect.minY,
+                                 width: diameter, height: diameter)
+                context.fill(Path(ellipseIn: dot), with: .color(color))
+            }
+        } else {
+            context.fill(Path(roundedRect: rect, cornerRadius: thickness / 2), with: .color(color))
         }
     }
 }

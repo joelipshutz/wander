@@ -9,7 +9,11 @@ does not replace Profile's Your Map renderer.
 ## Accepted Live contract, October 28
 
 Totem uses a monochrome category pictogram, compact ownership/status rails, and a
-separate list badge. Own status is coral; readable social status is blue. Been is
+small circular list badge at the upper-right corner. The category pictogram fits
+inside the cream body above the black footing, with its own clipped bounds.
+Solid and dotted status rails share centered visible bounds and equal side
+insets; dots are placed symmetrically rather than relying on a dashed stroke.
+Own status is coral; readable social status is blue. Been is
 solid and Wanna dotted. Mixed social Been/Wanna remains visible; own Been retains
 precedence when both match, while the Wanna filter can show the remaining Wanna.
 Unknown categories use a neutral place pictogram. A selected pin expands above
@@ -61,6 +65,16 @@ cached status or list badge. Trusted own pending writes remain visible. Snapshot
 persisted. Backend installation and hosted smoke validation remain separate gates.
 
 ## Live validation and review status
+
+The corner-badge and pin-geometry refinement passed all 3,193 native tests on
+iPhone 17e (iOS 26.5), with zero failures or skips. Pixel regressions verify every
+category silhouette stays inside the body, solid/dotted/mixed rails share
+symmetric visible endpoints, the circle overlaps the upper-right corner, and
+the 44pt interaction canvas remains unchanged. Light/Dark, selection, viewed
+and compact treatments are covered. The focused native eight-state capture
+passed on iPhone 17 Pro and iPhone 17e, exporting 20 original screenshots to
+`outputs/rec657/live-totem/refined-pins/index.html`. The results below describe
+the preceding functional pass; its video retains the earlier badge geometry.
 
 App implementation `15197e3` passed all 3,191 native tests on iPhone 17e (iOS 26.5),
 with zero failures or skips, including immediate pending-own save/list feedback.

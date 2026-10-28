@@ -60,15 +60,101 @@ final class LiveTotemPinRendererTests: XCTestCase {
         XCTAssertNotEqual(split.bytes, dotted.bytes)
     }
 
-    func testListMarkerChangesOnlyTopCapAndDoesNotCreateOwnershipColor() throws {
-        let without = try pixels(render(state(rails: [], list: false)))
-        let with = try pixels(render(state(rails: [], list: true)))
-        let changed = try XCTUnwrap(with.changedBounds(comparedTo: without))
-        XCTAssertLessThan(changed.maxY, 28 * 3,
-                          "List membership must add a cap mark without moving the pictogram or footing.")
-        XCTAssertEqual(with.count(0xF05A3C), 0)
-        XCTAssertEqual(with.count(0x69B8D7), 0)
-        XCTAssertEqual(with.count(0x6FB985), 0)
+    func testCategoryPictogramsStayInsideTheCreamBodyWithClearFootingSeparation() throws {
+        let categories = ["☕️", "🍽️", "🍜", "🍸", "🥐", "🌳", "🥾", "🏖️", "🏛️", "🏨", "🛍️", "🧘"]
+        let state = state(rails: [.init(ownership: .currentUser, status: .been)])
+        for selected in [false, true] {
+            for dark in [false, true] {
+                let reference = try pixels(render(state, selected: selected, dark: dark, emoji: "?"))
+                let tileWidth: CGFloat = selected ? 32 : 29
+                let tileHeight: CGFloat = selected ? 44 : 40
+                // The image is a 44pt interaction canvas with 8pt test padding.
+                // Category changes must stay at least 4pt inside the body and
+                // above the separate 10pt status footing, for every silhouette.
+                let safeBody = CGRect(x: 30 - tileWidth / 2 + 4, y: 30 - tileHeight / 2 + 4,
+                                      width: tileWidth - 8, height: tileHeight - 10 - 8)
+                for emoji in categories {
+                    let image = try pixels(render(state, selected: selected, dark: dark, emoji: emoji))
+                    let changed = try XCTUnwrap(image.changedBounds(comparedTo: reference), emoji)
+                    XCTAssertGreaterThanOrEqual(changed.minX, safeBody.minX * 3, emoji)
+                    XCTAssertLessThanOrEqual(changed.maxX, safeBody.maxX * 3, emoji)
+                    XCTAssertGreaterThanOrEqual(changed.minY, safeBody.minY * 3, emoji)
+                    XCTAssertLessThanOrEqual(changed.maxY, safeBody.maxY * 3,
+                                             "\(emoji) must remain above the black footing.")
+                }
+            }
+        }
+    }
+
+    func testSolidDottedAndMixedRailsShareSymmetricVisibleInsets() throws {
+        let variants: [MapPinOutline] = [
+            .init(ownership: .currentUser, status: .been),
+            .init(ownership: .currentUser, status: .wannaGo),
+            .init(ownership: .currentUser, status: .been, secondaryStatus: .wannaGo),
+            .init(ownership: .currentUser, status: .wannaGo, secondaryStatus: .been)
+        ]
+        for selected in [false, true] {
+            for dark in [false, true] {
+                let solid = try pixels(render(state(rails: [variants[0]]), selected: selected, dark: dark))
+                let reference = try XCTUnwrap(solid.colorBounds(0xF05A3C))
+                let footingWidth: CGFloat = (selected ? 32 : 29) * 3
+                let footingLeft = (CGFloat(solid.width) - footingWidth) / 2
+                let footingRight = footingLeft + footingWidth
+                for variant in variants {
+                    let image = try pixels(render(state(rails: [variant]), selected: selected, dark: dark))
+                    let rail = try XCTUnwrap(image.colorBounds(0xF05A3C))
+                    XCTAssertEqual(rail.minX - footingLeft, footingRight - rail.maxX, accuracy: 1,
+                                   "Visible rail endpoints must have equal left/right footing inset.")
+                    XCTAssertEqual(rail.minX, reference.minX, accuracy: 1)
+                    XCTAssertEqual(rail.maxX, reference.maxX, accuracy: 1,
+                                   "Dots and mixed statuses must reach the same visible ends as Been.")
+                }
+                let twoRows = try pixels(render(state(rails: [
+                    .init(ownership: .currentUser, status: .been, secondaryStatus: .wannaGo),
+                    .init(ownership: .social, status: .wannaGo)
+                ]), selected: selected, dark: dark))
+                let own = try XCTUnwrap(twoRows.colorBounds(0xF05A3C))
+                let social = try XCTUnwrap(twoRows.colorBounds(0x69B8D7))
+                XCTAssertEqual(own.minX, social.minX, accuracy: 1)
+                XCTAssertEqual(own.maxX, social.maxX, accuracy: 1)
+            }
+        }
+    }
+
+    func testListBadgeChangesOnlyTopRightCornerAcrossDensitySelectionAndAppearance() throws {
+        for compact in [false, true] {
+            for selected in [false, true] {
+                for dark in [false, true] {
+                    for viewed in [false, true] {
+                        let without = try pixels(render(state(rails: [], list: false), selected: selected,
+                                                        viewed: viewed, compact: compact, dark: dark))
+                        let with = try pixels(render(state(rails: [], list: true), selected: selected,
+                                                     viewed: viewed, compact: compact, dark: dark))
+                        let changed = try XCTUnwrap(with.changedBounds(comparedTo: without))
+                        let isDense = compact && !selected
+                        let diameter: CGFloat = isDense ? 7.5 : 11
+                        XCTAssertGreaterThan(changed.minX, (isDense ? 31 : 37) * 3,
+                                             "The list badge belongs at the right corner, outside the pictogram.")
+                        XCTAssertLessThan(changed.maxY, (isDense ? 29 : 25) * 3)
+                        XCTAssertLessThanOrEqual(changed.width, diameter * 3 + 2)
+                        XCTAssertLessThanOrEqual(changed.height, diameter * 3 + 2)
+                        if !isDense {
+                            let tileTop: CGFloat = selected ? 8 : 10
+                            let tileRight: CGFloat = 30 + (selected ? 32 : 29) / 2
+                            XCTAssertLessThan(changed.minY, tileTop * 3,
+                                              "The circular badge must overlap the top edge.")
+                            XCTAssertGreaterThan(changed.maxY, tileTop * 3)
+                            XCTAssertLessThan(changed.minX, tileRight * 3)
+                            XCTAssertGreaterThan(changed.maxX, tileRight * 3,
+                                                 "The circular badge must overlap the right edge.")
+                        }
+                        XCTAssertEqual(with.count(0xF05A3C), 0)
+                        XCTAssertEqual(with.count(0x69B8D7), 0)
+                        XCTAssertEqual(with.count(0x6FB985), 0)
+                    }
+                }
+            }
+        }
     }
 
     func testDenseDotsKeepBothOwnershipColorsAndDoNotFadeAfterViewing() throws {
@@ -97,11 +183,13 @@ final class LiveTotemPinRendererTests: XCTestCase {
     }
 
     func testDenseAndExpandedPinsRetainFortyFourPointInteractionCanvas() throws {
-        let state = state(rails: [.init(ownership: .social, status: .wannaGo)])
-        for compact in [false, true] {
-            for selected in [false, true] {
-                let image = try render(state, selected: selected, compact: compact, padding: 0)
-                XCTAssertEqual(image.size, CGSize(width: 44, height: 44))
+        for list in [false, true] {
+            let state = state(rails: [.init(ownership: .social, status: .wannaGo)], list: list)
+            for compact in [false, true] {
+                for selected in [false, true] {
+                    let image = try render(state, selected: selected, compact: compact, padding: 0)
+                    XCTAssertEqual(image.size, CGSize(width: 44, height: 44))
+                }
             }
         }
     }
@@ -114,9 +202,9 @@ final class LiveTotemPinRendererTests: XCTestCase {
 
     private func render(_ state: LiveTotemState, selected: Bool = false, viewed: Bool = false,
                         compact: Bool = false, dark: Bool = false,
-                        padding: CGFloat = 8) throws -> UIImage {
+                        emoji: String = "☕️", padding: CGFloat = 8) throws -> UIImage {
         let renderer = ImageRenderer(content: LiveTotemPinView(
-            state: state, categoryEmoji: "☕️", selected: selected, viewed: viewed, compact: compact
+            state: state, categoryEmoji: emoji, selected: selected, viewed: viewed, compact: compact
         )
             .environment(\.colorScheme, dark ? .dark : .light)
             .padding(padding))
@@ -161,6 +249,26 @@ final class LiveTotemPinRendererTests: XCTestCase {
                 }
             }
             return matches
+        }
+
+        func colorBounds(_ rgb: UInt32) -> CGRect? {
+            let red = Int((rgb >> 16) & 0xFF)
+            let green = Int((rgb >> 8) & 0xFF)
+            let blue = Int(rgb & 0xFF)
+            var bounds: CGRect?
+            for y in 0..<height {
+                for x in 0..<width {
+                    let index = (y * width + x) * 4
+                    guard bytes[index + 3] >= 250 else { continue }
+                    let matchesRed = abs(Int(bytes[index]) - red) <= 3
+                    let matchesGreen = abs(Int(bytes[index + 1]) - green) <= 3
+                    let matchesBlue = abs(Int(bytes[index + 2]) - blue) <= 3
+                    guard matchesRed, matchesGreen, matchesBlue else { continue }
+                    let pixel = CGRect(x: x, y: y, width: 1, height: 1)
+                    bounds = bounds.map { $0.union(pixel) } ?? pixel
+                }
+            }
+            return bounds
         }
 
         func changedBounds(comparedTo other: Self) -> CGRect? {

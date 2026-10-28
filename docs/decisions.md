@@ -999,7 +999,9 @@ Upcoming events and inviting people to Astir use icon buttons on the left and ri
 ## REC-657 — Totem Live pins and current place state, 2026-10-28
 
 Totem is the accepted Live pin family: a category pictogram tile, compact status
-rails, and a separate list badge. This supersedes the earlier Live photo/activity
+rails, and a small circular list badge at the upper-right corner. Pictograms stay
+within the cream body above the footing; solid and dotted rails have equal
+visible side insets within the black footing. This supersedes the earlier Live photo/activity
 badge proposal and the unselected lab status. Profile's Your Map remains a
 separate surface. Own status is coral; authorized social status is blue. Been is
 solid and Wanna dotted, with mixed social state preserved. Selection, viewed

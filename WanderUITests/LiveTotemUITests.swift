@@ -7,32 +7,7 @@ final class LiveTotemUITests: XCTestCase {
 
     func testTotemStatesFiltersAndPlaceNavigation() {
         let app = launch()
-        capture("01-live-with-feed")
-        collapseDrawer(app)
-        wait(app.buttons["live.pin.totem_featured"])
-        settle(app.buttons["live.pin.totem_featured"])
-        capture("02-all-states-map")
-        assertUniquePins(app)
-
-        for (id, name) in [("coffee", "03-you-been-persistent-list"),
-                           ("tacos", "04-you-wanna-list"),
-                           ("bar", "05-social-been"),
-                           ("noodles", "06-social-wanna"),
-                           ("mixed", "07-mixed-one-place"),
-                           ("list", "08-list-only"),
-                           ("featured_list", "09-list-over-featured"),
-                           ("featured", "10-featured-only")] {
-            let pin = app.buttons["live.pin.totem_\(id)"]
-            wait(pin)
-            settle(pin)
-            pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            wait(app.buttons["live.placePreview.close"])
-            capture(name)
-            app.buttons["live.placePreview.close"].tap()
-            XCTAssertTrue(app.buttons["live.placePreview.close"].waitForNonExistence(timeout: 5))
-            collapseDrawer(app)
-            assertUniquePins(app)
-        }
+        capturePinStates(app)
 
         app.buttons["Filters"].tap()
         wait(app.buttons["live.filter.people"])
@@ -129,6 +104,40 @@ final class LiveTotemUITests: XCTestCase {
         settle(featured)
         assertUniquePins(app)
         capture("20-featured-becomes-wanna")
+    }
+
+    /// Focused native mockup pass for pin-only geometry refinements.
+    func testRefinedTotemPinMockups() {
+        capturePinStates(launch())
+    }
+
+    private func capturePinStates(_ app: XCUIApplication) {
+        capture("01-live-with-feed")
+        collapseDrawer(app)
+        wait(app.buttons["live.pin.totem_featured"])
+        settle(app.buttons["live.pin.totem_featured"])
+        capture("02-all-states-map")
+        assertUniquePins(app)
+
+        for (id, name) in [("coffee", "03-you-been-persistent-list"),
+                           ("tacos", "04-you-wanna-list"),
+                           ("bar", "05-social-been"),
+                           ("noodles", "06-social-wanna"),
+                           ("mixed", "07-mixed-one-place"),
+                           ("list", "08-list-only"),
+                           ("featured_list", "09-list-over-featured"),
+                           ("featured", "10-featured-only")] {
+            let pin = app.buttons["live.pin.totem_\(id)"]
+            wait(pin)
+            settle(pin)
+            pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            wait(app.buttons["live.placePreview.close"])
+            capture(name)
+            app.buttons["live.placePreview.close"].tap()
+            XCTAssertTrue(app.buttons["live.placePreview.close"].waitForNonExistence(timeout: 5))
+            collapseDrawer(app)
+            assertUniquePins(app)
+        }
     }
 
     private func launch() -> XCUIApplication {
