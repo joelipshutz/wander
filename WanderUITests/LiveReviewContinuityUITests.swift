@@ -95,7 +95,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
     func testPinShowsItsOriginalFeedActivityAndOpensItsPlaceWithReturn() {
         let diagnosticStart = ProcessInfo.processInfo.systemUptime
         let app = launchLive()
-        let destinationTopLimit = app.buttons["live.scope.following"].frame.maxY
+        let destinationTopLimit = app.buttons["live.scope.featured"].frame.maxY
         let pin = app.buttons["live.pin.place_noodles"]
         waitHittable(pin)
         XCTAssertTrue(pin.label.contains("Ryan"))
@@ -103,9 +103,13 @@ final class LiveReviewContinuityUITests: XCTestCase {
         pin.tap()
         let activity = app.descendants(matching: .any)["live.placePreview.activity.fixture-feed-ryan-wanna-noodles"].firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
-        XCTAssertTrue(activity.label.contains("Ryan"))
-        XCTAssertTrue(activity.label.contains("Wanna"))
-        XCTAssertTrue(activity.label.contains("5h ago"))
+        // The activity row contains its open-place button and an optional photo
+        // control. Read attribution from that button, not its unlabeled container.
+        let activityAttribution = activity.buttons.firstMatch
+        XCTAssertTrue(activityAttribution.waitForExistence(timeout: 5))
+        XCTAssertTrue(activityAttribution.label.contains("Ryan"))
+        XCTAssertTrue(activityAttribution.label.contains("Wanna"))
+        XCTAssertTrue(activityAttribution.label.contains("5h ago"))
         let open = app.buttons["live.placePreview.open"]
         captureRouteDiagnostics("pin-selected-before-open", in: app, startedAt: diagnosticStart,
             queries: [("selected-place-open", app.buttons.matching(identifier: "live.placePreview.open")),
@@ -120,7 +124,19 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("original-place-from-pin-preview")
         placeBack.tap()
         XCTAssertTrue(placeBack.waitForNonExistence(timeout: 5))
-        waitDrawer("half expanded", in: app)
+        // The full place modal returns to the selected preview. Verify that
+        // original place/activity before explicitly closing it to reach Feed.
+        waitHittable(open)
+        XCTAssertEqual(open.label, "Open Larchmont Noodles")
+        XCTAssertTrue(activityAttribution.label.contains("Ryan"))
+        XCTAssertTrue(activityAttribution.label.contains("Wanna"))
+        XCTAssertTrue(activityAttribution.label.contains("5h ago"))
+        capture("original-place-return-to-pin-preview")
+        let closePreview = app.buttons["live.placePreview.close"]
+        waitHittable(closePreview)
+        closePreview.tap()
+        XCTAssertTrue(open.waitForNonExistence(timeout: 5))
+        waitDrawer("collapsed", in: app)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
         expandDrawer(in: app)
 
@@ -135,6 +151,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(destination.label.contains("Larchmont Noodles"))
         let comments = card.buttons["Open comments"]
         reveal(comments, in: feed, app: app)
+        waitDrawer("expanded", in: app)
         comments.tap()
         let send = app.buttons["activity.comment.send"]
         XCTAssertTrue(send.waitForExistence(timeout: 10))
@@ -146,7 +163,11 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("original-wanna-activity-from-pin")
         tapNavigationBack(app.navigationBars.firstMatch)
         XCTAssertTrue(send.waitForNonExistence(timeout: 5))
+        // The preceding pin-profile round trip must not leave a departure
+        // snapshot that replaces this later, genuinely scrolled Feed position.
+        waitDrawer("expanded", in: app)
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+        waitForFocusedCardIntersection(card, in: feed, app: app)
 
         reveal(destination, in: feed, app: app)
         waitHittable(destination)
@@ -187,11 +208,13 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(photos.frame.width, 44)
         XCTAssertGreaterThanOrEqual(photos.frame.height, 44)
         XCTAssertTrue(card.exists)
-        XCTAssertEqual(feed.value as? String, "5 activities loaded")
+        // The committed viewport includes four place-backed fixtures, not the
+        // place-less list-created event in the unfiltered five-event Feed seed.
+        XCTAssertEqual(feed.value as? String, "4 activities loaded")
         let drawer = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         let committedDrawerValue = drawer.value as? String
         XCTAssertNotNil(committedDrawerValue)
-        XCTAssertTrue(committedDrawerValue?.hasPrefix("5 loaded updates.") == true)
+        XCTAssertTrue(committedDrawerValue?.hasPrefix("4 activities.") == true)
         waitDrawer("expanded", in: app)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
         photos.tap()
@@ -225,7 +248,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         waitDrawer("expanded", in: app)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
         XCTAssertTrue(card.exists)
-        XCTAssertEqual(feed.value as? String, "5 activities loaded")
+        XCTAssertEqual(feed.value as? String, "4 activities loaded")
         XCTAssertEqual(drawer.value as? String, committedDrawerValue)
         XCTAssertEqual(photos.value as? String, "3 photos")
         XCTAssertTrue(physicallyVisible(photos, in: feed, app: app))
@@ -253,7 +276,9 @@ final class LiveReviewContinuityUITests: XCTestCase {
     func testLiveSearchNotificationsAndAddCancelReturnToSameSurface() {
         let diagnosticStart = ProcessInfo.processInfo.systemUptime
         let app = launchLive()
-        let destinationTopLimit = app.buttons["live.scope.following"].frame.maxY
+        waitDrawer("half expanded", in: app)
+        let originalDrawerLabel = app.staticTexts["live.drawerHandle"].label
+        let destinationTopLimit = app.buttons["live.scope.featured"].frame.maxY
         let searchMatches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
         let search = readySearch(in: app, startedAt: diagnosticStart)
         captureRouteDiagnostics("search-before-single-tap", in: app, startedAt: diagnosticStart,
@@ -290,9 +315,10 @@ final class LiveReviewContinuityUITests: XCTestCase {
         assertEmbeddedDestinationFillsViewport(searchBack, in: app, topLimit: destinationTopLimit)
         searchBack.tap()
         XCTAssertTrue(searchBack.waitForNonExistence(timeout: 5))
-        waitDrawer("expanded", in: app)
-
-        collapseDrawerToHalf(in: app)
+        // Search and Notifications restore the unscrolled detent we left from.
+        waitDrawer("half expanded", in: app)
+        XCTAssertEqual(app.staticTexts["live.drawerHandle"].label, originalDrawerLabel)
+        waitHittable(app.buttons["live.draw"])
         app.buttons["Notifications"].tap()
         let inbox = app.navigationBars["Notifications"]
         XCTAssertTrue(inbox.waitForExistence(timeout: 10))
@@ -301,9 +327,9 @@ final class LiveReviewContinuityUITests: XCTestCase {
         capture("notifications-from-live")
         tapNavigationBack(inbox)
         XCTAssertTrue(inbox.waitForNonExistence(timeout: 5))
-        waitDrawer("expanded", in: app)
-
-        collapseDrawerToHalf(in: app)
+        waitDrawer("half expanded", in: app)
+        XCTAssertEqual(app.staticTexts["live.drawerHandle"].label, originalDrawerLabel)
+        waitHittable(app.buttons["live.draw"])
         app.buttons["Add a place"].tap()
         let close = app.buttons["Close add place"]
         XCTAssertTrue(close.waitForExistence(timeout: 10))
@@ -343,15 +369,6 @@ final class LiveReviewContinuityUITests: XCTestCase {
         handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
         waitDrawer("expanded", in: app)
-    }
-
-    private func collapseDrawerToHalf(in app: XCUIApplication) {
-        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
-        waitHittable(handle)
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
-        waitDrawer("half expanded", in: app)
-        waitHittable(app.buttons["live.draw"])
     }
 
     private func waitDrawer(_ state: String, in app: XCUIApplication) {
@@ -639,11 +656,13 @@ final class LiveReviewContinuityUITests: XCTestCase {
 }
 
 /// Evidence-only appendix for LiveReviewContinuityUITests.swift, which imports XCTest.
-/// Keep its existing four-case class byte-for-byte; append this separate class.
+/// Uses the same current Live fixtures and committed-query contract as the journeys above.
 @MainActor
 final class LiveDrawerAndFilterUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    // Featured commits a viewport polygon: the four place activities match it;
+    // Maya’s list-created event has no place and remains outside that query.
     private let allPlaceIDs: Set<String> = [
         "place_bar_nido", "place_noodles", "place_juniper_table", "place_fern_desk_coffee"
     ]
@@ -651,25 +670,25 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     func testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity() {
         let app = launchLive()
-        assertDrawer("half expanded", count: 5, in: app)
+        assertDrawer("half expanded", count: 4, in: app)
         assertTabs(in: app)
         assertPins(allPlaceIDs, in: app)
         assertMapControls(in: app)
         capture("drawer-initial-half")
 
-        dragDrawer(.up, to: "expanded", count: 5, in: app)
+        dragDrawer(.up, to: "expanded", count: 4, in: app)
         assertTabs(in: app)
         XCTAssertFalse(app.buttons["live.draw"].exists)
-        assertFeedCount(5, in: app)
+        assertFeedCount(4, in: app)
         let feed = app.scrollViews["feed.places.scroll"]
         let actor = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.actor"]
         reveal(actor, in: feed, direction: .down, app: app)
         XCTAssertTrue(actor.label.contains("Maya"))
         capture("drawer-expanded-existing-feed")
 
-        dragDrawer(.down, to: "half expanded", count: 5, in: app)
+        dragDrawer(.down, to: "half expanded", count: 4, in: app)
         assertMapControls(in: app)
-        dragDrawer(.down, to: "collapsed", count: 5, in: app)
+        dragDrawer(.down, to: "collapsed", count: 4, in: app)
         assertTabs(in: app)
         assertMapControls(in: app)
         captureState("drawer-collapsed-before-accessibility-check", in: app, observations: [
@@ -682,17 +701,17 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         capture("drawer-collapsed-map")
 
         panMapOnce(anchorID: "place_noodles", in: app)
-        assertDrawer("collapsed", count: 5, in: app)
+        assertDrawer("collapsed", count: 4, in: app)
         assertPins(allPlaceIDs, in: app)
         assertCollapsedFeedDoesNotReceiveTouches(feed)
         capture("drawer-collapsed-after-native-pan")
 
-        dragDrawer(.up, to: "half expanded", count: 5, in: app)
+        dragDrawer(.up, to: "half expanded", count: 4, in: app)
         assertTabs(in: app)
         assertMapControls(in: app)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "0 active filters")
-        XCTAssertEqual(summary(in: app).label, "Following · Past 7 days")
-        assertFeedCount(5, in: app)
+        XCTAssertEqual(summary(in: app).label, "All time")
+        assertFeedCount(4, in: app)
         capture("drawer-half-after-pan-and-return")
     }
 
@@ -711,7 +730,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             $0.identifier == "live.filter.time" && $0.label == "When, Past 24 hours"
         })
         selectMenu(app.buttons["live.filter.scope"], option: "Nearby", form: form, app: app, selected: {
-            $0.identifier == "live.filter.scope" && $0.label == "Scope, Nearby"
+            $0.identifier == "live.filter.scope" && $0.value as? String == "Nearby"
         })
         let city = app.buttons["live.filter.city"]
         reveal(city, in: form, direction: .down, app: app)
@@ -731,7 +750,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         let origin = app.coordinate(withNormalizedOffset: .zero)
         origin.withOffset(CGVector(dx: contact.x - app.frame.minX, dy: contact.y - app.frame.minY))
             .press(forDuration: 0.2)
-        let cityNavigation = app.navigationBars["City center"]
+        let cityNavigation = app.navigationBars["Area center"]
         XCTAssertTrue(cityNavigation.exists)
         XCTAssertTrue(losAngeles.isSelected)
         let filtersBack = cityNavigation.buttons["Filters"]
@@ -784,7 +803,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(outsideCard.frame.minY, allBoundary.frame.maxY,
                                     "An outside-filter list addition belongs below its explicit disclosure.")
         assertFeedCount(2, in: app)
-        XCTAssertEqual(drawer(in: app).value as? String, "1 loaded update. \(combinedSummary)",
+        XCTAssertEqual(drawer(in: app).value as? String, "1 activity. \(combinedSummary)",
                        "Broadening Feed discovery must not broaden the committed map count or filters.")
         for forbiddenID in ["fixture-feed-maya-been-bar-nido", "fixture-feed-maya-created-sunset-list",
                             "fixture-feed-demo-saved-fern-desk"] {
@@ -812,7 +831,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(retainedForm.buttons["Activity, Wannas"].exists)
         XCTAssertEqual(app.buttons["live.filter.time"].label, "When, Past 24 hours")
         reveal(app.buttons["live.filter.scope"], in: retainedForm, direction: .down, app: app)
-        XCTAssertEqual(app.buttons["live.filter.scope"].label, "Scope, Nearby")
+        XCTAssertEqual(app.buttons["live.filter.scope"].value as? String, "Nearby")
         reveal(app.buttons["live.filter.city"], in: retainedForm, direction: .down, app: app)
         XCTAssertEqual(app.buttons["live.filter.city"].value as? String, "Los Angeles")
         reveal(app.buttons["25 km"], in: retainedForm, direction: .down, app: app)
@@ -829,8 +848,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.buttons["live.applyFilters"].tap()
 
         assertDrawer("half expanded", count: 2, in: app)
-        XCTAssertEqual(summary(in: app).label, "Past 7 days")
-        XCTAssertEqual(drawer(in: app).value as? String, "2 loaded updates. Following · Past 7 days · Only Friends")
+        XCTAssertEqual(summary(in: app).label, "All time")
+        XCTAssertEqual(drawer(in: app).value as? String, "2 activities. Featured · All time · Only Friends")
         XCTAssertEqual(app.buttons["Filters"].value as? String, "1 active filters")
         assertPins(["place_noodles", "place_juniper_table"], in: app)
         dragDrawer(.up, to: "expanded", count: 2, in: app)
@@ -876,7 +895,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
                               postInputCapture: String? = nil) {
-        let loadedCount = count == 1 ? "1 loaded update." : "\(count) loaded updates."
+        let loadedCount = count == 1 ? "1 activity." : "\(count) activities."
         // Read only the uniquely identified native drawer snapshot. Keep query
         // resolution inside the timed predicate; .element rejects ambiguity.
         let observationStart = ProcessInfo.processInfo.systemUptime
@@ -930,16 +949,20 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func dragDrawer(_ direction: Direction, to state: String, count: Int, in app: XCUIApplication) {
         let handle = drawer(in: app)
         waitHittable(handle)
-        let endY: CGFloat = direction == .up ? 0.12 : 0.85
+        // These checks traverse adjacent detents. A full-screen drag now
+        // intentionally crosses the middle stop, so move one short native step.
+        let distance: CGFloat = direction == .up ? -80 : 80
+        let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = start.withOffset(CGVector(dx: 0, dy: distance))
+        XCTAssertTrue(app.frame.contains(start.screenPoint) && app.frame.contains(end.screenPoint))
         captureState("drawer-before-native-drag", in: app, observations: [
-            "expectedState=\(state); expectedLoadedCount=\(count); endNormalizedY=\(endY)",
+            "expectedState=\(state); expectedLoadedCount=\(count); verticalTravel=\(distance)",
             "handleFrame=\(handle.frame); handleLabel=\(handle.label); handleValue=\(String(describing: handle.value)); handleHittable=\(handle.isHittable)",
             "preDragSystemUptime=\(ProcessInfo.processInfo.systemUptime)"
         ])
         // Use deliberate native input for the existing single drawer transition.
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY)),
-                   withVelocity: .slow, thenHoldForDuration: 0.1)
+        start.press(forDuration: 0.1, thenDragTo: end,
+                    withVelocity: .slow, thenHoldForDuration: 0.1)
         assertDrawer(state, count: count, in: app, postInputCapture: "drawer-after-native-drag")
     }
 
@@ -1046,7 +1069,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func assertCombinedResult(in app: XCUIApplication, drawerState: String = "half expanded") {
         assertDrawer(drawerState, count: 1, in: app)
         XCTAssertEqual(summary(in: app).label, "Past 1 day")
-        XCTAssertEqual(drawer(in: app).value as? String, "1 loaded update. \(combinedSummary)")
+        XCTAssertEqual(drawer(in: app).value as? String, "1 activity. \(combinedSummary)")
         XCTAssertEqual(app.buttons["Filters"].value as? String, "6 active filters")
         assertPins(["place_noodles"], in: app)
         let pin = app.buttons["live.pin.place_noodles"]
@@ -1117,10 +1140,23 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                             direction: Direction = .down, app: XCUIApplication,
                             selected: @escaping (XCUIElementSnapshot) -> Bool) {
         reveal(picker, in: form, direction: direction, app: app)
+        let semanticTitle: String?
+        switch picker.identifier {
+        case "live.filter.people": semanticTitle = "People"
+        case "live.filter.scope": semanticTitle = "Scope"
+        default: semanticTitle = nil
+        }
+        let semanticOptionID = semanticTitle.map { "live.filter.option.\($0).\(option)" }
         picker.tap()
-        // Native Picker options live in the popup collection; the retained
-        // Live header can expose an identically labeled Nearby button.
-        let choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
+        // Colored People/Scope options are native popover buttons with stable
+        // identifiers. Activity/When remain native Picker collection options.
+        // Both queries avoid the identically labeled Nearby header button.
+        let choice: XCUIElement
+        if let semanticOptionID {
+            choice = app.buttons.matching(identifier: semanticOptionID).element
+        } else {
+            choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
+        }
         waitHittable(choice, diagnosticFailure: { snapshotError in
             // Observe the failed wait once, before its original assertion aborts
             // the test. These reads neither retry the tap nor extend its gate.
@@ -1137,7 +1173,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                 @MainActor
                 func visit(_ node: XCUIElementSnapshot, inCollection: Bool) {
                     let collection = inCollection || node.elementType == .collectionView
-                    if collection && node.elementType == .button && node.label == option {
+                    if node.elementType == .button
+                        && (semanticOptionID.map { node.identifier == $0 } ?? (collection && node.label == option)) {
                         choiceCount += 1
                     }
                     for child in node.children { visit(child, inCollection: collection) }
@@ -1172,7 +1209,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                 let collection = inCollection || node.elementType == .collectionView
                 let form = inForm || node.identifier == "live.filters.form"
                 if node.elementType == .button {
-                    if collection && node.label == option { popupChoicePresent = true }
+                    if semanticOptionID.map({ node.identifier == $0 }) ?? (collection && node.label == option) {
+                        popupChoicePresent = true
+                    }
                     if form && selected(node) { selectedPickerCount += 1 }
                 }
                 for child in node.children { visit(child, inCollection: collection, inForm: form) }
@@ -1310,11 +1349,15 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                                            dy: contact.y - confirmed.app.minY)).press(forDuration: 0.2)
                 return
             }
-            // Keep the original reveal path and maximum of sixteen drags.
+            // Reset is the first Form section. If it was virtualized after
+            // inspecting lower filters, reveal toward the top; a known frame
+            // still chooses the direction that brings that exact row into view.
             guard attempt < 16 else { break }
+            let dragDown = observed.button.map { $0.minY < observed.viewport.minY } ?? true
             let from = CGPoint(x: observed.form.maxX - 8,
-                               y: observed.viewport.minY + observed.viewport.height * 0.75)
-            let to = CGPoint(x: from.x, y: observed.viewport.minY + observed.viewport.height * 0.45)
+                               y: observed.viewport.minY + observed.viewport.height * (dragDown ? 0.45 : 0.75))
+            let to = CGPoint(x: from.x,
+                             y: observed.viewport.minY + observed.viewport.height * (dragDown ? 0.75 : 0.45))
             XCTAssertTrue(observed.form.contains(from) && observed.form.contains(to))
             let origin = app.coordinate(withNormalizedOffset: .zero)
             origin.withOffset(CGVector(dx: from.x - observed.app.minX, dy: from.y - observed.app.minY))
@@ -1419,17 +1462,17 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func revealNativeCityOption(_ name: String, in app: XCUIApplication)
         -> (element: XCUIElement, frame: CGRect, viewport: CGRect)? {
-        let navigation = app.navigationBars["City center"]
+        let navigation = app.navigationBars["Area center"]
         guard navigation.waitForExistence(timeout: 5) else {
             captureCityPickerState("city-picker-route-missing", in: app, observations: [])
-            XCTFail("Expected the native City center picker before choosing a city")
+            XCTFail("Expected the native Area center picker before choosing a city")
             return nil
         }
         captureCityPickerState("city-picker-after-tap", in: app, observations: [])
         for attempt in 0...16 {
             guard navigation.exists else {
                 captureCityPickerState("city-picker-route-lost", in: app, observations: [])
-                XCTFail("City option reveal must remain in the native City center picker")
+                XCTFail("City option reveal must remain in the native Area center picker")
                 return nil
             }
             // Navigation can retain the offscreen Filters form. Use the unique

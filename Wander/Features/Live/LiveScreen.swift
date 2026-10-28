@@ -199,6 +199,9 @@ struct LiveScreen: View {
         }
         .background(brand.background)
         .recentPlaceListAddPresentation(recentListAdd)
+        // These profiles return to the selected preview. A Feed departure
+        // snapshot here would outlive that preview and override the next
+        // actual Feed destination's scroll position.
         .fullScreenCover(item: $fullProfilePin, onDismiss: modalDidDismiss) { pin in
             LivePlaceFullProfileScreen(place: pin.place, activities: activity, identity: pin.identity,
                 onBack: { fullProfilePin = nil })
@@ -866,7 +869,7 @@ struct LiveScreen: View {
                 onClose: dismissPlacePreview)
         } else if let candidate = selectedCandidate {
             LivePlacePreviewCard(candidate: candidate,
-                onOpen: { rememberFeedPresentation(); fullProfileCandidate = candidate },
+                onOpen: { fullProfileCandidate = candidate },
                 onAdd: { saveNativePlace(candidate) },
                 onShare: { previewSharePlace = LivePlaceShareRoute(place: PlaceSheetPlace(candidate: candidate)) },
                 onAddToList: { recentListAdd.add(.candidate(candidate), store: store, backend: backend, analyticsSurface: "map") },
@@ -1400,7 +1403,6 @@ struct LiveScreen: View {
                 visiblePlace: pin.place, identity: pin.identity, store: store)
             store.saveFlowDidPresent(.saveSheet)
         } else {
-            rememberFeedPresentation()
             fullProfilePin = pin
         }
     }
