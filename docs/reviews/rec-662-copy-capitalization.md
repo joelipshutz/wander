@@ -20,7 +20,7 @@ contractions, acronyms, intentional brand casing, and conventional units.
 
 ## Count
 
-The reproducible source count is **14,282 changed word occurrences in 156
+The reproducible source count is **14,296 changed word occurrences in 156
 source files**. Repeated copy counts at each source location; hyphen-separated
 word components count separately. Tests, comments,
 generated plist mirrors, documentation, and added implementation files are
@@ -29,7 +29,7 @@ finite rendered-word count and are not added to this number.
 
 ```sh
 python3 scripts/audit-copy-capitalization.py \
-  --base 40346e28903db3e21bd247a07911959cc583fd62 --json
+  --base 0947576af1fb01aa27667f157f5b0c79dd366106 --json
 ```
 
 The audit parses Swift interpolation as code and rejects changes in wording.
@@ -58,29 +58,29 @@ than counted as changed words.
    brands such as `iPhone`, retain conventional casing.
 5. **Review-only content and media:** standalone development mockups/fixtures,
    sample personal notes/comments, text embedded in images/videos, and spoken
-  content are outside the text
-   source change. Shared components used by the live app are included.
-
-6. **New upstream changes:** this audit uses base
-   `40346e28903db3e21bd247a07911959cc583fd62`. REC-661 and REC-663 landed on
-   `main` during validation. Their map appearance and Settings changes must be
-   reconciled and their new copy checked before this branch is merged.
+   content are outside the text source change. Shared components used by the live app are included.
 
 These flags bound the audit to the reviewed app-owned text sources. Strings
 supplied by a user, service, or iOS can still appear in their original style.
 
 ## Validation
 
+The post-rebase native suite and all four affected UI checks pass. App Clip
+and broader focused UI results below were established before the rebase; their
+source changes are unchanged by integration.
+
 - Xcode project regeneration and whitespace checks passed.
 - Focused formatter checks passed for contractions, acronyms, Unicode,
   hyphens, units, and preserved storage/custom values.
 - Audit parser checks passed for nested interpolation, raw strings, comments,
   and rejection of wording changes.
-- Final main-app native suite: **3,205 tests passed, zero failures**, on iPhone
+- Post-rebase main-app native suite: **3,229 tests passed, zero failures**, on iPhone
   17 Pro / iOS 26.5. Earlier copy-expectation, replay-image and performance
   failures were resolved and verified in the final sequential run.
 - App Clip: **33 unit tests passed, zero failures**, and **both UI flows passed**.
-- Main-app UI: **12 focused tests passed** across the final runs: seven
+- Post-rebase UI: **four tests passed, zero failures**: Map, place detail,
+  legacy default-filter selection, and Live Settings appearance controls.
+- Pre-rebase main-app UI: **12 focused tests passed** across the final runs: seven
   screenshot/navigation flows, accessibility-size answer controls, optional
   list selection, dietary/stealth persistence, repeated Settings navigation,
   and linked map sharing. The corrected four-flow rerun passed with zero failures.
@@ -96,14 +96,18 @@ supplied by a user, service, or iOS can still appear in their original style.
   against its committed SHA-256/size for native bundle validation. Its content
   is unchanged and is not part of the patch.
 
-## Handoff
+## Integration And Handoff
 
-Work is uncommitted in `/private/tmp/wander-word-capitalization` on
-`codex/word-capitalization`; last committed/base revision is
-`40346e28903db3e21bd247a07911959cc583fd62`. No PR is open yet.
+Branch: `codex/word-capitalization`. Worktree:
+`/private/tmp/wander-word-capitalization`.
 
-Before publication, reconcile current `origin/main`, review/capitalize any new
-app-owned copy, regenerate with `xcodegen generate`, rerun affected validation,
-and recompute the count against the chosen merge base. Exclude the unchanged
-hydrated founders video from the patch. Open a draft PR while the live-auth
-and walkthrough validation flags remain unresolved.
+Reconciled REC-661, REC-663 and REC-463 through
+`0947576af1fb01aa27667f157f5b0c79dd366106`. The Settings conflict preserves
+main's condition hiding the legacy default filter in Live mode. The new
+Colored Map label and accessibility explanation are included in the count.
+Xcode's Branch Chooser was verified as `codex/word-capitalization` in this
+worktree's project. The unchanged hydrated founders video is excluded from
+the patch.
+
+The PR remains draft while the live-auth and walkthrough validation flags
+remain unresolved. There is no merge or TestFlight upload in this task.

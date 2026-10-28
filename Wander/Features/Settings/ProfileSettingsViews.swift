@@ -296,10 +296,10 @@ struct ProfileSettingsHome: View {
                     set: { store.isColoredMapEnabled = $0 }
                 )
             ) {
-                Label("Colored map", systemImage: "paintpalette")
+                Label("Colored Map", systemImage: "paintpalette")
             }
             .tint(brandMode.accent)
-            .accessibilityHint("Turn on for colors in the main map or off for grayscale. Pins stay colored.")
+            .accessibilityHint("Turn On For Colors In The Main Map Or Off For Grayscale. Pins Stay Colored.")
             .accessibilityIdentifier("settings.map.coloredMap")
         } header: {
             Text("Map")

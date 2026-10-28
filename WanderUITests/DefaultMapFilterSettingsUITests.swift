@@ -43,10 +43,10 @@ final class DefaultMapFilterSettingsUITests: XCTestCase {
             waitHittable(control)
             XCTAssertTrue(app.frame.contains(control.frame), "Map appearance controls must be fully visible.")
         }
-        XCTAssertEqual(dark.label, "Dark map")
-        XCTAssertEqual(colored.label, "Colored map")
+        XCTAssertEqual(dark.label, "Dark Map")
+        XCTAssertEqual(colored.label, "Colored Map")
         XCTAssertFalse(app.descendants(matching: .any)["settings.map.defaultFilter"].firstMatch.exists)
-        XCTAssertFalse(app.staticTexts["Default map filter"].exists)
+        XCTAssertFalse(app.staticTexts["Default Map Filter"].exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC663-Live-Settings-Map-appearance-controls"
@@ -77,15 +77,15 @@ final class DefaultMapFilterSettingsUITests: XCTestCase {
         XCTAssertTrue(you.exists)
         XCTAssertEqual(
             featured.label,
-            "Featured. Featured shows you recommendations based on your taste"
+            "Featured. Featured Shows You Recommendations Based On Your Taste"
         )
         XCTAssertEqual(
             friends.label,
-            "Friends. All places from everyone you follow"
+            "Friends. All Places From Everyone You Follow"
         )
         XCTAssertEqual(
             you.label,
-            "You. Only your check-ins and Wanna Go places"
+            "You. Only Your Check-Ins And Wanna Go Places"
         )
         XCTAssertEqual(featured.value as? String, "Selected")
 
