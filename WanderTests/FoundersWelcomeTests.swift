@@ -52,6 +52,9 @@ final class FoundersWelcomeTests: XCTestCase {
 
     func testBundledMovieIsPlayableMedia() async throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "founders-welcome", withExtension: "mp4"))
+        let byteCount = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        XCTAssertGreaterThan(byteCount, 1_000_000, "The bundle must contain the movie, not its Git LFS pointer.")
+        XCTAssertLessThan(byteCount, 30_000_000, "Keep the offline welcome movie within its mobile delivery budget.")
         let asset = AVURLAsset(url: url)
         let isPlayable = try await asset.load(.isPlayable)
         let duration = try await asset.load(.duration)

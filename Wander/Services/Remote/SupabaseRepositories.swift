@@ -2743,16 +2743,25 @@ struct SupabaseListSuggestionRepository: ListSuggestionRepository {
 
 enum PlacePhotoNetworkSession {
     static let memoryCapacity = 16 * 1_024 * 1_024
-    static let diskCapacity = 96 * 1_024 * 1_024
+    static let diskCapacity = 0
+
+    static func makeCache(diskPath: String = "recme-place-photos") -> URLCache {
+        // The variant cache owns durable/offline photo bytes. Retire this
+        // session's legacy HTTP copies without touching other URL caches.
+        let cache = URLCache(
+            memoryCapacity: memoryCapacity,
+            diskCapacity: 96 * 1_024 * 1_024,
+            diskPath: diskPath
+        )
+        cache.removeAllCachedResponses()
+        cache.diskCapacity = diskCapacity
+        return cache
+    }
 
     static let shared: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.requestCachePolicy = .useProtocolCachePolicy
-        configuration.urlCache = URLCache(
-            memoryCapacity: memoryCapacity,
-            diskCapacity: diskCapacity,
-            diskPath: "recme-place-photos"
-        )
+        configuration.urlCache = makeCache()
         return URLSession(configuration: configuration)
     }()
 }
