@@ -1798,10 +1798,10 @@ private struct ListAddPlacesScreen: View {
     let onAdded: (ListPlaceAddResult) -> Void
     @State private var query = ""
     @State private var suggestionBatch = ListSuggestionBatch()
-    @State private var searchCandidates: [PlaceCandidate] = []
+    @StateObject private var placeSearch = ListPlaceSearchModel()
+    @State private var searchAttempt = 0
     @State private var isLoadingSuggestions = false
-    @State private var isSearching = false
-    @State private var selectedPlace: ListPlaceMock?
+    @State private var selectedPlace: PlaceSelection?
     @State private var pendingSearchCandidateIDs = Set<String>()
     @State private var pendingAddition: MapPlaceListTarget?
     @State private var showsAdditionNotificationChoice = false
@@ -1852,9 +1852,9 @@ private struct ListAddPlacesScreen: View {
         .task(id: list.id) {
             await loadSuggestions()
         }
-        .onChange(of: query) { _, _ in
-            Task {
-                await runSearch()
+        .task(id: SearchRequest(query: normalizedQuery, attempt: searchAttempt)) {
+            await placeSearch.search(normalizedQuery) { query in
+                try await store.quickSearchCandidates(for: query)
             }
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
@@ -1942,10 +1942,10 @@ private struct ListAddPlacesScreen: View {
                             currentUserID: store.currentUser.id,
                             isAdding: suggestionBatch.isAdding(suggestionID: suggestion.id),
                             onOpen: {
-                                selectedPlace = ListPlaceMock(
+                                selectedPlace = .suggested(ListPlaceMock(
                                     visiblePlace: suggestion.visiblePlace,
                                     currentUserID: store.currentUser.id
-                                )
+                                ))
                             },
                             onAdd: {
                                 pendingAddition = .visiblePlace(suggestion.visiblePlace)
@@ -1965,10 +1965,22 @@ private struct ListAddPlacesScreen: View {
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
 
-            if isSearching {
+            if placeSearch.isSearching {
                 ListLoadingRow(title: "Searching places")
+            } else if let errorMessage = placeSearch.errorMessage {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text(errorMessage)
+                        .font(AstirTypography.bodySmall)
+                        .foregroundStyle(brandMode.secondaryText)
+                    Button("Try again") { searchAttempt += 1 }
+                        .font(AstirTypography.label)
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                }
+                .accessibilityIdentifier("lists.searchError")
             } else if addableSearchCandidates.isEmpty {
-                Text("No places match that search.")
+                Text(placeSearch.candidates.isEmpty
+                     ? "No matching places found. Try a more specific name or nearby area."
+                     : "All matching places are already in this list.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1984,8 +1996,9 @@ private struct ListAddPlacesScreen: View {
                     ForEach(addableSearchCandidates) { candidate in
                         ListPlaceCandidateAddRow(
                             candidate: candidate,
-                            supportingText: searchSupportingText(for: candidate),
+                            supportingText: candidate.previewSubtitle(),
                             isAdding: pendingSearchCandidateIDs.contains(candidate.id),
+                            onOpen: { selectedPlace = .search(candidate) },
                             onAdd: {
                                 pendingAddition = .candidate(candidate)
                                 showsAdditionNotificationChoice = true
@@ -2020,8 +2033,18 @@ private struct ListAddPlacesScreen: View {
         let userID: String
     }
 
+    private enum PlaceSelection {
+        case suggested(ListPlaceMock)
+        case search(PlaceCandidate)
+    }
+
+    private struct SearchRequest: Equatable {
+        let query: String
+        let attempt: Int
+    }
+
     private var addableSearchCandidates: [PlaceCandidate] {
-        searchCandidates.filter { !store.hasCandidate($0, in: list) }
+        placeSearch.candidates.filter { !store.hasCandidate($0, in: list) }
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -2037,10 +2060,17 @@ private struct ListAddPlacesScreen: View {
 
     @ViewBuilder
     private var selectedPlaceDestination: some View {
-        if let selectedPlace {
-            ListPlaceProfileDestination(place: selectedPlace) {
-                self.selectedPlace = nil
+        switch selectedPlace {
+        case .suggested(let place):
+            ListPlaceProfileDestination(place: place) {
+                selectedPlace = nil
             }
+        case .search(let candidate):
+            LivePlaceFullProfileScreen(candidate: candidate) {
+                selectedPlace = nil
+            }
+        case nil:
+            EmptyView()
         }
     }
 
@@ -2051,24 +2081,6 @@ private struct ListAddPlacesScreen: View {
         guard !Task.isCancelled else { return }
         suggestionBatch.replace(with: suggestions)
         isLoadingSuggestions = false
-    }
-
-    @MainActor
-    private func runSearch() async {
-        let query = normalizedQuery
-        guard !query.isEmpty else {
-            searchCandidates = []
-            isSearching = false
-            return
-        }
-
-        isSearching = true
-        do {
-            searchCandidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
-        } catch {
-            searchCandidates = []
-        }
-        isSearching = false
     }
 
     @MainActor
@@ -2140,23 +2152,13 @@ private struct ListAddPlacesScreen: View {
             senderNotificationPolicy: policy)
         pendingSearchCandidateIDs.remove(candidate.id)
         if result.outcome == .added || result.outcome == .alreadyInList {
-            searchCandidates.removeAll { $0.id == candidate.id }
+            placeSearch.removeCandidate(id: candidate.id)
         }
         onAdded(result)
         handleAddResult(result)
     }
 
-    private func searchSupportingText(for candidate: PlaceCandidate) -> String {
-        let parts: [String?] = [
-            candidate.category,
-            candidate.locality,
-            candidate.region
-        ]
-        return parts
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " - ")
-    }
+
 }
 
 private struct ListAddPlacesUnavailableScreen: View {
@@ -2344,12 +2346,14 @@ private struct ListPlaceSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .black))
                 .foregroundStyle(brandMode.secondaryText)
-            TextField("Search places", text: $query)
+            TextField("Search places or coordinates", text: $query)
                 .font(AstirTypography.body)
                 .foregroundStyle(brandMode.primaryText)
                 .tint(brandMode.accent)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .submitLabel(.search)
+                .accessibilityIdentifier("lists.placeSearch")
         }
         .padding(WanderTheme.spacing3)
         .frame(minHeight: 54)
@@ -2407,6 +2411,8 @@ private struct ListVisiblePlaceAddRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("lists.openPlace.\(visiblePlace.id)")
+            .accessibilityHint("Opens the full place profile")
 
             Button(action: onAdd) {
                 Group {
@@ -2439,6 +2445,7 @@ private struct ListPlaceCandidateAddRow: View {
     let candidate: PlaceCandidate
     let supportingText: String
     let isAdding: Bool
+    let onOpen: () -> Void
     let onAdd: () -> Void
 
     private var subtitle: String {
@@ -2454,27 +2461,33 @@ private struct ListPlaceCandidateAddRow: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            HStack(spacing: WanderTheme.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                        .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
-                    WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
-                }
-                .frame(width: 48, height: 48)
+            Button(action: onOpen) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                            .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
+                        WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
+                    }
+                    .frame(width: 48, height: 48)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(candidate.name)
-                        .font(AstirTypography.cardTitle)
-                        .foregroundStyle(brandMode.primaryText)
-                        .lineLimit(1)
-                    Text(subtitle.isEmpty ? "Map search" : subtitle)
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
-                        .lineLimit(2)
-                }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(candidate.name)
+                            .font(AstirTypography.cardTitle)
+                            .foregroundStyle(brandMode.primaryText)
+                            .lineLimit(1)
+                        Text(subtitle.isEmpty ? "Map search" : subtitle)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
+                            .lineLimit(2)
+                    }
 
-                Spacer(minLength: WanderTheme.spacing2)
+                    Spacer(minLength: WanderTheme.spacing2)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("lists.openSearchPlace.\(candidate.id)")
+            .accessibilityHint("Opens the full place profile")
 
             Button(action: onAdd) {
                 Group {
