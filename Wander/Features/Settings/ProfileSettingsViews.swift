@@ -22,6 +22,7 @@ struct ProfileSettingsHome: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.astirBrandMode) private var brandMode
+    @Environment(\.liveExperienceEnabled) private var liveExperienceEnabled
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -261,19 +262,21 @@ struct ProfileSettingsHome: View {
 
     private var mapSection: some View {
         Section {
-            NavigationLink {
-                DefaultMapFilterSettingsScreen()
-            } label: {
-                HStack {
-                    Label("Default map filter", systemImage: "map")
-                    Spacer()
-                    Label(store.defaultMapFilter.title, systemImage: store.defaultMapFilter.systemImage)
-                        .font(AstirTypography.caption)
-                        .foregroundStyle(brandMode.secondaryText)
+            if !liveExperienceEnabled {
+                NavigationLink {
+                    DefaultMapFilterSettingsScreen()
+                } label: {
+                    HStack {
+                        Label("Default map filter", systemImage: "map")
+                        Spacer()
+                        Label(store.defaultMapFilter.title, systemImage: store.defaultMapFilter.systemImage)
+                            .font(AstirTypography.caption)
+                            .foregroundStyle(brandMode.secondaryText)
+                    }
                 }
+                .tint(brandMode.accent)
+                .accessibilityIdentifier("settings.map.defaultFilter")
             }
-            .tint(brandMode.accent)
-            .accessibilityIdentifier("settings.map.defaultFilter")
 
             Toggle(
                 isOn: Binding(
