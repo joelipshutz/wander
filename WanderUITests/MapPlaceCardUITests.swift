@@ -352,7 +352,59 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["map.searchMessage"].exists)
     }
 
-    func testREC386ShowsMemberPhotoThenDeletesDisposableCheckIn() {
+    func testPhotoDiskCacheReopensProfileAndFullscreenAfterOfflineRelaunch() throws {
+        try checkProviderPhotoViewer(usesDiskCache: true)
+    }
+
+    func testProviderPhotoViewerOpensWithoutDiskCache() throws {
+        try checkProviderPhotoViewer(usesDiskCache: false)
+    }
+
+    private func checkProviderPhotoViewer(usesDiskCache: Bool) throws {
+        let app = XCUIApplication()
+        let arguments = [
+            "-WanderMapCapture", "-WanderUseStorefrontFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapPlace", "Hearthline Coffee", "-WanderMapSheetExpanded"
+        ] + (usesDiskCache ? ["-WanderPhotoDiskCacheUITest"] : [])
+        for offline in usesDiskCache ? [false, true] : [false] {
+            app.launchArguments = arguments + (offline ? ["-WanderPhotoDiskCacheOffline"] : [])
+            app.launch()
+            let openPhoto = app.buttons["Open place photo of Hearthline Coffee full screen"]
+            XCTAssertTrue(openPhoto.waitForExistence(timeout: 15))
+            _ = try visiblePhoto(named: "Photo of Hearthline Coffee", in: app)
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                openPhoto.isHittable && app.scrollViews["place-profile.scroll"].isHittable
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+            openPhoto.tap()
+            let close = app.buttons["Close photo viewer"]
+            guard close.waitForExistence(timeout: 5) else {
+                XCTFail("Tapping the visible header photo must open the fullscreen viewer.")
+                return
+            }
+            _ = try visiblePhoto(named: "Photo of Hearthline Coffee", in: app)
+            capture(offline ? "REC-658 fullscreen from disk offline" : "REC-658 fullscreen after delivery")
+            close.tap()
+            XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+            XCTAssertTrue(openPhoto.isHittable)
+            _ = try visiblePhoto(named: "Photo of Hearthline Coffee", in: app)
+            capture(offline ? "REC-658 profile after offline return" : "REC-658 profile after online return")
+            app.terminate()
+        }
+    }
+
+    private func visiblePhoto(named label: String, in app: XCUIApplication) throws -> XCUIElement {
+        let photos = app.images.matching(identifier: label)
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            photos.allElementsBoundByIndex.contains { $0.isHittable }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 10), .completed,
+                       "The photo must decode and be visible, including after an offline cold launch.")
+        return try XCTUnwrap(photos.allElementsBoundByIndex.first { $0.isHittable })
+    }
+
+    func testREC386ShowsMemberPhotoThenDeletesDisposableCheckIn() throws {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -360,6 +412,7 @@ final class MapPlaceCardUITests: XCTestCase {
             "-WanderAuthenticatedUITest",
             "-WanderResetWalkthroughs",
             "-WanderREC386PhotoFixture",
+            "-WanderPhotoDiskCacheUITest",
             "-WanderMapPlace", "Dudley Market QA",
             "-WanderMapSheetExpanded",
         ]
@@ -390,6 +443,26 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertFalse(memberPhoto.frame.isEmpty)
         XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 3))
         capture("REC-386 member photo visible in gallery")
+        memberPhoto.tap()
+        let closeViewer = app.buttons["Close photo viewer"]
+        XCTAssertTrue(closeViewer.waitForExistence(timeout: 5))
+        XCTAssertTrue(closeViewer.isHittable)
+        closeViewer.tap()
+        XCTAssertTrue(closeViewer.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(memberPhoto.isHittable)
+        memberPhoto.tap()
+        XCTAssertTrue(closeViewer.waitForExistence(timeout: 5))
+        let fullscreenPhoto = try visiblePhoto(named: "Photo of Dudley Market QA", in: app)
+        capture("REC-658 member photo fullscreen")
+        fullscreenPhoto.doubleTap()
+        capture("REC-658 member photo zoomed")
+        fullscreenPhoto.doubleTap()
+        fullscreenPhoto.swipeRight()
+        XCTAssertTrue(app.descendants(matching: .any)["Photo 1 of 2"].waitForExistence(timeout: 5))
+        capture("REC-658 fullscreen paged to provider photo")
+        closeViewer.tap()
+        XCTAssertTrue(closeViewer.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(memberPhoto.isHittable)
         let profileScroll = app.scrollViews["place-profile.scroll"]
         XCTAssertTrue(profileScroll.waitForExistence(timeout: 3))
 
