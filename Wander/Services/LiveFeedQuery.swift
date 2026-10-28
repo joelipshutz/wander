@@ -4,7 +4,7 @@ import CoreLocation
 /// Immutable committed Live filters. Keep the time window fixed until the user
 /// applies a change or explicitly refreshes it; cursors are bound to this query.
 struct LiveFeedQuery: Equatable, Sendable {
-    enum ActivityType: String, Codable, Sendable { case all, checkIns = "check_ins", wannas }
+    enum ActivityType: String, Codable, Sendable { case all, checkIns = "check_ins", wannas, lists }
     struct Vertex: Codable, Equatable, Sendable {
         let latitude: Double
         let longitude: Double
@@ -74,6 +74,7 @@ struct LiveFeedQuery: Equatable, Sendable {
         case .all: break
         case .checkIns: if activity.resolvedTicketKind != .checkIn { return false }
         case .wannas: if activity.resolvedTicketKind != .wanna { return false }
+        case .lists: if activity.resolvedTicketKind != .list { return false }
         }
         if !personIDs.isEmpty, !personIDs.contains(activity.actor.id) { return false }
         if !categoryIDs.isEmpty {
@@ -238,7 +239,7 @@ extension LiveFeedQuery {
 extension LiveFeedQuery {
     /// Featured's anonymous aggregate is a place recommendation, never a social post.
     func includesFeatured(_ visible: VisiblePlace) -> Bool {
-        guard isValid, personIDs.isEmpty, activityType != .wannas,
+        guard isValid, personIDs.isEmpty, activityType != .wannas, activityType != .lists,
               visible.userPlace.status == .been else { return false }
         let date = visible.userPlace.visitedAt ?? visible.userPlace.savedAt
         if let occurredAfter, date < occurredAfter { return false }

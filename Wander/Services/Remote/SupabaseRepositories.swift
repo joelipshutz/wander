@@ -681,7 +681,7 @@ private struct PublicSharedPlacePreview: Decodable {
     }
 }
 
-struct SupabaseFeedRepository: FeedRepository {
+struct SupabaseFeedRepository: FeedRepository, LiveMapPinStateRepository {
     private let rpc: RemoteProcedureCalling
     private let storage: (any RemoteStorageCalling)?
     private let includesFeaturedPlaces: Bool
@@ -694,6 +694,10 @@ struct SupabaseFeedRepository: FeedRepository {
         self.rpc = rpc
         self.storage = storage ?? (rpc as? any RemoteStorageCalling)
         self.includesFeaturedPlaces = includesFeaturedPlaces
+    }
+
+    func liveMapPinStates(placeIDs: [String]) async throws -> LiveMapPinStateSnapshot {
+        try await LiveMapPinStateTransport.fetch(placeIDs: placeIDs, rpc: rpc)
     }
 
     func placeActivity(placeIDs: [String], before: String?, limit: Int) async throws -> FollowedFeedPage {

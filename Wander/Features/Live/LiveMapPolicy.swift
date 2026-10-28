@@ -56,13 +56,14 @@ struct LiveDrawnArea: Equatable {
 }
 
 enum LiveActivityFilter: String, CaseIterable, Identifiable {
-    case all = "All", checkIns = "Check-ins", wannas = "Wannas"
+    case all = "All", checkIns = "Check-ins", wannas = "Wannas", lists = "Lists"
     var id: Self { self }
     func includes(_ activity: FeedActivity) -> Bool {
         switch self {
         case .all: true
         case .checkIns: activity.resolvedTicketKind == .checkIn
         case .wannas: activity.resolvedTicketKind == .wanna
+        case .lists: activity.resolvedTicketKind == .list
         }
     }
 }

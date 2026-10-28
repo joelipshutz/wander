@@ -3162,6 +3162,9 @@ final class WanderStore: ObservableObject {
     }
 
     private func fixtureFollowedFeedPage(relativeTo now: Date) -> FollowedFeedPage {
+        #if DEBUG && targetEnvironment(simulator)
+        if LiveTotemUITestFixtures.isEnabled { return LiveTotemUITestFixtures.feedPage(store: self, now: now) }
+        #endif
         let followedIDs = Set(following(of: currentUser.id).map(\.id))
         let followedPlaces = visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
             .filter { followedIDs.contains($0.owner.id) }
@@ -4740,6 +4743,12 @@ final class WanderStore: ObservableObject {
             placeListMembers[memberIndex].deletedAt = now
         }
         persist()
+    }
+
+    /// Current readable membership, including places with no Been/Wanna save.
+    /// Uses the list resolver's alias-aware tombstone precedence.
+    func liveReadableListItems() -> [LocalPlaceListItem] {
+        visiblePlaceLists.flatMap { listItems(for: $0) }
     }
 
     private func listItems(for list: LocalPlaceList) -> [LocalPlaceListItem] {

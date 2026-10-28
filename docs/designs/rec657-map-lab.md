@@ -1,9 +1,91 @@
-# REC-657: native map design lab
+# REC-657: Totem Live pins and native map design lab
 
-Ten pin families across two rounds and five MapKit treatments, rendered in the existing Astir Map
-with fictional storefront fixtures. This is an unselected design exploration.
-Release and device builds exclude the lab. Ordinary simulator launches keep the
-current map and pins.
+Totem is the accepted pin family for Live. The ten-family native Map exploration
+below is retained as design history. Its simulator-only switches remain separate
+from the Live implementation and are excluded from Release and device builds.
+Live availability continues to follow the existing Live rollout gate; this work
+does not replace Profile's Your Map renderer.
+
+## Accepted Live contract, October 28
+
+Totem uses a monochrome category pictogram, compact ownership/status rails, and a
+separate list badge. Own status is coral; readable social status is blue. Been is
+solid and Wanna dotted. Mixed social Been/Wanna remains visible; own Been retains
+precedence when both match, while the Wanna filter can show the remaining Wanna.
+Unknown categories use a neutral place pictogram. A selected pin expands above
+its neighbors; density and viewed treatment retain the same place identity.
+
+| Current authorized place state | Pin state |
+| --- | --- |
+| Any own or social Been/Wanna | Matching coral/blue rails; no green Featured |
+| Saved state plus current readable list membership | Saved rails plus the list badge |
+| Current readable list membership without a saved status | List badge with neutral footing; no Featured |
+| Active own save awaiting sync or retry, absent from server state | Matching coral Been/Wanna rail under People/Activity filters; never green Featured |
+| Viewer-added active entry awaiting sync or retry in a currently readable list | List badge remains visible; never green Featured |
+| Featured candidate with proven absence of both saves and list membership | Solid green Featured (`#6FB985`) |
+| Current remote state unknown, incomplete, revoked or expired | Neutral except for trusted own pending writes; never green Featured |
+
+Membership is resolved from current readable list items, including canonical
+aliases and removal tombstones. The badge survives the activity time window and
+does not imply that the viewer saved the place or that a list-add event is recent.
+An event's required place container cannot manufacture a Been or Wanna save.
+Multiple readable lists still produce one badge and one canonical place pin.
+A bare private-list companion summary supplies no Wanna rail. The marker survives
+later real saves, so explicit Wanna events/history and actual visits remain valid
+evidence rather than being discarded with the container.
+
+Activity now includes **Lists** for list-created and place-added-to-list events.
+It applies before pagination with the other Live filters. A list creation without
+a place remains a Feed event. The map renders at most one pin for each matching
+canonical place across people, activities, dates and aliases. Persistent state
+decorates those results; it does not insert outside-filter places or synthetic
+events. People/Activity choices refine displayed rails, but excluded saved status
+still prevents Featured. The People and Scope dropdowns use coral **Only Me**,
+blue **Only Friends**, green **Featured**, and neutral **Everyone**, with readable
+Light/Dark text variants and explicit selection marks.
+
+Authenticated Live reads a complete per-place current-state snapshot, independent
+of the selected event window. Exact requested-identity coverage is required before
+absence can be inferred. Current server facts replace stale cached saves, list
+items and prior own check-in evidence. Active own saves awaiting sync or retry
+immediately show matching coral rails under People/Activity filters. Viewer-added
+active entries in currently readable lists retain their badge while pending or
+retrying. These trusted local writes prevent green even before server confirmation;
+synced stale, other-user, deleted, removing and server-denied records do not receive
+that exception. Account/query/authorization changes discard
+the snapshot; the existing 15-minute social lease is measured from its oldest
+response batch. Foreground and Live-tab re-entry synchronously revalidate expiry,
+including when a suspended timer has not resumed. Failure, partial coverage or
+expiry keeps the map and authorized events usable but restores no stale/social
+cached status or list badge. Trusted own pending writes remain visible. Snapshots are not
+persisted. Backend installation and hosted smoke validation remain separate gates.
+
+## Live validation and review status
+
+The final native suite passes all 3,191 tests on iPhone 17e (iOS 26.5),
+including immediate pending-own save/list feedback. Native UI capture validation,
+the gallery and video evidence are in progress.
+Earlier lab results below do not validate the integrated Live change.
+
+Hosted validation remains incomplete: the Lists smoke test reached an unresolved
+source-deletion assertion, and the diagnostic connector failed. The pin-state RPC
+hosted test has not run. Neither migration has been deployed.
+
+The current tests cover status/list precedence, authoritative deletion, incomplete
+state, query/audience filtering, canonical uniqueness, expiry and account races.
+The native review fixture uses the real Live map, drawer, filters and place routes;
+its list-only place has a current list item and no persisted companion save.
+Its 90-day-old membership remains visible beside an in-window activity.
+
+Reproduce that isolated review with all four launch arguments:
+
+```text
+-WanderLiveTotemUITest -WanderAuthenticatedUITest
+-WanderUseDemoFixtures -WanderUnifiedLiveUITest
+```
+
+The following lab rounds predate the Live selection. Their configuration and
+validation records apply to the original native Map comparison only.
 
 ## Second pass: five new visual systems
 
@@ -31,9 +113,10 @@ Approved status refinement: Featured-only marks use solid green (`#6FB985`) in
 the second-pass mockups. Green is a fallback only when the viewer and visible
 social graph have no active Been or Wanna save for that place. The existing
 outline builder already enforces this precedence; personal coral and social blue
-replace Featured completely. Green is never dotted. This review change does not
-select a production pin family or alter production rendering.
-Validation for this refinement: 3,118 native tests passed, with no failures or
+replace Featured completely. Green is never dotted. At this stage the refinement
+applied only to the mockups; the accepted Live contract above adds current list
+membership and authoritative absence requirements.
+Historical validation for this refinement: 3,118 native tests passed, with no failures or
 skips, including the existing Featured/save precedence coverage and a rendered
 Totem color regression in Light and Dark. Featured-only selected captures were
 reviewed on iPhone 17 Pro and iPhone 17e.
@@ -42,7 +125,7 @@ Capture this round with `scripts/capture-map-design-lab.py --second-pass` and th
 same device/app/output arguments. Add `--compact` for all five smaller-phone
 overviews. Generate the local comparison with
 `scripts/map-pin-second-pass-gallery.py`. All captures are real simulator output
-from the existing Map screen. No production family has been selected.
+from the existing Map screen and predate Totem's selection for Live.
 
 Use `--featured-totem` with the capture script for the green Featured-only
 selected pin; combine with `--compact` for the smaller phone. This uses the

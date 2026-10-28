@@ -3,66 +3,9 @@ import SwiftUI
 
 /// The existing annotation contract supplies an emoji as category metadata.
 /// Resolve it once into a non-emoji vocabulary shared by all five explorations.
-enum MapPinSecondPassCategory: String, CaseIterable {
-    case coffee, dining, noodles, bar, bakery, nature, trail, beach, culture, stay, shop, wellness, place
+typealias MapPinSecondPassCategory = MapCategoryPictogram
 
-    static func resolve(emoji: String) -> Self {
-        let key = emoji.replacingOccurrences(of: "\u{FE0F}", with: "")
-            .replacingOccurrences(of: "\u{FE0E}", with: "")
-        switch key {
-        case "☕", "🫖", "🧋", "🥤", "🧃": return .coffee
-        case "🍽", "🍴", "🍕", "🍔", "🌭", "🌮", "🌯", "🥪", "🥗", "🥞", "🍗", "🦪", "🐟", "🥩",
-             "🥟", "🧆", "🥙", "🥡", "🍱", "🍣", "🍝", "🥘", "🍛", "🍚", "🍤": return .dining
-        case "🍜", "🍲": return .noodles
-        case "🍸", "🍹", "🍷", "🍺", "🍻", "🥃", "🍶", "🪩": return .bar
-        case "🥐", "🥯", "🍩", "🎂", "🍰", "🍦", "🍨", "🍫", "🍬", "🧁", "🍪": return .bakery
-        case "🌳", "🌲", "🌴", "🌿", "🌻", "🌷", "🌺", "🌱", "🧺", "🛝", "🐕", "🐾", "🦌": return .nature
-        case "🥾", "🏔", "⛰", "🏞", "🌄", "⛺", "🪨", "🧗", "🚴", "🎿": return .trail
-        case "🏖", "🏝", "🌊", "💦", "🏄", "🛶", "⚓", "🎣": return .beach
-        case "🏛", "🎨", "🎭", "🎟", "🎫", "🎵", "🎶", "🎷", "🎧", "🎤", "🎙", "🎬", "🎪", "🏰", "🗿", "⛲", "🎡", "🎢", "🔭": return .culture
-        case "🏨", "🛏", "🏡", "🛖", "🏠": return .stay
-        case "🛍", "🛒", "🏬", "👕", "👗", "👟", "📚", "💐", "🎁": return .shop
-        case "🧘", "💆", "🧖", "💪", "💈", "💇", "💅", "💄", "♨", "🩺", "🏥", "💊", "🦷", "🧠": return .wellness
-        default: return .place
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .coffee: "cup.and.saucer.fill"
-        case .dining: "fork.knife"
-        case .noodles: "takeoutbag.and.cup.and.straw.fill"
-        case .bar: "wineglass.fill"
-        case .bakery: "birthday.cake.fill"
-        case .nature: "leaf.fill"
-        case .trail: "mountain.2.fill"
-        case .beach: "beach.umbrella.fill"
-        case .culture: "building.columns.fill"
-        case .stay: "bed.double.fill"
-        case .shop: "bag.fill"
-        case .wellness: "heart.fill"
-        case .place: "location.fill"
-        }
-    }
-
-    var outlineSymbolName: String {
-        switch self {
-        case .coffee: "cup.and.saucer"
-        case .dining: "fork.knife"
-        case .noodles: "takeoutbag.and.cup.and.straw"
-        case .bar: "wineglass"
-        case .bakery: "birthday.cake"
-        case .nature: "leaf"
-        case .trail: "mountain.2"
-        case .beach: "beach.umbrella"
-        case .culture: "building.columns"
-        case .stay: "bed.double"
-        case .shop: "bag"
-        case .wellness: "heart"
-        case .place: "location"
-        }
-    }
-
+private extension MapCategoryPictogram {
     fileprivate var illustrationColor: Color {
         switch self {
         case .coffee, .bakery: MapPinSecondPassPalette.color(0xD9AB69)
