@@ -738,7 +738,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(postcard.contains(".clipped()"))
         XCTAssertTrue(postcard.contains(".contentShape(Rectangle())"))
         XCTAssertTrue(postcard.contains("ActivityPostcardTypographyPolicy.ticketBadgeFontSize"))
-        XCTAssertTrue(postcardArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace)"))
+        XCTAssertTrue(postcardArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace, allowsUserPhotoFallback: allowsPlaceUserPhotoFallback)"))
+        XCTAssertTrue(activityModule.contains("allowsPlaceUserPhotoFallback: false"))
         XCTAssertTrue(activityModule.contains("if let place = activity.place"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("openList(list)"))
@@ -831,7 +832,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(resolvedPhoto.contains("@State private var failedGooglePhotoID: String?"))
         XCTAssertTrue(resolvedPhoto.contains("await backend.placePhoto("))
         XCTAssertTrue(resolvedPhoto.contains("await backend.visibleUserPlacePhoto("))
-        XCTAssertTrue(resolvedPhoto.contains("photoRequest: sheetPlace.photoRequest"))
+        XCTAssertTrue(resolvedPhoto.contains("photoRequest: allowsUserPhotoFallback ? sheetPlace.photoRequest : nil"))
+        XCTAssertTrue(resolvedPhoto.contains("guard allowsUserPhotoFallback else { return }"))
         XCTAssertTrue(resolvedPhoto.contains("variant: .feed"))
         XCTAssertTrue(resolvedPhoto.contains("PlaceProfilePhotoImage("))
         XCTAssertTrue(resolvedPhoto.contains("onLoadFailure:"))
@@ -841,7 +843,7 @@ final class NavigationContractTests: XCTestCase {
             activityViews.components(separatedBy: "private struct ActivityPostcardArtwork: View").last?
                 .components(separatedBy: "struct ActivityCommentsScreen: View").first
         )
-        XCTAssertTrue(activityArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace)"))
+        XCTAssertTrue(activityArtwork.contains("FeedResolvedPlacePhoto(place: visiblePlace, allowsUserPhotoFallback: allowsPlaceUserPhotoFallback)"))
 
         let mapSurface = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")

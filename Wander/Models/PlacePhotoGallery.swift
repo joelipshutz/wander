@@ -57,6 +57,24 @@ struct PlacePhotoGalleryPage: Equatable {
 }
 
 enum PlacePhotoGalleryPresenter {
+    static func selectedPhotoID(
+        currentID: String?,
+        previousItems: [PlacePhotoGalleryItem],
+        items: [PlacePhotoGalleryItem]
+    ) -> String? {
+        // The user gallery can finish before Google. Promote the new opening
+        // photo unless the viewer has already swiped away from the first item.
+        if let first = items.first, first.isGooglePlacesPhoto,
+           !previousItems.contains(where: \.isGooglePlacesPhoto),
+           currentID == nil || currentID == previousItems.first?.id {
+            return first.id
+        }
+        if let currentID, items.contains(where: { $0.id == currentID }) {
+            return currentID
+        }
+        return items.first?.id
+    }
+
     static func items(
         providerPhoto: PlacePhoto?,
         userPhotos: [PlacePhotoGalleryItem],

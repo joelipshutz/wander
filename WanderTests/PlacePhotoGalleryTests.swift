@@ -2,6 +2,44 @@ import XCTest
 @testable import Wander
 
 final class PlacePhotoGalleryTests: XCTestCase {
+    func testLateGooglePhotoBecomesOpeningPhotoAfterUserGalleryLoadsFirst() {
+        let user = userItem(id: "visit-photo", userID: "viewer", handle: "viewer")
+        let google = PlacePhotoGalleryItem.google(photo(provider: "google_places", id: "google"))
+        let initial = PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: nil, previousItems: [], items: [user]
+        )
+        XCTAssertEqual(initial, user.id)
+        XCTAssertEqual(PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: initial, previousItems: [user], items: [google, user]
+        ), google.id)
+    }
+
+    func testLateGooglePhotoPreservesSwipeToAnotherUserPhoto() {
+        let first = userItem(id: "first", userID: "viewer", handle: "viewer")
+        let second = userItem(id: "second", userID: "viewer", handle: "viewer")
+        let google = PlacePhotoGalleryItem.google(photo(provider: "google_places", id: "google"))
+        XCTAssertEqual(PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: second.id, previousItems: [first, second], items: [google, first, second]
+        ), second.id)
+        XCTAssertEqual(PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: first.id, previousItems: [google, first], items: [google, first, second]
+        ), first.id)
+    }
+
+    func testGallerySelectionRecoversFromRemovalAndKeepsNoGoogleFallback() {
+        let user = userItem(id: "visit-photo", userID: "viewer", handle: "viewer")
+        let google = PlacePhotoGalleryItem.google(photo(provider: "google_places", id: "google"))
+        XCTAssertEqual(PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: google.id, previousItems: [google, user], items: [user]
+        ), user.id)
+        XCTAssertEqual(PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: user.id, previousItems: [user], items: [user]
+        ), user.id)
+        XCTAssertNil(PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: user.id, previousItems: [user], items: []
+        ))
+    }
+
     func testSharedPreviewSourcesKeepGooglePhotosButRemoveVisibleWatermarks() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

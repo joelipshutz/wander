@@ -412,6 +412,7 @@ struct ActivityPostcardView: View {
     let postcardAccessibilityIdentifier: String
     var artworkAccessibilityValue: String? = nil
     var artworkAccessibilityHint: String? = nil
+    var allowsPlaceUserPhotoFallback = true
     var showsCommentButton = true
     var showsEngagementActions = true
     var showsActivityMenu = false
@@ -592,7 +593,8 @@ struct ActivityPostcardView: View {
             visiblePlace: visiblePlace,
             media: displayContext.media,
             fallbackIcon: metadataIcon,
-            usesAstirPhotoFallback: visualStyle == .astir
+            usesAstirPhotoFallback: visualStyle == .astir,
+            allowsPlaceUserPhotoFallback: allowsPlaceUserPhotoFallback
         )
     }
 
@@ -925,6 +927,7 @@ private struct ActivityPostcardArtwork: View {
     let media: [ActivityEngagementMedia]
     let fallbackIcon: String
     let usesAstirPhotoFallback: Bool
+    let allowsPlaceUserPhotoFallback: Bool
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -955,7 +958,7 @@ private struct ActivityPostcardArtwork: View {
                 hasVisiblePlace: visiblePlace != nil,
                 mediaCount: media.count
             ), let visiblePlace {
-                FeedResolvedPlacePhoto(place: visiblePlace)
+                FeedResolvedPlacePhoto(place: visiblePlace, allowsUserPhotoFallback: allowsPlaceUserPhotoFallback)
             }
 
             if let preview = media.first {
