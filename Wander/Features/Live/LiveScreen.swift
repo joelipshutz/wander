@@ -15,6 +15,7 @@ struct LiveScreen: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @State private var camera: MapCameraPosition = .region(LiveMapLaunchLocation.initialRegion())
+    @State private var cameraRevision: UInt64 = 0
     @State private var launchLocation = LiveMapLaunchLocation()
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
     @StateObject private var mapResults = LiveMapResults()
@@ -27,10 +28,11 @@ struct LiveScreen: View {
     @State private var mapRefreshDeferred = false
     @State private var fullProfilePin: LivePlacePin?
     @State private var fullProfileCandidate: PlaceCandidate?
-    @State private var nativeFeature: MapFeature?
+    @State private var nativeFeature: MKMapFeatureAnnotation?
     @State private var selectedCandidate: PlaceCandidate?
     @State private var nativeFeatureTask: Task<Void, Never>?
     @State private var nativeFeatureRequest = UUID()
+    @State private var nativeSelectionRevision = UUID()
     @State private var nativePreviewID: String?
     @State private var viewport: MKCoordinateRegion?
     @State private var mapSize: CGSize = .zero
@@ -57,6 +59,7 @@ struct LiveScreen: View {
     @State private var mapSearch = LiveMapSearchState()
     @State private var mapControlsHeight: CGFloat = 0
     @State private var drawerHeaderHeight: CGFloat = 0
+    @State private var drawingActionsHeight: CGFloat = 0
     @State private var drawing = false
     @State private var drawPoints: [CGPoint] = []
     @State private var drawCoordinates: [CLLocationCoordinate2D] = []
@@ -88,6 +91,7 @@ struct LiveScreen: View {
     @State private var areaNotice = false
     @Environment(\.liveMessageSession) private var demoMessageSession
     @State private var replyTarget: PrivateMessageThreadTarget?
+    @State private var mapProxy = LiveNativeMapProxy()
 
     let isActive: Bool
     let eventsAvailable: Bool
@@ -365,7 +369,7 @@ struct LiveScreen: View {
             fullProfilePin = nil; fullProfileCandidate = nil; committedMapBoundary = nil; committedMapViewport = nil
             mapActivity = []; mapPins = []
             launchLocation = LiveMapLaunchLocation()
-            mapSearch = LiveMapSearchState(); camera = .region(launchLocation.region)
+            mapSearch = LiveMapSearchState(); setMapCamera(.region(launchLocation.region))
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
             planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false; showsContactInvites = false
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
@@ -508,49 +512,46 @@ struct LiveScreen: View {
     }
 
     private func map(size: CGSize, drawerHeight: CGFloat) -> some View {
-        MapReader { proxy in
-            let layout = LiveMapSearchLayout(size: size,
-                controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
-            let compactIDs = compactPinIDs(proxy: proxy)
-            Map(position: $camera, interactionModes: drawing ? [] : .all, selection: $nativeFeature) {
-                // Never render a remembered fix as a live dot or prompt on launch.
-                if LiveMapLaunchLocation.showsUserLocation(locationPermission.authorizationStatus) {
-                    UserAnnotation()
-                }
-                ForEach(pins) { pin in
-                    Annotation(pin.place.place.canonicalName, coordinate: coordinate(pin.place)) {
-                        Button { selectPin(pin) } label: {
-                            LiveTotemPinView(state: pin.totemState, categoryEmoji: pin.place.categoryEmoji,
-                                selected: pin.id == selectedPlaceID,
-                                viewed: pin.isViewed(dates: viewedPins),
-                                compact: compactIDs.contains(pin.id))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(pin.accessibilityLabel)
-                        .accessibilityIdentifier("live.pin.\(pin.id)")
-                    }
-                    .annotationTitles(.hidden)
-                }
-                if let drawn = draftArea ?? (area?.isMapViewport == false ? area?.boundary : nil) {
-                    MapPolygon(coordinates: drawn.vertices.map(\.coordinate))
-                        .foregroundStyle(brand.accent.opacity(0.12))
-                        .stroke(brand.accent, lineWidth: 3)
-                }
-                if selection.scope == .nearby, let center = selection.center {
-                    MapCircle(center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
-                              radius: Double(selection.radius.rawValue))
-                        .foregroundStyle(brand.accent.opacity(0.05))
-                        .stroke(brand.accent.opacity(0.7), lineWidth: 1.5)
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .all))
-            .mapFeatureSelectionDisabled { drawing || $0.kind != .pointOfInterest }
-            .modifier(LiveMapNativeAccessory())
-            .onChange(of: nativeFeature) { _, feature in
-                // MapKit can clear its transient highlight without dismissing
-                // the app's durable place preview.
-                if let feature { selectNativePlace(feature) }
-            }
+        let proxy = mapProxy
+        let layout = LiveMapSearchLayout(size: size,
+            controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
+        return LiveNativeMap(
+            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, selectedID: selectedPlaceID,
+            viewedPins: viewedPins, brand: brand, coloredMap: store.isColoredMapEnabled,
+            drawing: drawing,
+            contentInsets: EdgeInsets(top: drawing ? 8 : layout.controlsHeight + 8, leading: 8,
+                bottom: drawing ? drawingActionsHeight + 40
+                    : hasPlacePreview ? min(previewHeight, size.height * 0.72) + 12 : drawerHeight + 12,
+                trailing: 8),
+            showsUserLocation: LiveMapLaunchLocation.showsUserLocation(locationPermission.authorizationStatus),
+            boundary: draftArea ?? (area?.isMapViewport == false ? area?.boundary : nil),
+            nearbyCenter: selection.scope == .nearby ? selection.center.map {
+                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+            } : nil,
+            nearbyRadius: selection.scope == .nearby ? Double(selection.radius.rawValue) : nil,
+            nativeSelectionRevision: nativeSelectionRevision,
+            onSelectPin: selectPin,
+            onNativeFeature: { feature in
+                nativeFeature = feature
+                selectNativePlace(feature)
+            },
+            onCameraEnd: { region, observedCamera, positionedByUser in
+                viewport = region
+                if positionedByUser { didFrame = true; launchLocation.userDidChooseCamera() }
+                let needsProvenanceReset = mapSearch.observe(camera: LiveMapSearchCamera(
+                    latitude: observedCamera.centerCoordinate.latitude,
+                    longitude: observedCamera.centerCoordinate.longitude,
+                    distance: observedCamera.distance, heading: observedCamera.heading, pitch: observedCamera.pitch),
+                    layout: layout, positionedByUser: positionedByUser)
+                if needsProvenanceReset { preserveMapCamera(observedCamera) }
+            },
+            onInteraction: {
+                guard !drawing else { return }
+                didFrame = true
+                launchLocation.userDidChooseCamera()
+                mapSearch.didInteractWithMap()
+                collapseForMapInteraction()
+            })
             .overlay(alignment: .top) {
                 if !drawing && detent < 2 && !showsFeedDestination {
                     controls.padding(.top, 8).padding(.bottom, 8)
@@ -562,29 +563,12 @@ struct LiveScreen: View {
                 }
             }
             .onPreferenceChange(LiveMapControlsHeightKey.self) { mapControlsHeight = $0; frameInitialMap() }
-            .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
-                guard !drawing else { return }
-                launchLocation.userDidChooseCamera()
-                mapSearch.didInteractWithMap()
-                collapseForMapInteraction()
-            })
             .onChange(of: previewID) { _, _ in
                 if hasPlacePreview { revealSelectedPin(proxy: proxy, size: size) }
             }
             .onChange(of: previewHeight) { _, _ in
                 previewCameraAdjusted = false
                 if hasPlacePreview { revealSelectedPin(proxy: proxy, size: size) }
-            }
-            .onMapCameraChange(frequency: .onEnd) { context in
-                viewport = context.region
-                let positionedByUser = camera.positionedByUser
-                if positionedByUser { didFrame = true; launchLocation.userDidChooseCamera() }
-                let needsProvenanceReset = mapSearch.observe(camera: LiveMapSearchCamera(
-                    latitude: context.camera.centerCoordinate.latitude,
-                    longitude: context.camera.centerCoordinate.longitude,
-                    distance: context.camera.distance, heading: context.camera.heading, pitch: context.camera.pitch),
-                    layout: layout, positionedByUser: positionedByUser)
-                if needsProvenanceReset { preserveMapCamera(context.camera) }
             }
             .overlay(alignment: .bottom) {
                 if mapSearch.shouldOfferSearch, !drawing, !showsFeedDestination, detent == 0, !hasPlacePreview,
@@ -593,7 +577,7 @@ struct LiveScreen: View {
                         guard let viewport,
                               let boundary = LiveMapSearchGeometry.area(layout: layout,
                                   longitudeSpan: viewport.span.longitudeDelta,
-                                  convert: { proxy.convert($0, from: .local) }) else {
+                                  convert: { proxy.coordinate(for: $0) }) else {
                             areaNotice = true
                             return
                         }
@@ -634,7 +618,7 @@ struct LiveScreen: View {
                                     if draftArea != nil { draftArea = nil; drawPoints = []; drawCoordinates = [] }
                                     guard drawPoints.count < 512,
                                           drawPoints.last.map({ hypot($0.x - value.location.x, $0.y - value.location.y) >= 5 }) ?? true,
-                                          let point = proxy.convert(value.location, from: .local) else { return }
+                                          let point = proxy.coordinate(for: value.location) else { return }
                                     drawPoints.append(value.location); drawCoordinates.append(point)
                                     drawingError = nil
                                 }
@@ -648,7 +632,6 @@ struct LiveScreen: View {
                     .accessibilityHint("Draw one area with your finger. You can also use the visible map area below.")
                 }
             }
-        }
     }
 
     private var controls: some View {
@@ -922,6 +905,12 @@ struct LiveScreen: View {
             }
             .font(AstirTypography.body).padding(12)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: LiveDrawingActionsHeightKey.self, value: geometry.size.height)
+                }
+            }
+            .onPreferenceChange(LiveDrawingActionsHeightKey.self) { drawingActionsHeight = $0 }
         }.padding(16).padding(.bottom, 16)
     }
 
@@ -1296,7 +1285,7 @@ struct LiveScreen: View {
             }
         }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
-            if let nextRegion { camera = .region(nextRegion) }
+            if let nextRegion { setMapCamera(.region(nextRegion)) }
             detent = next
         }
     }
@@ -1320,19 +1309,6 @@ struct LiveScreen: View {
         departedAt = nil; departedFeedWasScrolled = false
     }
 
-    private func compactPinIDs(proxy: MapProxy) -> Set<String> {
-        var offscreen = Set<String>()
-        let visible = CGRect(origin: .zero, size: mapSize).insetBy(dx: -44, dy: -44)
-        let points: [(id: String, point: CGPoint)] = pins.compactMap { pin in
-            guard let point = proxy.convert(coordinate(pin.place), to: .local), visible.contains(point) else {
-                offscreen.insert(pin.id)
-                return nil
-            }
-            return (id: pin.id, point: point)
-        }
-        return offscreen.union(LivePinDensity.compactIDs(points: points, selectedID: selectedPlaceID))
-    }
-
     private func selectPin(_ pin: LivePlacePin) {
         launchLocation.userDidChooseCamera()
         clearNativePlaceSelection()
@@ -1347,10 +1323,10 @@ struct LiveScreen: View {
         }
     }
 
-    private func revealSelectedPin(proxy: MapProxy, size: CGSize) {
+    private func revealSelectedPin(proxy: LiveNativeMapProxy, size: CGSize) {
         guard !previewCameraAdjusted, let coordinate = previewCoordinate,
-              let point = proxy.convert(coordinate, to: .local),
-              let current = camera.camera ?? mapSearch.latestCamera.map({
+              let point = proxy.point(for: coordinate),
+              let current = mapProxy.camera ?? mapSearch.latestCamera.map({
                   MapCamera(centerCoordinate: .init(latitude: $0.latitude, longitude: $0.longitude),
                             distance: $0.distance, heading: $0.heading, pitch: $0.pitch)
               }),
@@ -1358,13 +1334,12 @@ struct LiveScreen: View {
                                                 drawerHeight: min(previewHeight, size.height * 0.72) + 12).visibleRect else { return }
         let offset = LiveMapViewportPolicy.revealOffset(pin: point, exposedRect: exposed)
         guard offset != .zero,
-              let center = proxy.convert(CGPoint(x: size.width / 2 + offset.width,
-                                                  y: size.height / 2 + offset.height), from: .local) else { return }
+              let center = proxy.cameraCenter(after: offset, from: current) else { return }
         previewCameraAdjusted = true
         mapSearch.rebaseForPresentationChange()
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.28)) {
-            camera = .camera(MapCamera(centerCoordinate: center, distance: current.distance,
-                                      heading: current.heading, pitch: current.pitch))
+            setMapCamera(.camera(MapCamera(centerCoordinate: center, distance: current.distance,
+                                      heading: current.heading, pitch: current.pitch)))
         }
     }
 
@@ -1381,7 +1356,7 @@ struct LiveScreen: View {
         }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
             selectedPlaceID = nil; detent = 0
-            if let restoredOrigin { camera = .region(restoredOrigin) }
+            if let restoredOrigin { setMapCamera(.region(restoredOrigin)) }
         }
         cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
     }
@@ -1414,10 +1389,11 @@ struct LiveScreen: View {
     private func clearNativePlaceSelection() {
         nativeFeatureTask?.cancel(); nativeFeatureTask = nil
         nativeFeatureRequest = UUID()
+        nativeSelectionRevision = UUID()
         nativeFeature = nil; selectedCandidate = nil; nativePreviewID = nil
     }
 
-    private func selectNativePlace(_ feature: MapFeature) {
+    private func selectNativePlace(_ feature: MKMapFeatureAnnotation) {
         guard !drawing, let candidate = LiveMapPlaceDiscovery.candidate(from: feature) else { return }
         launchLocation.userDidChooseCamera()
         nativeFeatureTask?.cancel()
@@ -1444,19 +1420,25 @@ struct LiveScreen: View {
     }
 
     private func rebaseMapCameraForPresentationChange() {
-        let currentCamera = camera.camera ?? mapSearch.latestCamera.map {
+        let currentCamera = mapProxy.camera ?? mapSearch.latestCamera.map {
             MapCamera(centerCoordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude),
                       distance: $0.distance, heading: $0.heading, pitch: $0.pitch)
         }
         mapSearch.rebaseForPresentationChange()
         if let currentCamera { preserveMapCamera(currentCamera) }
     }
+    /// A repeated request remains a command even after native user movement.
+    private func setMapCamera(_ position: MapCameraPosition) {
+        camera = position
+        cameraRevision &+= 1
+    }
+
     private func preserveMapCamera(_ currentCamera: MapCamera) {
         // Reassert the same pose, not a fitted region. This clears the historic
         // user-positioned bit while leaving the map exactly where it is.
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
-        withTransaction(transaction) { camera = .camera(currentCamera) }
+        withTransaction(transaction) { setMapCamera(.camera(currentCamera)) }
     }
     private func startDrawing() {
         guard let viewport, viewport.span.longitudeDelta < 180 else { areaNotice = true; return }
@@ -1475,7 +1457,7 @@ struct LiveScreen: View {
     }
     private func frameInitialMap() {
         guard mapSize.width > 0, mapControlsHeight > 0,
-              !didFrame, !camera.positionedByUser, !hasPlacePreview else { return }
+              !didFrame, !hasPlacePreview else { return }
         applyLaunchRegion(launchLocation.region)
     }
 
@@ -1498,8 +1480,8 @@ struct LiveScreen: View {
         if detent > 0, let oldRect = old.visibleRect, let newRect = new.visibleRect,
            let fitted = LiveMapViewportPolicy.fittedRegion(region, size: mapSize, from: oldRect, to: newRect) {
             drawerMapOrigin = region
-            camera = .region(fitted)
-        } else { drawerMapOrigin = nil; camera = .region(region) }
+            setMapCamera(.region(fitted))
+        } else { drawerMapOrigin = nil; setMapCamera(.region(region)) }
     }
 
     private func planPlace(for event: FeedActivity) -> CommonGroundMockPlace? {
@@ -1573,13 +1555,6 @@ private struct LiveModalLifecycle: ViewModifier {
     }
 }
 
-private struct LiveMapNativeAccessory: ViewModifier {
-    @ViewBuilder func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) { content.mapFeatureSelectionAccessory(nil) }
-        else { content }
-    }
-}
-
 private struct LivePlaceShareRoute: Identifiable {
     let id = UUID()
     let place: PlaceSheetPlace
@@ -1604,4 +1579,9 @@ private struct LiveContactInvitePresentation: ViewModifier {
                 .modifier(lifecycle)
         }
     }
+}
+
+private struct LiveDrawingActionsHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

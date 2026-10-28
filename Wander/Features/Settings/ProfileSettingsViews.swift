@@ -286,6 +286,18 @@ struct ProfileSettingsHome: View {
             .tint(brandMode.accent)
             .accessibilityHint("Uses a dark map and matching controls on the Map tab")
             .accessibilityIdentifier("settings.map.darkMode")
+
+            Toggle(
+                isOn: Binding(
+                    get: { store.isColoredMapEnabled },
+                    set: { store.isColoredMapEnabled = $0 }
+                )
+            ) {
+                Label("Colored map", systemImage: "paintpalette")
+            }
+            .tint(brandMode.accent)
+            .accessibilityHint("Turn on for colors in the main map or off for grayscale. Pins stay colored.")
+            .accessibilityIdentifier("settings.map.coloredMap")
         } header: {
             Text("Map")
         }

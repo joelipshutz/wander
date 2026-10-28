@@ -2028,7 +2028,8 @@ struct MapScreen: View {
                             isUserInitiated: isUserInitiated
                         )
                         handleFeaturedCameraChange(region)
-                    }
+                    },
+                    coloredMap: store.isColoredMapEnabled
                 )
                 .tint(Self.currentLocationTint)
                 .ignoresSafeArea()
@@ -6780,6 +6781,9 @@ struct NativeMapView: UIViewRepresentable {
     let onUserInteraction: () -> Void
     let onCameraChange: (MKCoordinateRegion) -> Void
     let onCameraInteractionEnd: (MKCoordinateRegion, Bool) -> Void
+    // Only primary map surfaces opt into the saved basemap preference. Profile
+    // maps and other consumers retain their existing native appearance.
+    var coloredMap: Bool? = nil
     var allowsNativeFeatureSelection = true
     var usesAdaptivePinDetail = false
     var onCameraSnapshot: ((MKMapCamera) -> Void)? = nil
@@ -6838,6 +6842,7 @@ struct NativeMapView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         private var parent: NativeMapView
+        private let basemapAppearance = MapBasemapAppearance()
         private var annotationsByID: [String: NativeMapAnnotation] = [:]
         private var descriptorSnapshot: [NativeMapAnnotationDescriptor] = []
         private var annotationViewportIndex = MapAnnotationViewportIndex()
@@ -6897,6 +6902,9 @@ struct NativeMapView: UIViewRepresentable {
                 NativeMapPinImageRenderer.clearCache()
                 refreshVisibleAnnotationViews(in: mapView)
             }
+            if let coloredMap = parent.coloredMap {
+                basemapAppearance.update(mapView: mapView, coloredMap: coloredMap, isDark: parent.isDark)
+            }
 
             applyNativeFeatureClearIfNeeded(to: mapView)
             applyCameraRequestIfNeeded(to: mapView)
@@ -6914,6 +6922,10 @@ struct NativeMapView: UIViewRepresentable {
             adaptiveDetailRefresh = nil
             mapView.removeGestureRecognizer(tapRecognizer)
             mapView.removeGestureRecognizer(longPressRecognizer)
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: any MKOverlay) -> MKOverlayRenderer {
+            basemapAppearance.renderer(for: overlay) ?? MKOverlayRenderer(overlay: overlay)
         }
 
         func mapView(

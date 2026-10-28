@@ -555,6 +555,8 @@ struct WanderRootView: View {
                         onDidDismiss: { handleDeepLinkPresentationDismissal(of: $0) },
                         onAdd: presentAddSheet
                     )
+                    .environment(\.astirBrandMode, store.isDarkMapEnabled ? .editorial : astirBrandMode)
+                    .environment(\.colorScheme, store.isDarkMapEnabled ? .dark : systemColorScheme)
                     .tabItem { Label("Live", systemImage: "map") }
                     .tag(WanderTab.discover)
                 } else {

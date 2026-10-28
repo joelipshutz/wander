@@ -5,11 +5,11 @@ import SwiftUI
 /// Their identity matches the existing Map search path, without creating a save.
 @MainActor
 enum LiveMapPlaceDiscovery {
-    static func resolve(_ feature: MapFeature) async -> PlaceCandidate? {
-        guard feature.kind == .pointOfInterest, !Task.isCancelled else { return nil }
+    static func resolve(_ feature: MKMapFeatureAnnotation) async -> PlaceCandidate? {
+        guard feature.featureType == .pointOfInterest, !Task.isCancelled else { return nil }
         let fallback = candidate(from: feature)
         do {
-            let item = try await MKMapItemRequest(feature: feature).mapItem
+            let item = try await MKMapItemRequest(mapFeatureAnnotation: feature).mapItem
             guard !Task.isCancelled else { return nil }
             return candidate(from: item) ?? fallback
         } catch {
@@ -18,8 +18,8 @@ enum LiveMapPlaceDiscovery {
         }
     }
 
-    static func candidate(from feature: MapFeature) -> PlaceCandidate? {
-        guard feature.kind == .pointOfInterest else { return nil }
+    static func candidate(from feature: MKMapFeatureAnnotation) -> PlaceCandidate? {
+        guard feature.featureType == .pointOfInterest else { return nil }
         return candidate(title: feature.title, coordinate: feature.coordinate,
                          category: feature.pointOfInterestCategory)
     }
