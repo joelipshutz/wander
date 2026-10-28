@@ -91,10 +91,6 @@ struct LiveTotemPinView: View {
         ZStack {
             if isCompact {
                 compactDot
-                if state.hasListMembership {
-                    listBadge(diameter: 7.5, glyphSize: 4.5)
-                        .offset(x: 6, y: -6)
-                }
             } else {
                 if selected {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -254,7 +250,8 @@ private struct LiveTotemStatusRails: View {
             // Anchor both endpoint dots to the same visible bounds as a solid
             // capsule. Distributing the interior dots avoids dash-phase drift.
             let diameter = min(thickness, rect.width)
-            let count = max(2, Int((rect.width - diameter) / 4) + 1)
+            // A mixed Been/Wanna row still needs three readable Wanna dots.
+            let count = max(3, Int((rect.width - diameter) / 4) + 1)
             let step = (rect.width - diameter) / CGFloat(count - 1)
             for index in 0..<count {
                 let dot = CGRect(x: rect.minX + CGFloat(index) * step, y: rect.minY,

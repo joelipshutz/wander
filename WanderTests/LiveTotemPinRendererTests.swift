@@ -121,7 +121,7 @@ final class LiveTotemPinRendererTests: XCTestCase {
         }
     }
 
-    func testListBadgeChangesOnlyTopRightCornerAcrossDensitySelectionAndAppearance() throws {
+    func testListBadgeAppearsOnlyOnFullPinsAndStaysAtTopRightCorner() throws {
         for compact in [false, true] {
             for selected in [false, true] {
                 for dark in [false, true] {
@@ -130,12 +130,17 @@ final class LiveTotemPinRendererTests: XCTestCase {
                                                         viewed: viewed, compact: compact, dark: dark))
                         let with = try pixels(render(state(rails: [], list: true), selected: selected,
                                                      viewed: viewed, compact: compact, dark: dark))
-                        let changed = try XCTUnwrap(with.changedBounds(comparedTo: without))
                         let isDense = compact && !selected
-                        let diameter: CGFloat = isDense ? 7.5 : 11
-                        XCTAssertGreaterThan(changed.minX, (isDense ? 31 : 37) * 3,
+                        if isDense {
+                            XCTAssertEqual(with.bytes, without.bytes,
+                                           "Dense dots must not display a list badge.")
+                            continue
+                        }
+                        let changed = try XCTUnwrap(with.changedBounds(comparedTo: without))
+                        let diameter: CGFloat = 11
+                        XCTAssertGreaterThan(changed.minX, 37 * 3,
                                              "The list badge belongs at the right corner, outside the pictogram.")
-                        XCTAssertLessThan(changed.maxY, (isDense ? 29 : 25) * 3)
+                        XCTAssertLessThan(changed.maxY, 25 * 3)
                         XCTAssertLessThanOrEqual(changed.width, diameter * 3 + 2)
                         XCTAssertLessThanOrEqual(changed.height, diameter * 3 + 2)
                         if !isDense {
@@ -151,6 +156,27 @@ final class LiveTotemPinRendererTests: XCTestCase {
                         XCTAssertEqual(with.count(0xF05A3C), 0)
                         XCTAssertEqual(with.count(0x69B8D7), 0)
                         XCTAssertEqual(with.count(0x6FB985), 0)
+                    }
+                }
+            }
+        }
+    }
+
+    func testMixedSocialRailShowsOneBeenSegmentAndThreeSeparateWannaDots() throws {
+        let mixed = state(rails: [
+            .init(ownership: .currentUser, status: .been),
+            .init(ownership: .social, status: .been, secondaryStatus: .wannaGo)
+        ])
+        for selected in [false, true] {
+            for dark in [false, true] {
+                for viewed in [false, true] {
+                    let image = try pixels(render(mixed, selected: selected, viewed: viewed, dark: dark))
+                    let runs = image.colorColumnRuns(0x69B8D7)
+                    XCTAssertEqual(runs.count, 4, "Blue must contain one solid segment and three distinct dots.")
+                    if runs.count == 4 {
+                        XCTAssertGreaterThan(runs[0].count, runs[1].count)
+                        XCTAssertEqual(runs[1].count, runs[2].count, accuracy: 1)
+                        XCTAssertEqual(runs[2].count, runs[3].count, accuracy: 1)
                     }
                 }
             }
@@ -269,6 +295,26 @@ final class LiveTotemPinRendererTests: XCTestCase {
                 }
             }
             return bounds
+        }
+
+        func colorColumnRuns(_ rgb: UInt32) -> [Range<Int>] {
+            let target = [Int((rgb >> 16) & 0xFF), Int((rgb >> 8) & 0xFF), Int(rgb & 0xFF)]
+            var runs: [Range<Int>] = []
+            var start: Int?
+            for x in 0...width {
+                let matches = x < width && (0..<height).contains { y in
+                    let index = (y * width + x) * 4
+                    return bytes[index + 3] >= 250 && (0..<3).allSatisfy {
+                        abs(Int(bytes[index + $0]) - target[$0]) <= 3
+                    }
+                }
+                if matches, start == nil { start = x }
+                if !matches, let beginning = start {
+                    runs.append(beginning..<x)
+                    start = nil
+                }
+            }
+            return runs
         }
 
         func changedBounds(comparedTo other: Self) -> CGRect? {

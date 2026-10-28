@@ -111,6 +111,24 @@ final class LiveTotemUITests: XCTestCase {
         capturePinStates(launch())
     }
 
+    func testMixedSocialRailAndDenseBadgeMockups() {
+        let app = launch()
+        collapseDrawer(app)
+        let featured = app.buttons["live.pin.totem_featured"]
+        wait(featured)
+        settle(featured)
+        assertUniquePins(app)
+        capture("21-dense-dots-without-badges")
+        let mixed = app.buttons["live.pin.totem_mixed"]
+        wait(mixed)
+        settle(mixed)
+        mixed.tap()
+        wait(app.buttons["live.placePreview.close"])
+        settle(mixed)
+        capture("22-social-been-three-wanna-dots")
+        assertUniquePins(app)
+    }
+
     private func capturePinStates(_ app: XCUIApplication) {
         capture("01-live-with-feed")
         collapseDrawer(app)

@@ -999,13 +999,21 @@ Upcoming events and inviting people to Astir use icon buttons on the left and ri
 ## REC-657 — Totem Live pins and current place state, 2026-10-28
 
 Totem is the accepted Live pin family: a category pictogram tile, compact status
-rails, and a small circular list badge at the upper-right corner. Pictograms stay
+rails, and an 11pt circular list badge at the upper-right corner of full pins only.
+Pictograms stay
 within the cream body above the footing; solid and dotted rails have equal
 visible side insets within the black footing. This supersedes the earlier Live photo/activity
 badge proposal and the unselected lab status. Profile's Your Map remains a
 separate surface. Own status is coral; authorized social status is blue. Been is
-solid and Wanna dotted, with mixed social state preserved. Selection, viewed
-treatment and density change presentation without creating another place pin.
+solid and Wanna dotted; the Wanna segment of a mixed social Been/Wanna rail has
+three dots. Selection, viewed treatment and density change presentation without creating another place pin.
+
+Dense circles use coral for own saves, blue for readable social saves, green for
+proven Featured-only state, and black when no status rail is currently displayed.
+A coral/blue split represents both ownerships. Black is neutral, including list-only,
+filtered-out or unknown status; it does not mean a visit or a person. Dense circles
+have no list badge. Selection reveals the full pin and its 11pt badge when current
+membership qualifies, while list precedence remains unchanged at every density.
 
 Solid green Featured requires complete current evidence that the canonical
 place has neither any readable own/social Been or Wanna nor any readable current

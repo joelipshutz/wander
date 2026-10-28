@@ -8,24 +8,34 @@ does not replace Profile's Your Map renderer.
 
 ## Accepted Live contract, October 28
 
-Totem uses a monochrome category pictogram, compact ownership/status rails, and a
-small circular list badge at the upper-right corner. The category pictogram fits
+Totem uses a monochrome category pictogram, compact ownership/status rails, and an
+11pt circular list badge at the upper-right corner of full pins only.
+The category pictogram fits
 inside the cream body above the black footing, with its own clipped bounds.
 Solid and dotted status rails share centered visible bounds and equal side
 insets; dots are placed symmetrically rather than relying on a dashed stroke.
 Own status is coral; readable social status is blue. Been is
-solid and Wanna dotted. Mixed social Been/Wanna remains visible; own Been retains
-precedence when both match, while the Wanna filter can show the remaining Wanna.
+solid and Wanna dotted. The Wanna segment in a mixed social Been/Wanna rail has
+three dots. Own Been retains precedence when both match, while the Wanna filter can show the remaining Wanna.
 Unknown categories use a neutral place pictogram. A selected pin expands above
 its neighbors; density and viewed treatment retain the same place identity.
+
+Dense circles summarize the displayed status colors: coral means the viewer's
+save, blue means readable social saves, and green means proven Featured-only
+state. A coral/blue split means both ownerships are represented. Black is neutral:
+there is no displayed Been/Wanna/Featured rail, for example for a list-only place,
+filtered-out status or unknown remote state. It is not a visit, person or count.
+Dense circles never show a list badge or reserve space for one. Selecting the
+place expands the full pin, where the 11pt badge appears if current membership
+qualifies; hiding it at density does not change membership or Featured precedence.
 
 | Current authorized place state | Pin state |
 | --- | --- |
 | Any own or social Been/Wanna | Matching coral/blue rails; no green Featured |
-| Saved state plus current readable list membership | Saved rails plus the list badge |
-| Current readable list membership without a saved status | List badge with neutral footing; no Featured |
+| Saved state plus current readable list membership | Saved rails plus the list badge on full pins |
+| Current readable list membership without a saved status | Full-pin list badge with neutral footing; no Featured |
 | Active own save awaiting sync or retry, absent from server state | Matching coral Been/Wanna rail under People/Activity filters; never green Featured |
-| Viewer-added active entry awaiting sync or retry in a currently readable list | List badge remains visible; never green Featured |
+| Viewer-added active entry awaiting sync or retry in a currently readable list | Full-pin list badge remains visible; never green Featured |
 | Featured candidate with proven absence of both saves and list membership | Solid green Featured (`#6FB985`) |
 | Current remote state unknown, incomplete, revoked or expired | Neutral except for trusted own pending writes; never green Featured |
 
@@ -66,15 +76,23 @@ persisted. Backend installation and hosted smoke validation remain separate gate
 
 ## Live validation and review status
 
-The corner-badge and pin-geometry refinement passed all 3,193 native tests on
+The latest dense-dot badge removal and three-dot mixed social rail passed all
+3,194 native tests (zero failed/skipped) on iPhone 17e, iOS 26.5. Pixel coverage
+verifies one solid social segment plus three distinct Wanna dots and identical
+dense-dot pixels with/without list membership. The focused native capture passed
+on iPhone 17 Pro and iPhone 17e; four original screenshots are in
+`outputs/rec657/live-totem/social-dot-refinement/index.html`.
+
+The previous corner-badge and pin geometry passed all 3,193 native tests on
 iPhone 17e (iOS 26.5), with zero failures or skips. Pixel regressions verify every
 category silhouette stays inside the body, solid/dotted/mixed rails share
 symmetric visible endpoints, the circle overlaps the upper-right corner, and
 the 44pt interaction canvas remains unchanged. Light/Dark, selection, viewed
 and compact treatments are covered. The focused native eight-state capture
 passed on iPhone 17 Pro and iPhone 17e, exporting 20 original screenshots to
-`outputs/rec657/live-totem/refined-pins/index.html`. The results below describe
-the preceding functional pass; its video retains the earlier badge geometry.
+`outputs/rec657/live-totem/refined-pins/index.html`. Those screenshots show the
+previous geometry. The results below describe the preceding functional pass;
+its video retains the earlier badge geometry.
 
 App implementation `15197e3` passed all 3,191 native tests on iPhone 17e (iOS 26.5),
 with zero failures or skips, including immediate pending-own save/list feedback.
