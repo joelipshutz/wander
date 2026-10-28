@@ -6786,6 +6786,11 @@ struct NativeMapView: UIViewRepresentable {
         )
         configuration.pointOfInterestFilter = .includingAll
         mapView.preferredConfiguration = configuration
+        #if DEBUG && targetEnvironment(simulator)
+        if let style = MapKitLabStyle.current {
+            mapView.preferredConfiguration = style.configuration()
+        }
+        #endif
         mapView.selectableMapFeatures = allowsNativeFeatureSelection ? [.pointsOfInterest] : []
         mapView.delegate = context.coordinator
         mapView.showsScale = false
@@ -7488,6 +7493,57 @@ private final class WeakNativeMapPinAnnotationView {
 }
 
 @MainActor
+struct MapPinCanvasMetrics {
+    let size: CGSize
+    let pinCenter: CGPoint
+    let pinScale: CGFloat
+    let titleTop: CGFloat
+
+    static func resolve(
+        for descriptor: NativeMapAnnotationDescriptor
+    ) -> Self {
+        let scale = descriptor.isSelected
+            ? MapPinSelectionMotionStyle.selectedScale
+            : MapPinSelectionMotionStyle.inactiveScale
+        let outlineExpansion: CGFloat = descriptor.isSearchResult || descriptor.outlines.count > 1
+            ? 7.5
+            : descriptor.outlines.isEmpty ? 0 : 1.5
+        let pinDiameter = (MapPinVisualMetrics.discDiameter + outlineExpansion * 2) * scale
+        let pinCanvas = max(58, ceil(pinDiameter + 14))
+        guard descriptor.isSelected else {
+            let size = CGSize(width: pinCanvas, height: pinCanvas)
+            return Self(
+                size: size,
+                pinCenter: CGPoint(x: size.width / 2, y: size.height / 2),
+                pinScale: scale,
+                titleTop: 0
+            )
+        }
+
+        let titleFont = UIFont.systemFont(
+            ofSize: MapPinVisualMetrics.activeTitleFontSize,
+            weight: .semibold
+        )
+        let titleWidth = min(
+            210,
+            ceil((descriptor.title as NSString).size(withAttributes: [.font: titleFont]).width + 12)
+        )
+        let width = max(pinCanvas, titleWidth)
+        let titleTop = pinCanvas + MapPinVisualMetrics.activeTitleClearance
+        return Self(
+            size: CGSize(
+                width: width,
+                height: titleTop + MapPinVisualMetrics.activeTitleLineHeight + 6
+            ),
+            pinCenter: CGPoint(x: width / 2, y: pinCanvas / 2),
+            pinScale: scale,
+            titleTop: titleTop
+        )
+    }
+
+}
+
+@MainActor
 private enum NativeMapPinImageRenderer {
     private static let imageCache = NSCache<NSString, UIImage>()
 
@@ -7509,6 +7565,13 @@ private enum NativeMapPinImageRenderer {
         if let cached = imageCache.object(forKey: cacheKey) {
             return cached
         }
+
+        #if DEBUG && targetEnvironment(simulator)
+        if let image = MapPinDesignLab.image(for: descriptor, isDark: isDark) {
+            imageCache.setObject(image, forKey: cacheKey)
+            return image
+        }
+        #endif
 
         if descriptor.resolvedDetail == .dot {
             let image = dotImage(for: descriptor, isDark: isDark)
@@ -7560,53 +7623,8 @@ private enum NativeMapPinImageRenderer {
         }
     }
 
-    private struct CanvasMetrics {
-        let size: CGSize
-        let pinCenter: CGPoint
-        let pinScale: CGFloat
-        let titleTop: CGFloat
-    }
-
-    private static func canvasMetrics(
-        for descriptor: NativeMapAnnotationDescriptor
-    ) -> CanvasMetrics {
-        let scale = descriptor.isSelected
-            ? MapPinSelectionMotionStyle.selectedScale
-            : MapPinSelectionMotionStyle.inactiveScale
-        let outlineExpansion: CGFloat = descriptor.isSearchResult || descriptor.outlines.count > 1
-            ? 7.5
-            : descriptor.outlines.isEmpty ? 0 : 1.5
-        let pinDiameter = (MapPinVisualMetrics.discDiameter + outlineExpansion * 2) * scale
-        let pinCanvas = max(58, ceil(pinDiameter + 14))
-        guard descriptor.isSelected else {
-            let size = CGSize(width: pinCanvas, height: pinCanvas)
-            return CanvasMetrics(
-                size: size,
-                pinCenter: CGPoint(x: size.width / 2, y: size.height / 2),
-                pinScale: scale,
-                titleTop: 0
-            )
-        }
-
-        let titleFont = UIFont.systemFont(
-            ofSize: MapPinVisualMetrics.activeTitleFontSize,
-            weight: .semibold
-        )
-        let titleWidth = min(
-            210,
-            ceil((descriptor.title as NSString).size(withAttributes: [.font: titleFont]).width + 12)
-        )
-        let width = max(pinCanvas, titleWidth)
-        let titleTop = pinCanvas + MapPinVisualMetrics.activeTitleClearance
-        return CanvasMetrics(
-            size: CGSize(
-                width: width,
-                height: titleTop + MapPinVisualMetrics.activeTitleLineHeight + 6
-            ),
-            pinCenter: CGPoint(x: width / 2, y: pinCanvas / 2),
-            pinScale: scale,
-            titleTop: titleTop
-        )
+    private static func canvasMetrics(for descriptor: NativeMapAnnotationDescriptor) -> MapPinCanvasMetrics {
+        MapPinCanvasMetrics.resolve(for: descriptor)
     }
 
     private static func drawPin(
