@@ -2376,7 +2376,6 @@ struct MapScreen: View {
                 Task { await refreshMapCardViewerLocation() }
             }
             .onChange(of: compactSelectionIdentity, initial: true) { previous, current in
-                if previous != current { placePhotoGallery = nil }
                 handleCompactSelectionIdentityChange(from: previous, to: current)
             }
             .onChange(of: isMapTabActive) { _, isActive in

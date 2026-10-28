@@ -372,9 +372,17 @@ final class MapPlaceCardUITests: XCTestCase {
             app.launch()
             let openPhoto = app.buttons["Open place photo of Hearthline Coffee full screen"]
             XCTAssertTrue(openPhoto.waitForExistence(timeout: 15))
+            _ = try visiblePhoto(named: "Photo of Hearthline Coffee", in: app)
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                openPhoto.isHittable && app.scrollViews["place-profile.scroll"].isHittable
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
             openPhoto.tap()
             let close = app.buttons["Close photo viewer"]
-            XCTAssertTrue(close.waitForExistence(timeout: 5))
+            guard close.waitForExistence(timeout: 5) else {
+                XCTFail("Tapping the visible header photo must open the fullscreen viewer.")
+                return
+            }
             _ = try visiblePhoto(named: "Photo of Hearthline Coffee", in: app)
             capture(offline ? "REC-658 fullscreen from disk offline" : "REC-658 fullscreen after delivery")
             close.tap()
