@@ -1047,3 +1047,15 @@ or expired state renders neutral status except for those trusted own pending
 writes; it never resurrects stale/social cached associations or proves Featured. Deterministic offline
 review fixtures may explicitly declare complete state. See the
 [REC-657 design record](designs/rec657-map-lab.md) for validation and evidence status.
+
+## REC-661 — grayscale main map, 2026-10-28
+
+Ryan selected a grayscale basemap for both light and dark modes while retaining
+the existing colored pins. Settings → Map includes a persistent **Colored map**
+toggle, off by default. On restores native muted Paper/light or Ink/dark colors.
+This preference applies to the primary Live and legacy Map surfaces; embedded
+profile, list, place, onboarding and import maps keep their existing treatment.
+The existing Dark mode override also applies to Live. The setting follows the
+current local appearance lifetime, including persistence across sign-out and
+reset on account deletion. The renderer changes map appearance only; pin design,
+data/access policy and map feature behavior remain the existing contracts.

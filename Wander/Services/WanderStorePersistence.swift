@@ -210,6 +210,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let autoSaveListAddsToWant: Bool?
     let defaultMapFilterRaw: String?
     let isDarkMapEnabled: Bool?
+    let isColoredMapEnabled: Bool?
     let savedAt: Date
 
     @MainActor
@@ -251,6 +252,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         autoSaveListAddsToWant = store.autoSaveListAddsToWant
         defaultMapFilterRaw = store.defaultMapFilter.rawValue
         isDarkMapEnabled = store.isDarkMapEnabled
+        isColoredMapEnabled = store.isColoredMapEnabled
         savedAt = .now
     }
 
@@ -306,6 +308,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             autoSaveListAddsToWant: autoSaveListAddsToWant ?? true,
             defaultMapFilter: MapSource(rawValue: defaultMapFilterRaw ?? "") ?? .featured,
             isDarkMapEnabled: isDarkMapEnabled ?? false,
+            isColoredMapEnabled: isColoredMapEnabled ?? false,
             didApplySavedPlaceReset: shouldResetSavedPlaces
         )
     }
@@ -342,6 +345,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let autoSaveListAddsToWant: Bool
         let defaultMapFilter: MapSource
         let isDarkMapEnabled: Bool
+        let isColoredMapEnabled: Bool
         let didApplySavedPlaceReset: Bool
     }
 

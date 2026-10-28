@@ -499,8 +499,9 @@ final class LiveExperienceUITests: XCTestCase {
         app.tabBars.buttons["Lists"].tap()
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue((handle.value as? String)?.contains("25 km") == true)
-        app.buttons["live.scope.following"].tap()
-        XCTAssertTrue((handle.value as? String)?.contains("Following") == true)
+        app.buttons["live.scope.featured"].tap()
+        XCTAssertTrue(app.buttons["live.scope.featured"].isSelected)
+        XCTAssertFalse((handle.value as? String)?.contains("25 km") == true)
     }
 
     func testUpcomingInvitationKeepsExistingRecipientAndInboxRoutes() {

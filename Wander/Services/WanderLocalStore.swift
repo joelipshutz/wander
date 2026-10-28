@@ -409,6 +409,16 @@ final class WanderStore: ObservableObject {
             persist()
         }
     }
+    var isColoredMapEnabled: Bool {
+        willSet {
+            guard newValue != isColoredMapEnabled else { return }
+            objectWillChange.send()
+        }
+        didSet {
+            guard oldValue != isColoredMapEnabled else { return }
+            persist()
+        }
+    }
 
     let contactProvider: any ContactProvider
 
@@ -698,6 +708,7 @@ final class WanderStore: ObservableObject {
             self.autoSaveListAddsToWant = restored.autoSaveListAddsToWant
             self.defaultMapFilter = restored.defaultMapFilter
             self.isDarkMapEnabled = restored.isDarkMapEnabled
+            self.isColoredMapEnabled = restored.isColoredMapEnabled
             self.providerCategoryEnrichmentAttemptedAtByKey = restored.providerCategoryEnrichmentAttemptedAtByKey
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
             self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
@@ -726,6 +737,7 @@ final class WanderStore: ObservableObject {
             self.autoSaveListAddsToWant = true
             self.defaultMapFilter = .featured
             self.isDarkMapEnabled = false
+            self.isColoredMapEnabled = false
             self.saveStreakDatesByUserID = Dictionary(grouping: fixtures.userPlaces, by: \.userID)
                 .mapValues { $0.map(\.savedAt) }
             self.saveStreakRecoveryDatesByUserID = [:]
@@ -1765,6 +1777,7 @@ final class WanderStore: ObservableObject {
         autoSaveListAddsToWant = true
         defaultMapFilter = .featured
         isDarkMapEnabled = false
+        isColoredMapEnabled = false
         persist()
     }
 
