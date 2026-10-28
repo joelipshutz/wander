@@ -2200,12 +2200,12 @@ private struct PlaceProfileFullView: View {
     }
 
     private func reconcileSelectedPhoto() {
+        selectedHeaderPhotoID = PlacePhotoGalleryPresenter.selectedPhotoID(
+            currentID: selectedHeaderPhotoID,
+            previousItems: presentedGallery.photos,
+            items: galleryItems
+        )
         presentedGallery.update(galleryItems)
-        let ids = Set(galleryItems.map(\.id))
-        if let selectedHeaderPhotoID, ids.contains(selectedHeaderPhotoID) {
-            return
-        }
-        selectedHeaderPhotoID = galleryItems.first?.id
     }
 
     private var heading: some View {

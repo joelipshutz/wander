@@ -307,6 +307,22 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testPhotoLessActivityRejectsAnotherVisitsPhotoButKeepsGoogle() {
+        let unrelatedVisitPhoto = ActivityEngagementMedia(
+            id: "previous-visit-photo", storageBucket: "visit-photos",
+            storagePath: "owner/previous-visit/photo.jpg", accessibilityLabel: "Previous visit"
+        ).placePhoto
+        let google = PlacePhoto(provider: "google_places", providerPlaceID: "google-place",
+            photoURLString: "https://example.com/google.jpg", width: 800, height: 600,
+            authorName: nil, authorProfileURLString: nil, authorAvatarURLString: nil,
+            sourcePhotoURLString: nil, flagContentURLString: nil,
+            storageBucket: nil, storagePath: nil, localAssetRef: nil)
+        XCTAssertFalse(FeedPlacePhotoPolicy.accepts(unrelatedVisitPhoto, allowsUserPhotoFallback: false))
+        XCTAssertTrue(FeedPlacePhotoPolicy.accepts(google, allowsUserPhotoFallback: false))
+        // Non-activity surfaces retain their existing fallback behavior.
+        XCTAssertTrue(FeedPlacePhotoPolicy.accepts(unrelatedVisitPhoto, allowsUserPhotoFallback: true))
+    }
+
     func testShareDestinationTrayUsesTheRequestedOrderAndRoutes() {
         XCTAssertEqual(
             ActivityShareDestination.allCases,

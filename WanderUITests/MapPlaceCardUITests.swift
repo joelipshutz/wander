@@ -2,6 +2,30 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testPlaceWithUploadedPhotoOpensOnGoogleAndKeepsGallerySwipe() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderREC386PhotoFixture",
+            "-WanderMapPlace", "Dudley Market QA", "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        let firstPage = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "Photo 1 of 2")
+        ).firstMatch
+        XCTAssertTrue(firstPage.waitForExistence(timeout: 15))
+        let googlePhoto = app.buttons["Open place photo of Dudley Market QA full screen"]
+        XCTAssertTrue(googlePhoto.isHittable)
+        XCTAssertFalse(app.descendants(matching: .any)["Photo by Ryan"].exists)
+        capture("REC-463 Google-first place profile")
+        googlePhoto.swipeLeft()
+        XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 5))
+        capture("REC-463 uploaded photo remains in gallery")
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 5))
+        capture("REC-463 collapsed place card")
+    }
+
     func testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace() {
         let app = XCUIApplication()
         app.launchArguments = [

@@ -1654,6 +1654,7 @@ private struct FeedActivityModule: View {
             actorAccessibilityIdentifier: "feed.activity.\(activity.id).actor",
             destinationAccessibilityIdentifier: "feed.activity.\(activity.id).place",
             postcardAccessibilityIdentifier: "feed.activity.\(activity.id).postcard",
+            allowsPlaceUserPhotoFallback: false,
             showsEngagementActions: engagementContext != nil,
             showsActivityMenu: true,
             onPrivateReply: privateReplyAction,
@@ -1859,6 +1860,7 @@ private struct FeedPlaceArtwork: View {
 
 struct FeedResolvedPlacePhoto: View {
     let place: VisiblePlace
+    var allowsUserPhotoFallback = true
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
     @State private var failedGooglePhotoID: String?
@@ -1878,7 +1880,9 @@ struct FeedResolvedPlacePhoto: View {
                     photo: photo,
                     canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.place.canonicalName,
-                    photoRequest: sheetPlace.photoRequest,
+                    // Activity artwork already resolved the feed variant. Do
+                    // not let image delivery re-resolve to another visit's photo.
+                    photoRequest: allowsUserPhotoFallback ? sheetPlace.photoRequest : nil,
                     variant: .feed,
                     onLoadFailure: handlePhotoLoadFailure
                 )
@@ -1896,6 +1900,7 @@ struct FeedResolvedPlacePhoto: View {
         let resolutionKey = photoResolutionKey
         let request = sheetPlace.photoRequest.rendering(.feed)
         if let cachedPhoto = backend.cachedPlacePhoto(for: request),
+           FeedPlacePhotoPolicy.accepts(cachedPhoto, allowsUserPhotoFallback: allowsUserPhotoFallback),
            !(cachedPhoto.isGooglePlacesPhoto
                 && cachedPhoto.providerPlaceID == failedGooglePhotoID) {
             photo = cachedPhoto
@@ -1909,13 +1914,15 @@ struct FeedResolvedPlacePhoto: View {
             let resolvedPhoto: PlacePhoto
             if remotePhoto.isGooglePlacesPhoto,
                remotePhoto.providerPlaceID == failedGooglePhotoID {
+                guard allowsUserPhotoFallback else { return }
                 resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
             } else {
                 resolvedPhoto = remotePhoto
             }
             try Task.checkCancellation()
             guard resolutionKey == photoResolutionKey else { return }
-            photo = resolvedPhoto
+            photo = FeedPlacePhotoPolicy.accepts(resolvedPhoto, allowsUserPhotoFallback: allowsUserPhotoFallback)
+                ? resolvedPhoto : nil
         } catch is CancellationError {
             return
         } catch {
@@ -1931,6 +1938,12 @@ struct FeedResolvedPlacePhoto: View {
         } else {
             photo = nil
         }
+    }
+}
+
+enum FeedPlacePhotoPolicy {
+    static func accepts(_ photo: PlacePhoto, allowsUserPhotoFallback: Bool) -> Bool {
+        photo.isGooglePlacesPhoto || allowsUserPhotoFallback
     }
 }
 
