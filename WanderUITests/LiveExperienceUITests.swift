@@ -714,7 +714,15 @@ final class LiveExperienceUITests: XCTestCase {
                         withVelocity: .slow, thenHoldForDuration: 1)
             let after = try position()
             observations.append("step=\(step) viewport=\(before.viewport) after=\(after.viewport)")
-            let anchors = visibleCards(before).keys.filter { after.cards[$0] != nil }
+            let visibleAfter = visibleCards(after)
+            for (id, frame) in visibleCards(before) {
+                if let afterFrame = after.cards[id] {
+                    observations.append("step=\(step) measured card=\(id) before=\(frame) after=\(afterFrame) stillVisible=\(visibleAfter[id] != nil)")
+                }
+            }
+            // Lazy rows outside the viewport can have estimated AX frames.
+            // Measure the cards the reader can still see after this partial drag.
+            let anchors = visibleCards(before).keys.filter { visibleAfter[$0] != nil }
             XCTAssertFalse(anchors.isEmpty, "A partial-screen drag must retain a visible activity")
             if anchors.isEmpty { return }
             for id in anchors {
