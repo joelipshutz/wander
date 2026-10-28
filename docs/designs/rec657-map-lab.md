@@ -72,11 +72,12 @@ response batch. Foreground and Live-tab re-entry synchronously revalidate expiry
 including when a suspended timer has not resumed. Failure, partial coverage or
 expiry keeps the map and authorized events usable but restores no stale/social
 cached status or list badge. Trusted own pending writes remain visible. Snapshots are not
-persisted. Backend installation and hosted smoke validation remain separate gates.
+persisted. Backend installation remains a release operation after the passing
+rollback-only hosted validation described below.
 
 ## Live validation and review status
 
-The latest dense-dot badge removal and three-dot mixed social rail passed all
+Before final main integration, the dense-dot badge removal and three-dot mixed social rail passed all
 3,194 native tests (zero failed/skipped) on iPhone 17e, iOS 26.5. Pixel coverage
 verifies one solid social segment plus three distinct Wanna dots and identical
 dense-dot pixels with/without list membership. The focused native capture passed
@@ -104,9 +105,13 @@ and the local gallery are in the shared `outputs/rec657/live-totem` directory
 outside this worktree and Git.
 Earlier lab results below do not validate the integrated Live change.
 
-Hosted validation remains incomplete: the Lists smoke test reached an unresolved
-source-deletion assertion, then the follow-up diagnostic connector expired. The pin-state RPC
-hosted test has not run. Neither migration has been deployed.
+Hosted validation passed for both focused migration suites and the complete
+checked-in smoke suite, with both migrations previewed inside rolled-back
+transactions. The deletion fixtures use the authenticated app RPCs: deleting a
+save removes its Lists event, while deleting its final check-in preserves a
+list-only companion without Been/Wanna status. A read-only postcheck confirmed
+zero remaining fixture profiles/places and no installed migration changes.
+Neither migration has been deployed; apply both before releasing this behavior.
 
 The current tests cover status/list precedence, authoritative deletion, incomplete
 state, query/audience filtering, canonical uniqueness, expiry and account races.
