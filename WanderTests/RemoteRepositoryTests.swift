@@ -1419,6 +1419,7 @@ final class RemoteRepositoryTests: XCTestCase {
 
     func testFeedRPCsUseShortFirstPaintDeadlines() {
         XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "followed_feed"), 1.5)
+        XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "feed_shared_visit_context"), 1.5)
         XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "activity_media"), 1)
         XCTAssertEqual(WanderSupabaseClient.rpcTimeout(for: "discover_profile_recommendations"), 1.5)
         XCTAssertGreaterThan(WanderSupabaseClient.rpcTimeout(for: "profile_detail"), 1.5)
@@ -1557,9 +1558,16 @@ final class RemoteRepositoryTests: XCTestCase {
           "visit_id":"63620000-0000-0000-0000-000000000002","companions":[
           {"status":"accepted","profile":{"id":"unrequested","handle":"unrequested","display_name":"Unrequested"}}]}]
         """.data(using: .utf8)
-        let page = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25)
+        var firstContent: FollowedFeedPage?
+        let page = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 25) {
+            firstContent = $0
+        }
         XCTAssertEqual(page.activity.map(\.id), [eventID])
         let context = try XCTUnwrap(page.activity.first?.sharedVisit)
+        XCTAssertEqual(firstContent?.activity.first?.sharedVisit, context,
+                       "The first cards must already have their final grouping identity and companions")
+        XCTAssertEqual(FeedPresentation.groupedActivity(try XCTUnwrap(firstContent).activity).map(\.id),
+                       FeedPresentation.groupedActivity(page.activity).map(\.id))
         XCTAssertEqual(context.groupID, "63610000-0000-0000-0000-000000000001")
         XCTAssertEqual(context.companions.map(\.profile.id), ["accepted", "pending"])
         XCTAssertEqual(context.companions.map(\.status), [.accepted, .pending])
@@ -1623,6 +1631,34 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(page.activity.first?.media.first?.urlString)
     }
 
+    func testFeedCancellationDuringCompanionLookupDoesNotPublishPartialCards() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = Data("""
+        {"activity":[{"id":"65900000-0000-0000-0000-000000000001","event_type":"place_been",
+          "occurred_at":"2026-10-20T12:00:00Z","actor":{"id":"owner","handle":"owner","display_name":"Owner"},"media":[]}],
+          "featured_places":[],"next_cursor":null,"fetched_at":"2026-10-20T12:00:00Z"}
+        """.utf8)
+        rpc.responses["activity_media"] = Data("[]".utf8)
+        rpc.responses["feed_shared_visit_context"] = Data("[]".utf8)
+        rpc.delays["feed_shared_visit_context"] = .seconds(60)
+        var published = false
+        let pending = Task { @MainActor in
+            _ = try await SupabaseFeedRepository(rpc: rpc).followedFeed(before: nil, limit: 20) { _ in
+                published = true
+            }
+        }
+        for _ in 0..<1_000 where !rpc.calls.contains(where: { $0.name == "feed_shared_visit_context" }) {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(rpc.calls.contains { $0.name == "feed_shared_visit_context" })
+        pending.cancel()
+        do {
+            _ = try await pending.value
+            XCTFail("Cancellation must stop the page before publication")
+        } catch is CancellationError { }
+        XCTAssertFalse(published)
+    }
+
     func testPerformanceFeedFirstContentPrecedesSlowMedia() async throws {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
@@ -1674,7 +1710,8 @@ final class RemoteRepositoryTests: XCTestCase {
             XCTAssertEqual(content.activity.map(\.id), [activityID])
             XCTAssertEqual(content.activity[0].media.map(\.id), ["pending:\(activityID)"])
             XCTAssertNil(content.activity[0].media[0].urlString)
-            XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
+            XCTAssertEqual(rpc.calls.first?.name, "followed_feed")
+            XCTAssertTrue(rpc.calls.contains { $0.name == "feed_shared_visit_context" })
             XCTAssertTrue(storage.signedURLs.isEmpty)
         }
         let elapsed = start.duration(to: .now).components

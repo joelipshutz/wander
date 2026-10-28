@@ -1,8 +1,128 @@
+import CryptoKit
 import Foundation
 import XCTest
 @testable import Wander
 
 final class PlacePhotoDeliveryTests: XCTestCase {
+    func testIdenticalVariantsSharePhysicalBytesWithoutSharingLookupAuthorization() async throws {
+        let directory = temporaryCacheDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = PlacePhotoDataDiskCache(directoryURL: directory, totalCostLimit: 9)
+        let bytes = Data(repeating: 42, count: 8)
+        for variant in PlacePhotoRenderVariant.allCases {
+            await cache.insert(bytes, canonicalPlaceKey: "owner", photoKey: "photo", variant: variant)
+        }
+        let metrics = await cache.metrics()
+        XCTAssertEqual(metrics.entryCount, PlacePhotoRenderVariant.allCases.count)
+        XCTAssertEqual(metrics.totalByteCost, bytes.count, "A second alias must not consume the byte budget twice.")
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "image" }
+        let inodes = try files.map { try FileManager.default.attributesOfItem(atPath: $0.path)[.systemFileNumber] as! NSNumber }
+        XCTAssertEqual(Set(inodes).count, 1, "Verify actual filesystem sharing, not only bookkeeping.")
+        for variant in PlacePhotoRenderVariant.allCases {
+            let hit = await cache.data(canonicalPlaceKey: "owner", photoKey: "photo", variant: variant)
+            XCTAssertEqual(hit, bytes)
+        }
+        let unauthorizedKey = await cache.data(canonicalPlaceKey: "other-viewer", photoKey: "photo", variant: .feed)
+        XCTAssertNil(unauthorizedKey)
+    }
+
+    func testReplacingAndRemovingSharedPhotoDoesNotMutateOtherPhoto() async throws {
+        let directory = temporaryCacheDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = PlacePhotoDataDiskCache(directoryURL: directory)
+        let original = Data([1, 2, 3])
+        let replacement = Data([4, 5, 6, 7])
+        for key in ["first", "second"] {
+            await cache.insert(original, canonicalPlaceKey: key, photoKey: "photo", variant: .feed)
+        }
+        await cache.insert(replacement, canonicalPlaceKey: "first", photoKey: "photo", variant: .feed)
+        let first = await cache.data(canonicalPlaceKey: "first", photoKey: "photo", variant: .feed)
+        let second = await cache.data(canonicalPlaceKey: "second", photoKey: "photo", variant: .feed)
+        XCTAssertEqual(first, replacement)
+        XCTAssertEqual(second, original)
+        await cache.remove(canonicalPlaceKey: "first", photoKey: "photo")
+        let remaining = await cache.data(canonicalPlaceKey: "second", photoKey: "photo", variant: .feed)
+        XCTAssertEqual(remaining, original)
+        let contentDirectory = directory.appendingPathComponent("content")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: contentDirectory.path).count, 1)
+        await cache.remove(canonicalPlaceKey: "second", photoKey: "photo")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: contentDirectory.path).count, 0)
+    }
+
+    func testLegacyDuplicateFilesConsolidateWithoutLosingOfflineReadsAfterRestart() async throws {
+        let directory = temporaryCacheDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let bytes = Data(repeating: 7, count: 128)
+        for variant in [PlacePhotoRenderVariant.feed, .fullscreen] {
+            let key = "5:place|photo|\(variant.rawValue)"
+            let hash = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+            try bytes.write(to: directory.appendingPathComponent("\(hash).image"))
+        }
+        let cache = PlacePhotoDataDiskCache(directoryURL: directory)
+        await cache.consolidateExistingEntries()
+        let metrics = await cache.metrics()
+        XCTAssertEqual(metrics.entryCount, 2)
+        XCTAssertEqual(metrics.totalByteCost, bytes.count)
+        let restarted = PlacePhotoDataDiskCache(directoryURL: directory)
+        for variant in [PlacePhotoRenderVariant.feed, .fullscreen] {
+            let data = await restarted.data(canonicalPlaceKey: "place", photoKey: "photo", variant: variant)
+            XCTAssertEqual(data, bytes)
+        }
+    }
+
+    func testConsolidationFailureKeepsLegacyImageReadable() async throws {
+        let directory = temporaryCacheDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let bytes = Data([7, 8, 9])
+        let key = "5:place|photo|\(PlacePhotoRenderVariant.feed.rawValue)"
+        let hash = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        try bytes.write(to: directory.appendingPathComponent("\(hash).image"))
+        // Simulate a filesystem obstacle to creating the content directory.
+        try Data([0]).write(to: directory.appendingPathComponent("content"))
+        let cache = PlacePhotoDataDiskCache(directoryURL: directory)
+        await cache.consolidateExistingEntries()
+        let result = await cache.data(canonicalPlaceKey: "place", photoKey: "photo", variant: .feed)
+        XCTAssertEqual(result, bytes)
+    }
+
+    func testPruningSharedAliasesReleasesBytesOnlyAfterLastReference() async throws {
+        let directory = temporaryCacheDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = PlacePhotoDataDiskCache(directoryURL: directory, totalCostLimit: 8)
+        for variant in [PlacePhotoRenderVariant.feed, .fullscreen] {
+            await cache.insert(Data(repeating: 1, count: 8), canonicalPlaceKey: "old", photoKey: "photo", variant: variant)
+        }
+        for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            where url.pathExtension == "image" {
+            try FileManager.default.setAttributes([.modificationDate: Date.distantPast], ofItemAtPath: url.path)
+        }
+        let newer = Data(repeating: 2, count: 8)
+        await cache.insert(newer, canonicalPlaceKey: "new", photoKey: "photo", variant: .feed)
+        let metrics = await cache.metrics()
+        XCTAssertEqual(metrics.entryCount, 1)
+        XCTAssertEqual(metrics.totalByteCost, 8)
+        let hit = await cache.data(canonicalPlaceKey: "new", photoKey: "photo", variant: .feed)
+        XCTAssertEqual(hit, newer)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.appendingPathComponent("content").path).count, 1)
+    }
+
+    func testPhotoHTTPSessionKeepsMemoryCacheButDoesNotDuplicateDiskStorage() {
+        let cache = PlacePhotoNetworkSession.makeCache(diskPath: "rec658-test-\(UUID().uuidString)")
+        defer { cache.removeAllCachedResponses() }
+        XCTAssertEqual(cache.diskCapacity, 0)
+        XCTAssertEqual(cache.memoryCapacity, 16 * 1_024 * 1_024)
+        let request = URLRequest(url: URL(string: "https://example.invalid/photo.jpg")!)
+        let response = URLResponse(url: request.url!, mimeType: "image/jpeg", expectedContentLength: 3, textEncodingName: nil)
+        let bytes = Data([1, 2, 3])
+        cache.storeCachedResponse(CachedURLResponse(response: response, data: bytes, storagePolicy: .allowedInMemoryOnly), for: request)
+        XCTAssertEqual(cache.cachedResponse(for: request)?.data, bytes)
+        // URLCache can retain SQLite bookkeeping even with diskCapacity == 0;
+        // that metadata is not a persisted copy of the image payload.
+    }
+
     func testRenderVariantsKeepEverySurfaceCrispWithoutUpsizingFullscreen() {
         XCTAssertEqual(PlacePhotoRenderVariant.listThumbnail.maximumPixelDimension, 512)
         XCTAssertEqual(PlacePhotoRenderVariant.listThumbnail.deliveryQuality, 84)

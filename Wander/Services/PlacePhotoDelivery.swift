@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 /// Image bytes can stay cached; signed delivery URLs and live business facts cannot.
@@ -83,6 +84,11 @@ actor PlacePhotoDataDiskCache {
         let url: URL
         let byteCost: Int
         let modifiedAt: Date
+        let fileID: String
+    }
+
+    private var contentDirectoryURL: URL {
+        directoryURL.appendingPathComponent("content", isDirectory: true)
     }
 
     private let revocationDirectoryURL: URL
@@ -124,6 +130,9 @@ actor PlacePhotoDataDiskCache {
                 "recme-place-photo-variants-v1",
                 isDirectory: true
             )
+        }
+        if isEnabled {
+            Task(priority: .utility) { await self.consolidateExistingEntries() }
         }
     }
 
@@ -172,10 +181,11 @@ actor PlacePhotoDataDiskCache {
                 photoKey: photoKey,
                 variant: variant
             )
-            try data.write(to: url, options: .atomic)
+            try storeSharedBytes(data, at: url)
             try pruneIfNeeded()
         } catch {
             // Disk caching is an optimization; delivery continues from memory/network.
+            removeUnreferencedContent()
         }
     }
 
@@ -197,13 +207,14 @@ actor PlacePhotoDataDiskCache {
             misses: misses,
             networkLoads: networkLoads,
             entryCount: entries.count,
-            totalByteCost: entries.reduce(0) { $0 + $1.byteCost }
+            totalByteCost: uniqueByteCost(entries)
         )
     }
 
     func removeAll() {
         guard isEnabled else { return }
         for entry in cacheEntries() { try? fileManager.removeItem(at: entry.url) }
+        removeUnreferencedContent()
         memoryHits = 0
         diskHits = 0
         misses = 0
@@ -216,6 +227,76 @@ actor PlacePhotoDataDiskCache {
             try? fileManager.removeItem(at: fileURL(
                 canonicalPlaceKey: canonicalPlaceKey, photoKey: photoKey, variant: variant
             ))
+        }
+        removeUnreferencedContent()
+    }
+
+    /// Retain the v1 lookup paths and exact image bytes while reclaiming duplicate
+    /// payloads. Yield between files so a first upgrade does not monopolize reads.
+    func consolidateExistingEntries() async {
+        guard isEnabled else { return }
+        let files = (try? fileManager.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil)) ?? []
+        for url in files where url.lastPathComponent.hasPrefix(".photo-link-") {
+            try? fileManager.removeItem(at: url)
+        }
+        for entry in cacheEntries() {
+            if referenceCount(at: entry.url) == 1,
+               let data = try? Data(contentsOf: entry.url, options: .mappedIfSafe),
+               !data.isEmpty {
+                try? storeSharedBytes(data, at: entry.url, existingFile: true, modifiedAt: entry.modifiedAt)
+            }
+            await Task.yield()
+        }
+        try? pruneIfNeeded()
+    }
+
+    /// Scoped lookup -> hard link -> content-addressed bytes. The digest is only
+    /// a storage identity; callers still require their existing authorized key.
+    /// Atomic replacement keeps updating one variant from mutating other links.
+    private func storeSharedBytes(
+        _ data: Data,
+        at url: URL,
+        existingFile: Bool = false,
+        modifiedAt: Date = .now
+    ) throws {
+        try fileManager.createDirectory(at: contentDirectoryURL, withIntermediateDirectories: true)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let contentURL = contentDirectoryURL.appendingPathComponent(digest)
+        if !fileManager.fileExists(atPath: contentURL.path) {
+            if existingFile {
+                try fileManager.linkItem(at: url, to: contentURL)
+            } else {
+                try data.write(to: contentURL, options: .atomic)
+            }
+        }
+        let temporaryURL = directoryURL.appendingPathComponent(".photo-link-\(UUID().uuidString)")
+        defer { try? fileManager.removeItem(at: temporaryURL) }
+        try fileManager.linkItem(at: contentURL, to: temporaryURL)
+        guard rename(temporaryURL.path, url.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        let previousDate = (try? fileManager.attributesOfItem(atPath: contentURL.path)[.modificationDate]) as? Date
+        try? fileManager.setAttributes(
+            [.modificationDate: max(previousDate ?? modifiedAt, modifiedAt)],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func referenceCount(at url: URL) -> Int? {
+        (try? fileManager.attributesOfItem(atPath: url.path)[.referenceCount] as? NSNumber)?.intValue
+    }
+
+    private func removeUnreferencedContent() {
+        let files = (try? fileManager.contentsOfDirectory(at: contentDirectoryURL, includingPropertiesForKeys: nil)) ?? []
+        for url in files where referenceCount(at: url) == 1 {
+            try? fileManager.removeItem(at: url)
+        }
+    }
+
+    private func uniqueByteCost(_ entries: [Entry]) -> Int {
+        var seen: Set<String> = []
+        return entries.reduce(0) { cost, entry in
+            cost + (seen.insert(entry.fileID).inserted ? entry.byteCost : 0)
         }
     }
 
@@ -259,12 +340,15 @@ actor PlacePhotoDataDiskCache {
 
     private func pruneIfNeeded() throws {
         var entries = cacheEntries().sorted { $0.modifiedAt > $1.modifiedAt }
-        var totalCost = entries.reduce(0) { $0 + $1.byteCost }
+        var totalCost = uniqueByteCost(entries)
+        var references = Dictionary(grouping: entries, by: \.fileID).mapValues(\.count)
         while entries.count > countLimit || totalCost > totalCostLimit {
             guard let entry = entries.popLast() else { break }
-            try? fileManager.removeItem(at: entry.url)
-            totalCost -= entry.byteCost
+            try fileManager.removeItem(at: entry.url)
+            references[entry.fileID, default: 1] -= 1
+            if references[entry.fileID] == 0 { totalCost -= entry.byteCost }
         }
+        removeUnreferencedContent()
     }
 
     private func cacheEntries() -> [Entry] {
@@ -276,13 +360,16 @@ actor PlacePhotoDataDiskCache {
 
         return urls.compactMap { url in
             guard url.pathExtension == "image" else { return nil }
-            guard let values = try? url.resourceValues(
+            guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+                  let fileID = attributes[.systemFileNumber] as? NSNumber,
+                  let values = try? url.resourceValues(
                 forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
             ), values.isRegularFile == true else { return nil }
             return Entry(
                 url: url,
                 byteCost: max(0, values.fileSize ?? 0),
-                modifiedAt: values.contentModificationDate ?? .distantPast
+                modifiedAt: values.contentModificationDate ?? .distantPast,
+                fileID: fileID.stringValue
             )
         }
     }
