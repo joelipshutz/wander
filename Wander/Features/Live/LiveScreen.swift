@@ -87,6 +87,9 @@ struct LiveScreen: View {
     @State private var areaNotice = false
     @Environment(\.liveMessageSession) private var demoMessageSession
     @State private var replyTarget: PrivateMessageThreadTarget?
+    #if DEBUG && targetEnvironment(simulator)
+    @State private var grayscalePreviewDismissed = false
+    #endif
 
     let isActive: Bool
     let eventsAvailable: Bool
@@ -126,7 +129,24 @@ struct LiveScreen: View {
         isFeedDestinationActive || activityNavigation.commentsRoute != nil
     }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        #if DEBUG && targetEnvironment(simulator)
+        if let option = LiveMapStyleLab.current, option.usesGrayscaleOverlay, !grayscalePreviewDismissed {
+            LiveGrayscaleOverlayPreview(
+                pins: LiveMapProjection.pins(
+                    activities: store.liveMapFixtureActivity().filter(store.canDisplayLiveMapActivity),
+                    featured: [], ownCheckInPlaces: ownCheckInPlaces),
+                dark: option == .graphiteDark,
+                onClose: { grayscalePreviewDismissed = true })
+        } else {
+            standardBody
+        }
+        #else
+        standardBody
+        #endif
+    }
+
+    private var standardBody: some View {
         liveContent.modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
             onDismiss: modalDidDismiss, lifecycle: modalLifecycle))
     }

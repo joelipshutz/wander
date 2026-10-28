@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import MapKit
 import XCTest
 @testable import Wander
 
@@ -23,6 +24,18 @@ final class LiveMapStyleLabTests: XCTestCase {
         XCTAssertNil(LiveMapStyleLab.resolve(arguments: fixture))
         XCTAssertNil(LiveMapStyleLab.resolve(arguments: fixture + ["-WanderLiveMapStyle"]))
         XCTAssertNil(LiveMapStyleLab.resolve(arguments: fixture + ["-WanderLiveMapStyle", "unknown"]))
+    }
+
+    @MainActor func testGrayscaleOverlayIsLimitedToExplicitReviewVariants() {
+        XCTAssertEqual(Set(LiveMapStyleLab.allCases.filter(\.usesGrayscaleOverlay)),
+                       Set([.graphite, .graphiteDark]))
+        XCTAssertEqual(LiveMapStyleLab.graphite.colorScheme, .light)
+        XCTAssertEqual(LiveMapStyleLab.graphiteDark.colorScheme, .dark)
+        let bounds = LiveMapStyleLab.grayscalePolygon.boundingMapRect
+        XCTAssertEqual(bounds.origin.x, MKMapRect.world.origin.x)
+        XCTAssertEqual(bounds.origin.y, MKMapRect.world.origin.y)
+        XCTAssertEqual(bounds.size.width, MKMapRect.world.size.width)
+        XCTAssertEqual(bounds.size.height, MKMapRect.world.size.height)
     }
 }
 #endif

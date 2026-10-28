@@ -21,7 +21,8 @@ struct LiveMapStyleReview: ViewModifier {
 
 #if DEBUG && targetEnvironment(simulator)
 enum LiveMapStyleLab: String, CaseIterable {
-    case paper, atlas, ink, midnight, aerial
+    case paper, atlas, ink, midnight, aerial, graphite
+    case graphiteDark = "graphite-dark"
 
     static let current = resolve(arguments: ProcessInfo.processInfo.arguments)
 
@@ -37,12 +38,23 @@ enum LiveMapStyleLab: String, CaseIterable {
     }
 
     var colorScheme: ColorScheme {
-        self == .ink || self == .midnight ? .dark : .light
+        self == .ink || self == .midnight || self == .graphiteDark ? .dark : .light
     }
+
+    var usesGrayscaleOverlay: Bool { self == .graphite || self == .graphiteDark }
+
+    // Use projected points so the polygon spans the Mercator world without an
+    // antimeridian seam. It is inserted before the app's colored area overlays.
+    @MainActor static let grayscalePolygon = MKPolygon(points: [
+        MKMapPoint(x: MKMapRect.world.minX, y: MKMapRect.world.minY),
+        MKMapPoint(x: MKMapRect.world.maxX, y: MKMapRect.world.minY),
+        MKMapPoint(x: MKMapRect.world.maxX, y: MKMapRect.world.maxY),
+        MKMapPoint(x: MKMapRect.world.minX, y: MKMapRect.world.maxY)
+    ], count: 4)
 
     var mapStyle: MapStyle {
         switch self {
-        case .paper, .ink:
+        case .paper, .ink, .graphite, .graphiteDark:
             .standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .all,
                       showsTraffic: false)
         case .atlas, .midnight:

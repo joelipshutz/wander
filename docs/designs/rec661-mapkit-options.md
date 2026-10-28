@@ -49,6 +49,51 @@ do not establish real-device bandwidth, battery or rendering performance parity.
 
 The recommendations are design judgments, not measured performance claims.
 
+## Grayscale overlay exploration
+
+Ryan requested a grayscale preview, with Paper for light mode and Ink for dark
+mode as the fallback if the experiment is not selected. This is a comparison
+preference, not approval to change the production map.
+
+The `graphite` and `graphite-dark` review arguments open a separate native
+`MKMapView` inside a SwiftUI preview in the app. It uses the existing synthetic
+fixture projection and `LiveMapPinView` visuals. A toggle removes the grayscale
+overlay to compare Paper or Ink at the same camera and with the same controls.
+
+The treatment uses a world-sized `MKPolygon`, gray fill and the public
+`MKOverlayRenderer.blendMode = .saturation` API. The overlay sits above native map
+labels, while app annotation views remain colored. It does not replace or reach
+into the Live screen's SwiftUI map, delegate, gestures, search or drawing code.
+The preview exposes native map pan/zoom and pin selection; it is not a replacement
+for the full Live screen or evidence that all Live flows have been integrated.
+
+A direct SwiftUI `MapPolygon.foregroundStyle(Color.gray.blendMode(...))` probe
+compiled but rendered an opaque fill on the tested simulator. That approach is
+not retained. The native renderer technique is documented in
+[Apple's overlay/blend-mode demonstration](https://developer.apple.com/videos/play/wwdc2022/10035/).
+
+No production selection, data mutation, backend call or analytics event is added.
+Like the earlier lab, entry requires all four demo-fixture arguments and rejects
+live-auth launches. Normal builds and real devices cannot enter the preview.
+
+Grayscale validation: 3,115 native tests passed with zero failures/skips. Four
+targeted UI tests passed across iPhone 17 Pro and iPhone 17e: physical annotation
+selection/dismissal, native panning, unchanged annotation position when toggling
+the overlay, and closing the preview to return to Live. Sixteen original PNGs
+cover all four appearances and overview/selected states on both phones. Visual
+inspection confirms grayscale geography/labels, colored pins and attribution.
+These checks do not resolve the earlier Live zoom/Clear gaps described below.
+
+Build the new comparison from those two capture exports using:
+
+```sh
+python3 scripts/mapkit-style-gallery.py --grayscale-review \
+  --large /path/to/large-attachments --compact /path/to/compact-attachments \
+  --large-experiments /path/to/large-attachments \
+  --compact-experiments /path/to/compact-attachments \
+  --output /path/to/grayscale-gallery
+```
+
 ## Validation
 
 The full native suite passed: 3,114 tests, zero failures or skips. The simulator

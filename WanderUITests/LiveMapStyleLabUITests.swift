@@ -14,6 +14,50 @@ final class LiveMapStyleLabUITests: XCTestCase {
     func testMidnightMapStyle() throws { try verifyStyle("midnight") }
     func testAerialMapStyle() throws { try verifyStyle("aerial") }
 
+    func testGrayscaleLightPreview() throws { try captureGrayscale("graphite") }
+    func testGrayscaleDarkPreview() throws { try captureGrayscale("graphite-dark") }
+
+    private func captureGrayscale(_ style: String) throws {
+        let app = launch(style: style, waitForLive: false)
+        defer { app.terminate() }
+        let pin = app.buttons["grayscale.pin.place_bar_nido"]
+        let map = app.maps.firstMatch
+        waitHittable(pin, timeout: 20)
+        waitForStableFrames([pin, map], minimumDuration: 3)
+        let baseline = style == "graphite" ? "paper" : "ink"
+        for captureStyle in [style, baseline] {
+            if captureStyle == baseline {
+                let before = pin.frame
+                let label = baseline == "paper" ? "Paper" : "Ink"
+                app.segmentedControls.buttons[label].tap()
+                waitForStableFrames([pin, map], minimumDuration: 3)
+                XCTAssertEqual(pin.frame.midX, before.midX, accuracy: 1,
+                               "Changing the overlay must preserve the map camera.")
+                XCTAssertEqual(pin.frame.midY, before.midY, accuracy: 1)
+            }
+            capture(captureStyle, "overview")
+            pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertTrue(app.staticTexts["grayscale.selectedPlace"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.staticTexts["grayscale.selectedPlace"].label, "Bar Nido")
+            let close = app.buttons["grayscale.dismissSelection"]
+            waitHittable(close)
+            waitForStableFrames([pin, close], minimumDuration: 1)
+            capture(captureStyle, "selected")
+            close.tap()
+            XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+            waitForStableFrames([pin, map], minimumDuration: 1)
+        }
+        // A native pan must still move the same annotation after overlay toggles.
+        let beforePan = pin.frame.midX
+        let start = map.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.72))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 35, dy: 0)))
+        wait("The preview's native map must remain pannable.") {
+            pin.exists && abs(pin.frame.midX - beforePan) > 3
+        }
+        app.buttons["grayscale.close"].tap()
+        waitHittable(app.buttons["live.draw"])
+    }
+
     /// Independent overlay coverage so a gesture assertion cannot prevent the
     /// visual and apply/clear checks from running on all five configurations.
     func testDrawingAcrossAllStyles() throws {
@@ -83,7 +127,7 @@ final class LiveMapStyleLabUITests: XCTestCase {
         try verifyNativePan(in: app)
     }
 
-    private func launch(style: String) -> XCUIApplication {
+    private func launch(style: String, waitForLive: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
@@ -96,10 +140,14 @@ final class LiveMapStyleLabUITests: XCTestCase {
         if app.buttons["productUpsell.secondary"].waitForExistence(timeout: 4) {
             app.buttons["productUpsell.secondary"].tap()
         }
-        waitHittable(app.buttons["live.draw"], timeout: 30)
-        waitHittable(app.buttons["Filters"])
-        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 15))
-        waitHittable(drawer(in: app))
+        if waitForLive {
+            waitHittable(app.buttons["live.draw"], timeout: 30)
+            waitHittable(app.buttons["Filters"])
+            XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 15))
+            waitHittable(drawer(in: app))
+        } else {
+            waitHittable(app.buttons["grayscale.close"], timeout: 30)
+        }
         return app
     }
 
