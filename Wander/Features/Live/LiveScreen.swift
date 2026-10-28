@@ -134,24 +134,26 @@ struct LiveScreen: View {
     private var livePresentedContent: some View {
         GeometryReader { geometry in
             let drawerHeight = showsFeedDestination ? geometry.size.height
-                : drawing || hasPlacePreview ? 0 : height(for: detent, available: geometry.size.height)
+                : hasPlacePreview ? 0 : height(for: detent, available: geometry.size.height)
+            let hidesDrawer = (drawing || hasPlacePreview) && !showsFeedDestination
             ZStack(alignment: .bottom) {
-                map(drawerHeight: drawerHeight)
+                map(drawerHeight: drawing ? 0 : drawerHeight)
                     .allowsHitTesting(!showsFeedDestination)
                     .accessibilityHidden(showsFeedDestination)
-                if !drawing || showsFeedDestination {
-                    drawer(height: drawerHeight)
-                        .offset(y: hasPlacePreview && !showsFeedDestination ? geometry.size.height : 0)
-                        .allowsHitTesting(!hasPlacePreview || showsFeedDestination)
-                        .accessibilityHidden(hasPlacePreview && !showsFeedDestination)
-                        .background(alignment: .bottom) {
-                            // Paint only below the drawer, behind the native tab
-                            // bar; preserve the map's existing attribution inset.
-                            brand.background.frame(height: geometry.safeAreaInsets.bottom + 1)
-                                .offset(y: geometry.safeAreaInsets.bottom)
-                                .allowsHitTesting(false)
-                        }
-                } else {
+                // Keep the Feed's identity and viewport while drawing. Recreating
+                // it forgets consumed navigation requests and can reopen Search.
+                drawer(height: drawerHeight)
+                    .offset(y: hidesDrawer ? geometry.size.height : 0)
+                    .allowsHitTesting(!hidesDrawer)
+                    .accessibilityHidden(hidesDrawer)
+                    .background(alignment: .bottom) {
+                        // Paint only below the drawer, behind the native tab
+                        // bar; preserve the map's existing attribution inset.
+                        brand.background.frame(height: geometry.safeAreaInsets.bottom + 1)
+                            .offset(y: geometry.safeAreaInsets.bottom)
+                            .allowsHitTesting(false)
+                    }
+                if drawing && !showsFeedDestination {
                     drawingControls
                 }
                 if hasPlacePreview, !drawing, !showsFeedDestination {
@@ -793,7 +795,7 @@ struct LiveScreen: View {
                     onPresentation: onPresentation, onWillDismiss: onWillDismiss, onDidDismiss: onDidDismiss,
                     isEmbedded: true,
                     showsInviteEntry: false,
-                    isEmbeddedFeedVisible: isActive && detent > 0 && selectedPin == nil && !showsFeedDestination,
+                    isEmbeddedFeedVisible: isActive && detent > 0 && selectedPin == nil && !showsFeedDestination && !drawing,
                     filteredActivityIDs: Set(activity.map(\.id)),
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
                     onPrivateReply: openReply,
