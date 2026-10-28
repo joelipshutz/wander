@@ -20,7 +20,7 @@ final class FoundersWelcomeUITests: XCTestCase {
         pause.tap()
         let mute = app.buttons["onboarding.founders.mute"]
         mute.tap()
-        XCTAssertTrue(mute.label.contains("Sound on"))
+        XCTAssertTrue(mute.label.contains("Sound On"))
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(pause.waitForExistence(timeout: 6))

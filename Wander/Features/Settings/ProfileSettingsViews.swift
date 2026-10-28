@@ -84,7 +84,7 @@ struct ProfileSettingsHome: View {
                         isCurrentAccount: { auth.state.session?.userID == session.userID }
                     ), isOnboarding: false, continueAction: { showsContactDetails = false })
                     .id(session.userID)
-                    .navigationTitle("City & phone")
+                    .navigationTitle("City & Phone")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
@@ -94,17 +94,17 @@ struct ProfileSettingsHome: View {
                 }
             }
         }
-        .alert("You are deleting your account", isPresented: $showsDeleteWarning) {
+        .alert("You Are Deleting Your Account", isPresented: $showsDeleteWarning) {
             Button("Yes", role: .destructive) { showsFinalDeleteWarning = true }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Do you want to continue?")
+            Text("Do You Want To Continue?")
         }
-        .alert("Are you sure you want to permanently delete your account?", isPresented: $showsFinalDeleteWarning) {
-            Button("Yes, delete", role: .destructive) { Task { await deleteAccount() } }
-            Button("No, cancel", role: .cancel) {}
+        .alert("Are You Sure You Want To Permanently Delete Your Account?", isPresented: $showsFinalDeleteWarning) {
+            Button("Yes, Delete", role: .destructive) { Task { await deleteAccount() } }
+            Button("No, Cancel", role: .cancel) {}
         } message: {
-            Text("You will not be able to recover the data associated with your account.")
+            Text("You Will Not Be Able To Recover The Data Associated With Your Account.")
         }
         .onChange(of: debugSettingsUserID, initial: true) { _, _ in
             refreshDebugSettingsState()
@@ -208,7 +208,7 @@ struct ProfileSettingsHome: View {
             case .signedIn(let session):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
                 Button { showsContactDetails = true } label: {
-                    Label("City & phone", systemImage: "house")
+                    Label("City & Phone", systemImage: "house")
                 }
                 .accessibilityIdentifier("settings.account.contactDetails")
                 ProfileSettingsAccountActions(session: session) {
@@ -216,13 +216,13 @@ struct ProfileSettingsHome: View {
                 }
             case .offline(let session, _):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
-                Label("Saved map available offline", systemImage: "wifi.slash")
+                Label("Saved Map Available Offline", systemImage: "wifi.slash")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
             case .signedOut:
-                Button("Sign in") { auth.beginSignIn() }
+                Button("Sign In") { auth.beginSignIn() }
             case .loading:
-                ProgressView("Checking account...")
+                ProgressView("Checking Account...")
             case .unavailable(let message):
                 Text(message).foregroundStyle(WanderTheme.stateError.color)
             }
@@ -231,28 +231,28 @@ struct ProfileSettingsHome: View {
     }
 
     private var privacySection: some View {
-        Section("Privacy and safety") {
+        Section("Privacy And Safety") {
             NavigationLink {
                 ContactDiscoverySettingsScreen()
             } label: {
-                Label("Find friends from contacts", systemImage: "person.crop.circle.badge.checkmark")
+                Label("Find Friends From Contacts", systemImage: "person.crop.circle.badge.checkmark")
             }
             .accessibilityIdentifier("settings.contactDiscovery")
 
             NavigationLink {
                 ProfilePrivacyTrustScreen()
             } label: {
-                Label("Privacy and trust", systemImage: "shield.lefthalf.filled")
+                Label("Privacy And Trust", systemImage: "shield.lefthalf.filled")
             }
 
             NavigationLink {
                 BlockedMutedScreen()
             } label: {
-                Label("Blocked and muted accounts", systemImage: "person.crop.circle.badge.xmark")
+                Label("Blocked And Muted Accounts", systemImage: "person.crop.circle.badge.xmark")
             }
 
             SettingsExternalLink(
-                title: "Privacy choices",
+                title: "Privacy Choices",
                 icon: "slider.horizontal.3",
                 destination: RecmeSettingsWebDestination.privacyChoices
             )
@@ -267,7 +267,7 @@ struct ProfileSettingsHome: View {
                     DefaultMapFilterSettingsScreen()
                 } label: {
                     HStack {
-                        Label("Default map filter", systemImage: "map")
+                        Label("Default Map Filter", systemImage: "map")
                         Spacer()
                         Label(store.defaultMapFilter.title, systemImage: store.defaultMapFilter.systemImage)
                             .font(AstirTypography.caption)
@@ -284,10 +284,10 @@ struct ProfileSettingsHome: View {
                     set: { store.isDarkMapEnabled = $0 }
                 )
             ) {
-                Label("Dark map", systemImage: "moon.stars")
+                Label("Dark Map", systemImage: "moon.stars")
             }
             .tint(brandMode.accent)
-            .accessibilityHint("Uses a dark map and matching controls on the Map tab")
+            .accessibilityHint("Uses A Dark Map And Matching Controls On The Map Tab")
             .accessibilityIdentifier("settings.map.darkMode")
 
             Toggle(
@@ -308,12 +308,12 @@ struct ProfileSettingsHome: View {
     }
 
     private var checkInQuestionsSection: some View {
-        Section("Check-ins") {
+        Section("Check-Ins") {
             NavigationLink {
                 CheckInQuestionSettingsScreen(ownerUserID: store.currentUser.id)
                     .id(store.currentUser.id)
             } label: {
-                Label("Check-in questions", systemImage: "checklist")
+                Label("Check-In Questions", systemImage: "checklist")
                     .frame(minHeight: WanderTheme.tapMinimum)
             }
             .accessibilityIdentifier("settings.checkInQuestions")
@@ -347,7 +347,7 @@ struct ProfileSettingsHome: View {
             NavigationLink {
                 PlaceImportHistoryScreen(importStore: importStore)
             } label: {
-                Label("Import history", systemImage: "clock.arrow.circlepath")
+                Label("Import History", systemImage: "clock.arrow.circlepath")
             }
             .accessibilityIdentifier("settings.importHistory")
         }
@@ -355,14 +355,14 @@ struct ProfileSettingsHome: View {
 
     @ViewBuilder
     private var accountActionsSection: some View {
-        Section("Account actions") {
+        Section("Account Actions") {
             switch auth.state {
             case .signedIn, .offline:
                 Button {
                     Task { await signOut() }
                 } label: {
                     destructiveSettingsLabel(
-                        auth.isSigningOut ? "Signing out..." : "Sign out",
+                        auth.isSigningOut ? "Signing Out..." : "Sign Out",
                         icon: "rectangle.portrait.and.arrow.right",
                         color: WanderTheme.stateError.color
                     )
@@ -377,7 +377,7 @@ struct ProfileSettingsHome: View {
                 showsDeleteWarning = true
             } label: {
                 destructiveSettingsLabel(
-                    isDeleting ? "Deleting account..." : "Delete my account",
+                    isDeleting ? "Deleting Account..." : "Delete My Account",
                     icon: "trash",
                     color: .red
                 )
@@ -394,7 +394,7 @@ struct ProfileSettingsHome: View {
                 NavigationLink {
                     LiveIntroductionReplayView(userID: auth.state.session?.userID ?? store.currentUser.id)
                 } label: {
-                    Label("What’s changed", systemImage: "sparkles")
+                    Label("What’s Changed", systemImage: "sparkles")
                 }
                 .accessibilityIdentifier("settings.whatsChanged")
             }
@@ -436,7 +436,7 @@ struct ProfileSettingsHome: View {
 
     private var featureFlagsSection: some View {
         Section {
-            Text("Device overrides are saved for this account on this device. Active behavior changes only after you fully quit and reopen Astir.")
+            Text("Device Overrides Are Saved For This Account On This Device. Active Behavior Changes Only After You Fully Quit And Reopen Astir.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -445,20 +445,20 @@ struct ProfileSettingsHome: View {
             }
 
             if hasDeviceFeatureFlagOverrides {
-                Button("Reset all to defaults", role: .destructive) {
+                Button("Reset All To Defaults", role: .destructive) {
                     resetAllDeviceFeatureFlagOverrides()
                 }
                 .accessibilityIdentifier("settings.flags.resetAll")
             }
 
             if hasPendingFeatureFlagRestart {
-                Label("Restart Astir to apply these changes", systemImage: "arrow.clockwise")
+                Label("Restart Astir To Apply These Changes", systemImage: "arrow.clockwise")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.accentText)
                     .accessibilityIdentifier("settings.flags.restartRequired")
             }
         } header: {
-            Text("Feature flags")
+            Text("Feature Flags")
         }
         .listRowBackground(brandMode.raisedBackground)
     }
@@ -485,7 +485,7 @@ struct ProfileSettingsHome: View {
             if definition.isEditableOnDevice {
                 switch definition.valueKind {
                 case .boolean:
-                    Picker("Device value", selection: booleanOverrideBinding(for: key)) {
+                    Picker("Device Value", selection: booleanOverrideBinding(for: key)) {
                         ForEach(FeatureFlagBooleanOverrideChoice.allCases) { choice in
                             Text(choice.title).tag(choice)
                         }
@@ -510,7 +510,7 @@ struct ProfileSettingsHome: View {
         definition: FeatureFlagDefinition
     ) -> some View {
         if let range = definition.integerRange {
-            Toggle("Override on this device", isOn: integerOverrideEnabledBinding(for: key))
+            Toggle("Override On This Device", isOn: integerOverrideEnabledBinding(for: key))
                 .tint(brandMode.accent)
             if deviceFeatureFlagOverrides[key]?.integerValue != nil {
                 Stepper(value: integerOverrideBinding(for: key, range: range), in: range) {
@@ -519,7 +519,7 @@ struct ProfileSettingsHome: View {
                 }
             }
         } else {
-            Text("Invalid integer flag configuration")
+            Text("Invalid Integer Flag Configuration")
                 .font(AstirTypography.caption)
                 .foregroundStyle(WanderTheme.stateError.color)
         }
@@ -556,8 +556,8 @@ struct ProfileSettingsHome: View {
     private func featureFlagProvenance(for key: FeatureFlagKey) -> String {
         guard let userID = debugSettingsUserID,
               let resolved = backend.resolvedFeatureFlag(key, for: userID)
-        else { return "\(key.rawValue) · loading remote value" }
-        return "\(key.rawValue) · active \(resolved.value.displayValue) · \(resolved.source.settingsLabel)"
+        else { return "\(key.rawValue) · Loading Remote Value" }
+        return "\(key.rawValue) · Active \(resolved.value.displayValue) · \(resolved.source.settingsLabel)"
     }
 
     private func booleanOverrideBinding(for key: FeatureFlagKey) -> Binding<FeatureFlagBooleanOverrideChoice> {
@@ -715,7 +715,7 @@ struct ProfileSettingsHome: View {
                     authSession: auth
                 )
             }
-            errorMessage = "Your account could not be deleted. Nothing was removed. Please try again."
+            errorMessage = "Your Account Could Not Be Deleted. Nothing Was Removed. Please Try Again."
         }
     }
 }
@@ -766,14 +766,14 @@ private struct DefaultMapFilterSettingsScreen: View {
                     .accessibilityIdentifier("settings.map.defaultFilter.\(source.rawValue)")
                 }
             } footer: {
-                Text("Used whenever the map opens or resets on this device.")
+                Text("Used Whenever The Map Opens Or Resets On This Device.")
             }
             .listRowBackground(brandMode.raisedBackground)
         }
         .scrollContentBackground(.hidden)
         .background(brandMode.background)
         .tint(brandMode.accent)
-        .navigationTitle("Default map filter")
+        .navigationTitle("Default Map Filter")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
     }
@@ -784,27 +784,27 @@ private struct SettingsResourcesScreen: View {
     var body: some View {
         List {
             SettingsExternalLink(
-                title: "Import help",
+                title: "Import Help",
                 icon: "square.and.arrow.down",
                 destination: ImportHelpDestination.url
             )
             SettingsExternalLink(
-                title: "Help and support",
+                title: "Help And Support",
                 icon: "questionmark.circle",
                 destination: RecmeSettingsWebDestination.support
             )
             SettingsExternalLink(
-                title: "Privacy policy",
+                title: "Privacy Policy",
                 icon: "hand.raised",
                 destination: RecmeSettingsWebDestination.privacy
             )
             SettingsExternalLink(
-                title: "Terms of use",
+                title: "Terms Of Use",
                 icon: "doc.text",
                 destination: RecmeSettingsWebDestination.terms
             )
             SettingsExternalLink(
-                title: "Community guidelines",
+                title: "Community Guidelines",
                 icon: "person.3",
                 destination: RecmeSettingsWebDestination.community
             )
@@ -861,7 +861,7 @@ private struct ProfileSettingsIdentityRow: View {
                 color: WanderTheme.avatarRyan.color
             )
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(session.displayName ?? "Your account")
+                Text(session.displayName ?? "Your Account")
                     .font(AstirTypography.cardTitle)
                     .foregroundStyle(brandMode.primaryText)
                 if let emailAddress = SettingsAccountIdentityPresentation.emailAddress(for: session) {
@@ -893,23 +893,23 @@ private struct ProfileSettingsAccountActions: View {
     var body: some View {
         HStack(spacing: 0) {
             actionButton(
-                title: "Change email",
-                value: SettingsAccountIdentityPresentation.emailAddress(for: session) ?? "Not added",
+                title: "Change Email",
+                value: SettingsAccountIdentityPresentation.emailAddress(for: session) ?? "Not Added",
                 icon: "envelope"
             )
 
             actionDivider
 
             actionButton(
-                title: "Change phone number",
-                value: SettingsAccountIdentityPresentation.phoneNumber(for: session) ?? "Not added",
+                title: "Change Phone Number",
+                value: SettingsAccountIdentityPresentation.phoneNumber(for: session) ?? "Not Added",
                 icon: "phone"
             )
 
             actionDivider
 
             actionButton(
-                title: "Change password",
+                title: "Change Password",
                 value: nil,
                 icon: "key"
             )
@@ -1036,7 +1036,7 @@ struct ProfilePrivacyTrustScreen: View {
 
             calendarPermissionSection
 
-            Section("How privacy works") {
+            Section("How Privacy Works") {
                 ForEach(SettingsTrustSurface.facts) { fact in
                     HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                         Image(systemName: fact.icon)
@@ -1069,7 +1069,7 @@ struct ProfilePrivacyTrustScreen: View {
         .scrollContentBackground(.hidden)
         .background(brandMode.background)
         .tint(brandMode.accent)
-        .navigationTitle("Privacy and trust")
+        .navigationTitle("Privacy And Trust")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .onChange(of: scenePhase) { _, phase in
@@ -1110,8 +1110,8 @@ struct ProfilePrivacyTrustScreen: View {
                         Text("Apple Calendar")
                             .font(.system(size: 15, weight: .black))
                         Text(calendarReservations.hasFullAccess
-                             ? "Connected. Astir can recognize restaurant reservations on this iPhone."
-                             : "Connect to let Astir look for restaurant reservations on this iPhone.")
+                             ? "Connected. Astir Can Recognize Restaurant Reservations On This iPhone."
+                             : "Connect To Let Astir Look For Restaurant Reservations On This iPhone.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
@@ -1125,7 +1125,7 @@ struct ProfilePrivacyTrustScreen: View {
                               ? "arrow.triangle.2.circlepath"
                               : "calendar.badge.plus")
                         Text(isConnectingCalendar
-                             ? "working"
+                             ? "Working"
                              : CalendarPermissionPolicy.primaryTitle(
                                  for: calendarReservations.authorizationStatus
                              ))
@@ -1139,11 +1139,11 @@ struct ProfilePrivacyTrustScreen: View {
                 .disabled(isConnectingCalendar || !auth.isSignedIn)
                 .accessibilityIdentifier("settings.privacy.calendar.action")
 
-                Text("Astir never uploads or stores raw calendar titles, notes, guests, URLs, or addresses—only the matched restaurant and reservation time.")
+                Text("Astir Never Uploads Or Stores Raw Calendar Titles, Notes, Guests, URLs, Or Addresses—Only The Matched Restaurant And Reservation Time.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
 
-                Text("Choose whether to receive reservation reminders in Notifications.")
+                Text("Choose Whether To Receive Reservation Reminders In Notifications.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -1221,7 +1221,7 @@ struct ProfilePrivacyTrustScreen: View {
                 backend: backend
             )
         } catch {
-            errorMessage = "Your privacy preference is saved on this device and will sync when the connection recovers."
+            errorMessage = "Your Privacy Preference Is Saved On This Device And Will Sync When The Connection Recovers."
         }
     }
 }
@@ -1230,7 +1230,7 @@ enum ProfileRelationshipFilter: String, CaseIterable, Identifiable {
     case blocked
     case muted
     var id: String { rawValue }
-    var title: String { rawValue == "blocked" ? "Blocked accounts" : "Muted accounts" }
+    var title: String { rawValue == "blocked" ? "Blocked Accounts" : "Muted Accounts" }
 }
 
 struct BlockedMutedScreen: View {
@@ -1242,7 +1242,7 @@ struct BlockedMutedScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Account controls", selection: $selectedTab) {
+            Picker("Account Controls", selection: $selectedTab) {
                 ForEach(ProfileRelationshipFilter.allCases) { tab in
                     Text(tab.title).tag(tab)
                 }
@@ -1294,7 +1294,7 @@ struct BlockedMutedScreen: View {
         }
         .background(brandMode.background)
         .tint(brandMode.accent)
-        .navigationTitle("Blocked and muted")
+        .navigationTitle("Blocked And Muted")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .task {
@@ -1313,7 +1313,7 @@ private struct BlockedMutedEmptyState: View {
             Image(systemName: tab == .blocked ? "person.crop.circle.badge.xmark" : "speaker.slash.circle")
                 .font(.system(size: 72, weight: .regular))
                 .foregroundStyle(WanderTheme.categoryMoss.color)
-            Text(tab == .blocked ? "You haven't blocked anyone" : "You haven't muted anyone")
+            Text(tab == .blocked ? "You Haven't Blocked Anyone" : "You Haven't Muted Anyone")
                 .font(AstirTypography.sheetTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .multilineTextAlignment(.center)
@@ -1330,9 +1330,9 @@ private struct BlockedMutedEmptyState: View {
     private var message: String {
         switch tab {
         case .blocked:
-            "Members you block will not be able to see your content and you will not be able to see theirs."
+            "Members You Block Will Not Be Able To See Your Content And You Will Not Be Able To See Theirs."
         case .muted:
-            "Activity by members you mute will not appear in your newsfeed and you will not receive notifications for this person."
+            "Activity By Members You Mute Will Not Appear In Your Newsfeed And You Will Not Receive Notifications For This Person."
         }
     }
 }

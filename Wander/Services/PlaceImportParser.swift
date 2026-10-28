@@ -12,15 +12,15 @@ enum PlaceImportParsingError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyInput:
-            "Add at least one link or place before importing."
+            "Add At Least One Link Or Place Before Importing."
         case .noPlacesFound:
-            "No place entries were found. Try one place or link per line."
+            "No Place Entries Were Found. Try One Place Or Link Per Line."
         case .unreadableFile:
-            "This file could not be read. Try exporting it again."
+            "This File Could Not Be Read. Try Exporting It Again."
         case .compressedTakeoutNeedsUnzip:
-            "Unzip the Google Takeout archive in Files, then choose its Saved Places CSV or JSON file."
+            "Unzip The Google Takeout Archive In Files, Then Choose Its Saved Places CSV Or JSON File."
         case .unsupportedFile:
-            "Choose a CSV, JSON, TXT, Markdown, or RTF file."
+            "Choose A CSV, JSON, TXT, Markdown, Or RTF File."
         }
     }
 }

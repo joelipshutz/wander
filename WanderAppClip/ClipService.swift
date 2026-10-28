@@ -58,8 +58,8 @@ final class ClipService: ClipServing {
             let response = try await rpc("profile_visible_places", ["profile_id": route.identifier])
             guard let rows = response as? [[String: Any]] else { throw ClipError.unavailable }
             let publicRow = try? await publicPreview(kind: .profile, id: route.identifier)
-            return ClipPreview(title: publicRow.flatMap { text($0["title"]) } ?? "Shared map",
-                subtitle: rows.count > 100 ? "Showing 100 of \(rows.count) places visible to your account" : "Places visible to your account", imageURL: nil,
+            return ClipPreview(title: publicRow.flatMap { text($0["title"]) } ?? "Shared Map",
+                subtitle: rows.count > 100 ? "Showing 100 Of \(rows.count) Places Visible To Your Account" : "Places Visible To Your Account", imageURL: nil,
                 places: rows.prefix(100).compactMap(place))
         }
         if route.kind == .profile || route.kind == .invite {
@@ -70,12 +70,12 @@ final class ClipService: ClipServing {
             }
         }
         if hasPublishedCard, route.kind == .profile || route.kind == .invite {
-            return ClipPreview(title: route.kind == .invite ? "You’re invited to a list on Astir" : "Shared map",
+            return ClipPreview(title: route.kind == .invite ? "You’re Invited To A List On Astir" : "Shared Map",
                 subtitle: nil, imageURL: nil, places: [], needsSignIn: route.kind == .profile)
         }
         if [.list, .activity].contains(route.kind), !authenticated {
-            return ClipPreview(title: route.kind == .list ? "Shared list" : "Shared activity",
-                subtitle: "Sign in to see what's been shared with you.", imageURL: nil, places: [], needsSignIn: true)
+            return ClipPreview(title: route.kind == .list ? "Shared List" : "Shared Activity",
+                subtitle: "Sign In To See What's Been Shared With You.", imageURL: nil, places: [], needsSignIn: true)
         }
         throw ClipError.unavailable
     }
@@ -92,7 +92,7 @@ final class ClipService: ClipServing {
             if let place = place(row) { places.append(place) }
         }
         let description = text(list["description"])
-        let subtitle = ids.count > 20 ? [description, "Showing 20 of \(ids.count) places"].compactMap { $0 }.joined(separator: "\n") : description
+        let subtitle = ids.count > 20 ? [description, "Showing 20 Of \(ids.count) Places"].compactMap { $0 }.joined(separator: "\n") : description
         return ClipPreview(title: title, subtitle: subtitle, imageURL: nil, places: places)
     }
 

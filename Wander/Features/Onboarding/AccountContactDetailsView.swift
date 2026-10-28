@@ -33,7 +33,7 @@ struct AccountContactDetailsView: View {
             else if !focused { citySearch.cancel() }
         }
         .sheet(isPresented: $showsCountries) {
-            ContactDetailsPicker(title: "Country code", options: OnboardingPhoneNumber.countries.map {
+            ContactDetailsPicker(title: "Country Code", options: OnboardingPhoneNumber.countries.map {
                 .init(id: $0.id, title: $0.name, subtitle: $0.dialingCode)
             }, selectedID: model.phoneCountryCode) { id in
                 model.selectPhoneCountry(id)
@@ -67,10 +67,10 @@ struct AccountContactDetailsView: View {
 
     private var form: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-            OnboardingHeadline(eyebrow: "A LITTLE ABOUT YOU", title: "Make yourself at home", message: "Check your home city and add your phone number.")
+            OnboardingHeadline(eyebrow: "A LITTLE ABOUT YOU", title: "Make Yourself At Home", message: "Check Your Home City And Add Your Phone Number.")
             citySection
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("Phone number").font(AstirTypography.label)
+                Text("Phone Number").font(AstirTypography.label)
                 HStack(spacing: WanderTheme.spacing2) {
                     Button {
                         phoneIsFocused = false
@@ -85,10 +85,10 @@ struct AccountContactDetailsView: View {
                         .frame(minHeight: WanderTheme.tapMinimum)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Country code, \(OnboardingPhoneNumber.country(model.phoneCountryCode).name), \(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)")
+                    .accessibilityLabel("Country Code, \(OnboardingPhoneNumber.country(model.phoneCountryCode).name), \(OnboardingPhoneNumber.country(model.phoneCountryCode).dialingCode)")
                     .accessibilityIdentifier("accountContactDetails.country")
                     Divider().frame(height: 28)
-                    TextField(model.phoneCountryCode == "US" ? "10-digit phone number" : "Phone number", text: Binding(get: { model.phoneText }, set: { model.editPhone($0) }))
+                    TextField(model.phoneCountryCode == "US" ? "10-Digit Phone Number" : "Phone Number", text: Binding(get: { model.phoneText }, set: { model.editPhone($0) }))
                         .keyboardType(.phonePad)
                         .textContentType(.telephoneNumber)
                         .sessionReplayVisibleInput()
@@ -102,7 +102,7 @@ struct AccountContactDetailsView: View {
                         .foregroundStyle(WanderTheme.stateError.color)
                         .accessibilityIdentifier("accountContactDetails.phoneError")
                 }
-                Text("Your phone number is private.")
+                Text("Your Phone Number Is Private.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -112,7 +112,7 @@ struct AccountContactDetailsView: View {
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.stateError.color)
                 if !model.didLoad {
-                    Button("Try again") { Task { await model.load() } }
+                    Button("Try Again") { Task { await model.load() } }
                 }
             }
         }
@@ -136,11 +136,11 @@ struct AccountContactDetailsView: View {
 
     private var citySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Home city").font(AstirTypography.label)
+            Text("Home City").font(AstirTypography.label)
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(WanderTheme.textMuted.color)
-                TextField("Search any city", text: Binding(get: { model.cityText }, set: {
+                TextField("Search Any City", text: Binding(get: { model.cityText }, set: {
                     guard cityIsFocused, $0 != model.cityText else { return }
                     model.editCity($0)
                     citySearch.update($0)
@@ -150,7 +150,7 @@ struct AccountContactDetailsView: View {
                 .focused($cityIsFocused)
                 .submitLabel(.search)
                 .onSubmit { citySearch.update(model.cityText, force: true) }
-                .accessibilityLabel("Home city")
+                .accessibilityLabel("Home City")
                 .accessibilityIdentifier("accountContactDetails.city")
                 if !model.cityText.isEmpty {
                     Button {
@@ -163,7 +163,7 @@ struct AccountContactDetailsView: View {
                             .frame(minWidth: 32, minHeight: WanderTheme.tapMinimum)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear city")
+                    .accessibilityLabel("Clear City")
                     .accessibilityIdentifier("accountContactDetails.clearCity")
                 }
             }
@@ -177,7 +177,7 @@ struct AccountContactDetailsView: View {
                     .accessibilityIdentifier("accountContactDetails.cityContext")
             }
             if !cityIsFocused {
-                Text("Your home city, even when you’re away. You can change it later.")
+                Text("Your Home City, Even When You’re Away. You Can Change It Later.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -190,7 +190,7 @@ struct AccountContactDetailsView: View {
             if citySearch.isSearching || citySearch.isResolving {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
-                    Text(citySearch.isResolving ? "Selecting city…" : "Finding cities…")
+                    Text(citySearch.isResolving ? "Selecting City…" : "Finding Cities…")
                 }
                 .font(AstirTypography.caption)
                 .padding(WanderTheme.spacing3)
@@ -229,14 +229,14 @@ struct AccountContactDetailsView: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(message)
                     if message.hasPrefix("Couldn’t") {
-                        Button("Try again") { citySearch.retry() }
+                        Button("Try Again") { citySearch.retry() }
                     }
                 }
                 .font(AstirTypography.caption)
                 .padding(WanderTheme.spacing3)
                 .accessibilityIdentifier("accountContactDetails.citySearchMessage")
             } else if model.cityText.isEmpty {
-                Text("Start typing a city anywhere in the world.")
+                Text("Start Typing A City Anywhere In The World.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .padding(WanderTheme.spacing3)

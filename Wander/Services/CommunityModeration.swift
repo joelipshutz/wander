@@ -10,12 +10,12 @@ enum CommunityReportSubjectKind: String, Codable, CaseIterable, Equatable {
 
     var displayName: String {
         switch self {
-        case .profile: "profile"
-        case .activity: "activity"
-        case .comment: "comment"
-        case .userPlace: "place memory"
-        case .visitPhoto: "photo"
-        case .placeList: "list"
+        case .profile: "Profile"
+        case .activity: "Activity"
+        case .comment: "Comment"
+        case .userPlace: "Place Memory"
+        case .visitPhoto: "Photo"
+        case .placeList: "List"
         }
     }
 }
@@ -45,14 +45,14 @@ enum CommunityReportReason: String, Codable, CaseIterable, Equatable, Identifiab
 
     var title: String {
         switch self {
-        case .spam: "Spam or scam"
-        case .harassment: "Harassment or bullying"
-        case .hateOrAbuse: "Hate or abusive content"
-        case .sexualContent: "Sexual content"
-        case .dangerousContent: "Threats or dangerous content"
+        case .spam: "Spam Or Scam"
+        case .harassment: "Harassment Or Bullying"
+        case .hateOrAbuse: "Hate Or Abusive Content"
+        case .sexualContent: "Sexual Content"
+        case .dangerousContent: "Threats Or Dangerous Content"
         case .impersonation: "Impersonation"
-        case .privacy: "Privacy concern"
-        case .other: "Something else"
+        case .privacy: "Privacy Concern"
+        case .other: "Something Else"
         }
     }
 
@@ -99,7 +99,7 @@ enum CommunityContentPolicyError: LocalizedError, Equatable {
     case prohibitedContent
 
     var errorDescription: String? {
-        "That text can’t be shared on Astir. Please revise it and try again."
+        "That Text Can’t Be Shared On Astir. Please Revise It And Try Again."
     }
 }
 

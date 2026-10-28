@@ -7,11 +7,11 @@ final class InviteFrameworkTests: XCTestCase {
         let feed = InviteSurface.feedPeople
         let list = InviteSurface.listCollaborator(listName: "LA date nights")
 
-        XCTAssertEqual(visit.sheetSubtitle, "Who joined you at Gjelina?")
-        XCTAssertEqual(feed.entryTitle, "invite people to Astir")
-        XCTAssertEqual(list.sheetSubtitle, "Invite people to help build LA date nights.")
-        XCTAssertEqual(visit.entrySubtitle, "Invite them to Astir, then connect after they join.")
-        XCTAssertTrue(list.inviteMessage.contains("add you as a collaborator on LA date nights"))
+        XCTAssertEqual(visit.sheetSubtitle, "Who Joined You At Gjelina?")
+        XCTAssertEqual(feed.entryTitle, "Invite People To Astir")
+        XCTAssertEqual(list.sheetSubtitle, "Invite People To Help Build LA date nights.")
+        XCTAssertEqual(visit.entrySubtitle, "Invite Them To Astir, Then Connect After They Join.")
+        XCTAssertTrue(list.inviteMessage.contains("Add You As A Collaborator On LA date nights"))
         XCTAssertEqual(InviteIntent(surface: visit, resourceID: "visit-123").analyticsProperties, ["surface": "shared_visit"])
         XCTAssertFalse(InviteIntent(surface: visit, resourceID: "visit-123").analyticsProperties.values.contains("visit-123"))
     }
@@ -37,7 +37,7 @@ final class InviteFrameworkTests: XCTestCase {
 
         let sections = InviteContactSection.sections(for: [frequent, alphabetical])
 
-        XCTAssertEqual(sections.map(\.title), ["frequently contacted", "A"])
+        XCTAssertEqual(sections.map(\.title), ["Frequently Contacted", "A"])
         XCTAssertEqual(sections.flatMap(\.contacts).map(\.id), ["frequent", "alphabetical"])
     }
 
@@ -212,9 +212,9 @@ final class InviteFrameworkTests: XCTestCase {
             )
         )
 
-        let search = try XCTUnwrap(source.range(of: "TextField(\"Search friends\""))
+        let search = try XCTUnwrap(source.range(of: "TextField(\"Search Friends\""))
         let invite = try XCTUnwrap(source.range(of: "InviteEntryPointButton(surface: .sharedVisit"))
-        let friends = try XCTUnwrap(source.range(of: "Section(\"friends\")"))
+        let friends = try XCTUnwrap(source.range(of: "Section(\"Friends\")"))
 
         XCTAssertLessThan(search.lowerBound, invite.lowerBound)
         XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
@@ -245,8 +245,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(feed.contains("walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil"))
         XCTAssertTrue(feed.contains("walkthroughs.completeContactInviteRequest()"))
         XCTAssertTrue(sheet.contains("ContactInviteWalkthroughGoalBanner("))
-        XCTAssertTrue(sheet.contains("Start with five people"))
-        XCTAssertTrue(sheet.contains("Fewer is fine too"))
+        XCTAssertTrue(sheet.contains("Start With Five People"))
+        XCTAssertTrue(sheet.contains("Fewer Is Fine Too"))
         XCTAssertTrue(sheet.contains("finishWalkthroughAfterDeniedPermission()"))
     }
 
@@ -282,7 +282,7 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertEqual(ContactInviteWalkthroughContent.selectionGoal, 5)
         XCTAssertEqual(
             ContactInviteWalkthroughContent.inviteProse,
-            "Hey sharing an invite to Astir a social app for tracking places. This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. Excited to have you on and make sure to use my link. Heads up this invite expires in 24 hours."
+            "Hey Sharing An Invite To Astir A Social App For Tracking Places. This App Is Perfect For You And Selfishly I Need You On The App So I Can See The Places That You've Been To. Excited To Have You On And Make Sure To Use My Link. Heads Up This Invite Expires In 24 Hours."
         )
 
         let content = WanderShareContent.appInvite(
@@ -299,9 +299,9 @@ final class InviteFrameworkTests: XCTestCase {
     func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {
         let source = try projectSource("Wander/Features/Lists/ListsScreen.swift")
         let content = try XCTUnwrap(source.components(separatedBy: "private struct FriendCollaboratorSearchContent: View").last)
-        let search = try XCTUnwrap(content.range(of: "TextField(\"Search friends\""))
+        let search = try XCTUnwrap(content.range(of: "TextField(\"Search Friends\""))
         let invite = try XCTUnwrap(content.range(of: "InviteEntryPointButton(surface: .listCollaborator"))
-        let friends = try XCTUnwrap(content.range(of: "Text(\"friends\")"))
+        let friends = try XCTUnwrap(content.range(of: "Text(\"Friends\")"))
 
         XCTAssertLessThan(search.lowerBound, invite.lowerBound)
         XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
@@ -317,8 +317,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("await contactProvider.requestAccess()"))
         XCTAssertTrue(sheet.contains("await contactProvider.matches()"))
         XCTAssertTrue(sheet.contains("if isLoadingContacts"))
-        XCTAssertTrue(sheet.contains("Your address book stays on this device"))
-        XCTAssertTrue(sheet.contains("Invites open in Messages for you to send"))
+        XCTAssertTrue(sheet.contains("Your Address Book Stays On This Device"))
+        XCTAssertTrue(sheet.contains("Invites Open In Messages For You To Send"))
         let provider = try projectSource("Wander/Services/ContactProvider.swift")
         let invitationRead = try XCTUnwrap(provider.components(separatedBy: "func matches() async throws -> [ContactMatch] {").last?.components(separatedBy: "private static func authorization").first)
         XCTAssertFalse(invitationRead.contains("CNContactEmailAddressesKey"))

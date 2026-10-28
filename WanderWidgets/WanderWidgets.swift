@@ -92,8 +92,8 @@ private struct WanderQuickCaptureWidget: Widget {
         ) { entry in
             WanderQuickCaptureWidgetView(entry: entry)
         }
-        .configurationDisplayName("I'm here now")
-        .description("Open Astir to save the place where you are.")
+        .configurationDisplayName("I'm Here Now")
+        .description("Open Astir To Save The Place Where You Are.")
         .supportedFamilies([
             .systemSmall,
             .accessoryCircular,
@@ -133,7 +133,7 @@ private struct WanderQuickCaptureWidgetView: View {
             compactSmallView
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("I'm here now. Opens Astir to save your current place.")
+        .accessibilityLabel("I'm Here Now. Opens Astir To Save Your Current Place.")
     }
 
     private var regularSmallView: some View {
@@ -151,7 +151,7 @@ private struct WanderQuickCaptureWidgetView: View {
 
             Spacer(minLength: 8)
 
-            Text("I'm here\nnow")
+            Text("I'm Here\nNow")
                 .font(.title2.weight(.black))
                 .fontDesign(.rounded)
                 .foregroundStyle(WanderWidgetPalette.textInk)
@@ -161,7 +161,7 @@ private struct WanderQuickCaptureWidgetView: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 5) {
-                Text("Save this place")
+                Text("Save This Place")
                     .lineLimit(1)
                 Image(systemName: "arrow.right")
             }
@@ -183,7 +183,7 @@ private struct WanderQuickCaptureWidgetView: View {
                     .foregroundStyle(WanderWidgetPalette.terracottaDark)
             }
 
-            Text("I'm here now")
+            Text("I'm Here Now")
                 .font(.headline.weight(.black))
                 .fontDesign(.rounded)
                 .foregroundStyle(WanderWidgetPalette.textInk)
@@ -191,7 +191,7 @@ private struct WanderQuickCaptureWidgetView: View {
                 .minimumScaleFactor(0.75)
 
             HStack(spacing: 5) {
-                Text("Save this place")
+                Text("Save This Place")
                     .lineLimit(1)
                 Image(systemName: "arrow.right")
             }
@@ -241,7 +241,7 @@ private struct WanderQuickCaptureWidgetView: View {
             .widgetAccentable()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("I'm here now. Opens Astir to save your current place.")
+        .accessibilityLabel("I'm Here Now. Opens Astir To Save Your Current Place.")
     }
 
     private var rectangularView: some View {
@@ -251,10 +251,10 @@ private struct WanderQuickCaptureWidgetView: View {
                 .widgetAccentable()
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("I'm here now")
+                Text("I'm Here Now")
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
-                Text("Save in Astir")
+                Text("Save In Astir")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -262,12 +262,12 @@ private struct WanderQuickCaptureWidgetView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("I'm here now. Opens Astir to save your current place.")
+        .accessibilityLabel("I'm Here Now. Opens Astir To Save Your Current Place.")
     }
 
     private var inlineView: some View {
-        Label("I'm here now", systemImage: "location.fill")
-            .accessibilityLabel("I'm here now. Opens Astir.")
+        Label("I'm Here Now", systemImage: "location.fill")
+            .accessibilityLabel("I'm Here Now. Opens Astir.")
     }
 }
 
@@ -341,7 +341,7 @@ private struct WanderQuickSearchWidget: Widget {
             WanderQuickSearchWidgetView(entry: entry)
         }
         .configurationDisplayName("Search Astir")
-        .description("Jump to the map and start a place search.")
+        .description("Jump To The Map And Start A Place Search.")
         .supportedFamilies([
             .systemMedium,
             .accessoryRectangular,
@@ -384,7 +384,7 @@ private struct WanderQuickSearchWidgetView: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(WanderWidgetPalette.terracotta)
 
-                Text("Search in Astir")
+                Text("Search In Astir")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(WanderWidgetPalette.textInk)
                     .lineLimit(1)
@@ -404,12 +404,12 @@ private struct WanderQuickSearchWidgetView: View {
                     .stroke(WanderWidgetPalette.borderHairline, lineWidth: 1)
             )
 
-            Text("Opens the map ready to type")
+            Text("Opens The Map Ready To Type")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(WanderWidgetPalette.textMuted)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Search Astir. Opens the map with search ready.")
+        .accessibilityLabel("Search Astir. Opens The Map With Search Ready.")
     }
 
     private var accessoryView: some View {
@@ -422,7 +422,7 @@ private struct WanderQuickSearchWidgetView: View {
                 Text("Search Astir")
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .lineLimit(1)
-                Text("Opens the map")
+                Text("Opens The Map")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -430,7 +430,7 @@ private struct WanderQuickSearchWidgetView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Search Astir. Opens the map with search ready.")
+        .accessibilityLabel("Search Astir. Opens The Map With Search Ready.")
     }
 }
 
@@ -444,8 +444,8 @@ private struct WanderActivityCalendarWidget: Widget {
         ) { entry in
             WanderActivityCalendarWidgetView(entry: entry)
         }
-        .configurationDisplayName("Activity calendar")
-        .description("See your been activity for the current month.")
+        .configurationDisplayName("Activity Calendar")
+        .description("See Your Been Activity For The Current Month.")
         .supportedFamilies([.systemLarge])
     }
 }
@@ -471,7 +471,7 @@ private struct WanderActivityCalendarWidgetView: View {
         }
         .widgetURL(WanderWidgetConstants.profileCalendarURL)
         .accessibilityElement(children: .contain)
-        .accessibilityHint("Opens your calendar in Astir.")
+        .accessibilityHint("Opens Your Calendar In Astir.")
     }
 
     private func calendarContent(availableHeight: CGFloat) -> some View {
@@ -528,7 +528,7 @@ private struct WanderActivityCalendarWidgetView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text("your calendar")
+                Text("Your Calendar")
                     .font(.headline.weight(.black))
                     .fontDesign(.rounded)
                     .foregroundStyle(WanderWidgetPalette.textInk)
@@ -541,7 +541,7 @@ private struct WanderActivityCalendarWidgetView: View {
 
             Spacer(minLength: 8)
 
-            Text("\(model.beenCount) been")
+            Text("\(model.beenCount) Been")
                 .foregroundStyle(WanderWidgetPalette.terracottaDark)
                 .font(.caption2.weight(.black))
                 .fontDesign(.rounded)
@@ -554,12 +554,12 @@ private struct WanderActivityCalendarWidgetView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            WanderCalendarLegendItem(state: .been, title: "been")
+            WanderCalendarLegendItem(state: .been, title: "Been")
 
             Spacer(minLength: 2)
 
             if model.needsRefresh {
-                Text("Open Astir to update")
+                Text("Open Astir To Update")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(WanderWidgetPalette.textMuted)
                     .lineLimit(1)
@@ -569,8 +569,8 @@ private struct WanderActivityCalendarWidgetView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             model.needsRefresh
-                ? "Calendar has not synced yet. Open Astir to update."
-                : "Calendar legend: filled is been."
+                ? "Calendar Has Not Synced Yet. Open Astir To Update."
+                : "Calendar Legend: Filled Is Been."
         )
     }
 }
@@ -641,9 +641,9 @@ private struct WanderCalendarDayCell: View {
     private var accessibilityLabel: String {
         guard let dayNumber else { return "" }
         let dateLabel = "\(monthTitle) \(dayNumber)"
-        let todayLabel = isToday ? ", today" : ""
+        let todayLabel = isToday ? ", Today" : ""
         guard let snapshot, snapshot.beenCount > 0 else {
-            return "\(dateLabel)\(todayLabel), no activity"
+            return "\(dateLabel)\(todayLabel), No Activity"
         }
         return "\(dateLabel)\(todayLabel). Been: \(snapshot.beenCount)."
     }
@@ -905,25 +905,25 @@ private enum WanderWidgetPreviewData {
     )
 }
 
-#Preview("Quick capture", as: .systemSmall) {
+#Preview("Quick Capture", as: .systemSmall) {
     WanderQuickCaptureWidget()
 } timeline: {
     WanderShortcutEntry(date: WanderWidgetPreviewData.date)
 }
 
-#Preview("Quick capture — Lock Screen", as: .accessoryCircular) {
+#Preview("Quick Capture — Lock Screen", as: .accessoryCircular) {
     WanderQuickCaptureWidget()
 } timeline: {
     WanderShortcutEntry(date: WanderWidgetPreviewData.date)
 }
 
-#Preview("Quick search", as: .systemMedium) {
+#Preview("Quick Search", as: .systemMedium) {
     WanderQuickSearchWidget()
 } timeline: {
     WanderShortcutEntry(date: WanderWidgetPreviewData.date)
 }
 
-#Preview("Activity calendar", as: .systemLarge) {
+#Preview("Activity Calendar", as: .systemLarge) {
     WanderActivityCalendarWidget()
 } timeline: {
     WanderCalendarEntry(

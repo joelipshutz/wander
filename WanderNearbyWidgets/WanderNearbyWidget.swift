@@ -14,16 +14,16 @@ struct WanderNearbyPlacesWidget: Widget {
             WanderNearbyWidgetView(entry: entry)
         }
         .configurationDisplayName("Nearby Rich Visit")
-        .description("Pick a nearby place and add a Rich Visit in Astir.")
+        .description("Pick A Nearby Place And Add A Rich Visit In Astir.")
         .supportedFamilies([.systemLarge])
         .contentMarginsDisabled()
     }
 }
 
 struct WanderRefreshNearbyPlacesIntent: AppIntent {
-    static let title: LocalizedStringResource = "Refresh nearby spots"
+    static let title: LocalizedStringResource = "Refresh Nearby Spots"
     static let description = IntentDescription(
-        "Updates the nearby spots shown in the Astir widget."
+        "Updates The Nearby Spots Shown In The Astir Widget."
     )
     static let openAppWhenRun = false
 
@@ -514,10 +514,10 @@ private struct WanderNearbyMapKitSearch {
             return ("restaurants_food", "Restaurant", "🍽️")
         }
         if raw.contains("cafe") || raw.contains("bakery") {
-            return ("coffee_tea_sweets", "Coffee & sweets", "☕️")
+            return ("coffee_tea_sweets", "Coffee & Sweets", "☕️")
         }
         if raw.contains("nightlife") || raw.contains("brewery") || raw.contains("winery") {
-            return ("bars_nightlife", "Bar & nightlife", "🍸")
+            return ("bars_nightlife", "Bar & Nightlife", "🍸")
         }
         if raw.contains("park") || raw.contains("beach") || raw.contains("marina") {
             return ("outdoors_nature", "Outdoors", "🌲")
@@ -526,7 +526,7 @@ private struct WanderNearbyMapKitSearch {
             return ("shopping", "Shopping", "🛍️")
         }
         if raw.contains("museum") || raw.contains("theater") || raw.contains("music") {
-            return ("things_to_do", "Things to do", "🎟️")
+            return ("things_to_do", "Things To Do", "🎟️")
         }
         if raw.contains("fitness") || raw.contains("spa") || raw.contains("hospital") {
             return ("wellness_fitness", "Wellness", "🧘")
@@ -643,8 +643,8 @@ private struct WanderNearbyWidgetView: View {
             .disabled(entry.isRefreshing)
             .accessibilityLabel(
                 entry.isRefreshing
-                    ? "Refreshing nearby spots"
-                    : "Refresh nearby spots"
+                    ? "Refreshing Nearby Spots"
+                    : "Refresh Nearby Spots"
             )
 
             Spacer()
@@ -668,7 +668,7 @@ private struct WanderNearbyWidgetView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Nearby spots")
+                Text("Nearby Spots")
                     .font(.title2.weight(.black))
                     .fontDesign(.rounded)
                     .foregroundStyle(WanderNearbyPalette.textInk)
@@ -683,7 +683,7 @@ private struct WanderNearbyWidgetView: View {
             Spacer()
 
             Link(destination: WanderWidgetConstants.quickCaptureURL) {
-                Label("See all", systemImage: "chevron.right")
+                Label("See All", systemImage: "chevron.right")
                     .font(.caption.weight(.bold))
                     .fontDesign(.rounded)
                     .foregroundStyle(WanderNearbyPalette.terracottaDark)
@@ -697,20 +697,20 @@ private struct WanderNearbyWidgetView: View {
                     }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("See all nearby spots in I'm Here Now")
+            .accessibilityLabel("See All Nearby Spots In I'm Here Now")
         }
     }
 
     private var headerSubtitle: String {
         switch entry.availability {
         case .ready:
-            "tap a place to check-in"
+            "Tap A Place To Check-In"
         case .locationAuthorizationRequired:
-            "location access needed"
+            "Location Access Needed"
         case .locationTemporarilyUnavailable:
-            "showing the latest nearby places"
+            "Showing The Latest Nearby Places"
         case .noPlaces:
-            "no nearby places found yet"
+            "No Nearby Places Found Yet"
         }
     }
 
@@ -760,7 +760,7 @@ private struct WanderNearbyWidgetView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(place.name), \(place.categoryLabel), \(distanceLabel). Check in here."
+            "\(place.name), \(place.categoryLabel), \(distanceLabel). Check In Here."
         )
     }
 
@@ -809,22 +809,22 @@ private struct WanderNearbyWidgetView: View {
     private var unavailableTitle: String {
         switch entry.availability {
         case .locationAuthorizationRequired:
-            "Turn on nearby spots"
+            "Turn On Nearby Spots"
         case .noPlaces:
-            "Nothing nearby yet"
+            "Nothing Nearby Yet"
         case .ready, .locationTemporarilyUnavailable:
-            "Finding nearby places"
+            "Finding Nearby Places"
         }
     }
 
     private var unavailableMessage: String {
         switch entry.availability {
         case .locationAuthorizationRequired:
-            "Open Astir and allow location while using the app, then approve location for this widget."
+            "Open Astir And Allow Location While Using The App, Then Approve Location For This Widget."
         case .noPlaces:
-            "Open Astir to search manually or try again after moving to a new area."
+            "Open Astir To Search Manually Or Try Again After Moving To A New Area."
         case .ready, .locationTemporarilyUnavailable:
-            "WidgetKit will retry automatically. Opening Astir can refresh it sooner."
+            "WidgetKit Will Retry Automatically. Opening Astir Can Refresh It Sooner."
         }
     }
 }
@@ -894,7 +894,7 @@ private enum WanderNearbyPreviewData {
                 id: "canyon-coffee",
                 name: "Canyon Coffee",
                 category: "coffee_tea_sweets",
-                label: "Coffee & sweets",
+                label: "Coffee & Sweets",
                 emoji: "☕️",
                 distance: 58
             ),
@@ -902,7 +902,7 @@ private enum WanderNearbyPreviewData {
                 id: "gold-line",
                 name: "Gold Line",
                 category: "bars_nightlife",
-                label: "Bar & nightlife",
+                label: "Bar & Nightlife",
                 emoji: "🍸",
                 distance: 112
             ),

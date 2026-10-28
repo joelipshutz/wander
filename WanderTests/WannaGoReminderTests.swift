@@ -162,8 +162,8 @@ final class WannaGoReminderTests: XCTestCase {
         let data = try XCTUnwrap(payload["data"] as? [String: String])
         let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
 
-        XCTAssertEqual(request.content.title, "Wanna go reminder")
-        XCTAssertEqual(request.content.body, "You wanted to try Maru Coffee on August 20, 2026.")
+        XCTAssertEqual(request.content.title, "Wanna Go Reminder")
+        XCTAssertEqual(request.content.body, "You Wanted To Try Maru Coffee On August 20, 2026.")
         XCTAssertEqual(payload["notification_type"] as? String, "wanna_go_reminder")
         XCTAssertEqual(payload["deeplink_url"] as? String, "recme://places/place_maru")
         XCTAssertEqual(data["place_id"], "place_maru")
@@ -267,10 +267,10 @@ final class WannaGoReminderTests: XCTestCase {
         let data = try XCTUnwrap(payload["data"] as? [String: String])
         let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
 
-        XCTAssertEqual(request.content.title, "Your 4-day streak is waiting")
+        XCTAssertEqual(request.content.title, "Your 4-Day Streak Is Waiting")
         XCTAssertEqual(
             request.content.body,
-            "Where did you go today? Check in or save a place to keep your streak."
+            "Where Did You Go Today? Check In Or Save A Place To Keep Your Streak."
         )
         XCTAssertEqual(payload["notification_type"] as? String, "save_streak_reminder")
         XCTAssertEqual(payload["deeplink_url"] as? String, "recme://add/here-now")
@@ -291,13 +291,13 @@ final class WannaGoReminderTests: XCTestCase {
             recentDayCoverage: Array(repeating: false, count: 7)
         )
         let expectations: [(day: Int, variant: SaveStreakReminderCopyVariant, title: String, body: String)] = [
-            (2, .anythingWorthRemembering, "Anything worth remembering today?", "Save it now and keep your streak going."),
-            (3, .current, "Your 4-day streak is waiting", "Where did you go today? Check in or save a place to keep your streak."),
-            (4, .anythingWorthRemembering, "Anything worth remembering today?", "Save it now and keep your streak going."),
-            (5, .onePlaceKeepsStreakAlive, "One place keeps the streak alive", "Check in or save somewhere before the day ends."),
-            (6, .current, "Your 4-day streak is waiting", "Where did you go today? Check in or save a place to keep your streak."),
-            (7, .mapHasRoom, "Your map has room for today", "Add somewhere you went or somewhere you want to go."),
-            (8, .onePlaceKeepsStreakAlive, "One place keeps the streak alive", "Check in or save somewhere before the day ends.")
+            (2, .anythingWorthRemembering, "Anything Worth Remembering Today?", "Save It Now And Keep Your Streak Going."),
+            (3, .current, "Your 4-Day Streak Is Waiting", "Where Did You Go Today? Check In Or Save A Place To Keep Your Streak."),
+            (4, .anythingWorthRemembering, "Anything Worth Remembering Today?", "Save It Now And Keep Your Streak Going."),
+            (5, .onePlaceKeepsStreakAlive, "One Place Keeps The Streak Alive", "Check In Or Save Somewhere Before The Day Ends."),
+            (6, .current, "Your 4-Day Streak Is Waiting", "Where Did You Go Today? Check In Or Save A Place To Keep Your Streak."),
+            (7, .mapHasRoom, "Your Map Has Room For Today", "Add Somewhere You Went Or Somewhere You Want To Go."),
+            (8, .onePlaceKeepsStreakAlive, "One Place Keeps The Streak Alive", "Check In Or Save Somewhere Before The Day Ends.")
         ]
 
         for expectation in expectations {
@@ -401,8 +401,8 @@ final class WannaGoReminderTests: XCTestCase {
             calendar.dateComponents([.year, .month, .day, .hour], from: plan.fireDate),
             DateComponents(year: 2026, month: 8, day: 5, hour: 10)
         )
-        XCTAssertEqual(request.content.title, "Keep your streak alive")
-        XCTAssertEqual(request.content.body, "Save a place today to bring back your 2-day streak.")
+        XCTAssertEqual(request.content.title, "Keep Your Streak Alive")
+        XCTAssertEqual(request.content.body, "Save A Place Today To Bring Back Your 2-Day Streak.")
         XCTAssertEqual(data["reminder_kind"], "recovery")
         XCTAssertEqual(PushNotificationManager.destination(from: request.content.userInfo), .quickCapture)
     }

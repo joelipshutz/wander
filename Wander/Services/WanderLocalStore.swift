@@ -651,10 +651,10 @@ final class WanderStore: ObservableObject {
     )
 
     let smartFilters: [SmartFilter] = [
-        SmartFilter(id: "hikes-la", title: "hikes in LA", query: "hikes in LA"),
-        SmartFilter(id: "coffee-work", title: "coffee to work from", query: "coffee work friendly"),
-        SmartFilter(id: "patio-bars", title: "patio bars", query: "bars patio"),
-        SmartFilter(id: "friends-liked", title: "friends liked", query: "friends been")
+        SmartFilter(id: "hikes-la", title: "Hikes In LA", query: "hikes in LA"),
+        SmartFilter(id: "coffee-work", title: "Coffee To Work From", query: "coffee work friendly"),
+        SmartFilter(id: "patio-bars", title: "Patio Bars", query: "bars patio"),
+        SmartFilter(id: "friends-liked", title: "Friends Liked", query: "friends been")
     ]
 
     init(
@@ -2132,7 +2132,7 @@ final class WanderStore: ObservableObject {
               let repository = backend?.activityEngagementRepository
         else {
             activityEngagementErrorByID[activityID] = existing == nil
-                ? "This activity is no longer available." : nil
+                ? "This Activity Is No Longer Available." : nil
             return existing
         }
 
@@ -2146,7 +2146,7 @@ final class WanderStore: ObservableObject {
             guard activity.id == activityID, canDisplayActivity(activity),
                   activity.activityEngagementContext != nil else {
                 discardCachedActivity(activityID)
-                activityEngagementErrorByID[activityID] = "This activity is no longer available."
+                activityEngagementErrorByID[activityID] = "This Activity Is No Longer Available."
                 return nil
             }
             let currentPage = followedFeedPage
@@ -2198,7 +2198,7 @@ final class WanderStore: ObservableObject {
                 && [.placeBeen, .placeSaved].contains(match.kind)
         }
         guard let repository = backend?.activityEngagementRepository else {
-            activityEngagementErrorByID[errorID] = "This activity is no longer available."
+            activityEngagementErrorByID[errorID] = "This Activity Is No Longer Available."
             return nil
         }
         do {
@@ -2211,7 +2211,7 @@ final class WanderStore: ObservableObject {
                 for cached in placeActivityEngagementMatches.filter(matchesTarget) {
                     discardCachedActivity(cached.activityID)
                 }
-                activityEngagementErrorByID[errorID] = "This activity is no longer available."
+                activityEngagementErrorByID[errorID] = "This Activity Is No Longer Available."
                 return nil
             }
             placeActivityEngagementMatches.removeAll(where: matchesTarget)
@@ -2407,7 +2407,7 @@ final class WanderStore: ObservableObject {
                 return false
             }
             updateActivityCommentLikes(previous)
-            activityEngagementErrorByID[comment.activityID] = "Couldn't update this comment's like. Try again."
+            activityEngagementErrorByID[comment.activityID] = "Couldn't Update This Comment's Like. Try Again."
             return false
         }
     }
@@ -4097,7 +4097,7 @@ final class WanderStore: ObservableObject {
         guard !owned.isEmpty else { return nil }
         return performBatchedLocalMutations {
             guard let list = createPlaceList(
-                name: "Map snapshot · \(now.formatted(date: .abbreviated, time: .shortened))",
+                name: "Map Snapshot · \(now.formatted(date: .abbreviated, time: .shortened))",
                 description: "",
                 visibility: .stealth
             ), let index = placeLists.firstIndex(where: { $0.localID == list.localID }) else { return nil }
@@ -6680,7 +6680,7 @@ final class WanderStore: ObservableObject {
                 visitID: visit.serverID ?? visit.localID
             )
         } catch {
-            lastRemoteError = "This check-in couldn’t be deleted because its private answers couldn’t be removed from this device."
+            lastRemoteError = "This Check-In Couldn’t Be Deleted Because Its Private Answers Couldn’t Be Removed From This Device."
             return false
         }
 
@@ -8414,14 +8414,14 @@ final class WanderStore: ObservableObject {
 
         switch sourceType {
         case .link:
-            title = "This link needs a little help."
-            message = originalInput?.isEmpty == false ? originalInput ?? "Saved as a draft." : "Saved as a draft for extraction."
+            title = "This Link Needs A Little Help."
+            message = originalInput?.isEmpty == false ? originalInput ?? "Saved As A Draft." : "Saved As A Draft For Extraction."
         case .photo:
-            title = "Could not find a place in this photo."
-            message = "We could not read a place from that photo yet. Add it manually if you want it on your map now."
+            title = "Could Not Find A Place In This Photo."
+            message = "We Could Not Read A Place From That Photo Yet. Add It Manually If You Want It On Your Map Now."
         default:
-            title = "Draft saved."
-            message = "You can finish this manually."
+            title = "Draft Saved."
+            message = "You Can Finish This Manually."
         }
 
         let artifact = sourceType.createsSourceArtifact
@@ -8676,14 +8676,14 @@ final class WanderStore: ObservableObject {
             }
 
             guard let remoteUserPlaceID = userPlace.serverID else {
-                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing remote user place id")
+                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing Remote User Place Id")
                 return false
             }
             return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend)
         }
 
         guard hasEditableVisitAnswers(visit) else {
-            lastRemoteError = "Load this check-in's saved details before editing. Connect and try again."
+            lastRemoteError = "Load This Check-In's Saved Details Before Editing. Connect And Try Again."
             return false
         }
 
@@ -8694,7 +8694,7 @@ final class WanderStore: ObservableObject {
         }
 
         guard let checkInDraft = checkInDraft(for: visit.id, userPlace: userPlace) else {
-            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing check-in draft")
+            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing Check-In Draft")
             return false
         }
 
@@ -8792,7 +8792,7 @@ final class WanderStore: ObservableObject {
         }
 
         guard let remoteVisitID = visit.serverID else {
-            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing remote visit id")
+            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing Remote Visit Id")
             return photo
         }
 
@@ -8817,7 +8817,7 @@ final class WanderStore: ObservableObject {
                         localOrServerID: photo.id,
                         syncState: .failed,
                         uploadState: .uploaded,
-                        error: "Missing uploaded visit photo draft"
+                        error: "Missing Uploaded Visit Photo Draft"
                     )
                     return photo
                 }
@@ -8837,12 +8837,12 @@ final class WanderStore: ObservableObject {
                     localOrServerID: photo.id,
                     syncState: .failed,
                     uploadState: .failed,
-                    error: "Missing local visit photo data"
+                    error: "Missing Local Visit Photo Data"
                 )
                 return photo
             }
             guard let pendingDraft = visitPhotoDraft(for: photo.id, uploadState: .pendingUpload) else {
-                markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing visit photo draft")
+                markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing Visit Photo Draft")
                 return photo
             }
             _ = try await backend.upsertVisitPhotoMetadata(pendingDraft)
@@ -10694,7 +10694,7 @@ final class WanderStore: ObservableObject {
                     ?? ProfileShell(
                         id: mute.mutedUserID,
                         handle: "muted-user",
-                        displayName: "Muted user",
+                        displayName: "Muted User",
                         avatarURL: nil,
                         bio: nil,
                         relationship: .nonFollower
@@ -10788,9 +10788,9 @@ final class WanderStore: ObservableObject {
     func authGate(for action: AddSourceType) -> AuthGateCopy {
         switch action {
         case .socialSave:
-            AuthGateCopy(title: "Sign in to save from people", message: "Social saves sync to your map after you have an account.", primaryAction: "Sign in", secondaryAction: "Keep browsing")
+            AuthGateCopy(title: "Sign In To Save From People", message: "Social Saves Sync To Your Map After You Have An Account.", primaryAction: "Sign In", secondaryAction: "Keep Browsing")
         default:
-            AuthGateCopy(title: "Sign in to sync this place", message: "Keep it on this phone for now, or sign in to back it up.", primaryAction: "Sign in", secondaryAction: "Keep it on this phone")
+            AuthGateCopy(title: "Sign In To Sync This Place", message: "Keep It On This Phone For Now, Or Sign In To Back It Up.", primaryAction: "Sign In", secondaryAction: "Keep It On This Phone")
         }
     }
 
@@ -10824,7 +10824,7 @@ final class WanderStore: ObservableObject {
         return ProfileShell(
             id: userID,
             handle: handle.isEmpty ? "blocked-user" : handle,
-            displayName: "Blocked user",
+            displayName: "Blocked User",
             avatarURL: nil,
             bio: nil,
             relationship: .nonFollower
@@ -11643,7 +11643,7 @@ final class WanderStore: ObservableObject {
             // Preserve the original record and retain the accepted server ID
             // so retrying cannot create a duplicate remote check-in. A later
             // reconciliation retries promotion from the still-known local ID.
-            let warning = "Your private answers couldn’t be linked to this check-in on this device. The original private answers are still stored."
+            let warning = "Your Private Answers Couldn’t Be Linked To This Check-In On This Device. The Original Private Answers Are Still Stored."
             lastRemoteError = warning
             return warning
         }
@@ -11794,7 +11794,7 @@ final class WanderStore: ObservableObject {
         do {
             let remoteVisits = try await backend.visits(for: remoteUserPlaceID)
             guard let result = remoteVisits.first(where: { $0.backfilledFromUserPlace }) else {
-                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Remote backfilled visit missing")
+                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Remote Backfilled Visit Missing")
                 return false
             }
             markPlaceVisit(localOrServerID: visit.id, serverID: result.visitID, syncState: .synced, result: result)
@@ -11870,7 +11870,7 @@ final class WanderStore: ObservableObject {
                 try privateQuestionPreferences.removeAnswers(ownerUserID: currentUser.id, userPlaceID: alias, visitID: nil)
             }
         } catch {
-            lastRemoteError = "This place couldn’t be deleted because its private answers couldn’t be removed from this device."
+            lastRemoteError = "This Place Couldn’t Be Deleted Because Its Private Answers Couldn’t Be Removed From This Device."
             return nil
         }
 
@@ -11963,7 +11963,7 @@ final class WanderStore: ObservableObject {
                 try privateQuestionPreferences.removeAnswers(ownerUserID: currentUser.id, userPlaceID: alias, visitID: nil)
             }
         } catch {
-            lastRemoteError = "This place couldn’t be deleted because its private answers couldn’t be removed from this device."
+            lastRemoteError = "This Place Couldn’t Be Deleted Because Its Private Answers Couldn’t Be Removed From This Device."
             return nil
         }
 
@@ -13461,7 +13461,7 @@ final class WanderStore: ObservableObject {
             items.append(
                 DiscoverEvidenceItem(
                     kind: .owner,
-                    displayValue: "\(visiblePlace.owner.displayName)'s save",
+                    displayValue: "\(visiblePlace.owner.displayName)'s Save",
                     sourceOwnerID: visiblePlace.owner.id
                 )
             )
@@ -13479,7 +13479,7 @@ final class WanderStore: ObservableObject {
             items.append(
                 DiscoverEvidenceItem(
                     kind: .opinion,
-                    displayValue: "favorite",
+                    displayValue: "Favorite",
                     sourceOwnerID: visiblePlace.owner.id
                 )
             )
@@ -13541,10 +13541,10 @@ final class WanderStore: ObservableObject {
         if let relationship = filters.relationship {
             let title: String
             switch relationship {
-            case .owner: title = "mine"
-            case .mutual: title = "friend"
-            case .follower: title = "following"
-            case .nonFollower: title = "other person"
+            case .owner: title = "Mine"
+            case .mutual: title = "Friend"
+            case .follower: title = "Following"
+            case .nonFollower: title = "Other Person"
             }
             items.append(
                 DiscoverEvidenceItem(

@@ -18,6 +18,21 @@ This is the project-level design source of truth for Astir (formerly rec.me and 
 - Original rendered mocks: `docs/source/wander-mocks-pages/`
 - Onboarding research: `research/screensdesign/2026-05-30-social-map-onboarding/report.md`
 
+## App Copy Capitalization (REC-662)
+
+Capitalize the first letter of every word in app-owned visible copy, including
+small words and each part of a hyphenated word. Apply this to headings, body
+copy, controls, placeholders, accessibility labels, errors, and app-authored
+notification text. Preserve contractions, acronyms, intentional brand casing
+(such as iPhone), and conventional unit symbols.
+
+Keep stored values, search terms, identifiers, and data contracts unchanged.
+Format built-in question choices and taxonomy labels only at presentation using
+`AppCopy.capitalizingWords` or `WanderPlaceCategory.displayLabel`. Preserve
+user-authored text, personal tags, usernames, URLs, and provider place names.
+System dialogs and incoming server-authored copy require separate ownership
+review; see `docs/reviews/rec-662-copy-capitalization.md` for coverage and flags.
+
 ## Provisional Astir Visual Override (REC-383 / REC-397)
 
 Joe approved Astir as the public product name and direction 55, the warm family

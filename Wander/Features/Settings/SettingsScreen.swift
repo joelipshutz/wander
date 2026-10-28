@@ -29,14 +29,14 @@ struct SettingsScreen: View {
     }
 
     private var header: some View {
-        Text("settings")
+        Text("Settings")
             .font(AstirTypography.screenTitle)
             .lineLimit(1)
     }
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("account")
+            SettingsSectionTitle("Account")
 
             switch auth.state {
             case .signedIn(let session), .offline(let session, _):
@@ -48,7 +48,7 @@ struct SettingsScreen: View {
                         color: WanderTheme.pinSocial.color
                     )
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text(session.displayName ?? "Signed in")
+                        Text(session.displayName ?? "Signed In")
                             .font(AstirTypography.control)
                         if let publicHandle = SettingsAccountIdentityPresentation.publicHandle(for: session) {
                             Text(publicHandle)
@@ -85,7 +85,7 @@ struct SettingsScreen: View {
                         } else {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                         }
-                        Text(auth.isSigningOut ? "Signing out" : "Sign out")
+                        Text(auth.isSigningOut ? "Signing Out" : "Sign Out")
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(WanderTheme.stateError.color)
@@ -114,9 +114,9 @@ struct SettingsScreen: View {
                         .background(brandMode.accentWash)
                         .clipShape(Circle())
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text("Signed out")
+                        Text("Signed Out")
                             .font(AstirTypography.control)
-                        Text("Sign in to sync and follow people.")
+                        Text("Sign In To Sync And Follow People.")
                             .font(AstirTypography.caption)
                             .foregroundStyle(brandMode.secondaryText)
                     }
@@ -128,7 +128,7 @@ struct SettingsScreen: View {
                 } label: {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "person.crop.circle.badge.plus")
-                        Text("Sign in")
+                        Text("Sign In")
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
@@ -144,7 +144,7 @@ struct SettingsScreen: View {
             case .loading:
                 HStack {
                     ProgressView()
-                    Text("Checking account...")
+                    Text("Checking Account...")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -153,7 +153,7 @@ struct SettingsScreen: View {
                     Text(message)
                         .font(AstirTypography.label)
                         .foregroundStyle(WanderTheme.stateError.color)
-                    Text("Rebuild with local auth config to sign in or out.")
+                    Text("Rebuild With Local Auth Config To Sign In Or Out.")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -167,12 +167,12 @@ struct SettingsScreen: View {
 
     private var visibilitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("privacy")
+            SettingsSectionTitle("Privacy")
 
             privateProfileToggle
 
             if isUpdatingPrivateProfile {
-                ProgressView("Updating privacy...")
+                ProgressView("Updating Privacy...")
                     .font(AstirTypography.caption)
             } else if let privacyErrorMessage {
                 Text(privacyErrorMessage)
@@ -250,10 +250,10 @@ struct SettingsScreen: View {
 
     private var blockedSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("blocked users")
+            SettingsSectionTitle("Blocked Users")
             let blocked = store.blockedProfiles()
             if blocked.isEmpty {
-                Text("No one blocked.")
+                Text("No One Blocked.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             } else {
@@ -302,8 +302,8 @@ struct SettingsScreen: View {
             ) {
                 activeDetail = .trust
             }
-            SettingsRow(title: "Contacts", subtitle: "managed in iOS Settings", systemImage: "person.crop.rectangle.stack")
-            SettingsRow(title: "Notifications", subtitle: pushNotifications.statusTitle.lowercased(), systemImage: "bell") {
+            SettingsRow(title: "Contacts", subtitle: "Managed In iOS Settings", systemImage: "person.crop.rectangle.stack")
+            SettingsRow(title: "Notifications", subtitle: pushNotifications.statusTitle, systemImage: "bell") {
                 auth.requireSignIn(for: .manageNotifications) {
                     activeDetail = .notifications
                 }
@@ -423,10 +423,10 @@ struct NotificationSettingsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("notifications")
+                        Text("Notifications")
                             .font(AstirTypography.screenTitle)
                             .accessibilityAddTraits(.isHeader)
-                        Text("Choose the account activity Astir can send to this phone.")
+                        Text("Choose The Account Activity Astir Can Send To This Phone.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -435,61 +435,61 @@ struct NotificationSettingsSheet: View {
                     statusBlock
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                        SettingsSectionTitle("push types")
+                        SettingsSectionTitle("Push Types")
                         notificationToggle(
-                            title: "Follows and friends",
+                            title: "Follows And Friends",
                             systemImage: "person.2",
                             binding: preferenceBinding(\.socialGraphEnabled) { NotificationPreferencesUpdate(socialGraphEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Shared lists",
+                            title: "Shared Lists",
                             systemImage: PlaceListSymbol.systemImage,
                             binding: preferenceBinding(\.sharedListsEnabled) { NotificationPreferencesUpdate(sharedListsEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Shared check-ins",
+                            title: "Shared Check-Ins",
                             systemImage: "person.2.badge.plus",
                             binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Saves from your map",
+                            title: "Saves From Your Map",
                             systemImage: "map",
                             binding: preferenceBinding(\.recommendationsEnabled) { NotificationPreferencesUpdate(recommendationsEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "People you follow",
+                            title: "People You Follow",
                             systemImage: "person.crop.circle.badge.checkmark",
                             binding: preferenceBinding(\.followedActivityEnabled) { NotificationPreferencesUpdate(followedActivityEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Likes and comments",
+                            title: "Likes And Comments",
                             systemImage: "heart.text.bubble",
                             binding: preferenceBinding(\.engagementEnabled) { NotificationPreferencesUpdate(engagementEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Capture ready",
+                            title: "Capture Ready",
                             systemImage: "sparkles",
                             binding: preferenceBinding(\.captureEnabled) { NotificationPreferencesUpdate(captureEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Discovery digest",
+                            title: "Discovery Digest",
                             systemImage: "calendar.badge.clock",
                             binding: preferenceBinding(\.discoveryDigestEnabled) { NotificationPreferencesUpdate(discoveryDigestEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Wanna go reminders",
+                            title: "Wanna Go Reminders",
                             systemImage: "calendar.badge.exclamationmark",
                             binding: preferenceBinding(\.wannaGoRemindersEnabled) { NotificationPreferencesUpdate(wannaGoRemindersEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Reservation check-in reminders",
+                            title: "Reservation Check-In Reminders",
                             systemImage: "fork.knife.circle",
                             binding: preferenceBinding(\.reservationRemindersEnabled) {
                                 NotificationPreferencesUpdate(reservationRemindersEnabled: $0)
                             }
                         )
                         notificationToggle(
-                            title: "Save streak reminders",
+                            title: "Save Streak Reminders",
                             systemImage: "flame",
                             binding: saveStreakReminderBinding
                         )
@@ -553,7 +553,7 @@ struct NotificationSettingsSheet: View {
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(notificationsEnabled ? "Notifications on" : "Notifications off")
+                    Text(notificationsEnabled ? "Notifications On" : "Notifications Off")
                         .font(AstirTypography.cardTitle)
                     Text(statusSubtitle)
                         .font(AstirTypography.bodySmall)
@@ -586,36 +586,36 @@ struct NotificationSettingsSheet: View {
 
     private var statusSubtitle: String {
         if notificationsEnabled {
-            return "This device can receive every enabled Astir activity type."
+            return "This Device Can Receive Every Enabled Astir Activity Type."
         }
         switch pushNotifications.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            return "Allow notifications to turn on every activity type for this device."
+            return "Allow Notifications To Turn On Every Activity Type For This Device."
         case .denied:
-            return "Enable alerts in iOS Settings to receive pushes."
+            return "Enable Alerts In iOS Settings To Receive Pushes."
         case .notDetermined:
-            return "Astir will ask only when you allow it here."
+            return "Astir Will Ask Only When You Allow It Here."
         @unknown default:
-            return "Notification status is unavailable."
+            return "Notification Status Is Unavailable."
         }
     }
 
     private var actionButtonTitle: String {
         if isChangingEnabledState || pushNotifications.isRequestingAuthorization || pushNotifications.isRegisteringToken {
-            return notificationsEnabled ? "disabling" : "allowing"
+            return notificationsEnabled ? "Disabling" : "Allowing"
         }
         if notificationsEnabled {
-            return "disable notifications"
+            return "Disable Notifications"
         }
         switch pushNotifications.authorizationStatus {
         case .notDetermined:
-            return "continue"
+            return "Continue"
         case .denied:
-            return "open settings"
+            return "Open Settings"
         case .authorized, .provisional, .ephemeral:
-            return "allow notifications"
+            return "Allow Notifications"
         @unknown default:
-            return "continue"
+            return "Continue"
         }
     }
 
@@ -725,7 +725,7 @@ struct NotificationSettingsSheet: View {
             )
         } catch {
             if isCurrentNotificationAccount(userID) {
-                errorMessage = "Could not load notification settings."
+                errorMessage = "Could Not Load Notification Settings."
             }
         }
     }
@@ -733,7 +733,7 @@ struct NotificationSettingsSheet: View {
     private func enableNotifications(permissionAlreadyGranted: Bool = false) async {
         guard case .signedIn(let session) = auth.state,
               backend.canRegisterPushNotifications else {
-            errorMessage = "Sign in to turn on notifications."
+            errorMessage = "Sign In To Turn On Notifications."
             return
         }
         let userID = session.userID
@@ -761,7 +761,7 @@ struct NotificationSettingsSheet: View {
         ) else {
             guard isCurrentNotificationAccount(userID) else { return }
             preferences = .allDisabled
-            errorMessage = pushNotifications.lastErrorMessage ?? "Notifications were not allowed."
+            errorMessage = pushNotifications.lastErrorMessage ?? "Notifications Were Not Allowed."
             return
         }
         guard isCurrentNotificationAccount(userID) else { return }
@@ -853,7 +853,7 @@ struct NotificationSettingsSheet: View {
             }
         } catch {
             if isCurrentNotificationAccount(userID) {
-                errorMessage = "Could not save notification settings."
+                errorMessage = "Could Not Save Notification Settings."
             }
         }
     }
@@ -865,92 +865,92 @@ struct NotificationSettingsSheet: View {
 }
 
 struct SettingsTrustSurface {
-    static let rowTitle = "Privacy and trust"
-    static let rowSubtitle = "who sees places, location, sources"
+    static let rowTitle = "Privacy And Trust"
+    static let rowSubtitle = "Who Sees Places, Location, Sources"
     static let rowAccessibilityID = "settings.privacyTrust.row"
     static let sheetAccessibilityID = "settings.privacyTrust.sheet"
     static let factAccessibilityPrefix = "settings.privacyTrust.fact."
-    static let sheetTitle = "privacy and trust"
-    static let sheetIntro = "quick answers for what Astir shares, syncs, and keeps private."
+    static let sheetTitle = "Privacy And Trust"
+    static let sheetIntro = "Quick Answers For What Astir Shares, Syncs, And Keeps Private."
 
     static let facts: [TrustFact] = [
         TrustFact(
             id: "everyone",
             icon: "eye.slash",
-            title: "Not private means followers",
-            body: "Places saved outside stealth mode are visible to people who follow you. They are not a public internet feed."
+            title: "Not Private Means Followers",
+            body: "Places Saved Outside Stealth Mode Are Visible To People Who Follow You. They Are Not A Public Internet Feed."
         ),
         TrustFact(
             id: "stealth",
             icon: "lock",
-            title: "Stealth mode means private",
-            body: "Stealth places stay on your map for you only."
+            title: "Stealth Mode Means Private",
+            body: "Stealth Places Stay On Your Map For You Only."
         ),
         TrustFact(
             id: "location",
             icon: "location",
-            title: "Location is for finding places",
-            body: "Astir uses location when you ask for nearby candidates. It does not broadcast live location."
+            title: "Location Is For Finding Places",
+            body: "Astir Uses Location When You Ask For Nearby Candidates. It Does Not Broadcast Live Location."
         ),
         TrustFact(
             id: "extraction",
             icon: "wand.and.stars",
-            title: "Extraction asks first",
-            body: "Links and photos can create candidates or drafts. Low-confidence results never auto-save to your map."
+            title: "Extraction Asks First",
+            body: "Links And Photos Can Create Candidates Or Drafts. Low-Confidence Results Never Auto-Save To Your Map."
         ),
         TrustFact(
             id: "blocks",
             icon: "person.crop.circle.badge.xmark",
-            title: "Blocks are hard blocks",
-            body: "Blocking hides profiles, places, search results, and map content in both directions."
+            title: "Blocks Are Hard Blocks",
+            body: "Blocking Hides Profiles, Places, Search Results, And Map Content In Both Directions."
         ),
         TrustFact(
             id: "contacts",
             icon: "person.crop.rectangle.stack",
-            title: "Contacts stay under your control",
-            body: "If you choose Find friends, Astir securely compares allowed contact phone numbers and emails with verified accounts without saving your address book. Turn matching off in Find friends settings, or manage Contacts access in iOS Settings."
+            title: "Contacts Stay Under Your Control",
+            body: "If You Choose Find Friends, Astir Securely Compares Allowed Contact Phone Numbers And Emails With Verified Accounts Without Saving Your Address Book. Turn Matching Off In Find Friends Settings, Or Manage Contacts Access In iOS Settings."
         )
     ]
 }
 
 struct SettingsDefaultPlacePrivacySurface {
-    static let toggleTitle = "stealth mode for new saves"
+    static let toggleTitle = "Stealth Mode For New Saves"
 
     static func helperCopy(for visibility: PlaceVisibility, isLockedByPrivateProfile: Bool = false) -> String {
         if isLockedByPrivateProfile {
-            return "Locked on by Private Profile. New places stay hidden while Private Profile is on."
+            return "Locked On By Private Profile. New Places Stay Hidden While Private Profile Is On."
         }
 
         if visibility.isStealthModeEnabled {
-            return "On: new places start private. Only you can see them unless you turn stealth off before saving."
+            return "On: New Places Start Private. Only You Can See Them Unless You Turn Stealth Off Before Saving."
         }
 
-        return "Off: new places are visible to people who follow you. You can still turn stealth on before saving."
+        return "Off: New Places Are Visible To People Who Follow You. You Can Still Turn Stealth On Before Saving."
     }
 }
 
 struct SettingsProfilePrivacySurface {
-    static let title = "Private profile"
+    static let title = "Private Profile"
     static let accessibilityID = "settings.profilePrivacy.explainer"
 
     static func body(isEnabled: Bool) -> String {
         if isEnabled {
-            return "Your saved places are in stealth mode, new places stay stealth, and your username stays out of search. Existing friends and collaborative lists stay unchanged; new collaborative lists are unavailable."
+            return "Your Saved Places Are In Stealth Mode, New Places Stay Stealth, And Your Username Stays Out Of Search. Existing Friends And Collaborative Lists Stay Unchanged; New Collaborative Lists Are Unavailable."
         }
 
-        return "Your username can appear in search and you can collaborate on lists."
+        return "Your Username Can Appear In Search And You Can Collaborate On Lists."
     }
 
     static func warningTitle(enabling: Bool) -> String {
-        enabling ? "Turn on Private Profile?" : "Turn off Private Profile?"
+        enabling ? "Turn On Private Profile?" : "Turn Off Private Profile?"
     }
 
     static func warningBody(enabling: Bool) -> String {
         if enabling {
-            return "Places saved by you will switch to stealth mode, including your check-ins and Wanna Go places. Future saves stay stealth and your username will be hidden while Private Profile is on. Your followers and existing collaborative lists stay unchanged, but new collaborative lists are unavailable."
+            return "Places Saved By You Will Switch To Stealth Mode, Including Your Check-Ins And Wanna Go Places. Future Saves Stay Stealth And Your Username Will Be Hidden While Private Profile Is On. Your Followers And Existing Collaborative Lists Stay Unchanged, But New Collaborative Lists Are Unavailable."
         }
 
-        return "Your existing places will stay in stealth mode. Your username can appear in search again, and future saves will follow your stealth mode for new saves setting."
+        return "Your Existing Places Will Stay In Stealth Mode. Your Username Can Appear In Search Again, And Future Saves Will Follow Your Stealth Mode For New Saves Setting."
     }
 
     static func warningConfirmTitle(enabling: Bool) -> String {

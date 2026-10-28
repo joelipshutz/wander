@@ -47,7 +47,7 @@ final class RecentPlaceListAddController: ObservableObject {
                 self.showToast(self.additionMessage(for: target, list: list, store: store, alreadyAdded: true), allowsChange: true)
             case .permissionDenied:
                 RecentPlaceListChoice.shared.clear()
-                self.showToast("Couldn’t add this place. Choose a list to try again.", allowsChange: true)
+                self.showToast("Couldn’t Add This Place. Choose A List To Try Again.", allowsChange: true)
             }
         }
     }
@@ -87,19 +87,19 @@ final class RecentPlaceListAddController: ObservableObject {
         guard result.deniedCount == 0, destinations.allSatisfy({
             membershipState(for: target, list: $0, store: store) == .synced
         }) else {
-            showToast("\(text). Also kept in \(previous.name) because the new addition hasn’t synced.", allowsChange: true)
+            showToast("\(text). Also Kept In \(previous.name) Because The New Addition Hasn’t Synced.", allowsChange: true)
             return
         }
         guard store.canManage(previous) else {
             // Collaborators can add but only a list owner can remove membership.
-            showToast("\(text). Also kept in \(previous.name).", allowsChange: true)
+            showToast("\(text). Also Kept In \(previous.name).", allowsChange: true)
             return
         }
         // Change only undoes this controller's just-created addition, after a
         // replacement succeeds. Cancelling, existing membership, and another
         // account's additions can never be removed by this convenience.
         guard let membership = membershipPlace(for: target, list: previous, store: store) else {
-            showToast("\(text). The previous list could not be updated.", allowsChange: true)
+            showToast("\(text). The Previous List Could Not Be Updated.", allowsChange: true)
             return
         }
         let viewerID = store.currentUser.id
@@ -113,7 +113,7 @@ final class RecentPlaceListAddController: ObservableObject {
             guard let self, self.requestID == request, store.currentUser.id == viewerID else { return }
             self.isAdding = false
             self.showToast(removed && store.lastRemoteError == nil ? text
-                : "\(text). The previous list could not be updated.", allowsChange: true)
+                : "\(text). The Previous List Could Not Be Updated.", allowsChange: true)
         }
     }
 
@@ -148,10 +148,10 @@ final class RecentPlaceListAddController: ObservableObject {
     private func additionMessage(for target: MapPlaceListTarget, list: LocalPlaceList,
                                  store: WanderStore, alreadyAdded: Bool = false) -> String {
         switch membershipState(for: target, list: list, store: store) {
-        case .synced: return "\(alreadyAdded ? "Already in" : "Added to") \(list.name)"
-        case .pending: return "Added to \(list.name) on this phone · waiting to sync"
-        case .failed: return "Added to \(list.name) on this phone · couldn’t sync"
-        case .missing: return "Couldn’t confirm the addition to \(list.name). Try again."
+        case .synced: return "\(alreadyAdded ? "Already In" : "Added To") \(list.name)"
+        case .pending: return "Added To \(list.name) On This Phone · Waiting To Sync"
+        case .failed: return "Added To \(list.name) On This Phone · Couldn’t Sync"
+        case .missing: return "Couldn’t Confirm The Addition To \(list.name). Try Again."
         }
     }
 

@@ -10,17 +10,17 @@ enum ProfileSocialGraphTab: String, CaseIterable, Identifiable {
 
     var emptyTitle: String {
         switch self {
-        case .followers: "No followers yet"
-        case .following: "You are not following anyone yet"
-        case .friends: "No friends yet"
+        case .followers: "No Followers Yet"
+        case .following: "You Are Not Following Anyone Yet"
+        case .friends: "No Friends Yet"
         }
     }
 
     var emptyMessage: String {
         switch self {
-        case .followers: "Members who follow you will appear here."
-        case .following: "Find people you trust and follow their maps."
-        case .friends: "Friends appear when you follow each other."
+        case .followers: "Members Who Follow You Will Appear Here."
+        case .following: "Find People You Trust And Follow Their Maps."
+        case .friends: "Friends Appear When You Follow Each Other."
         }
     }
 }
@@ -77,9 +77,9 @@ struct ProfileSocialGraphScreen: View {
                                     .foregroundStyle(brandMode.accentText)
                                     .clipShape(Circle())
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Find friends")
+                                    Text("Find Friends")
                                         .font(AstirTypography.cardTitle)
-                                    Text("Search Astir members")
+                                    Text("Search Astir Members")
                                         .font(AstirTypography.caption)
                                         .foregroundStyle(brandMode.secondaryText)
                                 }
@@ -102,7 +102,7 @@ struct ProfileSocialGraphScreen: View {
                     }
 
                     if isRefreshing && profiles.isEmpty {
-                        ProgressView("Loading connections")
+                        ProgressView("Loading Connections")
                             .frame(maxWidth: .infinity, minHeight: 180)
                     } else if profiles.isEmpty {
                         ProfileGraphEmptyState(tab: selectedTab)
@@ -120,7 +120,7 @@ struct ProfileSocialGraphScreen: View {
                     }
 
                     if let error = store.lastRemoteError, !error.isEmpty {
-                        Button("Could not refresh. Try again") {
+                        Button("Could Not Refresh. Try Again") {
                             Task { await refresh() }
                         }
                         .font(AstirTypography.control)
@@ -132,7 +132,7 @@ struct ProfileSocialGraphScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .astirScreen()
-            .navigationTitle(isOwnerGraph ? "friends" : "connections")
+            .navigationTitle(isOwnerGraph ? "Friends" : "Connections")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -149,7 +149,7 @@ struct ProfileSocialGraphScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .alert("Unfollow \(pendingUnfollow?.displayName ?? "this member")?", isPresented: Binding(
+            .alert("Unfollow \(pendingUnfollow?.displayName ?? "This Member")?", isPresented: Binding(
                 get: { pendingUnfollow != nil },
                 set: { if !$0 { pendingUnfollow = nil } }
             )) {
@@ -160,7 +160,7 @@ struct ProfileSocialGraphScreen: View {
                 }
                 Button("Cancel", role: .cancel) { pendingUnfollow = nil }
             } message: {
-                Text("Their places will stop appearing in your social map.")
+                Text("Their Places Will Stop Appearing In Your Social Map.")
             }
             .blocksProductUpsells(
                 while: selectedProfileID != nil || pendingUnfollow != nil
@@ -221,7 +221,7 @@ private struct ProfileGraphSearchField: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(brandMode.secondaryText)
-            TextField("Search people", text: $query)
+            TextField("Search People", text: $query)
                 .font(AstirTypography.body)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -231,7 +231,7 @@ private struct ProfileGraphSearchField: View {
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(width: 32, height: 32)
                 }
-                .accessibilityLabel("Clear search")
+                .accessibilityLabel("Clear Search")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
@@ -307,7 +307,7 @@ private struct ProfileGraphRow: View {
         case .owner: "You"
         case .mutual: "Friend"
         case .follower: "Following"
-        case .nonFollower: "Follows you"
+        case .nonFollower: "Follows You"
         }
     }
 

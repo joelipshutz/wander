@@ -3,15 +3,15 @@ import XCTest
 
 final class CheckInCopyTests: XCTestCase {
     func testCheckInVocabularyIsConsistent() {
-        XCTAssertEqual(CheckInCopy.verb, "check in")
-        XCTAssertEqual(CheckInCopy.action, "Check in")
-        XCTAssertEqual(CheckInCopy.pluralTitle, "Check-ins")
-        XCTAssertEqual(CheckInCopy.noun, "check-in")
-        XCTAssertEqual(CheckInCopy.pluralNoun, "check-ins")
-        XCTAssertEqual(CheckInCopy.pastTense, "checked in")
-        XCTAssertEqual(CheckInCopy.count(1), "1 check-in")
-        XCTAssertEqual(CheckInCopy.count(2), "2 check-ins")
-        XCTAssertEqual(PlaceStatus.been.displayTitle, "check-in")
+        XCTAssertEqual(CheckInCopy.verb, "Check In")
+        XCTAssertEqual(CheckInCopy.action, "Check In")
+        XCTAssertEqual(CheckInCopy.pluralTitle, "Check-Ins")
+        XCTAssertEqual(CheckInCopy.noun, "Check-In")
+        XCTAssertEqual(CheckInCopy.pluralNoun, "Check-Ins")
+        XCTAssertEqual(CheckInCopy.pastTense, "Checked In")
+        XCTAssertEqual(CheckInCopy.count(1), "1 Check-In")
+        XCTAssertEqual(CheckInCopy.count(2), "2 Check-Ins")
+        XCTAssertEqual(PlaceStatus.been.displayTitle, "Check-In")
     }
 
     func testBeenRemainsThePersistenceValue() {

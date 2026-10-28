@@ -969,7 +969,7 @@ struct WanderAppEntryView: View {
         VStack(spacing: WanderTheme.spacing3) {
             ProgressView()
                 .tint(WanderTheme.terracotta.color)
-            Text("Checking your session…")
+            Text("Checking Your Session…")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
@@ -986,14 +986,14 @@ struct WanderAppEntryView: View {
                         .foregroundStyle(WanderTheme.terracotta.color)
                         .accessibilityHidden(true)
                     VStack(spacing: WanderTheme.spacing2) {
-                        Text("Sign in is unavailable")
+                        Text("Sign In Is Unavailable")
                             .font(.title2.weight(.bold))
                         Text(message)
                             .font(.body)
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .multilineTextAlignment(.center)
                     }
-                    WanderPrimaryButton(title: "Try again", systemImage: "arrow.clockwise") {
+                    WanderPrimaryButton(title: "Try Again", systemImage: "arrow.clockwise") {
                         auth.beginSessionValidation()
                         hasResolvedSession = false
                         sessionRefreshGeneration &+= 1

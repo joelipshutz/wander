@@ -956,7 +956,7 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
         XCTAssertEqual(item.visiblePlace.id, currentSave.id)
         XCTAssertEqual(item.outlines.map(\.ownership), [.currentUser, .social])
         XCTAssertEqual(item.outlines.map(\.status), [.been, .wannaGo])
-        XCTAssertTrue(item.accessibilityLabel.contains("Your and social saved place"))
+        XCTAssertTrue(item.accessibilityLabel.contains("Your And Social Saved Place"))
         XCTAssertTrue(item.accessibilityLabel.contains("Mutsu"))
         XCTAssertNotNil(presentation.fittedRegion)
     }
@@ -1220,10 +1220,10 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
             destinationName: "Mutsu"
         )
 
-        XCTAssertEqual(accessibility.label, "Mutsu, one of 3 saved places at this location")
+        XCTAssertEqual(accessibility.label, "Mutsu, One Of 3 Saved Places At This Location")
         XCTAssertEqual(
             accessibility.hint,
-            "Shows Mutsu details. Every place remains in the list below."
+            "Shows Mutsu Details. Every Place Remains In The List Below."
         )
     }
 

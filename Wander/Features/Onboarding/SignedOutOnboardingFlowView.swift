@@ -71,11 +71,11 @@ struct SignedOutOnboardingFlowView: View {
         if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut"),
            ProcessInfo.processInfo.environment["WANDER_ONBOARDING_REVIEW_PICKER"] == "1" {
             Menu {
-                Button("Approved opening") { reviewTreatment = .approved }
-                Button("Film · current fonts") { reviewTreatment = .film }
-                Button("Film · matching fonts") { reviewTreatment = .filmType }
+                Button("Approved Opening") { reviewTreatment = .approved }
+                Button("Film · Current Fonts") { reviewTreatment = .film }
+                Button("Film · Matching Fonts") { reviewTreatment = .filmType }
                 Divider()
-                Button("Replay introduction") {
+                Button("Replay Introduction") {
                     welcomeGeneration += 1
                     auth.nativeAuthDidDismiss()
                 }

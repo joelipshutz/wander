@@ -72,10 +72,10 @@ struct LiveBrowseSelection: Equatable {
     }
 
     var summary: String {
-        var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose a city") : (nearbyCenterName ?? "Map center"))" : "Featured", time.title]
+        var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose A City") : (nearbyCenterName ?? "Map Center"))" : "Featured", time.title]
         if activityType != .all { terms.append(activityType.rawValue) }
-        if !categoryIDs.isEmpty { terms.append("\(categoryIDs.count) \(categoryIDs.count == 1 ? "category" : "categories")") }
-        if !personIDs.isEmpty { terms.append("\(personIDs.count) \(personIDs.count == 1 ? "person" : "people")") }
+        if !categoryIDs.isEmpty { terms.append("\(categoryIDs.count) \(categoryIDs.count == 1 ? "category" : "Categories")") }
+        if !personIDs.isEmpty { terms.append("\(personIDs.count) \(personIDs.count == 1 ? "person" : "People")") }
         return terms.joined(separator: " · ")
     }
 

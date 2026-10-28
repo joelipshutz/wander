@@ -9,17 +9,17 @@ enum ShareCardPreparationError: Error, Equatable {
     case artwork, publication, connection, session, unavailable, configuration
 
     var title: String {
-        self == .artwork ? "Couldn't make the share image" : "Couldn't create the share link"
+        self == .artwork ? "Couldn't Make The Share Image" : "Couldn't Create The Share Link"
     }
 
     var message: String {
         switch self {
-        case .artwork: "Try sharing this item again."
-        case .connection: "Check your internet connection, then try sharing again."
-        case .session: "Your session needs to reconnect. Reopen Astir, then try sharing again."
-        case .unavailable: "This item is no longer available to share. Reopen the item and try again."
-        case .configuration: "Sharing isn't available right now. Please try again later."
-        case .publication: "The share link couldn't be created. Please try again in a moment."
+        case .artwork: "Try Sharing This Item Again."
+        case .connection: "Check Your Internet Connection, Then Try Sharing Again."
+        case .session: "Your Session Needs To Reconnect. Reopen Astir, Then Try Sharing Again."
+        case .unavailable: "This Item Is No Longer Available To Share. Reopen The Item And Try Again."
+        case .configuration: "Sharing Isn't Available Right Now. Please Try Again Later."
+        case .publication: "The Share Link Couldn't Be Created. Please Try Again In A Moment."
         }
     }
 
@@ -119,7 +119,7 @@ final class SupabaseShareCardPreviewRepository: ShareCardPreviewRepository {
         try Task.checkCancellation()
         let result: CreatedCard = try await rpc.call("create_share_card_preview", params: [
             "input_kind": target.kind, "input_identifier": target.identifier,
-            "input_image_path": "", "input_title": "Shared on Astir"
+            "input_image_path": "", "input_title": "Shared On Astir"
         ])
         guard authSession.state.session?.userID == session.userID else { throw CancellationError() }
         guard let url = ShareCardLinkTarget.link(content.item, token: result.token) else {
@@ -127,7 +127,7 @@ final class SupabaseShareCardPreviewRepository: ShareCardPreviewRepository {
         }
         guard let path = result.snapshotPath else {
             // Older servers and other people's protected items never upload a copy.
-            return content.withLink(url).withSubject("Shared on Astir")
+            return content.withLink(url).withSubject("Shared On Astir")
         }
         guard path.hasPrefix(session.userID + "/"),
               path.range(of: "^[A-Za-z0-9_-]+/[a-f0-9-]{36}/preview[.]png$", options: .regularExpression) != nil else {

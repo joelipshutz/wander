@@ -44,8 +44,8 @@ final class MapAnnotationVisibilityTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
         XCTAssertEqual(visibleCount(), pins.count, "No saved pin may be hidden by density or zoom")
-        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Map dot" }.count, 80)
-        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Category pin" }.count, 20)
+        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Map Dot" }.count, 80)
+        XCTAssertEqual(pins.filter { map.view(for: $0)?.accessibilityValue == "Category Pin" }.count, 20)
         for pin in pins {
             let view = try XCTUnwrap(map.view(for: pin))
             XCTAssertEqual(view.displayPriority, .required)

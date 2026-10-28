@@ -68,23 +68,23 @@ enum LiveIntroductionStep: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .mapAndFeed: "Your Feed has a map"
-        case .drawArea: "Choose your filters and area"
-        case .activity: "The same Feed, within reach"
-        case .searchAndPeople: "Find a place or a person"
-        case .addPlace: "Keep a place for later"
-        case .yourMap: "Your Map stays in Profile"
+        case .mapAndFeed: "Your Feed Has A Map"
+        case .drawArea: "Choose Your Filters And Area"
+        case .activity: "The Same Feed, Within Reach"
+        case .searchAndPeople: "Find A Place Or A Person"
+        case .addPlace: "Keep A Place For Later"
+        case .yourMap: "Your Map Stays In Profile"
         }
     }
 
     var message: String {
         switch self {
-        case .mapAndFeed: "Drag the activity drawer up to read your Feed, or down to explore its map. Pins show shared activity, not someone’s live location."
-        case .drawArea: "Filters lets you choose your existing Feed audience, Check-ins or Wannas, and a time range. Apply commits your choices; Cancel keeps the previous ones. Draw area adds a boundary, or use the visible area. Your Map’s other tools stay in Profile."
-        case .activity: "Your activity cards and their Like, Comment, Save and Share actions are still here. Check-ins and outlined Wanna bookmarks describe different actions. Counts show what’s loaded."
-        case .searchAndPeople: "Search from Live to find places and people. Your existing Feed audience choices still control whose activity you see. Invite people from the person-plus icon beside the activity count. People worth following remain in the Feed."
-        case .addPlace: "Use + in Live to add a Check-in or Wanna, search for a place, or open your existing import flow. You choose what to share."
-        case .yourMap: "Open Profile, then Your Map, for your full place history, Patterns, filters, Snapshot and sharing. Your calendar, streak and recent activity stay in Profile too."
+        case .mapAndFeed: "Drag The Activity Drawer Up To Read Your Feed, Or Down To Explore Its Map. Pins Show Shared Activity, Not Someone’s Live Location."
+        case .drawArea: "Filters Lets You Choose Your Existing Feed Audience, Check-Ins Or Wannas, And A Time Range. Apply Commits Your Choices; Cancel Keeps The Previous Ones. Draw Area Adds A Boundary, Or Use The Visible Area. Your Map’s Other Tools Stay In Profile."
+        case .activity: "Your Activity Cards And Their Like, Comment, Save And Share Actions Are Still Here. Check-Ins And Outlined Wanna Bookmarks Describe Different Actions. Counts Show What’s Loaded."
+        case .searchAndPeople: "Search From Live To Find Places And People. Your Existing Feed Audience Choices Still Control Whose Activity You See. Invite People From The Person-Plus Icon Beside The Activity Count. People Worth Following Remain In The Feed."
+        case .addPlace: "Use + In Live To Add A Check-In Or Wanna, Search For A Place, Or Open Your Existing Import Flow. You Choose What To Share."
+        case .yourMap: "Open Profile, Then Your Map, For Your Full Place History, Patterns, Filters, Snapshot And Sharing. Your Calendar, Streak And Recent Activity Stay In Profile Too."
         }
     }
 

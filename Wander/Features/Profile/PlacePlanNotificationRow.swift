@@ -23,7 +23,7 @@ struct PlacePlanNotificationRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("\(plan.invitation.payload.senderName) invited you to \(plan.invitation.payload.placeName)")
+                    Text("\(plan.invitation.payload.senderName) Invited You To \(plan.invitation.payload.placeName)")
                         .font(AstirTypography.control).foregroundStyle(brand.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(plan.invitation.payload.dateLabel)
@@ -43,7 +43,7 @@ struct PlacePlanNotificationRow: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityValue(plan.isUnread ? "Unread" : "Read")
-        .accessibilityHint("Opens your invitation")
+        .accessibilityHint("Opens Your Invitation")
         .accessibilityIdentifier("place-plan.notification.\(plan.id.uuidString)")
     }
 }

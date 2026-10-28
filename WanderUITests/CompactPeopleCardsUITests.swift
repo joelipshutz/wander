@@ -71,8 +71,8 @@ final class CompactPeopleCardsUITests: XCTestCase {
     @MainActor
     func testPeopleReplaceFeaturedAndFollowFailureCanRetry() {
         let app = launch()
-        XCTAssertTrue(app.staticTexts["People worth following"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.staticTexts["Featured for you"].exists)
+        XCTAssertTrue(app.staticTexts["People Worth Following"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["Featured For You"].exists)
         let profile = app.buttons["people.recommendation.user_maya.profile"]
         let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))

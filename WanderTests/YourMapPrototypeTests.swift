@@ -186,7 +186,7 @@ final class YourMapPrototypeTests: XCTestCase {
 
         XCTAssertEqual(saved.lens, lens)
         XCTAssertEqual(saved.title, "Coffee · Los Angeles")
-        XCTAssertEqual(saved.detail, "5 selected options")
+        XCTAssertEqual(saved.detail, "5 Selected Options")
     }
 
     func testSavedLensSwipeOnlyRevealsTheTrailingDeleteAction() {

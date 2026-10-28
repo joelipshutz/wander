@@ -317,7 +317,7 @@ struct LiveScreen: View {
                 })
                 .padding(20)
                 }
-                .navigationTitle("Upcoming invitations").navigationBarTitleDisplayMode(.inline)
+                .navigationTitle("Upcoming Invitations").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { showsUpcomingInvitations = false }
                 } }
@@ -396,9 +396,9 @@ struct LiveScreen: View {
             if let selectedPlaceID, !ids.contains(selectedPlaceID) { dismissPlacePreview() }
             frameInitialMap()
         }
-        .alert("Zoom in to choose an area", isPresented: $areaNotice) {
+        .alert("Zoom In To Choose An Area", isPresented: $areaNotice) {
             Button("OK", role: .cancel) {}
-        } message: { Text("Choose a region smaller than half the world, then draw or use the visible area.") }
+        } message: { Text("Choose A Region Smaller Than Half The World, Then Draw Or Use The Visible Area.") }
         .onAppear {
             locationPermission.refreshAuthorizationStatus()
             viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
@@ -586,7 +586,7 @@ struct LiveScreen: View {
                         focusRequest = nil
                         commitSelection(selection.searchingMapArea())
                     } label: {
-                        Label("Search this area", systemImage: "magnifyingglass")
+                        Label("Search This Area", systemImage: "magnifyingglass")
                             .font(AstirTypography.body)
                             .foregroundStyle(brand.primaryText)
                             .multilineTextAlignment(.center)
@@ -597,7 +597,7 @@ struct LiveScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("live.searchArea")
-                    .accessibilityHint("Updates map pins and activity to the visible map area. Replaces the previous area; keeps your other filters.")
+                    .accessibilityHint("Updates Map Pins And Activity To The Visible Map Area. Replaces The Previous Area; Keeps Your Other Filters.")
                     .padding(.horizontal, 16)
                     .padding(.bottom, drawerHeight + 12)
                 }
@@ -624,12 +624,12 @@ struct LiveScreen: View {
                                 }
                                 .onEnded { _ in
                                     draftArea = LiveDrawnArea(coordinates: drawCoordinates)
-                                    drawingError = draftArea == nil ? "Draw a closed area within this region to continue." : nil
+                                    drawingError = draftArea == nil ? "Draw A Closed Area Within This Region To Continue." : nil
                                     drawPoints = []; drawCoordinates = []
                                 })
                     }
-                    .accessibilityLabel("Map drawing canvas")
-                    .accessibilityHint("Draw one area with your finger. You can also use the visible map area below.")
+                    .accessibilityLabel("Map Drawing Canvas")
+                    .accessibilityHint("Draw One Area With Your Finger. You Can Also Use The Visible Map Area Below.")
                 }
             }
     }
@@ -658,13 +658,13 @@ struct LiveScreen: View {
                 }
                 .padding(.horizontal, 8)
                 .astirGlassSurface(cornerRadius: 26, castsShadow: true, interactive: true)
-                control("Add a place", symbol: "plus") { onAdd() }
+                control("Add A Place", symbol: "plus") { onAdd() }
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true, accentAction: true)
             }
             HStack(spacing: 8) {
-                control(area?.drawActionTitle ?? "Draw area", symbol: "pencil.and.outline") { startDrawing() }
+                control(area?.drawActionTitle ?? "Draw Area", symbol: "pencil.and.outline") { startDrawing() }
                     .font(.system(size: 20, weight: .medium))
                     .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
                     .accessibilityIdentifier("live.draw")
@@ -683,7 +683,7 @@ struct LiveScreen: View {
 
     private var filterControl: some View {
         control("Filters", symbol: "slider.horizontal.3") { openFilters() }
-            .accessibilityValue("\(activeFilterCount) active filters")
+            .accessibilityValue("\(activeFilterCount) Active Filters")
             .overlay(alignment: .topTrailing) {
                 if activeFilterCount > 0 {
                     Circle().fill(brand.accent).frame(width: 7, height: 7).padding(6)
@@ -726,7 +726,7 @@ struct LiveScreen: View {
     }
 
     private var drawerFilterSummary: some View {
-        Text(selection.time == .all ? "All time" : "Past \(selection.time.rawValue) \(selection.time.rawValue == 1 ? "day" : "days")")
+        Text(selection.time == .all ? "All Time" : "Past \(selection.time.rawValue) \(selection.time.rawValue == 1 ? "Day" : "Days")")
             .font(.caption2).foregroundStyle(brand.secondaryText)
             .accessibilityIdentifier("live.filter.summary")
     }
@@ -759,7 +759,7 @@ struct LiveScreen: View {
                 }
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
+                .accessibilityLabel("Activity Drawer, \(["Collapsed", "Half Expanded", "Expanded"][detent])")
                 .accessibilityValue("\(LiveMapPaging.countText(activity.count, complete: mapResults.complete)). \(filterSummary)")
                 .accessibilityAdjustableAction { direction in
                     changeDetent(detent + (direction == .increment ? 1 : -1))
@@ -770,14 +770,14 @@ struct LiveScreen: View {
             VStack(spacing: 0) {
                 if !showsFeedDestination {
                     if mapResults.error {
-                        Button("Refresh map results") { mapRefresh &+= 1 }
+                        Button("Refresh Map Results") { mapRefresh &+= 1 }
                             .font(AstirTypography.caption).foregroundStyle(brand.accentText)
                             .frame(minHeight: 44).accessibilityIdentifier("live.mapResults.retry")
                     }
                     if store.liveFeedSocialExpired {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Reconnect to refresh your people’s activity").font(AstirTypography.bodySmall)
-                            Button("Try again") { commitSelection(selection) }.frame(minHeight: 44)
+                            Text("Reconnect To Refresh Your People’s Activity").font(AstirTypography.bodySmall)
+                            Button("Try Again") { commitSelection(selection) }.frame(minHeight: 44)
                                 .accessibilityIdentifier("live.reconnect")
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20)
                     }
@@ -797,7 +797,7 @@ struct LiveScreen: View {
                     }
                     if upcomingInvitationCount > 0 {
                         Button { showsUpcomingInvitations = true } label: {
-                            Label("Upcoming invitations (\(upcomingInvitationCount))", systemImage: "envelope")
+                            Label("Upcoming Invitations (\(upcomingInvitationCount))", systemImage: "envelope")
                                 .font(AstirTypography.bodySmall)
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         }.padding(.horizontal, 20).accessibilityIdentifier("live.upcomingInvitations")
@@ -889,7 +889,7 @@ struct LiveScreen: View {
 
     private var drawingControls: some View {
         VStack {
-            Text(draftArea == nil ? "Draw an area" : "Use this area?")
+            Text(draftArea == nil ? "Draw An Area" : "Use This Area?")
                 .font(AstirTypography.body).padding(14).background(.regularMaterial, in: Capsule())
             Spacer()
             if let drawingError { Text(drawingError).font(.caption).padding().background(.regularMaterial, in: Capsule()) }
@@ -922,7 +922,7 @@ struct LiveScreen: View {
             draftArea = viewport.flatMap(Self.areaForViewport)
             if draftArea == nil { areaNotice = true }
         } label: {
-            Text("Use visible area").fixedSize(horizontal: false, vertical: true)
+            Text("Use Visible Area").fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.center)
         }.frame(minHeight: 44)
         Button {
@@ -940,7 +940,7 @@ struct LiveScreen: View {
         NavigationStack {
             Form {
                 Section {
-                    Button("Reset filters") { resetDraftFilters() }
+                    Button("Reset Filters") { resetDraftFilters() }
                         .foregroundStyle(brand.accentText)
                         .accessibilityIdentifier("live.filter.reset")
                 }
@@ -952,7 +952,7 @@ struct LiveScreen: View {
                     .accessibilityIdentifier("live.filter.people")
                     .accessibilityValue(draftAudience.title)
                     Picker("Activity", selection: $draftSelection.activityType) {
-                        ForEach(LiveActivityFilter.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(LiveActivityFilter.allCases) { Text(AppCopy.capitalizingWords($0.rawValue)).tag($0) }
                     }.accessibilityIdentifier("live.filter.activity")
                     Picker("When", selection: $draftSelection.time) {
                         ForEach(LiveTimeFilter.allCases) { Text($0.title).tag($0) }
@@ -963,11 +963,11 @@ struct LiveScreen: View {
                 personFilterSection
                 Section {
                     if let area, !(draftSelection.scope == .nearby && area.isMapViewport) {
-                        Toggle(area.isMapViewport ? "Keep map area" : "Keep drawn area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
+                        Toggle(area.isMapViewport ? "Keep Map Area" : "Keep Drawn Area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
                     }
-                    Text("The map and recent Feed use these filters. Scroll further for older matches, then clearly labeled activity outside your filters.")
+                    Text("The Map And Recent Feed Use These Filters. Scroll Further For Older Matches, Then Clearly Labeled Activity Outside Your Filters.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Text("Time window ends \(selection.committedAt.formatted(date: .abbreviated, time: .shortened)). Apply or refresh updates the window.")
+                    Text("Time Window Ends \(selection.committedAt.formatted(date: .abbreviated, time: .shortened)). Apply Or Refresh Updates The Window.")
                         .font(.footnote).foregroundStyle(.secondary)
 
                 }
@@ -997,19 +997,19 @@ struct LiveScreen: View {
                         color: $0 == .featured ? LiveFilterTint.featured(brand: brand) : brand.primaryText)
                 }).accessibilityIdentifier("live.filter.scope")
             if draftSelection.scope == .nearby {
-                Picker("Area center", selection: Binding(get: {
+                Picker("Area Center", selection: Binding(get: {
                     draftSelection.nearbyCenter == nil ? draftSelection.cityID : nil
                 }, set: { cityID in
                     draftSelection.cityID = cityID
                     draftSelection.nearbyCenter = nil; draftSelection.nearbyCenterName = nil
                 })) {
-                    Text(draftSelection.nearbyCenterName ?? "Choose a city").tag(nil as String?)
+                    Text(draftSelection.nearbyCenterName ?? "Choose A City").tag(nil as String?)
                     ForEach(HomeMetro.all) { Text($0.name).tag(Optional($0.id)) }
                 }.pickerStyle(.navigationLink).accessibilityIdentifier("live.filter.city")
                 Picker("Radius", selection: $draftSelection.radius) {
                     ForEach(LiveBrowseSelection.Radius.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).accessibilityIdentifier("live.filter.radius")
-                Text("Nearby uses a 10 km radius around your location when available, otherwise the map center. You can choose a city or another radius here. A drawn area narrows it further.")
+                Text("Nearby Uses A 10 km Radius Around Your Location When Available, Otherwise The Map Center. You Can Choose A City Or Another Radius Here. A Drawn Area Narrows It Further.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -1019,14 +1019,14 @@ struct LiveScreen: View {
         Section("Categories") {
             let categories = WanderPlaceCategory.allowedCategories
             ForEach(categories, id: \.self) { category in
-                Toggle(WanderPlaceCategory.broadCategory(for: category),
+                Toggle(AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: category)),
                        isOn: Binding(get: { draftSelection.categoryIDs.contains(category) }, set: { selected in
                     if selected { draftSelection.categoryIDs.insert(category) }
                     else { draftSelection.categoryIDs.remove(category) }
                 })).accessibilityIdentifier("live.filter.category.\(category)")
             }
             if !draftSelection.categoryIDs.isEmpty {
-                Button("Clear category selection") { draftSelection.categoryIDs = [] }
+                Button("Clear Category Selection") { draftSelection.categoryIDs = [] }
             }
         }
     }
@@ -1041,7 +1041,7 @@ struct LiveScreen: View {
                 })).accessibilityIdentifier("live.filter.person.\(person.id)")
             }
             if !draftSelection.personIDs.isEmpty {
-                Button("Clear person selection") { draftSelection.personIDs = [] }
+                Button("Clear Person Selection") { draftSelection.personIDs = [] }
             }
         }
     }
@@ -1074,7 +1074,7 @@ struct LiveScreen: View {
         // center gives an immediate, deterministic 10 km scope with no sheet.
         if let center = viewport?.center {
             next.nearbyCenter = .init(latitude: center.latitude, longitude: center.longitude)
-            next.nearbyCenterName = "Map center"
+            next.nearbyCenterName = "Map Center"
         }
         if next.isValid { commitSelection(next) }
         guard CLLocationManager().authorizationStatus == .authorizedWhenInUse
@@ -1088,7 +1088,7 @@ struct LiveScreen: View {
                   store.currentUser.id == accountID, selection == requestedSelection, selection.scope == .nearby else { return }
             var located = selection
             located.nearbyCenter = .init(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
-            located.nearbyCenterName = "Your location"
+            located.nearbyCenterName = "Your Location"
             located.radius = .tenKilometers
             commitSelection(located)
         }
@@ -1529,19 +1529,19 @@ private struct LiveMapControlsHeightKey: PreferenceKey {
 /// Shared copy for Live's map and selection chooser; Feed cards keep their own presentation.
 enum LiveActivityPresentation {
     static func shownUpdateCount(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "place update" : "place updates")"
+        "\(count) \(count == 1 ? "Place Update" : "Place Updates")"
     }
 
     static func loadedUpdateCount(_ count: Int) -> String {
-        "\(count) loaded \(count == 1 ? "update" : "updates")"
+        "\(count) Loaded \(count == 1 ? "Update" : "Updates")"
     }
 
     static func title(for activity: FeedActivity) -> String {
         switch activity.resolvedTicketKind {
         case .wanna: "Wanna"
-        case .checkIn: "Check-in"
-        case .list: "List update"
-        case .saved: "Saved place"
+        case .checkIn: "Check-In"
+        case .list: "List Update"
+        case .saved: "Saved Place"
         }
     }
 }

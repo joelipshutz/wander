@@ -15,15 +15,15 @@ enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
 
     var paragraphs: [String] {
         [
-            "Your rating averages your rated check-ins here.",
-            "Friends rating averages each followed person's visible ratings; activity hidden from you does not count.",
-            "Astir rating averages all rated check-ins, including private activity, without showing who contributed.",
-            "A dash means there are no ratings yet."
+            "Your Rating Averages Your Rated Check-Ins Here.",
+            "Friends Rating Averages Each Followed Person's Visible Ratings; Activity Hidden From You Does Not Count.",
+            "Astir Rating Averages All Rated Check-Ins, Including Private Activity, Without Showing Who Contributed.",
+            "A Dash Means There Are No Ratings Yet."
         ]
     }
 
     var accessibilityLabel: String {
-        "About the \(title)"
+        "About The \(title)"
     }
 }
 
@@ -119,7 +119,7 @@ struct PlaceProfileRatingsRail: View {
             }
 
             if currentState == .unavailable {
-                Button("Retry ratings") { retryGeneration += 1 }
+                Button("Retry Ratings") { retryGeneration += 1 }
                     .font(AstirTypography.label)
                     .frame(minHeight: WanderTheme.tapMinimum)
             }
@@ -290,7 +290,7 @@ struct PlaceRatingInfoButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(explanation.accessibilityLabel)
         .accessibilityIdentifier("ratings.explanation.open")
-        .accessibilityHint("Shows how this score is calculated")
+        .accessibilityHint("Shows How This Score Is Calculated")
         .popover(
             isPresented: $isPresented,
             attachmentAnchor: .rect(.bounds),

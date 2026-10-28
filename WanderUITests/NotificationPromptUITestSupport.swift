@@ -18,7 +18,7 @@ extension XCTestCase {
     func dismissStartupNotificationPromptIfNeeded(in app: XCUIApplication) {
         let primary = app.buttons["productUpsell.primary"]
         guard primary.waitForExistence(timeout: 8) else { return }
-        XCTAssertTrue(app.staticTexts["Keep up with your people"].exists)
+        XCTAssertTrue(app.staticTexts["Keep Up With Your People"].exists)
         func tapVisibleCenter(_ button: XCUIElement) {
             // A fresh simulator can expose accessibility elements while their
             // native window still has an infinite origin and zero size. Asking

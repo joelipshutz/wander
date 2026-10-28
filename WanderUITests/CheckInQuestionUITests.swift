@@ -15,7 +15,7 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(lists, in: app)
         XCTAssertTrue(lists.exists)
         XCTAssertEqual(more.value as? String, "Collapsed")
-        let friends = app.buttons["Add friends to this check-in"]
+        let friends = app.buttons["Add Friends To This Check-In"]
         XCTAssertTrue(friends.exists)
         XCTAssertLessThan(friends.frame.minY, lists.frame.minY)
         XCTAssertLessThan(lists.frame.minY, app.buttons["save.photos"].frame.minY)
@@ -27,7 +27,7 @@ final class CheckInQuestionUITests: XCTestCase {
         note.tap()
         note.typeText("Keep this check-in draft")
         reveal(lists, in: app)
-        XCTAssertEqual(lists.value as? String, "0 selected")
+        XCTAssertEqual(lists.value as? String, "0 Selected")
         lists.tap()
         let picker = app.buttons["map-list-picker.cancel"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
@@ -42,7 +42,7 @@ final class CheckInQuestionUITests: XCTestCase {
         app.buttons["map-list-picker.cancel"].tap()
         XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
         XCTAssertTrue(lists.waitForExistence(timeout: 10))
-        XCTAssertEqual(lists.value as? String, "0 selected")
+        XCTAssertEqual(lists.value as? String, "0 Selected")
         XCTAssertEqual(note.value as? String, "Keep this check-in draft")
 
         reveal(lists, in: app)
@@ -53,14 +53,14 @@ final class CheckInQuestionUITests: XCTestCase {
         app.buttons["map-list-picker.apply"].tap()
         XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
         XCTAssertTrue(lists.waitForExistence(timeout: 10))
-        XCTAssertEqual(lists.value as? String, "1 selected")
+        XCTAssertEqual(lists.value as? String, "1 Selected")
         reveal(more, in: app)
         more.tap()
         XCTAssertTrue(lists.exists)
         more.tap()
         XCTAssertEqual(more.value as? String, "Collapsed")
         XCTAssertTrue(lists.exists)
-        XCTAssertEqual(lists.value as? String, "1 selected")
+        XCTAssertEqual(lists.value as? String, "1 Selected")
         capture("REC-567 lists remain visible with More options collapsed")
 
         let close = app.buttons["save.close"]
@@ -72,7 +72,7 @@ final class CheckInQuestionUITests: XCTestCase {
         lists.tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons[listID].isEnabled, "Closing an unsaved check-in must not create list membership.")
-        XCTAssertFalse(app.buttons[listID].label.contains("already in list"))
+        XCTAssertFalse(app.buttons[listID].label.contains("Already In List"))
         capture("REC-567 cancelled check-in leaves list available")
     }
 
@@ -100,7 +100,7 @@ final class CheckInQuestionUITests: XCTestCase {
         app.buttons["map-list-picker.apply"].tap()
         XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
         XCTAssertTrue(lists.waitForExistence(timeout: 10))
-        XCTAssertEqual(lists.value as? String, "1 selected")
+        XCTAssertEqual(lists.value as? String, "1 Selected")
         let close = app.buttons["save.close"]
         reveal(close, in: app, upwards: false)
         close.tap()
@@ -112,7 +112,7 @@ final class CheckInQuestionUITests: XCTestCase {
         lists.tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons[listID].isEnabled, "Closing an unsaved Wanna must not create list membership.")
-        XCTAssertFalse(app.buttons[listID].label.contains("already in list"))
+        XCTAssertFalse(app.buttons[listID].label.contains("Already In List"))
         capture("REC-567 cancelled Wanna leaves list available")
     }
 
@@ -161,7 +161,7 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["map-list-picker.cancel"].waitForNonExistence(timeout: 10))
         app.buttons["save.submit"].tap()
         // Demo saves stay local; the list sync notice must allow finishing.
-        let done = app.alerts["Wanna saved"].buttons["Done"]
+        let done = app.alerts["Wanna Saved"].buttons["Done"]
         if done.waitForExistence(timeout: 10) { done.tap() }
         XCTAssertTrue(wanna.waitForExistence(timeout: 10))
         wanna.tap()
@@ -170,14 +170,14 @@ final class CheckInQuestionUITests: XCTestCase {
         lists.tap()
         XCTAssertTrue(app.buttons[listID].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons[listID].isEnabled)
-        XCTAssertTrue(app.buttons[listID].label.contains("already in list"))
+        XCTAssertTrue(app.buttons[listID].label.contains("Already In List"))
         capture("REC-567 saved Wanna disables existing membership")
     }
 
     private func selectPendingList(_ row: XCUIElement) {
         row.tap()
         let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label ENDSWITH %@", ", selected"), object: row
+            predicate: NSPredicate(format: "label ENDSWITH %@", ", Selected"), object: row
         )
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
@@ -193,17 +193,17 @@ final class CheckInQuestionUITests: XCTestCase {
         let restore = app.buttons["save.questions.restore"]
         reveal(restore, in: app)
         restore.press(forDuration: 0.2)
-        let cancel = app.buttons["No, cancel"]
+        let cancel = app.buttons["No, Cancel"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
         capture("REC-485 native restore confirmation")
         cancel.press(forDuration: 0.2)
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 5))
         XCTAssertEqual(recurringIDs(in: app), previous)
-        let footer = app.staticTexts["Drag to reorder."]
+        let footer = app.staticTexts["Drag To Reorder."]
         reveal(footer, in: app)
         XCTAssertTrue(footer.exists)
-        XCTAssertTrue(app.staticTexts["Removing a question changes future prompts and keeps previous answers."].exists)
-        XCTAssertTrue(app.staticTexts["Slashed eye. This symbol means those questions only stay with you"].exists)
+        XCTAssertTrue(app.staticTexts["Removing A Question Changes Future Prompts And Keeps Previous Answers."].exists)
+        XCTAssertTrue(app.staticTexts["Slashed Eye. This Symbol Means Those Questions Only Stay With You"].exists)
         capture("REC-485 restore cancellation preserves customization")
 
         // Closing and reopening the editor must preserve the saved question order.
@@ -244,7 +244,7 @@ final class CheckInQuestionUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(app.textViews["save.note"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["What made you save this?"].exists)
+        XCTAssertTrue(app.staticTexts["What Made You Save This?"].exists)
         XCTAssertFalse(app.buttons["save.questions.customize"].exists)
         XCTAssertEqual(catalogAnswerButtons(in: app).count, 0)
         capture("REC-485 Wanna introduction note")
@@ -293,9 +293,9 @@ final class CheckInQuestionUITests: XCTestCase {
         outlets.press(forDuration: 0.2)
         XCTAssertTrue(recurringElement("place_detail_outlets", in: app).waitForExistence(timeout: 3))
         let outletsEye = app.buttons["save.questions.stealth.place_detail_outlets"]
-        XCTAssertEqual(outletsEye.value as? String, "Off, check-in audience")
+        XCTAssertEqual(outletsEye.value as? String, "Off, Check-In Audience")
         outletsEye.press(forDuration: 0.2)
-        XCTAssertEqual(outletsEye.value as? String, "On, only you")
+        XCTAssertEqual(outletsEye.value as? String, "On, Only You")
 
         let createCustom = app.buttons["save.questions.createCustom"]
         reveal(createCustom, in: app)
@@ -311,9 +311,9 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["save.questions.done"].waitForExistence(timeout: 3))
         let customID = try XCTUnwrap(recurringIDs(in: app).first { $0.hasPrefix("custom_question_") })
         let customEye = app.buttons["save.questions.stealth.\(customID)"]
-        XCTAssertEqual(customEye.value as? String, "On, only you")
+        XCTAssertEqual(customEye.value as? String, "On, Only You")
         customEye.press(forDuration: 0.2)
-        XCTAssertEqual(customEye.value as? String, "Off, check-in audience")
+        XCTAssertEqual(customEye.value as? String, "Off, Check-In Audience")
         let expectedIDs = recurringIDs(in: app)
         capture("REC-485 customized recurring questions")
         app.buttons["save.questions.done"].press(forDuration: 0.2)
@@ -331,11 +331,11 @@ final class CheckInQuestionUITests: XCTestCase {
         XCTAssertEqual(recurringIDs(in: app), expectedIDs)
         let selectedStealth = app.buttons["save.questions.stealth.\(customID)"]
         XCTAssertTrue(selectedStealth.waitForExistence(timeout: 3))
-        XCTAssertEqual(selectedStealth.value as? String, "Off, check-in audience")
+        XCTAssertEqual(selectedStealth.value as? String, "Off, Check-In Audience")
         // Match the earlier custom-question press: the native editable List
         // can discard XCTest's 50 ms tap while settling after navigation.
         selectedStealth.press(forDuration: 0.2)
-        XCTAssertEqual(selectedStealth.value as? String, "On, only you")
+        XCTAssertEqual(selectedStealth.value as? String, "On, Only You")
         app.buttons["save.questions.done"].press(forDuration: 0.2)
         let badge = app.descendants(matching: .any)["save.question.stealth.\(customID)"].firstMatch
         reveal(badge, in: app)
@@ -361,7 +361,7 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(subtype, in: app)
         XCTAssertTrue(subtype.isHittable)
         subtype.tap()
-        let search = app.textFields["Search types"]
+        let search = app.textFields["Search Types"]
         let pickerOpened = search.waitForExistence(timeout: 3)
         if !pickerOpened { capture("REC-485 subtype picker did not open") }
         XCTAssertTrue(pickerOpened)
@@ -433,11 +433,11 @@ final class CheckInQuestionUITests: XCTestCase {
         reveal(foodType, in: app)
         XCTAssertTrue(foodType.isHittable)
         foodType.tap()
-        let foodTypeSearch = app.textFields["Search food types"]
+        let foodTypeSearch = app.textFields["Search Food Types"]
         let pickerOpened = foodTypeSearch.waitForExistence(timeout: 3)
         if !pickerOpened { capture("REC-485 food type picker did not open") }
         XCTAssertTrue(pickerOpened)
-        XCTAssertFalse(app.textFields["Search types"].exists)
+        XCTAssertFalse(app.textFields["Search Types"].exists)
         foodTypeSearch.tap()
         foodTypeSearch.typeText("Thai\n")
         let thai = app.buttons.matching(NSPredicate(format: "label == %@", "Thai")).firstMatch
@@ -530,7 +530,7 @@ final class CheckInQuestionUITests: XCTestCase {
             app.buttons["save.questions.customize"].frame.height - 0.5
         )
         usefulness.press(forDuration: 0.2)
-        XCTAssertEqual(usefulness.value as? String, "Hidden from future prompts")
+        XCTAssertEqual(usefulness.value as? String, "Hidden From Future Prompts")
         XCTAssertFalse(yes.isEnabled)
         XCTAssertTrue(yes.isSelected, "Hiding must preserve an answer already entered.")
         capture("REC-485 dismissed question with Undo")
@@ -545,7 +545,7 @@ final class CheckInQuestionUITests: XCTestCase {
         let restore = app.buttons["save.questions.restore"]
         reveal(restore, in: app)
         restore.press(forDuration: 0.2)
-        app.buttons["No, cancel"].press(forDuration: 0.2)
+        app.buttons["No, Cancel"].press(forDuration: 0.2)
         XCTAssertFalse(recurringElement("place_detail_arrival_parking", in: app).exists)
         app.buttons["save.questions.done"].press(forDuration: 0.2)
         app.terminate()
@@ -579,11 +579,15 @@ final class CheckInQuestionUITests: XCTestCase {
         glutenFree.tap()
         XCTAssertTrue(vegan.isSelected)
         XCTAssertTrue(glutenFree.isSelected)
-        for expected in ["On, only you", "Off, check-in audience"] {
+        for expected in ["On, Only You", "Off, Check-In Audience"] {
             openCustomize(in: app)
             let eye = app.buttons["save.questions.stealth.place_detail_dietary_options"]
             reveal(eye, in: app)
-            eye.tap()
+            eye.press(forDuration: 0.2)
+            let toggled = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", expected), object: eye
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [toggled], timeout: 5), .completed)
             XCTAssertEqual(eye.value as? String, expected)
             XCTAssertTrue(app.buttons["save.questions.done"].exists, "No separate Stealth page")
             capture("REC-485 inline privacy eyes")
@@ -611,7 +615,7 @@ final class CheckInQuestionUITests: XCTestCase {
         silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).press(forDuration: 0.2)
         let enabled = NSPredicate(format: "value == %@", "1")
         wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: silent)], timeout: 5)
-        XCTAssertTrue(app.staticTexts["Skip notifications for this save. Visibility stays the same."].exists)
+        XCTAssertTrue(app.staticTexts["Skip Notifications For This Save. Visibility Stays The Same."].exists)
         let more = app.buttons["save.moreOptions"]
         reveal(more, in: app)
         more.tap()
@@ -631,16 +635,16 @@ final class CheckInQuestionUITests: XCTestCase {
         let save = app.buttons["import.save"]
         XCTAssertTrue(save.isEnabled)
         save.tap()
-        let alert = app.alerts["Silence notifications for this import?"]
+        let alert = app.alerts["Silence Notifications For This Import?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        XCTAssertTrue(alert.buttons["Yes, save silently"].exists)
-        XCTAssertTrue(alert.buttons["No, notify followers"].exists)
+        XCTAssertTrue(alert.buttons["Yes, Save Silently"].exists)
+        XCTAssertTrue(alert.buttons["No, Notify Followers"].exists)
         capture("REC-589 native import silent choice")
         alert.buttons["Cancel"].tap()
         XCTAssertTrue(save.isEnabled)
         save.tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons["Yes, save silently"].tap()
+        alert.buttons["Yes, Save Silently"].tap()
         XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
     }
 
@@ -703,7 +707,7 @@ final class CheckInQuestionUITests: XCTestCase {
     }
 
     private func confirmRestore(in app: XCUIApplication) {
-        let confirm = app.buttons["Yes, restore"]
+        let confirm = app.buttons["Yes, Restore"]
         let presented = confirm.waitForExistence(timeout: 5)
         if !presented {
             capture("REC-485 restore confirmation missing")

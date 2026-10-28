@@ -23,10 +23,10 @@ import XCTest
         XCTAssertFalse(app.descendants(matching: .any)["feed.surfaceSwitch"].exists)
         XCTAssertLessThan(bell.frame.midY, search.frame.midY)
         XCTAssertEqual(add.frame.midY, search.frame.midY, accuracy: 4)
-        let invite = app.buttons["invite people to Astir"]
+        let invite = app.buttons["Invite People To Astir"]
         XCTAssertTrue(invite.exists)
         XCTAssertGreaterThan(invite.frame.minY, search.frame.maxY)
-        let people = app.staticTexts["People worth following"]
+        let people = app.staticTexts["People Worth Following"]
         XCTAssertTrue(people.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(people.frame.minY, invite.frame.maxY)
         capture("REC-597 consolidated Feed")
@@ -57,13 +57,13 @@ import XCTest
         let app = launch()
         let bell = app.buttons["feed.notifications"]
         XCTAssertTrue(bell.waitForExistence(timeout: 15))
-        let hasBadge = NSPredicate(format: "value != %@", "No new notifications")
+        let hasBadge = NSPredicate(format: "value != %@", "No New Notifications")
         expectation(for: hasBadge, evaluatedWith: bell)
         waitForExpectations(timeout: 10)
         bell.tap()
         XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["Couldn’t refresh notifications"].exists)
-        XCTAssertFalse(app.buttons["Find friends from contacts"].exists)
+        XCTAssertFalse(app.staticTexts["Couldn’t Refresh Notifications"].exists)
+        XCTAssertFalse(app.buttons["Find Friends From Contacts"].exists)
         capture("REC-597 shared follower inbox")
         app.buttons["notifications.follow.user_ryan"].tap()
         XCTAssertTrue(app.buttons["profile.back"].waitForExistence(timeout: 5))
@@ -71,23 +71,23 @@ import XCTest
         XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 5))
-        XCTAssertEqual(bell.value as? String, "No new notifications")
+        XCTAssertEqual(bell.value as? String, "No New Notifications")
         app.tabBars.buttons["Profile"].tap()
         let profileBell = app.buttons["profile.checkInInvitations"]
         XCTAssertTrue(profileBell.waitForExistence(timeout: 8))
-        XCTAssertEqual(profileBell.value as? String, "No new notifications")
+        XCTAssertEqual(profileBell.value as? String, "No New Notifications")
     }
 
     func testRecentActivityOpensConversationAndAcknowledgesSharedBadge() {
         let app = launch(extraArguments: ["-WanderActivityNotificationUITest"])
         let bell = app.buttons["feed.notifications"]
         XCTAssertTrue(bell.waitForExistence(timeout: 15))
-        expectation(for: NSPredicate(format: "value != %@", "No new notifications"), evaluatedWith: bell)
+        expectation(for: NSPredicate(format: "value != %@", "No New Notifications"), evaluatedWith: bell)
         waitForExpectations(timeout: 10)
         bell.tap()
         let row = app.buttons["notifications.activity.65300000-0000-0000-0000-000000000001"]
         XCTAssertTrue(row.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Recent activity"].exists)
+        XCTAssertTrue(app.staticTexts["Recent Activity"].exists)
         XCTAssertTrue(app.buttons["notifications.follow.user_ryan"].exists)
         XCTAssertGreaterThanOrEqual(row.frame.height, 44)
         XCTAssertGreaterThanOrEqual(row.frame.minX, app.frame.minX)
@@ -95,10 +95,10 @@ import XCTest
         capture("REC-653 recent notification activity")
         let grouped = app.buttons["notifications.activity.65300000-0000-0000-0000-000000000002"]
         XCTAssertTrue(grouped.exists)
-        XCTAssertFalse(app.staticTexts["Stored import details"].exists)
+        XCTAssertFalse(app.staticTexts["Stored Import Details"].exists)
         grouped.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 5))
-        XCTAssertEqual(bell.value as? String, "No new notifications")
+        XCTAssertEqual(bell.value as? String, "No New Notifications")
         bell.tap()
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()

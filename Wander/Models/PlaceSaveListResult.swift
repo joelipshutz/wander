@@ -15,13 +15,13 @@ struct PlaceSaveListResult: Equatable {
     var message: String {
         var parts: [String] = []
         if syncedCount > 0 {
-            parts.append("Added to \(syncedCount == 1 ? "1 list" : "\(syncedCount) lists").")
+            parts.append("Added To \(syncedCount == 1 ? "1 List" : "\(syncedCount) Lists").")
         }
         if pendingCount + failedCount > 0 {
-            parts.append("Some list additions are saved on this device and still need to sync. You can retry now or let them sync later.")
+            parts.append("Some List Additions Are Saved On This Device And Still Need To Sync. You Can Retry Now Or Let Them Sync Later.")
         }
         if unavailableCount > 0 {
-            parts.append("\(unavailableCount == 1 ? "A selected list is" : "Some selected lists are") no longer available to add to. Choose another list from the place page.")
+            parts.append("\(unavailableCount == 1 ? "A Selected List Is" : "Some Selected Lists Are") No Longer Available To Add To. Choose Another List From The Place Page.")
         }
         return parts.joined(separator: " ")
     }

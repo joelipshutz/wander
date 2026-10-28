@@ -17,7 +17,7 @@ final class NativeAccountSetupUITests: XCTestCase {
         name.typeText("Jordan Lee")
         username.tap()
         username.typeText("jordan_review")
-        XCTAssertTrue(app.staticTexts["Username available"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Username Available"].waitForExistence(timeout: 8))
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertEqual(name.value as? String, "Jordan Lee")
@@ -47,7 +47,7 @@ final class NativeAccountSetupUITests: XCTestCase {
 
     func testProfilePhotoPickerCropAndValidation() {
         let app = launchReview("identity")
-        let name = app.textFields["How friends know you"]
+        let name = app.textFields["How Friends Know You"]
         let username = app.textFields["your_username"]
         let continueButton = app.buttons["onboarding.identity.continue"]
         XCTAssertTrue(name.waitForExistence(timeout: 12))
@@ -57,7 +57,7 @@ final class NativeAccountSetupUITests: XCTestCase {
         name.typeText("Jordan Lee")
         username.tap()
         username.typeText("jordan_review")
-        XCTAssertTrue(app.staticTexts["Username available"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Username Available"].waitForExistence(timeout: 8))
         dismissKeyboardIfPresent(in: app)
         XCTAssertTrue(app.staticTexts["Jordan Lee"].exists)
         XCTAssertEqual(app.staticTexts["@jordan_review"].label, "@jordan_review")
@@ -65,18 +65,18 @@ final class NativeAccountSetupUITests: XCTestCase {
         keepScreenshot("N08-filled", app: app)
 
         replaceText(in: username, with: "taken")
-        XCTAssertTrue(app.staticTexts["That username is taken"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["That Username Is Taken"].waitForExistence(timeout: 8))
         dismissKeyboardIfPresent(in: app)
         XCTAssertFalse(continueButton.isEnabled)
-        reveal(app.staticTexts["That username is taken"], in: app)
+        reveal(app.staticTexts["That Username Is Taken"], in: app)
         keepScreenshot("N35", app: app)
         replaceText(in: username, with: "jordan_review")
-        XCTAssertTrue(app.staticTexts["Username available"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Username Available"].waitForExistence(timeout: 8))
         dismissKeyboardIfPresent(in: app)
 
         let photo = app.buttons["onboarding.identity.photo"]
         reveal(photo, in: app, direction: .down)
-        XCTAssertEqual(photo.label, "Add an optional profile photo")
+        XCTAssertEqual(photo.label, "Add An Optional Profile Photo")
         photo.tap()
         // The recording setup imports the app's public-safe bundled avatar
         // artwork into this simulator's Photos library. Selection and crop both
@@ -90,11 +90,11 @@ final class NativeAccountSetupUITests: XCTestCase {
         // PhotoKit exposes the correct visible frame but no synthesized hit
         // point for this remote image tile. Tap its observed frame center.
         firstPhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(app.staticTexts["Crop photo"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Crop Photo"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Choose"].isEnabled)
         keepScreenshot("N67", app: app)
         app.buttons["Choose"].tap()
-        XCTAssertTrue(waitFor(NSPredicate(format: "label == %@", "Change profile photo"), on: photo, timeout: 6))
+        XCTAssertTrue(waitFor(NSPredicate(format: "label == %@", "Change Profile Photo"), on: photo, timeout: 6))
         XCTAssertTrue(continueButton.isEnabled, "A successfully chosen crop preserves valid identity input.")
         keepScreenshot("N08-photo-chosen", app: app, settleSeconds: 1)
     }
@@ -122,7 +122,7 @@ final class NativeAccountSetupUITests: XCTestCase {
         XCTAssertTrue(waitFor(NSPredicate(format: "label == %@", "Following Theo Chen"), on: theo))
         XCTAssertFalse(theo.isEnabled)
 
-        let clearSearch = app.buttons["Clear search"]
+        let clearSearch = app.buttons["Clear Search"]
         XCTAssertTrue(clearSearch.exists)
         clearSearch.tap()
         XCTAssertTrue(mina.waitForExistence(timeout: 6))
@@ -156,7 +156,7 @@ final class NativeAccountSetupUITests: XCTestCase {
         let locationSettings = deniedLocationApp.buttons["onboarding.location.primary"]
         XCTAssertTrue(locationSettings.waitForExistence(timeout: 10))
         XCTAssertEqual(locationSettings.label, "Open Settings")
-        XCTAssertTrue(deniedLocationApp.buttons["Not now"].exists)
+        XCTAssertTrue(deniedLocationApp.buttons["Not Now"].exists)
         // The shared map entrance takes 2.2 seconds; retain its settled frame.
         keepScreenshot("N31", app: deniedLocationApp, settleSeconds: 2.5)
 
@@ -178,7 +178,7 @@ final class NativeAccountSetupUITests: XCTestCase {
         }
         let contactsError = contactsApp.staticTexts["onboarding.contacts.error"]
         XCTAssertTrue(contactsError.waitForExistence(timeout: 10))
-        XCTAssertEqual(contactsError.label, "Allow Contacts access in iOS Settings to find friends. You can still search by name.")
+        XCTAssertEqual(contactsError.label, "Allow Contacts Access In iOS Settings To Find Friends. You Can Still Search By Name.")
         XCTAssertTrue(contactsApp.buttons["onboarding.contacts.skip"].exists)
     }
 

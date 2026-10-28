@@ -60,13 +60,13 @@ enum DiscoverPeopleRecommendationReason: Equatable {
 
     var compactDisplayText: String {
         switch self {
-        case .contacts: "In your contacts"
-        case .nearby: "In your area"
-        case .followsYou: "Follows you"
+        case .contacts: "In Your Contacts"
+        case .nearby: "In Your Area"
+        case .followsYou: "Follows You"
         case .sharedFollows(let count):
-            count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
+            count == 1 ? "Followed By 1 Person You Follow" : "Followed By \(count) People You Follow"
         case .contactFollows(let count):
-            count == 1 ? "Followed by 1 contact" : "Followed by \(count) contacts"
+            count == 1 ? "Followed By 1 Contact" : "Followed By \(count) Contacts"
         case .suggested: ""
         }
     }
@@ -74,19 +74,19 @@ enum DiscoverPeopleRecommendationReason: Equatable {
     func displayText(for profile: ProfileShell) -> String {
         switch self {
         case .contacts:
-            return "In your contacts"
+            return "In Your Contacts"
         case .nearby:
-            return profile.homeArea.map { "Also in \($0)" } ?? "In your area"
+            return profile.homeArea.map { "Also In \($0)" } ?? "In Your Area"
         case .followsYou:
-            return "Follows you"
+            return "Follows You"
         case .sharedFollows(let count):
             return count == 1
-                ? "1 person you follow follows \(profile.displayName)"
-                : "\(count) people you follow follow \(profile.displayName)"
+                ? "1 Person You Follow Follows \(profile.displayName)"
+                : "\(count) People You Follow Follow \(profile.displayName)"
         case .contactFollows(let count):
             return count == 1
-                ? "1 of your contacts follows \(profile.displayName)"
-                : "\(count) of your contacts follow \(profile.displayName)"
+                ? "1 Of Your Contacts Follows \(profile.displayName)"
+                : "\(count) Of Your Contacts Follow \(profile.displayName)"
         case .suggested:
             return ""
         }
@@ -475,7 +475,7 @@ extension PlaceCandidate {
 
         let miles = distanceMeters / 1_609.344
         if miles < 0.1 {
-            return "nearby"
+            return "Nearby"
         }
         if miles < 10 {
             return String(format: "%.1f mi", miles)
@@ -512,7 +512,7 @@ extension PlaceCandidate {
         let parts = Self.dedupedDisplayParts(baseParts + trailingParts)
 
         guard !parts.isEmpty else {
-            return fallback ?? "confidence \(Int(confidence * 100))%"
+            return fallback ?? "Confidence \(Int(confidence * 100))%"
         }
 
         return parts.joined(separator: " · ")

@@ -632,10 +632,10 @@ struct AddScreen: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isShowingHereNowResults ? "I'm here now" : "add a place")
+                Text(isShowingHereNowResults ? "I'm Here Now" : "Add A Place")
                     .font(AstirTypography.sheetTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text(isShowingHereNowResults ? "choose the place you're at" : step.subtitle)
+                Text(isShowingHereNowResults ? "Choose The Place You're At" : step.subtitle)
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -655,7 +655,7 @@ struct AddScreen: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close add place")
+                .accessibilityLabel("Close Add Place")
             }
         }
     }
@@ -668,12 +668,12 @@ struct AddScreen: View {
                 Button {
                     clearInlineCandidateResults()
                 } label: {
-                    Label("Back to add options", systemImage: "chevron.left")
+                    Label("Back To Add Options", systemImage: "chevron.left")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.accentText)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Back to add options")
+                .accessibilityLabel("Back To Add Options")
 
                 confirmPlace
 
@@ -709,7 +709,7 @@ struct AddScreen: View {
         .allowsHitTesting(!isWalkthroughAutomatingPlace)
         .accessibilityHint(
             isWalkthroughAutomatingPlace
-                ? "Astir is choosing a nearby park for this demonstration"
+                ? "Astir Is Choosing A Nearby Park For This Demonstration"
                 : ""
         )
     }
@@ -725,7 +725,7 @@ struct AddScreen: View {
 
     private var suggestedPlacesCore: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Nearby places")
+            Text("Nearby Places")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .accessibilityAddTraits(.isHeader)
@@ -737,7 +737,7 @@ struct AddScreen: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
                         .tint(brandMode.accent)
-                    Text("Finding places near you…")
+                    Text("Finding Places Near You…")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -756,7 +756,7 @@ struct AddScreen: View {
                     }
                 } label: {
                     Label(
-                        suggestionMessage ?? "Use your location to suggest nearby places",
+                        suggestionMessage ?? "Use Your Location To Suggest Nearby Places",
                         systemImage: "location.fill"
                     )
                     .font(AstirTypography.label)
@@ -764,7 +764,7 @@ struct AddScreen: View {
                     .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Tries nearby suggestions again")
+                .accessibilityHint("Tries Nearby Suggestions Again")
             }
         }
     }
@@ -783,7 +783,7 @@ struct AddScreen: View {
                     await resolveCurrentLocationCandidates()
                 }
             } label: {
-                Label("See more", systemImage: "arrow.up.right")
+                Label("See More", systemImage: "arrow.up.right")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.accentText)
                     .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
@@ -796,7 +796,7 @@ struct AddScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("add.nearbySeeMore")
-            .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
+            .accessibilityHint("Opens All Nearby Suggestions In The Full-Screen Nearby View")
         }
     }
 
@@ -1004,7 +1004,7 @@ struct AddScreen: View {
         if UIAccessibility.isVoiceOverRunning {
             UIAccessibility.post(
                 notification: .announcement,
-                argument: "Selected \(candidate.name) for the saving-a-place demonstration."
+                argument: "Selected \(candidate.name) For The Saving-A-Place Demonstration."
             )
         }
 
@@ -1061,14 +1061,14 @@ struct AddScreen: View {
                 .font(.system(size: 38, weight: .bold))
                 .foregroundStyle(brandMode.accentText)
 
-            Text(draft?.title ?? "Draft saved.")
+            Text(draft?.title ?? "Draft Saved.")
                 .font(AstirTypography.sheetTitle)
                 .foregroundStyle(brandMode.primaryText)
-            Text(draft?.message ?? "You can finish this manually.")
+            Text(draft?.message ?? "You Can Finish This Manually.")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
-            AstirAddPrimaryButton(title: "Try another search", systemImage: "magnifyingglass") {
+            AstirAddPrimaryButton(title: "Try Another Search", systemImage: "magnifyingglass") {
                 step = .source
                 expandSheet()
                 isQuickAddFocused = true
@@ -1237,7 +1237,7 @@ struct AddScreen: View {
                   !reservation.isCompleted,
                   !reservation.isCancelled
             else {
-                resolutionMessage = "That reservation is no longer waiting for a check-in."
+                resolutionMessage = "That Reservation Is No Longer Waiting For A Check-In."
                 return
             }
             let resolvedCandidates = try await store.manualCandidates(
@@ -1249,7 +1249,7 @@ struct AddScreen: View {
                 $0.sourceProvider == reservation.sourceProvider
                     && ($0.sourceProviderPlaceID ?? $0.id) == reservation.sourceProviderPlaceID
             }) ?? resolvedCandidates.first else {
-                resolutionMessage = "We couldn’t find that restaurant. Search for it to check in."
+                resolutionMessage = "We Couldn’t Find That Restaurant. Search For It To Check In."
                 return
             }
 
@@ -1272,7 +1272,7 @@ struct AddScreen: View {
                 }
             ))
         } catch {
-            resolutionMessage = "That reservation couldn’t be opened. Try again."
+            resolutionMessage = "That Reservation Couldn’t Be Opened. Try Again."
         }
     }
 
@@ -1533,7 +1533,7 @@ struct AddScreen: View {
             let nearby = try await store.currentLocationCandidates()
             suggestedCandidates = AddSuggestedPlaces.limited(nearby)
             if suggestedCandidates.isEmpty {
-                suggestionMessage = "No nearby places found. Tap to try again."
+                suggestionMessage = "No Nearby Places Found. Tap To Try Again."
             }
         } catch {
             suggestedCandidates = []
@@ -1643,7 +1643,7 @@ struct AddScreen: View {
             let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
             await importPhotoDraft(data: data, assetRef: assetRef)
         } catch {
-            resolutionMessage = "Could not import that photo. Try another one or search by name."
+            resolutionMessage = "Could Not Import That Photo. Try Another One Or Search By Name."
         }
     }
 
@@ -1653,7 +1653,7 @@ struct AddScreen: View {
         guard let data = await Task.detached(priority: .userInitiated, operation: {
             transferableImage.value.jpegData(compressionQuality: 0.92)
         }).value else {
-            resolutionMessage = "Could not use that photo. Try another one or search by name."
+            resolutionMessage = "Could Not Use That Photo. Try Another One Or Search By Name."
             return
         }
         await importPhotoDraft(
@@ -1695,7 +1695,7 @@ struct AddScreen: View {
         let resolvedAssetRef = assetRef ?? "photo:imported_\(data.count)"
         draft = await store.createUnresolvedDraft(
             sourceType: .photo,
-            originalInput: "photo import · \(data.count) bytes",
+            originalInput: "Photo Import · \(data.count) Bytes",
             localAssetRef: resolvedAssetRef,
             backend: auth.isSignedIn ? backend : nil
         )
@@ -1785,7 +1785,7 @@ struct AddScreen: View {
             return description
         }
 
-        return "Could not find matching places. Try a more specific name or add a nearby area."
+        return "Could Not Find Matching Places. Try A More Specific Name Or Add A Nearby Area."
     }
 
 }
@@ -1840,9 +1840,9 @@ private enum AddStep {
 
     var subtitle: String {
         switch self {
-        case .source: "find it nearby, search, or import"
-        case .confirm: "Pick the right place, then save it."
-        case .draft: "we could not find enough place info yet."
+        case .source: "Find It Nearby, Search, Or Import"
+        case .confirm: "Pick The Right Place, Then Save It."
+        case .draft: "We Could Not Find Enough Place Info Yet."
         }
     }
 
@@ -1896,7 +1896,7 @@ private struct AddSearchField: View {
             TextField(
                 "",
                 text: $query,
-                prompt: Text("Search for a place")
+                prompt: Text("Search For A Place")
                     .foregroundStyle(brandMode.secondaryText.opacity(0.72))
             )
                 .font(AstirTypography.bodySmall)
@@ -1918,12 +1918,12 @@ private struct AddSearchField: View {
                         .foregroundStyle(brandMode.secondaryText.opacity(0.72))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear add search")
+                .accessibilityLabel("Clear Add Search")
             }
 
             Menu {
                 Button(action: takePhoto) {
-                    Label("Take a Photo", systemImage: "camera")
+                    Label("Take A Photo", systemImage: "camera")
                 }
 
                 Button(action: chooseFromLibrary) {
@@ -1940,8 +1940,8 @@ private struct AddSearchField: View {
                 .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
                 .contentShape(Rectangle())
             }
-            .accessibilityLabel("Add from a photo")
-            .accessibilityHint("Choose Take a Photo or Photo Library")
+            .accessibilityLabel("Add From A Photo")
+            .accessibilityHint("Choose Take A Photo Or Photo Library")
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 48)
@@ -1957,7 +1957,7 @@ private struct AddSearchField: View {
         )
         .animation(.easeOut(duration: 0.16), value: isFocused.wrappedValue)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Search for a place")
+        .accessibilityLabel("Search For A Place")
         .disabled(isLoading)
         .opacity(isLoading ? 0.78 : 1)
     }
@@ -2008,7 +2008,7 @@ private struct SuggestedPlaceCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add \(candidate.name)")
-        .accessibilityHint("Opens the save flow for this nearby place")
+        .accessibilityHint("Opens The Save Flow For This Nearby Place")
     }
 }
 
@@ -2033,7 +2033,7 @@ private struct CandidateRow: View {
         }
         .accessibilityIdentifier("add.candidate.\(candidate.id)")
         .accessibilityLabel(candidate.name)
-        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
         .accessibilityRespondsToUserInteraction(isInteractive)
     }
 
@@ -2174,7 +2174,7 @@ private struct AddCameraCaptureScreen: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Close camera")
+                    .accessibilityLabel("Close Camera")
                 }
 
                 Spacer()
@@ -2189,8 +2189,8 @@ private struct AddCameraCaptureScreen: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Choose from Photos")
-                    .accessibilityHint("Closes the camera and opens your photo library")
+                    .accessibilityLabel("Choose From Photos")
+                    .accessibilityHint("Closes The Camera And Opens Your Photo Library")
 
                     Spacer()
 
@@ -2207,7 +2207,7 @@ private struct AddCameraCaptureScreen: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Take photo")
+                    .accessibilityLabel("Take Photo")
 
                     Spacer()
 
@@ -2224,7 +2224,7 @@ private struct AddCameraCaptureScreen: View {
                     .buttonStyle(.plain)
                     .disabled(!canFlipCamera)
                     .opacity(canFlipCamera ? 1 : 0)
-                    .accessibilityLabel("Flip camera")
+                    .accessibilityLabel("Flip Camera")
                 }
             }
             .padding(.horizontal, WanderTheme.spacing3)
@@ -2242,22 +2242,22 @@ private enum AddCameraRecoveryState: Equatable {
     var title: String {
         switch self {
         case .permissionDenied:
-            "Camera access is off"
+            "Camera Access Is Off"
         case .restricted:
-            "Camera access is restricted"
+            "Camera Access Is Restricted"
         case .unavailable:
-            "Camera isn't available"
+            "Camera Isn't Available"
         }
     }
 
     var message: String {
         switch self {
         case .permissionDenied:
-            "Allow camera access in Settings, or choose an existing photo instead."
+            "Allow Camera Access In Settings, Or Choose An Existing Photo Instead."
         case .restricted:
-            "This device doesn't allow camera access. You can choose an existing photo instead."
+            "This Device Doesn't Allow Camera Access. You Can Choose An Existing Photo Instead."
         case .unavailable:
-            "You can still choose a photo without losing anything you've entered."
+            "You Can Still Choose A Photo Without Losing Anything You've Entered."
         }
     }
 }
@@ -2284,7 +2284,7 @@ private struct AddCameraRecoveryScreen: View {
                             .astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Close camera")
+                    .accessibilityLabel("Close Camera")
                 }
 
                 Spacer()
@@ -2312,7 +2312,7 @@ private struct AddCameraRecoveryScreen: View {
 
                 VStack(spacing: WanderTheme.spacing2) {
                     AstirAddPrimaryButton(
-                        title: "Choose from Photos",
+                        title: "Choose From Photos",
                         systemImage: "photo.on.rectangle",
                         action: onGallery
                     )

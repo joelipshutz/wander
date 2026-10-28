@@ -41,19 +41,19 @@ struct LiveUpcomingInvitationsView: View {
             )
             if !projection.rows.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Upcoming invitations")
+                    Text("Upcoming Invitations")
                         .font(AstirTypography.sectionTitle)
                         .accessibilityAddTraits(.isHeader)
-                    Text("\(projection.visibleRows.count) shown · \(projection.rows.count) in recent inbox")
+                    Text("\(projection.visibleRows.count) Shown · \(projection.rows.count) In Recent Inbox")
                         .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                         .accessibilityIdentifier("live.upcoming.count")
                     ForEach(projection.visibleRows) { invitation in
                         row(invitation)
                     }
-                    Text("From up to 100 recent received invitations")
+                    Text("From Up To 100 Recent Received Invitations")
                         .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button("View inbox") {
+                    Button("View Inbox") {
                         guard let userID, inbox.userID == userID else { return }
                         onOpenInbox()
                     }
@@ -64,18 +64,18 @@ struct LiveUpcomingInvitationsView: View {
                 .foregroundStyle(brand.primaryText)
             } else if let userID, inbox.userID == userID {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Upcoming invitations").font(AstirTypography.sectionTitle)
+                    Text("Upcoming Invitations").font(AstirTypography.sectionTitle)
                         .accessibilityAddTraits(.isHeader)
                     if inbox.failed {
-                        Text("Couldn’t refresh invitations. Open your inbox to try again.")
+                        Text("Couldn’t Refresh Invitations. Open Your Inbox To Try Again.")
                             .font(AstirTypography.bodySmall)
                     } else if inbox.isLoading {
-                        ProgressView("Refreshing invitations")
+                        ProgressView("Refreshing Invitations")
                     } else {
-                        Text("No upcoming dates in your recent received invitations.")
+                        Text("No Upcoming Dates In Your Recent Received Invitations.")
                             .font(AstirTypography.bodySmall)
                     }
-                    Button("View inbox") {
+                    Button("View Inbox") {
                         guard inbox.userID == userID else { return }
                         onOpenInbox()
                     }
@@ -85,7 +85,7 @@ struct LiveUpcomingInvitationsView: View {
                 }
                 .foregroundStyle(brand.primaryText)
             } else {
-                Text("Invitations are unavailable.")
+                Text("Invitations Are Unavailable.")
                     .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
             }
         }
@@ -118,7 +118,7 @@ struct LiveUpcomingInvitationsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens your invitation. No response is sent.")
+        .accessibilityHint("Opens Your Invitation. No Response Is Sent.")
         .accessibilityIdentifier("live.upcoming.invitation.\(invitation.id.uuidString)")
     }
 }

@@ -40,11 +40,11 @@ enum ProfileIdentityValidationError: Error, Equatable {
     var message: String {
         switch self {
         case .displayNameRequired:
-            "Add your name so friends can recognize you."
+            "Add Your Name So Friends Can Recognize You."
         case .displayNameTooLong:
-            "Keep your name to 80 characters or fewer."
+            "Keep Your Name To 80 Characters Or Fewer."
         case .invalidHandle:
-            "Use 2–39 lowercase letters, numbers, or underscores."
+            "Use 2–39 Lowercase Letters, Numbers, Or Underscores."
         }
     }
 }
@@ -99,15 +99,15 @@ enum ProfileIdentitySubmissionError: Error, Equatable {
     var message: String {
         switch self {
         case .handleTaken:
-            "That username was just claimed. Try another one."
+            "That Username Was Just Claimed. Try Another One."
         case .invalidIdentity:
-            "Check your name and username, then try again."
+            "Check Your Name And Username, Then Try Again."
         case .signedOut:
-            "Your session ended. Log in again to continue."
+            "Your Session Ended. Log In Again To Continue."
         case .unavailable:
-            "We couldn’t save your profile. Check your connection and try again."
+            "We Couldn’t Save Your Profile. Check Your Connection And Try Again."
         case .contentNotAllowed:
-            "That text can’t be shared on Astir. Please revise it and try again."
+            "That Text Can’t Be Shared On Astir. Please Revise It And Try Again."
         }
     }
 }

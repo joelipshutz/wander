@@ -287,7 +287,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(store.isPresentingNativeAuth)
         XCTAssertEqual(
             store.nativeAuthError,
-            "Apple sign-in didn’t finish. Try again or use another method."
+            "Apple Sign-In Didn’t Finish. Try Again Or Use Another Method."
         )
         XCTAssertEqual(
             analytics.events,
@@ -326,7 +326,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertNil(store.activeSocialAuthProvider)
         XCTAssertEqual(
             store.nativeAuthError,
-            "We couldn’t match that Apple login to an existing account. Sign in with the method you originally used. Your saved places and people are still there."
+            "We Couldn’t Match That Apple Login To An Existing Account. Sign In With The Method You Originally Used. Your Saved Places And People Are Still There."
         )
     }
 
@@ -392,7 +392,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertNil(store.emailVerificationAddress)
         XCTAssertEqual(
             store.nativeAuthError,
-            "We couldn’t find an account for that email. Try Apple or Google, or create an account."
+            "We Couldn’t Find An Account For That Email. Try Apple Or Google, Or Create An Account."
         )
     }
 
@@ -438,7 +438,7 @@ final class AuthSessionTests: XCTestCase {
             password: "password"
         )
         XCTAssertNil(invalidEmailOutcome)
-        XCTAssertEqual(store.nativeAuthError, "Enter a valid email address.")
+        XCTAssertEqual(store.nativeAuthError, "Enter A Valid Email Address.")
         XCTAssertTrue(provider.requestedPasswordSignInEmails.isEmpty)
 
         let emptyPasswordOutcome = await store.signInWithPassword(
@@ -446,7 +446,7 @@ final class AuthSessionTests: XCTestCase {
             password: ""
         )
         XCTAssertNil(emptyPasswordOutcome)
-        XCTAssertEqual(store.nativeAuthError, "Enter your password.")
+        XCTAssertEqual(store.nativeAuthError, "Enter Your Password.")
         XCTAssertTrue(provider.requestedPasswordSignInEmails.isEmpty)
     }
 
@@ -466,7 +466,7 @@ final class AuthSessionTests: XCTestCase {
 
         XCTAssertNil(outcome)
         XCTAssertTrue(store.isPresentingNativeAuth)
-        XCTAssertEqual(store.nativeAuthError, "Email or password didn’t match.")
+        XCTAssertEqual(store.nativeAuthError, "Email Or Password Didn’t Match.")
         XCTAssertFalse(store.isSigningInWithPassword)
     }
 
@@ -488,7 +488,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(store.isPresentingNativeAuth)
         XCTAssertEqual(
             store.nativeAuthError,
-            "This account needs another verification step. Use email or another sign-in method."
+            "This Account Needs Another Verification Step. Use Email Or Another Sign-In Method."
         )
     }
 
@@ -505,7 +505,7 @@ final class AuthSessionTests: XCTestCase {
             configureClerk: { _ in "" }
         )
 
-        XCTAssertEqual(service.state, .unavailable("Missing Clerk publishable key."))
+        XCTAssertEqual(service.state, .unavailable("Missing Clerk Publishable Key."))
         XCTAssertFalse(service.canPresentNativeAuth)
     }
 
@@ -536,7 +536,7 @@ final class AuthSessionTests: XCTestCase {
             service.state,
             .offline(
                 session,
-                message: "Could not verify your session. Your saved map is available offline."
+                message: "Could Not Verify Your Session. Your Saved Map Is Available Offline."
             )
         )
         XCTAssertEqual(cache.session, session)
@@ -560,7 +560,7 @@ final class AuthSessionTests: XCTestCase {
 
         XCTAssertEqual(
             service.state,
-            .unavailable("Could not verify your session. Check your connection and try again.")
+            .unavailable("Could Not Verify Your Session. Check Your Connection And Try Again.")
         )
     }
 
@@ -1754,7 +1754,7 @@ final class AuthSessionTests: XCTestCase {
 
         XCTAssertEqual(store.state, .signedIn(session))
         XCTAssertFalse(store.isSigningOut)
-        XCTAssertEqual(store.signOutError, "Could not sign out. Try again.")
+        XCTAssertEqual(store.signOutError, "Could Not Sign Out. Try Again.")
     }
 
     func testStoreTracksProviderLogoutWithoutManualRefresh() async {
@@ -1871,18 +1871,18 @@ final class AuthSessionTests: XCTestCase {
 
     func testAuthGateCopyKeepsTrustPromisesClear() {
         let syncCopy = AuthGateIntent.syncPlace.copy
-        XCTAssertTrue(syncCopy.message.contains("this phone"))
-        XCTAssertTrue(syncCopy.message.contains("visibility setting"))
+        XCTAssertTrue(syncCopy.message.contains("This Phone"))
+        XCTAssertTrue(syncCopy.message.contains("Visibility Setting"))
 
         let socialCopy = AuthGateIntent.socialSave.copy
-        XCTAssertTrue(socialCopy.message.contains("whose map"))
+        XCTAssertTrue(socialCopy.message.contains("Whose Map"))
 
         let followCopy = AuthGateIntent.followPeople.copy
-        XCTAssertTrue(followCopy.message.contains("social map"))
+        XCTAssertTrue(followCopy.message.contains("Social Map"))
     }
 
     func testSettingsTrustSurfaceKeepsAlphaPromisesClear() {
-        XCTAssertEqual(SettingsTrustSurface.rowTitle, "Privacy and trust")
+        XCTAssertEqual(SettingsTrustSurface.rowTitle, "Privacy And Trust")
         XCTAssertEqual(SettingsTrustSurface.rowAccessibilityID, "settings.privacyTrust.row")
         XCTAssertEqual(SettingsTrustSurface.sheetAccessibilityID, "settings.privacyTrust.sheet")
 
@@ -1890,13 +1890,13 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(facts.map(\.id), ["everyone", "stealth", "location", "extraction", "blocks", "contacts"])
         XCTAssertEqual(Set(facts.map(\.id)).count, facts.count)
 
-        XCTAssertTrue(facts.first { $0.id == "everyone" }?.body.contains("people who follow you") == true)
-        XCTAssertTrue(facts.first { $0.id == "everyone" }?.body.contains("not a public internet feed") == true)
-        XCTAssertTrue(facts.first { $0.id == "stealth" }?.body.contains("you only") == true)
-        XCTAssertTrue(facts.first { $0.id == "location" }?.body.contains("does not broadcast live location") == true)
-        XCTAssertTrue(facts.first { $0.id == "extraction" }?.body.contains("never auto-save") == true)
-        XCTAssertTrue(facts.first { $0.id == "blocks" }?.body.contains("hides profiles, places, search results, and map content") == true)
-        XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("If you choose Find friends") == true)
+        XCTAssertTrue(facts.first { $0.id == "everyone" }?.body.contains("People Who Follow You") == true)
+        XCTAssertTrue(facts.first { $0.id == "everyone" }?.body.contains("Not A Public Internet Feed") == true)
+        XCTAssertTrue(facts.first { $0.id == "stealth" }?.body.contains("You Only") == true)
+        XCTAssertTrue(facts.first { $0.id == "location" }?.body.contains("Does Not Broadcast Live Location") == true)
+        XCTAssertTrue(facts.first { $0.id == "extraction" }?.body.contains("Never Auto-Save") == true)
+        XCTAssertTrue(facts.first { $0.id == "blocks" }?.body.contains("Hides Profiles, Places, Search Results, And Map Content") == true)
+        XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("If You Choose Find Friends") == true)
         XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("iOS Settings") == true)
     }
 
@@ -1951,35 +1951,35 @@ final class AuthSessionTests: XCTestCase {
     }
 
     func testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch() {
-        XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "stealth mode for new saves")
+        XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "Stealth Mode For New Saves")
 
         let notPrivateCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .followers)
-        XCTAssertTrue(notPrivateCopy.contains("new places"))
-        XCTAssertTrue(notPrivateCopy.contains("people who follow you"))
-        XCTAssertTrue(notPrivateCopy.contains("turn stealth on"))
+        XCTAssertTrue(notPrivateCopy.contains("New Places"))
+        XCTAssertTrue(notPrivateCopy.contains("People Who Follow You"))
+        XCTAssertTrue(notPrivateCopy.contains("Turn Stealth On"))
 
         let privateCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .selfOnly)
-        XCTAssertTrue(privateCopy.contains("new places start private"))
-        XCTAssertTrue(privateCopy.contains("Only you can see them"))
+        XCTAssertTrue(privateCopy.contains("New Places Start Private"))
+        XCTAssertTrue(privateCopy.contains("Only You Can See Them"))
 
         let lockedCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .selfOnly, isLockedByPrivateProfile: true)
-        XCTAssertTrue(lockedCopy.contains("Locked on by Private Profile"))
-        XCTAssertTrue(lockedCopy.contains("while Private Profile is on"))
+        XCTAssertTrue(lockedCopy.contains("Locked On By Private Profile"))
+        XCTAssertTrue(lockedCopy.contains("While Private Profile Is On"))
 
-        XCTAssertEqual(SettingsProfilePrivacySurface.title, "Private profile")
-        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: true).contains("saved places are in stealth mode"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: true).contains("new collaborative lists are unavailable"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: false).contains("username can appear in search"))
+        XCTAssertEqual(SettingsProfilePrivacySurface.title, "Private Profile")
+        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: true).contains("Saved Places Are In Stealth Mode"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: true).contains("New Collaborative Lists Are Unavailable"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: false).contains("Username Can Appear In Search"))
         XCTAssertFalse(SettingsProfilePrivacySurface.body(isEnabled: false).contains("Stealth mode below"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Places saved by you will switch to stealth mode"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("check-ins and Wanna Go"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("username will be hidden"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("existing collaborative lists stay unchanged"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("new collaborative lists are unavailable"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Places Saved By You Will Switch To Stealth Mode"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Check-Ins And Wanna Go"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Username Will Be Hidden"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Existing Collaborative Lists Stay Unchanged"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("New Collaborative Lists Are Unavailable"))
         XCTAssertFalse(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Stealth mode will stay activated"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("username can appear in search again"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("existing places will stay in stealth mode"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("future saves will follow"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("Username Can Appear In Search Again"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("Existing Places Will Stay In Stealth Mode"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("Future Saves Will Follow"))
     }
 
     private func waitForState(

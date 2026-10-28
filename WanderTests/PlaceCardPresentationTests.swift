@@ -14,7 +14,7 @@ final class PlaceCardPresentationTests: XCTestCase {
             XCTAssertNil(rating.count)
             XCTAssertEqual(rating.source, .featured)
             XCTAssertNil(rating.providerDisplayName)
-            XCTAssertEqual(rating.accessibilityLabel, "Featured, 5 out of 5, not yet rated")
+            XCTAssertEqual(rating.accessibilityLabel, "Featured, 5 Out Of 5, Not Yet Rated")
         }
     }
 
@@ -136,7 +136,7 @@ final class PlaceCardPresentationTests: XCTestCase {
 
         XCTAssertFalse(hours.isOpen)
         XCTAssertEqual(hours.statusText, "Closed")
-        XCTAssertEqual(hours.detailText, "Opens Tue at 8 AM")
+        XCTAssertEqual(hours.detailText, "Opens Tue At 8 AM")
     }
 
     func testOpenHoursShowTodaysClosingTime() throws {
@@ -153,7 +153,7 @@ final class PlaceCardPresentationTests: XCTestCase {
 
         XCTAssertTrue(hours.isOpen)
         XCTAssertEqual(hours.statusText, "Open")
-        XCTAssertEqual(hours.detailText, "Closes at 11 AM")
+        XCTAssertEqual(hours.detailText, "Closes At 11 AM")
     }
 
     func testMissingHoursOmitsTheBadge() {

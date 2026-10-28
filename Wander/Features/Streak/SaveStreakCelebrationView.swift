@@ -63,7 +63,7 @@ struct SaveStreakCelebrationView: View {
                             .minimumScaleFactor(0.72)
                             .lineLimit(1)
 
-                        Text("day streak!")
+                        Text("Day Streak!")
                             .font(.system(size: streakLabelFontSize, weight: .semibold, design: .serif))
                             .minimumScaleFactor(0.72)
                             .lineLimit(1)
@@ -102,7 +102,7 @@ struct SaveStreakCelebrationView: View {
                     Spacer(minLength: WanderTheme.spacing6)
 
                     Button(action: onDismiss) {
-                        Text("Got it")
+                        Text("Got It")
                             .font(AstirTypography.control)
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 54)
@@ -111,7 +111,7 @@ struct SaveStreakCelebrationView: View {
                             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityHint("Closes the streak celebration")
+                    .accessibilityHint("Closes The Streak Celebration")
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, max(proxy.safeAreaInsets.bottom, WanderTheme.spacing4) + WanderTheme.spacing2)
                 }
@@ -150,8 +150,8 @@ struct SaveStreakCelebrationView: View {
         let title = SaveStreakCelebrationPresentation.accessibilityTitle(
             for: celebration.streakCount
         )
-        let activity = celebration.status == .been ? CheckInCopy.pastTense : "added to Wanna"
-        return "\(title). \(activity) at \(celebration.placeName)."
+        let activity = celebration.status == .been ? CheckInCopy.pastTense : "Added To Wanna"
+        return "\(title). \(activity) At \(celebration.placeName)."
     }
 }
 
@@ -328,9 +328,9 @@ private struct SaveStreakWeekCard: View {
     private func weekAccessibilityLabel(for days: [SaveStreakWeekday]) -> String {
         let coveredCount = days.filter(\.isCovered).count
         let recoveryCopy = days.contains(where: \.isRecoveryDay)
-            ? " One missed day used a Streak Save."
+            ? " One Missed Day Used A Streak Save."
             : ""
-        return "Last \(SaveStreakWindow.dayCount) days. \(coveredCount) days complete. Today complete.\(recoveryCopy)"
+        return "Last \(SaveStreakWindow.dayCount) Days. \(coveredCount) Days Complete. Today Complete.\(recoveryCopy)"
     }
 }
 

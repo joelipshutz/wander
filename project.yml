@@ -333,12 +333,12 @@ targets:
           - tiktoksharesdk
           - snssdk1180
           - snssdk1233
-        NSCameraUsageDescription: Astir uses the camera when you choose to take a profile or place photo, such as adding a restaurant photo to a saved place.
-        NSMicrophoneUsageDescription: Astir uses your microphone only when you choose to record a voice note for the Astir team with your feedback.
-        NSCalendarsFullAccessUsageDescription: Astir reads restaurant reservations from Apple Calendar to prepare private check-in reminders. It syncs only the matched restaurant and reservation time—not raw calendar titles, notes, guests, URLs, or addresses.
-        NSContactsUsageDescription: Astir reads the contacts you allow to find friends or choose invitations. If you choose Find friends, phone numbers and emails are securely compared with verified Astir accounts; your address book is not saved on our servers.
-        NSLocationWhenInUseUsageDescription: Astir uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.
-        NSPhotoLibraryAddUsageDescription: Astir saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.
+        NSCameraUsageDescription: Astir Uses The Camera When You Choose To Take A Profile Or Place Photo, Such As Adding A Restaurant Photo To A Saved Place.
+        NSMicrophoneUsageDescription: Astir Uses Your Microphone Only When You Choose To Record A Voice Note For The Astir Team With Your Feedback.
+        NSCalendarsFullAccessUsageDescription: Astir Reads Restaurant Reservations From Apple Calendar To Prepare Private Check-In Reminders. It Syncs Only The Matched Restaurant And Reservation Time—Not Raw Calendar Titles, Notes, Guests, URLs, Or Addresses.
+        NSContactsUsageDescription: Astir Reads The Contacts You Allow To Find Friends Or Choose Invitations. If You Choose Find Friends, Phone Numbers And Emails Are Securely Compared With Verified Astir Accounts; Your Address Book Is Not Saved On Our Servers.
+        NSLocationWhenInUseUsageDescription: Astir Uses Your Location To Suggest Nearby Places When You Ask And To Keep An Optional Nearby Widget Useful. It Never Broadcasts Live Location.
+        NSPhotoLibraryAddUsageDescription: Astir Saves A Share Ticket To Your Photo Library When You Choose Save, Instagram Post, Or TikTok.
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
@@ -399,7 +399,7 @@ targets:
     info:
       path: WanderShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: Save to Astir
+        CFBundleDisplayName: Save To Astir
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

@@ -14,7 +14,7 @@ import XCTest
         app.buttons["Profile"].firstMatch.tap()
         let bell = app.buttons["profile.checkInInvitations"]
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
-        let hasOne = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1 new notification"), object: bell)
+        let hasOne = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1 New Notification"), object: bell)
         XCTAssertEqual(XCTWaiter.wait(for: [hasOne], timeout: 10), .completed)
         let before = XCTAttachment(screenshot: app.screenshot())
         before.name = "rec486-bell-count"
@@ -26,7 +26,7 @@ import XCTest
         XCTAssertEqual(row.value as? String, "Unread")
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
-        XCTAssertEqual(bell.value as? String, "No new notifications")
+        XCTAssertEqual(bell.value as? String, "No New Notifications")
         let after = XCTAttachment(screenshot: app.screenshot())
         after.name = "rec486-bell-cleared"
         after.lifetime = .keepAlways
@@ -43,7 +43,7 @@ import XCTest
         XCTAssertEqual(row.value as? String, "Unread", "The plan remains unopened and available")
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
-        XCTAssertEqual(bell.value as? String, "No new notifications")
+        XCTAssertEqual(bell.value as? String, "No New Notifications")
     }
 
     func testProfileNotificationsKeepReadPlansAvailableToReopen() {
@@ -104,7 +104,7 @@ import XCTest
         // A second incoming link must dismiss the first presentation before
         // opening the replacement; unavailable links never show stale content.
         openInvitation(token: String(repeating: "b", count: 48), in: app)
-        XCTAssertTrue(app.staticTexts["This invitation is unavailable"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["This Invitation Is Unavailable"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["place-plan.message"].exists)
         app.buttons["place-plan.close"].tap()
         XCTAssertFalse(app.buttons["place-plan.close"].waitForExistence(timeout: 2))

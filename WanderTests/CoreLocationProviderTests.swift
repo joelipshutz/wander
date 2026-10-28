@@ -417,7 +417,7 @@ final class CoreLocationProviderTests: XCTestCase {
     func testLocationUnavailableCopyOffersRetry() {
         XCTAssertEqual(
             PlaceResolutionError.locationUnavailable.errorDescription,
-            "Couldn’t get your location. Tap to retry"
+            "Couldn’t Get Your Location. Tap To Retry"
         )
     }
 

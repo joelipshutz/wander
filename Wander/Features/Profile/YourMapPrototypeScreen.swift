@@ -201,13 +201,13 @@ struct YourMapPrototypeScreen: View {
                 SnapshotListEditorScreen(listID: editingSnapshotListID)
             }
         }
-        .alert("Couldn’t save snapshot", isPresented: Binding(
+        .alert("Couldn’t Save Snapshot", isPresented: Binding(
             get: { snapshotError != nil },
             set: { if !$0 { snapshotError = nil } }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(snapshotError ?? "Please try again.")
+            Text(snapshotError ?? "Please Try Again.")
         }
         .navigationTitle(interaction.isMapChromeVisible ? (mode == .map ? mapTitle : "Patterns") : "")
         .navigationBarTitleDisplayMode(.inline)
@@ -227,7 +227,7 @@ struct YourMapPrototypeScreen: View {
                         Image(systemName: mode == .map ? "square.and.arrow.up" : "slider.horizontal.3")
                     }
                     .disabled(mode == .map && sharedMapProfile?.serverID == nil)
-                    .accessibilityLabel(mode == .map ? "Share this lens" : "Filters")
+                    .accessibilityLabel(mode == .map ? "Share This Lens" : "Filters")
                 }
             }
         }
@@ -284,9 +284,9 @@ struct YourMapPrototypeScreen: View {
     }
 
     private func mapShareTitle(_ profile: LocalProfile) -> String {
-        if let city = lens.cities.sorted().first { return "\(profile.displayName)’s \(city) map" }
-        if let category = lens.categories.sorted().first { return "\(profile.displayName)’s \(category.lowercased()) map" }
-        return mapTitle == "Your Map" ? "\(profile.displayName)’s map" : mapTitle
+        if let city = lens.cities.sorted().first { return "\(profile.displayName)’s \(city) Map" }
+        if let category = lens.categories.sorted().first { return "\(profile.displayName)’s \(category) Map" }
+        return mapTitle == "Your Map" ? "\(profile.displayName)’s Map" : mapTitle
     }
 
     private var filteredPlaces: [YourMapPrototypePlace] {
@@ -423,8 +423,8 @@ struct YourMapPrototypeScreen: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isCapturingSnapshot)
-                .accessibilityLabel("Save map snapshot as a list")
-                .accessibilityHint("Includes the saved Check-in and Wanna pins in this view")
+                .accessibilityLabel("Save Map Snapshot As A List")
+                .accessibilityHint("Includes The Saved Check-In And Wanna Pins In This View")
                 .accessibilityIdentifier("yourMap.snapshot")
             }
 
@@ -451,7 +451,7 @@ struct YourMapPrototypeScreen: View {
                     }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Filters, \(lens.activeSectionCount) active")
+            .accessibilityLabel("Filters, \(lens.activeSectionCount) Active")
             .accessibilityIdentifier("yourMap.prototype.filters")
         }
         .padding(.horizontal, WanderTheme.spacing4)
@@ -475,7 +475,7 @@ struct YourMapPrototypeScreen: View {
                 throw MapSnapshotCapture.CaptureError.empty
             }
             snapshotListID = list.localID
-            UIAccessibility.post(notification: .announcement, argument: "Snapshot list saved. View snapshot list.")
+            UIAccessibility.post(notification: .announcement, argument: "Snapshot List Saved. View Snapshot List.")
             Task {
                 try? await Task.sleep(for: .milliseconds(600))
                 isCapturingSnapshot = false
@@ -494,7 +494,7 @@ struct YourMapPrototypeScreen: View {
                 .foregroundStyle(WanderTheme.stateSuccess.color)
                 .accessibilityHidden(true)
 
-            Text("View snapshot list")
+            Text("View Snapshot List")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.primaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -510,7 +510,7 @@ struct YourMapPrototypeScreen: View {
                     .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
             }
             .accessibilityIdentifier("yourMap.viewSnapshotList")
-            .accessibilityHint("Edit the snapshot list's name, details, and places")
+            .accessibilityHint("Edit The Snapshot List's Name, Details, And Places")
         }
         .buttonStyle(.plain)
         .padding(.leading, WanderTheme.spacing4)
@@ -577,7 +577,7 @@ struct YourMapPrototypeScreen: View {
 
     private var categoryMixCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Label("category mix", systemImage: "chart.bar.fill")
+            Label("Category Mix", systemImage: "chart.bar.fill")
                 .font(AstirTypography.label)
             ForEach(insights.categoryBreakdown.prefix(5)) { item in
                 YourMapPrototypeBarRow(item: item)
@@ -593,12 +593,12 @@ struct YourMapPrototypeScreen: View {
 
     private var repeatRateCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Label("repeat rate", systemImage: "arrow.triangle.2.circlepath")
+            Label("Repeat Rate", systemImage: "arrow.triangle.2.circlepath")
                 .font(AstirTypography.label)
             Text("\(repeatRatePercentage)%")
                 .font(AstirTypography.screenTitle.monospacedDigit())
                 .foregroundStyle(brandMode.accentText)
-            Text("of checked-in places are somewhere you returned to")
+            Text("Of Checked-In Places Are Somewhere You Returned To")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -620,7 +620,7 @@ struct YourMapPrototypeScreen: View {
 
     private var monthlyRhythmCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Label("month by month", systemImage: "calendar")
+            Label("Month By Month", systemImage: "calendar")
                 .font(AstirTypography.cardTitle)
 
             LazyVGrid(
@@ -646,7 +646,7 @@ struct YourMapPrototypeScreen: View {
                             }
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(month.title), \(month.count) places")
+                    .accessibilityLabel("\(month.title), \(month.count) Places")
                 }
             }
         }
@@ -659,11 +659,11 @@ struct YourMapPrototypeScreen: View {
 
     private var returnMagnetsCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Label("return magnets", systemImage: "arrow.triangle.2.circlepath")
+            Label("Return Magnets", systemImage: "arrow.triangle.2.circlepath")
                 .font(AstirTypography.cardTitle)
 
             if insights.returnMagnets.isEmpty {
-                Text("Places you revisit will collect here.")
+                Text("Places You Revisit Will Collect Here.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
             } else {
@@ -684,7 +684,7 @@ struct YourMapPrototypeScreen: View {
                                 .foregroundStyle(brandMode.secondaryText)
                         }
                         Spacer(minLength: 0)
-                        Text("\(place.visitCount) visits")
+                        Text("\(place.visitCount) Visits")
                             .font(AstirTypography.metadata.monospacedDigit())
                             .foregroundStyle(brandMode.accentText)
                     }
@@ -708,15 +708,15 @@ struct YourMapPrototypeScreen: View {
             Image(systemName: dataset.places.isEmpty ? "mappin.and.ellipse" : "line.3.horizontal.decrease.circle")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(brandMode.accentText)
-            Text(dataset.places.isEmpty ? "\(mapTitle) has no places you can see yet" : "No places match this lens")
+            Text(dataset.places.isEmpty ? "\(mapTitle) Has No Places You Can See Yet" : "No Places Match This Lens")
                 .font(AstirTypography.cardTitle)
                 .multilineTextAlignment(.center)
-            Text(dataset.places.isEmpty ? emptyMapDetail : "Keep the lens or loosen one filter. Your choices stay intact until you reset them.")
+            Text(dataset.places.isEmpty ? emptyMapDetail : "Keep The Lens Or Loosen One Filter. Your Choices Stay Intact Until You Reset Them.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .multilineTextAlignment(.center)
             if !dataset.places.isEmpty {
-                Button("Reset lens") {
+                Button("Reset Lens") {
                     lens = YourMapPrototypeLens()
                 }
                 .font(AstirTypography.control)
@@ -740,8 +740,8 @@ struct YourMapPrototypeScreen: View {
 
     private var emptyMapDetail: String {
         mapTitle == "Your Map"
-            ? "Add a place worth remembering and it will appear here."
-            : "Places they choose to share with you will appear here."
+            ? "Add A Place Worth Remembering And It Will Appear Here."
+            : "Places They Choose To Share With You Will Appear Here."
     }
 
     private var patternsEmptyState: some View {
@@ -749,9 +749,9 @@ struct YourMapPrototypeScreen: View {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(brandMode.accentText)
-            Text("No patterns in this slice yet")
+            Text("No Patterns In This Slice Yet")
                 .font(AstirTypography.cardTitle)
-            Text("Try a wider time range or reset one filter.")
+            Text("Try A Wider Time Range Or Reset One Filter.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
         }
@@ -831,7 +831,7 @@ private struct YourMapPrototypeFilterSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                     savedLensSection
 
-                    filterSection(title: "Time", detail: "Choose one") {
+                    filterSection(title: "Time", detail: "Choose One") {
                         optionGrid {
                             ForEach(YourMapPrototypeTimeRange.allCases) { range in
                                 filterChip(
@@ -845,7 +845,7 @@ private struct YourMapPrototypeFilterSheet: View {
                         }
                     }
 
-                    filterSection(title: "Status", detail: "Choose one or more") {
+                    filterSection(title: "Status", detail: "Choose One Or More") {
                         optionGrid {
                             ForEach(YourMapPrototypeStatus.allCases) { status in
                                 filterChip(
@@ -859,7 +859,7 @@ private struct YourMapPrototypeFilterSheet: View {
                         }
                     }
 
-                    filterSection(title: "Category", detail: "Values combine together") {
+                    filterSection(title: "Category", detail: "Values Combine Together") {
                         optionGrid {
                             ForEach(categories, id: \.self) { category in
                                 filterChip(
@@ -873,7 +873,7 @@ private struct YourMapPrototypeFilterSheet: View {
                         }
                     }
 
-                    filterSection(title: "City", detail: "Choose one or more") {
+                    filterSection(title: "City", detail: "Choose One Or More") {
                         optionGrid {
                             ForEach(cities, id: \.self) { city in
                                 filterChip(
@@ -887,7 +887,7 @@ private struct YourMapPrototypeFilterSheet: View {
                         }
                     }
 
-                    filterSection(title: "Country", detail: "Choose one or more") {
+                    filterSection(title: "Country", detail: "Choose One Or More") {
                         optionGrid {
                             ForEach(countries, id: \.self) { country in
                                 filterChip(
@@ -901,7 +901,7 @@ private struct YourMapPrototypeFilterSheet: View {
                         }
                     }
 
-                    filterSection(title: "Tags", detail: "Any selected tag can match") {
+                    filterSection(title: "Tags", detail: "Any Selected Tag Can Match") {
                         optionGrid {
                             ForEach(tags, id: \.self) { tag in
                                 filterChip(
@@ -915,7 +915,7 @@ private struct YourMapPrototypeFilterSheet: View {
                         }
                     }
 
-                    filterSection(title: "Rating", detail: "Choose one") {
+                    filterSection(title: "Rating", detail: "Choose One") {
                         optionGrid {
                             ForEach(YourMapPrototypeRatingOption.allCases) { option in
                                 filterChip(
@@ -930,13 +930,13 @@ private struct YourMapPrototypeFilterSheet: View {
                     }
 
                     Toggle(isOn: $lens.repeatOnly) {
-                        Label("Repeat visits only", systemImage: "arrow.triangle.2.circlepath")
+                        Label("Repeat Visits Only", systemImage: "arrow.triangle.2.circlepath")
                             .font(AstirTypography.label)
                     }
                     .tint(brandMode.accent)
                     .frame(minHeight: WanderTheme.tapMinimum)
 
-                    Text("Values within a section combine. Sections narrow the map together. A zero-result lens stays selected until you change or reset it.")
+                    Text("Values Within A Section Combine. Sections Narrow The Map Together. A Zero-Result Lens Stays Selected Until You Change Or Reset It.")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -972,7 +972,7 @@ private struct YourMapPrototypeFilterSheet: View {
                                 )
                             )
                         } label: {
-                            Label(isCurrentLensSaved ? "Saved" : "Save lens", systemImage: isCurrentLensSaved ? "checkmark" : "bookmark")
+                            Label(isCurrentLensSaved ? "Saved" : "Save Lens", systemImage: isCurrentLensSaved ? "checkmark" : "bookmark")
                                 .font(AstirTypography.control)
                                 .foregroundStyle(brandMode.primaryText)
                                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -1017,21 +1017,21 @@ private struct YourMapPrototypeFilterSheet: View {
     private var savedLensSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Saved lenses")
+                Text("Saved Lenses")
                     .font(AstirTypography.sectionTitle)
                 Spacer()
-                Text("Reusable filters")
+                Text("Reusable Filters")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
             }
 
-            Text("Save lens stores this exact filter recipe. Tap it later to reapply the same slice; it does not share any places.")
+            Text("Save Lens Stores This Exact Filter Recipe. Tap It Later To Reapply The Same Slice; It Does Not Share Any Places.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
             if savedLenses.isEmpty {
-                Label("No saved lenses yet", systemImage: "bookmark")
+                Label("No Saved Lenses Yet", systemImage: "bookmark")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
@@ -1222,7 +1222,7 @@ private struct YourMapPrototypeSavedLensRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: 68)
         .clipped()
-        .accessibilityAction(named: "Delete lens", onDelete)
+        .accessibilityAction(named: "Delete Lens", onDelete)
     }
 
     private var swipeGesture: some Gesture {
@@ -1278,8 +1278,8 @@ struct YourMapGeographyCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: WanderTheme.spacing4) {
-                column("cities", items: cities, identifier: "city")
-                column("countries", items: countries, identifier: "country")
+                column("Cities", items: cities, identifier: "city")
+                column("Countries", items: countries, identifier: "country")
             }
             .overlay {
                 Rectangle()
@@ -1297,7 +1297,7 @@ struct YourMapGeographyCard: View {
                         }
                     } label: {
                         HStack(spacing: 7) {
-                            Text(isExpanded ? "See less" : "See more")
+                            Text(isExpanded ? "See Less" : "See More")
                                 .font(AstirTypography.metadata)
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 12, weight: .semibold))
@@ -1309,9 +1309,9 @@ struct YourMapGeographyCard: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(isExpanded ? "Show top five cities and countries" : "Show top ten cities and countries")
+                    .accessibilityLabel(isExpanded ? "Show Top Five Cities And Countries" : "Show Top Ten Cities And Countries")
                     .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-                    .accessibilityHint("Updates this section in place")
+                    .accessibilityHint("Updates This Section In Place")
                     .accessibilityIdentifier("yourMap.prototype.geography.expand")
                 }
                 .padding(.top, WanderTheme.spacing1)
@@ -1351,7 +1351,7 @@ struct YourMapGeographyCard: View {
             .accessibilityAddTraits(.isHeader)
 
             if items.isEmpty {
-                Text("No \(title) yet")
+                Text("No \(title) Yet")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1359,7 +1359,7 @@ struct YourMapGeographyCard: View {
                 VStack(spacing: 14) {
                     ForEach(items.prefix(isExpanded ? 10 : 5)) { item in
                         YourMapPrototypeBarRow(item: item, minimumFraction: 0)
-                            .accessibilityLabel("\(item.title), \(Int((item.fraction * 100).rounded())) percent, \(item.count) places")
+                            .accessibilityLabel("\(item.title), \(Int((item.fraction * 100).rounded())) Percent, \(item.count) Places")
                             .accessibilityIdentifier("yourMap.prototype.\(identifier)Row.\(item.id)")
                             .transition(.opacity)
                     }
@@ -1398,7 +1398,7 @@ private struct YourMapPrototypeBarRow: View {
             .frame(height: 6)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.title), \(item.count) places")
+        .accessibilityLabel("\(item.title), \(item.count) Places")
     }
 }
 
@@ -1439,8 +1439,8 @@ private enum YourMapPrototypeRatingOption: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .any: "Any"
-        case .fourPlus: "4+ stars"
-        case .fourPointFivePlus: "4.5+ stars"
+        case .fourPlus: "4+ Stars"
+        case .fourPointFivePlus: "4.5+ Stars"
         }
     }
 

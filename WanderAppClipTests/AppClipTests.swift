@@ -64,7 +64,7 @@ final class ClipStoreTests: XCTestCase {
         store.resumeAfterAuth()
         await settle { !store.isWorking && service.saves == 1 }
         XCTAssertEqual(service.saves, 1)
-        XCTAssertEqual(store.success, "Saved to your Wanna map")
+        XCTAssertEqual(store.success, "Saved To Your Wanna Map")
     }
 
     func testDeviceTrustCodeMustCompleteBeforePendingSave() async {
@@ -142,7 +142,7 @@ final class ClipStoreTests: XCTestCase {
         store.open(url); await settle { !store.isLoading }
         store.perform(.save(service.place))
         await settle { !store.isWorking }
-        XCTAssertEqual(store.success, "Already on your map")
+        XCTAssertEqual(store.success, "Already On Your Map")
     }
 
     func testSetupAndJoinRunInsideClip() async {
@@ -159,7 +159,7 @@ final class ClipStoreTests: XCTestCase {
         await settle { !store.isWorking }
         XCTAssertEqual(service.joins, 1)
         XCTAssertEqual(store.route?.kind, .list)
-        XCTAssertEqual(store.success, "You're on the list")
+        XCTAssertEqual(store.success, "You're On The List")
     }
 
     func testDoubleTapDoesNotDuplicateSave() async {
@@ -192,7 +192,7 @@ final class ClipStoreTests: XCTestCase {
         await settle { !store.isLoading }
         store.perform(.join); await settle { !store.isWorking }
         XCTAssertTrue(store.joined)
-        XCTAssertEqual(store.success, "You're on the list")
+        XCTAssertEqual(store.success, "You're On The List")
         XCTAssertNotNil(store.error)
         store.reload(); await settle { !store.isLoading }
         XCTAssertEqual(service.joins, 1)

@@ -22,8 +22,8 @@ struct SilentSaveToggle: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                     Text(hasInvitations
-                         ? "Skip notifications for this save. Visibility stays the same. People you invite will still receive invitations."
-                         : "Skip notifications for this save. Visibility stays the same.")
+                         ? "Skip Notifications For This Save. Visibility Stays The Same. People You Invite Will Still Receive Invitations."
+                         : "Skip Notifications For This Save. Visibility Stays The Same.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .fixedSize(horizontal: false, vertical: true)

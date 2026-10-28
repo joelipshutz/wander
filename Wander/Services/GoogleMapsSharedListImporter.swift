@@ -108,7 +108,7 @@ final class GoogleMapsSharedListImporter: GoogleMapsSharedListLoading {
     }
 
     private static let unavailableMessage =
-        "This Google Maps list could not be read. Make sure anyone with the link can view it, then retry."
+        "This Google Maps List Could Not Be Read. Make Sure Anyone With The Link Can View It, Then Retry."
 
     private static func isGoogleMapsURL(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
@@ -326,7 +326,7 @@ enum GoogleMapsSharedListParser {
             throw GoogleMapsSharedListParsingError.invalidPayload
         }
 
-        let listName = string(at: 4, in: root) ?? "Google Maps list"
+        let listName = string(at: 4, in: root) ?? "Google Maps List"
         var seen = Set<String>()
         var seeds: [PlaceImportSeed] = []
 

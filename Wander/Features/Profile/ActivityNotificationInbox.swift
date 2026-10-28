@@ -29,8 +29,8 @@ struct ActivityNotification: Identifiable, Decodable, Equatable {
 
     // Grouped imports can lose access to individual places after delivery. Never
     // show the stored snapshot's names/count or navigate to its stale first place.
-    var displayTitle: String { isGroupedImport ? "New places from your people" : title }
-    var displayBody: String { isGroupedImport ? "Open to see their available activity." : body }
+    var displayTitle: String { isGroupedImport ? "New Places From Your People" : title }
+    var displayBody: String { isGroupedImport ? "Open To See Their Available Activity." : body }
 
     var symbol: String {
         switch notificationType {
@@ -155,12 +155,12 @@ struct SimulatorActivityNotificationRepository: ActivityNotificationRepository {
     func receivedActivity(userID: String) async throws -> [ActivityNotification] {
         guard includesNotifications else { return [] }
         return [ActivityNotification(id: UUID(uuidString: "65300000-0000-0000-0000-000000000001")!,
-            actorID: "user_ryan", notificationType: "activity_commented", title: "Ryan commented on your activity",
-            body: "Open the conversation", createdAt: .now.addingTimeInterval(-60),
+            actorID: "user_ryan", notificationType: "activity_commented", title: "Ryan Commented On Your Activity",
+            body: "Open The Conversation", createdAt: .now.addingTimeInterval(-60),
             data: ["activity_id": .string("fixture-feed-maya-been-bar-nido")]),
             ActivityNotification(id: UUID(uuidString: "65300000-0000-0000-0000-000000000002")!,
-                actorID: "user_ryan", notificationType: "followed_place_visit", title: "Stored import summary",
-                body: "Stored import details", createdAt: .now.addingTimeInterval(-120),
+                actorID: "user_ryan", notificationType: "followed_place_visit", title: "Stored Import Summary",
+                body: "Stored Import Details", createdAt: .now.addingTimeInterval(-120),
                 data: ["sender_import_id": .string("synthetic-import"), "place_id": .string("stale-place")])]
     }
 }

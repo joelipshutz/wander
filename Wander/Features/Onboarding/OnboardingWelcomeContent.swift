@@ -9,7 +9,7 @@ struct OnboardingTickerContent: Equatable {
     let finalLockup: String?
 
     init(
-        stableText: String = "Connect with your",
+        stableText: String = "Connect With Your",
         words: [String],
         description: String? = nil,
         finalLockup: String? = nil
@@ -74,9 +74,9 @@ struct OnboardingWelcomeConfiguration: Equatable {
         // Approved opening copy and finite three-scene sequence.
         var configuration = Self(
             ticker: OnboardingTickerContent(
-                words: ["community", "people", "places", "loved ones"],
-                description: "Keep track of everywhere you’ve been. Keep up with the people you love.",
-                finalLockup: "a local experiment"
+                words: ["Community", "People", "Places", "Loved Ones"],
+                description: "Keep Track Of Everywhere You’ve Been. Keep Up With The People You Love.",
+                finalLockup: "A Local Experiment"
             ),
             descriptionIsDelayed: true
         )

@@ -48,7 +48,7 @@ final class PlaceExternalLinksTests: XCTestCase {
     func testShareSummaryOmitsMissingMetadata() {
         XCTAssertEqual(
             PlaceExternalLinks.shareSummary(placeName: "Griffith Observatory Trail", locality: nil, status: .been),
-            "Griffith Observatory Trail · check-in"
+            "Griffith Observatory Trail · Check-In"
         )
     }
 
@@ -105,7 +105,7 @@ final class PlaceExternalLinksTests: XCTestCase {
             actionLinksJSON: PlaceActionLink.encode(links)
         )
 
-        XCTAssertEqual(actions.map(\.title), ["Website", "Call", "Order now", "Find reservations"])
+        XCTAssertEqual(actions.map(\.title), ["Website", "Call", "Order now", "Find Reservations"])
         XCTAssertEqual(actions.first { $0.kind == .reserve }, nil)
         XCTAssertEqual(actions.first { $0.kind == .reservationSearch }?.url.absoluteString, "https://resy.example/search?q=place")
     }

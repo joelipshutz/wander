@@ -259,9 +259,9 @@ final class LiveMapSearchPolicyTests: XCTestCase {
         let searched = LiveSelectedArea.mapViewport(area)
         let drawn = LiveSelectedArea.drawn(area)
         XCTAssertEqual(searched.boundary, drawn.boundary)
-        XCTAssertEqual(searched.summary, "Map area")
-        XCTAssertEqual(searched.drawActionTitle, "Draw area")
-        XCTAssertEqual(drawn.summary, "Drawn area")
+        XCTAssertEqual(searched.summary, "Map Area")
+        XCTAssertEqual(searched.drawActionTitle, "Draw Area")
+        XCTAssertEqual(drawn.summary, "Drawn Area")
         XCTAssertEqual(drawn.drawActionTitle, "Redraw")
     }
 

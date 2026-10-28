@@ -28,20 +28,20 @@ struct NativeAuthFlowView: View {
     private var title: String {
         switch mode {
         case .signIn:
-            "Welcome back"
+            "Welcome Back"
         case .signInOrUp:
-            "Continue to \(AppBrand.displayName)"
+            "Continue To \(AppBrand.displayName)"
         case .signUp:
-            "Create your account"
+            "Create Your Account"
         }
     }
 
     private var subtitle: String {
         switch mode {
         case .signIn:
-            "Sign in to get back to your saved places and people."
+            "Sign In To Get Back To Your Saved Places And People."
         case .signInOrUp, .signUp:
-            "Keep your places synced and discover recommendations from people you trust."
+            "Keep Your Places Synced And Discover Recommendations From People You Trust."
         }
     }
 
@@ -148,7 +148,7 @@ struct NativeAuthFlowView: View {
 
                 Button(action: sendEmailCode) {
                     ZStack {
-                        Text("Continue with email")
+                        Text("Continue With Email")
                             .font(AstirTypography.control)
                         if auth.isSendingEmailCode {
                             HStack {
@@ -174,7 +174,7 @@ struct NativeAuthFlowView: View {
                 .accessibilityIdentifier("auth.continueWithEmail")
 
                 if mode != .signUp {
-                    Button("Use a password") {
+                    Button("Use A Password") {
                         auth.cancelEmailVerification()
                         isUsingPassword = true
                         focusedField = .email
@@ -190,10 +190,10 @@ struct NativeAuthFlowView: View {
             authError
 
             VStack(spacing: WanderTheme.spacing2) {
-                Text("If Apple or Google returns the same verified email, it connects to your existing \(AppBrand.displayName) account.")
+                Text("If Apple Or Google Returns The Same Verified Email, It Connects To Your Existing \(AppBrand.displayName) Account.")
                     .accessibilityIdentifier("auth.accountLinkingExplanation")
 
-                Text(.init("By continuing, you agree to the [Terms of Use](https://astirmovement.com/terms) and [Community Guidelines](https://astirmovement.com/community), and acknowledge the [Privacy Policy](https://astirmovement.com/privacy)."))
+                Text(.init("By Continuing, You Agree To The [Terms Of Use](https://astirmovement.com/terms) And [Community Guidelines](https://astirmovement.com/community), And Acknowledge The [Privacy Policy](https://astirmovement.com/privacy)."))
                     .accessibilityIdentifier("auth.legalAcknowledgement")
             }
             .font(AstirTypography.caption)
@@ -203,7 +203,7 @@ struct NativeAuthFlowView: View {
 
             if mode == .signUp, let onLogIn {
                 Button(action: onLogIn) {
-                    Text("Already have an account? Log in")
+                    Text("Already Have An Account? Log In")
                         .font(AstirTypography.control)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -266,7 +266,7 @@ struct NativeAuthFlowView: View {
             authenticate(with: .google)
         } label: {
             ZStack {
-                Text(mode == .signIn ? "Sign in with Google" : "Continue with Google")
+                Text(mode == .signIn ? "Sign In With Google" : "Continue With Google")
                     .font(AstirTypography.control)
 
                 HStack {
@@ -305,7 +305,7 @@ struct NativeAuthFlowView: View {
             Rectangle()
                 .fill(WanderTheme.borderHairline.color)
                 .frame(height: 1)
-            Text("or")
+            Text("Or")
                 .font(AstirTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
             Rectangle()
@@ -325,10 +325,10 @@ struct NativeAuthFlowView: View {
                     .background(WanderTheme.terracottaTint.color)
                     .clipShape(Circle())
 
-                Text("Sign in with password")
+                Text("Sign In With Password")
                     .font(AstirTypography.screenTitle)
 
-                Text("Use the email and password for this account.")
+                Text("Use The Email And Password For This Account.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
@@ -400,7 +400,7 @@ struct NativeAuthFlowView: View {
 
                 Button(action: signInWithPassword) {
                     ZStack {
-                        Text("Sign in")
+                        Text("Sign In")
                             .font(AstirTypography.control)
                         if auth.isSigningInWithPassword {
                             HStack {
@@ -428,7 +428,7 @@ struct NativeAuthFlowView: View {
 
             authError
 
-            Button("Use another sign-in method") {
+            Button("Use Another Sign-In Method") {
                 password = ""
                 isUsingPassword = false
                 auth.cancelEmailVerification()
@@ -452,10 +452,10 @@ struct NativeAuthFlowView: View {
                     .background(WanderTheme.terracottaTint.color)
                     .clipShape(Circle())
 
-                Text("Check your email")
+                Text("Check Your Email")
                     .font(AstirTypography.screenTitle)
 
-                Text("Enter the verification code sent to \(address).")
+                Text("Enter The Verification Code Sent To \(address).")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
@@ -463,7 +463,7 @@ struct NativeAuthFlowView: View {
             }
             .padding(.top, WanderTheme.spacing4)
 
-            TextField("Verification code", text: $verificationCode)
+            TextField("Verification Code", text: $verificationCode)
                 .font(.system(.title2, design: .monospaced).weight(.semibold))
                 .multilineTextAlignment(.center)
                 .keyboardType(.numberPad)
@@ -485,7 +485,7 @@ struct NativeAuthFlowView: View {
 
             Button(action: verifyEmailCode) {
                 ZStack {
-                    Text("Verify and continue")
+                    Text("Verify And Continue")
                         .font(AstirTypography.control)
                     if auth.isVerifyingEmailCode {
                         HStack {
@@ -510,12 +510,12 @@ struct NativeAuthFlowView: View {
             authError
 
             VStack(spacing: WanderTheme.spacing2) {
-                Button("Send a new code") {
+                Button("Send A New Code") {
                     Task { await auth.sendEmailCode(to: address) }
                 }
                 .disabled(auth.isPerformingNativeAuth)
 
-                Button("Use another sign-in method") {
+                Button("Use Another Sign-In Method") {
                     verificationCode = ""
                     auth.cancelEmailVerification()
                     focusedField = .email

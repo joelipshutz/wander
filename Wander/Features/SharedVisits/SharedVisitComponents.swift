@@ -28,13 +28,13 @@ struct SharedVisitInviteSection: View {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.pinSocial.color)
-                    Text("friends")
+                    Text("Friends")
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.primaryText)
 
                     Spacer()
 
-                    Text(selectedFriends.isEmpty ? "Add" : "\(selectedFriends.count) added")
+                    Text(selectedFriends.isEmpty ? "Add" : "\(selectedFriends.count) Added")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(brandMode.secondaryText)
 
@@ -48,13 +48,13 @@ struct SharedVisitInviteSection: View {
             .buttonStyle(.plain)
             .disabled(isLoading || errorMessage != nil)
             .opacity(isLoading || errorMessage != nil ? 0.5 : 1)
-            .accessibilityLabel("Add friends to this check-in")
-            .accessibilityValue(selectedFriends.isEmpty ? "None added" : "\(selectedFriends.count) added")
+            .accessibilityLabel("Add Friends To This Check-In")
+            .accessibilityValue(selectedFriends.isEmpty ? "None Added" : "\(selectedFriends.count) Added")
 
             if isLoading {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
-                    Text("Loading shared friends...")
+                    Text("Loading Shared Friends...")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -146,7 +146,7 @@ struct SharedVisitFriendPicker: View {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(brandMode.secondaryText)
-                        TextField("Search friends", text: $query)
+                        TextField("Search Friends", text: $query)
                             .font(AstirTypography.body)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -162,9 +162,9 @@ struct SharedVisitFriendPicker: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-                Section("friends") {
+                Section("Friends") {
                     if friends.isEmpty {
-                        Text("No mutual friends available.")
+                        Text("No Mutual Friends Available.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                     } else {
@@ -201,7 +201,7 @@ struct SharedVisitFriendPicker: View {
             .scrollContentBackground(.hidden)
             .background(brandMode.background)
             .foregroundStyle(brandMode.primaryText)
-            .navigationTitle("add friends")
+            .navigationTitle("Add Friends")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -247,9 +247,9 @@ enum SharedVisitCompanionPresentation {
             companion.userID == currentUserID ? "You" : companion.displayName
         }
         guard !names.isEmpty else { return "" }
-        if names.count == 1 { return "with \(names[0])" }
-        if names.count == 2 { return "with \(names[0]) and \(names[1])" }
-        return "with \(names[0]), \(names[1]) +\(names.count - 2)"
+        if names.count == 1 { return "With \(names[0])" }
+        if names.count == 2 { return "With \(names[0]) And \(names[1])" }
+        return "With \(names[0]), \(names[1]) +\(names.count - 2)"
     }
 }
 
@@ -274,7 +274,7 @@ struct SharedVisitCompanionLabel: View {
                                 companionAvatar(companion)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Open \(companion.displayName)'s profile")
+                            .accessibilityLabel("Open \(companion.displayName)'s Profile")
                         } else {
                             companionAvatar(companion)
                                 .accessibilityLabel(companion.displayName)
@@ -334,7 +334,7 @@ struct SharedVisitBannerTracker {
 
 enum SharedVisitBannerCopy {
     static func title(inviterName: String, placeName: String) -> String {
-        "\(inviterName) tagged you at \(placeName)"
+        "\(inviterName) Tagged You At \(placeName)"
     }
 }
 
@@ -363,7 +363,7 @@ struct SharedVisitNotificationBanner: View {
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.primaryText)
                         .lineLimit(2)
-                    Text("Shared check-in · \(relativeInvitationTime)")
+                    Text("Shared Check-In · \(relativeInvitationTime)")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -390,7 +390,7 @@ struct SharedVisitNotificationBanner: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
-            "Open check-in invitations. \(SharedVisitBannerCopy.title(inviterName: invitation.sourceOwnerDisplayName, placeName: invitation.placeName))"
+            "Open Check-In Invitations. \(SharedVisitBannerCopy.title(inviterName: invitation.sourceOwnerDisplayName, placeName: invitation.placeName))"
         )
     }
 
@@ -415,7 +415,7 @@ struct ProfileSharedVisitInboxRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("check-in invitations")
+                    Text("Check-In Invitations")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(subtitle)
@@ -450,16 +450,16 @@ struct ProfileSharedVisitInboxRow: View {
 
     private var subtitle: String {
         switch invitationCount {
-        case 0: "You're all caught up"
-        case 1: "1 waiting for you"
-        default: "\(invitationCount) waiting for you"
+        case 0: "You're All Caught Up"
+        case 1: "1 Waiting For You"
+        default: "\(invitationCount) Waiting For You"
         }
     }
 
     private var accessibilityText: String {
         invitationCount == 0
-            ? "Check-in invitations, none pending"
-            : "Check-in invitations, \(invitationCount) pending"
+            ? "Check-In Invitations, None Pending"
+            : "Check-In Invitations, \(invitationCount) Pending"
     }
 }
 
@@ -531,7 +531,7 @@ struct SharedVisitInvitationInboxScreen: View {
                         }
 
                         if !activity.isEmpty {
-                            Text("Recent activity").font(AstirTypography.sectionTitle)
+                            Text("Recent Activity").font(AstirTypography.sectionTitle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             ForEach(activity) { notification in
                                 ActivityNotificationRow(notification: notification) {
@@ -558,7 +558,7 @@ struct SharedVisitInvitationInboxScreen: View {
                                                      size: 44, color: WanderTheme.pinSocial.color)
                                         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                                             Text(notification.displayName).font(AstirTypography.cardTitle)
-                                            Text(notification.isMutual ? "Followed you back. You're now following each other." : "Started following you.")
+                                            Text(notification.isMutual ? "Followed You Back. You're Now Following Each Other." : "Started Following You.")
                                                 .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
                                             Text(notification.createdAt, style: .relative)
                                                 .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
@@ -582,7 +582,7 @@ struct SharedVisitInvitationInboxScreen: View {
                             }
                         }
                         if !store.sharedVisitInvitations.isEmpty {
-                            Text("Check-in invitations").font(AstirTypography.sectionTitle)
+                            Text("Check-In Invitations").font(AstirTypography.sectionTitle)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
@@ -605,7 +605,7 @@ struct SharedVisitInvitationInboxScreen: View {
         }
         .overlay {
             if isRefreshing || planInbox.isLoading || followInbox.isLoading || activityInbox.isLoading, isEmpty {
-                ProgressView("Loading notifications…")
+                ProgressView("Loading Notifications…")
                     .font(AstirTypography.label)
                     .tint(brandMode.accent)
             }
@@ -645,15 +645,15 @@ struct SharedVisitInvitationInboxScreen: View {
                 .foregroundStyle(WanderTheme.stateSuccess.color)
                 .frame(width: 84, height: 84)
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
-            Text("No notifications yet")
+            Text("No Notifications Yet")
                 .font(AstirTypography.sectionTitle)
-            Text("Activity from your people, new followers, plans, and check-in invitations will show up here")
+            Text("Activity From Your People, New Followers, Plans, And Check-In Invitations Will Show Up Here")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
 
             if let refreshError {
                 Text(refreshError).font(AstirTypography.bodySmall)
-                Button("Try again") { Task { await refresh() } }
+                Button("Try Again") { Task { await refresh() } }
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
                     .frame(minWidth: 128, minHeight: 48)
@@ -710,7 +710,7 @@ struct SharedVisitInvitationInboxScreen: View {
             backend: backend
         )
         if !didDecline {
-            declineErrors[invitation.participantID] = "Could not decline this invitation. Try again."
+            declineErrors[invitation.participantID] = "Could Not Decline This Invitation. Try Again."
         }
     }
 }
@@ -759,7 +759,7 @@ private struct SharedVisitInboxInvitationCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(invitation.sourceOwnerDisplayName)
                     .font(AstirTypography.bodySmall)
-                Text("invited you to a check-in")
+                Text("Invited You To A Check-In")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -843,7 +843,7 @@ private struct SharedVisitInboxInvitationCard: View {
 
             Button(action: onReview) {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text("Review & save")
+                    Text("Review & Save")
                     Image(systemName: "arrow.right")
                 }
                 .font(AstirTypography.control)
@@ -859,7 +859,7 @@ private struct SharedVisitInboxInvitationCard: View {
     }
 
     private var placeContext: String {
-        [invitation.locality, WanderPlaceCategory.broadCategory(for: invitation.primaryCategory)]
+        [invitation.locality, AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: invitation.primaryCategory))]
             .compactMap { value in
                 guard let value, !value.isEmpty else { return nil }
                 return value

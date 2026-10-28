@@ -19,22 +19,22 @@ enum InviteSurface: Equatable {
     var entryTitle: String {
         switch self {
         case .sharedVisit:
-            "invite someone from contacts"
+            "Invite Someone From Contacts"
         case .feedPeople:
-            "invite people to Astir"
+            "Invite People To Astir"
         case .listCollaborator:
-            "invite a collaborator"
+            "Invite A Collaborator"
         }
     }
 
     var entrySubtitle: String {
         switch self {
         case .sharedVisit:
-            "Invite them to Astir, then connect after they join."
+            "Invite Them To Astir, Then Connect After They Join."
         case .feedPeople:
-            "Bring the people whose taste you trust."
+            "Bring The People Whose Taste You Trust."
         case .listCollaborator:
-            "Invite someone to Astir, then add them to this list."
+            "Invite Someone To Astir, Then Add Them To This List."
         }
     }
 
@@ -42,17 +42,17 @@ enum InviteSurface: Equatable {
         switch self {
         case .sharedVisit(let placeName):
             if let placeName, !placeName.isEmpty {
-                "Join me on Astir so we can connect around my check-in at \(placeName)."
+                "Join Me On Astir So We Can Connect Around My Check-In At \(placeName)."
             } else {
-                "Join me on Astir so we can connect around our check-ins."
+                "Join Me On Astir So We Can Connect Around Our Check-Ins."
             }
         case .feedPeople:
-            "Join me on Astir so we can share places worth remembering."
+            "Join Me On Astir So We Can Share Places Worth Remembering."
         case .listCollaborator(let listName):
             if let listName, !listName.isEmpty {
-                "Join me on Astir so I can add you as a collaborator on \(listName)."
+                "Join Me On Astir So I Can Add You As A Collaborator On \(listName)."
             } else {
-                "Join me on Astir so I can add you as a list collaborator."
+                "Join Me On Astir So I Can Add You As A List Collaborator."
             }
         }
     }
@@ -60,11 +60,11 @@ enum InviteSurface: Equatable {
     var sheetTitle: String {
         switch self {
         case .sharedVisit:
-            "add people"
+            "Add People"
         case .feedPeople:
-            "invite people"
+            "Invite People"
         case .listCollaborator:
-            "add collaborators"
+            "Add Collaborators"
         }
     }
 
@@ -72,17 +72,17 @@ enum InviteSurface: Equatable {
         switch self {
         case .sharedVisit(let placeName):
             if let placeName, !placeName.isEmpty {
-                "Who joined you at \(placeName)?"
+                "Who Joined You At \(placeName)?"
             } else {
-                "Who were you with?"
+                "Who Were You With?"
             }
         case .feedPeople:
-            "Astir is better with people you actually know."
+            "Astir Is Better With People You Actually Know."
         case .listCollaborator(let listName):
             if let listName, !listName.isEmpty {
-                "Invite people to help build \(listName)."
+                "Invite People To Help Build \(listName)."
             } else {
-                "Invite people to build this list with you."
+                "Invite People To Build This List With You."
             }
         }
     }
@@ -101,22 +101,22 @@ enum InviteSurface: Equatable {
     var permissionMessage: String {
         switch self {
         case .sharedVisit:
-            "Find the people you were with without typing every name."
+            "Find The People You Were With Without Typing Every Name."
         case .feedPeople:
-            "Find people you know and choose who gets an invite."
+            "Find People You Know And Choose Who Gets An Invite."
         case .listCollaborator:
-            "Find the right collaborators without leaving your list."
+            "Find The Right Collaborators Without Leaving Your List."
         }
     }
 
     var completionTitle: String {
         switch self {
         case .sharedVisit:
-            "invite sent"
+            "Invite Sent"
         case .feedPeople:
-            "invite sent"
+            "Invite Sent"
         case .listCollaborator:
-            "collaborator invite sent"
+            "Collaborator Invite Sent"
         }
     }
 }
@@ -125,10 +125,10 @@ enum ContactInviteWalkthroughContent {
     static let selectionGoal = 5
 
     static let inviteProse =
-        "Hey sharing an invite to Astir a social app for tracking places. "
-        + "This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. "
-        + "Excited to have you on and make sure to use my link. "
-        + "Heads up this invite expires in 24 hours."
+        "Hey Sharing An Invite To Astir A Social App For Tracking Places. "
+        + "This App Is Perfect For You And Selfishly I Need You On The App So I Can See The Places That You've Been To. "
+        + "Excited To Have You On And Make Sure To Use My Link. "
+        + "Heads Up This Invite Expires In 24 Hours."
 }
 
 enum ContactInviteWalkthroughComposerOutcome: Equatable {
@@ -267,7 +267,7 @@ struct InviteContactSection: Identifiable, Equatable {
                 .filter(\.isFrequentlyContacted)
                 .sorted(by: sortContacts)
             if !frequent.isEmpty {
-                result.append(InviteContactSection(id: "frequent", title: "frequently contacted", contacts: frequent))
+                result.append(InviteContactSection(id: "frequent", title: "Frequently Contacted", contacts: frequent))
             }
         }
 

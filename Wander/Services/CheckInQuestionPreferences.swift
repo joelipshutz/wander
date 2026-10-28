@@ -147,13 +147,13 @@ enum CheckInQuestionPersistenceError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPrompt:
-            "Write a question using 1–120 characters."
+            "Write A Question Using 1–120 Characters."
         case .invalidAccount:
-            "Sign in to customize your questions."
+            "Sign In To Customize Your Questions."
         case .invalidScope, .invalidConfiguration, .unreadableStorage:
-            "Your questions couldn’t be saved on this device. Please try again."
+            "Your Questions Couldn’t Be Saved On This Device. Please Try Again."
         case .invalidPrivateAnswer:
-            "Your private answers couldn’t be saved on this device. Please try again."
+            "Your Private Answers Couldn’t Be Saved On This Device. Please Try Again."
         }
     }
 }

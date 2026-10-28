@@ -3137,7 +3137,7 @@ final class WanderStoreTests: XCTestCase {
         let blocked = store.blockedProfiles()
         XCTAssertTrue(blocked.contains { profile in
             profile.id == "user_remote_only"
-                && profile.displayName == "Blocked user"
+                && profile.displayName == "Blocked User"
                 && profile.handle == "user_remote_only"
         })
     }
@@ -5221,7 +5221,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.mapTopLevelAction(currentUserSave: nil), .add)
         XCTAssertEqual(PlaceSheetAction.mapTopLevelAction(currentUserSave: wantPlace), .reselectWant)
         XCTAssertEqual(PlaceSheetAction.reselectWant.systemImage, "plus")
-        XCTAssertEqual(PlaceSheetAction.reselectWant.accessibilityLabel, "Check in or Wanna")
+        XCTAssertEqual(PlaceSheetAction.reselectWant.accessibilityLabel, "Check In Or Wanna")
         XCTAssertEqual(wantContext.initialStatus, .been)
         XCTAssertFalse(wantContext.hasPriorCheckIn)
         XCTAssertNil(wantContext.initialRatingScore)
@@ -7841,7 +7841,7 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertFalse(results.places.isEmpty)
         XCTAssertTrue(results.places.allSatisfy { $0.place.category == WanderPlaceCategory.outdoorsNature })
-        XCTAssertEqual(store.lastDiscoverFilters.chips.map(\.title), ["Outdoors & Nature", "following", "LA"])
+        XCTAssertEqual(store.lastDiscoverFilters.chips.map(\.title), ["Outdoors & Nature", "Following", "LA"])
         XCTAssertTrue(results.profiles.isEmpty)
     }
 
@@ -7874,8 +7874,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(evidence.ratingScore, 4)
         XCTAssertEqual(evidence.items.map(\.kind), [.owner, .opinion, .rating, .category])
         XCTAssertTrue(evidence.items.allSatisfy { $0.sourceOwnerID == "user_ryan" })
-        XCTAssertTrue(evidence.summary.contains("Ryan's save"))
-        XCTAssertTrue(evidence.summary.contains("favorite"))
+        XCTAssertTrue(evidence.summary.contains("Ryan's Save"))
+        XCTAssertTrue(evidence.summary.contains("Favorite"))
         XCTAssertTrue(evidence.summary.contains("4/5"))
     }
 
@@ -11244,7 +11244,7 @@ final class WanderStoreTests: XCTestCase {
             .wannaGo
         )
         let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
-        XCTAssertEqual(toast.message, "We also saved this to your Wanna Go")
+        XCTAssertEqual(toast.message, "We Also Saved This To Your Wanna Go")
         XCTAssertEqual(toast.actionTitle, "Edit")
         let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
         guard case .add = context.mode else {
@@ -11288,7 +11288,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(result.createdWantSave)
         XCTAssertTrue(result.shouldExplainAutoSave)
         let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
-        XCTAssertEqual(toast.message, "This is already saved to your Wanna Go")
+        XCTAssertEqual(toast.message, "This Is Already Saved To Your Wanna Go")
         XCTAssertEqual(toast.actionTitle, "Edit")
         let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
         guard case .editWant(let visiblePlace) = context.mode else {

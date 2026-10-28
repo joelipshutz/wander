@@ -16,7 +16,7 @@ final class LiveLocationUITests: XCTestCase {
         }
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderOnboardingUITestStep", "location"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Find places nearby"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Find Places Nearby"].waitForExistence(timeout: 15))
         app.buttons["Continue"].firstMatch.tap()
         let alert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10))

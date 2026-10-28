@@ -634,7 +634,7 @@ struct ProfileScreen: View {
     }
 
     private var pageTitle: some View {
-        Text("profile")
+        Text("Profile")
             .font(AstirTypography.screenTitle)
             .lineLimit(1)
     }
@@ -652,7 +652,7 @@ struct ProfileScreen: View {
                 )
             }
             .buttonStyle(ProfileStatButtonStyle())
-            .accessibilityLabel("Open checked-in places")
+            .accessibilityLabel("Open Checked-In Places")
 
             Button {
                 savedListMode = .wanna
@@ -667,14 +667,14 @@ struct ProfileScreen: View {
                 )
             }
             .buttonStyle(ProfileStatButtonStyle())
-            .accessibilityLabel("Open wanna places")
+            .accessibilityLabel("Open Wanna Places")
         }
     }
 
     private var monthCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("this month")
+                Text("This Month")
                     .font(AstirTypography.sectionTitle)
                 Spacer()
                 Text("JUN '26")
@@ -686,7 +686,7 @@ struct ProfileScreen: View {
                 Text("\(store.currentUserVisiblePlaces.count)")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.accentText)
-                Text("saved places this month.")
+                Text("Saved Places This Month.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                 Spacer()
@@ -699,11 +699,11 @@ struct ProfileScreen: View {
 
     private var draftsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("drafts")
+            Text("Drafts")
                 .font(AstirTypography.sectionTitle)
 
             if store.unresolvedDrafts.isEmpty {
-                SmallEmptyRow(title: "No unresolved drafts", subtitle: "link and photo shells land here")
+                SmallEmptyRow(title: "No Unresolved Drafts", subtitle: "Link And Photo Shells Land Here")
             } else {
                 ForEach(store.unresolvedDrafts) { draft in
                     HStack {
@@ -732,7 +732,7 @@ struct ProfileScreen: View {
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("recent")
+                Text("Recent")
                     .font(AstirTypography.sectionTitle)
                 Spacer()
             }
@@ -745,7 +745,7 @@ struct ProfileScreen: View {
 
     private var peopleSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("people")
+            Text("People")
                 .font(AstirTypography.sectionTitle)
 
             AstirEditorialSegmentedSwitch(
@@ -760,7 +760,7 @@ struct ProfileScreen: View {
 
             let people = people(for: selectedPeopleMode)
             if people.isEmpty {
-                SmallEmptyRow(title: "No \(selectedPeopleMode.title) yet", subtitle: selectedPeopleMode.emptySubtitle)
+                SmallEmptyRow(title: "No \(selectedPeopleMode.title) Yet", subtitle: selectedPeopleMode.emptySubtitle)
             } else {
                 ForEach(people, id: \.id) { profile in
                     ProfilePersonRow(profile: profile, relationship: store.relationship(to: profile.id)) {
@@ -950,13 +950,13 @@ struct ProfileDetailView: View {
                             onCalendarScrollRequestHandled: { _ in }
                         )
                     } else if isLoading {
-                        ProgressView("Loading profile")
+                        ProgressView("Loading Profile")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .astirScreen()
                     } else {
                         AccessChangedPanel(
-                            title: "This profile isn't available",
-                            subtitle: "It may have been removed, blocked, or become unavailable."
+                            title: "This Profile Isn't Available",
+                            subtitle: "It May Have Been Removed, Blocked, Or Become Unavailable."
                         )
                         .padding(WanderTheme.spacing4)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1022,17 +1022,17 @@ struct ProfileDetailView: View {
                 CommunityReportSheet(subject: subject)
                     .environmentObject(backend)
             }
-            .alert("Block this person?", isPresented: $showBlockConfirm) {
+            .alert("Block This Person?", isPresented: $showBlockConfirm) {
                 Button("Block", role: .destructive) { confirmBlock() }
                 Button("Cancel", role: .cancel) { showBlockConfirm = false }
             } message: {
-                Text("You won't see each other's profiles, places, or search results.")
+                Text("You Won't See Each Other's Profiles, Places, Or Search Results.")
             }
             .alert(unfollowConfirmationTitle, isPresented: $showUnfollowConfirm) {
-                Button("Yes, unfollow", role: .destructive) { confirmUnfollow() }
-                Button("No, cancel", role: .cancel) { showUnfollowConfirm = false }
+                Button("Yes, Unfollow", role: .destructive) { confirmUnfollow() }
+                Button("No, Cancel", role: .cancel) { showUnfollowConfirm = false }
             } message: {
-                Text("Their places will stop appearing in your social map.")
+                Text("Their Places Will Stop Appearing In Your Social Map.")
             }
             .task(id: profileID) {
                 await refreshRemoteProfile()
@@ -1249,7 +1249,7 @@ struct ProfileDetailView: View {
                 kind: .profile,
                 subjectID: profileID,
                 reportedUserID: profileID,
-                context: "Report @\(profile?.handle ?? "this person") and anything they’ve shared."
+                context: "Report @\(profile?.handle ?? "This Person") And Anything They’ve Shared."
             )
         }
     }
@@ -1277,8 +1277,8 @@ struct ProfileDetailView: View {
     }
 
     private var unfollowConfirmationTitle: String {
-        guard let profile else { return "Are you sure you want to unfollow this person" }
-        return "Are you sure you want to unfollow \(profile.displayName)"
+        guard let profile else { return "Are You Sure You Want To Unfollow This Person" }
+        return "Are You Sure You Want To Unfollow \(profile.displayName)"
     }
 
     private func confirmUnfollow() {
@@ -1301,17 +1301,17 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .following: "following"
-        case .followers: "followers"
-        case .friends: "friends"
+        case .following: "Following"
+        case .followers: "Followers"
+        case .friends: "Friends"
         }
     }
 
     var emptySubtitle: String {
         switch self {
-        case .following: "follow someone from contacts or username search"
-        case .followers: "people who follow you will show up here"
-        case .friends: "mutual follows show up here"
+        case .following: "Follow Someone From Contacts Or Username Search"
+        case .followers: "People Who Follow You Will Show Up Here"
+        case .friends: "Mutual Follows Show Up Here"
         }
     }
 }
@@ -1354,7 +1354,7 @@ private struct ProfileActivityHistoryScreen: View {
                 if filteredItems.isEmpty {
                     SmallEmptyRow(
                         title: emptyStateTitle,
-                        subtitle: "Saved places and check-ins will appear here"
+                        subtitle: "Saved Places And Check-Ins Will Appear Here"
                     )
                 } else {
                     LazyVStack(spacing: 0) {
@@ -1389,9 +1389,9 @@ private struct ProfileActivityHistoryScreen: View {
 
     private var emptyStateTitle: String {
         switch filter {
-        case .all: "No activity yet"
-        case .checkIns: "No check-ins yet"
-        case .wanna: "No Wanna activity yet"
+        case .all: "No Activity Yet"
+        case .checkIns: "No Check-Ins Yet"
+        case .wanna: "No Wanna Activity Yet"
         }
     }
 }
@@ -1405,7 +1405,7 @@ private enum SavedPlacesListMode: String, Identifiable {
 
     var title: String {
         switch self {
-        case .been: "Check-ins"
+        case .been: "Check-Ins"
         case .wanna: "Wanna"
         case .inCommon: "In Common"
         }
@@ -1574,11 +1574,11 @@ enum ProfilePlaceCollectionMapProjection {
         let hasSocial = outlines.contains { $0.ownership == .social }
         let ownership: String
         if hasCurrentUser && hasSocial {
-            ownership = "Your and social saved place"
+            ownership = "Your And Social Saved Place"
         } else if hasCurrentUser {
-            ownership = "Your saved place"
+            ownership = "Your Saved Place"
         } else {
-            ownership = "Social saved place"
+            ownership = "Social Saved Place"
         }
 
         return "\(ownership) \(visiblePlace.effectiveCompactType), \(visiblePlace.place.canonicalName)"
@@ -1836,23 +1836,23 @@ struct ProfilePlaceCollectionMapClusterAccessibility: Equatable {
         case .open:
             if let destinationName {
                 return Self(
-                    label: "\(destinationName), one of \(count) saved places at this location",
-                    hint: "Shows \(destinationName) details. Every place remains in the list below."
+                    label: "\(destinationName), One Of \(count) Saved Places At This Location",
+                    hint: "Shows \(destinationName) Details. Every Place Remains In The List Below."
                 )
             }
             return Self(
-                label: "\(count) saved places at this location",
-                hint: "Shows one saved place. Every place remains in the list below."
+                label: "\(count) Saved Places At This Location",
+                hint: "Shows One Saved Place. Every Place Remains In The List Below."
             )
         case .zoom:
             return Self(
-                label: "\(count) places close together",
-                hint: "Zooms in"
+                label: "\(count) Places Close Together",
+                hint: "Zooms In"
             )
         case nil:
             return Self(
-                label: "\(count) saved places",
-                hint: "Every place remains in the list below."
+                label: "\(count) Saved Places",
+                hint: "Every Place Remains In The List Below."
             )
         }
     }
@@ -2007,7 +2007,7 @@ private struct ProfilePlaceCollectionMap: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(item.accessibilityLabel)
-                            .accessibilityHint("Shows saved place details")
+                            .accessibilityHint("Shows Saved Place Details")
                         }
                     }
                 }
@@ -2090,24 +2090,24 @@ private struct ProfilePlaceCollectionMap: View {
     private var mapStatusText: String {
         switch presentation.contentState {
         case .empty:
-            overviewTotalCount > 0 ? "No matching places to map" : "No places to map"
+            overviewTotalCount > 0 ? "No Matching Places To Map" : "No Places To Map"
         case .unresolved(let total):
-            "Locations unavailable for \(total) \(total == 1 ? "place" : "places")"
+            "Locations Unavailable For \(total) \(total == 1 ? "Place" : "Places")"
         case .partial(let mapped, let total):
-            "\(mapped) mapped of \(total)"
+            "\(mapped) Mapped Of \(total)"
         case .mapped(let count):
-            "\(count) \(count == 1 ? "place" : "places")"
+            "\(count) \(count == 1 ? "Place" : "Places")"
         }
     }
 
     private var unavailableSubtitle: String {
         if presentation.totalCount == 0, overviewTotalCount > 0 {
-            return "Clear search or filters to restore map pins."
+            return "Clear Search Or Filters To Restore Map Pins."
         }
         if overviewTotalCount > 0 {
-            return "Every place remains available in the list below."
+            return "Every Place Remains Available In The List Below."
         }
-        return "This collection does not have any places yet."
+        return "This Collection Does Not Have Any Places Yet."
     }
 
     private func refreshClusters(viewportSize: CGSize) {
@@ -2343,11 +2343,11 @@ private struct InCommonReleaseHero: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     avatarPair
-                    Text(score >= 80 ? "Your maps really click ✨" : "You’ve got common ground")
+                    Text(score >= 80 ? "Your Maps Really Click ✨" : "You’ve Got Common Ground")
                         .font(AstirTypography.sectionTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(
-                        "\(sharedPlaceCount) shared \(sharedPlaceCount == 1 ? "place" : "places") with \(profileName)."
+                        "\(sharedPlaceCount) Shared \(sharedPlaceCount == 1 ? "Place" : "Places") With \(profileName)."
                     )
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
@@ -2363,7 +2363,7 @@ private struct InCommonReleaseHero: View {
             )
 
             if !signals.isEmpty {
-                Text("you both keep coming back for")
+                Text("You Both Keep Coming Back For")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
 
@@ -2400,14 +2400,14 @@ private struct InCommonReleaseHero: View {
                 Text("\(score)%")
                     .font(AstirTypography.sheetTitle)
                     .monospacedDigit()
-                Text("overlap")
+                Text("Overlap")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
             }
         }
         .frame(width: 102, height: 102)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(score) percent map overlap")
+        .accessibilityLabel("\(score) Percent Map Overlap")
     }
 
     private var avatarPair: some View {
@@ -2483,7 +2483,7 @@ private struct InCommonReleaseMapScreen: View {
                     onSelect: onSelect
                 )
 
-                Text("where you agree")
+                Text("Where You Agree")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(brandMode.primaryText)
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -2497,7 +2497,7 @@ private struct InCommonReleaseMapScreen: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("in-common.map-place.\(visiblePlace.id)")
-                        .accessibilityHint("Compose an invitation for this shared place")
+                        .accessibilityHint("Compose An Invitation For This Shared Place")
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -2506,7 +2506,7 @@ private struct InCommonReleaseMapScreen: View {
         }
         .astirScreen()
         .tint(brandMode.accent)
-        .navigationTitle("Shared map")
+        .navigationTitle("Shared Map")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -2603,7 +2603,7 @@ private struct SavedPlacesListScreen: View {
                 Button {
                     showsInCommonMap = true
                 } label: {
-                    Label("Open your shared map", systemImage: "map.fill")
+                    Label("Open Your Shared Map", systemImage: "map.fill")
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.accentForeground)
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -2619,7 +2619,7 @@ private struct SavedPlacesListScreen: View {
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.vertical, WanderTheme.spacing2)
                 .background(brandMode.background.opacity(0.96))
-                .accessibilityHint("Shows every place you have in common on a map")
+                .accessibilityHint("Shows Every Place You Have In Common On A Map")
             }
         }
         .navigationDestination(isPresented: $showsInCommonMap) {
@@ -2691,7 +2691,7 @@ private struct SavedPlacesListScreen: View {
                             score: inCommonOverlapScore,
                             sharedPlaceCount: allModePlaces.count,
                             viewerName: store.currentUser.displayName,
-                            profileName: inCommonProfile?.displayName ?? "their",
+                            profileName: inCommonProfile?.displayName ?? "Their",
                             signals: inCommonSignals
                         )
                     }
@@ -2702,25 +2702,25 @@ private struct SavedPlacesListScreen: View {
                         calendarDayFilterControls
                     } else {
                         searchField
-                        filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                        filterSection(title: "Type", values: categories, selectedValue: $selectedCategory)
                         tagFilterDropdown
                     }
 
                     if filteredPlaces.isEmpty {
                         if isInCommonRoot, allModePlaces.isEmpty {
                             SmallEmptyRow(
-                                title: "Your maps haven’t crossed yet",
-                                subtitle: "When you both save the same place, it’ll show up here"
+                                title: "Your Maps Haven’t Crossed Yet",
+                                subtitle: "When You Both Save The Same Place, It’ll Show Up Here"
                             )
                         } else if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
-                                title: "No activity this day",
-                                subtitle: "check-ins will show up here"
+                                title: "No Activity This Day",
+                                subtitle: "Check-Ins Will Show Up Here"
                             )
                         } else if collection?.calendarDay != nil {
-                            SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
+                            SmallEmptyRow(title: "No Matching Places", subtitle: "Try Another Type Or Tag")
                         } else {
-                            SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                            SmallEmptyRow(title: "No Matching Places", subtitle: "Try Clearing Search Or Filters")
                         }
                     } else {
                         ForEach(filteredPlaces) { visiblePlace in
@@ -2730,7 +2730,7 @@ private struct SavedPlacesListScreen: View {
                                 ProfilePlaceRow(visiblePlace: visiblePlace)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityHint("Shows saved place details")
+                            .accessibilityHint("Shows Saved Place Details")
                         }
                     }
                 }
@@ -2779,8 +2779,8 @@ private struct SavedPlacesListScreen: View {
                 }
             )
         } else {
-            ContentUnavailableView("This plan is no longer available", systemImage: "lock",
-                                   description: Text("Head back to In Common for your current shared places"))
+            ContentUnavailableView("This Plan Is No Longer Available", systemImage: "lock",
+                                   description: Text("Head Back To In Common For Your Current Shared Places"))
                 .toolbar(.visible, for: .navigationBar)
         }
     }
@@ -2830,8 +2830,8 @@ private struct SavedPlacesListScreen: View {
             signals.append(
                 InCommonReleaseSignal(
                     emoji: category.value.first?.categoryEmoji ?? "📍",
-                    title: category.key,
-                    detail: "\(category.value.count) shared \(category.value.count == 1 ? "place" : "places")"
+                    title: AppCopy.capitalizingWords(category.key),
+                    detail: "\(category.value.count) Shared \(category.value.count == 1 ? "Place" : "Places")"
                 )
             )
         }
@@ -2849,7 +2849,7 @@ private struct SavedPlacesListScreen: View {
                 InCommonReleaseSignal(
                     emoji: "📌",
                     title: locality.key,
-                    detail: "\(locality.value.count) shared \(locality.value.count == 1 ? "place" : "places")"
+                    detail: "\(locality.value.count) Shared \(locality.value.count == 1 ? "Place" : "Places")"
                 )
             )
         }
@@ -2864,9 +2864,9 @@ private struct SavedPlacesListScreen: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.stateInfo.color)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Based on places visible to you")
+                    Text("Based On Places Visible To You")
                         .font(.system(size: 13, weight: .black))
-                    Text("Friends-only and private saves stay out of this comparison.")
+                    Text("Friends-Only And Private Saves Stay Out Of This Comparison.")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -2961,17 +2961,17 @@ private struct SavedPlacesListScreen: View {
     private var calendarDayFilterControls: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             compactFilterDropdown(
-                title: "type",
+                title: "Type",
                 systemImage: "square.grid.2x2.fill",
-                allTitle: "All types",
+                allTitle: "All Types",
                 values: categories,
                 selectedValue: $selectedCategory,
-                displayTitle: { WanderPlaceCategory.broadCategory(for: $0) }
+                displayTitle: { AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: $0)) }
             )
             compactFilterDropdown(
-                title: "tags",
+                title: "Tags",
                 systemImage: "tag.fill",
-                allTitle: "All tags",
+                allTitle: "All Tags",
                 values: metadataTags,
                 selectedValue: $selectedMetadataTag,
                 displayTitle: { $0 }
@@ -3037,7 +3037,7 @@ private struct SavedPlacesListScreen: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(title.capitalized) filter")
+            .accessibilityLabel("\(title.capitalized) Filter")
             .accessibilityValue(selectedValue.wrappedValue.map(displayTitle) ?? allTitle)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3047,7 +3047,7 @@ private struct SavedPlacesListScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(brandMode.secondaryText)
-            TextField("search \(navigationTitle.lowercased())", text: $query)
+            TextField("Search \(navigationTitle)", text: $query)
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -3072,7 +3072,7 @@ private struct SavedPlacesListScreen: View {
                     Button {
                         selectedValue.wrappedValue = nil
                     } label: {
-                        filterOption("all", isSelected: selectedValue.wrappedValue == nil)
+                        filterOption("All", isSelected: selectedValue.wrappedValue == nil)
                     }
                     .buttonStyle(.plain)
 
@@ -3081,7 +3081,7 @@ private struct SavedPlacesListScreen: View {
                             selectedValue.wrappedValue = selectedValue.wrappedValue == value ? nil : value
                         } label: {
                             filterOption(
-                                title == "type" ? WanderPlaceCategory.broadCategory(for: value) : value,
+                                title.caseInsensitiveCompare("type") == .orderedSame ? AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: value)) : value,
                                 isSelected: selectedValue.wrappedValue == value
                             )
                         }
@@ -3109,7 +3109,7 @@ private struct SavedPlacesListScreen: View {
 
     private var tagFilterDropdown: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("tags")
+            Text("Tags")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -3122,7 +3122,7 @@ private struct SavedPlacesListScreen: View {
                     Image(systemName: "tag.fill")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(brandMode.secondaryText)
-                    Text(selectedMetadataTag ?? "All tags")
+                    Text(selectedMetadataTag ?? "All Tags")
                         .font(AstirTypography.control)
                         .foregroundStyle(selectedMetadataTag == nil ? brandMode.secondaryText : brandMode.primaryText)
                         .lineLimit(1)
@@ -3142,14 +3142,14 @@ private struct SavedPlacesListScreen: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Tag filter")
+            .accessibilityLabel("Tag Filter")
 
             if isTagFilterExpanded {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(brandMode.secondaryText)
-                        TextField("search tags", text: $tagFilterQuery)
+                        TextField("Search Tags", text: $tagFilterQuery)
                             .textFieldStyle(.plain)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -3161,10 +3161,10 @@ private struct SavedPlacesListScreen: View {
 
                     ScrollView {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                            tagOption(title: "All tags", value: nil)
+                            tagOption(title: "All Tags", value: nil)
 
                             if filteredMetadataTags.isEmpty {
-                                Text(metadataTags.isEmpty ? "no tags saved yet" : "no matching tags")
+                                Text(metadataTags.isEmpty ? "No Tags Saved Yet" : "No Matching Tags")
                                     .font(AstirTypography.bodySmall)
                                     .foregroundStyle(brandMode.secondaryText)
                                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
@@ -3436,10 +3436,10 @@ private struct GraphListScreen: View {
                     .environmentObject(backend)
             }
             .alert(pendingUnfollowTitle, isPresented: $showsUnfollowConfirm) {
-                Button("Yes, unfollow", role: .destructive) {
+                Button("Yes, Unfollow", role: .destructive) {
                     confirmPendingUnfollow()
                 }
-                Button("No, cancel", role: .cancel) {
+                Button("No, Cancel", role: .cancel) {
                     pendingUnfollowProfile = nil
                     showsUnfollowConfirm = false
                 }
@@ -3457,9 +3457,9 @@ private struct GraphListScreen: View {
 
     private var pendingUnfollowTitle: String {
         guard let pendingUnfollowProfile else {
-            return "Are you sure you want to unfollow this person"
+            return "Are You Sure You Want To Unfollow This Person"
         }
-        return "Are you sure you want to unfollow \(pendingUnfollowProfile.displayName)"
+        return "Are You Sure You Want To Unfollow \(pendingUnfollowProfile.displayName)"
     }
 
     private func handleFollowAction(for profile: LocalProfile) {
@@ -3549,11 +3549,11 @@ private struct GraphPersonListRow: View {
     private var savedPlaceCountLabel: String {
         switch savedPlaceCount {
         case 0:
-            return "no saved places yet"
+            return "No Saved Places Yet"
         case 1:
-            return "1 saved place"
+            return "1 Saved Place"
         default:
-            return "\(savedPlaceCount) saved places"
+            return "\(savedPlaceCount) Saved Places"
         }
     }
 }
@@ -3731,7 +3731,7 @@ private struct ProfileCalendarDayDetailHeader: View {
             metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun, color: brandMode.accent)
             Divider()
                 .overlay(brandMode.border)
-            metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: brandMode.primaryText)
+            metric(value: summary.placeIDs.count, singular: "Place", plural: "Places", color: brandMode.primaryText)
         }
         .frame(maxWidth: .infinity)
         .padding(WanderTheme.spacing3)
@@ -3774,7 +3774,7 @@ private struct RecommendedScorePill: View {
         }
         .foregroundStyle(brandMode.accentText)
         .frame(minHeight: 30)
-        .accessibilityLabel("Recommended score \(PlaceRating.averageDisplay(score)) out of 5")
+        .accessibilityLabel("Recommended Score \(PlaceRating.averageDisplay(score)) Out Of 5")
     }
 }
 

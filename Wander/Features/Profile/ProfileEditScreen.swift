@@ -45,7 +45,7 @@ struct ProfileEditScreen: View {
                         Button {
                             showsPhotoMenu = true
                         } label: {
-                            Text("Edit profile photo")
+                            Text("Edit Profile Photo")
                                 .font(AstirTypography.control)
                                 .foregroundStyle(brandMode.accentText)
                                 .frame(minHeight: WanderTheme.tapMinimum)
@@ -56,19 +56,19 @@ struct ProfileEditScreen: View {
                     .padding(.top, WanderTheme.spacing4)
 
                     VStack(spacing: 0) {
-                        ProfileEditFieldRow(title: "Name", prompt: "Your name", text: $name, capitalization: .words)
+                        ProfileEditFieldRow(title: "Name", prompt: "Your Name", text: $name, capitalization: .words)
                         Divider().overlay(brandMode.border)
                         ProfileEditFieldRow(
                             title: "Username",
-                            prompt: "username",
+                            prompt: "Username",
                             text: $handle,
                             capitalization: .never,
                             disablesAutocorrection: true
                         )
                         Divider().overlay(brandMode.border)
-                        ProfileEditFieldRow(title: "Home city", prompt: "Add a home city", text: $homeArea, capitalization: .words)
+                        ProfileEditFieldRow(title: "Home City", prompt: "Add A Home City", text: $homeArea, capitalization: .words)
                         Divider().overlay(brandMode.border)
-                        ProfileEditFieldRow(title: "Bio", prompt: "Add a bio", text: $bio, capitalization: .sentences, axis: .vertical)
+                        ProfileEditFieldRow(title: "Bio", prompt: "Add A Bio", text: $bio, capitalization: .sentences, axis: .vertical)
                     }
                     .background(brandMode.raisedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
@@ -88,7 +88,7 @@ struct ProfileEditScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .astirScreen()
-            .navigationTitle("edit profile")
+            .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -120,11 +120,11 @@ struct ProfileEditScreen: View {
                 guard let item else { return }
                 Task { await importPhoto(item) }
             }
-            .confirmationDialog("Profile photo", isPresented: $showsPhotoMenu, titleVisibility: .visible) {
+            .confirmationDialog("Profile Photo", isPresented: $showsPhotoMenu, titleVisibility: .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button("Take Photo") { showsCamera = true }
                 }
-                Button("Choose from Library") { showsPhotoLibrary = true }
+                Button("Choose From Library") { showsPhotoLibrary = true }
                 if hasProfilePhoto {
                     Button("Delete Photo", role: .destructive) {
                         Task { await deletePhoto() }
@@ -198,7 +198,7 @@ struct ProfileEditScreen: View {
             }.value
             try await savePhoto(jpegData)
         } catch {
-            errorMessage = "Could not save that profile photo. Try another one."
+            errorMessage = "Could Not Save That Profile Photo. Try Another One."
         }
     }
 
@@ -215,7 +215,7 @@ struct ProfileEditScreen: View {
             }.value
             try await savePhoto(jpegData)
         } catch {
-            errorMessage = "Could not save that profile photo. Try another one."
+            errorMessage = "Could Not Save That Profile Photo. Try Another One."
         }
     }
 
@@ -243,7 +243,7 @@ struct ProfileEditScreen: View {
             try ProfileAvatarStorage.live.deleteAvatar()
             store.updateCurrentUserAvatarURL(nil)
         } catch {
-            errorMessage = "Could not delete that profile photo. Try again."
+            errorMessage = "Could Not Delete That Profile Photo. Try Again."
         }
     }
 }
@@ -318,12 +318,12 @@ struct ProfilePhotoFullScreenViewer: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFit()
-                            .accessibilityLabel("\(displayName)'s profile photo")
+                            .accessibilityLabel("\(displayName)'s Profile Photo")
                     } else if loadFailed {
                         VStack(spacing: WanderTheme.spacing2) {
                             Image(systemName: "photo")
                                 .font(.system(size: 28, weight: .semibold))
-                            Text("Could not load profile photo")
+                            Text("Could Not Load Profile Photo")
                                 .font(AstirTypography.control)
                         }
                         .foregroundStyle(.white.opacity(0.82))
@@ -337,7 +337,7 @@ struct ProfilePhotoFullScreenViewer: View {
 
             WanderGlassActionButton(
                 systemImage: "xmark",
-                accessibilityLabel: "Close profile photo",
+                accessibilityLabel: "Close Profile Photo",
                 tone: .darkOverlay,
                 action: dismiss.callAsFunction
             )

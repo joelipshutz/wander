@@ -11,7 +11,7 @@ import XCTest
         XCTAssertEqual(selection.radius, .tenKilometers)
         XCTAssertNil(selection.occurredAfter)
         XCTAssertEqual(selection.occurredBefore, now)
-        XCTAssertEqual(selection.summary, "Featured · All time")
+        XCTAssertEqual(selection.summary, "Featured · All Time")
         XCTAssertEqual(selection.activeFilterCount, 0)
         XCTAssertTrue(selection.includes(event("historical", offset: -400 * 86_400)))
         XCTAssertTrue(selection.includes(event("end")))
@@ -22,7 +22,7 @@ import XCTest
         var selection = LiveBrowseSelection(now: now)
         selection.activityType = .lists
         XCTAssertTrue(LiveActivityFilter.allCases.contains(.lists))
-        XCTAssertEqual(selection.summary, "Featured · All time · Lists")
+        XCTAssertEqual(selection.summary, "Featured · All Time · Lists")
         XCTAssertEqual(selection.activeFilterCount, 1)
         XCTAssertEqual(selection.query().activityType, .lists)
         XCTAssertTrue(selection.includes(event("creation", kind: .listCreated)))
@@ -49,7 +49,7 @@ import XCTest
     func testTwentyFourHourAndAllTimeNeverMixFutureItemsIntoPastActivity() {
         var selection = LiveBrowseSelection(now: now)
         selection.time = .day
-        XCTAssertEqual(selection.time.title, "Past 24 hours")
+        XCTAssertEqual(selection.time.title, "Past 24 Hours")
         XCTAssertTrue(selection.includes(event("day", offset: -86_400)))
         XCTAssertFalse(selection.includes(event("older", offset: -86_401)))
         selection.time = .all
@@ -206,7 +206,7 @@ import XCTest
         XCTAssertEqual(selection.activeFilterCount, 4)
         XCTAssertTrue(selection.summary.contains("25 km"))
         XCTAssertTrue(selection.summary.contains("Los Angeles"))
-        XCTAssertTrue(selection.summary.contains("2 people"))
+        XCTAssertTrue(selection.summary.contains("2 People"))
         XCTAssertFalse(selection.summary.contains("opaque-1"))
     }
 

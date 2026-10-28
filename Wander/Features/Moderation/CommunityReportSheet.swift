@@ -27,7 +27,7 @@ struct CommunityReportSheet: View {
             }
             .foregroundStyle(brandMode.primaryText)
             .background(brandMode.background.ignoresSafeArea())
-            .navigationTitle(receipt == nil ? "report \(subject.kind.displayName)" : "report sent")
+            .navigationTitle(receipt == nil ? "Report \(subject.kind.displayName)" : "Report Sent")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -50,13 +50,13 @@ struct CommunityReportSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("What’s going on?")
+                    Text("What’s Going On?")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(subject.context)
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.secondaryText)
-                    Text("Your report is private. The person you report won’t be told who sent it.")
+                    Text("Your Report Is Private. The Person You Report Won’t Be Told Who Sent It.")
                         .font(AstirTypography.body)
                         .foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -69,10 +69,10 @@ struct CommunityReportSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Anything else? (optional)")
+                    Text("Anything Else? (Optional)")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.primaryText)
-                    TextField("Add context for our safety team", text: $details, axis: .vertical)
+                    TextField("Add Context For Our Safety Team", text: $details, axis: .vertical)
                         .font(AstirTypography.body)
                         .lineLimit(3...6)
                         .focused($detailsFocused)
@@ -104,7 +104,7 @@ struct CommunityReportSheet: View {
                 }
 
                 WanderPrimaryButton(
-                    title: isSubmitting ? "Sending…" : "Send report",
+                    title: isSubmitting ? "Sending…" : "Send Report",
                     systemImage: "paperplane.fill",
                     isDisabled: selectedReason == nil || isSubmitting
                 ) {
@@ -113,7 +113,7 @@ struct CommunityReportSheet: View {
                 .accessibilityIdentifier("communityReport.submit")
 
                 Link(destination: URL(string: "https://astirmovement.com/community")!) {
-                    Label("Read the Astir community guidelines", systemImage: "arrow.up.right")
+                    Label("Read The Astir Community Guidelines", systemImage: "arrow.up.right")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.accentText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -186,12 +186,12 @@ struct CommunityReportSheet: View {
                     .foregroundStyle(WanderTheme.stateSuccess.color)
                     .accessibilityHidden(true)
 
-                Text("Thanks for looking out for the community.")
+                Text("Thanks For Looking Out For The Community.")
                     .font(AstirTypography.sheetTitle)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(brandMode.primaryText)
 
-                Text("Our safety team will review the report. If anyone is in immediate danger, contact local emergency services.")
+                Text("Our Safety Team Will Review The Report. If Anyone Is In Immediate Danger, Contact Local Emergency Services.")
                     .font(AstirTypography.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(brandMode.secondaryText)
@@ -205,7 +205,7 @@ struct CommunityReportSheet: View {
                     Button(role: .destructive) {
                         blockReportedUser()
                     } label: {
-                        Label(isBlocking ? "Blocking…" : "Block this person", systemImage: "hand.raised.fill")
+                        Label(isBlocking ? "Blocking…" : "Block This Person", systemImage: "hand.raised.fill")
                             .font(AstirTypography.control)
                             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                     }
@@ -236,7 +236,7 @@ struct CommunityReportSheet: View {
                     )
                 )
             } catch {
-                errorMessage = "Your report couldn’t be sent. Check your connection and try again."
+                errorMessage = "Your Report Couldn’t Be Sent. Check Your Connection And Try Again."
             }
             isSubmitting = false
         }

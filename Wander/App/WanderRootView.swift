@@ -40,24 +40,24 @@ private struct SharedPlaceImportDrainNotice: Identifiable {
     var title: String {
         if report.importedOrDuplicateBatchCount > 0,
            report.failedEnvelopeCount + report.quarantinedEnvelopeCount + report.expiredEnvelopeCount > 0 {
-            return "Some shared places were captured"
+            return "Some Shared Places Were Captured"
         }
         if report.importedOrDuplicateBatchCount > 0 {
-            return "Shared places captured"
+            return "Shared Places Captured"
         }
-        return "Shared import needs attention"
+        return "Shared Import Needs Attention"
     }
 
     var message: String {
         var parts: [String] = []
         if report.importedBatchCount > 0 {
             parts.append(
-                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? " is" : "s are") ready to review."
+                "\(report.importedBatchCount) Import\(report.importedBatchCount == 1 ? " Is" : "S Are") Ready To Review."
             )
         }
         if report.duplicateBatchCount > 0 {
             parts.append(
-                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already captured."
+                "\(report.duplicateBatchCount) Import\(report.duplicateBatchCount == 1 ? " Was" : "S Were") Already Captured."
             )
         }
         let unavailableCount = report.failedEnvelopeCount
@@ -65,7 +65,7 @@ private struct SharedPlaceImportDrainNotice: Identifiable {
             + report.expiredEnvelopeCount
         if unavailableCount > 0 {
             parts.append(
-                "\(unavailableCount) shared item\(unavailableCount == 1 ? "" : "s") could not be recovered. Share \(unavailableCount == 1 ? "it" : "them") again."
+                "\(unavailableCount) Shared Item\(unavailableCount == 1 ? "" : "s") Could Not Be Recovered. Share \(unavailableCount == 1 ? "It" : "Them") Again."
             )
         }
         return parts.joined(separator: " ")
@@ -1326,7 +1326,7 @@ struct WanderRootView: View {
     private var recoveryObservedRoot: some View {
         lifecycleObservedRoot
         .alert(
-            "Saved to your map",
+            "Saved To Your Map",
             isPresented: Binding(
                 get: { interruptedSaveRecoveryMessage != nil },
                 set: { if !$0 { interruptedSaveRecoveryMessage = nil } }
@@ -1607,7 +1607,7 @@ struct WanderRootView: View {
                 activateDeepLink(.sharedPlace(placeID: place.place.id))
             } else {
                 selectedTab = .profile
-                interruptedSaveRecoveryMessage = "This older guide no longer has an accessible place to reopen. Your saved guide is still in Settings → What’s changed."
+                interruptedSaveRecoveryMessage = "This Older Guide No Longer Has An Accessible Place To Reopen. Your Saved Guide Is Still In Settings → What’s Changed."
             }
         default: selectedTab = unifiedLiveEnabled ? .discover : .map
         }
@@ -1732,8 +1732,8 @@ struct WanderRootView: View {
                 placeSaveDraftStore.clear()
                 pendingCommittedWalkthroughDraft = nil
                 interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
-                    ? "Your check-in finished while Astir was in the background."
-                    : "This place was added to Wanna while Astir was in the background."
+                    ? "Your Check-In Finished While Astir Was In The Background."
+                    : "This Place Was Added To Wanna While Astir Was In The Background."
                 reconcileLiveMigration()
                 return
             }
@@ -1742,12 +1742,12 @@ struct WanderRootView: View {
                 routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
             } else {
                 interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
-                    ? "Your check-in finished while Astir was in the background."
-                    : "This place was added to Wanna while Astir was in the background."
+                    ? "Your Check-In Finished While Astir Was In The Background."
+                    : "This Place Was Added To Wanna While Astir Was In The Background."
             }
         case .retry:
             placeSaveDraftStore.prepareRetry(
-                message: "Save was interrupted before Astir could confirm it. Review your details and try again."
+                message: "Save Was Interrupted Before Astir Could Confirm It. Review Your Details And Try Again."
             )
             presentRestoredAddSheet()
         case .editing:

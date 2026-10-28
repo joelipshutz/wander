@@ -17,14 +17,14 @@ enum NUXMapDemonstration {
 
     static func places(around center: CLLocationCoordinate2D) -> [VisiblePlace] {
         let examples = [
-            ("Coffee spot", "cafe", -0.0018, 0.0014),
-            ("Neighborhood park", "park", 0.0012, -0.0016),
-            ("Dinner spot", "restaurant", 0.0031, 0.0017),
-            ("Weekend bakery", "bakery", -0.0029, -0.0026),
-            ("A favorite bookstore", "bookstore", 0.0005, 0.0035),
-            ("Something to try", "restaurant", -0.0006, -0.0040),
-            ("A little getaway", "park", 0.0038, -0.0030),
-            ("Morning coffee", "cafe", -0.0039, 0.0030)
+            ("Coffee Spot", "cafe", -0.0018, 0.0014),
+            ("Neighborhood Park", "park", 0.0012, -0.0016),
+            ("Dinner Spot", "restaurant", 0.0031, 0.0017),
+            ("Weekend Bakery", "bakery", -0.0029, -0.0026),
+            ("A Favorite Bookstore", "bookstore", 0.0005, 0.0035),
+            ("Something To Try", "restaurant", -0.0006, -0.0040),
+            ("A Little Getaway", "park", 0.0038, -0.0030),
+            ("Morning Coffee", "cafe", -0.0039, 0.0030)
         ]
         return examples.enumerated().map { index, example in
             let id = "nux-demo-\(index)"

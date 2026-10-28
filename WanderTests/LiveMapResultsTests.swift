@@ -25,7 +25,7 @@ final class LiveMapResultsTests: XCTestCase {
         XCTAssertEqual(Set(received.map(\.id)), Set(rows.map(\.id)))
         let pins = LiveMapProjection.pins(activities: received, featured: [])
         XCTAssertEqual(pins.count, 127)
-        XCTAssertEqual(LiveMapPaging.countText(received.count, complete: true), "100+ activities")
+        XCTAssertEqual(LiveMapPaging.countText(received.count, complete: true), "100+ Activities")
         let compact = LivePinDensity.compactIDs(points: pins.map { ($0.id, CGPoint(x: 100, y: 100)) }, selectedID: nil)
         XCTAssertEqual(compact.count, 126, "Density changes presentation without clipping the complete pin set.")
         XCTAssertEqual(pins.count, 127)
@@ -63,12 +63,12 @@ final class LiveMapResultsTests: XCTestCase {
 
     func testCountDistinguishesLoadingEmptyPartialAndCompleteResults() {
         for (count, complete, text) in [
-            (0, false, "Finding activities…"), (0, true, "0 activities"),
-            (1, false, "1+ activities"), (1, true, "1 activity"),
-            (20, false, "20+ activities"), (20, true, "20 activities"),
-            (99, true, "99 activities"), (100, false, "100+ activities"),
-            (100, true, "100+ activities"), (127, true, "100+ activities"),
-            (-1, true, "0 activities")
+            (0, false, "Finding Activities…"), (0, true, "0 Activities"),
+            (1, false, "1+ Activities"), (1, true, "1 Activity"),
+            (20, false, "20+ Activities"), (20, true, "20 Activities"),
+            (99, true, "99 Activities"), (100, false, "100+ Activities"),
+            (100, true, "100+ Activities"), (127, true, "100+ Activities"),
+            (-1, true, "0 Activities")
         ] { XCTAssertEqual(LiveMapPaging.countText(count, complete: complete), text) }
     }
 
@@ -102,7 +102,7 @@ final class LiveMapResultsTests: XCTestCase {
             XCTAssertEqual(model.activities.count, total)
             XCTAssertEqual(Set(model.activities.map(\.id)), Set(rows.map(\.id)))
             XCTAssertEqual(LiveMapProjection.pins(activities: model.activities, featured: model.featuredPlaces).count, total)
-            XCTAssertEqual(LiveMapPaging.countText(model.activities.count, complete: model.complete), "100+ activities")
+            XCTAssertEqual(LiveMapPaging.countText(model.activities.count, complete: model.complete), "100+ Activities")
             XCTAssertEqual(repository.requests.count, (total + 49) / 50)
             XCTAssertTrue(repository.requests.allSatisfy { $0.limit == 50 })
         }
@@ -254,7 +254,7 @@ final class LiveMapResultsTests: XCTestCase {
         XCTAssertEqual(Set(pin.activities.map(\.id)), Set(rows.map(\.id)))
         XCTAssertEqual(Set(pin.activities.map { $0.actor.id }), ["alex", "sam", "pat"])
         XCTAssertEqual(pin.kind, .checkIn)
-        XCTAssertEqual(LiveMapPaging.countText(rows.count, complete: true), "3 activities")
+        XCTAssertEqual(LiveMapPaging.countText(rows.count, complete: true), "3 Activities")
         XCTAssertTrue(LivePinDensity.compactIDs(points: pins.map { ($0.id, CGPoint(x: 10, y: 10)) }, selectedID: nil).isEmpty,
             "Several records for one venue must not leave a second density dot.")
     }

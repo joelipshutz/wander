@@ -18,9 +18,9 @@ final class MapSnapshotCapture: ObservableObject {
 
         var errorDescription: String? {
             switch self {
-            case .unavailable: "The map is still loading. Try again in a moment."
-            case .empty: "No saved places in this view. Move the map or change your filters, then try again."
-            case .imageFailed: "Couldn’t capture the map. Please try again."
+            case .unavailable: "The Map Is Still Loading. Try Again In A Moment."
+            case .empty: "No Saved Places In This View. Move The Map Or Change Your Filters, Then Try Again."
+            case .imageFailed: "Couldn’t Capture The Map. Please Try Again."
             }
         }
     }

@@ -15,17 +15,17 @@ final class CommonGroundLiveDataTests: XCTestCase {
         XCTAssertEqual(snapshot.places.count, 1, "Do not invent extra picks to fill the limit.")
         XCTAssertTrue(place.isOneSidedRecommendation)
         XCTAssertEqual(place.linkage, .partnerLoves)
-        XCTAssertEqual(place.narrativeTitle, "Brian loves Canal Coffee")
-        XCTAssertEqual(place.narrativeDetail, "Brian rated it 4.5/5")
-        XCTAssertEqual(place.reason, "You two should go together.")
+        XCTAssertEqual(place.narrativeTitle, "Brian Loves Canal Coffee")
+        XCTAssertEqual(place.narrativeDetail, "Brian Rated It 4.5/5")
+        XCTAssertEqual(place.reason, "You Two Should Go Together.")
         XCTAssertEqual(place.sourcePlaceID, favorite.id)
         XCTAssertEqual(place.youVisits, 0)
         XCTAssertFalse(place.youWanna)
         XCTAssertNil(place.youRating)
         let draft = CommonGroundInvitationDraft(place: place)
-        XCTAssertEqual(draft.message, "You love Canal Coffee\nTake me next time?")
-        XCTAssertEqual(draft.reasonTitle, "Brian loves this place")
-        XCTAssertEqual(draft.recipientReasonTitle, "You love this place, show Viewer")
+        XCTAssertEqual(draft.message, "You Love Canal Coffee\nTake Me Next Time?")
+        XCTAssertEqual(draft.reasonTitle, "Brian Loves This Place")
+        XCTAssertEqual(draft.recipientReasonTitle, "You Love This Place, Show Viewer")
     }
 
     func testEmptyPartnerGetsViewersFavoritesIncludingOwnPrivatePlace() throws {
@@ -39,8 +39,8 @@ final class CommonGroundLiveDataTests: XCTestCase {
         XCTAssertEqual(place.sourcePlaceID, favorite.id)
         XCTAssertEqual(place.joeVisits, 0)
         XCTAssertFalse(place.joeWanna)
-        XCTAssertEqual(CommonGroundInvitationDraft(place: place).message, "I love Canal Coffee\nLet me show you why")
-        XCTAssertEqual(CommonGroundInvitationDraft(place: place).recipientReasonTitle, "Viewer loves this place")
+        XCTAssertEqual(CommonGroundInvitationDraft(place: place).message, "I Love Canal Coffee\nLet Me Show You Why")
+        XCTAssertEqual(CommonGroundInvitationDraft(place: place).recipientReasonTitle, "Viewer Loves This Place")
     }
 
     func testDisjointSavesChooseThreeDistinctFavoritesByRatingVisitsAndName() {
@@ -356,8 +356,8 @@ final class CommonGroundLiveDataTests: XCTestCase {
         let result = try XCTUnwrap(project(viewer, partner, rows: [been, wanna],
                                           visits: [visit("visit", parent: been)]).places.first)
         XCTAssertEqual(result.linkage, .viewerBeenPartnerWanna)
-        XCTAssertEqual(result.narrativeTitle, "You’ve been to Charleston Park\nRachel wants to go")
-        XCTAssertEqual(CommonGroundInvitationDraft(place: result).reasonTitle, "You’ve been and Rachel wants to go")
+        XCTAssertEqual(result.narrativeTitle, "You’ve Been To Charleston Park\nRachel Wants To Go")
+        XCTAssertEqual(CommonGroundInvitationDraft(place: result).reasonTitle, "You’ve Been And Rachel Wants To Go")
         XCTAssertEqual(result.joeVisits, 0)
         XCTAssertTrue(result.joeWanna)
     }
@@ -373,7 +373,7 @@ final class CommonGroundLiveDataTests: XCTestCase {
         XCTAssertEqual(transport.params["input_recipient_id"] as? String, "rachel")
         XCTAssertEqual(transport.params["input_message"] as? String, draft.message)
         XCTAssertEqual(transport.params["input_title"] as? String, draft.linkTitle)
-        XCTAssertEqual(transport.params["input_connection"] as? String, "Ryan’s been and you wanna go")
+        XCTAssertEqual(transport.params["input_connection"] as? String, "Ryan’s Been And You Wanna Go")
         XCTAssertNil(transport.params["visits"])
         XCTAssertNil(transport.params["note"])
         XCTAssertEqual(share.item.path, "/plans/" + String(repeating: "b", count: 48))

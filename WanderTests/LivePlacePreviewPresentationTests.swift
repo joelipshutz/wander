@@ -28,7 +28,7 @@ import XCTest
         let activity = event("list", place: place("selected"), relationship: .follower, age: 0,
                              kind: .listItemAdded)
         XCTAssertEqual(LivePlacePreviewPresentation.emoji(for: activity), "📋")
-        XCTAssertEqual(LivePlacePreviewPresentation.actionLabel(for: activity), "Added to a list")
+        XCTAssertEqual(LivePlacePreviewPresentation.actionLabel(for: activity), "Added To A List")
         XCTAssertNotEqual(LivePlacePreviewPresentation.highlight(for: activity), "Wanna")
     }
 

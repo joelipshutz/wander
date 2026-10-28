@@ -24,8 +24,8 @@ struct PlaceCardRatingPresentation: Equatable {
 
     var accessibilityLabel: String {
         source == .featured
-            ? "Featured, 5 out of 5, not yet rated"
-            : "Rated \(scoreText) out of 5"
+            ? "Featured, 5 Out Of 5, Not Yet Rated"
+            : "Rated \(scoreText) Out Of 5"
     }
 }
 
@@ -149,14 +149,14 @@ enum PlaceCardPresentation {
         let time = timeFormatter.string(from: date).replacingOccurrences(of: ":00", with: "")
 
         if calendar.isDate(date, inSameDayAs: now) {
-            return "at \(time)"
+            return "At \(time)"
         }
 
         let dayFormatter = DateFormatter()
         dayFormatter.locale = Locale(identifier: "en_US_POSIX")
         dayFormatter.timeZone = timeZone
         dayFormatter.dateFormat = "EEE"
-        return "\(dayFormatter.string(from: date)) at \(time)"
+        return "\(dayFormatter.string(from: date)) At \(time)"
     }
 }
 

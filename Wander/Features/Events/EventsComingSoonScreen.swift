@@ -23,7 +23,7 @@ struct EventsComingSoonScreen: View {
             EventsVideoSurface(policy: playbackPolicy)
                 .ignoresSafeArea()
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Coming soon. An Ocean Park experiment.")
+                .accessibilityLabel("Coming Soon. An Ocean Park Experiment.")
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("events.comingSoon")
 
@@ -50,11 +50,11 @@ struct EventsComingSoonScreen: View {
         .task(id: isSelected) {
             if isSelected { await interest.load(userID: userID, repository: repository) }
         }
-        .alert("Keep me posted", isPresented: Binding(
+        .alert("Keep Me Posted", isPresented: Binding(
             get: { interest.errorMessage != nil },
             set: { if !$0 { interest.errorMessage = nil } }
         )) {
-            Button("Try again") { Task { await interest.register(repository: repository, analytics: analytics) } }
+            Button("Try Again") { Task { await interest.register(repository: repository, analytics: analytics) } }
             Button("Cancel", role: .cancel) { interest.errorMessage = nil }
         } message: {
             Text(interest.errorMessage ?? "")
@@ -251,7 +251,7 @@ private struct EventsNotifyControl: UIViewRepresentable {
         button.isEnabled = enabled && !saving
         button.alpha = saving ? 0.65 : 1
         button.accessibilityValue = saving ? "Saving" : nil
-        button.accessibilityHint = "Get notified when Events launches."
+        button.accessibilityHint = "Get Notified When Events Launches."
         button.updateAnimation(animates && !saving)
     }
 
@@ -268,7 +268,7 @@ private struct EventsNotifyControl: UIViewRepresentable {
     override init(frame: CGRect) {
         super.init(frame: frame)
         accessibilityIdentifier = "events.keepMePosted"
-        accessibilityLabel = "Keep me posted"
+        accessibilityLabel = "Keep Me Posted"
         imageView?.contentMode = .scaleToFill
         adjustsImageWhenHighlighted = false
         backgroundColor = .clear
@@ -326,7 +326,7 @@ private struct EventsWaitlistStatus: UIViewRepresentable {
         isAccessibilityElement = true
         accessibilityTraits = .staticText
         accessibilityIdentifier = "events.waitlistStatus"
-        accessibilityLabel = "Added to Waitlist"
+        accessibilityLabel = "Added To Waitlist"
         addSubview(artwork)
     }
 

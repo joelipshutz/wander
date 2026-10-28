@@ -45,16 +45,16 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         let continueGuide = app.buttons["live.migration.guide"]
         XCTAssertTrue(continueGuide.waitForExistence(timeout: 5))
         continueGuide.tap()
-        XCTAssertTrue(app.staticTexts["Choose your filters and area"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Choose Your Filters And Area"].waitForExistence(timeout: 5))
         app.buttons["live.introduction.next"].tap()
-        XCTAssertTrue(app.staticTexts["Find a place or a person"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Find A Place Or A Person"].waitForExistence(timeout: 5))
         capture("D9-partial-guide")
         app.terminate()
         app.launch()
         waitForTab("Live", in: app)
         openReplay(in: app)
         continueGuide.tap()
-        XCTAssertTrue(app.staticTexts["Find a place or a person"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.staticTexts["Find A Place Or A Person"].waitForExistence(timeout: 5),
                       "Relaunch must retain the explicit first acknowledgement.")
         app.terminate()
         app.launchArguments.append("-WanderLiveIntroductionUITestRollback")
@@ -62,8 +62,8 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         waitForTab("Map", in: app)
         openReplay(in: app)
         continueGuide.tap()
-        XCTAssertTrue(app.staticTexts["Find a place or a person"].waitForExistence(timeout: 5))
-        for title in ["Find a place or a person", "Keep a place for later", "The same Feed, within reach"] {
+        XCTAssertTrue(app.staticTexts["Find A Place Or A Person"].waitForExistence(timeout: 5))
+        for title in ["Find a place or a person", "Keep A Place For Later", "The same Feed, within reach"] {
             XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
             app.buttons["live.introduction.next"].tap()
         }
@@ -84,7 +84,7 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         app.launch()
         waitForTab("Live", in: app)
         openReplay(in: app)
-        XCTAssertTrue(app.staticTexts["Your Feed has a map"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Your Feed Has A Map"].waitForExistence(timeout: 5))
         XCTAssertFalse(continueGuide.exists, "Completed mapped teaching opens ordinary read-only replay.")
         capture("D9-acknowledged-guide-after-rollback")
     }
@@ -95,9 +95,9 @@ final class LiveMigrationAndPrivacyUITests: XCTestCase {
         app.buttons["live.migration.openRecovery"].tap()
         let acknowledge = app.buttons["live.migration.deviceAcknowledged"]
         XCTAssertTrue(acknowledge.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["These are optional setup instructions. This guide does not request or change device permissions."].exists)
+        XCTAssertTrue(app.staticTexts["These Are Optional Setup Instructions. This Guide Does Not Request Or Change Device Permissions."].exists)
         capture("D9-device-optional-lesson")
-        app.navigationBars.buttons["Not now"].tap()
+        app.navigationBars.buttons["Not Now"].tap()
         waitForTab("Live", in: app)
         openReplay(in: app)
         app.buttons["live.migration.openRecovery"].tap()

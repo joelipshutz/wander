@@ -16,58 +16,58 @@ enum AuthGateIntent: String, Equatable, Identifiable {
         switch self {
         case .syncPlace:
             AuthGateCopy(
-                title: "Sign in to sync this place",
-                message: "It stays on this phone either way. Sign in when you want it backed up and shared by your visibility setting.",
-                primaryAction: "Sign in",
-                secondaryAction: "Keep it here"
+                title: "Sign In To Sync This Place",
+                message: "It Stays On This Phone Either Way. Sign In When You Want It Backed Up And Shared By Your Visibility Setting.",
+                primaryAction: "Sign In",
+                secondaryAction: "Keep It Here"
             )
         case .socialSave:
             AuthGateCopy(
-                title: "Sign in to save from people",
-                message: "Social saves need an account so \(AppBrand.displayName) knows whose map gets the copy.",
-                primaryAction: "Sign in",
-                secondaryAction: "Keep browsing"
+                title: "Sign In To Save From People",
+                message: "Social Saves Need An Account So \(AppBrand.displayName) Knows Whose Map Gets The Copy.",
+                primaryAction: "Sign In",
+                secondaryAction: "Keep Browsing"
             )
         case .socialActivity:
             AuthGateCopy(
-                title: "Sign in to join the conversation",
-                message: "Likes and comments need an account so people know they came from you.",
-                primaryAction: "Sign in",
-                secondaryAction: "Keep browsing"
+                title: "Sign In To Join The Conversation",
+                message: "Likes And Comments Need An Account So People Know They Came From You.",
+                primaryAction: "Sign In",
+                secondaryAction: "Keep Browsing"
             )
         case .followPeople:
             AuthGateCopy(
-                title: "Sign in to follow people",
-                message: "Follows shape your social map and need an account.",
-                primaryAction: "Sign in",
-                secondaryAction: "Not now"
+                title: "Sign In To Follow People",
+                message: "Follows Shape Your Social Map And Need An Account.",
+                primaryAction: "Sign In",
+                secondaryAction: "Not Now"
             )
         case .manageBlocks:
             AuthGateCopy(
-                title: "Sign in to manage blocks",
-                message: "Blocks apply across search, profiles, and maps, so they need an account.",
-                primaryAction: "Sign in",
+                title: "Sign In To Manage Blocks",
+                message: "Blocks Apply Across Search, Profiles, And Maps, So They Need An Account.",
+                primaryAction: "Sign In",
                 secondaryAction: "Cancel"
             )
         case .reportContent:
             AuthGateCopy(
-                title: "Sign in to send a report",
-                message: "Reports need an account so our safety team can investigate abuse and prevent duplicate reports.",
-                primaryAction: "Sign in",
+                title: "Sign In To Send A Report",
+                message: "Reports Need An Account So Our Safety Team Can Investigate Abuse And Prevent Duplicate Reports.",
+                primaryAction: "Sign In",
                 secondaryAction: "Cancel"
             )
         case .manageNotifications:
             AuthGateCopy(
-                title: "Sign in for notifications",
-                message: "Notification settings follow your account and device.",
-                primaryAction: "Sign in",
+                title: "Sign In For Notifications",
+                message: "Notification Settings Follow Your Account And Device.",
+                primaryAction: "Sign In",
                 secondaryAction: "Cancel"
             )
         case .syncPending:
             AuthGateCopy(
-                title: "Sign in to sync pending items",
-                message: "Your local saves are safe here. Sign in to back them up when you're ready.",
-                primaryAction: "Sign in",
+                title: "Sign In To Sync Pending Items",
+                message: "Your Local Saves Are Safe Here. Sign In To Back Them Up When You're Ready.",
+                primaryAction: "Sign In",
                 secondaryAction: "Later"
             )
         }
@@ -318,7 +318,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             isPresentingNativeAuth = true
         } else {
             nativeAuthDidDismiss()
-            state = .unavailable("Clerk is not configured for this build.")
+            state = .unavailable("Clerk Is Not Configured For This Build.")
         }
     }
 
@@ -339,7 +339,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                 sessionAdoption: nil,
                 failureCategory: "not_configured"
             )
-            nativeAuthError = "Sign in is not available in this build."
+            nativeAuthError = "Sign In Is Not Available In This Build."
             return nil
         }
 
@@ -364,7 +364,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                         sessionAdoption: result.sessionAdoption,
                         failureCategory: "store_session_missing"
                     )
-                    nativeAuthError = "\(socialProvider.displayName) sign-in didn’t finish. Try again or use another method."
+                    nativeAuthError = "\(socialProvider.displayName) Sign-In Didn’t Finish. Try Again Or Use Another Method."
                     return nil
                 }
             } else {
@@ -403,20 +403,20 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                 sessionAdoption: nil,
                 failureCategory: Self.analyticsFailureCategory(for: error)
             )
-            nativeAuthError = "\(socialProvider.displayName) sign-in didn’t finish. Try again or use another method."
+            nativeAuthError = "\(socialProvider.displayName) Sign-In Didn’t Finish. Try Again Or Use Another Method."
             return nil
         }
     }
 
     func sendEmailCode(to rawEmailAddress: String) async -> Bool {
         guard provider.canPresentNativeAuth else {
-            nativeAuthError = "Email sign-in is not available in this build."
+            nativeAuthError = "Email Sign-In Is Not Available In This Build."
             return false
         }
 
         let emailAddress = rawEmailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.looksLikeEmailAddress(emailAddress) else {
-            nativeAuthError = "Enter a valid email address."
+            nativeAuthError = "Enter A Valid Email Address."
             return false
         }
 
@@ -430,16 +430,16 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             emailVerificationAddress = emailAddress
             return true
         } catch AuthSessionError.accountNotFound {
-            nativeAuthError = "We couldn’t find an account for that email. Try Apple or Google, or create an account."
+            nativeAuthError = "We Couldn’t Find An Account For That Email. Try Apple Or Google, Or Create An Account."
         } catch AuthSessionError.emailAlreadyInUse {
-            nativeAuthError = "That email already has an account. Go back and log in instead."
+            nativeAuthError = "That Email Already Has An Account. Go Back And Log In Instead."
         } catch {
             #if DEBUG
             WanderDebugLog.remote.error(
                 "email code send failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
-            nativeAuthError = "We couldn’t send a code. Check the email and try again."
+            nativeAuthError = "We Couldn’t Send A Code. Check The Email And Try Again."
         }
         return false
     }
@@ -448,7 +448,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     func verifyEmailCode(_ rawCode: String) async -> NativeAuthOutcome? {
         let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else {
-            nativeAuthError = "Enter the code from your email."
+            nativeAuthError = "Enter The Code From Your Email."
             return nil
         }
 
@@ -461,22 +461,22 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             if outcome == .completed {
                 synchronizeState(provider.state)
                 guard state.isSignedIn else {
-                    nativeAuthError = "Email sign-in didn’t finish. Try again."
+                    nativeAuthError = "Email Sign-In Didn’t Finish. Try Again."
                     return nil
                 }
             } else {
-                nativeAuthError = "This account needs another verification step. Try Apple or Google, or contact support."
+                nativeAuthError = "This Account Needs Another Verification Step. Try Apple Or Google, Or Contact Support."
             }
             return outcome
         } catch AuthSessionError.invalidVerificationCode {
-            nativeAuthError = "That code isn’t right. Check the email and try again."
+            nativeAuthError = "That Code Isn’t Right. Check The Email And Try Again."
         } catch {
             #if DEBUG
             WanderDebugLog.remote.error(
                 "email code verification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
-            nativeAuthError = "We couldn’t verify that code. Try again."
+            nativeAuthError = "We Couldn’t Verify That Code. Try Again."
         }
         return nil
     }
@@ -493,17 +493,17 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         password rawPassword: String
     ) async -> NativeAuthOutcome? {
         guard provider.canPresentNativeAuth else {
-            nativeAuthError = "Password sign-in is not available in this build."
+            nativeAuthError = "Password Sign-In Is Not Available In This Build."
             return nil
         }
 
         let emailAddress = rawEmailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.looksLikeEmailAddress(emailAddress) else {
-            nativeAuthError = "Enter a valid email address."
+            nativeAuthError = "Enter A Valid Email Address."
             return nil
         }
         guard !rawPassword.isEmpty else {
-            nativeAuthError = "Enter your password."
+            nativeAuthError = "Enter Your Password."
             return nil
         }
 
@@ -520,20 +520,20 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             if outcome == .completed {
                 synchronizeState(provider.state)
                 guard state.isSignedIn else {
-                    nativeAuthError = "Password sign-in didn’t finish. Try again or use another method."
+                    nativeAuthError = "Password Sign-In Didn’t Finish. Try Again Or Use Another Method."
                     return nil
                 }
             } else {
-                nativeAuthError = "This account needs another verification step. Use email or another sign-in method."
+                nativeAuthError = "This Account Needs Another Verification Step. Use Email Or Another Sign-In Method."
             }
             return outcome
         } catch AuthSessionError.invalidCredentials, AuthSessionError.accountNotFound {
-            nativeAuthError = "Email or password didn’t match."
+            nativeAuthError = "Email Or Password Didn’t Match."
         } catch {
             #if DEBUG
             WanderDebugLog.remote.error("password sign-in failed")
             #endif
-            nativeAuthError = "Password sign-in didn’t finish. Check your connection and try again."
+            nativeAuthError = "Password Sign-In Didn’t Finish. Check Your Connection And Try Again."
         }
         return nil
     }
@@ -594,7 +594,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         } catch {
             await provider.refreshSession()
             synchronizeStateFromProvider()
-            signOutError = "Could not sign out. Try again."
+            signOutError = "Could Not Sign Out. Try Again."
             throw error
         }
     }
@@ -663,9 +663,9 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         case .completed:
             return ""
         case .requiresExistingAccountVerification:
-            return "We couldn’t match that \(provider.displayName) login to an existing account. Sign in with the method you originally used. Your saved places and people are still there."
+            return "We Couldn’t Match That \(provider.displayName) Login To An Existing Account. Sign In With The Method You Originally Used. Your Saved Places And People Are Still There."
         case .requiresAdditionalVerification:
-            return "This \(provider.displayName) account needs another verification step. Try email or your other sign-in method."
+            return "This \(provider.displayName) Account Needs Another Verification Step. Try Email Or Your Other Sign-In Method."
         }
     }
 

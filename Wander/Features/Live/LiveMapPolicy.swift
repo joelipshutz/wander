@@ -72,7 +72,7 @@ enum LiveTimeFilter: Int, CaseIterable, Identifiable {
     case day = 1, week = 7, month = 30, all = 0
     var id: Self { self }
     var title: String {
-        switch self { case .day: "Past 24 hours"; case .week: "Past 7 days"; case .month: "Past 30 days"; case .all: "All time" }
+        switch self { case .day: "Past 24 Hours"; case .week: "Past 7 Days"; case .month: "Past 30 Days"; case .all: "All Time" }
     }
     func includes(_ date: Date, now: Date) -> Bool {
         rawValue == 0 || (date >= now.addingTimeInterval(-Double(rawValue) * 86_400) && date <= now.addingTimeInterval(300))

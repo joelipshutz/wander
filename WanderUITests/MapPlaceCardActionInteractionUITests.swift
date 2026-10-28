@@ -12,7 +12,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         ]
         app.launch()
         XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 12))
-        let edit = app.buttons["Edit check-in"].firstMatch
+        let edit = app.buttons["Edit Check-In"].firstMatch
         for _ in 0..<7 where !edit.isHittable { app.swipeUp() }
         edit.tap()
         let form = app.scrollViews["save.editorScroll"]
@@ -29,7 +29,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         scrollReset.isInverted = true
         XCTAssertEqual(XCTWaiter.wait(for: [scrollReset], timeout: 2), .completed)
         photos.tap()
-        XCTAssertTrue(app.buttons["Choose from Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Choose From Library"].waitForExistence(timeout: 5))
         capture("REC-443 editor photo menu")
     }
 
@@ -43,7 +43,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         ]
         app.launch()
         XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 12))
-        let edit = app.buttons["Edit check-in"].firstMatch
+        let edit = app.buttons["Edit Check-In"].firstMatch
         for _ in 0..<7 where !edit.isHittable { app.swipeUp() }
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.tap()
@@ -100,7 +100,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         app.buttons["map.selectedPlaceShare"].tap()
         let sharePreview = app.segmentedControls["share.format"]
         XCTAssertTrue(sharePreview.waitForExistence(timeout: 5))
-        app.buttons["Close share preview"].tap()
+        app.buttons["Close Share Preview"].tap()
         XCTAssertFalse(sharePreview.waitForExistence(timeout: 3))
     }
 
@@ -208,7 +208,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         app.buttons["place-profile.floating-action.wanna"].tap()
         XCTAssertTrue(app.textViews["save.note"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["save.checkInDateDisclosure"].exists)
-        XCTAssertFalse(app.buttons["Remove from Wanna"].exists)
+        XCTAssertFalse(app.buttons["Remove From Wanna"].exists)
         app.buttons["save.close"].tap()
         app.buttons["place-profile.back"].tap()
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 5))
@@ -231,22 +231,22 @@ final class FeedPostcardInteractionUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 6))
 
-        let likeButton = app.buttons["Like activity"].firstMatch
+        let likeButton = app.buttons["Like Activity"].firstMatch
         reveal(likeButton, in: app)
         XCTAssertTrue(likeButton.waitForExistence(timeout: 4))
         XCTAssertTrue(likeButton.isHittable)
         likeButton.tap()
 
-        XCTAssertTrue(app.buttons["Unlike activity"].firstMatch.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Unlike Activity"].firstMatch.waitForExistence(timeout: 4))
         XCTAssertFalse(app.buttons["place-profile.back"].exists)
 
-        let commentButton = app.buttons["Open comments"].firstMatch
+        let commentButton = app.buttons["Open Comments"].firstMatch
         XCTAssertTrue(commentButton.isHittable)
         commentButton.tap()
         XCTAssertTrue(app.buttons["activity.comment.send"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.otherElements["comments.activity.postcard"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.buttons["Unlike activity"].firstMatch.exists)
-        XCTAssertFalse(app.buttons["Open comments"].exists)
+        XCTAssertTrue(app.buttons["Unlike Activity"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["Open Comments"].exists)
         capture("rec-337-comments-postcard")
         app.navigationBars.buttons.firstMatch.tap()
 
@@ -310,13 +310,13 @@ final class FeedPostcardInteractionUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["In Common"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts["common-ground.collection-title"].exists)
-        let sharedMapButton = app.buttons["Open your shared map"]
+        let sharedMapButton = app.buttons["Open Your Shared Map"]
         XCTAssertTrue(sharedMapButton.waitForExistence(timeout: 4))
         capture("rec-335-in-common-release")
 
         sharedMapButton.tap()
-        XCTAssertTrue(app.navigationBars["Shared map"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["where you agree"].exists)
+        XCTAssertTrue(app.navigationBars["Shared Map"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["Where You Agree"].exists)
         capture("rec-335-in-common-shared-map-release")
 
         let sharedPlace = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "in-common.map-place.")).firstMatch
@@ -327,7 +327,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         let linkage = app.staticTexts["common-ground.invitation.heading"]
         XCTAssertTrue(linkage.exists)
         XCTAssertNotEqual(linkage.label, "ASTIR’s taking the wheel")
-        XCTAssertTrue(app.buttons["Share invitation"].exists)
+        XCTAssertTrue(app.buttons["Share Invitation"].exists)
         capture("rec486-shared-map-invitation")
     }
 
@@ -359,7 +359,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
         XCTAssertTrue(invite.label.contains("Mina"))
         invite.tap()
         XCTAssertTrue(app.staticTexts["common-ground.invitation.place"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Share invitation"].exists)
+        XCTAssertTrue(app.buttons["Share Invitation"].exists)
         XCTAssertFalse(app.staticTexts["Design preview · nothing is sent"].exists)
         capture("rec486-live-compose")
     }

@@ -46,32 +46,32 @@ struct LivePlanPeoplePicker: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 if isDemo {
-                    Label("Demo plan · nothing is saved or sent", systemImage: "testtube.2")
+                    Label("Demo Plan · Nothing Is Saved Or Sent", systemImage: "testtube.2")
                         .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                         .accessibilityIdentifier("live.plan.demo")
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(targetFriendID == nil ? "Who’s coming?" : "Go together")
+                    Text(targetFriendID == nil ? "Who’s Coming?" : "Go Together")
                         .font(AstirTypography.screenTitle).foregroundStyle(brand.primaryText)
                     Text(targetFriendID == nil
-                         ? "Make a plan for \(place.place.canonicalName) with a mutual friend."
-                         : "Make a plan for \(place.place.canonicalName) with \(place.owner.displayName).")
+                         ? "Make A Plan For \(place.place.canonicalName) With A Mutual Friend."
+                         : "Make A Plan For \(place.place.canonicalName) With \(place.owner.displayName).")
                         .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
-                    Text("You’ll choose the details before sharing an invitation.")
+                    Text("You’ll Choose The Details Before Sharing An Invitation.")
                         .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 }
                 if loading && friends.isEmpty {
-                    ProgressView("Finding your friends…").frame(maxWidth: .infinity, minHeight: 100)
+                    ProgressView("Finding Your Friends…").frame(maxWidth: .infinity, minHeight: 100)
                 } else if friends.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(targetFriendID == nil ? "Find someone to go with" : "A plan between mutual friends")
+                        Text(targetFriendID == nil ? "Find Someone To Go With" : "A Plan Between Mutual Friends")
                             .font(AstirTypography.cardTitle)
                         Text(targetFriendID == nil
-                             ? "Friends appear when you follow each other. Choose someone to invite to this place."
-                             : "You need to follow each other before making this plan. This person may also no longer be available.")
+                             ? "Friends Appear When You Follow Each Other. Choose Someone To Invite To This Place."
+                             : "You Need To Follow Each Other Before Making This Plan. This Person May Also No Longer Be Available.")
                             .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                         if let onFindPeople {
-                            Button("Find people", action: onFindPeople).font(AstirTypography.control)
+                            Button("Find People", action: onFindPeople).font(AstirTypography.control)
                                 .frame(minHeight: 44).foregroundStyle(brand.accentText)
                                 .accessibilityIdentifier("live.plan.findPeople")
                         }
@@ -91,7 +91,7 @@ struct LivePlanPeoplePicker: View {
                 }
                 if needsOwnSave && (isDemo || onOpenPlace != nil) {
                     Button { openWannaRecovery() } label: {
-                        Label(isDemo ? "Save Wanna in demo" : "Open place to save Wanna", systemImage: "bookmark")
+                        Label(isDemo ? "Save Wanna In Demo" : "Open Place To Save Wanna", systemImage: "bookmark")
                             .frame(minHeight: 44)
                     }.font(AstirTypography.control).foregroundStyle(brand.accentText)
                         .accessibilityIdentifier("live.plan.saveWanna")
@@ -99,7 +99,7 @@ struct LivePlanPeoplePicker: View {
             }.padding(22)
         }
         .background(brand.background.ignoresSafeArea())
-        .navigationTitle("Make a plan").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Make A Plan").navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $demoPlan) { plan in
             #if DEBUG && targetEnvironment(simulator)
             LivePlanDemoComposer(place: plan.place)
@@ -112,7 +112,7 @@ struct LivePlanPeoplePicker: View {
                 Button { Task { await refreshAndCheckTarget() } } label: {
                     Image(systemName: "arrow.clockwise").frame(width: 44, height: 44)
                 }.foregroundStyle(brand.accentText).disabled(loading || checkingID != nil)
-                    .accessibilityLabel("Refresh friends").accessibilityIdentifier("live.plan.refresh")
+                    .accessibilityLabel("Refresh Friends").accessibilityIdentifier("live.plan.refresh")
             }
         }
         .task(id: store.currentUser.id) {
@@ -135,7 +135,7 @@ struct LivePlanPeoplePicker: View {
                              avatarURL: isDemo ? nil : friend.avatarURL, size: 44).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(friend.displayName).font(AstirTypography.cardTitle).foregroundStyle(brand.primaryText)
-                    Text(available ? "Choose invitation details" : "Check place availability")
+                    Text(available ? "Choose Invitation Details" : "Check Place Availability")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }
                 Spacer(minLength: 8)
@@ -144,7 +144,7 @@ struct LivePlanPeoplePicker: View {
             }.frame(maxWidth: .infinity, minHeight: 72, alignment: .leading).padding(.vertical, 8).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(checkingID != nil)
             .accessibilityIdentifier("live.plan.person.\(friend.id)")
-            .accessibilityHint("Opens invitation details without sending anything")
+            .accessibilityHint("Opens Invitation Details Without Sending Anything")
     }
 
     private func candidate(for partnerID: String) -> CommonGroundMockPlace? {
@@ -162,7 +162,7 @@ struct LivePlanPeoplePicker: View {
         guard store.currentUser.id == viewerID, !Task.isCancelled else { loading = false; return }
         loading = false
         rebuildPeople()
-        if store.lastRemoteError != nil { notice = "Couldn’t refresh friends. Try again when you’re connected." }
+        if store.lastRemoteError != nil { notice = "Couldn’t Refresh Friends. Try Again When You’re Connected." }
     }
 
     private func refreshAndCheckTarget() async {
@@ -193,7 +193,7 @@ struct LivePlanPeoplePicker: View {
             guard requestID == request, store.currentUser.id == viewerID,
                   auth.state.session?.userID == sessionID, !Task.isCancelled else { return }
             guard store.lastRemoteError == nil else {
-                notice = "Couldn’t check shared places. Try again when you’re connected."
+                notice = "Couldn’t Check Shared Places. Try Again When You’re Connected."
                 return
             }
             rebuildPeople()
@@ -205,11 +205,11 @@ struct LivePlanPeoplePicker: View {
             needsOwnSave = (targetFriendID != nil || sourceContext == .placeProfile) && !LivePlanPeoplePolicy.hasViewerSave(
                 for: place, authorizedPlaces: store.currentUserVisiblePlaces, viewerID: viewerID)
             if needsOwnSave {
-                notice = "Save this place to your Wannas first, then come back to make a plan together. Nothing has been sent."
+                notice = "Save This Place To Your Wannas First, Then Come Back To Make A Plan Together. Nothing Has Been Sent."
             } else if targetFriendID != nil {
-                notice = "This Wanna isn’t available in your shared places right now. Refresh to check again. Nothing has been sent."
+                notice = "This Wanna Isn’t Available In Your Shared Places Right Now. Refresh To Check Again. Nothing Has Been Sent."
             } else {
-                notice = "This place is no longer available. Save it to your Wannas or refresh and try again. Nothing has been sent."
+                notice = "This Place Is No Longer Available. Save It To Your Wannas Or Refresh And Try Again. Nothing Has Been Sent."
             }
             return
         }

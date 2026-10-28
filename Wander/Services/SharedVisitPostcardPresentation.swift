@@ -47,8 +47,8 @@ struct SharedVisitPostcardPresentation {
 
     var attribution: String {
         let names = companions.map(\.displayName)
-        guard !names.isEmpty else { return "\(context.actor.displayName) checked-in" }
-        return "\(context.actor.displayName) checked-in with \(ListFormatter.localizedString(byJoining: names))"
+        guard !names.isEmpty else { return "\(context.actor.displayName) Checked-In" }
+        return "\(context.actor.displayName) Checked-In With \(ListFormatter.localizedString(byJoining: names))"
     }
 }
 

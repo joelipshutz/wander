@@ -32,17 +32,17 @@ struct PlacePlanInvitationScreen: View {
             ScrollView {
                 Group {
                     if isLoading {
-                        ProgressView("Opening invitation")
+                        ProgressView("Opening Invitation")
                             .frame(maxWidth: .infinity).padding(.top, 60)
                     } else if let invitation {
                         PlacePlanInvitationContent(invitation: invitation)
                     } else {
                         ContentUnavailableView {
-                            Label(failed ? "Couldn’t open this invitation" : "This invitation is unavailable", systemImage: "envelope")
+                            Label(failed ? "Couldn’t Open This Invitation" : "This Invitation Is Unavailable", systemImage: "envelope")
                         } description: {
-                            Text(failed ? "Check your connection and try again" : "Ask your friend for a fresh invitation")
+                            Text(failed ? "Check Your Connection And Try Again" : "Ask Your Friend For A Fresh Invitation")
                         } actions: {
-                            if failed { Button("Try again") { attempt += 1 } }
+                            if failed { Button("Try Again") { attempt += 1 } }
                         }
                         .accessibilityIdentifier("place-plan.unavailable")
                     }
@@ -118,7 +118,7 @@ struct PlacePlanInvitationContent: View {
                     }
                 }
                 .frame(width: 42, height: 42).clipShape(Circle()).accessibilityHidden(true)
-                Text("\(plan.senderName)’s got a plan")
+                Text("\(plan.senderName)’s Got A Plan")
                     .font(AstirTypography.sheetTitle)
             }
             VStack(spacing: 0) {

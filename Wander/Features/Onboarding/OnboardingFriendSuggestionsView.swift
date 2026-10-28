@@ -19,14 +19,14 @@ struct OnboardingFriendSuggestionsView: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 OnboardingHeadline(
                     eyebrow: "YOUR PEOPLE",
-                    title: "Keep up with the people you love",
+                    title: "Keep Up With The People You Love",
                     message: ""
                 )
                 .padding(.horizontal, WanderTheme.spacing4)
 
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "magnifyingglass").foregroundStyle(brandMode.secondaryText)
-                    TextField("Search name or username", text: $model.query)
+                    TextField("Search Name Or Username", text: $model.query)
                         .font(AstirTypography.bodySmall)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -37,7 +37,7 @@ struct OnboardingFriendSuggestionsView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(brandMode.secondaryText)
                         }
-                        .accessibilityLabel("Clear search")
+                        .accessibilityLabel("Clear Search")
                     }
                 }
                 .padding(WanderTheme.spacing3)
@@ -73,23 +73,23 @@ struct OnboardingFriendSuggestionsView: View {
     @ViewBuilder
     private var results: some View {
         if model.loadingState == .failed {
-            emptyState("Suggestions are taking a minute", message: "You can skip this and find people from Discover anytime.") {
+            emptyState("Suggestions Are Taking A Minute", message: "You Can Skip This And Find People From Discover Anytime.") {
                 Task { await model.load() }
             }
         } else if model.loadingState != .loaded {
-            loading("Finding people…")
+            loading("Finding People…")
         } else if model.isSearching && model.normalizedQuery.count < 2 {
-            emptyState("Who are you looking for?", message: "Enter at least two letters of a name or username.")
+            emptyState("Who Are You Looking For?", message: "Enter At Least Two Letters Of A Name Or Username.")
         } else if model.isSearching && model.searchState == .loading {
             loading("Searching…")
         } else if model.isSearching && model.searchState == .failed {
-            emptyState("Search couldn’t load", message: "Check your connection and try again.") {
+            emptyState("Search Couldn’t Load", message: "Check Your Connection And Try Again.") {
                 Task { await model.search() }
             }
         } else if model.visibleProfiles.isEmpty {
             emptyState(
-                model.isSearching ? "No people found" : "Your people will show up here",
-                message: model.isSearching ? "Try another name or username." : "Skip for now — we’ll keep finding trusted people as Astir grows."
+                model.isSearching ? "No People Found" : "Your People Will Show Up Here",
+                message: model.isSearching ? "Try Another Name Or Username." : "Skip For Now — We’ll Keep Finding Trusted People As Astir Grows."
             )
         } else {
             ScrollView {
@@ -125,7 +125,7 @@ struct OnboardingFriendSuggestionsView: View {
             Text(title).font(AstirTypography.sectionTitle)
             Text(message).font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
             if let retry {
-                Button("Try again", action: retry).font(AstirTypography.control)
+                Button("Try Again", action: retry).font(AstirTypography.control)
             }
         }
         .multilineTextAlignment(.center)

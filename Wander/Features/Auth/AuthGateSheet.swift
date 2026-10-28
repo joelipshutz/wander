@@ -87,7 +87,7 @@ struct ClerkAccountManagementView: View {
         VStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.system(size: 30, weight: .bold))
-            Text("Account management is not linked in this build.")
+            Text("Account Management Is Not Linked In This Build.")
                 .font(AstirTypography.sectionTitle)
                 .multilineTextAlignment(.center)
         }

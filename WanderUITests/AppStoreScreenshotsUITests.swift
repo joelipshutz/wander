@@ -40,8 +40,8 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         searchField.typeText("coffee")
         searchField.typeText("\n")
 
-        XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["No exact matches yet"].exists)
+        XCTAssertTrue(app.staticTexts["Understood As"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["No Exact Matches Yet"].exists)
         settleForCapture()
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(
             format: "label BEGINSWITH %@", "Some results may be missing"
@@ -67,12 +67,12 @@ final class AppStoreScreenshotsUITests: XCTestCase {
             "-WanderOpenAdd",
         ])
 
-        XCTAssertTrue(app.staticTexts["add a place"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["Add A Place"].waitForExistence(timeout: 6))
         XCTAssertTrue(
             app.buttons["Add Sparrow Bakery"]
                 .waitForExistence(timeout: 6)
         )
-        XCTAssertFalse(app.staticTexts["No friends’ places yet."].exists)
+        XCTAssertFalse(app.staticTexts["No Friends’ Places Yet."].exists)
         settleForCapture()
         capture("recme-store-05-add")
     }
@@ -94,8 +94,8 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         let addPlace = app.buttons["map.headerAdd"]
         XCTAssertTrue(addPlace.waitForExistence(timeout: 10))
         addPlace.tap()
-        let title = app.staticTexts["add a place"]
-        let seeMore = app.buttons["See more"]
+        let title = app.staticTexts["Add A Place"]
+        let seeMore = app.buttons["See More"]
         let importTitle = app.staticTexts["Import"].firstMatch
         XCTAssertTrue(seeMore.waitForExistence(timeout: 10))
         settleForCapture()
@@ -108,10 +108,10 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         capture("REC-446 compact production Add")
 
         seeMore.tap()
-        let back = app.buttons["Back to add options"]
+        let back = app.buttons["Back To Add Options"]
         XCTAssertTrue(back.waitForExistence(timeout: 10))
         settleForCapture()
-        XCTAssertLessThan(app.staticTexts["I'm here now"].frame.minY, restingTitleY - 40)
+        XCTAssertLessThan(app.staticTexts["I'm Here Now"].frame.minY, restingTitleY - 40)
         capture("REC-446 expanded production suggestions")
 
         back.tap()

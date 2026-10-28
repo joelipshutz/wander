@@ -177,8 +177,8 @@ enum WannaGoReminderPlanner {
             ?? plan.item.placeID
 
         let content = UNMutableNotificationContent()
-        content.title = "Wanna go reminder"
-        content.body = "You wanted to try \(plan.item.placeName) on \(displayDate)."
+        content.title = "Wanna Go Reminder"
+        content.body = "You Wanted To Try \(plan.item.placeName) On \(displayDate)."
         content.sound = .default
         content.userInfo = [
             "recme": [

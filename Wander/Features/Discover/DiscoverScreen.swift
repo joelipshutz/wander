@@ -92,7 +92,7 @@ struct DiscoverScreen: View {
     ]
 
     private var tickerSuggestions: [String] {
-        suggestedSearches.map(\.query)
+        suggestedSearches.map { AppCopy.capitalizingWords($0.query) }
     }
 
     private var profileResults: [ProfileShell] {
@@ -162,23 +162,23 @@ struct DiscoverScreen: View {
         if placeResults.filters.opinion == .favorite,
            let owner = placeResults.filters.ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
            !owner.isEmpty {
-            return "Places \(owner.capitalized) saved and rated highly"
+            return "Places \(owner.capitalized) Saved And Rated Highly"
         }
         if let selectedOwner {
-            return "\(count) \(count == 1 ? "place" : "places") filtered from \(selectedOwner.displayName)"
+            return "\(count) \(count == 1 ? "Place" : "Places") Filtered From \(selectedOwner.displayName)"
         }
         if let owner = store.lastDiscoverFilters.ownerQuery,
            !owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "\(count) \(count == 1 ? "place" : "places") filtered from \(owner.capitalized)"
+            return "\(count) \(count == 1 ? "Place" : "Places") Filtered From \(owner.capitalized)"
         }
         if isCommunityPlaceSearchLoading || isExternalPlaceSearchLoading {
-            return "\(count) relevant \(count == 1 ? "place" : "places") so far"
+            return "\(count) Relevant \(count == 1 ? "Place" : "Places") So Far"
         }
-        return "\(count) relevant \(count == 1 ? "place" : "places") after checking \(successfulSearchSourceSummary)"
+        return "\(count) Relevant \(count == 1 ? "Place" : "Places") After Checking \(successfulSearchSourceSummary)"
     }
 
     private var successfulSearchSourceSummary: String {
-        var sources = ["your people"]
+        var sources = ["Your People"]
         if canSearchRecmeCorpus, !communityPlaceSearchFailed {
             sources.append("Astir")
         }
@@ -204,10 +204,10 @@ struct DiscoverScreen: View {
 
     private func formattedSearchSources(_ sources: [String]) -> String {
         switch sources.count {
-        case 0: "available sources"
+        case 0: "Available Sources"
         case 1: sources[0]
-        case 2: sources.joined(separator: " and ")
-        default: "\(sources.dropLast().joined(separator: ", ")), and \(sources.last ?? "")"
+        case 2: sources.joined(separator: " And ")
+        default: "\(sources.dropLast().joined(separator: ", ")), And \(sources.last ?? "")"
         }
     }
 
@@ -247,12 +247,11 @@ struct DiscoverScreen: View {
             let category = placeResults.filters.categories
                 .map(WanderPlaceCategory.broadCategory)
                 .sorted()
-                .first?
-                .lowercased() ?? "place"
-            return "\(owner.capitalized)'s \(category) favorites"
+                .first.map(AppCopy.capitalizingWords) ?? "Place"
+            return "\(owner.capitalized)'s \(category) Favorites"
         }
         let trimmed = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "places" : trimmed
+        return trimmed.isEmpty ? "Places" : trimmed
     }
 
     var body: some View {
@@ -448,12 +447,12 @@ struct DiscoverScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .confirmationDialog("Add to Wanna Go", isPresented: $showsQuickWannaChoice, titleVisibility: .visible) {
-                Button("Add to Wanna Go") { commitQuickWanna(silent: false) }
-                Button("Add silently") { commitQuickWanna(silent: true) }
+            .confirmationDialog("Add To Wanna Go", isPresented: $showsQuickWannaChoice, titleVisibility: .visible) {
+                Button("Add To Wanna Go") { commitQuickWanna(silent: false) }
+                Button("Add Silently") { commitQuickWanna(silent: true) }
                 Button("Cancel", role: .cancel) { quickWannaPlace = nil }
             } message: {
-                Text("A silent save sends no notifications. People can still see it based on your visibility setting.")
+                Text("A Silent Save Sends No Notifications. People Can Still See It Based On Your Visibility Setting.")
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -464,7 +463,7 @@ struct DiscoverScreen: View {
                     await removeDiscoverSave(context)
                 }
             }
-            .alert("Saved to your map", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
+            .alert("Saved To Your Map", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
                 Button("OK", role: .cancel) { savedMessage = nil }
             } message: {
                 Text(savedMessage ?? "")
@@ -482,7 +481,7 @@ struct DiscoverScreen: View {
                 .presentationBackground(WanderTheme.canvasWarm.color)
             }
             .alert(
-                "List updated",
+                "List Updated",
                 isPresented: Binding(
                     get: { listMessage != nil },
                     set: { if !$0 { listMessage = nil } }
@@ -717,7 +716,7 @@ struct DiscoverScreen: View {
 
         placesQuery = walkthroughs.tutorialDiscoverQuery
             ?? suggestedSearches.first?.query
-            ?? "popular parks"
+            ?? "Popular Parks"
         submitPlaceSearch(source: "walkthrough_resume")
     }
 
@@ -1017,7 +1016,7 @@ struct DiscoverScreen: View {
             onPersonQueryChange: { isShowingPersonSuggestions = $0 },
             placeholders: tickerSuggestions,
             isTicker: true,
-            accessibilityLabel: "Search places",
+            accessibilityLabel: "Search Places",
             accessibilityIdentifier: "discover.placesSearchField",
             onFocus: activatePlaceSearch,
             onSubmit: submitPlaceSearch,
@@ -1030,9 +1029,9 @@ struct DiscoverScreen: View {
             text: $memberQuery,
             mentions: $memberMentions,
             focus: $searchFieldFocused,
-            placeholders: ["Search name or @handle"],
+            placeholders: ["Search Name Or @handle"],
             isTicker: false,
-            accessibilityLabel: "Search people",
+            accessibilityLabel: "Search People",
             accessibilityIdentifier: "discover.peopleSearchField",
             onFocus: {},
             onSubmit: {},
@@ -1059,9 +1058,9 @@ struct DiscoverScreen: View {
                 mentions: $placesMentions,
                 focus: $searchFieldFocused,
                 onPersonQueryChange: { isShowingPersonSuggestions = $0 },
-                placeholders: ["Search places and people"],
+                placeholders: ["Search Places And People"],
                 isTicker: false,
-                accessibilityLabel: "Search places and people",
+                accessibilityLabel: "Search Places And People",
                 accessibilityIdentifier: "discover.placesSearchField",
                 onFocus: {},
                 onSubmit: submitPlaceSearch,
@@ -1091,9 +1090,9 @@ struct DiscoverScreen: View {
     private var walkthroughSearchBackLabel: String {
         switch walkthroughs.currentStep?.target {
         case .feedSearchResultsBack:
-            "Back to Feed"
+            "Back To Feed"
         default:
-            onClose == nil ? "Back to Discover" : "Back to Feed"
+            onClose == nil ? "Back To Discover" : "Back To Feed"
         }
     }
 
@@ -1102,13 +1101,13 @@ struct DiscoverScreen: View {
         unifiedPeopleResults
         if isPlaceSearchLoading,
            rankedPlaceCandidates.isEmpty {
-            DiscoverLoadingPanel(label: "Understanding your search")
+            DiscoverLoadingPanel(label: "Understanding Your Search")
         } else if submittedPlacesQuery != nil {
             if isPlaceSearchRefining {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Refining with smart filters…")
+                    Text("Refining With Smart Filters…")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -1142,10 +1141,10 @@ struct DiscoverScreen: View {
                         }
                     )
                 }
-                if peopleSearch.isLoading { ProgressView("Finding people…").font(AstirTypography.caption) }
+                if peopleSearch.isLoading { ProgressView("Finding People…").font(AstirTypography.caption) }
                 if peopleSearch.failed {
                     HStack {
-                        Text("People search couldn't refresh.").font(AstirTypography.caption)
+                        Text("People Search Couldn't Refresh.").font(AstirTypography.caption)
                         Button("Retry") { peopleSearchRetry += 1 }
                     }
                 }
@@ -1157,12 +1156,12 @@ struct DiscoverScreen: View {
     private var placeSearchInterpretation: some View {
         let filters = placeResults.filters
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Understood as")
+            Text("Understood As")
                 .font(AstirTypography.metadata)
                 .foregroundStyle(brandMode.secondaryText)
 
             if filters.chips.isEmpty {
-                Text("places matching your words")
+                Text("Places Matching Your Words")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
             } else {
@@ -1195,14 +1194,14 @@ struct DiscoverScreen: View {
                     .map(\.displayTitle)
                     .sorted()
                     .joined(separator: ", ")
-                Text("We can't reliably filter by \(concepts) yet, so those words weren't applied.")
+                Text("We Can't Reliably Filter By \(concepts) Yet, So Those Words Weren't Applied.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.stateWarning.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if placeResults.parseSource == .deterministicFallback {
-                Text("Using basic matching because smart search is temporarily unavailable.")
+                Text("Using Basic Matching Because Smart Search Is Temporarily Unavailable.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1230,8 +1229,8 @@ struct DiscoverScreen: View {
     private var suggestedSearchesSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                SectionTitle("Try a search")
-                Text("A few useful ways to find a place that fits.")
+                SectionTitle("Try A Search")
+                Text("A Few Useful Ways To Find A Place That Fits.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -1259,7 +1258,7 @@ struct DiscoverScreen: View {
                                     .font(.system(size: 20))
                                     .accessibilityHidden(true)
 
-                                Text(suggestion.query)
+                                Text(AppCopy.capitalizingWords(suggestion.query))
                                     .font(AstirTypography.bodySmall)
                                     .foregroundStyle(brandMode.primaryText)
                                     .multilineTextAlignment(.leading)
@@ -1277,7 +1276,7 @@ struct DiscoverScreen: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Search \(suggestion.query)")
+                        .accessibilityLabel("Search \(AppCopy.capitalizingWords(suggestion.query))")
                     }
                 }
                 .padding(.vertical, 1)
@@ -1309,24 +1308,24 @@ struct DiscoverScreen: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                     if communityPlaceSearchFailed || externalPlaceSearchFailed {
                         EmptyPanel(
-                            title: "Search hit a snag",
-                            action: "We couldn't finish checking \(failedSearchSourceSummary). Try again; your trusted results are still safe."
+                            title: "Search Hit A Snag",
+                            action: "We Couldn't Finish Checking \(failedSearchSourceSummary). Try Again; Your Trusted Results Are Still Safe."
                         )
                         WanderPrimaryButton(
-                            title: "Try again",
+                            title: "Try Again",
                             systemImage: "arrow.clockwise"
                         ) {
                             submitPlaceSearch(source: "retry")
                         }
                     } else {
                         EmptyPanel(
-                            title: "No exact matches yet",
-                            action: "We checked \(successfulSearchSourceSummary). Remove one detail or try the option below."
+                            title: "No Exact Matches Yet",
+                            action: "We Checked \(successfulSearchSourceSummary). Remove One Detail Or Try The Option Below."
                         )
 
                         if let relaxedQuery = favoriteRelaxationQuery {
                             WanderPrimaryButton(
-                                title: "Search visited instead",
+                                title: "Search Visited Instead",
                                 systemImage: "arrow.right"
                             ) {
                                 placesQuery = relaxedQuery
@@ -1386,7 +1385,7 @@ struct DiscoverScreen: View {
             DiscoverCommunityPlaceCard(
                 candidate: candidate,
                 source: .recme,
-                sourceLabel: "Saved on Astir"
+                sourceLabel: "Saved On Astir"
             ) {
                 trackPlaceSearchSelection(result, in: candidates)
                 presentCandidateSaveFlow(candidate, sourceType: .socialSave)
@@ -1430,7 +1429,7 @@ struct DiscoverScreen: View {
         let hasUnverifiedRecmeFacet = !filters.tags.isEmpty
             || filters.opinion != nil
             || !filters.statuses.isEmpty
-        let suffix = hasUnverifiedRecmeFacet ? " match only" : " match"
+        let suffix = hasUnverifiedRecmeFacet ? " Match Only" : " Match"
         return "Apple Maps · \(matchedDimensions.joined(separator: " + "))\(suffix)"
     }
 
@@ -1449,15 +1448,15 @@ struct DiscoverScreen: View {
 
     private var searchLoadingMessage: String {
         if isCommunityPlaceSearchLoading, isExternalPlaceSearchLoading {
-            return "Searching Astir and Apple Maps…"
+            return "Searching Astir And Apple Maps…"
         }
         return isCommunityPlaceSearchLoading
-            ? "Searching all Astir saves…"
-            : "Searching beyond Astir on Apple Maps…"
+            ? "Searching All Astir Saves…"
+            : "Searching Beyond Astir On Apple Maps…"
     }
 
     private var searchFailureMessage: String {
-        "Some results may be missing because \(failedSearchSourceSummary) couldn't be reached."
+        "Some Results May Be Missing Because \(failedSearchSourceSummary) Couldn't Be Reached."
     }
 
     private var failedSearchSourceSummary: String {
@@ -1501,13 +1500,13 @@ struct DiscoverScreen: View {
 
             switch activityLoadState {
             case .loading:
-                DiscoverLoadingPanel(label: "Loading activity")
+                DiscoverLoadingPanel(label: "Loading Activity")
             case .failed:
                 DiscoverActionPanel(
                     icon: "wifi.exclamationmark",
-                    title: "Activity couldn't load",
-                    message: "Check your connection and try again.",
-                    actionTitle: "Try again"
+                    title: "Activity Couldn't Load",
+                    message: "Check Your Connection And Try Again.",
+                    actionTitle: "Try Again"
                 ) {
                     Task { await refreshActivity() }
                 }
@@ -1547,7 +1546,7 @@ struct DiscoverScreen: View {
                 .foregroundStyle(brandMode.accentText)
                 .frame(width: 28, height: 28)
 
-            Text("Follow people whose taste you trust. Places they choose to share can appear in Activity and on your map.")
+            Text("Follow People Whose Taste You Trust. Places They Choose To Share Can Appear In Activity And On Your Map.")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1563,25 +1562,25 @@ struct DiscoverScreen: View {
         case .idle where !auth.isSignedIn:
             DiscoverActionPanel(
                 icon: "person.crop.circle.badge.plus",
-                title: "Find people you trust",
-                message: "Sign in to see people worth following.",
-                actionTitle: "Sign in"
+                title: "Find People You Trust",
+                message: "Sign In To See People Worth Following.",
+                actionTitle: "Sign In"
             ) {
                 auth.presentGate(for: .followPeople)
             }
         case .idle, .loading:
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                SectionTitle("People worth following")
-                DiscoverLoadingPanel(label: "Finding people")
+                SectionTitle("People Worth Following")
+                DiscoverLoadingPanel(label: "Finding People")
             }
         case .failed:
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                SectionTitle("People worth following")
+                SectionTitle("People Worth Following")
                 DiscoverActionPanel(
                     icon: "arrow.clockwise",
-                    title: "Suggestions couldn't load",
-                    message: "Search still works, or try these suggestions again.",
-                    actionTitle: "Try again"
+                    title: "Suggestions Couldn't Load",
+                    message: "Search Still Works, Or Try These Suggestions Again.",
+                    actionTitle: "Try Again"
                 ) {
                     Task {
                         await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
@@ -1590,8 +1589,8 @@ struct DiscoverScreen: View {
             }
         case .loaded(let recommendations) where recommendations.isEmpty:
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                SectionTitle("People worth following")
-                EmptyPanel(title: "No suggestions yet", action: "search a name or @handle above")
+                SectionTitle("People Worth Following")
+                EmptyPanel(title: "No Suggestions Yet", action: "Search A Name Or @handle Above")
             }
         case .loaded(let recommendations):
             PeopleRecommendationShelf(
@@ -1609,10 +1608,10 @@ struct DiscoverScreen: View {
         let results = profileResults
         let recommendationCounts = store.visiblePlaceCountsByOwnerID()
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("Member results")
+            SectionTitle("Member Results")
 
             if results.isEmpty {
-                EmptyPanel(title: "No members found", action: "try a handle or full first name")
+                EmptyPanel(title: "No Members Found", action: "Try A Handle Or Full First Name")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: WanderTheme.spacing3) {
@@ -1645,7 +1644,7 @@ struct DiscoverScreen: View {
             }
 
             if friends.isEmpty {
-                EmptyPanel(title: "No one followed yet", action: "search or follow someone above")
+                EmptyPanel(title: "No One Followed Yet", action: "Search Or Follow Someone Above")
             } else {
                 ForEach(friends) { profile in
                     FriendListRow(
@@ -1691,8 +1690,8 @@ struct DiscoverScreen: View {
                 await refreshPlaces(query: resolvedPlacesQuery)
                 await refreshMembers(query: memberQuery)
                 savedMessage = result.syncState == .synced
-                    ? "Added to Wanna Go."
-                    : "Added to Wanna Go locally. We'll retry sync."
+                    ? "Added To Wanna Go."
+                    : "Added To Wanna Go Locally. We'll Retry Sync."
             }
         }
     }
@@ -1743,7 +1742,7 @@ struct DiscoverScreen: View {
             ) else { return nil }
             await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
-            savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+            savedMessage = result.syncState == .synced ? "Saved." : "Queued Locally. We'll Retry Sync."
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
@@ -1772,18 +1771,18 @@ struct DiscoverScreen: View {
     }
 
     private func scopedDiscoverMessage(for context: MapPlaceSaveContext, syncState: SyncState) -> String {
-        let suffix = syncState == .synced ? "" : " We'll retry sync."
+        let suffix = syncState == .synced ? "" : " We'll Retry Sync."
         switch context.mode {
         case .add:
-            return syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+            return syncState == .synced ? "Saved." : "Queued Locally. We'll Retry Sync."
         case .addVisit:
-            return "Check-in saved." + suffix
+            return "Check-In Saved." + suffix
         case .sharedVisit:
-            return "Shared check-in saved." + suffix
+            return "Shared Check-In Saved." + suffix
         case .editVisit:
-            return "Check-in updated." + suffix
+            return "Check-In Updated." + suffix
         case .editWant:
-            return "Want updated." + suffix
+            return "Want Updated." + suffix
         }
     }
 
@@ -1796,7 +1795,7 @@ struct DiscoverScreen: View {
             }
             await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
-            savedMessage = "Check-in deleted."
+            savedMessage = "Check-In Deleted."
             return true
         case .editWant(let visiblePlace):
             guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
@@ -1806,7 +1805,7 @@ struct DiscoverScreen: View {
             await refreshPlaces(query: resolvedPlacesQuery)
             await refreshMembers(query: memberQuery)
             selectedPlace = nil
-            savedMessage = "Want removed."
+            savedMessage = "Want Removed."
             return true
         case .add, .addVisit, .sharedVisit:
             return false
@@ -2192,9 +2191,9 @@ private struct DiscoverActivityEmptyPanel: View {
     var body: some View {
         DiscoverActionPanel(
             icon: "person.2.fill",
-            title: "Your Activity starts with people",
-            message: "Follow people you trust and places they choose to share can show up here.",
-            actionTitle: "Find people to follow",
+            title: "Your Activity Starts With People",
+            message: "Follow People You Trust And Places They Choose To Share Can Show Up Here.",
+            actionTitle: "Find People To Follow",
             action: findPeople
         )
     }
@@ -2211,7 +2210,7 @@ struct PeopleRecommendationShelf: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("People worth following")
+            SectionTitle("People Worth Following")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: WanderTheme.spacing3) {
@@ -2239,7 +2238,7 @@ struct PeopleRecommendationLoadingShelf: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("People worth following")
+            SectionTitle("People Worth Following")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WanderTheme.spacing3) {
                     ForEach(0..<3, id: \.self) { _ in
@@ -2266,7 +2265,7 @@ struct PeopleRecommendationLoadingShelf: View {
             .discoverSearchRailBleed()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Finding people worth following")
+        .accessibilityLabel("Finding People Worth Following")
     }
 }
 
@@ -2315,7 +2314,7 @@ struct PeopleRecommendationCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(profile.displayName)'s profile")
+            .accessibilityLabel("Open \(profile.displayName)'s Profile")
             .accessibilityIdentifier("people.recommendation.\(profile.id).profile")
 
             if !recommendation.reason.compactDisplayText.isEmpty {
@@ -2473,7 +2472,7 @@ private struct DiscoverSearchField: View {
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
-                .accessibilityLabel("Clear search")
+                .accessibilityLabel("Clear Search")
             }
         }
         .padding(.leading, WanderTheme.spacing3)
@@ -2581,7 +2580,7 @@ private struct DiscoverPlaceResultCard: View {
                 )
 
                 DiscoverResultActionButton(
-                    title: "Add to list",
+                    title: "Add To List",
                     systemImage: PlaceListSymbol.systemImage,
                     action: addToList
                 )
@@ -2611,9 +2610,9 @@ private struct DiscoverPlaceResultCard: View {
 
     private var recMeRating: String {
         guard let score = evidence.ratingScore ?? group.recommendedScore else {
-            return "Astir rating · Not rated yet"
+            return "Astir Rating · Not Rated Yet"
         }
-        return "Astir rating · \(PlaceRating.averageDisplay(score))"
+        return "Astir Rating · \(PlaceRating.averageDisplay(score))"
     }
 
     private var wannaActionTitle: String {
@@ -2623,7 +2622,7 @@ private struct DiscoverPlaceResultCard: View {
         case .been:
             "Visited"
         case nil:
-            "Wanna go"
+            "Wanna Go"
         }
     }
 
@@ -2724,12 +2723,12 @@ private struct LatestActivityRow: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(visiblePlace.owner.displayName)'s profile")
+            .accessibilityLabel("Open \(visiblePlace.owner.displayName)'s Profile")
 
             Button(action: openPlace) {
                 HStack(spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("\(visiblePlace.owner.displayName) saved \(visiblePlace.place.canonicalName)")
+                    Text("\(visiblePlace.owner.displayName) Saved \(visiblePlace.place.canonicalName)")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
                         .lineLimit(1)
@@ -2801,10 +2800,10 @@ private struct OwnerDisambiguationSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("Which person?")
+                Text("Which Person?")
                     .font(AstirTypography.sheetTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text("Pick who you want to search.")
+                Text("Pick Who You Want To Search.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -2828,7 +2827,7 @@ private struct OwnerDisambiguationSection: View {
                             Text("@\(profile.handle)")
                                 .font(AstirTypography.caption)
                                 .foregroundStyle(brandMode.secondaryText)
-                            Text("\(recommendationCounts[profile.id, default: 0]) rec matches")
+                            Text("\(recommendationCounts[profile.id, default: 0]) Rec Matches")
                                 .font(AstirTypography.metadata)
                                 .foregroundStyle(brandMode.secondaryText)
                         }
@@ -2877,7 +2876,7 @@ private struct MemberResultTile: View {
                     .foregroundStyle(brandMode.secondaryText)
                     .lineLimit(1)
                 Spacer()
-                Text("\(recCount) rec matches")
+                Text("\(recCount) Rec Matches")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.accentText)
             }
@@ -2921,7 +2920,7 @@ private struct FriendListRow: View {
 
                 Spacer()
 
-                Text("\(recCount) recs")
+                Text("\(recCount) Recs")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -2957,7 +2956,7 @@ private enum DiscoverCommunityPlaceSource {
 
     var title: String {
         switch self {
-        case .recme: "Saved on Astir"
+        case .recme: "Saved On Astir"
         case .appleMaps: "From Apple Maps"
         }
     }
@@ -3033,8 +3032,8 @@ private struct DiscoverCommunityPlaceCard: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("discover.communityPlace.\(candidate.id)")
         .accessibilityLabel(
-            "Save \(candidate.name), \(subtitle), found through \(source.accessibilitySource)"
+            "Save \(candidate.name), \(subtitle), Found Through \(source.accessibilitySource)"
         )
-        .accessibilityHint("Opens save confirmation")
+        .accessibilityHint("Opens Save Confirmation")
     }
 }

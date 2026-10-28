@@ -9,11 +9,11 @@ enum WanderImageProcessingError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidImageData:
-            "The selected file is not a readable image."
+            "The Selected File Is Not A Readable Image."
         case .invalidImageSize:
-            "The selected image has an invalid size."
+            "The Selected Image Has An Invalid Size."
         case .jpegEncodingFailed:
-            "The selected image could not be prepared."
+            "The Selected Image Could Not Be Prepared."
         }
     }
 }

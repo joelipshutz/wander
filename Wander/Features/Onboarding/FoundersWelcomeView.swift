@@ -85,12 +85,12 @@ struct FoundersWelcomeView: View {
         VStack(spacing: 16) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("A quick hello").font(AstirTypography.sheetTitle)
+                    Text("A Quick Hello").font(AstirTypography.sheetTitle)
                     Text("From Joe & Ryan · 1:31").font(AstirTypography.caption)
                         .foregroundStyle(AstirTheme.mutedOnInk.color)
                 }
                 Spacer(minLength: 12)
-                Button("Skip intro", action: leave)
+                Button("Skip Intro", action: leave)
                     .font(AstirTypography.label)
                     .foregroundStyle(AstirTheme.paper.color)
                     .frame(minHeight: 44)
@@ -108,7 +108,7 @@ struct FoundersWelcomeView: View {
                         Image(uiImage: image).resizable().scaledToFit().accessibilityHidden(true)
                     }
                     Button(action: model.play) {
-                        Label(model.position > 1 ? "Resume welcome" : "Play welcome", systemImage: "play.fill")
+                        Label(model.position > 1 ? "Resume Welcome" : "Play Welcome", systemImage: "play.fill")
                             .font(AstirTypography.label)
                             .padding(.horizontal, 22).padding(.vertical, 16)
                             .background(AstirTheme.signal.color, in: Capsule())
@@ -122,7 +122,7 @@ struct FoundersWelcomeView: View {
 
             if let failure = model.failure {
                 Text(failure).font(AstirTypography.bodySmall)
-                Button("Try again", action: model.play)
+                Button("Try Again", action: model.play)
                     .accessibilityIdentifier("onboarding.founders.retry")
             } else if model.hasStarted {
                 HStack {
@@ -132,14 +132,14 @@ struct FoundersWelcomeView: View {
                     .accessibilityIdentifier("onboarding.founders.pause")
                     Spacer()
                     Button(action: { model.player.isMuted.toggle(); model.isMuted = model.player.isMuted }) {
-                        Label(model.isMuted ? "Sound on" : "Mute", systemImage: model.isMuted ? "speaker.slash" : "speaker.wave.2")
+                        Label(model.isMuted ? "Sound On" : "Mute", systemImage: model.isMuted ? "speaker.slash" : "speaker.wave.2")
                     }
                     .accessibilityIdentifier("onboarding.founders.mute")
                 }
                 .font(AstirTypography.label)
                 .frame(minHeight: 44)
             } else {
-                Text("A little about why we made Astir.")
+                Text("A Little About Why We Made Astir.")
                     .font(AstirTypography.bodySmall).foregroundStyle(AstirTheme.mutedOnInk.color)
             }
         }
@@ -195,7 +195,7 @@ final class FoundersWelcomePlayer: ObservableObject {
 
     private func prepare() {
         guard let url = Bundle.main.url(forResource: "founders-welcome", withExtension: "mp4") else {
-            failure = "The welcome video couldn’t load. You can continue into Astir."
+            failure = "The Welcome Video Couldn’t Load. You Can Continue Into Astir."
             return
         }
         let item = AVPlayerItem(url: url)
@@ -207,7 +207,7 @@ final class FoundersWelcomePlayer: ObservableObject {
                 guard let self else { return }
                 if self.player.currentItem?.status == .failed {
                     self.pause()
-                    self.failure = "The welcome video couldn’t play. Try again or skip into Astir."
+                    self.failure = "The Welcome Video Couldn’t Play. Try Again Or Skip Into Astir."
                 }
             }
         }
@@ -248,7 +248,7 @@ final class FoundersWelcomePlayer: ObservableObject {
             player.play()
             isPlaying = true
         } catch {
-            failure = "Audio couldn’t start. Try again or skip into Astir."
+            failure = "Audio Couldn’t Start. Try Again Or Skip Into Astir."
         }
     }
     func togglePlayback() { player.rate > 0 ? pause() : play() }

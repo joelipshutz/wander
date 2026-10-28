@@ -105,13 +105,13 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertTrue(joesFavorite.youWanna)
         XCTAssertEqual(joesFavorite.youVisits, 0)
         XCTAssertGreaterThanOrEqual(joesFavorite.joeVisits, 3)
-        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe’s been to Mudwater\nYou wanna go")
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe’s Been To Mudwater\nYou Wanna Go")
 
         let yourFavorite = try place("the-little-room")
         XCTAssertTrue(yourFavorite.joeWanna)
         XCTAssertEqual(yourFavorite.joeVisits, 0)
         XCTAssertGreaterThanOrEqual(yourFavorite.youVisits, 3)
-        XCTAssertEqual(yourFavorite.narrativeTitle, "You’ve been to The Little Room\nJoe wants to go")
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You’ve Been To The Little Room\nJoe Wants To Go")
 
         for candidate in [try place("narwhal"), joesFavorite, yourFavorite] {
             XCTAssertFalse(candidate.reason.contains("/5"), "Repeat evidence should describe check-ins.")
@@ -127,7 +127,7 @@ final class CommonGroundMockDataTests: XCTestCase {
         XCTAssertEqual(candidate.kind, .mutualWanna)
         XCTAssertEqual(candidate.reason, "In both of your Wannas")
         XCTAssertTrue(CommonGroundMockData.mix().contains { $0.id == candidate.id })
-        XCTAssertEqual(candidate.narrativeTitle, "You both want to go to Not No Bar")
+        XCTAssertEqual(candidate.narrativeTitle, "You Both Want To Go To Not No Bar")
         XCTAssertFalse(candidate.narrativeDetail.hasSuffix("."))
         XCTAssertFalse(CommonGroundInvitationDraft(place: candidate).message.contains("finally"))
     }
@@ -140,7 +140,7 @@ final class CommonGroundMockDataTests: XCTestCase {
             youWannaEventIDs: ["wanna-1", "wanna-2"], reason: "In your Wannas"
         )
         XCTAssertEqual(joesFavorite.kind, .introduce)
-        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe’s been to Repeat\nYou wanna go")
+        XCTAssertEqual(joesFavorite.narrativeTitle, "Joe’s Been To Repeat\nYou Wanna Go")
 
         let yourFavorite = CommonGroundMockPlace(
             id: "repeat", name: "Repeat", category: "Coffee", area: "Silver Lake", city: "Los Angeles",
@@ -149,9 +149,9 @@ final class CommonGroundMockDataTests: XCTestCase {
             joeWannaEventIDs: ["wanna-3"], reason: "In Joe’s Wannas"
         )
         XCTAssertEqual(yourFavorite.kind, .introduce)
-        XCTAssertEqual(yourFavorite.narrativeTitle, "You’ve been to Repeat\nJoe wants to go")
-        XCTAssertTrue(CommonGroundInvitationDraft(place: joesFavorite).message.contains("I wanna go"))
-        XCTAssertTrue(CommonGroundInvitationDraft(place: yourFavorite).message.contains("you wanna go"))
+        XCTAssertEqual(yourFavorite.narrativeTitle, "You’ve Been To Repeat\nJoe Wants To Go")
+        XCTAssertTrue(CommonGroundInvitationDraft(place: joesFavorite).message.contains("I Wanna Go"))
+        XCTAssertTrue(CommonGroundInvitationDraft(place: yourFavorite).message.contains("You Wanna Go"))
     }
 
     func testAvailableCitiesUseTheUnionOfVisitsAndExcludeWannaOnlyCities() {
@@ -213,7 +213,7 @@ final class CommonGroundMockDataTests: XCTestCase {
                 XCTAssertFalse(CommonGroundInvitationDraft(place: place).reasonTitle.contains("both been"))
             }
             if expected == .viewerBeenPartnerWanna {
-                XCTAssertEqual(place.narrativeTitle, "You’ve been to Charleston Park\nJoe wants to go")
+                XCTAssertEqual(place.narrativeTitle, "You’ve Been To Charleston Park\nJoe Wants To Go")
             }
         }
     }

@@ -156,7 +156,7 @@ enum NUXFeedFocus: String, CaseIterable {
 
     var target: WalkthroughTargetID { self == .circle ? .feedCircle : .feedRecent }
     var message: String {
-        self == .circle ? "Connect with\nyour circle" : "Keep up with\ntheir moments"
+        self == .circle ? "Connect With\nYour Circle" : "Keep Up With\nTheir Moments"
     }
 
     func visibleFrame(in targets: [WalkthroughTargetID: CGRect], size: CGSize, safeTop: CGFloat) -> CGRect? {
@@ -454,7 +454,7 @@ struct NUXGuidanceOverlay: View {
 
     private var addAnnotation: some View {
         let isImport = step.target == .addImport
-        let text = isImport ? "Import your saved places\nfrom Instagram, TikTok\nand Google Maps" : "Search nearby places"
+        let text = isImport ? "Import Your Saved Places\nFrom Instagram, TikTok\nAnd Google Maps" : "Search Nearby Places"
         let sectionTop = additionalTargets[.addNearbySection]?.minY ?? target.minY
         let y = isImport ? target.minY - 66 : sectionTop - 34
         return ZStack(alignment: .topLeading) {
@@ -483,13 +483,13 @@ struct NUXGuidanceOverlay: View {
     private var annotations: some View {
         if step.target == .placeSaveActions {
             if let checkIn = additionalTargets[.placeCheckIn] {
-                annotation("Places you’ve\nbeen", target: checkIn, side: -1)
+                annotation("Places You’ve\nBeen", target: checkIn, side: -1)
             }
             if let wanna = additionalTargets[.placeWanna] {
-                annotation("Places you\nwanna go", target: wanna, side: 1)
+                annotation("Places You\nWanna Go", target: wanna, side: 1)
             }
         } else {
-            annotation("Your nearby places\nwill show up here", target: target, side: 1)
+            annotation("Your Nearby Places\nWill Show Up Here", target: target, side: 1)
         }
     }
 

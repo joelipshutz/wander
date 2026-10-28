@@ -59,7 +59,7 @@ enum PhotoPlaceImportResolver {
                 source: .photoLocation,
                 candidates: candidates,
                 manualName: candidates.first?.name,
-                message: "Found nearby places from this photo's location."
+                message: "Found Nearby Places From This Photo's Location."
             )
         }
 
@@ -69,7 +69,7 @@ enum PhotoPlaceImportResolver {
                 source: .recognizedText,
                 candidates: [],
                 manualName: manualName,
-                message: "Read \"\(manualName)\" from the photo. Confirm or edit it, then tap find this place."
+                message: "Read \"\(manualName)\" From The Photo. Confirm Or Edit It, Then Tap Find This Place."
             )
         }
 
@@ -78,7 +78,7 @@ enum PhotoPlaceImportResolver {
             source: .none,
             candidates: [],
             manualName: nil,
-            message: "We could not read a place from that photo yet. Add it manually if you want it on your map now."
+            message: "We Could Not Read A Place From That Photo Yet. Add It Manually If You Want It On Your Map Now."
         )
     }
 }

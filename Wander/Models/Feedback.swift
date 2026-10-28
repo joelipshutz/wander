@@ -76,7 +76,7 @@ final class FeedbackComposer: ObservableObject {
     func submit(repository: (any FeedbackRepository)?, analytics: any AnalyticsClient) async {
         guard canSubmit else { return }
         guard let repository else {
-            errorMessage = "Feedback is unavailable right now. Your note is still here; please try again shortly."
+            errorMessage = "Feedback Is Unavailable Right Now. Your Note Is Still Here; Please Try Again Shortly."
             return
         }
         // Freeze the payload and identifier across ambiguous network failures.
@@ -94,7 +94,7 @@ final class FeedbackComposer: ObservableObject {
                 "has_voice_note": String(submission.attachments.contains { $0.kind == .voice })
             ]))
         } catch {
-            errorMessage = "We couldn’t confirm your submission. Your feedback is still here. Tap Try again to send the same report."
+            errorMessage = "We Couldn’t Confirm Your Submission. Your Feedback Is Still Here. Tap Try Again To Send The Same Report."
         }
     }
 

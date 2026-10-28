@@ -60,12 +60,12 @@ struct ActivityEngagementActionRow: View {
             }
         }
         .frame(minHeight: 44)
-        .alert("Couldn't load this check-in", isPresented: Binding(
+        .alert("Couldn't Load This Check-In", isPresented: Binding(
             get: { actionError != nil }, set: { if !$0 { actionError = nil } }
         )) {
             Button("OK", role: .cancel) { actionError = nil }
         } message: {
-            Text(actionError ?? "Try again in a moment.")
+            Text(actionError ?? "Try Again In A Moment.")
         }
         .sheet(item: $wannaSaveContext, onDismiss: {
             store.saveFlowDidDismiss(.saveSheet)
@@ -149,8 +149,8 @@ struct ActivityEngagementActionRow: View {
         .buttonStyle(.plain)
         .disabled(!canAttemptEngagement || isResolvingAction || store.isActivityLikePending(context.activityID))
         .opacity(canAttemptEngagement ? 1 : 0.45)
-        .accessibilityLabel(engagement.viewerHasLiked ? "Unlike activity" : "Like activity")
-        .accessibilityValue("\(engagement.likeCount) likes")
+        .accessibilityLabel(engagement.viewerHasLiked ? "Unlike Activity" : "Like Activity")
+        .accessibilityValue("\(engagement.likeCount) Likes")
     }
 
     private var commentButton: some View {
@@ -179,8 +179,8 @@ struct ActivityEngagementActionRow: View {
         .buttonStyle(.plain)
         .disabled(!canAttemptEngagement || isResolvingAction)
         .opacity(canAttemptEngagement ? 1 : 0.45)
-        .accessibilityLabel("Open comments")
-        .accessibilityValue(sharedVisitGroupID == nil ? "\(engagement.commentCount) comments" : "All readable shared check-in discussions")
+        .accessibilityLabel("Open Comments")
+        .accessibilityValue(sharedVisitGroupID == nil ? "\(engagement.commentCount) Comments" : "All Readable Shared Check-In Discussions")
     }
 
     private var activityMenu: some View {
@@ -206,7 +206,7 @@ struct ActivityEngagementActionRow: View {
             kind: .activity,
             subjectID: context.activityID,
             reportedUserID: context.actor.id,
-            context: "Report \(context.actor.displayName)’s activity at \(context.placeName)."
+            context: "Report \(context.actor.displayName)’s Activity At \(context.placeName)."
         )
     }
 
@@ -216,7 +216,7 @@ struct ActivityEngagementActionRow: View {
             Button {
                 performResolvedAction { resolved in
                     guard let presentation = ActivitySharePreviewPresentation(context: resolved) else {
-                        actionError = "This check-in is still syncing. Try sharing again in a moment."
+                        actionError = "This Check-In Is Still Syncing. Try Sharing Again In A Moment."
                         return
                     }
                     if let onSharePreviewPresentation {
@@ -237,7 +237,7 @@ struct ActivityEngagementActionRow: View {
             .buttonStyle(.plain)
             .disabled(true)
             .opacity(0.45)
-            .accessibilityHint("Available when this activity finishes loading.")
+            .accessibilityHint("Available When This Activity Finishes Loading.")
         }
     }
 
@@ -261,7 +261,7 @@ struct ActivityEngagementActionRow: View {
             guard !Task.isCancelled, store.currentUser.id == requestUserID,
                   actionGeneration == requestGeneration else { return }
             guard let resolved else {
-                actionError = "Check your connection and tap the action to try again. If the owner removed this check-in, it will disappear when history refreshes."
+                actionError = "Check Your Connection And Tap The Action To Try Again. If The Owner Removed This Check-In, It Will Disappear When History Refreshes."
                 return
             }
             await action(resolved)
@@ -282,7 +282,7 @@ struct ActivityEngagementActionRow: View {
             .foregroundStyle(primaryColor)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
-            .accessibilityLabel("Share activity")
+            .accessibilityLabel("Share Activity")
     }
 
     private var bookmarkButton: some View {
@@ -318,9 +318,9 @@ struct ActivityEngagementActionRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(resolvedBookmarkState == .wanna ? "Remove from Wanna" : "Add to Wanna")
+                .accessibilityLabel(resolvedBookmarkState == .wanna ? "Remove From Wanna" : "Add To Wanna")
                 .accessibilityValue(resolvedBookmarkState.accessibilityValue)
-                .accessibilityHint(resolvedBookmarkState == .checkedIn ? "This place is already in your check-ins." : "")
+                .accessibilityHint(resolvedBookmarkState == .checkedIn ? "This Place Is Already In Your Check-Ins." : "")
             }
         }
     }
@@ -360,15 +360,15 @@ struct ActivityActionsMenu: View {
     var body: some View {
         Menu {
             if let onPrivateReply {
-                Button("Reply privately", systemImage: "bubble.left", action: onPrivateReply)
+                Button("Reply Privately", systemImage: "bubble.left", action: onPrivateReply)
             }
             if let onReport {
                 Button(action: onReport) {
-                    Label("Report activity", systemImage: "exclamationmark.bubble")
+                    Label("Report Activity", systemImage: "exclamationmark.bubble")
                 }
             }
             if onPrivateReply == nil && onReport == nil {
-                Button("No additional actions", action: {}).disabled(true)
+                Button("No Additional Actions", action: {}).disabled(true)
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -378,7 +378,7 @@ struct ActivityActionsMenu: View {
                 .contentShape(Rectangle())
         }
         .menuOrder(.fixed)
-        .accessibilityLabel("Activity actions")
+        .accessibilityLabel("Activity Actions")
         .accessibilityIdentifier("activity.\(activityID).actions")
     }
 }
@@ -580,7 +580,7 @@ struct ActivityPostcardView: View {
             .frame(height: ActivityPostcardLayout.artworkHeight)
             .clipped()
             .contentShape(Rectangle())
-            .accessibilityLabel(artworkAccessibilityLabel ?? "Open activity")
+            .accessibilityLabel(artworkAccessibilityLabel ?? "Open Activity")
             .accessibilityValue(artworkAccessibilityValue ?? "")
             .accessibilityHint(artworkAccessibilityHint ?? "")
         } else {
@@ -671,7 +671,7 @@ struct ActivityPostcardView: View {
                     .accessibilityHidden(true)
                 Text(PlaceRating.averageDisplay(rating))
                     .accessibilityIdentifier("\(postcardAccessibilityIdentifier).rating.value")
-                    .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) out of 5")
+                    .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating)) Out Of 5")
             }
                 .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
@@ -743,7 +743,7 @@ struct ActivityPostcardView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(actorAccessibilityLabel)
-            .accessibilityHint("Opens profile")
+            .accessibilityHint("Opens Profile")
             .accessibilityIdentifier(actorAccessibilityIdentifier)
         } else {
             actorContent
@@ -791,7 +791,7 @@ struct ActivityPostcardView: View {
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(profile.displayName)’s profile")
+                    .accessibilityLabel("Open \(profile.displayName)’s Profile")
                 }
             }
             VStack(alignment: .leading, spacing: 1) {
@@ -830,10 +830,10 @@ struct ActivityPostcardView: View {
                 }
             }
         } else if sharedModel.failed {
-            Button("Shared check-ins couldn’t load. Try again") { sharedRetry += 1 }
+            Button("Shared Check-Ins Couldn’t Load. Try Again") { sharedRetry += 1 }
                 .font(AstirTypography.caption).frame(minHeight: 44)
         } else {
-            ProgressView("Loading shared check-ins…").font(AstirTypography.caption)
+            ProgressView("Loading Shared Check-Ins…").font(AstirTypography.caption)
         }
     }
 
@@ -889,9 +889,9 @@ struct ActivityPostcardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("View \(displayContext.media.count == 1 ? "photo" : "photos") from \(displayContext.actor.displayName)’s \(displayContext.ticketKind == .checkIn ? "check-in" : "save")")
-        .accessibilityValue(displayContext.media.count == 1 ? "1 photo" : "\(displayContext.media.count) photos")
-        .accessibilityHint("Opens a full-screen photo viewer")
+        .accessibilityLabel("View \(displayContext.media.count == 1 ? "Photo" : "Photos") From \(displayContext.actor.displayName)’s \(displayContext.ticketKind == .checkIn ? "Check-In" : "Save")")
+        .accessibilityValue(displayContext.media.count == 1 ? "1 Photo" : "\(displayContext.media.count) Photos")
+        .accessibilityHint("Opens A Full-Screen Photo Viewer")
         .accessibilityIdentifier("\(postcardAccessibilityIdentifier).photos")
     }
 
@@ -1115,13 +1115,13 @@ struct ActivityCommentsScreen: View {
                     openProfile: openProfile, openPlace: openPlace, openList: openList,
                     recheckAccess: recheckAccess, composer: $composer)
             } else if checkedKey == accessKey {
-                ContentUnavailableView("Activity unavailable", systemImage: "lock",
-                    description: Text("This activity is no longer available, or couldn’t be checked. Try again when connected."))
+                ContentUnavailableView("Activity Unavailable", systemImage: "lock",
+                    description: Text("This Activity Is No Longer Available, Or Couldn’t Be Checked. Try Again When Connected."))
                     .safeAreaInset(edge: .bottom) {
-                        Button("Try again") { retryID += 1 }.padding()
+                        Button("Try Again") { retryID += 1 }.padding()
                     }
             } else {
-                ProgressView("Opening activity…")
+                ProgressView("Opening Activity…")
             }
         }
         .blocksProductUpsells(while: composer.preservesForegroundEntry, preservesForegroundEntry: true)
@@ -1210,7 +1210,7 @@ private struct AuthorizedActivityCommentsScreen: View {
                     .listRowBackground(Color.clear)
 
                 if isLoading, comments.isEmpty {
-                    ProgressView("Loading comments…")
+                    ProgressView("Loading Comments…")
                         .font(AstirTypography.bodySmall)
                         .tint(brandMode.accent)
                         .foregroundStyle(brandMode.secondaryText)
@@ -1231,7 +1231,7 @@ private struct AuthorizedActivityCommentsScreen: View {
                 if let commentError {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(commentError)
-                        Button("Try again") {
+                        Button("Try Again") {
                             Task { await refreshComments() }
                         }
                         .frame(minHeight: 44)
@@ -1313,7 +1313,7 @@ private struct AuthorizedActivityCommentsScreen: View {
             authSession: auth
         )
         guard !Task.isCancelled, ActivitySessionReadiness(auth: auth) != .validating || UUID(uuidString: context.activityID) == nil else { return }
-        commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
+        commentError = didRefresh ? nil : "Comments Couldn't Refresh. Try Again."
         isLoading = false
     }
 
@@ -1335,10 +1335,10 @@ private struct AuthorizedActivityCommentsScreen: View {
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
-                    .accessibilityLabel("Delete comment")
+                    .accessibilityLabel("Delete Comment")
                     .disabled(!store.canDeleteActivityComment(comment))
                 }
-                .accessibilityAction(named: "Delete comment") {
+                .accessibilityAction(named: "Delete Comment") {
                     delete(comment)
                 }
         } else {
@@ -1353,9 +1353,9 @@ private struct AuthorizedActivityCommentsScreen: View {
                         Label("Report", systemImage: "exclamationmark.bubble")
                     }
                     .tint(WanderTheme.stateWarning.color)
-                    .accessibilityLabel("Report comment")
+                    .accessibilityLabel("Report Comment")
                 }
-                .accessibilityAction(named: "Report comment") {
+                .accessibilityAction(named: "Report Comment") {
                     presentReport(for: comment)
                 }
         }
@@ -1368,7 +1368,7 @@ private struct AuthorizedActivityCommentsScreen: View {
             metadataIcon: metadataIcon,
             secondaryMetadataTitle: secondaryListContext?.name,
             secondaryMetadataAction: secondaryMetadataAction,
-            secondaryMetadataAccessibilityLabel: secondaryListContext.map { "View list \($0.name)" },
+            secondaryMetadataAccessibilityLabel: secondaryListContext.map { "View List \($0.name)" },
             artworkAction: artworkAction,
             artworkAccessibilityLabel: artworkAccessibilityLabel,
             destinationAction: destinationAction,
@@ -1419,18 +1419,18 @@ private struct AuthorizedActivityCommentsScreen: View {
 
     private var artworkAccessibilityLabel: String? {
         if !context.media.isEmpty {
-            return context.media.count == 1 ? "Open activity photo" : "Open activity photos"
+            return context.media.count == 1 ? "Open Activity Photo" : "Open Activity Photos"
         }
-        return visiblePlace.map { "Open activity at \($0.place.canonicalName)" }
+        return visiblePlace.map { "Open Activity At \($0.place.canonicalName)" }
     }
 
     private var artworkAccessibilityValue: String? {
         guard !context.media.isEmpty else { return nil }
-        return context.media.count == 1 ? "1 photo" : "\(context.media.count) photos"
+        return context.media.count == 1 ? "1 Photo" : "\(context.media.count) Photos"
     }
 
     private var artworkAccessibilityHint: String? {
-        context.media.isEmpty ? nil : "Opens a full-screen photo viewer"
+        context.media.isEmpty ? nil : "Opens A Full-Screen Photo Viewer"
     }
 
     private var secondaryListContext: ActivityEngagementListContext? {
@@ -1447,7 +1447,7 @@ private struct AuthorizedActivityCommentsScreen: View {
         if let visiblePlace {
             return "Open \(visiblePlace.place.canonicalName)"
         }
-        return context.listContext.map { "Open list \($0.name)" }
+        return context.listContext.map { "Open List \($0.name)" }
     }
 
     private var destinationAction: (() -> Void)? {
@@ -1462,7 +1462,7 @@ private struct AuthorizedActivityCommentsScreen: View {
         PersonMentionField(
             text: $composer.draft, mentions: $composer.mentions,
             focus: $composerFocused,
-            placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
+            placeholder: "Add A Comment…", accessibilityLabel: "Add A Comment",
             accessibilityIdentifier: "activity.comment.input", submitOnReturn: true,
             suggestionPlacement: .aboveInput, onSubmit: post,
             decorateInput: { AnyView(composerRow($0)) }
@@ -1506,7 +1506,7 @@ private struct AuthorizedActivityCommentsScreen: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(composer.isPosting ? "Sending comment" : "Send comment")
+                .accessibilityLabel(composer.isPosting ? "Sending Comment" : "Send Comment")
                 .accessibilityIdentifier("activity.comment.send")
                 .disabled(normalizedDraft.isEmpty || normalizedDraft.count > 1_000 || composer.isPosting)
             }
@@ -1541,7 +1541,7 @@ private struct AuthorizedActivityCommentsScreen: View {
             )
             guard composer.finishPost(post, succeeded: didPost) else { return }
             if !didPost {
-                commentError = "Your comment couldn't post. Try again."
+                commentError = "Your Comment Couldn't Post. Try Again."
             }
             composerFocused = true
         }
@@ -1555,7 +1555,7 @@ private struct AuthorizedActivityCommentsScreen: View {
                 backend: auth.isSignedIn ? backend : nil
             )
             if !didDelete {
-                commentError = "Your comment couldn't be deleted. Try again."
+                commentError = "Your Comment Couldn't Be Deleted. Try Again."
             }
         }
     }
@@ -1566,7 +1566,7 @@ private struct AuthorizedActivityCommentsScreen: View {
                 kind: .comment,
                 subjectID: comment.id,
                 reportedUserID: comment.author.id,
-                context: "Report \(comment.author.displayName)’s comment."
+                context: "Report \(comment.author.displayName)’s Comment."
             )
         }
     }
@@ -1619,16 +1619,16 @@ struct ActivityPhotoViewerScreen: View {
                     Color.black.ignoresSafeArea()
                     if access.isResolved(for: scope) || wasRevoked {
                         ContentUnavailableView {
-                            Label("Photos unavailable", systemImage: "photo")
+                            Label("Photos Unavailable", systemImage: "photo")
                         } description: {
-                            Text("These photos are no longer available, or couldn’t be checked.")
+                            Text("These Photos Are No Longer Available, Or Couldn’t Be Checked.")
                         } actions: {
-                            Button("Try again") { retryID += 1 }
+                            Button("Try Again") { retryID += 1 }
                                 .frame(minHeight: WanderTheme.tapMinimum)
                         }
                         .accessibilityIdentifier("activity.photos.unavailable")
                     } else {
-                        ProgressView("Opening photos…")
+                        ProgressView("Opening Photos…")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     WanderGlassActionButton(systemImage: "chevron.left", accessibilityLabel: "Back",
@@ -1706,11 +1706,11 @@ private struct SharedVisitPhotoViewerScreen: View {
                 ZStack(alignment: .topLeading) {
                     Color.black.ignoresSafeArea()
                     if model.failed || model.collection != nil {
-                        ContentUnavailableView("Photos unavailable", systemImage: "photo",
-                            description: Text("These photos are no longer available, or couldn’t be checked."))
-                            .safeAreaInset(edge: .bottom) { Button("Try again") { retry += 1 }.frame(minHeight: 44) }
+                        ContentUnavailableView("Photos Unavailable", systemImage: "photo",
+                            description: Text("These Photos Are No Longer Available, Or Couldn’t Be Checked."))
+                            .safeAreaInset(edge: .bottom) { Button("Try Again") { retry += 1 }.frame(minHeight: 44) }
                             .accessibilityIdentifier("activity.photos.unavailable")
-                    } else { ProgressView("Opening photos…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+                    } else { ProgressView("Opening Photos…").frame(maxWidth: .infinity, maxHeight: .infinity) }
                     WanderGlassActionButton(systemImage: "chevron.left", accessibilityLabel: "Back",
                         tone: .darkOverlay, action: dismiss.callAsFunction)
                         .accessibilityIdentifier("activity.photos.back")
@@ -1791,7 +1791,7 @@ private struct ActivityCommentsPhotoViewer: View {
 
                 Spacer()
 
-                Text("\((media.firstIndex(where: { $0.id == selectedMediaID }) ?? 0) + 1) of \(media.count)")
+                Text("\((media.firstIndex(where: { $0.id == selectedMediaID }) ?? 0) + 1) Of \(media.count)")
                     .font(AstirTypography.caption)
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("activity.photos.position")
@@ -1801,7 +1801,7 @@ private struct ActivityCommentsPhotoViewer: View {
                 if reportableSelectedPhoto != nil {
                     WanderGlassActionButton(
                         systemImage: "exclamationmark.bubble",
-                        accessibilityLabel: "Report photo",
+                        accessibilityLabel: "Report Photo",
                         tone: .darkOverlay,
                         action: reportSelectedPhoto
                     )
@@ -1838,7 +1838,7 @@ private struct ActivityCommentsPhotoViewer: View {
             kind: .visitPhoto,
             subjectID: selectedMediaID,
             reportedUserID: authorID,
-            context: "Report \(authorName)’s photo from \(placeName)."
+            context: "Report \(authorName)’s Photo From \(placeName)."
         )
     }
 
@@ -1861,7 +1861,7 @@ private struct ActivityCommentsFullScreenImage: View {
                                    variant: .profile, contentMode: .fit,
                                    onLoadFailure: { _ in failed = true })
             if failed {
-                Label("Photo unavailable", systemImage: "photo")
+                Label("Photo Unavailable", systemImage: "photo")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(.white)
             }
@@ -1937,7 +1937,7 @@ struct ActivityCommentsRouteScreen: View {
     private var resolutionState: some View {
         VStack(spacing: WanderTheme.spacing4) {
             if resolutionError == nil || isRetrying || ActivitySessionReadiness(auth: auth) == .validating {
-                ProgressView("Opening activity…")
+                ProgressView("Opening Activity…")
                     .tint(brandMode.accent)
                     .foregroundStyle(brandMode.secondaryText)
             } else {
@@ -1945,16 +1945,16 @@ struct ActivityCommentsRouteScreen: View {
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(brandMode.accentText)
 
-                Text("This activity couldn’t load")
+                Text("This Activity Couldn’t Load")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(brandMode.primaryText)
 
-                Text("Check your connection and try again.")
+                Text("Check Your Connection And Try Again.")
                     .font(AstirTypography.bodySmall)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(brandMode.secondaryText)
 
-                Button("Try again") {
+                Button("Try Again") {
                     Task { @MainActor in
                         isRetrying = true
                         await retry()
@@ -2026,7 +2026,7 @@ private struct ActivityCommentRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
+            .accessibilityLabel("\(comment.author.displayName) Commented: \(comment.body)")
             .opacity(comment.isPending ? 0.58 : 1)
 
             Spacer(minLength: 0)
@@ -2048,18 +2048,18 @@ private struct ActivityCommentRow: View {
                 .disabled(!canLike || isLikePending)
                 .opacity(isLikePending ? 0.6 : 1)
                 .accessibilityIdentifier("activity.comment.like.\(comment.id)")
-                .accessibilityLabel(comment.viewerHasLiked ? "Unlike comment" : "Like comment")
-                .accessibilityValue(comment.likeCount == 1 ? "1 like" : "\(comment.likeCount) likes")
+                .accessibilityLabel(comment.viewerHasLiked ? "Unlike Comment" : "Like Comment")
+                .accessibilityValue(comment.likeCount == 1 ? "1 Like" : "\(comment.likeCount) Likes")
                 if onDelete != nil || onReport != nil {
                     Menu {
                         if let onReport {
                             Button(action: onReport) {
-                                Label("Report comment", systemImage: "exclamationmark.bubble")
+                                Label("Report Comment", systemImage: "exclamationmark.bubble")
                             }
                         }
                         if let onDelete {
                             Button(role: .destructive, action: onDelete) {
-                                Label("Delete comment", systemImage: "trash")
+                                Label("Delete Comment", systemImage: "trash")
                             }
                         }
                     } label: {
@@ -2069,7 +2069,7 @@ private struct ActivityCommentRow: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
-                    .accessibilityLabel("Comment actions")
+                    .accessibilityLabel("Comment Actions")
                     .accessibilityIdentifier("activity.comment.actions.\(comment.id)")
                 }
             }
@@ -2156,7 +2156,7 @@ struct SharedVisitCommentsScreen: View {
                                 bottom: WanderTheme.spacing2, trailing: WanderTheme.spacing4))
                             .listRowSeparator(.hidden).listRowBackground(Color.clear)
                         if model.isLoading && visibleComments(collection).isEmpty {
-                            ProgressView("Loading comments…")
+                            ProgressView("Loading Comments…")
                                 .font(AstirTypography.bodySmall).tint(brandMode.accent)
                                 .frame(maxWidth: .infinity, minHeight: 140)
                                 .listRowSeparator(.hidden).listRowBackground(Color.clear)
@@ -2170,7 +2170,7 @@ struct SharedVisitCommentsScreen: View {
                             }
                         }
                         if model.hasMore {
-                            Button(model.isLoading ? "Loading…" : "Load earlier comments") { Task { await loadMore() } }
+                            Button(model.isLoading ? "Loading…" : "Load Earlier Comments") { Task { await loadMore() } }
                                 .disabled(model.isLoading).frame(minHeight: 44)
                                 .listRowSeparator(.hidden).listRowBackground(Color.clear)
                         }
@@ -2189,10 +2189,10 @@ struct SharedVisitCommentsScreen: View {
                 }
                 .safeAreaInset(edge: .bottom, spacing: 0) { composerInput }
             } else if model.failed || model.collection != nil {
-                ContentUnavailableView("Shared check-in unavailable", systemImage: "lock",
-                    description: Text("The shared check-in couldn’t be verified. Try again when connected."))
-                    .safeAreaInset(edge: .bottom) { Button("Try again") { retry += 1 }.padding() }
-            } else { ProgressView("Opening shared check-in…") }
+                ContentUnavailableView("Shared Check-In Unavailable", systemImage: "lock",
+                    description: Text("The Shared Check-In Couldn’t Be Verified. Try Again When Connected."))
+                    .safeAreaInset(edge: .bottom) { Button("Try Again") { retry += 1 }.padding() }
+            } else { ProgressView("Opening Shared Check-In…") }
         }
         .background(brandMode.background.ignoresSafeArea())
         .task(id: accessKey) { await reload() }
@@ -2242,22 +2242,22 @@ struct SharedVisitCommentsScreen: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if store.canDeleteActivityComment(comment) {
                 Button(role: .destructive) { updateComment(comment, deleting: true) } label: { Label("Delete", systemImage: "trash") }
-                    .accessibilityLabel("Delete comment")
+                    .accessibilityLabel("Delete Comment")
             } else if comment.author.id != store.currentUser.id {
                 Button { presentReport(comment) } label: { Label("Report", systemImage: "exclamationmark.bubble") }
-                    .tint(WanderTheme.stateWarning.color).accessibilityLabel("Report comment")
+                    .tint(WanderTheme.stateWarning.color).accessibilityLabel("Report Comment")
             }
         }
     }
 
     private func presentReport(_ comment: ActivityComment) {
         reportSubject = CommunityReportSubject(kind: .comment, subjectID: comment.id,
-            reportedUserID: comment.author.id, context: "Report comment")
+            reportedUserID: comment.author.id, context: "Report Comment")
     }
 
     private var composerInput: some View {
         PersonMentionField(text: $draft, mentions: $mentions, focus: $focused,
-            placeholder: "Add a comment…", accessibilityLabel: "Add a comment",
+            placeholder: "Add A Comment…", accessibilityLabel: "Add A Comment",
             accessibilityIdentifier: "activity.comment.input", submitOnReturn: true,
             suggestionPlacement: .aboveInput, onSubmit: post,
             decorateInput: { AnyView(composerRow($0)) })
@@ -2282,7 +2282,7 @@ struct SharedVisitCommentsScreen: View {
                     .background(brandMode.accent.opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1), in: Circle())
                     .frame(width: 44, height: 44).contentShape(Rectangle())
                 }
-                .buttonStyle(.plain).accessibilityLabel(posting ? "Sending comment" : "Send comment")
+                .buttonStyle(.plain).accessibilityLabel(posting ? "Sending Comment" : "Send Comment")
                 .accessibilityIdentifier("activity.comment.send")
                 .disabled(posting || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 1_000)
             }
@@ -2326,7 +2326,7 @@ struct SharedVisitCommentsScreen: View {
             guard key == accessKey, !Task.isCancelled else { posting = false; return }
             posting = false
             if success { draft = ""; mentions = []; await reload() }
-            else { error = "Your comment couldn’t post. Try again." }
+            else { error = "Your Comment Couldn’t Post. Try Again." }
         }
     }
 
@@ -2341,7 +2341,7 @@ struct SharedVisitCommentsScreen: View {
             let success = await model.update(comment, deleting: deleting, repository: repository,
                 isCurrent: { key == accessKey })
             guard key == accessKey, !Task.isCancelled else { return }
-            if !success { error = "The comment couldn’t update. Try again." }
+            if !success { error = "The Comment Couldn’t Update. Try Again." }
             else if !deleting {
                 let liked = !comment.viewerHasLiked
                 store.productAnalytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.activityCommentLikeChanged,

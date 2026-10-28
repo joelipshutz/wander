@@ -27,13 +27,13 @@ enum ListMapContentState: Equatable {
     var countLabel: String {
         switch self {
         case .empty:
-            "No mapped places"
+            "No Mapped Places"
         case .unresolved(let total):
-            "\(total) \(total == 1 ? "place" : "places")"
+            "\(total) \(total == 1 ? "Place" : "Places")"
         case .partial(let mapped, let total):
-            "\(mapped) mapped of \(total)"
+            "\(mapped) Mapped Of \(total)"
         case .mapped(let count):
-            "\(count) \(count == 1 ? "place" : "places")"
+            "\(count) \(count == 1 ? "Place" : "Places")"
         }
     }
 }

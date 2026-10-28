@@ -28,7 +28,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         capture("Owner pinned header")
 
         // Edit belongs to the scrollable identity block, below Member since.
-        let edit = app.buttons["Edit profile"]
+        let edit = app.buttons["Edit Profile"]
         for _ in 0..<6 where !edit.isHittable { app.swipeDown() }
         XCTAssertTrue(edit.isHittable)
         edit.tap()
@@ -57,7 +57,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
 
     func testNormalMemberKeepsMoreActionsAndBackWhilePinned() {
         let app = launch(["-WanderMapCapture", "-WanderOpenProfile", "user_maya"])
-        let more = app.buttons["More profile actions"]
+        let more = app.buttons["More Profile Actions"]
         XCTAssertTrue(more.waitForExistence(timeout: 15))
         let name = app.staticTexts["profile.header.name"].firstMatch
         let photo = app.descendants(matching: .any)["profile.header.photo"].firstMatch
@@ -83,7 +83,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         let toolbarY = settings.frame.midY
         app.swipeUp()
         photo.tap()
-        let close = app.buttons["Close profile photo"]
+        let close = app.buttons["Close Profile Photo"]
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
@@ -115,7 +115,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
             capture("Photo returning step \(step)")
         }
         photo.tap()
-        XCTAssertTrue(app.buttons["Close profile photo"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Close Profile Photo"].waitForExistence(timeout: 5))
     }
 
     private func launch(_ arguments: [String]) -> XCUIApplication {

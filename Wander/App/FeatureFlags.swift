@@ -75,8 +75,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
         switch self {
         case .unifiedLiveV1:
             FeatureFlagDefinition(
-                title: "Unified Live experience",
-                summary: "Combines Map and Feed with three tabs and private replies. Restart to apply.",
+                title: "Unified Live Experience",
+                summary: "Combines Map And Feed With Three Tabs And Private Replies. Restart To Apply.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -84,8 +84,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .firstVisitNUX:
             FeatureFlagDefinition(
-                title: "First-visit NUX",
-                summary: "Shows the guided first-visit walkthrough.",
+                title: "First-Visit NUX",
+                summary: "Shows The Guided First-Visit Walkthrough.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -93,8 +93,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .debugSettings:
             FeatureFlagDefinition(
-                title: "Debug settings access",
-                summary: "Server entitlement for this tester control panel.",
+                title: "Debug Settings Access",
+                summary: "Server Entitlement For This Tester Control Panel.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -102,8 +102,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .placeProfileSaveTrayV1:
             FeatureFlagDefinition(
-                title: "Place profile save tray v1",
-                summary: "Uses the floating Check in and Wanna actions on place profiles.",
+                title: "Place Profile Save Tray V1",
+                summary: "Uses The Floating Check In And Wanna Actions On Place Profiles.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -111,8 +111,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .semanticPlaceSearchV1:
             FeatureFlagDefinition(
-                title: "Semantic place search v1",
-                summary: "Adds semantic candidate retrieval to place search.",
+                title: "Semantic Place Search V1",
+                summary: "Adds Semantic Candidate Retrieval To Place Search.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: false,
@@ -120,8 +120,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .socialImportApifyGeminiV1:
             FeatureFlagDefinition(
-                title: "Apify + Gemini social import v1",
-                summary: "Uses server-backed understanding for Instagram and TikTok imports.",
+                title: "Apify + Gemini Social Import V1",
+                summary: "Uses Server-Backed Understanding For Instagram And TikTok Imports.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -129,8 +129,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .placeProfileActionVariant:
             FeatureFlagDefinition(
-                title: "Place button style",
-                summary: "Selects the place-profile floating action layout.",
+                title: "Place Button Style",
+                summary: "Selects The Place-Profile Floating Action Layout.",
                 bundledDefault: .integer(5),
                 integerRange: 1 ... 5,
                 allowsRemoteAccountOverride: true,
@@ -138,8 +138,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .profileFeedbackV1:
             FeatureFlagDefinition(
-                title: "Profile feedback",
-                summary: "Shows the profile feedback button. Enable after delivery setup is verified.",
+                title: "Profile Feedback",
+                summary: "Shows The Profile Feedback Button. Enable After Delivery Setup Is Verified.",
                 bundledDefault: .boolean(false),
                 integerRange: nil,
                 allowsRemoteAccountOverride: true,
@@ -147,8 +147,8 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
             )
         case .notificationRepromptCampaign:
             FeatureFlagDefinition(
-                title: "Notification re-prompt campaign",
-                summary: "0 is off. A higher campaign number reopens the notification primer once per account on this device while notifications are off.",
+                title: "Notification Re-Prompt Campaign",
+                summary: "0 Is Off. A Higher Campaign Number Reopens The Notification Primer Once Per Account On This Device While Notifications Are Off.",
                 bundledDefault: .integer(0),
                 integerRange: 0 ... 1_000_000,
                 allowsRemoteAccountOverride: true,
@@ -167,13 +167,13 @@ enum FeatureFlagValueSource: Equatable {
     var settingsLabel: String {
         switch self {
         case .bundledDefault:
-            "Bundled default"
+            "Bundled Default"
         case .globalDefault:
-            "Remote default"
+            "Remote Default"
         case .accountOverride:
-            "Remote account override"
+            "Remote Account Override"
         case .deviceOverride:
-            "Device override"
+            "Device Override"
         }
     }
 }

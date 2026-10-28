@@ -357,9 +357,9 @@ final class PushNotificationManager: ObservableObject {
         case .authorized, .provisional, .ephemeral:
             return "Allowed"
         case .denied:
-            return "Off in iOS Settings"
+            return "Off In iOS Settings"
         case .notDetermined:
-            return "Not set up"
+            return "Not Set Up"
         @unknown default:
             return "Unknown"
         }
@@ -519,7 +519,7 @@ final class PushNotificationManager: ObservableObject {
             }
             return granted
         } catch {
-            lastErrorMessage = "Could not request notification permission."
+            lastErrorMessage = "Could Not Request Notification Permission."
             return false
         }
     }
@@ -575,7 +575,7 @@ final class PushNotificationManager: ObservableObject {
         guard case .signedIn(let session) = authSession.state,
               session.userID == expectedUserID,
               backend.canRegisterPushNotifications else {
-            lastErrorMessage = "Sign in to turn on notifications."
+            lastErrorMessage = "Sign In To Turn On Notifications."
             return nil
         }
         let userID = expectedUserID
@@ -585,7 +585,7 @@ final class PushNotificationManager: ObservableObject {
         await refreshAuthorizationStatus()
         guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
         if authorizationStatus == .denied {
-            lastErrorMessage = "Enable alerts in iOS Settings, then try again."
+            lastErrorMessage = "Enable Alerts In iOS Settings, Then Try Again."
             return nil
         }
 
@@ -604,7 +604,7 @@ final class PushNotificationManager: ObservableObject {
             authSession: authSession
         ) else {
             guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
-            lastErrorMessage = "This device did not finish registering with Apple. Try again."
+            lastErrorMessage = "This Device Did Not Finish Registering With Apple. Try Again."
             await disablePreferencesAfterFailedEnrollment(
                 backend: backend,
                 userID: userID,
@@ -629,7 +629,7 @@ final class PushNotificationManager: ObservableObject {
                 authSession: authSession
             )
             guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
-            lastErrorMessage = "Astir could not finish notification setup. Try again."
+            lastErrorMessage = "Astir Could Not Finish Notification Setup. Try Again."
             return nil
         }
 
@@ -651,7 +651,7 @@ final class PushNotificationManager: ObservableObject {
                 authSession: authSession
             )
             guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
-            lastErrorMessage = "Astir could not finish notification setup. Try again."
+            lastErrorMessage = "Astir Could Not Finish Notification Setup. Try Again."
             #if DEBUG
             WanderDebugLog.remote.error("transactional push enrollment failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
@@ -688,7 +688,7 @@ final class PushNotificationManager: ObservableObject {
             guard isCurrentNotificationAccount(userID, authSession: authSession) else { return nil }
             return preferences
         } catch {
-            lastErrorMessage = "Could not disable notifications. Try again."
+            lastErrorMessage = "Could Not Disable Notifications. Try Again."
             return nil
         }
     }
@@ -704,7 +704,7 @@ final class PushNotificationManager: ObservableObject {
     }
 
     func handleRegistrationFailure(_ error: Error) {
-        lastErrorMessage = "Could not register this device for notifications."
+        lastErrorMessage = "Could Not Register This Device For Notifications."
         #if DEBUG
         WanderDebugLog.remote.error("push token registration failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
         #endif
@@ -761,7 +761,7 @@ final class PushNotificationManager: ObservableObject {
             } catch {
                 guard attempt == 0,
                       isCurrentNotificationAccount(userID, authSession: authSession) else {
-                    lastErrorMessage = "Notifications are off, but this device could not be fully disconnected."
+                    lastErrorMessage = "Notifications Are Off, But This Device Could Not Be Fully Disconnected."
                     #if DEBUG
                     WanderDebugLog.remote.error("push token unregister failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
                     #endif
@@ -816,7 +816,7 @@ final class PushNotificationManager: ObservableObject {
                 return self.isTokenRegistrationAllowed(userID, authSession: authSession)
             } catch {
                 if self.isTokenRegistrationAllowed(userID, authSession: authSession) {
-                    self.lastErrorMessage = "Could not sync notification settings."
+                    self.lastErrorMessage = "Could Not Sync Notification Settings."
                 }
                 #if DEBUG
                 WanderDebugLog.remote.error("push token sync failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
@@ -1170,8 +1170,8 @@ final class PushNotificationManager: ObservableObject {
                     ?? plan.item.placeID
                 return ClientNotificationIntent(
                     intentKey: "\(plan.item.userPlaceID):\(plannedDate)",
-                    title: "Wanna go reminder",
-                    body: "You wanted to try \(plan.item.placeName) on \(displayDate).",
+                    title: "Wanna Go Reminder",
+                    body: "You Wanted To Try \(plan.item.placeName) On \(displayDate).",
                     deeplinkURL: "recme://places/\(encodedPlaceID)",
                     data: [
                         "place_id": .string(plan.item.placeID),
@@ -1197,7 +1197,7 @@ final class PushNotificationManager: ObservableObject {
             )
         } catch {
             if isCurrentNotificationAccount(userID, authSession: authSession) {
-                lastErrorMessage = "Could not sync Wanna go reminders."
+                lastErrorMessage = "Could Not Sync Wanna Go Reminders."
             }
             #if DEBUG
             WanderDebugLog.remote.error("wanna reminder reconciliation failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
@@ -1252,20 +1252,20 @@ final class PushNotificationManager: ObservableObject {
         let content = UNMutableNotificationContent()
         if matchedCount == 0, needsReviewCount == 0, sourceRetryCount > 0 {
             content.title = sourceRetryCount == 1
-                ? "Your source scan needs a retry"
-                : "\(sourceRetryCount) source scans need a retry"
-            content.body = "Open Astir to retry the incomplete source scan."
+                ? "Your Source Scan Needs A Retry"
+                : "\(sourceRetryCount) Source Scans Need A Retry"
+            content.body = "Open Astir To Retry The Incomplete Source Scan."
         } else if sourceRetryCount > 0 {
-            content.title = "Your import is ready"
-            content.body = "\(matchedCount) matched. Open Astir to review and retry the incomplete source scan."
+            content.title = "Your Import Is Ready"
+            content.body = "\(matchedCount) Matched. Open Astir To Review And Retry The Incomplete Source Scan."
         } else if needsReviewCount > 0 {
-            content.title = "Your import is ready"
-            content.body = "\(matchedCount) matched. \(needsReviewCount) need a quick look."
+            content.title = "Your Import Is Ready"
+            content.body = "\(matchedCount) Matched. \(needsReviewCount) Need A Quick Look."
         } else {
-            content.title = "Your import is ready"
+            content.title = "Your Import Is Ready"
             content.body = matchedCount == 1
-                ? "1 place is ready to add to your map."
-                : "\(matchedCount) places are ready to add to your map."
+                ? "1 Place Is Ready To Add To Your Map."
+                : "\(matchedCount) Places Are Ready To Add To Your Map."
         }
         content.sound = .default
         let eventID = "local-import-\(batchIDs.sorted().joined(separator: "|"))"
@@ -1384,7 +1384,7 @@ final class PushNotificationManager: ObservableObject {
                 )
             } catch {
                 if isCurrentNotificationAccount(userID, authSession: authSession) {
-                    lastErrorMessage = "Could not sync save streak reminders."
+                    lastErrorMessage = "Could Not Sync Save Streak Reminders."
                 }
             }
             return
@@ -1438,7 +1438,7 @@ final class PushNotificationManager: ObservableObject {
             }
         } catch {
             if isCurrentNotificationAccount(userID, authSession: authSession) {
-                lastErrorMessage = "Could not sync save streak reminders."
+                lastErrorMessage = "Could Not Sync Save Streak Reminders."
             }
             #if DEBUG
             WanderDebugLog.remote.error("save streak reminder reconciliation failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
@@ -1496,7 +1496,7 @@ final class PushNotificationManager: ObservableObject {
     func scheduleDebugSaveStreakReminder(_ summary: SaveStreakSummary) async -> Bool {
         await refreshAuthorizationStatus()
         guard saveStreakRemindersEnabled, canRegisterForRemoteNotifications else {
-            lastErrorMessage = "Turn on save streak reminders first."
+            lastErrorMessage = "Turn On Save Streak Reminders First."
             return false
         }
 
@@ -1506,7 +1506,7 @@ final class PushNotificationManager: ObservableObject {
             )
             return true
         } catch {
-            lastErrorMessage = "Could not schedule the test reminder."
+            lastErrorMessage = "Could Not Schedule The Test Reminder."
             return false
         }
     }

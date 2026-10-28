@@ -5,7 +5,7 @@ enum OnboardingIdentityPhotoError: Error {
 
     var message: String {
         switch self {
-        case .uploadFailed: "Your photo couldn’t be saved. Check your connection and try again."
+        case .uploadFailed: "Your Photo Couldn’t Be Saved. Check Your Connection And Try Again."
         }
     }
 }

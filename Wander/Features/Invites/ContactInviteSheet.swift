@@ -269,17 +269,17 @@ struct ContactInviteSheet: View {
                     return
                 }
                 completeDelivery(
-                    headline: selection.count == 1 ? "invite shared" : "invites shared",
-                    detail: "The TestFlight link was handed off successfully.",
+                    headline: selection.count == 1 ? "Invite Shared" : "Invites Shared",
+                    detail: "The TestFlight Link Was Handed Off Successfully.",
                     deliveryMode: "share_sheet",
                     sentCount: selection.count
                 )
             }
         }
-        .alert("Invite wasn’t sent", isPresented: deliveryErrorBinding) {
+        .alert("Invite Wasn’t Sent", isPresented: deliveryErrorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(deliveryErrorMessage ?? "Messages could not send this invitation. Try again.")
+            Text(deliveryErrorMessage ?? "Messages Could Not Send This Invitation. Try Again.")
         }
     }
 
@@ -317,7 +317,7 @@ struct ContactInviteSheet: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(
-                        onWalkthroughDismiss == nil ? "Close" : "Dismiss walkthrough"
+                        onWalkthroughDismiss == nil ? "Close" : "Dismiss Walkthrough"
                     )
                     .accessibilityIdentifier(
                         onWalkthroughDismiss == nil
@@ -372,10 +372,10 @@ struct ContactInviteSheet: View {
                     .accessibilityLabel(primaryActionState.title)
                     .accessibilityHint(
                         isWalkthroughMode
-                            ? "Continues the walkthrough"
+                            ? "Continues The Walkthrough"
                             : (primaryActionState.isSubdued
-                                ? "Select at least one person to invite"
-                                : "Invites the selected people")
+                                ? "Select At Least One Person To Invite"
+                                : "Invites The Selected People")
                     )
                 } else {
                     Color.clear.frame(width: 64, height: WanderTheme.tapMinimum)
@@ -452,7 +452,7 @@ struct ContactInviteSheet: View {
                 .font(.system(size: 16, weight: .black))
                 .foregroundStyle(brandMode.secondaryText)
 
-            TextField("Name, number, or @username", text: $query)
+            TextField("Name, Number, Or @username", text: $query)
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.primaryText)
                 .textInputAutocapitalization(.never)
@@ -468,7 +468,7 @@ struct ContactInviteSheet: View {
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
+                .accessibilityLabel("Clear Search")
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
@@ -552,9 +552,9 @@ struct ContactInviteSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(contactAccessibilityLabel(for: contact))
-        .accessibilityValue(selection.contains(contact.id) ? "Selected" : "Not selected")
+        .accessibilityValue(selection.contains(contact.id) ? "Selected" : "Not Selected")
         .accessibilityHint(
-            selection.contains(contact.id) ? "Double-tap to deselect" : "Double-tap to select"
+            selection.contains(contact.id) ? "Double-Tap To Deselect" : "Double-Tap To Select"
         )
     }
 
@@ -614,9 +614,9 @@ struct ContactInviteSheet: View {
             .buttonStyle(.plain)
             .disabled(!canInvite)
             .accessibilityIdentifier("invite.contactAdd.\(contact.id)")
-            .accessibilityLabel(isSent ? "Invitation sent to \(contact.displayName)" : "Invite \(contact.displayName)")
-            .accessibilityValue(isSent ? "Sent" : "Not sent")
-            .accessibilityHint(canInvite ? "Opens a text invitation" : "")
+            .accessibilityLabel(isSent ? "Invitation Sent To \(contact.displayName)" : "Invite \(contact.displayName)")
+            .accessibilityValue(isSent ? "Sent" : "Not Sent")
+            .accessibilityHint(canInvite ? "Opens A Text Invitation" : "")
         }
         .frame(minHeight: 56)
     }
@@ -638,7 +638,7 @@ struct ContactInviteSheet: View {
                         .lineLimit(1)
 
                     if contact.relationship.isOnRecme {
-                        Text("on Astir")
+                        Text("On Astir")
                             .font(AstirTypography.metadata)
                             .foregroundStyle(brandMode.accentText)
                             .scaleEffect(0.82)
@@ -688,7 +688,7 @@ struct ContactInviteSheet: View {
             }
 
             VStack(spacing: WanderTheme.spacing2) {
-                Text("find your people")
+                Text("Find Your People")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Text(surface.permissionMessage)
@@ -699,9 +699,9 @@ struct ContactInviteSheet: View {
             }
 
             VStack(spacing: WanderTheme.spacing2) {
-                permissionPromise(icon: "checkmark.shield.fill", text: "You choose each person you invite")
-                permissionPromise(icon: "paperplane.fill", text: "Invites open in Messages for you to send")
-                permissionPromise(icon: "lock.fill", text: "Your address book stays on this device")
+                permissionPromise(icon: "checkmark.shield.fill", text: "You Choose Each Person You Invite")
+                permissionPromise(icon: "paperplane.fill", text: "Invites Open In Messages For You To Send")
+                permissionPromise(icon: "lock.fill", text: "Your Address Book Stays On This Device")
             }
             .padding(WanderTheme.spacing3)
             .background(brandMode.recessedBackground)
@@ -764,17 +764,17 @@ struct ContactInviteSheet: View {
                 .foregroundStyle(brandMode.accentText)
 
             VStack(spacing: WanderTheme.spacing2) {
-                Text("contacts are off")
+                Text("Contacts Are Off")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text("Turn on Contacts in Settings to browse your address book, or share an Astir link instead.")
+                Text("Turn On Contacts In Settings To Browse Your Address Book, Or Share An Astir Link Instead.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button("Open settings") {
+            Button("Open Settings") {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(url)
             }
@@ -793,7 +793,7 @@ struct ContactInviteSheet: View {
                 trackInviteDeliveryStarted(mode: "share_sheet", recipientCount: 0)
                 sharePresentation = InviteSharePresentation(content: inviteShareContent)
             } label: {
-                Label("Share an invite link", systemImage: "square.and.arrow.up")
+                Label("Share An Invite Link", systemImage: "square.and.arrow.up")
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.primaryText)
                     .frame(maxWidth: .infinity, minHeight: 50)
@@ -825,10 +825,10 @@ struct ContactInviteSheet: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 34, weight: .black))
                 .foregroundStyle(brandMode.secondaryText.opacity(0.72))
-            Text("no contacts found")
+            Text("No Contacts Found")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
-            Text("Try another name, number, or username.")
+            Text("Try Another Name, Number, Or Username.")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
             Spacer()
@@ -841,7 +841,7 @@ struct ContactInviteSheet: View {
             Spacer()
             ProgressView()
                 .tint(brandMode.accent)
-            Text("loading contacts")
+            Text("Loading Contacts")
                 .font(AstirTypography.cardTitle)
                 .foregroundStyle(brandMode.primaryText)
             Spacer()
@@ -855,10 +855,10 @@ struct ContactInviteSheet: View {
             Image(systemName: "arrow.clockwise.circle.fill")
                 .font(.system(size: 42, weight: .black))
                 .foregroundStyle(brandMode.accentText)
-            Text("contacts couldn’t load")
+            Text("Contacts Couldn’t Load")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
-            Button("Try again") {
+            Button("Try Again") {
                 Task { await loadContacts() }
             }
             .font(AstirTypography.control)
@@ -895,14 +895,14 @@ struct ContactInviteSheet: View {
                 Text(completionHeadline ?? surface.completionTitle)
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text(completionDetail ?? "The TestFlight invitation was shared.")
+                Text(completionDetail ?? "The TestFlight Invitation Was Shared.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("If they follow you, tap their follow notification to open their profile and follow back.")
+            Text("If They Follow You, Tap Their Follow Notification To Open Their Profile And Follow Back.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.primaryText)
                 .multilineTextAlignment(.center)
@@ -1004,7 +1004,7 @@ struct ContactInviteSheet: View {
         else { return }
 
         guard MFMessageComposeViewController.canSendText() else {
-            deliveryErrorMessage = "Messages are not available on this device. Try again on an iPhone that can send texts."
+            deliveryErrorMessage = "Messages Are Not Available On This Device. Try Again On An iPhone That Can Send Texts."
             return
         }
 
@@ -1020,10 +1020,10 @@ struct ContactInviteSheet: View {
             let sentCount = messageDeliveryPlan?.sentCount ?? 0
             guard sentCount > 0 else { return }
             completeDelivery(
-                headline: sentCount == 1 ? "invite sent" : "invites sent",
+                headline: sentCount == 1 ? "Invite Sent" : "Invites Sent",
                 detail: sentCount == 1
-                    ? "The TestFlight link was sent in Messages."
-                    : "The TestFlight link was sent to \(sentCount) people in Messages.",
+                    ? "The TestFlight Link Was Sent In Messages."
+                    : "The TestFlight Link Was Sent To \(sentCount) People In Messages.",
                 deliveryMode: "messages",
                 sentCount: sentCount
             )
@@ -1071,7 +1071,7 @@ struct ContactInviteSheet: View {
             )
             messageDeliveryPlan?.cancelRemaining()
             messageDeliveryPlan = nil
-            deliveryErrorMessage = "Messages could not send this invitation. Try again."
+            deliveryErrorMessage = "Messages Could Not Send This Invitation. Try Again."
         @unknown default:
             trackInviteCompletion(
                 outcome: "failed",
@@ -1080,7 +1080,7 @@ struct ContactInviteSheet: View {
             )
             messageDeliveryPlan?.cancelRemaining()
             messageDeliveryPlan = nil
-            deliveryErrorMessage = "Messages returned an unknown result. Try again."
+            deliveryErrorMessage = "Messages Returned An Unknown Result. Try Again."
         }
     }
 
@@ -1109,11 +1109,11 @@ struct ContactInviteSheet: View {
         case .failed:
             outcome = .failed
             analyticsOutcome = "failed"
-            errorMessage = "Messages could not send this invitation. Try again."
+            errorMessage = "Messages Could Not Send This Invitation. Try Again."
         @unknown default:
             outcome = .failed
             analyticsOutcome = "failed"
-            errorMessage = "Messages returned an unknown result. Try again."
+            errorMessage = "Messages Returned An Unknown Result. Try Again."
         }
 
         let nextSelection = ContactInviteWalkthroughProgressReducer.reduce(
@@ -1213,7 +1213,7 @@ struct ContactInviteSheet: View {
 
     private func contactAccessibilityLabel(for contact: InviteContact) -> String {
         let detail = rowDetail(for: contact)
-        let relationship = contact.relationship.isOnRecme ? "Already on Astir" : "Phone contact"
+        let relationship = contact.relationship.isOnRecme ? "Already On Astir" : "Phone Contact"
         return [contact.displayName, detail, relationship].compactMap { $0 }.joined(separator: ", ")
     }
 
@@ -1298,13 +1298,13 @@ private struct ContactInviteWalkthroughGoalBanner: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isComplete ? "Your circle is ready" : "Start with five people")
+                    Text(isComplete ? "Your Circle Is Ready" : "Start With Five People")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(
                         isComplete
-                            ? "Nice. Their saves can make every search more useful."
-                            : "Pick up to five people whose taste you already trust. Fewer is fine too."
+                            ? "Nice. Their Saves Can Make Every Search More Useful."
+                            : "Pick Up To Five People Whose Taste You Already Trust. Fewer Is Fine Too."
                     )
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
@@ -1366,7 +1366,7 @@ private struct ContactInviteWalkthroughGoalBanner: View {
                 )
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(completedCount) of \(goal) invitations sent")
+        .accessibilityLabel("\(completedCount) Of \(goal) Invitations Sent")
         .onChange(of: isComplete, initial: true) { _, complete in
             guard complete, !reduceMotion else { return }
             withAnimation(.spring(response: 0.34, dampingFraction: 0.62)) {
@@ -1469,9 +1469,9 @@ private struct AlphabetScrubber: View {
         }
         .frame(width: WanderTheme.tapMinimum, height: 324)
         .accessibilityElement()
-        .accessibilityLabel("Contact index")
+        .accessibilityLabel("Contact Index")
         .accessibilityValue(letters[selectedIndex])
-        .accessibilityHint("Swipe up or down to jump through contact sections")
+        .accessibilityHint("Swipe Up Or Down To Jump Through Contact Sections")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment:

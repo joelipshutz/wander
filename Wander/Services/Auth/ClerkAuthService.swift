@@ -108,10 +108,10 @@ final class ClerkAuthService: AuthSessionProviding {
         if let publishableKey = configuration.clerkPublishableKey {
             let configuredPublishableKey = configureClerk(publishableKey)
             if configuredPublishableKey.isEmpty {
-                state = .unavailable("Missing Clerk publishable key.")
+                state = .unavailable("Missing Clerk Publishable Key.")
             }
         } else {
-            state = .unavailable("Missing Clerk publishable key.")
+            state = .unavailable("Missing Clerk Publishable Key.")
         }
     }
     #else
@@ -119,7 +119,7 @@ final class ClerkAuthService: AuthSessionProviding {
         self.configuration = configuration
         self.sessionCache = sessionCache
 
-        state = .unavailable("ClerkKit is not linked.")
+        state = .unavailable("ClerkKit Is Not Linked.")
     }
     #endif
 
@@ -198,7 +198,7 @@ final class ClerkAuthService: AuthSessionProviding {
         #if canImport(ClerkKit)
         await refreshSession(expectedSessionID: nil)
         #else
-        state = .unavailable("ClerkKit is not linked.")
+        state = .unavailable("ClerkKit Is Not Linked.")
         #if DEBUG
         WanderDebugLog.remote.error("clerk refresh unavailable reason=clerkkit_not_linked")
         #endif
@@ -213,7 +213,7 @@ final class ClerkAuthService: AuthSessionProviding {
         refreshGeneration &+= 1
         let generation = refreshGeneration
         guard configuration.isClerkConfigured else {
-            state = .unavailable("Missing Clerk publishable key.")
+            state = .unavailable("Missing Clerk Publishable Key.")
             #if DEBUG
             WanderDebugLog.remote.error("clerk refresh skipped reason=missing_publishable_key")
             #endif
@@ -284,11 +284,11 @@ final class ClerkAuthService: AuthSessionProviding {
                 state = .signedOut
                 return
             }
-            let message = "Could not verify your session. Your saved map is available offline."
+            let message = "Could Not Verify Your Session. Your Saved Map Is Available Offline."
             if let session = sessionCache.load() {
                 state = .offline(session, message: message)
             } else {
-                state = .unavailable("Could not verify your session. Check your connection and try again.")
+                state = .unavailable("Could Not Verify Your Session. Check Your Connection And Try Again.")
             }
             #if DEBUG
             WanderDebugLog.remote.error("clerk refresh failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")

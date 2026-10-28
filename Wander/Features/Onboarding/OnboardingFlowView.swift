@@ -247,15 +247,15 @@ struct OnboardingIdentityView: View {
                     if session.isAppleSignIn == true {
                         OnboardingHeadline(
                             eyebrow: "",
-                            title: "Choose your username",
-                            message: "This is how friends find you on Astir."
+                            title: "Choose Your Username",
+                            message: "This Is How Friends Find You On Astir."
                         )
                     }
                     VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                         Text("YOUR PROFILE")
                             .font(AstirTypography.metadata).tracking(1.4)
                             .foregroundStyle(AstirTheme.signal.color)
-                        ProfileIdentityHeader(name: draft.normalizedDisplayName.isEmpty ? "Your name" : draft.normalizedDisplayName) {
+                        ProfileIdentityHeader(name: draft.normalizedDisplayName.isEmpty ? "Your Name" : draft.normalizedDisplayName) {
                             PhotosPicker(selection: $selectedPhoto, matching: .images) {
                                 ZStack(alignment: .bottomTrailing) {
                                     Group {
@@ -281,17 +281,17 @@ struct OnboardingIdentityView: View {
                                         .overlay(Circle().stroke(AstirTheme.ink.color, lineWidth: 3))
                                 }
                             }
-                            .accessibilityLabel(previewImage == nil && existingAvatarURL == nil ? "Add an optional profile photo" : "Change profile photo")
+                            .accessibilityLabel(previewImage == nil && existingAvatarURL == nil ? "Add An Optional Profile Photo" : "Change Profile Photo")
                             .accessibilityIdentifier("onboarding.identity.photo")
                         } details: {
                             Text(draft.normalizedHandle.isEmpty ? "@username" : "@\(draft.normalizedHandle)")
                                 .font(AstirTypography.bodySmall)
                                 .foregroundStyle(AstirTheme.mutedOnInk.color)
-                            Text(previewImage == nil && existingAvatarURL == nil ? "Add a photo" : "Change photo")
+                            Text(previewImage == nil && existingAvatarURL == nil ? "Add A Photo" : "Change Photo")
                                 .font(AstirTypography.label)
                                 .foregroundStyle(AstirTheme.signal.color)
                         }
-                        Text("Make yourself easy to find.")
+                        Text("Make Yourself Easy To Find.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(AstirTheme.mutedOnInk.color)
                     }
@@ -301,7 +301,7 @@ struct OnboardingIdentityView: View {
                         if session.isAppleSignIn != true {
                             OnboardingTextField(
                                 title: "Name",
-                                prompt: "How friends know you",
+                                prompt: "How Friends Know You",
                                 text: $name,
                                 capitalization: .words
                             )
@@ -325,15 +325,15 @@ struct OnboardingIdentityView: View {
                                 switch availability {
                                 case .checking:
                                     ProgressView().controlSize(.small)
-                                    Text("Checking username…")
+                                    Text("Checking Username…")
                                 case .available:
                                     Image(systemName: "checkmark.circle.fill")
-                                    Text("Username available")
+                                    Text("Username Available")
                                 case .unavailable:
                                     Image(systemName: "xmark.circle.fill")
-                                    Text("That username is taken")
+                                    Text("That Username Is Taken")
                                 case .idle:
-                                    Text("2–39 letters, numbers, or underscores")
+                                    Text("2–39 Letters, Numbers, Or Underscores")
                                 }
                             }
                             .font(AstirTypography.caption)
@@ -359,7 +359,7 @@ struct OnboardingIdentityView: View {
             .scrollDismissesKeyboard(.interactively)
         } footer: {
             WanderPrimaryButton(
-                title: isSaving ? "Creating your profile…" : "Continue",
+                title: isSaving ? "Creating Your Profile…" : "Continue",
                 systemImage: isSaving ? nil : "arrow.right",
                 isDisabled: !canSubmit
             ) {
@@ -488,7 +488,7 @@ struct OnboardingIdentityView: View {
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data)
         else {
-            errorMessage = "That photo couldn’t be loaded. Try another one."
+            errorMessage = "That Photo Couldn’t Be Loaded. Try Another One."
             return
         }
         errorMessage = nil
@@ -538,7 +538,7 @@ private struct OnboardingLocationPermissionView: View {
             VStack(spacing: WanderTheme.spacing1) {
                 WanderPrimaryButton(
                     title: isRequesting
-                        ? "Requesting location…"
+                        ? "Requesting Location…"
                         : OnboardingLocationPermissionPolicy.primaryTitle(
                             for: permission.authorizationStatus
                         ),
@@ -549,7 +549,7 @@ private struct OnboardingLocationPermissionView: View {
                 .accessibilityIdentifier("onboarding.location.primary")
 
                 if permissionAction == .openSettings {
-                    Button("Not now") {
+                    Button("Not Now") {
                         trackResult("skipped")
                         continueAction()
                     }
@@ -631,7 +631,7 @@ private struct OnboardingPermissionView: View {
                     OnboardingWelcomePostcard()
                         .allowsHitTesting(false)
                         .padding(.vertical, WanderTheme.spacing6)
-                        .accessibilityLabel("Example of a friend’s activity on Astir")
+                        .accessibilityLabel("Example Of A Friend’s Activity On Astir")
 
                     OnboardingHeadline(eyebrow: "YOUR PEOPLE", title: title, message: message)
 
@@ -650,7 +650,7 @@ private struct OnboardingPermissionView: View {
             }
         } footer: {
             WanderPrimaryButton(
-                title: isRequesting ? "Opening settings…" : primaryTitle,
+                title: isRequesting ? "Opening Settings…" : primaryTitle,
                 isDisabled: isRequesting
             ) {
                 Task {
@@ -829,7 +829,7 @@ struct OnboardingStepScaffold<Content: View, Footer: View>: View {
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, WanderTheme.spacing3)
-            .accessibilityLabel("Onboarding step \(candidateIndex(step) + 1) of \(OnboardingStep.allCases.count)")
+            .accessibilityLabel("Onboarding Step \(candidateIndex(step) + 1) Of \(OnboardingStep.allCases.count)")
 
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
 

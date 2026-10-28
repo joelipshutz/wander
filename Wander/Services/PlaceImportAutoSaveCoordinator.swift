@@ -21,35 +21,35 @@ struct PlaceImportFinishedNotificationCopy: Equatable {
         sourceRetryCount: Int
     ) -> PlaceImportFinishedNotificationCopy {
         let sourceRetryCopy = sourceRetryCount == 1
-            ? "retry the incomplete source scan"
-            : "retry \(sourceRetryCount) incomplete source scans"
+            ? "Retry The Incomplete Source Scan"
+            : "Retry \(sourceRetryCount) Incomplete Source Scans"
         let title: String
         if savedCount == 0 {
             if sourceRetryCount > 0, needsReviewCount == 0 {
                 title = sourceRetryCount == 1
-                    ? "Your source scan needs a retry"
-                    : "\(sourceRetryCount) source scans need a retry"
+                    ? "Your Source Scan Needs A Retry"
+                    : "\(sourceRetryCount) Source Scans Need A Retry"
             } else {
-                title = "Your import needs a quick review"
+                title = "Your Import Needs A Quick Review"
             }
         } else {
             title = savedCount == 1
-                ? "1 place saved"
-                : "\(savedCount) places saved"
+                ? "1 Place Saved"
+                : "\(savedCount) Places Saved"
         }
 
         let body: String
         switch (needsReviewCount > 0, sourceRetryCount > 0) {
         case (true, true):
-            body = "Open Astir to verify what was saved, review \(needsReviewCount) more, and \(sourceRetryCopy)."
+            body = "Open Astir To Verify What Was Saved, Review \(needsReviewCount) More, And \(sourceRetryCopy)."
         case (true, false):
-            body = "Open Astir to verify what was saved and review \(needsReviewCount) more."
+            body = "Open Astir To Verify What Was Saved And Review \(needsReviewCount) More."
         case (false, true):
             body = savedCount > 0
-                ? "Open Astir to verify what was saved and \(sourceRetryCopy)."
-                : "Open Astir to \(sourceRetryCopy)."
+                ? "Open Astir To Verify What Was Saved And \(sourceRetryCopy)."
+                : "Open Astir To \(sourceRetryCopy)."
         case (false, false):
-            body = "Open Astir to verify the places from your import."
+            body = "Open Astir To Verify The Places From Your Import."
         }
         return PlaceImportFinishedNotificationCopy(title: title, body: body)
     }
@@ -354,7 +354,7 @@ enum PlaceImportAutoSaveCoordinator {
         )
         guard let list = store.createPlaceList(
             name: name,
-            description: "Imported from Google Maps",
+            description: "Imported From Google Maps",
             visibility: .stealth
         ) else { return nil }
         importStore.setDestinationListID(list.id, batchID: batch.id)

@@ -2655,7 +2655,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
         XCTAssertFalse(map.contains("Dropped pin. Tap + to add it."))
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))
-        XCTAssertTrue(card.contains("Label(\"Copy coordinates\", systemImage: \"doc.on.doc\")"))
+        XCTAssertTrue(card.contains("Label(\"Copy Coordinates\", systemImage: \"doc.on.doc\")"))
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
     }
     func testPassiveSingleTapObserverRecognizesImmediatelyWithoutBlockingMapMovement() {
@@ -2978,15 +2978,15 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapSource.you.systemImage, "person.fill")
         XCTAssertEqual(
             MapSource.featured.subtitle,
-            "Featured shows you recommendations based on your taste"
+            "Featured Shows You Recommendations Based On Your Taste"
         )
         XCTAssertEqual(
             MapSource.friends.subtitle,
-            "All places from everyone you follow"
+            "All Places From Everyone You Follow"
         )
         XCTAssertEqual(
             MapSource.you.subtitle,
-            "Only your check-ins and Wanna Go places"
+            "Only Your Check-Ins And Wanna Go Places"
         )
     }
 
@@ -4055,7 +4055,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             label,
-            "Bar Nido, Restaurant, you checked in, social checked in and wanna"
+            "Bar Nido, Restaurant, You Checked In, Social Checked In And Wanna"
         )
         XCTAssertFalse(label.localizedCaseInsensitiveContains("save"))
         XCTAssertFalse(label.localizedCaseInsensitiveContains("been"))

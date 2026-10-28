@@ -22,7 +22,7 @@ import XCTest
         followRepository.shouldFail = true
         await follows.refresh(userID: "recipient", repository: followRepository)
         XCTAssertEqual(plans.invitations, initialPlans)
-        XCTAssertEqual(message(), "Couldn’t refresh follower notifications")
+        XCTAssertEqual(message(), "Couldn’t Refresh Follower Notifications")
         XCTAssertNil(message(for: "other-account"))
 
         // Recovery need not change the original rows or trigger a screen refresh.
@@ -33,7 +33,7 @@ import XCTest
         XCTAssertNil(message())
         XCTAssertEqual(NotificationInboxRefreshStatus.errorMessage(
             userID: "recipient", plans: plans, follows: follows, checkInFailureUserID: "recipient"
-        ), "Couldn’t refresh check-in invitations")
+        ), "Couldn’t Refresh Check-In Invitations")
     }
 
     func testOverlappingFollowRefreshDiscardsEarlierFailure() async {

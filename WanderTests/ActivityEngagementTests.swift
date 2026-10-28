@@ -481,18 +481,18 @@ final class ActivityEngagementTests: XCTestCase {
         )
         XCTAssertEqual(
             ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_008),
-            .failed(message: "TikTok rejected the share image resolution.")
+            .failed(message: "TikTok Rejected The Share Image Resolution.")
         )
         XCTAssertEqual(
             ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_004),
             .failed(
-                message: "Sign in to the TikTok account enabled for this Astir sandbox, then try again."
+                message: "Sign In To The TikTok Account Enabled For This Astir Sandbox, Then Try Again."
             )
         )
         XCTAssertEqual(
             ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_001),
             .failed(
-                message: "TikTok could not finish this share. Try again or use More to share another way."
+                message: "TikTok Could Not Finish This Share. Try Again Or Use More To Share Another Way."
             )
         )
     }
@@ -615,20 +615,20 @@ final class ActivityEngagementTests: XCTestCase {
 
     func testShareCardCopyAndDatesFollowApprovedVariants() {
         let profile = ShareCardContent(kind: .profile, name: "Ryan Lieblein", ownerName: "Ryan Lieblein", detail: "@ryan")
-        XCTAssertEqual(profile.headline, "Discover Ryan’s world")
+        XCTAssertEqual(profile.headline, "Discover Ryan’s World")
         XCTAssertNil(profile.subtitle)
         let invitation = ShareCardContent(kind: .invitation, name: "Good nights, great tables", ownerName: "Ryan Lieblein", count: 4)
         XCTAssertNil(invitation.subtitle)
         XCTAssertEqual(invitation.action, "Join")
         XCTAssertEqual(ShareCardContent(kind: .list, name: "A long list name with many places", count: 4).action, "View")
         var wanna = ShareCardContent(kind: .wanna, name: "Bar Chelou", ownerName: "Ryan Lieblein")
-        XCTAssertEqual(wanna.subtitle, "Bar Chelou · On Ryan’s radar")
+        XCTAssertEqual(wanna.subtitle, "Bar Chelou · On Ryan’s Radar")
         XCTAssertEqual(wanna.action, "Let’s Go")
         wanna.date = Date(timeIntervalSince1970: 1_789_754_400)
         XCTAssertEqual(wanna.subtitle, "Bar Chelou · \(wanna.dateLabel!)")
-        XCTAssertFalse(wanna.socialTitle.contains("radar"))
+        XCTAssertFalse(wanna.socialTitle.contains("Radar"))
         wanna.date = nil
-        XCTAssertEqual(wanna.socialTitle, "On Ryan’s radar.")
+        XCTAssertEqual(wanna.socialTitle, "On Ryan’s Radar.")
     }
 
     func testShareCardWannaDateUsesExactEventAndRespectsExplicitlyUndatedRepeats() {
@@ -660,13 +660,13 @@ final class ActivityEngagementTests: XCTestCase {
 
     func testNativeLinkTitleIncludesContextForEveryShareKind() {
         let variants: [(ShareCardContent.Kind, String)] = [
-            (.profile, "Discover Ryan’s world"),
-            (.map, "Favorites · Ryan’s saved map · 4 places"),
-            (.list, "Favorites · 4 places · Curated by Ryan"),
+            (.profile, "Discover Ryan’s World"),
+            (.map, "Favorites · Ryan’s Saved Map · 4 Places"),
+            (.list, "Favorites · 4 Places · Curated By Ryan"),
             (.place, "Favorites · French restaurant"),
-            (.checkIn, "Ryan checked in · Favorites"),
-            (.wanna, "Ryan wants to go · Favorites · On Ryan’s radar"),
-            (.invitation, "Build this list with Ryan · Favorites"),
+            (.checkIn, "Ryan Checked In · Favorites"),
+            (.wanna, "Ryan Wants To Go · Favorites · On Ryan’s Radar"),
+            (.invitation, "Build This List With Ryan · Favorites"),
         ]
         for (kind, expected) in variants {
             let card = ShareCardContent(kind: kind, name: "Favorites", ownerName: "Ryan Lieblein",
@@ -1105,10 +1105,10 @@ final class ActivityEngagementTests: XCTestCase {
             occurredAt: .now
         )
 
-        XCTAssertEqual(checkIn.actionTitle, "checked in at")
-        XCTAssertEqual(wanna.actionTitle, "added to Wanna")
-        XCTAssertTrue(checkIn.shareMessage.contains("Judy's check-in at Ada Street"))
-        XCTAssertTrue(wanna.shareMessage.contains("Judy's Wanna pick Ada Street"))
+        XCTAssertEqual(checkIn.actionTitle, "Checked In At")
+        XCTAssertEqual(wanna.actionTitle, "Added To Wanna")
+        XCTAssertTrue(checkIn.shareMessage.contains("Judy's Check-In At Ada Street"))
+        XCTAssertTrue(wanna.shareMessage.contains("Judy's Wanna Pick Ada Street"))
 
         let list = ActivityEngagementContext(
             activityID: "list",
@@ -1121,8 +1121,8 @@ final class ActivityEngagementTests: XCTestCase {
             rating: 4.5,
             listContext: ActivityEngagementListContext(id: "list-chicago", name: "Best of Chicago")
         )
-        XCTAssertEqual(list.actionTitle, "saved to")
-        XCTAssertTrue(list.shareMessage.contains("list activity"))
+        XCTAssertEqual(list.actionTitle, "Saved To")
+        XCTAssertTrue(list.shareMessage.contains("List Activity"))
         XCTAssertEqual(list.rating, 4.5)
         XCTAssertEqual(list.listContext, ActivityEngagementListContext(id: "list-chicago", name: "Best of Chicago"))
     }

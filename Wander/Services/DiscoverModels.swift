@@ -19,12 +19,12 @@ enum DiscoverUnsupportedConcept: String, Codable, CaseIterable, Equatable, Hasha
 
     var displayTitle: String {
         switch self {
-        case .distance: "distance"
-        case .hours: "hours"
-        case .nearMe: "near me"
-        case .openNow: "open now"
-        case .price: "price"
-        case .recency: "recency"
+        case .distance: "Distance"
+        case .hours: "Hours"
+        case .nearMe: "Near Me"
+        case .openNow: "Open Now"
+        case .price: "Price"
+        case .recency: "Recency"
         }
     }
 }
@@ -102,7 +102,7 @@ extension DiscoverFilters {
         }
 
         if opinion == .favorite {
-            chips.append(DiscoverFilterChip(id: "opinion_favorite", title: "favorites"))
+            chips.append(DiscoverFilterChip(id: "opinion_favorite", title: "Favorites"))
         }
 
         chips.append(contentsOf: tags.sorted().map { tag in
@@ -734,16 +734,16 @@ enum DiscoverLatestActivityPresentation {
         let elapsed = max(0, now.timeIntervalSince(savedAt))
 
         if elapsed < 60 {
-            return "just now"
+            return "Just Now"
         }
         if elapsed < 60 * 60 {
-            return "\(Int(elapsed / 60))m ago"
+            return "\(Int(elapsed / 60))m Ago"
         }
         if elapsed < 24 * 60 * 60 {
-            return "\(Int(elapsed / (60 * 60)))h ago"
+            return "\(Int(elapsed / (60 * 60)))h Ago"
         }
         if elapsed < 7 * 24 * 60 * 60 {
-            return "\(Int(elapsed / (24 * 60 * 60)))d ago"
+            return "\(Int(elapsed / (24 * 60 * 60)))d Ago"
         }
 
         return absoluteDateText(for: savedAt, relativeTo: now, calendar: calendar)
@@ -1215,9 +1215,9 @@ enum DiscoverPlaceScope: String, CaseIterable, Identifiable, Equatable {
 
     var title: String {
         switch self {
-        case .myPlaces: "mine"
-        case .friendsPlaces: "friends"
-        case .everyone: "everyone"
+        case .myPlaces: "Mine"
+        case .friendsPlaces: "Friends"
+        case .everyone: "Everyone"
         }
     }
 
@@ -1344,10 +1344,10 @@ struct DeterministicFilterParser: LLMFilterParser {
 private extension ViewerRelationship {
     var discoverChipTitle: String {
         switch self {
-        case .owner: "mine"
-        case .mutual: "friends"
-        case .follower: "following"
-        case .nonFollower: "other people"
+        case .owner: "Mine"
+        case .mutual: "Friends"
+        case .follower: "Following"
+        case .nonFollower: "Other People"
         }
     }
 }

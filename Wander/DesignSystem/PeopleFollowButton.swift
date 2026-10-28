@@ -19,7 +19,7 @@ struct PeopleFollowButton: View {
             transaction.disablesAnimations = true
             withTransaction(transaction) { action() }
         } label: {
-            Text(showsFollowing ? "Following" : didFail ? "Try again" : "Follow")
+            Text(showsFollowing ? "Following" : didFail ? "Try Again" : "Follow")
                 .font(AstirTypography.label)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 .foregroundStyle(showsFollowing ? brandMode.primaryText : brandMode.accentForeground)
@@ -35,7 +35,7 @@ struct PeopleFollowButton: View {
         .disabled(showsFollowing)
         .transaction { $0.animation = nil; $0.disablesAnimations = true }
         .onAppear { feedback.prepare() }
-        .accessibilityLabel(showsFollowing ? "Following \(displayName)" : didFail ? "Couldn't follow \(displayName). Try again" : "Follow \(displayName)")
+        .accessibilityLabel(showsFollowing ? "Following \(displayName)" : didFail ? "Couldn't Follow \(displayName). Try Again" : "Follow \(displayName)")
     }
 }
 

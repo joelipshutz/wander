@@ -149,7 +149,7 @@ final class LinkPlaceParserTests: XCTestCase {
     func testShortLinkCopyIsSpecific() {
         XCTAssertEqual(
             PlaceResolutionError.shortLinkNeedsExtraction.localizedDescription,
-            "Short map links need extraction. Save this as a draft for now or add it manually."
+            "Short Map Links Need Extraction. Save This As A Draft For Now Or Add It Manually."
         )
     }
 }

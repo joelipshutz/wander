@@ -41,26 +41,26 @@ struct PrivateMessageThreadScreen: View {
             transcript
         }
         .background(brand.background.ignoresSafeArea())
-        .navigationTitle("Private reply").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Private Reply").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let conversation = state.conversation, let onOpenProfile {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { onOpenProfile(conversation.participant.id) } label: {
-                            Label("View profile", systemImage: "person.crop.circle")
-                        }.accessibilityHint("Open profile actions, including Block and Report")
+                            Label("View Profile", systemImage: "person.crop.circle")
+                        }.accessibilityHint("Open Profile Actions, Including Block And Report")
                             .accessibilityIdentifier("messaging.profile")
                     } label: {
                         Image(systemName: "ellipsis").frame(width: 44, height: 44)
                     }.foregroundStyle(brand.accentText)
-                        .accessibilityLabel("Conversation actions")
+                        .accessibilityLabel("Conversation Actions")
                         .accessibilityIdentifier("messaging.actions")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: refresh) { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .foregroundStyle(brand.accentText).disabled(state.isLoading)
-                    .accessibilityLabel("Refresh conversation").accessibilityIdentifier("messaging.thread.refresh")
+                    .accessibilityLabel("Refresh Conversation").accessibilityIdentifier("messaging.thread.refresh")
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -89,16 +89,16 @@ struct PrivateMessageThreadScreen: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     if state.isLoading && state.conversation == nil {
-                        ProgressView("Opening your conversation…").font(AstirTypography.bodySmall)
+                        ProgressView("Opening Your Conversation…").font(AstirTypography.bodySmall)
                             .frame(maxWidth: .infinity, minHeight: 180)
                             .accessibilityIdentifier("messaging.thread.loading")
                     } else if state.failed {
                         PrivateMessagingNotice(symbol: "lock.bubble",
-                                               title: "Conversation unavailable",
-                                               detail: "Try again when you’re connected. Private replies are available between mutual friends who can still access this conversation.",
-                                               actionTitle: "Try again", action: refresh)
+                                               title: "Conversation Unavailable",
+                                               detail: "Try Again When You’re Connected. Private Replies Are Available Between Mutual Friends Who Can Still Access This Conversation.",
+                                               actionTitle: "Try Again", action: refresh)
                         if state.pending != nil {
-                            Text("Your reply is kept here, but sending has not been confirmed. Refresh to check it before retrying.")
+                            Text("Your Reply Is Kept Here, But Sending Has Not Been Confirmed. Refresh To Check It Before Retrying.")
                                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                         }
                     } else if state.conversation != nil {
@@ -108,7 +108,7 @@ struct PrivateMessageThreadScreen: View {
                             } label: {
                                 HStack {
                                     if state.isLoadingEarlier { ProgressView() }
-                                    Text(state.isLoadingEarlier ? "Loading earlier messages…" : "Earlier messages")
+                                    Text(state.isLoadingEarlier ? "Loading Earlier Messages…" : "Earlier Messages")
                                 }.frame(maxWidth: .infinity, minHeight: 44)
                             }.font(AstirTypography.control).foregroundStyle(brand.accentText)
                                 .disabled(state.isLoadingEarlier || state.isLoading)
@@ -116,8 +116,8 @@ struct PrivateMessageThreadScreen: View {
                         }
                         if state.messages.isEmpty && state.pending == nil {
                             PrivateMessagingNotice(symbol: "bubble.left",
-                                                   title: "A private conversation starts here",
-                                                   detail: "Your reply goes to this person, not the public activity. Nothing is sent until you tap Send.")
+                                                   title: "A Private Conversation Starts Here",
+                                                   detail: "Your Reply Goes To This Person, Not The Public Activity. Nothing Is Sent Until You Tap Send.")
                         }
                         ForEach(state.messages) { message in
                             PrivateMessageBubble(message: message, isOwn: message.senderID == userID,
@@ -149,13 +149,13 @@ struct PrivateMessageThreadScreen: View {
                 PrivateMessageContextLabel(context: context, onOpen: onOpenContext)
             }
             HStack(alignment: .bottom, spacing: 10) {
-                TextField("Reply privately…", text: $state.draft, axis: .vertical)
+                TextField("Reply Privately…", text: $state.draft, axis: .vertical)
                     .font(AstirTypography.body).foregroundStyle(brand.primaryText)
                     .lineLimit(1...5).focused($composerFocused)
                     .padding(13).frame(minHeight: 48)
                     .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 18))
                     .disabled(state.pending != nil || state.isLoading)
-                    .accessibilityLabel("Private message")
+                    .accessibilityLabel("Private Message")
                     .accessibilityIdentifier("messaging.composer")
                     .sessionReplayMasked()
                 Button {
@@ -163,10 +163,10 @@ struct PrivateMessageThreadScreen: View {
                     Task { await state.send(repository: repository) }
                 } label: { Image(systemName: "arrow.up").font(.system(size: 18, weight: .semibold)) }
                     .buttonStyle(PrivateMessagingPrimaryButtonStyle()).disabled(!state.canSend)
-                    .accessibilityLabel("Send private message").accessibilityIdentifier("messaging.send")
+                    .accessibilityLabel("Send Private Message").accessibilityIdentifier("messaging.send")
             }
             HStack(alignment: .top) {
-                Label("Only you and this person", systemImage: "lock.fill")
+                Label("Only You And This Person", systemImage: "lock.fill")
                 Spacer(minLength: 12)
                 if state.draft.unicodeScalars.count > 1_800 {
                     Text("\(state.draft.unicodeScalars.count)/\(PrivateMessageDraftPolicy.maximumCharacters)")
@@ -186,7 +186,7 @@ struct PrivateMessageThreadScreen: View {
                 .sessionReplayMasked()
             HStack(spacing: 8) {
                 if pending.status == .sending { ProgressView().controlSize(.small) }
-                Text(pending.status == .sending ? "Sending…" : "Not confirmed")
+                Text(pending.status == .sending ? "Sending…" : "Not Confirmed")
                     .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 if pending.status == .unconfirmed {
                     Button("Retry") { Task { await state.retryPending(repository: repository) } }
@@ -195,7 +195,7 @@ struct PrivateMessageThreadScreen: View {
                 }
             }
             if pending.status == .unconfirmed {
-                Text(state.sendFailure == .rateLimited ? "Please wait a moment before trying again." : "Retry checks the same reply, so it won’t send a duplicate.")
+                Text(state.sendFailure == .rateLimited ? "Please Wait A Moment Before Trying Again." : "Retry Checks The Same Reply, So It Won’t Send A Duplicate.")
                     .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -241,7 +241,7 @@ struct PrivateMessageContextLabel: View {
         Group {
             if context.title != nil, let onOpen {
                 Button { onOpen(context) } label: { label.frame(minHeight: 44, alignment: .leading) }
-                    .buttonStyle(.plain).accessibilityHint("Opens the original place or activity")
+                    .buttonStyle(.plain).accessibilityHint("Opens The Original Place Or Activity")
             } else { label }
         }.sessionReplayMasked()
     }
@@ -249,7 +249,7 @@ struct PrivateMessageContextLabel: View {
     private var label: some View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: context.kind == .activity ? "quote.bubble" : "mappin.and.ellipse").accessibilityHidden(true)
-            Text(context.title.map { "About \($0)" } ?? "Original \(context.kind == .activity ? "activity" : "place") unavailable")
+            Text(context.title.map { "About \($0)" } ?? "Original \(context.kind == .activity ? "Activity" : "Place") Unavailable")
                 .fixedSize(horizontal: false, vertical: true)
         }.font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
     }

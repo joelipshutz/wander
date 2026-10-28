@@ -11,7 +11,7 @@ struct PrivateMessagingInactiveCover: ViewModifier {
             if scenePhase != .active {
                 ZStack {
                     brand.background.ignoresSafeArea()
-                    Label("Private messages", systemImage: "lock.fill")
+                    Label("Private Messages", systemImage: "lock.fill")
                         .font(AstirTypography.cardTitle).foregroundStyle(brand.primaryText)
                 }
                 .accessibilityIdentifier("messaging.inactiveCover")
@@ -28,7 +28,7 @@ protocol PrivateMessageSimulationIdentifying {
 struct PrivateMessagingSimulationLabel: View {
     @Environment(\.astirBrandMode) private var brand
     var body: some View {
-        Label("Demo messages · nothing is delivered", systemImage: "testtube.2")
+        Label("Demo Messages · Nothing Is Delivered", systemImage: "testtube.2")
             .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("messaging.simulation")
@@ -40,10 +40,10 @@ struct PrivateMessagingSimulationLabel: View {
 struct PrivateMessagingPrivacyLabel: View {
     @Environment(\.astirBrandMode) private var brand
     var body: some View {
-        Label("Private conversation", systemImage: "lock.fill")
+        Label("Private Conversation", systemImage: "lock.fill")
             .font(AstirTypography.caption)
             .foregroundStyle(brand.secondaryText)
-            .accessibilityLabel("Private conversation between you and this person")
+            .accessibilityLabel("Private Conversation Between You And This Person")
     }
 }
 

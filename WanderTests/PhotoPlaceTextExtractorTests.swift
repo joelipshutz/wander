@@ -133,7 +133,7 @@ final class PhotoPlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(resolution.candidates, [])
         XCTAssertEqual(
             resolution.message,
-            "Read \"Chamberlain Coffee\" from the photo. Confirm or edit it, then tap find this place."
+            "Read \"Chamberlain Coffee\" From The Photo. Confirm Or Edit It, Then Tap Find This Place."
         )
     }
 
@@ -152,7 +152,7 @@ final class PhotoPlaceImportResolverTests: XCTestCase {
         XCTAssertNil(resolution.manualName)
         XCTAssertEqual(
             resolution.message,
-            "We could not read a place from that photo yet. Add it manually if you want it on your map now."
+            "We Could Not Read A Place From That Photo Yet. Add It Manually If You Want It On Your Map Now."
         )
     }
 }

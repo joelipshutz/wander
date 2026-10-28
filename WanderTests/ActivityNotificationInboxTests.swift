@@ -37,7 +37,7 @@ import XCTest
         let plans = PlacePlanInvitationInbox()
         let follows = FollowNotificationInbox()
         XCTAssertEqual(NotificationInboxRefreshStatus.errorMessage(userID: "recipient", plans: plans, follows: follows,
-            checkInFailureUserID: nil, activity: inbox), "Couldn’t refresh recent activity")
+            checkInFailureUserID: nil, activity: inbox), "Couldn’t Refresh Recent Activity")
         XCTAssertNil(NotificationInboxRefreshStatus.errorMessage(userID: "other", plans: plans, follows: follows,
             checkInFailureUserID: nil, activity: inbox))
         await inbox.refresh(userID: "recipient", repository: repository)

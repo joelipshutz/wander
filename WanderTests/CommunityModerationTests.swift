@@ -65,7 +65,7 @@ final class CommunityModerationTests: XCTestCase {
 
     func testReportAuthGateExplainsWhySignInIsRequired() {
         let copy = AuthGateIntent.reportContent.copy
-        XCTAssertEqual(copy.title, "Sign in to send a report")
-        XCTAssertTrue(copy.message.contains("safety team"))
+        XCTAssertEqual(copy.title, "Sign In To Send A Report")
+        XCTAssertTrue(copy.message.contains("Safety Team"))
     }
 }

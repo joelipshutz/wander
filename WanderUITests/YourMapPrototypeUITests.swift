@@ -125,14 +125,14 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertFalse(app.buttons["yourMap.prototype.filters"].exists)
         XCTAssertFalse(app.buttons["yourMap.snapshot"].exists)
         XCTAssertFalse(app.buttons["yourMap.prototype.mode"].exists)
-        XCTAssertFalse(app.buttons["Share this lens"].exists)
+        XCTAssertFalse(app.buttons["Share This Lens"].exists)
         XCTAssertFalse(app.navigationBars.firstMatch.exists, "The native Your Map header must yield to the place profile header")
         capture("REC-574 full place detail from Your Map")
         back.tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["yourMap.prototype.filters"].exists)
         XCTAssertTrue(app.buttons["yourMap.snapshot"].exists)
-        XCTAssertTrue(app.buttons["Share this lens"].exists)
+        XCTAssertTrue(app.buttons["Share This Lens"].exists)
         XCTAssertTrue(app.navigationBars.firstMatch.exists)
         XCTAssertEqual(finalSelectedPin.frame.midX, selectedFrame.midX, accuracy: 5)
         XCTAssertEqual(finalSelectedPin.frame.midY, selectedFrame.midY, accuracy: 5)
@@ -168,13 +168,13 @@ final class YourMapPrototypeUITests: XCTestCase {
             app.swipeUp()
         }
         preview.tap()
-        app.buttons["Share this lens"].tap()
+        app.buttons["Share This Lens"].tap()
         XCTAssertTrue(app.segmentedControls["share.format"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["share.card"].exists)
         XCTAssertFalse(app.segmentedControls["yourMap.prototype.shareFormat"].exists)
         capture("Linked map card")
-        app.buttons["Close share preview"].tap()
-        XCTAssertTrue(app.buttons["Share this lens"].waitForExistence(timeout: 5))
+        app.buttons["Close Share Preview"].tap()
+        XCTAssertTrue(app.buttons["Share This Lens"].waitForExistence(timeout: 5))
     }
 
     func testGeographyExpandsAndCollapsesInPlaceWithoutUnknowns() {
@@ -393,7 +393,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["View snapshot list"].exists)
         capture("REC-413 Snapshot saved toast")
         toast.tap()
-        XCTAssertTrue(app.staticTexts["edit list"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Edit List"].waitForExistence(timeout: 5))
         let title = app.textFields.firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.tap()
@@ -417,7 +417,7 @@ final class YourMapPrototypeUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(collaborators.isHittable)
-        XCTAssertTrue(app.buttons["Save changes"].exists)
+        XCTAssertTrue(app.buttons["Save Changes"].exists)
         XCTAssertTrue(app.buttons["Delete List"].exists)
         capture("REC-480 Snapshot list editor without duplicate places")
     }

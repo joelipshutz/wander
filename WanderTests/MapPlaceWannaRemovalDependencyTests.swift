@@ -295,7 +295,7 @@ final class MapPlaceWannaRemovalDependencyTests: XCTestCase {
         XCTAssertEqual(store.placeWannaSaves.map(\.id), wannaIDs)
         XCTAssertNil(source.userPlace.deletedAt)
         XCTAssertEqual(source.userPlace.status, .wannaGo)
-        XCTAssertTrue(MapPlaceWannaHistoryError.unavailable.localizedDescription.contains("turn off Remove from Wanna"))
+        XCTAssertTrue(MapPlaceWannaHistoryError.unavailable.localizedDescription.contains("Turn Off Remove From Wanna"))
     }
 
     func testHistoryPreparationRejectsSameAccountReloginAndStalePreparedMarker() async throws {
@@ -361,7 +361,7 @@ final class MapPlaceWannaRemovalDependencyTests: XCTestCase {
         let completed = await completeSourceWannaRemovalAfterCheckIn(
             SaveResult(userPlaceID: first.userPlace.id, syncState: .synced), visit: visit,
             submission: submitted, store: store, backend: backend)
-        XCTAssertTrue(completed.localDetailsWarning?.contains("pending") == true)
+        XCTAssertTrue(completed.localDetailsWarning?.contains("Pending") == true)
         store.flushPersistence()
         let restored = WanderStore(fixtures: .seed(), persistence: persistence)
         let tombstone = try XCTUnwrap(restored.placeWannaSaves.first { $0.replacementVisitID == visit.localID })
@@ -396,7 +396,7 @@ final class MapPlaceWannaRemovalDependencyTests: XCTestCase {
         let result = await completeSourceWannaRemovalAfterCheckIn(
             SaveResult(userPlaceID: first.userPlace.id, syncState: .synced), visit: visit,
             submission: submitted, store: store, backend: backend)
-        XCTAssertTrue(result.localDetailsWarning?.contains("pending") == true)
+        XCTAssertTrue(result.localDetailsWarning?.contains("Pending") == true)
         XCTAssertEqual(repository.deletedIDs.count, 1)
         XCTAssertNotEqual(repository.deletedIDs.first, repeatID)
         repository.failedIDs = []

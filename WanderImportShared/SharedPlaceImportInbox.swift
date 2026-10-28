@@ -139,23 +139,23 @@ enum SharedPlaceImportInboxError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .appGroupUnavailable:
-            "Astir could not access its shared inbox. Check the app and extension App Group signing."
+            "Astir Could Not Access Its Shared Inbox. Check The App And Extension App Group Signing."
         case .noSupportedContent:
-            "Share a public link, place text, or a supported place file."
+            "Share A Public Link, Place Text, Or A Supported Place File."
         case .tooManyItems:
-            "Share 20 or fewer items at a time."
+            "Share 20 Or Fewer Items At A Time."
         case .textTooLarge:
-            "The shared text is too large. Try a shorter selection or a supported file."
+            "The Shared Text Is Too Large. Try A Shorter Selection Or A Supported File."
         case .fileTooLarge:
-            "That file is over 10 MB. Choose a smaller CSV, JSON, text, Markdown, or RTF file."
+            "That File Is Over 10 MB. Choose A Smaller CSV, JSON, Text, Markdown, Or RTF File."
         case .totalPayloadTooLarge:
-            "This share is over 25 MB. Share fewer files at a time."
+            "This Share Is Over 25 MB. Share Fewer Files At A Time."
         case .unsupportedFile:
-            "Choose a CSV, JSON, TXT, Markdown, or RTF file."
+            "Choose A CSV, JSON, TXT, Markdown, Or RTF File."
         case .invalidEnvelope:
-            "The shared import was damaged before Astir could read it."
+            "The Shared Import Was Damaged Before Astir Could Read It."
         case .missingAttachment:
-            "A shared file is no longer available. Share it to Astir again."
+            "A Shared File Is No Longer Available. Share It To Astir Again."
         }
     }
 }

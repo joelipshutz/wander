@@ -5,7 +5,7 @@ final class OnboardingWelcomeTests: XCTestCase {
     func testStaticOpeningIncludesFinalPhraseAndCompleteAccessibleCopy() throws {
         let content = try XCTUnwrap(OnboardingWelcomeConfiguration.resolved(environment: [:]).ticker)
         XCTAssertTrue(OnboardingTickerFrame.at(elapsed: content.staticElapsed, content: content).showsFinalLockup)
-        for phrase in ["Connect with your", "community", "people", "places", "loved ones", "a local experiment"] {
+        for phrase in ["Connect With Your", "Community", "People", "Places", "Loved Ones", "A Local Experiment"] {
             XCTAssertTrue(content.staticAccessibilityLabel.contains(phrase))
         }
     }
@@ -60,10 +60,10 @@ final class OnboardingWelcomeTests: XCTestCase {
     func testCurrentDefaultsStartWithConfirmedOpeningThenNativeBenefits() throws {
         let configuration = OnboardingWelcomeConfiguration.resolved(environment: [:])
         let ticker = try XCTUnwrap(configuration.ticker)
-        XCTAssertEqual(ticker.stableText, "Connect with your")
-        XCTAssertEqual(ticker.words, ["community", "people", "places", "loved ones"])
-        XCTAssertEqual(ticker.description, "Keep track of everywhere you’ve been. Keep up with the people you love.")
-        XCTAssertEqual(ticker.finalLockup, "a local experiment")
+        XCTAssertEqual(ticker.stableText, "Connect With Your")
+        XCTAssertEqual(ticker.words, ["Community", "People", "Places", "Loved Ones"])
+        XCTAssertEqual(ticker.description, "Keep Track Of Everywhere You’ve Been. Keep Up With The People You Love.")
+        XCTAssertEqual(ticker.finalLockup, "A Local Experiment")
         XCTAssertTrue(configuration.descriptionIsDelayed)
         XCTAssertEqual(configuration.steps, [.opening, .places, .people])
         XCTAssertEqual(configuration.next(after: .opening), .places)
@@ -81,8 +81,8 @@ final class OnboardingWelcomeTests: XCTestCase {
             "WANDER_ONBOARDING_DELAY_DESCRIPTION": "0"
         ])
         XCTAssertEqual(configuration.ticker?.description, "An alternative supporting line.")
-        XCTAssertEqual(configuration.ticker?.words, ["community", "people", "places", "loved ones"])
-        XCTAssertEqual(configuration.ticker?.finalLockup, "a local experiment")
+        XCTAssertEqual(configuration.ticker?.words, ["Community", "People", "Places", "Loved Ones"])
+        XCTAssertEqual(configuration.ticker?.finalLockup, "A Local Experiment")
         XCTAssertFalse(configuration.descriptionIsDelayed)
     }
 
@@ -90,7 +90,7 @@ final class OnboardingWelcomeTests: XCTestCase {
         let configuration = OnboardingWelcomeConfiguration.resolved(environment: [
             "WANDER_ONBOARDING_TICKER_WORDS": "not a JSON list"
         ])
-        XCTAssertEqual(configuration.ticker?.words, ["community", "people", "places", "loved ones"])
+        XCTAssertEqual(configuration.ticker?.words, ["Community", "People", "Places", "Loved Ones"])
         XCTAssertEqual(configuration.steps.first, .opening)
     }
     #endif

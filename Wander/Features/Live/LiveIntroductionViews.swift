@@ -10,10 +10,10 @@ struct LiveIntroductionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(audience == .returning ? "Your Feed now has a map" : "Welcome to Live")
+            Text(audience == .returning ? "Your Feed Now Has A Map" : "Welcome To Live")
                 .font(AstirTypography.cardTitle).foregroundStyle(brand.primaryText)
                 .accessibilityAddTraits(.isHeader)
-            Text("Explore your people’s activity in the Feed or on its map. Your Map is still in Profile.")
+            Text("Explore Your People’s Activity In The Feed Or On Its Map. Your Map Is Still In Profile.")
                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             if dynamicTypeSize.isAccessibilitySize {
@@ -29,10 +29,10 @@ struct LiveIntroductionCard: View {
     }
 
     @ViewBuilder private var actions: some View {
-        Button("Show me", action: onShowMe)
+        Button("Show Me", action: onShowMe)
             .font(AstirTypography.control).foregroundStyle(brand.accentText)
             .frame(minHeight: 44).accessibilityIdentifier("live.introduction.showMe")
-        Button("Not now", action: onNotNow)
+        Button("Not Now", action: onNotNow)
             .font(AstirTypography.control).foregroundStyle(brand.secondaryText)
             .frame(minHeight: 44).accessibilityIdentifier("live.introduction.notNow")
     }
@@ -80,7 +80,7 @@ struct LiveIntroductionGuide: View {
                     .accessibilityAddTraits(.isHeader)
                 Text(step.message).font(AstirTypography.body).foregroundStyle(brand.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(index + 1) of \(steps.count)")
+                Text("\(index + 1) Of \(steps.count)")
                     .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 VStack(spacing: 8) {
                     Button(index == steps.count - 1 ? "Done" : "Next", action: advance)
@@ -95,13 +95,13 @@ struct LiveIntroductionGuide: View {
                             .accessibilityIdentifier("live.introduction.previous")
                     }
                 }
-                Text("You can revisit this guide in Settings → What’s changed.")
+                Text("You Can Revisit This Guide In Settings → What’s Changed.")
                     .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(brand.background.ignoresSafeArea())
-        .navigationTitle("What’s changed")
+        .navigationTitle("What’s Changed")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
@@ -139,8 +139,8 @@ struct LiveIntroductionMigrationCard: View {
     let onPresented: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Continue where you left off").font(AstirTypography.cardTitle)
-            Text("Your unfinished guide and saved details are still here. Continue now, or find them in Settings → What’s changed.")
+            Text("Continue Where You Left Off").font(AstirTypography.cardTitle)
+            Text("Your Unfinished Guide And Saved Details Are Still Here. Continue Now, Or Find Them In Settings → What’s Changed.")
                 .font(AstirTypography.bodySmall).fixedSize(horizontal: false, vertical: true)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 24) { actions }
@@ -154,7 +154,7 @@ struct LiveIntroductionMigrationCard: View {
     @ViewBuilder private var actions: some View {
         Button("Continue", action: onContinue).foregroundStyle(brand.accentText)
             .frame(minHeight: 44).accessibilityIdentifier("live.migration.continue")
-        Button("Not now", action: onNotNow).foregroundStyle(brand.secondaryText)
+        Button("Not Now", action: onNotNow).foregroundStyle(brand.secondaryText)
             .frame(minHeight: 44).accessibilityIdentifier("live.migration.notNow")
     }
 }
@@ -176,7 +176,7 @@ struct LiveIntroductionReplayView: View {
             if let record, !record.isComplete {
                 List {
                     if record.recovery != nil {
-                        Section("Your unfinished step") {
+                        Section("Your Unfinished Step") {
                             Text(recoveryMessage(record))
                             Button("Continue") {
                                 guard let latest = LiveIntroductionMigrationStore().load(for: userID),
@@ -189,31 +189,31 @@ struct LiveIntroductionReplayView: View {
                                 dismiss()
                             }.accessibilityIdentifier("live.migration.openRecovery")
                                 .disabled(!auth.isSessionValidated)
-                            Text("Opening a screen does not complete a save, send an invitation, or change permissions.")
+                            Text("Opening A Screen Does Not Complete A Save, Send An Invitation, Or Change Permissions.")
                                 .font(.footnote).foregroundStyle(.secondary)
-                            Button("Dismiss this old tutorial step") {
+                            Button("Dismiss This Old Tutorial Step") {
                                 guard store.currentUser.id == userID else { return }
                                 self.record = LiveIntroductionMigrationStore().dismissRecovery(userID: userID, recordID: record.id)
                                 LiveIntroductionRecoveryCenter.shared.didChange()
                             }.accessibilityIdentifier("live.migration.dismissOldStep")
-                            Text("This dismisses only the tutorial reminder. Saved drafts, permissions and invitations remain unchanged.")
+                            Text("This Dismisses Only The Tutorial Reminder. Saved Drafts, Permissions And Invitations Remain Unchanged.")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }
                     if !record.pendingSteps.isEmpty {
-                        NavigationLink("Continue the Live guide") {
+                        NavigationLink("Continue The Live Guide") {
                             LiveIntroductionGuide(initialStep: record.pendingSteps[0], steps: record.pendingSteps,
                                 onStepAcknowledged: { step in acknowledge(step, record: record) })
                         }.accessibilityIdentifier("live.migration.guide")
                     }
                     if record.pendingSteps.isEmpty, record.recovery == nil, !record.isComplete {
-                        Text("This older guide contains a step this version cannot restore. Its original checkpoint is preserved; it has not been marked complete.")
+                        Text("This Older Guide Contains A Step This Version Cannot Restore. Its Original Checkpoint Is Preserved; It Has Not Been Marked Complete.")
                     }
-                    NavigationLink("Review the whole guide") { LiveIntroductionGuide() }
+                    NavigationLink("Review The Whole Guide") { LiveIntroductionGuide() }
                 }
             } else { LiveIntroductionGuide() }
         }
-        .navigationTitle("What’s changed").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("What’s Changed").navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .disabled(recoveryHandoff.hasPendingRequest)
         .onChange(of: store.currentUser.id) { _, id in
@@ -239,12 +239,12 @@ struct LiveIntroductionReplayView: View {
     private func recoveryMessage(_ record: LiveIntroductionMigrationRecord) -> String {
         switch record.recovery {
         case .retained(.saveFlow, _), .retained(.add, _):
-            "Continue reopens your saved form when it is available. Otherwise, it starts a new save using the previous place name when available. Add the date, notes and photos again."
-        case .retainedLesson(.contactInvite): "Your invitation step is optional. Continue with your previous selection; nothing is sent automatically."
-        case .retainedLesson(.deviceFeaturesLesson), .retainedLesson(.awaitingDeviceFeaturesLesson): "Review the existing widget and device setup guide. No permission is requested automatically."
-        case .retainedLesson(.importLesson): "Open the existing import flow when you are ready. Your imports stay unchanged."
-        case .retained(.listDetail, _), .retained(.listEditor, _): "Continue opens Lists so you can choose the list you want to return to."
-        default: "Continue takes you back to the relevant screen so you can pick up where you left off."
+            "Continue Reopens Your Saved Form When It Is Available. Otherwise, It Starts A New Save Using The Previous Place Name When Available. Add The Date, Notes And Photos Again."
+        case .retainedLesson(.contactInvite): "Your Invitation Step Is Optional. Continue With Your Previous Selection; Nothing Is Sent Automatically."
+        case .retainedLesson(.deviceFeaturesLesson), .retainedLesson(.awaitingDeviceFeaturesLesson): "Review The Existing Widget And Device Setup Guide. No Permission Is Requested Automatically."
+        case .retainedLesson(.importLesson): "Open The Existing Import Flow When You Are Ready. Your Imports Stay Unchanged."
+        case .retained(.listDetail, _), .retained(.listEditor, _): "Continue Opens Lists So You Can Choose The List You Want To Return To."
+        default: "Continue Takes You Back To The Relevant Screen So You Can Pick Up Where You Left Off."
         }
     }
 }
@@ -254,16 +254,16 @@ struct LiveIntroductionDeviceRecoveryView: View {
     let onAcknowledged: () -> Void
     var body: some View {
         List {
-            Section("Astir, one press away") {
-                Label("Choose Astir Check In for Action Button or Controls", systemImage: "button.programmable")
-                Label("Add Quick Add, Search, Activity or Nearby widgets", systemImage: "square.grid.2x2")
-                Label("Send places to Astir from another app’s share sheet", systemImage: "square.and.arrow.up")
-                Link("Setup guide", destination: WalkthroughHelpDestination.extensions)
-                Text("These are optional setup instructions. This guide does not request or change device permissions.")
+            Section("Astir, One Press Away") {
+                Label("Choose Astir Check In For Action Button Or Controls", systemImage: "button.programmable")
+                Label("Add Quick Add, Search, Activity Or Nearby Widgets", systemImage: "square.grid.2x2")
+                Label("Send Places To Astir From Another App’s Share Sheet", systemImage: "square.and.arrow.up")
+                Link("Setup Guide", destination: WalkthroughHelpDestination.extensions)
+                Text("These Are Optional Setup Instructions. This Guide Does Not Request Or Change Device Permissions.")
                     .font(.footnote).foregroundStyle(.secondary)
-                Button("Got it", action: onAcknowledged).accessibilityIdentifier("live.migration.deviceAcknowledged")
+                Button("Got It", action: onAcknowledged).accessibilityIdentifier("live.migration.deviceAcknowledged")
             }
-        }.navigationTitle("Device setup")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Not now") { dismiss() } } }
+        }.navigationTitle("Device Setup")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Not Now") { dismiss() } } }
     }
 }

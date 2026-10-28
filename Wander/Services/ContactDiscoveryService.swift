@@ -10,9 +10,9 @@ enum ContactDiscoveryError: Error, LocalizedError {
     case permissionDenied, tooManyContacts, unavailable
     var errorDescription: String? {
         switch self {
-        case .permissionDenied: "Allow Contacts access in iOS Settings to find friends. You can still search by name."
-        case .tooManyContacts: "Choose fewer contacts in iOS Settings to find friends. You can still search by name."
-        case .unavailable: "Contact matching couldn’t load. You can try again or search by name."
+        case .permissionDenied: "Allow Contacts Access In iOS Settings To Find Friends. You Can Still Search By Name."
+        case .tooManyContacts: "Choose Fewer Contacts In iOS Settings To Find Friends. You Can Still Search By Name."
+        case .unavailable: "Contact Matching Couldn’t Load. You Can Try Again Or Search By Name."
         }
     }
 }

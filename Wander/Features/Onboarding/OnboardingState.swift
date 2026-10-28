@@ -523,7 +523,7 @@ final class AppEntryCoordinator: ObservableObject {
                 let canContinue = AppEntryStateResolver.canContinueOffline(localState: local)
                 state = .recoverableFailure(
                     session: session,
-                    message: "We couldn’t check your profile. Try again, or continue if you’re offline.",
+                    message: "We Couldn’t Check Your Profile. Try Again, Or Continue If You’re Offline.",
                     canContinueOffline: canContinue
                 )
             }

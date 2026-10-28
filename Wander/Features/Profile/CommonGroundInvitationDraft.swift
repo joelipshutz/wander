@@ -11,46 +11,46 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
         let personalNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard personalNote.isEmpty else { return personalNote }
         switch place.linkage {
-        case .sharedRegulars: return "We’re both regulars at \(place.name)\nLet’s go together?"
-        case .sharedLove: return "We both loved \(place.name)\nRound two?"
-        case .mutualWanna: return "We both wanna go to \(place.name)\nLet’s make a plan?"
-        case .partnerBeenViewerWanna: return "You’ve been to \(place.name) and I wanna go\nTake me next time?"
-        case .viewerBeenPartnerWanna: return "I’ve been to \(place.name) and you wanna go\nLet’s make a plan?"
-        case .partnerLoves: return "You love \(place.name)\nTake me next time?"
-        case .viewerLoves: return "I love \(place.name)\nLet me show you why"
-        case .bothBeen: return "We’ve both been to \(place.name)\nGo back together?"
-        default: return "Want to go to \(place.name)?"
+        case .sharedRegulars: return "We’re Both Regulars At \(place.name)\nLet’s Go Together?"
+        case .sharedLove: return "We Both Loved \(place.name)\nRound Two?"
+        case .mutualWanna: return "We Both Wanna Go To \(place.name)\nLet’s Make A Plan?"
+        case .partnerBeenViewerWanna: return "You’ve Been To \(place.name) And I Wanna Go\nTake Me Next Time?"
+        case .viewerBeenPartnerWanna: return "I’ve Been To \(place.name) And You Wanna Go\nLet’s Make A Plan?"
+        case .partnerLoves: return "You Love \(place.name)\nTake Me Next Time?"
+        case .viewerLoves: return "I Love \(place.name)\nLet Me Show You Why"
+        case .bothBeen: return "We’ve Both Been To \(place.name)\nGo Back Together?"
+        default: return "Want To Go To \(place.name)?"
         }
     }
 
     var reasonTitle: String {
         switch place.linkage {
-        case .sharedRegulars: "You’re both regulars at \(place.name)"
-        case .sharedLove: "You both love this place"
+        case .sharedRegulars: "You’re Both Regulars At \(place.name)"
+        case .sharedLove: "You Both Love This Place"
         case .mutualWanna: "Both Wanna Go"
-        case .viewerBeenPartnerWanna: "You’ve been and \(place.partner.shortName) wants to go"
-        case .partnerBeenViewerWanna: "\(place.partner.shortName)’s been and you wanna go"
-        case .partnerLoves: "\(place.partner.shortName) loves this place"
-        case .viewerLoves: "You love this place, show \(place.partner.shortName)"
-        case .bothBeen: "You’ve both been here"
-        case .viewerBeen: "You’ve been here"
-        case .partnerBeen: "\(place.partner.shortName)’s been here"
-        case .viewerWanna: "You wanna go"
-        case .partnerWanna: "\(place.partner.shortName) wants to go"
-        case .sharedPlace: "A place for you two"
+        case .viewerBeenPartnerWanna: "You’ve Been And \(place.partner.shortName) Wants To Go"
+        case .partnerBeenViewerWanna: "\(place.partner.shortName)’s Been And You Wanna Go"
+        case .partnerLoves: "\(place.partner.shortName) Loves This Place"
+        case .viewerLoves: "You Love This Place, Show \(place.partner.shortName)"
+        case .bothBeen: "You’ve Both Been Here"
+        case .viewerBeen: "You’ve Been Here"
+        case .partnerBeen: "\(place.partner.shortName)’s Been Here"
+        case .viewerWanna: "You Wanna Go"
+        case .partnerWanna: "\(place.partner.shortName) Wants To Go"
+        case .sharedPlace: "A Place For You Two"
         }
     }
 
     var recipientReasonTitle: String {
         switch place.linkage {
-        case .viewerBeenPartnerWanna: "\(place.viewer.shortName)’s been and you wanna go"
-        case .partnerBeenViewerWanna: "You’ve been and \(place.viewer.shortName) wants to go"
-        case .partnerLoves: "You love this place, show \(place.viewer.shortName)"
-        case .viewerLoves: "\(place.viewer.shortName) loves this place"
-        case .viewerBeen: "\(place.viewer.shortName)’s been here"
-        case .partnerBeen: "You’ve been here"
-        case .viewerWanna: "\(place.viewer.shortName) wants to go"
-        case .partnerWanna: "You wanna go"
+        case .viewerBeenPartnerWanna: "\(place.viewer.shortName)’s Been And You Wanna Go"
+        case .partnerBeenViewerWanna: "You’ve Been And \(place.viewer.shortName) Wants To Go"
+        case .partnerLoves: "You Love This Place, Show \(place.viewer.shortName)"
+        case .viewerLoves: "\(place.viewer.shortName) Loves This Place"
+        case .viewerBeen: "\(place.viewer.shortName)’s Been Here"
+        case .partnerBeen: "You’ve Been Here"
+        case .viewerWanna: "\(place.viewer.shortName) Wants To Go"
+        case .partnerWanna: "You Wanna Go"
         default: reasonTitle
         }
     }
@@ -65,7 +65,7 @@ struct CommonGroundInvitationDraft: Hashable, Sendable {
 
     /// The composer, shared artwork, and hosted invitation use this title/date.
     var linkTitle: String {
-        "Let’s go to \(place.name) together"
+        "Let’s Go To \(place.name) Together"
     }
 
     var linkSubtitle: String {

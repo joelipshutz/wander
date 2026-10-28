@@ -5,14 +5,14 @@ enum ClipError: Error, Equatable {
 
     var message: String {
         switch self {
-        case .unavailable: "This link is no longer available, or your account doesn't have access."
-        case .connection: "Check your connection, then try again."
-        case .configuration: "This experience isn't available yet. Please try again later."
-        case .signIn: "Sign in again to continue."
-        case .verification: "Your account needs another verification step. Try your original sign-in method."
-        case .profile: "Choose a name and an available username to continue."
-        case .privateProfile: "List collaboration requires a public profile. You can change this in Astir Settings."
-        case .server: "Couldn't finish that action. Try again."
+        case .unavailable: "This Link Is No Longer Available, Or Your Account Doesn't Have Access."
+        case .connection: "Check Your Connection, Then Try Again."
+        case .configuration: "This Experience Isn't Available Yet. Please Try Again Later."
+        case .signIn: "Sign In Again To Continue."
+        case .verification: "Your Account Needs Another Verification Step. Try Your Original Sign-In Method."
+        case .profile: "Choose A Name And An Available Username To Continue."
+        case .privateProfile: "List Collaboration Requires A Public Profile. You Can Change This In Astir Settings."
+        case .server: "Couldn't Finish That Action. Try Again."
         }
     }
 }

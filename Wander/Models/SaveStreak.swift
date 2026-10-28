@@ -212,10 +212,10 @@ struct SaveStreakWeekday: Equatable {
 }
 
 enum SaveStreakCelebrationPresentation {
-    static let helperText = "Keep it up 🔥"
+    static let helperText = "Keep It Up 🔥"
 
     static func helperText(for celebration: SaveStreakCelebration) -> String {
-        celebration.recoveryDate == nil ? helperText : "Streak saved 🔥"
+        celebration.recoveryDate == nil ? helperText : "Streak Saved 🔥"
     }
 
     static func visualCount(for streakCount: Int) -> String {
@@ -224,7 +224,7 @@ enum SaveStreakCelebrationPresentation {
 
     static func accessibilityTitle(for streakCount: Int) -> String {
         let count = max(streakCount, 1)
-        return "\(count) day streak"
+        return "\(count) Day Streak"
     }
 
     static func weekdays(

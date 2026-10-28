@@ -6,7 +6,7 @@ struct FeedAudienceMenu: View {
 
     var body: some View {
         Menu {
-            Picker("Activity audience", selection: $selection) {
+            Picker("Activity Audience", selection: $selection) {
                 ForEach(FeedAudience.allCases, id: \.self) { audience in
                     Text(audience.title).tag(audience)
                 }
@@ -27,7 +27,7 @@ struct FeedAudienceMenu: View {
         .menuStyle(.borderlessButton)
         .buttonStyle(.plain)
         .tint(brandMode.accentText)
-        .accessibilityLabel("Activity audience")
+        .accessibilityLabel("Activity Audience")
         .accessibilityValue(selection.title)
         .accessibilityIdentifier("feed.audience")
     }
@@ -39,12 +39,12 @@ struct FeedAudienceEmptyState: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(audience == .onlyMe ? "No activity from you yet" : "No activity from friends yet")
+            Text(audience == .onlyMe ? "No Activity From You Yet" : "No Activity From Friends Yet")
                 .font(AstirTypography.control)
                 .foregroundStyle(brandMode.primaryText)
             Text(audience == .onlyMe
-                 ? "Your check-ins, Wannas, and lists will appear here."
-                 : "Activity from people you follow who also follow you will appear here.")
+                 ? "Your Check-Ins, Wannas, And Lists Will Appear Here."
+                 : "Activity From People You Follow Who Also Follow You Will Appear Here.")
                 .font(AstirTypography.body)
                 .foregroundStyle(brandMode.secondaryText)
             Button("Show Everyone") { audience = .everyone }

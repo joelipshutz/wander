@@ -134,9 +134,9 @@ enum ActivityBookmarkState: Equatable {
 
     var accessibilityValue: String {
         switch self {
-        case .notSaved: "Not in Wanna"
+        case .notSaved: "Not In Wanna"
         case .wanna: "In Wanna"
-        case .checkedIn: "Already checked in"
+        case .checkedIn: "Already Checked In"
         }
     }
 }
@@ -233,23 +233,23 @@ struct ActivityEngagementContext: Identifiable, Equatable {
 
     var actionTitle: String {
         switch ticketKind {
-        case .checkIn: "checked in at"
-        case .wanna: "added to Wanna"
-        case .list: "saved to"
-        case .saved: "saved"
+        case .checkIn: "Checked In At"
+        case .wanna: "Added To Wanna"
+        case .list: "Saved To"
+        case .saved: "Saved"
         }
     }
 
     var shareMessage: String {
         switch ticketKind {
         case .checkIn:
-            "See \(actor.displayName)'s check-in at \(placeName) on Astir"
+            "See \(actor.displayName)'s Check-In At \(placeName) On Astir"
         case .wanna:
-            "See \(actor.displayName)'s Wanna pick \(placeName) on Astir"
+            "See \(actor.displayName)'s Wanna Pick \(placeName) On Astir"
         case .list:
-            "See \(actor.displayName)'s list activity for \(placeName) on Astir"
+            "See \(actor.displayName)'s List Activity For \(placeName) On Astir"
         case .saved:
-            "See \(actor.displayName)'s save for \(placeName) on Astir"
+            "See \(actor.displayName)'s Save For \(placeName) On Astir"
         }
     }
 }
@@ -338,10 +338,10 @@ extension FeedTicketKind {
 
     var defaultAttributionAction: String {
         switch self {
-        case .checkIn: "checked in"
-        case .wanna: "added to Wanna"
-        case .list: "added this to a list"
-        case .saved: "saved this place"
+        case .checkIn: "Checked In"
+        case .wanna: "Added To Wanna"
+        case .list: "Added This To A List"
+        case .saved: "Saved This Place"
         }
     }
 }
@@ -402,7 +402,7 @@ enum ActivitySessionReadiness: Hashable {
     }
 
     struct Unavailable: Error {}
-    static let unavailableMessage = "Your session couldn’t be verified. Try again."
+    static let unavailableMessage = "Your Session Couldn’t Be Verified. Try Again."
 }
 
 struct ActivityCheckInTarget: Equatable, Hashable {

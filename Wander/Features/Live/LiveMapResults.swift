@@ -32,9 +32,9 @@ enum LiveMapPaging {
 
     static func countText(_ count: Int, complete: Bool) -> String {
         let count = max(0, count)
-        if count >= 100 { return "100+ activities" }
-        if !complete && count == 0 { return "Finding activities…" }
-        return "\(count)\(complete ? "" : "+") \(count == 1 && complete ? "activity" : "activities")"
+        if count >= 100 { return "100+ Activities" }
+        if !complete && count == 0 { return "Finding Activities…" }
+        return "\(count)\(complete ? "" : "+") \(count == 1 && complete ? "Activity" : "Activities")"
     }
 }
 

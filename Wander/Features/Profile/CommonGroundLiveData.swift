@@ -104,7 +104,7 @@ enum CommonGroundLiveData {
                 joeEvidence: theirs.evidence,
                 reason: isShared
                     ? reason(mine: mine, theirs: theirs, partner: partner.shortName)
-                    : "You two should go together.",
+                    : "You Two Should Go Together.",
                 viewer: viewer,
                 partner: partner,
                 photoReference: CommonGroundPlacePhotoReference(place: primary),
@@ -229,20 +229,20 @@ enum CommonGroundLiveData {
         let youCount = mine.evidence.visitCount, theirCount = theirs.evidence.visitCount
         if (mine.rating ?? 0) >= 4.5 && (theirs.rating ?? 0) >= 4.5 {
             if youCount >= 3 && theirCount >= 3 {
-                return "You: \(youCount) check-ins. \(partner): \(theirCount) check-ins."
+                return "You: \(youCount) Check-Ins. \(partner): \(theirCount) Check-Ins."
             }
             let yours = mine.rating!.formatted(.number.precision(.fractionLength(0...1)))
             let theirs = theirs.rating!.formatted(.number.precision(.fractionLength(0...1)))
-            return "Average ratings: you \(yours)/5. \(partner) \(theirs)/5."
+            return "Average Ratings: You \(yours)/5. \(partner) \(theirs)/5."
         }
-        if mine.evidence.hasWanna && theirs.evidence.hasWanna { return "In both of your Wannas" }
+        if mine.evidence.hasWanna && theirs.evidence.hasWanna { return "In Both Of Your Wannas" }
         if mine.evidence.hasWanna && theirCount >= 3 && (theirs.rating ?? 0) >= 4.5 {
-            return "\(partner): \(theirCount) check-ins. In your Wannas."
+            return "\(partner): \(theirCount) Check-Ins. In Your Wannas."
         }
         if theirs.evidence.hasWanna && youCount >= 3 && (mine.rating ?? 0) >= 4.5 {
-            return "You: \(youCount) check-ins. In \(partner)’s Wannas."
+            return "You: \(youCount) Check-Ins. In \(partner)’s Wannas."
         }
-        return "Saved by you and \(partner)."
+        return "Saved By You And \(partner)."
     }
 
     private static func rank(_ place: CommonGroundMockPlace) -> Int {

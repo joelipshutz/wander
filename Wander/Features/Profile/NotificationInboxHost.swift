@@ -68,13 +68,13 @@ enum NotificationInboxRefreshStatus {
         activity: ActivityNotificationInbox? = nil
     ) -> String? {
         var sources: [String] = []
-        if activity?.userID == userID, activity?.failed == true { sources.append("recent activity") }
-        if follows.userID == userID, follows.failed { sources.append("follower notifications") }
-        if plans.userID == userID, plans.failed { sources.append("plan invitations") }
-        if checkInFailureUserID == userID { sources.append("check-in invitations") }
+        if activity?.userID == userID, activity?.failed == true { sources.append("Recent Activity") }
+        if follows.userID == userID, follows.failed { sources.append("Follower Notifications") }
+        if plans.userID == userID, plans.failed { sources.append("Plan Invitations") }
+        if checkInFailureUserID == userID { sources.append("Check-In Invitations") }
         guard !sources.isEmpty else { return nil }
-        if sources.count == (activity == nil ? 3 : 4) { return "Couldn’t refresh notifications" }
-        return "Couldn’t refresh \(sources.joined(separator: " and "))"
+        if sources.count == (activity == nil ? 3 : 4) { return "Couldn’t Refresh Notifications" }
+        return "Couldn’t Refresh \(sources.joined(separator: " And "))"
     }
 }
 
