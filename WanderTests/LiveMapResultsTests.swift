@@ -460,6 +460,144 @@ final class LiveMapResultsTests: XCTestCase {
         XCTAssertEqual(current.map(\.id), reversed.map(\.id))
     }
 
+    func testFiveAndThirtySecondWarmReturnsReuseTheSnapshot() async {
+        let start = ContinuousClock.now
+        var instant = start
+        let model = LiveMapResults(clock: { instant })
+        let repository = MapPageTestRepository { _ in self.page([self.event(1)], next: nil) }
+        for seconds in [0, 5, 30] {
+            instant = start.advanced(by: .seconds(seconds))
+            await model.load(request: request(), repository: repository, fixture: [], featured: { [] }, permits: { _ in true })
+            XCTAssertEqual(model.activities.map(\.id), [event(1).id])
+        }
+        XCTAssertEqual(repository.requests.count, 1)
+    }
+
+    func testTwoMinuteRefreshRetainsRowsAndLoadsFeaturedBeforeSlowHistory() async {
+        var instant = ContinuousClock.now
+        let model = LiveMapResults(clock: { instant }), gate = MapPageGate()
+        let original = event(1), replacement = event(2)
+        await model.load(request: request(), repository: nil, fixture: [original], featured: { [] }, permits: { _ in true })
+        instant = instant.advanced(by: .seconds(120))
+        let repository = MapPageTestRepository { _ in await gate.wait() }
+        let task = Task { await model.load(request: self.request(), repository: repository, fixture: [],
+            featured: { [self.place("independent")] }, permits: { _ in true }) }
+        await gate.waitUntilRequested()
+        for _ in 0..<100 where model.featuredPlaces.isEmpty { await Task.yield() }
+        XCTAssertEqual(model.activities.map(\.id), [original.id], "A pending replacement must not blank the map")
+        XCTAssertEqual(model.featuredPlaces.map { $0.place.id }, ["independent"])
+        gate.resume(page([replacement], next: nil))
+        await task.value
+        XCTAssertEqual(model.activities.map(\.id), [replacement.id], "Successful complete results remove missing rows")
+    }
+
+    func testWarmCacheDoesNotRenewSocialAuthorization() async {
+        let start = ContinuousClock.now
+        var instant = start
+        let model = LiveMapResults(clock: { instant })
+        await model.load(request: request(), repository: nil, fixture: [event(1)], featured: { [self.place("featured")] }, permits: { _ in true })
+        instant = start.advanced(by: .seconds(30))
+        await model.load(request: request(), repository: nil, fixture: [], featured: { [] }, permits: { _ in true })
+        XCTAssertEqual(model.activities.count, 1)
+        instant = start.advanced(by: .seconds(900))
+        model.revalidate(userID: "viewer", permits: { _ in true })
+        XCTAssertTrue(model.activities.isEmpty)
+        XCTAssertTrue(model.featuredPlaces.isEmpty)
+    }
+
+    func testReturningToCachedQueryKeepsOriginalReceiptAndRejectsRevocation() async {
+        let model = LiveMapResults()
+        let first = request()
+        let second = LiveMapRequest(userID: "viewer", audience: .everyone,
+            query: LiveFeedQuery(activityType: .wannas), featured: false, viewport: nil, refresh: 0)
+        var calls = 0
+        let repository = MapPageTestRepository { _ in calls += 1; return self.page([self.event(1)], next: nil) }
+        await model.load(request: first, repository: repository, fixture: [], featured: { [] }, permits: { _ in true })
+        await model.load(request: second, repository: repository, fixture: [], featured: { [] }, permits: { _ in true })
+        await model.load(request: first, repository: repository, fixture: [], featured: { [] }, permits: { _ in true })
+        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(model.activities.count, 1)
+        model.revalidate(userID: "viewer", permits: { _ in false })
+        await model.load(request: second, repository: repository, fixture: [], featured: { [] }, permits: { _ in false })
+        await model.load(request: first, repository: repository, fixture: [], featured: { [] }, permits: { _ in false })
+        XCTAssertTrue(model.activities.isEmpty)
+    }
+
+    func testForcedRefreshCoalescesAndRetainsContentUntilCancelledResponse() async {
+        let model = LiveMapResults(), gate = MapPageGate()
+        await model.load(request: request(), repository: nil, fixture: [event(1)], featured: { [] }, permits: { _ in true })
+        let initial = request()
+        let forced = LiveMapRequest(userID: initial.userID, audience: initial.audience, query: initial.query,
+                                    featured: initial.featured, viewport: nil, refresh: 1)
+        let repository = MapPageTestRepository { _ in await gate.wait() }
+        let task = Task { await model.load(request: forced, repository: repository, fixture: [], featured: { [] }, permits: { _ in true }) }
+        await gate.waitUntilRequested()
+        await model.load(request: forced, repository: repository, fixture: [], featured: { [] }, permits: { _ in true })
+        XCTAssertEqual(repository.requests.count, 1)
+        XCTAssertEqual(model.activities.count, 1)
+        task.cancel(); gate.resume(page([event(2)], next: nil)); await task.value
+        XCTAssertEqual(model.activities.map(\.id), [event(1).id])
+    }
+
+    func testCacheHitRetiresOlderLoadingOwnershipSoThatScopeCanLoadAgain() async {
+        let model = LiveMapResults(), gate = MapPageGate()
+        let cached = request()
+        let pending = LiveMapRequest(userID: "viewer", audience: .everyone,
+            query: .init(activityType: .lists), featured: false, viewport: nil, refresh: 0)
+        await model.load(request: cached, repository: nil, fixture: [event(1)], featured: { [] }, permits: { _ in true })
+        let repository = MapPageTestRepository { _ in await gate.wait() }
+        let old = Task { await model.load(request: pending, repository: repository, fixture: [], featured: { [] }, permits: { _ in true }) }
+        await gate.waitUntilRequested()
+        await model.load(request: cached, repository: nil, fixture: [], featured: { [] }, permits: { _ in true })
+        gate.resume(page([], next: nil)); await old.value
+        var called = false
+        await model.load(request: pending, repository: nil, fixture: [], featured: { called = true; return [] }, permits: { _ in true })
+        XCTAssertTrue(called, "A completed obsolete load cannot poison future loads of its scope")
+    }
+
+    func testAccountRevalidationImmediatelyRemovesFeaturedAndSocialSnapshots() async {
+        let model = LiveMapResults()
+        await model.load(request: request(), repository: nil, fixture: [event(1)], featured: { [self.place("featured")] }, permits: { _ in true })
+        model.revalidate(userID: "other", permits: { _ in true })
+        XCTAssertTrue(model.activities.isEmpty)
+        XCTAssertTrue(model.featuredPlaces.isEmpty)
+    }
+
+    func testOfflineRefreshRetainsAuthorizedRowsButDeniedReadClearsThem() async {
+        let model = LiveMapResults()
+        let initial = request()
+        await model.load(request: initial, repository: nil, fixture: [event(1)], featured: { [] }, permits: { _ in true })
+        func forced(_ revision: UInt64) -> LiveMapRequest {
+            .init(userID: initial.userID, audience: initial.audience, query: initial.query,
+                  featured: true, viewport: nil, refresh: revision)
+        }
+        let offline = MapPageTestRepository { _ in throw URLError(.notConnectedToInternet) }
+        await model.load(request: forced(1), repository: offline, fixture: [], featured: { nil }, permits: { _ in true })
+        XCTAssertEqual(model.activities.map(\.id), [event(1).id])
+        XCTAssertTrue(model.error)
+        let denied = MapPageTestRepository { _ in throw WanderRemoteError.notAuthenticated }
+        await model.load(request: forced(2), repository: denied, fixture: [], featured: { [] }, permits: { _ in true })
+        XCTAssertTrue(model.activities.isEmpty)
+        XCTAssertTrue(model.featuredPlaces.isEmpty)
+    }
+
+    func testRevalidationDuringCoalescedPagingKeepsUnpublishedReceipts() async {
+        let model = LiveMapResults(), gate = MapPageGate()
+        let rows = (0..<170).map { event($0) }
+        let repository = MapPageTestRepository { cursor in
+            let offset = Int(cursor ?? "0")!
+            if offset == 150 { return await gate.wait() }
+            return self.page(Array(rows[offset..<(offset+50)]), next: String(offset+50))
+        }
+        let task = Task { await model.load(request: self.request(), repository: repository, fixture: [], featured: { [] }, permits: { _ in true }) }
+        await gate.waitUntilRequested()
+        XCTAssertEqual(model.activities.count, 100)
+        model.revalidate(userID: "viewer", permits: { _ in true })
+        gate.resume(page(Array(rows[150..<170]), next: nil)); await task.value
+        XCTAssertEqual(model.activities.count, 170)
+        XCTAssertEqual(Set(model.activities.map(\.id)), Set(rows.map(\.id)))
+    }
+
     private func groupedEvent(_ id: String, place: VisiblePlace, actorID: String, kind: FeedActivityKind) -> FeedActivity {
         FeedActivity(id: id, kind: kind,
             actor: ProfileShell(id: actorID, handle: actorID, displayName: actorID, avatarURL: nil, bio: nil, relationship: .mutual),
@@ -493,15 +631,15 @@ final class LiveMapResultsTests: XCTestCase {
 private final class MapPageTestRepository: FeedRepository {
     struct Request { let audience: FeedAudience; let query: LiveFeedQuery; let before: String?; let limit: Int }
     var requests: [Request] = []
-    let page: (String?) async -> FollowedFeedPage
-    init(page: @escaping (String?) async -> FollowedFeedPage) { self.page = page }
+    let page: (String?) async throws -> FollowedFeedPage
+    init(page: @escaping (String?) async throws -> FollowedFeedPage) { self.page = page }
     func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
         requests.append(Request(audience: audience, query: query, before: before, limit: limit))
-        return await page(before)
+        return try await page(before)
     }
     func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
         XCTFail("Map enumeration must use the map endpoint")
-        return await page(before)
+        return try await page(before)
     }
 }
 

@@ -1067,3 +1067,28 @@ The existing Dark mode override also applies to Live. The setting follows the
 current local appearance lifetime, including persistence across sign-out and
 reset on account deletion. The renderer changes map appearance only; pin design,
 data/access policy and map feature behavior remain the existing contracts.
+
+## REC-667 — warm Live continuity, 2026-10-29
+
+Live retains authorized map and Feed content during automatic refreshes. A short
+foreground return reuses fresh session data; a stale result refreshes in place.
+GPS changes below 250 metres from the last committed fix do not replace the
+query. Meaningful movement updates the area while retaining matching rows until
+replacement results arrive. Explicit filter/audience changes still isolate their
+queries and cursors. Automatic Feed refresh preserves the visible window and
+older authorized pages; pull to refresh resets the window.
+
+Map snapshots are session-only, scoped to account/audience/query/viewport, and
+limited to four inactive snapshots with at most 2,000 combined records each.
+Larger active results remain complete but are not retained as inactive snapshots.
+Freshness is 60 seconds. Reuse never renews the existing 15-minute social display
+lease; only a successful authorized read renews the rows it returned. Account
+changes, denied reads, local revocations, and expiry invalidate affected evidence.
+Featured loads independently of paginated social history.
+
+Cold launches may restore a versioned, account-scoped UI bookmark younger than
+six hours: camera, geographic scope, filters, audience, drawer position, and last
+GPS anchor. It contains no Feed rows, pins, social authorization, or pin-state
+facts. Invalid/oversized/expired bookmarks are ignored. Existing owner SwiftData
+persistence remains the source for owner data. No backend or schema change is
+required.

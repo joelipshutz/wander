@@ -1,8 +1,8 @@
 import MapKit
 
 /// Presentation geometry only. Inputs must already pass the Feed's access policy.
-struct LiveDrawnArea: Equatable {
-    struct Vertex: Equatable {
+struct LiveDrawnArea: Codable, Equatable {
+    struct Vertex: Codable, Equatable {
         let latitude: Double
         let longitude: Double
         var coordinate: CLLocationCoordinate2D {
@@ -55,7 +55,7 @@ struct LiveDrawnArea: Equatable {
     }
 }
 
-enum LiveActivityFilter: String, CaseIterable, Identifiable {
+enum LiveActivityFilter: String, Codable, CaseIterable, Identifiable {
     case all = "All", checkIns = "Check-ins", wannas = "Wannas", lists = "Lists"
     var id: Self { self }
     func includes(_ activity: FeedActivity) -> Bool {
@@ -68,7 +68,7 @@ enum LiveActivityFilter: String, CaseIterable, Identifiable {
     }
 }
 
-enum LiveTimeFilter: Int, CaseIterable, Identifiable {
+enum LiveTimeFilter: Int, Codable, CaseIterable, Identifiable {
     case day = 1, week = 7, month = 30, all = 0
     var id: Self { self }
     var title: String {

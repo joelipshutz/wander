@@ -44,7 +44,7 @@ final class LiveMapPinStateLoaderTests: XCTestCase {
         let loader = LiveMapPinStateLoader()
         let expected = snapshot()
         await loader.load(request: request(), repository: Stub { _ in expected })
-        await loader.load(request: request(), repository: Stub { _ in
+        await loader.load(request: request(refresh: 1), repository: Stub { _ in
             throw WanderRemoteError.invalidResponse("Unavailable")
         })
         XCTAssertNil(loader.snapshot)
@@ -80,13 +80,53 @@ final class LiveMapPinStateLoaderTests: XCTestCase {
         XCTAssertGreaterThan(loader.revision, revision)
     }
 
+    func testEquivalentResultRevisionReusesEvidenceAndForcedRefreshKeepsItWhilePending() async {
+        let loader = LiveMapPinStateLoader()
+        let expected = snapshot()
+        var calls = 0
+        await loader.load(request: request(), repository: Stub { _ in calls += 1; return expected })
+        await loader.load(request: request(), repository: Stub { _ in calls += 1; return expected })
+        XCTAssertEqual(calls, 1)
+        var continuation: CheckedContinuation<Void, Never>?
+        let task = Task { await loader.load(request: request(refresh: 1), repository: Stub { _ in
+            await withCheckedContinuation { continuation = $0 }; return expected
+        }) }
+        for _ in 0..<100 where continuation == nil { await Task.yield() }
+        XCTAssertEqual(loader.snapshot, expected)
+        continuation?.resume(); await task.value
+        XCTAssertEqual(loader.snapshot, expected)
+    }
+
+    func testCancelledExpandedRequestCannotClaimTheOldSnapshotCoversNewPlaces() async {
+        let loader = LiveMapPinStateLoader()
+        let initial = request()
+        await loader.load(request: initial, repository: Stub { _ in self.snapshot() })
+        let secondID = UUID().uuidString.lowercased()
+        let expanded = LiveMapPinStateRequest(map: initial.map, placeIDs: initial.placeIDs + [secondID],
+                                             resultRevision: 2, storeRevision: initial.storeRevision)
+        let full = LiveMapPinStateSnapshot(states: snapshot().states + [.init(placeID: secondID, saves: [], hasListMembership: false)],
+                                          complete: true, fetchedAt: .now)
+        var continuation: CheckedContinuation<Void, Never>?
+        let task = Task { await loader.load(request: expanded, repository: Stub { _ in
+            await withCheckedContinuation { continuation = $0 }; return full
+        }) }
+        for _ in 0..<100 where continuation == nil { await Task.yield() }
+        task.cancel()
+        var calls = 0
+        await loader.load(request: expanded, repository: Stub { _ in calls += 1; return full })
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(loader.snapshot, full)
+        continuation?.resume(); await task.value
+        XCTAssertEqual(loader.snapshot, full)
+    }
+
     private func snapshot(hasList: Bool = false) -> LiveMapPinStateSnapshot {
         .init(states: [.init(placeID: placeID, saves: [], hasListMembership: hasList)], complete: true, fetchedAt: .now)
     }
 
-    private func request(user: String = "viewer") -> LiveMapPinStateRequest {
+    private func request(user: String = "viewer", refresh: UInt64 = 0) -> LiveMapPinStateRequest {
         .init(map: .init(userID: user, audience: .everyone, query: .init(), featured: true,
-                        viewport: nil, refresh: 0), placeIDs: [placeID], resultRevision: 1, storeRevision: 1)
+                        viewport: nil, refresh: refresh), placeIDs: [placeID], resultRevision: 1, storeRevision: 1)
     }
 
     private struct Stub: LiveMapPinStateRepository {

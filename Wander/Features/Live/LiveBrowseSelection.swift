@@ -2,12 +2,12 @@ import CoreLocation
 import Foundation
 
 /// Draft controls become an immutable server query only when committed.
-struct LiveBrowseSelection: Equatable {
-    enum Scope: String, CaseIterable, Identifiable {
+struct LiveBrowseSelection: Codable, Equatable {
+    enum Scope: String, Codable, CaseIterable, Identifiable {
         case featured = "Featured", nearby = "Nearby"
         var id: Self { self }
     }
-    enum Radius: Int, CaseIterable, Identifiable {
+    enum Radius: Int, Codable, CaseIterable, Identifiable {
         case fiveKilometers = 5_000, tenKilometers = 10_000, twentyFiveKilometers = 25_000
         var id: Self { self }
         var title: String { "\(rawValue / 1_000) km" }
