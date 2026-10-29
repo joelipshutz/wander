@@ -470,6 +470,7 @@ private struct FollowNotificationProfileRoute: Identifiable {
 struct SharedVisitInvitationInboxScreen: View {
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
     @ObservedObject var planInbox: PlacePlanInvitationInbox
@@ -477,6 +478,9 @@ struct SharedVisitInvitationInboxScreen: View {
     @EnvironmentObject private var followInbox: FollowNotificationInbox
     @EnvironmentObject private var activityInbox: ActivityNotificationInbox
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @State private var rowFrames: [String: CGRect] = [:]
+    @State private var viewport: CGRect = .zero
+    @State private var nativeVisibleIDs: Set<String> = []
     @State private var selectedFollower: FollowNotificationProfileRoute?
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
@@ -524,83 +528,121 @@ struct SharedVisitInvitationInboxScreen: View {
             if isEmpty, !isRefreshing, !planInbox.isLoading, !followInbox.isLoading, !activityInbox.isLoading {
                 emptyState
             } else {
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: WanderTheme.spacing4) {
-                        if let refreshError {
-                            refreshErrorRow(refreshError)
-                        }
-
-                        if !activity.isEmpty {
-                            Text("Recent activity").font(AstirTypography.sectionTitle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            ForEach(activity) { notification in
-                                ActivityNotificationRow(notification: notification) {
-                                    guard let destination = notification.destination else { return }
-                                    if let event = notification.openedEvent { store.productAnalytics.track(event) }
-                                    if destination == .discover { dismiss() }
-                                    pushNotifications.route(to: destination)
-                                }
+                GeometryReader { geometry in
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: WanderTheme.spacing4) {
+                            if let refreshError {
+                                refreshErrorRow(refreshError)
                             }
-                        }
-                        if !follows.isEmpty {
-                            Text("Followers").font(AstirTypography.sectionTitle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            ForEach(follows) { notification in
-                                Button {
-                                    selectedFollower = FollowNotificationProfileRoute(id: notification.actorID)
-                                    store.productAnalytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.notificationOpened, properties: [
-                                        "notification_type": notification.isMutual ? "mutual_follow" : "followed_you",
-                                        "delivery_channel": "in_app", "route": "profile"
-                                    ]))
-                                } label: {
-                                    HStack(spacing: WanderTheme.spacing3) {
-                                        WanderAvatar(initials: String(notification.displayName.prefix(1)), avatarURL: notification.avatarURL,
-                                                     size: 44, color: WanderTheme.pinSocial.color)
-                                        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                                            Text(notification.displayName).font(AstirTypography.cardTitle)
-                                            Text(notification.isMutual ? "Followed you back. You're now following each other." : "Started following you.")
-                                                .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
-                                            Text(notification.createdAt, style: .relative)
-                                                .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
-                                        }
-                                        Spacer(minLength: 0)
-                                        Image(systemName: "chevron.right").font(.caption)
-                                    }
-                                    .padding(WanderTheme.spacing3)
+
+                            if !activity.isEmpty {
+                                Text("Recent activity").font(AstirTypography.sectionTitle)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                                ForEach(activity) { notification in
+                                    ActivityNotificationRow(notification: notification) {
+                                        guard let destination = notification.destination else { return }
+                                        acknowledge(notification.badgeID)
+                                        if let event = notification.openedEvent { store.productAnalytics.track(event) }
+                                        if destination == .discover { dismiss() }
+                                        pushNotifications.route(to: destination)
+                                    }
+                                    .modifier(unreadRow(notification.badgeID))
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("notifications.follow.\(notification.actorID)")
                             }
-                        }
-                        if !plans.isEmpty {
-                            Text("Plans").font(AstirTypography.sectionTitle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            ForEach(plans) { plan in
-                                PlacePlanNotificationRow(plan: plan) { selectedPlan = plan }
+                            if !follows.isEmpty {
+                                Text("Followers").font(AstirTypography.sectionTitle)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                ForEach(follows) { notification in
+                                    Button {
+                                        acknowledge("follow:\(notification.id.uuidString)")
+                                        selectedFollower = FollowNotificationProfileRoute(id: notification.actorID)
+                                        store.productAnalytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.notificationOpened, properties: [
+                                            "notification_type": notification.isMutual ? "mutual_follow" : "followed_you",
+                                            "delivery_channel": "in_app", "route": "profile"
+                                        ]))
+                                    } label: {
+                                        HStack(spacing: WanderTheme.spacing3) {
+                                            WanderAvatar(initials: String(notification.displayName.prefix(1)), avatarURL: notification.avatarURL,
+                                                         size: 44, color: WanderTheme.pinSocial.color)
+                                            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                                                Text(notification.displayName).font(AstirTypography.cardTitle)
+                                                Text(notification.isMutual ? "Followed you back. You're now following each other." : "Started following you.")
+                                                    .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
+                                                Text(notification.createdAt, style: .relative)
+                                                    .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
+                                            }
+                                            Spacer(minLength: 0)
+                                            Image(systemName: "chevron.right").font(.caption)
+                                        }
+                                        .padding(WanderTheme.spacing3)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(brandMode.raisedBackground, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("notifications.follow.\(notification.actorID)")
+                                    .modifier(unreadRow("follow:\(notification.id.uuidString)"))
+                                }
                             }
-                        }
-                        if !store.sharedVisitInvitations.isEmpty {
-                            Text("Check-in invitations").font(AstirTypography.sectionTitle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                            if !plans.isEmpty {
+                                Text("Plans").font(AstirTypography.sectionTitle)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                ForEach(plans) { plan in
+                                    PlacePlanNotificationRow(plan: plan) {
+                                        acknowledge("plan:\(plan.id.uuidString)")
+                                        selectedPlan = plan
+                                    }
+                                        .modifier(unreadRow("plan:\(plan.id.uuidString)"))
+                                }
+                            }
+                            if !store.sharedVisitInvitations.isEmpty {
+                                Text("Check-in invitations").font(AstirTypography.sectionTitle)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
 
-                        ForEach(store.sharedVisitInvitations) { invitation in
-                            SharedVisitInboxInvitationCard(
-                                invitation: invitation,
-                                isDeclining: decliningParticipantID == invitation.participantID,
-                                errorMessage: declineErrors[invitation.participantID],
-                                onReview: { onReview(invitation) },
-                                onDecline: { Task { await decline(invitation) } }
-                            )
+                            ForEach(store.sharedVisitInvitations) { invitation in
+                                SharedVisitInboxInvitationCard(
+                                    invitation: invitation,
+                                    isDeclining: decliningParticipantID == invitation.participantID,
+                                    errorMessage: declineErrors[invitation.participantID],
+                                    onReview: {
+                                        acknowledge("check-in:\(invitation.participantID):\(invitation.invitationGeneration)")
+                                        onReview(invitation)
+                                    },
+                                    onDecline: {
+                                        acknowledge("check-in:\(invitation.participantID):\(invitation.invitationGeneration)")
+                                        Task { await decline(invitation) }
+                                    }
+                                )
+                                .modifier(unreadRow("check-in:\(invitation.participantID):\(invitation.invitationGeneration)"))
+                            }
+                        }
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .padding(.top, WanderTheme.spacing3)
+                        .padding(.bottom, WanderTheme.spacing8)
+                        .background(alignment: .top) {
+                            AstirScrollOffsetReader(coordinateSpaceName: "notificationViewport")
                         }
                     }
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing8)
+                    .coordinateSpace(name: "notificationViewport")
+                    .astirScrollTracking(coordinateSpaceName: "notificationViewport") { offset in
+                        guard offset > 1, scenePhase == .active, selectedPlan == nil, selectedFollower == nil else { return }
+                        notificationBadge.scrolled(userID: store.currentUser.id)
+                    }
+                    .onPreferenceChange(NotificationRowFrames.self) { frames in
+                        rowFrames = frames
+                        viewport = visibleViewport(in: geometry)
+                        observeRows()
+                    }
+                    .onChange(of: geometry.size) { _, _ in
+                        viewport = visibleViewport(in: geometry)
+                        observeRows()
+                    }
+                    .onChange(of: geometry.safeAreaInsets) { _, _ in
+                        viewport = visibleViewport(in: geometry)
+                        observeRows()
+                    }
+                    .refreshable { await refresh() }
                 }
-                .refreshable { await refresh() }
             }
         }
         .overlay {
@@ -612,8 +654,25 @@ struct SharedVisitInvitationInboxScreen: View {
         }
         .background(brandMode.background.ignoresSafeArea())
         .foregroundStyle(brandMode.primaryText)
-        .onAppear { notificationBadge.open(badgeSnapshot) }
-        .onChange(of: badgeSnapshot) { _, snapshot in notificationBadge.updateVisibleInbox(snapshot) }
+        .onAppear {
+            notificationBadge.open(badgeSnapshot)
+            observeRows()
+        }
+        .onChange(of: badgeSnapshot) { _, snapshot in
+            notificationBadge.updateVisibleInbox(snapshot)
+            observeRows()
+        }
+        .onChange(of: nativeVisibleIDs) { _, _ in observeRows() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                notificationBadge.open(badgeSnapshot)
+                observeRows()
+            } else {
+                notificationBadge.close()
+            }
+        }
+        .onChange(of: selectedPlan?.id) { _, _ in updateCoveredInbox() }
+        .onChange(of: selectedFollower?.id) { _, _ in updateCoveredInbox() }
         .onDisappear { notificationBadge.close() }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
@@ -635,6 +694,46 @@ struct SharedVisitInvitationInboxScreen: View {
         .onChange(of: store.currentUser.id) { _, _ in
             selectedPlan = nil
             selectedFollower = nil
+            rowFrames = [:]
+            nativeVisibleIDs = []
+            notificationBadge.open(badgeSnapshot)
+        }
+    }
+
+    private func unreadRow(_ id: String) -> NotificationUnreadRow {
+        NotificationUnreadRow(id: id, isUnseen: notificationBadge.isUnseen(id, in: badgeSnapshot)) { visible in
+            if visible { nativeVisibleIDs.insert(id) }
+            else { nativeVisibleIDs.remove(id) }
+        }
+    }
+
+    private func visibleViewport(in geometry: GeometryProxy) -> CGRect {
+        let frame = geometry.frame(in: .global)
+        let insets = geometry.safeAreaInsets
+        return CGRect(x: frame.minX + insets.leading, y: frame.minY + insets.top,
+                      width: max(0, frame.width - insets.leading - insets.trailing),
+                      height: max(0, frame.height - insets.top - insets.bottom))
+    }
+
+    private func acknowledge(_ id: String) {
+        notificationBadge.acknowledge(id, userID: store.currentUser.id)
+    }
+
+    private func observeRows() {
+        guard scenePhase == .active, selectedPlan == nil, selectedFollower == nil else { return }
+        if #available(iOS 18.0, *) {
+            notificationBadge.observeVisibleIDs(nativeVisibleIDs, userID: store.currentUser.id)
+        } else {
+            notificationBadge.observe(frames: rowFrames, viewport: viewport, userID: store.currentUser.id)
+        }
+    }
+
+    private func updateCoveredInbox() {
+        if selectedPlan == nil, selectedFollower == nil, scenePhase == .active {
+            notificationBadge.open(badgeSnapshot)
+            observeRows()
+        } else {
+            notificationBadge.close()
         }
     }
 

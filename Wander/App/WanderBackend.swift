@@ -292,7 +292,7 @@ final class WanderBackend: ObservableObject {
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
             self.followNotificationRepository = SupabaseFollowNotificationRepository(rpc: client)
-            self.activityNotificationRepository = SupabaseActivityNotificationRepository(table: client)
+            self.activityNotificationRepository = SupabaseActivityNotificationRepository(table: client, feed: SupabaseFeedRepository(rpc: client))
             self.eventsInterestRepository = SupabaseEventsInterestRepository(rpc: client)
             self.accountContactDetailsRepository = SupabaseAccountContactDetailsRepository(rpc: client)
             self.eventsAccessRepository = SupabaseEventsAccessRepository(rpc: client)

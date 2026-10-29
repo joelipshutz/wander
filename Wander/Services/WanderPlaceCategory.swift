@@ -517,7 +517,7 @@ enum WanderPlaceCategory {
             "New Zealand", "Fijian", "Samoan", "Tongan", "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings",
             "Steakhouse", "Bar & grill", "Taco stand", "Taco truck", "Burrito", "Taco", "Sandwich", "Bagel",
             "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup", "Chicken", "Seafood",
-            "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub"
+            "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub", "Fruit stand"
         ],
             isEditable: true
         ),
@@ -533,7 +533,7 @@ enum WanderPlaceCategory {
             "juice", "smoothie", "acai", "ice cream", "gelato", "candy", "chocolate", "cat cafe", "dog cafe"
         ],
             subcategories: [
-            "Coffee shop", "Cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store", "Juice shop",
+            "Coffee shop", "Cafe", "Working cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store", "Juice shop",
             "Smoothie shop", "Acai", "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop",
             "Dessert shop", "Dessert restaurant", "Ice cream", "Gelato", "Candy store", "Chocolate shop",
             "Chocolate factory", "Chocolate lounge", "Confectionery", "Cat cafe", "Dog cafe"
@@ -603,7 +603,7 @@ enum WanderPlaceCategory {
             "Auditorium", "Movie theater", "Planetarium", "Observation deck", "Aquarium", "Zoo", "Amusement park",
             "Water park", "Ferris wheel", "Roller coaster", "Arcade", "Bowling", "Mini golf", "Billiards", "Darts",
             "Axe throwing", "Board game lounge", "Go-karting", "Paintball", "Indoor playground", "Event venue",
-            "Convention center", "Banquet hall", "Wedding venue", "Community center", "Internet cafe",
+            "Convention center", "Banquet hall", "Wedding venue", "Community center",
             "Dance hall", "Barbecue area",
             "Stadium", "Arena"
         ],
@@ -1070,12 +1070,12 @@ enum WanderPlaceCategory {
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Misc", subcategories: [
                 "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup",
-                "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub"
+                "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub", "Fruit stand"
             ], role: .cuisine)
         ],
         coffeeTeaSweets: [
             PlaceCategorySubcategoryGroup(title: "Coffee & tea", subcategories: [
-                "Coffee shop", "Cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store"
+                "Coffee shop", "Cafe", "Working cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store"
             ]),
             PlaceCategorySubcategoryGroup(title: "Juice & light treats", subcategories: [
                 "Juice shop", "Smoothie shop", "Acai", "Cat cafe", "Dog cafe"
@@ -1133,7 +1133,7 @@ enum WanderPlaceCategory {
             PlaceCategorySubcategoryGroup(title: "Attractions & games", subcategories: [
                 "Aquarium", "Zoo", "Amusement park", "Water park", "Ferris wheel", "Roller coaster", "Arcade",
                 "Bowling", "Mini golf", "Billiards", "Darts", "Axe throwing", "Board game lounge", "Go-karting",
-                "Paintball", "Indoor playground", "Internet cafe", "Dance hall", "Barbecue area"
+                "Paintball", "Indoor playground", "Dance hall", "Barbecue area"
             ]),
             PlaceCategorySubcategoryGroup(title: "Events", subcategories: [
                 "Event venue", "Convention center", "Banquet hall", "Wedding venue", "Community center"
@@ -2113,6 +2113,7 @@ enum WanderPlaceCategory {
     /// Exact provider type tokens only. Generic gyms and business names never
     /// become CrossFit, Pilates or surf-break evidence. These are not MapKit enum cases.
     private static let explicitProviderCategories: [String: ProviderCategoryMetadata] = [
+        "internetcafe": ProviderCategoryMetadata(canonicalType: "working cafe", primaryCategory: coffeeTeaSweets, subcategory: "Working cafe"),
         "beachtennis": ProviderCategoryMetadata(canonicalType: "beach tennis", primaryCategory: wellnessFitness, subcategory: "Beach tennis"),
         "beachtenniscourt": ProviderCategoryMetadata(canonicalType: "beach tennis", primaryCategory: wellnessFitness, subcategory: "Beach tennis"),
         "beachvolleyball": ProviderCategoryMetadata(canonicalType: "beach volleyball", primaryCategory: wellnessFitness, subcategory: "Beach volleyball"),

@@ -8,6 +8,11 @@ struct LiveMapRequest: Equatable {
     let featured: Bool
     let viewport: MapViewport?
     let refresh: UInt64
+
+    func hasSameScope(as other: Self) -> Bool {
+        userID == other.userID && audience == other.audience && query == other.query
+            && featured == other.featured && viewport == other.viewport
+    }
 }
 
 enum LiveMapPaging {
@@ -50,75 +55,179 @@ final class LiveMapResults: ObservableObject {
     private var requestID = UUID()
     private var lease = LiveFeedDisplayLease()
     private var expiryTask: Task<Void, Never>?
+    private var currentRequest: LiveMapRequest?
+    private var loadingRequest: LiveMapRequest?
+    private var completedAt: ContinuousClock.Instant?
+    private var featuredExpiresAt: ContinuousClock.Instant?
+    private let clock: () -> ContinuousClock.Instant
+    private struct Snapshot {
+        let request: LiveMapRequest
+        let activities: [FeedActivity]
+        let featured: [VisiblePlace]
+        let lease: LiveFeedDisplayLease
+        let completedAt: ContinuousClock.Instant
+        let featuredExpiresAt: ContinuousClock.Instant?
+    }
+    private var snapshots: [Snapshot] = []
+
+    init(clock: @escaping () -> ContinuousClock.Instant = { .now }) { self.clock = clock }
 
     func load(request: LiveMapRequest, repository: (any FeedRepository)?,
-              fixture: [FeedActivity], featured: () async -> [VisiblePlace],
+              fixture: [FeedActivity], featured: @escaping @MainActor () async -> [VisiblePlace]?,
               permits: @escaping (FeedActivity) -> Bool) async {
-        let token = UUID(); requestID = token
-        expiryTask?.cancel(); lease = LiveFeedDisplayLease()
-        activities = []; featuredPlaces = []; complete = false; error = false; revision &+= 1
-        do {
-            if let repository {
-                var processedCount = 0
-                var accumulated: [FeedActivity] = []
-                var lastPublishedCount = 0
-                try await LiveMapPaging.readAll(page: { cursor in
-                    try await repository.liveMapActivity(audience: request.audience, query: request.query,
-                                                         before: cursor, limit: 50)
-                }, receive: { [weak self] rows, exhausted in
-                    guard let self, self.requestID == token, !Task.isCancelled else { return }
-                    let now = ContinuousClock.now
-                    let incoming = rows.dropFirst(processedCount).filter { request.query.includes($0) && permits($0) }
-                    processedCount = rows.count
-                    accumulated.append(contentsOf: incoming)
-                    self.lease.accept(activityIDs: incoming.map(\.id), at: now, replacing: false)
-                    // Publish early feedback, then coalesce large city histories.
-                    // Count formatting is bounded; the final pin snapshot is not.
-                    if exhausted || accumulated.count <= 100 || accumulated.count - lastPublishedCount >= 250 {
-                        self.activities = accumulated.filter { permits($0) && self.lease.permits(
-                            activityID: $0.id, isOwn: $0.actor.id == request.userID, at: now) }
-                        lastPublishedCount = accumulated.count
-                        self.complete = exhausted
-                        self.revision &+= 1
-                    }
-                    self.scheduleExpiry(userID: request.userID, token: token)
-                })
+        guard !Task.isCancelled else { return }
+        if loadingRequest == request { return }
+        let previousRequest = currentRequest
+        rememberSnapshot()
+        if previousRequest?.userID != request.userID { snapshots.removeAll() }
+        let sameScope = previousRequest?.hasSameScope(as: request) == true
+        if !sameScope {
+            if let cached = snapshots.last(where: { $0.request.hasSameScope(as: request) }) {
+                activities = cached.activities; featuredPlaces = cached.featured
+                lease = cached.lease; completedAt = cached.completedAt
+                featuredExpiresAt = cached.featuredExpiresAt; complete = true
             } else {
-                activities = fixture.filter { request.query.includes($0) && permits($0) }
-                lease.accept(activityIDs: activities.map(\.id), at: .now, replacing: true)
-                complete = true
+                // Matching, still-authorized rows bridge movement. Never bridge an
+                // account/audience change or carry the old query's cursor.
+                let canBridge = previousRequest?.userID == request.userID
+                    && previousRequest?.audience == request.audience
+                activities = canBridge ? activities.filter { request.query.includes($0) } : []
+                if !canBridge { lease = LiveFeedDisplayLease() }
+                if canBridge && request.featured && request.audience == .everyone {
+                    featuredPlaces = featuredPlaces.filter { request.query.includesFeatured($0) }
+                } else { featuredPlaces = []; featuredExpiresAt = nil }
+                completedAt = nil; complete = false
             }
-            let candidates = await featured()
-            guard requestID == token, !Task.isCancelled else { return }
-            featuredPlaces = candidates
-            revision &+= 1
-            scheduleExpiry(userID: request.userID, token: token)
-        } catch {
-            guard requestID == token, !Task.isCancelled else { return }
-            self.error = true; complete = false; revision &+= 1
-            scheduleExpiry(userID: request.userID, token: token)
         }
+        let token = UUID(); requestID = token; currentRequest = request
+        loadingRequest = nil
+        expiryTask?.cancel()
+        revalidate(userID: request.userID, permits: permits)
+        let fresh = completedAt.map { $0.duration(to: clock()) >= .zero && $0.duration(to: clock()) < .seconds(60) } ?? false
+        if complete && fresh && (!sameScope || previousRequest?.refresh == request.refresh) {
+            error = false
+            scheduleExpiry(userID: request.userID, token: token)
+            return
+        }
+        loadingRequest = request
+        defer { if requestID == token { loadingRequest = nil } }
+        error = false
+        scheduleExpiry(userID: request.userID, token: token)
+        // Featured has its own request and receipt; it must not wait for every
+        // social-history page in a busy city.
+        let featuredTask = Task { @MainActor [weak self] in
+            let candidates = await featured()
+            guard let self, !Task.isCancelled, self.requestID == token else { return }
+            self.featuredPlaces = candidates ?? []
+            self.featuredExpiresAt = candidates == nil ? nil : self.clock().advanced(by: LiveFeedDisplayLease.duration)
+            self.revision &+= 1
+            self.scheduleExpiry(userID: request.userID, token: token)
+        }
+        await withTaskCancellationHandler {
+            do {
+                if let repository {
+                    var processedCount = 0
+                    var accumulated: [FeedActivity] = []
+                    var lastPublishedCount = 0
+                    try await LiveMapPaging.readAll(page: { cursor in
+                        try await repository.liveMapActivity(audience: request.audience, query: request.query,
+                                                             before: cursor, limit: 50)
+                    }, receive: { [weak self] rows, exhausted in
+                        guard let self, self.requestID == token, !Task.isCancelled else { return }
+                        let now = self.clock()
+                        let incoming = rows.dropFirst(processedCount).filter { request.query.includes($0) && permits($0) }
+                        processedCount = rows.count
+                        accumulated.append(contentsOf: incoming)
+                        self.lease.accept(activityIDs: incoming.map(\.id), at: now, replacing: false)
+                        if exhausted || accumulated.count <= 100 || accumulated.count - lastPublishedCount >= 250 {
+                            let newIDs = Set(accumulated.map(\.id))
+                            let retained = exhausted ? [] : self.activities.filter { !newIDs.contains($0.id) }
+                            self.activities = (accumulated + retained).filter { permits($0) && self.lease.permits(
+                                activityID: $0.id, isOwn: $0.actor.id == request.userID, at: now) }
+                            lastPublishedCount = accumulated.count
+                            self.complete = exhausted
+                            self.revision &+= 1
+                        }
+                        self.scheduleExpiry(userID: request.userID, token: token)
+                    })
+                } else {
+                    activities = fixture.filter { request.query.includes($0) && permits($0) }
+                    lease.accept(activityIDs: activities.map(\.id), at: clock(), replacing: true)
+                    complete = true; revision &+= 1
+                }
+                guard requestID == token, !Task.isCancelled else { return }
+                completedAt = clock()
+            } catch {
+                guard requestID == token, !Task.isCancelled else { return }
+                if !ProtectedContentCachePolicy.permitsOfflineRead(after: error) {
+                    activities = []; featuredPlaces = []; featuredExpiresAt = nil
+                    lease = LiveFeedDisplayLease(); snapshots.removeAll(); featuredTask.cancel()
+                }
+                self.error = true; complete = false; completedAt = nil; revision &+= 1
+            }
+            await featuredTask.value
+            guard requestID == token, !Task.isCancelled else { return }
+            scheduleExpiry(userID: request.userID, token: token)
+            rememberSnapshot()
+        } onCancel: { featuredTask.cancel() }
+    }
+
+    func invalidateFreshness() {
+        completedAt = nil
+        snapshots.removeAll()
     }
 
     func revalidate(userID: String, permits: (FeedActivity) -> Bool) {
-        let now = ContinuousClock.now
+        if let currentRequest, currentRequest.userID != userID {
+            requestID = UUID(); expiryTask?.cancel(); loadingRequest = nil
+            self.currentRequest = nil; activities = []; featuredPlaces = []
+            lease = LiveFeedDisplayLease(); snapshots.removeAll()
+            completedAt = nil; featuredExpiresAt = nil; complete = false; error = false
+        }
+        let now = clock()
         activities.removeAll { !permits($0) || !lease.permits(activityID: $0.id, isOwn: $0.actor.id == userID, at: now) }
+        // Intermediate pages may be authorized but not published yet.
+        if loadingRequest == nil { lease.retain(activityIDs: Set(activities.map(\.id))) }
+        if let expiry = featuredExpiresAt, now >= expiry { featuredPlaces = []; featuredExpiresAt = nil }
+        // A cached snapshot never renews authorization or resurrects a local revocation.
+        snapshots = snapshots.filter { $0.request.userID == userID && $0.completedAt.duration(to: now) < LiveFeedDisplayLease.duration }
+        for index in snapshots.indices {
+            let old = snapshots[index]
+            snapshots[index] = Snapshot(request: old.request,
+                activities: old.activities.filter { permits($0) }, featured: old.featured,
+                lease: old.lease, completedAt: old.completedAt, featuredExpiresAt: old.featuredExpiresAt)
+        }
         revision &+= 1
+    }
+
+    private func rememberSnapshot() {
+        guard complete, let request = currentRequest, let completedAt else { return }
+        snapshots.removeAll { $0.request.hasSameScope(as: request) }
+        lease.retain(activityIDs: Set(activities.map(\.id)))
+        // Bound inactive memory without clipping the active map's complete result.
+        guard activities.count + featuredPlaces.count <= 2_000 else { return }
+        snapshots.append(Snapshot(request: request, activities: activities, featured: featuredPlaces,
+            lease: lease, completedAt: completedAt, featuredExpiresAt: featuredExpiresAt))
+        if snapshots.count > 4 { snapshots.removeFirst(snapshots.count - 4) }
     }
 
     private func scheduleExpiry(userID: String, token: UUID) {
         expiryTask?.cancel()
-        guard let expiry = lease.nextExpiry(after: .now) else { return }
+        let now = clock()
+        let expiry = [lease.nextExpiry(after: now), featuredExpiresAt].compactMap { $0 }.filter { $0 > now }.min()
+        guard let expiry else { return }
+        let delay = now.duration(to: expiry)
         expiryTask = Task { @MainActor [weak self] in
-            do { try await ContinuousClock().sleep(until: expiry) } catch { return }
+            do { try await Task.sleep(for: delay) } catch { return }
             guard let self, self.requestID == token else { return }
             self.revalidate(userID: userID, permits: { _ in true })
-            self.featuredPlaces = []
             self.complete = false
+            self.completedAt = nil
             self.error = true
             self.scheduleExpiry(userID: userID, token: token)
         }
     }
+
 }
 
 /// A presentation identity for an already-authorized place. Coordinate overlap
@@ -201,7 +310,11 @@ struct LivePlaceIdentity: Hashable {
                 "drive": "dr", "highway": "hwy", "lane": "ln", "parkway": "pkwy", "place": "pl",
                 "road": "rd", "street": "st", "terrace": "ter"]
             street = text(place.address).split(separator: " ").map { suffixes[String($0)] ?? String($0) }.joined(separator: " ")
-            locality = text(place.locality); region = text(place.region); country = text(place.country)
+            locality = text(place.locality); region = text(place.region)
+            // MapKit and older imports can describe one country as US/USA or
+            // United States. Compare canonical names before joining address
+            // aliases, or one venue can survive as both a saved pin and a dot.
+            country = text(CountryCanonicalizer.canonicalName(place.country))
             let valid = place.latitude.isFinite && place.longitude.isFinite
                 && CLLocationCoordinate2DIsValid(.init(latitude: place.latitude, longitude: place.longitude))
             latitude = valid ? (place.latitude == 0 ? 0 : place.latitude) : nil

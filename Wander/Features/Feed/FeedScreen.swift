@@ -541,7 +541,7 @@ struct FeedScreen: View {
                 .onChange(of: embeddedScrollResetRequest) { _, _ in
                     resetEmbeddedScroll(proxy)
                 }
-                .onChange(of: store.liveFeedQuery) { _, _ in
+                .onChange(of: store.liveFeedScrollResetRevision) { _, _ in
                     if isEmbedded { resetEmbeddedScroll(proxy) }
                 }
                 .onChange(of: store.feedAudience) { _, _ in

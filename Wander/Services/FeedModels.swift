@@ -1,7 +1,7 @@
 import Foundation
 
 /// A session-only audience choice, applied by the server before pagination.
-enum FeedAudience: String, CaseIterable, Equatable {
+enum FeedAudience: String, Codable, CaseIterable, Equatable {
     case everyone
     case onlyMe = "only_me"
     case onlyFriends = "only_friends"

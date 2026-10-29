@@ -28,6 +28,22 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertFalse(query["notification_type"]?.contains("shared_visit") == true)
     }
 
+    func testNotificationWannasUseBoundedAuthorizedServerFilterAndPropagateFailure() async throws {
+        let table = RecordingTable()
+        table.responses["GET:notification_events"] = Data("[]".utf8)
+        let feed = NotificationWannaFeed()
+        let repository = SupabaseActivityNotificationRepository(table: table, feed: feed)
+        _ = try await repository.receivedActivity(userID: "recipient")
+        XCTAssertEqual(feed.cursors.count, 2)
+        XCTAssertNil(feed.cursors[0])
+        XCTAssertEqual(feed.cursors[1], "next")
+        feed.fails = true
+        do {
+            _ = try await repository.receivedActivity(userID: "recipient")
+            XCTFail("An unavailable Wanna source must not look like a successful empty refresh")
+        } catch { }
+    }
+
     func testSharedPostCompanionsUseExistingAuthorizedContextAndClearOnDeclinedRefresh() async throws {
         let rpc = RecordingRPC()
         let row = """
@@ -5937,5 +5953,22 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
                 result[element.key] = nil
             }
         }
+    }
+}
+
+@MainActor private final class NotificationWannaFeed: FeedRepository {
+    var cursors: [String?] = []
+    var fails = false
+    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
+        XCTFail("Do not filter a mixed activity page after its limit")
+        throw WanderRemoteError.notConfigured
+    }
+    func liveMapActivity(audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int) async throws -> FollowedFeedPage {
+        XCTAssertEqual(audience, .everyone)
+        XCTAssertEqual(query, LiveFeedQuery(activityType: .wannas))
+        XCTAssertEqual(limit, 50)
+        cursors.append(before)
+        if fails { throw WanderRemoteError.notConfigured }
+        return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: "next", fetchedAt: .now)
     }
 }

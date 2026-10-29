@@ -5,6 +5,40 @@ import XCTest
 final class LiveTotemUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testCountryAliasHasOneSavedMarkerThroughSelectionAndZoom() {
+        let app = launch()
+        collapseDrawer(app)
+        let pin = app.buttons["live.pin.totem_tacos"]
+        wait(pin)
+        settle(pin)
+        func assertOneSavedMarker() {
+            let matches = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.totem_tacos"))
+            XCTAssertEqual(matches.count, 1, "One venue must never render both a pin and a dense dot.")
+            XCTAssertTrue(pin.label.contains("You, Wanna"))
+            XCTAssertFalse(pin.label.contains("Featured"))
+        }
+        assertOneSavedMarker()
+        pin.tap()
+        wait(app.buttons["live.placePreview.close"])
+        settle(pin)
+        assertOneSavedMarker()
+        capture("REC666-one-saved-marker-selected")
+        app.buttons["live.placePreview.close"].tap()
+        wait(pin)
+        settle(pin)
+        let map = app.descendants(matching: .any).matching(identifier: "live.map").firstMatch
+        map.pinch(withScale: 0.6, velocity: -1)
+        wait(pin)
+        settle(pin)
+        assertOneSavedMarker()
+        capture("REC666-one-saved-marker-dense")
+        map.pinch(withScale: 1.8, velocity: 1)
+        wait(pin)
+        settle(pin)
+        assertOneSavedMarker()
+        capture("REC666-one-saved-marker-expanded")
+    }
+
     func testTotemStatesFiltersAndPlaceNavigation() {
         let app = launch()
         capturePinStates(app)
@@ -158,7 +192,76 @@ final class LiveTotemUITests: XCTestCase {
         }
     }
 
-    private func launch() -> XCUIApplication {
+    func testWarmReturnsKeepSelectedPinAndFeedPosition() {
+        let app = launch()
+        collapseDrawer(app)
+        let pin = app.buttons["live.pin.totem_coffee"]
+        wait(pin); settle(pin)
+        pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        wait(app.buttons["live.placePreview.close"])
+        capture("rec667-before-five-second-return")
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 5)
+        reactivate(app)
+        wait(app.buttons["live.placePreview.close"], timeout: 5)
+        XCTAssertTrue(app.buttons["live.placePreview.close"].exists, "A warm return must preserve the selected pin")
+        capture("rec667-after-five-second-return")
+        app.buttons["live.placePreview.close"].tap()
+        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        handle.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.5)).press(forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.15)))
+        let scroll = app.scrollViews["feed.places.scroll"]
+        wait(scroll)
+        scroll.swipeUp()
+        let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'feed.activity.' AND identifier ENDSWITH '.postcard'"))
+        for seconds in [30.0, 120.0] {
+            let anchor = cards.allElementsBoundByIndex.first { $0.isHittable }
+            XCTAssertNotNil(anchor, "Expected a visible Feed card before backgrounding")
+            guard let anchor else { return }
+            let identifier = anchor.identifier, before = anchor.frame.minY
+            capture("rec667-before-\(Int(seconds))-second-return")
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: seconds)
+            reactivate(app)
+            let restored = app.descendants(matching: .any)[identifier].firstMatch
+            wait(restored, timeout: 5)
+            capture("rec667-after-\(Int(seconds))-second-return")
+            if !restored.exists {
+                let hierarchy = XCTAttachment(string: app.debugDescription)
+                hierarchy.name = "REC667 warm-return hierarchy"
+                hierarchy.lifetime = .keepAlways
+                add(hierarchy)
+            }
+            XCTAssertTrue(restored.exists, "Warm return must retain the reader's card")
+            XCTAssertEqual(restored.frame.minY, before, accuracy: 8, "Warm refresh must preserve Feed position")
+        }
+    }
+
+    func testColdLaunchRestoresFilterAndDrawerBookmark() {
+        let app = launch(restoration: true)
+        app.buttons["Filters"].tap()
+        app.buttons["live.filter.people"].tap()
+        app.buttons["live.filter.option.People.Only Friends"].tap()
+        app.buttons["live.applyFilters"].tap()
+        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        wait(handle)
+        handle.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.5)).press(forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.15)))
+        let savedLabel = handle.label
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+        app.launch()
+        let restoredHandle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        wait(restoredHandle, timeout: 30)
+        XCTAssertEqual(restoredHandle.label, savedLabel)
+        collapseDrawer(app)
+        app.buttons["Filters"].tap()
+        wait(app.buttons["live.filter.people"])
+        XCTAssertEqual(app.buttons["live.filter.people"].value as? String, "Only Friends")
+        capture("rec667-cold-restored-filters")
+    }
+
+    private func launch(restoration: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest",
@@ -166,12 +269,26 @@ final class LiveTotemUITests: XCTestCase {
             "-astir.live.viewedPins.user_joe", "",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        if restoration { app.launchArguments.append("-WanderLiveRestorationUITest") }
         app.launch()
+        if restoration {
+            wait(app.descendants(matching: .any)["live.drawerHandle"].firstMatch, timeout: 30)
+            collapseDrawer(app)
+        }
         wait(app.buttons["live.draw"], timeout: 30)
         if app.buttons["live.introduction.notNow"].exists {
             app.buttons["live.introduction.notNow"].tap()
         }
         return app
+    }
+
+    private func reactivate(_ app: XCUIApplication) {
+        app.activate()
+        let foreground = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.state == .runningForeground
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [foreground], timeout: 5), .completed,
+                       "Warm-return assertions require the app to actually be foregrounded")
     }
 
     private func wait(_ element: XCUIElement, timeout: TimeInterval = 10) {
@@ -192,7 +309,8 @@ final class LiveTotemUITests: XCTestCase {
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)),
                    withVelocity: .slow, thenHoldForDuration: 0.1)
         let collapsed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            handle.exists && handle.label.contains(", collapsed")
+            let current = app.descendants(matching: .any).matching(identifier: "live.drawerHandle").firstMatch
+            return current.exists && current.label.contains(", collapsed")
         }, object: nil)
         let result = XCTWaiter.wait(for: [collapsed], timeout: 10)
         if result != .completed { capture("diagnostic-drawer-drag") }

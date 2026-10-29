@@ -222,7 +222,8 @@
         "Vegan",
         "Gluten-free",
         "Snack bar",
-        "Gastropub"
+        "Gastropub",
+        "Fruit stand"
       ]
     },
     {
@@ -261,6 +262,7 @@
       "subcategories": [
         "Coffee shop",
         "Cafe",
+        "Working cafe",
         "Coffee stand",
         "Coffee lounge",
         "Roastery",
@@ -523,7 +525,6 @@
         "Banquet hall",
         "Wedding venue",
         "Community center",
-        "Internet cafe",
         "Dance hall",
         "Barbecue area",
         "Stadium",
