@@ -2054,8 +2054,8 @@ final class WanderStore: ObservableObject {
                     else { return }
                     authorizedAt = self.liveFeedClock()
                     guard self.followedFeedPage == nil else { return }
-                    self.acceptLiveFeedAuthorization(content, at: authorizedAt!, replacing: true)
                     self.followedFeedPage = self.displayableFeedPage(content)
+                    self.acceptLiveFeedAuthorization(content, at: authorizedAt!, replacing: true)
                     self.feedLoadState = .loaded
                     self.lastFeedRefreshAt = content.fetchedAt
                 }
@@ -2070,7 +2070,6 @@ final class WanderStore: ObservableObject {
                 guard !Task.isCancelled, currentUser.id == requestUserID,
                       feedAudience == audience, liveFeedQuery == query,
                       feedRefreshTask?.id == requestID else { return false }
-                acceptLiveFeedAuthorization(resolvedPage, at: authorizedAt ?? liveFeedClock(), replacing: retainedPage == nil)
                 if let retainedPage {
                     let oldestFresh = resolvedPage.activity.min {
                         $0.occurredAt == $1.occurredAt ? $0.id < $1.id : $0.occurredAt < $1.occurredAt
@@ -2098,6 +2097,7 @@ final class WanderStore: ObservableObject {
                         featuredPlaces: resolvedPage.featuredPlaces, nextCursor: nextCursor,
                         fetchedAt: resolvedPage.fetchedAt)
                 } else { followedFeedPage = resolvedPage }
+                acceptLiveFeedAuthorization(resolvedPage, at: authorizedAt ?? liveFeedClock(), replacing: retainedPage == nil)
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil
