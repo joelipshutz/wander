@@ -320,6 +320,7 @@ final class WanderStore: ObservableObject {
     private(set) var wannaRemovalAccountGeneration = UUID()
     @Published private(set) var feedAudience: FeedAudience = .everyone
     @Published private(set) var liveFeedQuery: LiveFeedQuery?
+    @Published private(set) var liveFeedScrollResetRevision: UInt64 = 0
     @Published private(set) var liveFeedExpansionStage: LiveFeedExpansionStage = .selected
     @Published private(set) var feedPaginationRevision: UInt64 = 0
     private var liveFeedRequestedCursors = Set<String>()
@@ -1476,6 +1477,7 @@ final class WanderStore: ObservableObject {
             feedRefreshCompletedRevision = nil
             feedAudience = .everyone
             liveFeedQuery = nil
+            liveFeedScrollResetRevision &+= 1
             clearLiveFeedLease()
             followedFeedPage = nil
             feedLoadState = .idle
@@ -1784,6 +1786,7 @@ final class WanderStore: ObservableObject {
         feedRefreshCompletedRevision = nil
         feedAudience = .everyone
         liveFeedQuery = nil
+        liveFeedScrollResetRevision &+= 1
         clearLiveFeedLease()
         followedFeedPage = nil
         feedLoadState = .idle
@@ -1947,6 +1950,7 @@ final class WanderStore: ObservableObject {
         feedLoadState = .idle
         lastFeedRefreshAt = nil
         liveFeedQuery = query
+        if !preservingMatchingContent { liveFeedScrollResetRevision &+= 1 }
         if let previous, let query {
             followedFeedPage = FollowedFeedPage(activity: previous.activity.filter {
                 query.includes($0) && canDisplayLiveMapActivity($0)

@@ -150,6 +150,9 @@ struct LiveScreen: View {
     var body: some View {
         liveContent.modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
             onDismiss: modalDidDismiss, lifecycle: modalLifecycle))
+            .onChange(of: detent) { _, _ in saveBrowseState() }
+            .onChange(of: selection) { _, _ in saveBrowseState() }
+            .onChange(of: store.feedAudience) { _, _ in saveBrowseState() }
     }
 
     private var livePresentedContent: some View {
@@ -427,6 +430,7 @@ struct LiveScreen: View {
             else { restoreFeedPresentation() }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .inactive { saveBrowseState() }
             if phase == .background {
                 backgroundedAt = .now
                 saveBrowseState()
@@ -1330,6 +1334,9 @@ struct LiveScreen: View {
     }
 
     private func restoreFeedPresentation() {
+        // Initial tab activation is not a return from another surface. Keep
+        // the bookmark installed by onAppear until a real departure occurs.
+        guard departedAt != nil else { return }
         let retains = LiveReviewContinuity.keepsFeedPosition(scrolled: departedFeedWasScrolled, departedAt: departedAt)
         if !retains { feedScrollResetRequest = UUID(); feedIsScrolled = false }
         let returningFromCard = hasPlacePreview || cardMapOrigin != nil
@@ -1488,9 +1495,11 @@ struct LiveScreen: View {
         return LiveDrawnArea(coordinates: [point(lat-dy, lon-dx), point(lat-dy, lon+dx), point(lat+dy, lon+dx), point(lat+dy, lon-dx)])
     }
     private func saveBrowseState() {
-        guard LiveBrowseRestoration.enabledForProcess, let region = drawerMapOrigin ?? viewport else { return }
+        guard didRestoreBrowse, LiveBrowseRestoration.enabledForProcess,
+              let region = viewport ?? drawerMapOrigin else { return }
         LiveBrowseRestoration(selection: selection, audience: store.feedAudience, area: area,
-            boundary: committedMapBoundary, region: region, detent: detent, lastLocation: lastLocationCenter).save(userID: store.currentUser.id)
+            boundary: committedMapBoundary, region: region, detent: detent, lastLocation: lastLocationCenter,
+            drawerOrigin: drawerMapOrigin).save(userID: store.currentUser.id)
     }
 
     private func restoreBrowseState() {
@@ -1502,6 +1511,8 @@ struct LiveScreen: View {
         area = saved.area; committedMapBoundary = saved.boundary
         committedMapViewport = saved.boundary.flatMap(Self.viewport)
         detent = saved.detent
+        drawerMapOrigin = saved.drawerOrigin?.region
+        viewport = saved.region
         lastLocationCenter = saved.lastLocation.map { .init(latitude: $0.latitude, longitude: $0.longitude) }
         restoredWithoutLocation = lastLocationCenter == nil
         setMapCamera(.region(saved.region)); didFrame = true

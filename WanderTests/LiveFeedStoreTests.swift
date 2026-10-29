@@ -359,6 +359,19 @@ final class LiveFeedStoreTests: XCTestCase {
         XCTAssertNotEqual(store.liveContentRevision, revision)
     }
 
+    func testWarmQueryAdvancePreservesScrollWhileExplicitBrowseAndAccountChangesResetIt() {
+        let store = WanderStore(fixtures: .seed())
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 100)))
+        let initial = store.liveFeedScrollResetRevision
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 220)), preservingMatchingContent: true)
+        XCTAssertEqual(store.liveFeedScrollResetRevision, initial)
+        store.selectLiveFeedQuery(.init(activityType: .wannas))
+        XCTAssertGreaterThan(store.liveFeedScrollResetRevision, initial)
+        let filtered = store.liveFeedScrollResetRevision
+        store.apply(authState: .signedIn(AuthSession(userID: "scroll-new-account", displayName: "Fixture", handle: "fixture")))
+        XCTAssertGreaterThan(store.liveFeedScrollResetRevision, filtered)
+    }
+
     func testAutomaticMovementKeepsMatchingRowsButNeverOldCursorOrExpiredAuthorization() async {
         let start = ContinuousClock.now
         var instant = start

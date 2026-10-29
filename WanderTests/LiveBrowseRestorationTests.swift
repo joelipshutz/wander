@@ -62,4 +62,18 @@ final class LiveBrowseRestorationTests: XCTestCase {
             region: LiveMapCameraPolicy.locationRegion(.init(latitude: 0, longitude: 0)), detent: 1, now: now.addingTimeInterval(1))
         XCTAssertFalse(future.isValid(now: now))
     }
+
+    func testVisibleCameraAndDrawerOriginRoundTripIndependently() throws {
+        let visible = LiveMapCameraPolicy.locationRegion(.init(latitude: 40.9, longitude: -74))
+        let origin = LiveMapCameraPolicy.locationRegion(.init(latitude: 40.7, longitude: -74))
+        let saved = LiveBrowseRestoration(selection: .init(), audience: .everyone, area: nil,
+            boundary: nil, region: visible, detent: 1, drawerOrigin: origin)
+        let copy = try JSONDecoder().decode(LiveBrowseRestoration.self, from: JSONEncoder().encode(saved))
+        XCTAssertTrue(copy.isValid(now: .now))
+        XCTAssertEqual(copy.region.center.latitude, visible.center.latitude)
+        XCTAssertEqual(copy.drawerOrigin?.region.center.latitude, origin.center.latitude)
+        let invalidOrigin = MKCoordinateRegion(center: origin.center, span: .init(latitudeDelta: 0, longitudeDelta: 0))
+        XCTAssertFalse(LiveBrowseRestoration(selection: .init(), audience: .everyone, area: nil,
+            boundary: nil, region: visible, detent: 1, drawerOrigin: invalidOrigin).isValid(now: .now))
+    }
 }

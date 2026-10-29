@@ -2,6 +2,25 @@ import MapKit
 
 /// A small UI bookmark, never a persisted authorization receipt or social page.
 struct LiveBrowseRestoration: Codable {
+    struct CameraRegion: Codable {
+        let latitude: Double
+        let longitude: Double
+        let latitudeDelta: Double
+        let longitudeDelta: Double
+        init(_ region: MKCoordinateRegion) {
+            latitude = region.center.latitude; longitude = region.center.longitude
+            latitudeDelta = region.span.latitudeDelta; longitudeDelta = region.span.longitudeDelta
+        }
+        var region: MKCoordinateRegion {
+            .init(center: .init(latitude: latitude, longitude: longitude),
+                  span: .init(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta))
+        }
+        var isValid: Bool {
+            CLLocationCoordinate2DIsValid(region.center) && latitude.isFinite && longitude.isFinite
+                && latitudeDelta.isFinite && longitudeDelta.isFinite
+                && latitudeDelta > 0 && latitudeDelta <= 180 && longitudeDelta > 0 && longitudeDelta < 180
+        }
+    }
     static var enabledForProcess: Bool {
         #if DEBUG && targetEnvironment(simulator)
         let arguments = ProcessInfo.processInfo.arguments
@@ -24,13 +43,15 @@ struct LiveBrowseRestoration: Codable {
     let longitudeDelta: Double
     let detent: Int
     let lastLocation: LiveFeedQuery.Vertex?
+    let drawerOrigin: CameraRegion?
 
     init(selection: LiveBrowseSelection, audience: FeedAudience, area: LiveSelectedArea?,
          boundary: LiveDrawnArea?, region: MKCoordinateRegion, detent: Int,
-         lastLocation: CLLocationCoordinate2D? = nil, now: Date = .now) {
+         lastLocation: CLLocationCoordinate2D? = nil, drawerOrigin: MKCoordinateRegion? = nil, now: Date = .now) {
         version = 1; savedAt = now; self.selection = selection; self.audience = audience
         self.area = area; self.boundary = boundary; self.detent = detent
         self.lastLocation = lastLocation.map { .init(latitude: $0.latitude, longitude: $0.longitude) }
+        self.drawerOrigin = drawerOrigin.map(CameraRegion.init)
         latitude = region.center.latitude; longitude = region.center.longitude
         latitudeDelta = region.span.latitudeDelta; longitudeDelta = region.span.longitudeDelta
     }
@@ -42,9 +63,7 @@ struct LiveBrowseRestoration: Codable {
         let age = now.timeIntervalSince(savedAt)
         return version == 1 && age.isFinite && age >= 0 && age < Self.maximumAge
             && selection.isValid && selection.personIDs.count <= 100 && selection.categoryIDs.count <= 100
-            && CLLocationCoordinate2DIsValid(region.center) && latitude.isFinite && longitude.isFinite
-            && latitudeDelta.isFinite && longitudeDelta.isFinite
-            && latitudeDelta > 0 && latitudeDelta <= 180 && longitudeDelta > 0 && longitudeDelta < 180
+            && CameraRegion(region).isValid && (drawerOrigin?.isValid ?? true)
             && (lastLocation.map { $0.latitude.isFinite && $0.longitude.isFinite && CLLocationCoordinate2DIsValid(.init(latitude: $0.latitude, longitude: $0.longitude)) } ?? true)
             && (0...2).contains(detent)
             && [area?.boundary, boundary].compactMap { $0 }.allSatisfy {
