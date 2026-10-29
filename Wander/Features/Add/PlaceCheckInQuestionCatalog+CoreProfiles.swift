@@ -8,7 +8,7 @@ extension PlaceCheckInQuestionCatalog {
     static let coreProfiles: [PlaceCheckInQuestionProfile] = [
         p("restaurants_food", "Restaurant|Thai|Vietnamese|Chinese|Korean|Japanese|Indian|Asian fusion|Sushi|Ramen|Dumplings|Bao buns|Noodles|Dim sum|Cantonese|Taiwanese|Izakaya|Yakitori|North Indian|South Indian|Pakistani|Sri Lankan|Bangladeshi|Nepalese|Malaysian|Singaporean|Indonesian|Filipino|Burmese|Cambodian|Laotian|Asian|Tibetan|Mongolian|Georgian|Armenian|Uzbek|Mongolian BBQ|Japanese curry|Tonkatsu|Afghan|Middle Eastern|Lebanese|Persian|Turkish|Israeli|Palestinian|Syrian|Iraqi|Jordanian|Yemeni|Egyptian|Moroccan|Tunisian|Algerian|Ethiopian|Eritrean|Somali|Kenyan|Nigerian|Ghanaian|Senegalese|South African|African|Falafel|Gyro|Kebab|Shawarma|Halal|Italian|Mediterranean|Greek|French|Spanish|Tapas|Portuguese|Basque|German|Austrian|Bavarian|Swiss|Dutch|Belgian|British|Irish|Scandinavian|Swedish|Norwegian|Finnish|Danish|Polish|Ukrainian|Russian|Czech|Slovak|Hungarian|Romanian|Croatian|Serbian|Bosnian|Bulgarian|Albanian|Slovenian|Lithuanian|European|Eastern European|Pizza|Fish & chips|Fondue|American|Canadian|Mexican|Tex-Mex|Caribbean|Jamaican|Puerto Rican|Dominican|Haitian|Panamanian|Cuban|Brazilian|Argentinian|Colombian|Chilean|Peruvian|Venezuelan|Ecuadorian|Bolivian|Uruguayan|Salvadoran|Guatemalan|South American|Latin American|Southwestern|Cajun|Californian|Hawaiian|Poke|Australian|New Zealand|Fijian|Samoan|Tongan|Burgers|Diner|Hot dogs|Barbecue|Wings|Steakhouse|Bar & grill|Burrito|Taco|Sandwich|Bagel|Deli|Salad|Bistro|Breakfast|Brunch|Soup|Chicken|Seafood|Oyster bar|Gastropub", "arrival_parking outdoor_seating dietary_options"),
         p("restaurants_food", "Hot pot|Yakiniku|Korean BBQ|Japanese BBQ", "ventilation booking_policy dietary_options"),
-        p("restaurants_food", "Taco stand|Taco truck|Snack bar", "arrival_parking waiting dietary_options"),
+        p("restaurants_food", "Taco stand|Taco truck|Snack bar|Fruit stand", "arrival_parking waiting dietary_options"),
         p("restaurants_food", "Food court", "seating restroom dietary_options"),
         p("restaurants_food", "Vegetarian", "arrival_parking outdoor_seating vegan"),
         p("restaurants_food", "Vegan", "arrival_parking outdoor_seating gluten_free_options"),
@@ -19,6 +19,7 @@ extension PlaceCheckInQuestionCatalog {
 
         p("coffee_tea_sweets", "Coffee shop", "laptop outlets dog_access"),
         p("coffee_tea_sweets", "Cafe", "laptop outlets dog_access"),
+        p("coffee_tea_sweets", "Working cafe", "wifi outlets noise"),
         p("coffee_tea_sweets", "Coffee stand", "waiting milk dog_access"),
         p("coffee_tea_sweets", "Coffee lounge", "laptop outlets dog_access"),
         p("coffee_tea_sweets", "Roastery", "beans tasting dog_access"),
