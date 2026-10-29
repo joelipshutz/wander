@@ -98,12 +98,41 @@ import XCTest
         XCTAssertFalse(app.staticTexts["Stored import details"].exists)
         grouped.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 5))
-        XCTAssertEqual(bell.value as? String, "No new notifications")
         bell.tap()
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
         XCTAssertTrue(app.textViews["activity.comment.input"].waitForExistence(timeout: 10))
         capture("REC-653 notification conversation")
+    }
+
+    func testUnseenDotsClearOnlyAfterBrowsingAndPersistAcrossReopening() {
+        let app = launch(extraArguments: ["-WanderActivityNotificationUITest", "-WanderNotificationScrollUITest"])
+        let bell = app.buttons["feed.notifications"]
+        XCTAssertTrue(bell.waitForExistence(timeout: 15))
+        bell.tap()
+        let first = app.buttons["notifications.activity.66800000-0000-0000-0000-000000000001"]
+        XCTAssertTrue(first.waitForExistence(timeout: 8))
+        XCTAssertEqual(first.value as? String, "New notification")
+        capture("REC-668 unseen Wanna dots")
+        // Opening and leaving only consumes the rows actually encountered.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(bell.waitForExistence(timeout: 5))
+        XCTAssertNotEqual(bell.value as? String, "No new notifications")
+        bell.tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertEqual(first.value as? String, "Seen")
+        let ninth = app.buttons["notifications.activity.66800000-0000-0000-0000-000000000009"]
+        for _ in 0..<8 where !ninth.isHittable { app.scrollViews.firstMatch.swipeUp(velocity: .slow) }
+        XCTAssertTrue(ninth.isHittable)
+        XCTAssertEqual(ninth.value as? String, "New notification")
+        capture("REC-668 later Wanna remains new")
+        // Scroll it past the top, then return: the dot is gone in this session.
+        for _ in 0..<3 { app.scrollViews.firstMatch.swipeUp(velocity: .slow) }
+        for _ in 0..<8 where !ninth.isHittable { app.scrollViews.firstMatch.swipeDown(velocity: .slow) }
+        XCTAssertTrue(ninth.isHittable)
+        XCTAssertEqual(ninth.value as? String, "Seen")
+        capture("REC-668 scrolled-past Wanna is seen")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
     }
 
     private func capture(_ name: String) {

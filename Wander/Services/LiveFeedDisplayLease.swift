@@ -13,6 +13,10 @@ struct LiveFeedDisplayLease {
         for id in activityIDs { authorizedAt[id] = now }
     }
 
+    mutating func retain(activityIDs: Set<String>) {
+        authorizedAt = authorizedAt.filter { activityIDs.contains($0.key) }
+    }
+
     func permits(activityID: String, isOwn: Bool, at now: ContinuousClock.Instant) -> Bool {
         if isOwn { return true }
         guard let accepted = authorizedAt[activityID] else { return false }
