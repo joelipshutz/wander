@@ -634,7 +634,7 @@ struct ProfileScreen: View {
     }
 
     private var pageTitle: some View {
-        Text("profile")
+        Text("Profile")
             .font(AstirTypography.screenTitle)
             .lineLimit(1)
     }
@@ -674,7 +674,7 @@ struct ProfileScreen: View {
     private var monthCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("this month")
+                Text("This month")
                     .font(AstirTypography.sectionTitle)
                 Spacer()
                 Text("JUN '26")
@@ -699,11 +699,11 @@ struct ProfileScreen: View {
 
     private var draftsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("drafts")
+            Text("Drafts")
                 .font(AstirTypography.sectionTitle)
 
             if store.unresolvedDrafts.isEmpty {
-                SmallEmptyRow(title: "No unresolved drafts", subtitle: "link and photo shells land here")
+                SmallEmptyRow(title: "No unresolved drafts", subtitle: "Link and photo shells land here")
             } else {
                 ForEach(store.unresolvedDrafts) { draft in
                     HStack {
@@ -732,7 +732,7 @@ struct ProfileScreen: View {
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("recent")
+                Text("Recent")
                     .font(AstirTypography.sectionTitle)
                 Spacer()
             }
@@ -745,7 +745,7 @@ struct ProfileScreen: View {
 
     private var peopleSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("people")
+            Text("People")
                 .font(AstirTypography.sectionTitle)
 
             AstirEditorialSegmentedSwitch(
@@ -1301,17 +1301,17 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .following: "following"
-        case .followers: "followers"
-        case .friends: "friends"
+        case .following: "Following"
+        case .followers: "Followers"
+        case .friends: "Friends"
         }
     }
 
     var emptySubtitle: String {
         switch self {
-        case .following: "follow someone from contacts or username search"
-        case .followers: "people who follow you will show up here"
-        case .friends: "mutual follows show up here"
+        case .following: "Follow someone from contacts or username search"
+        case .followers: "People who follow you will show up here"
+        case .friends: "Mutual follows show up here"
         }
     }
 }
@@ -2363,7 +2363,7 @@ private struct InCommonReleaseHero: View {
             )
 
             if !signals.isEmpty {
-                Text("you both keep coming back for")
+                Text("You both keep coming back for")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
 
@@ -2400,7 +2400,7 @@ private struct InCommonReleaseHero: View {
                 Text("\(score)%")
                     .font(AstirTypography.sheetTitle)
                     .monospacedDigit()
-                Text("overlap")
+                Text("Overlap")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -2483,7 +2483,7 @@ private struct InCommonReleaseMapScreen: View {
                     onSelect: onSelect
                 )
 
-                Text("where you agree")
+                Text("Where you agree")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(brandMode.primaryText)
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -2702,7 +2702,7 @@ private struct SavedPlacesListScreen: View {
                         calendarDayFilterControls
                     } else {
                         searchField
-                        filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                        filterSection(title: "Type", values: categories, selectedValue: $selectedCategory)
                         tagFilterDropdown
                     }
 
@@ -2715,12 +2715,12 @@ private struct SavedPlacesListScreen: View {
                         } else if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
-                                subtitle: "check-ins will show up here"
+                                subtitle: "Check-ins will show up here"
                             )
                         } else if collection?.calendarDay != nil {
-                            SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
+                            SmallEmptyRow(title: "No matching places", subtitle: "Try another type or tag")
                         } else {
-                            SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                            SmallEmptyRow(title: "No matching places", subtitle: "Try clearing search or filters")
                         }
                     } else {
                         ForEach(filteredPlaces) { visiblePlace in
@@ -2830,7 +2830,7 @@ private struct SavedPlacesListScreen: View {
             signals.append(
                 InCommonReleaseSignal(
                     emoji: category.value.first?.categoryEmoji ?? "📍",
-                    title: category.key,
+                    title: AppCopy.capitalizingInitial(category.key),
                     detail: "\(category.value.count) shared \(category.value.count == 1 ? "place" : "places")"
                 )
             )
@@ -2961,15 +2961,15 @@ private struct SavedPlacesListScreen: View {
     private var calendarDayFilterControls: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             compactFilterDropdown(
-                title: "type",
+                title: "Type",
                 systemImage: "square.grid.2x2.fill",
                 allTitle: "All types",
                 values: categories,
                 selectedValue: $selectedCategory,
-                displayTitle: { WanderPlaceCategory.broadCategory(for: $0) }
+                displayTitle: { AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: $0)) }
             )
             compactFilterDropdown(
-                title: "tags",
+                title: "Tags",
                 systemImage: "tag.fill",
                 allTitle: "All tags",
                 values: metadataTags,
@@ -3047,7 +3047,7 @@ private struct SavedPlacesListScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(brandMode.secondaryText)
-            TextField("search \(navigationTitle.lowercased())", text: $query)
+            TextField("Search \(navigationTitle.lowercased())", text: $query)
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -3072,7 +3072,7 @@ private struct SavedPlacesListScreen: View {
                     Button {
                         selectedValue.wrappedValue = nil
                     } label: {
-                        filterOption("all", isSelected: selectedValue.wrappedValue == nil)
+                        filterOption("All", isSelected: selectedValue.wrappedValue == nil)
                     }
                     .buttonStyle(.plain)
 
@@ -3081,7 +3081,7 @@ private struct SavedPlacesListScreen: View {
                             selectedValue.wrappedValue = selectedValue.wrappedValue == value ? nil : value
                         } label: {
                             filterOption(
-                                title == "type" ? WanderPlaceCategory.broadCategory(for: value) : value,
+                                title.caseInsensitiveCompare("type") == .orderedSame ? AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: value)) : value,
                                 isSelected: selectedValue.wrappedValue == value
                             )
                         }
@@ -3109,7 +3109,7 @@ private struct SavedPlacesListScreen: View {
 
     private var tagFilterDropdown: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("tags")
+            Text("Tags")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -3149,7 +3149,7 @@ private struct SavedPlacesListScreen: View {
                     HStack(spacing: WanderTheme.spacing2) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(brandMode.secondaryText)
-                        TextField("search tags", text: $tagFilterQuery)
+                        TextField("Search tags", text: $tagFilterQuery)
                             .textFieldStyle(.plain)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -3164,7 +3164,7 @@ private struct SavedPlacesListScreen: View {
                             tagOption(title: "All tags", value: nil)
 
                             if filteredMetadataTags.isEmpty {
-                                Text(metadataTags.isEmpty ? "no tags saved yet" : "no matching tags")
+                                Text(metadataTags.isEmpty ? "No tags saved yet" : "No matching tags")
                                     .font(AstirTypography.bodySmall)
                                     .foregroundStyle(brandMode.secondaryText)
                                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
@@ -3549,7 +3549,7 @@ private struct GraphPersonListRow: View {
     private var savedPlaceCountLabel: String {
         switch savedPlaceCount {
         case 0:
-            return "no saved places yet"
+            return "No saved places yet"
         case 1:
             return "1 saved place"
         default:

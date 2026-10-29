@@ -200,7 +200,7 @@ struct MapPlaceListPickerSheet: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text("add to lists")
+                        Text("Add to lists")
                             .font(AstirTypography.sheetTitle)
                             .foregroundStyle(brandMode.primaryText)
                         Text(additionalTargets.isEmpty ? target.placeName : "\(targets.count) places")
@@ -215,10 +215,10 @@ struct MapPlaceListPickerSheet: View {
                         emptyState
                     } else {
                         if !yourLists.isEmpty {
-                            listSection(title: "your lists", lists: yourLists)
+                            listSection(title: "Your lists", lists: yourLists)
                         }
                         if !collaborationLists.isEmpty {
-                            listSection(title: "collabs", lists: collaborationLists)
+                            listSection(title: "Collabs", lists: collaborationLists)
                         }
                     }
 

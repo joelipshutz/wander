@@ -154,7 +154,7 @@ struct CheckInQuestionPanel: View {
     }
 
     private var sectionTitle: some View {
-        Text("useful details")
+        Text("Useful details")
             .font(AstirTypography.label)
             .foregroundStyle(brandMode.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -356,7 +356,7 @@ struct CheckInPrivateAnswerSummary: View {
                             Text(row.prompt)
                                 .font(AstirTypography.bodySmall)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(row.answer)
+                            Text(AppCopy.capitalizingInitial(row.answer))
                                 .font(AstirTypography.control)
                         }
                         .accessibilityElement(children: .combine)
@@ -520,7 +520,7 @@ private struct CheckInQuestionAnswerRow: View {
                     Image(systemName: "checkmark")
                         .accessibilityHidden(true)
                 }
-                Text(option)
+                Text(AppCopy.capitalizingInitial(option))
                     .fixedSize(horizontal: false, vertical: true)
             }
             .font(AstirTypography.control)
@@ -536,7 +536,7 @@ private struct CheckInQuestionAnswerRow: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(question.prompt) \(option)")
+        .accessibilityLabel("\(question.prompt) \(AppCopy.capitalizingInitial(option))")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityHint(selected ? "Tap again to clear this answer." : "Select this answer.")
         .accessibilityIdentifier("save.question.\(question.id).\(option)")

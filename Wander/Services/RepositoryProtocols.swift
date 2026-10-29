@@ -475,7 +475,7 @@ extension PlaceCandidate {
 
         let miles = distanceMeters / 1_609.344
         if miles < 0.1 {
-            return "nearby"
+            return "Nearby"
         }
         if miles < 10 {
             return String(format: "%.1f mi", miles)
@@ -512,7 +512,7 @@ extension PlaceCandidate {
         let parts = Self.dedupedDisplayParts(baseParts + trailingParts)
 
         guard !parts.isEmpty else {
-            return fallback ?? "confidence \(Int(confidence * 100))%"
+            return fallback ?? "Confidence \(Int(confidence * 100))%"
         }
 
         return parts.joined(separator: " · ")

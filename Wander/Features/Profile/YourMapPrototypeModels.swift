@@ -414,7 +414,7 @@ struct YourMapPrototypeDataset {
                 latitude: place.latitude,
                 longitude: place.longitude,
                 status: status,
-                category: WanderPlaceCategory.broadCategory(for: saved.category),
+                category: AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: saved.category)),
                 city: city,
                 country: country,
                 tags: tags,

@@ -622,7 +622,7 @@ struct ProfileOwnerHome: View {
     }
 
     private var ownerLabel: String {
-        mode.isOwner ? "your" : "\(profile.displayName.components(separatedBy: " ").first ?? profile.displayName)'s"
+        mode.isOwner ? "Your" : "\(profile.displayName.components(separatedBy: " ").first ?? profile.displayName)'s"
     }
 
     private func relationshipTitle(_ relationship: ViewerRelationship) -> String {
@@ -1256,9 +1256,9 @@ private struct ProfileSaveStreakRow: View {
 
     private var streakTitle: String {
         if summary.isRecoveryAvailable {
-            return "restore \(summary.recoverableCount)-day streak"
+            return "Restore \(summary.recoverableCount)-day streak"
         }
-        guard summary.currentCount > 0 else { return "start a streak" }
+        guard summary.currentCount > 0 else { return "Start a streak" }
         return "\(summary.currentCount)-day streak"
     }
 
@@ -1300,7 +1300,7 @@ struct SaveStreakProfileRowMockup: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("profile")
+                Text("Profile")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
                 Text("Joe")
@@ -1396,9 +1396,9 @@ private struct ProfileCalendarSection: View {
             .walkthroughTarget(.profileCalendar)
 
             HStack(spacing: 0) {
-                ProfileCalendarMetric(value: insights.monthSpotCount, label: "spots ranked")
-                ProfileCalendarMetric(value: insights.monthCategoryCount, label: "categories")
-                ProfileCalendarMetric(value: insights.monthCityCount, label: "cities")
+                ProfileCalendarMetric(value: insights.monthSpotCount, label: "Spots ranked")
+                ProfileCalendarMetric(value: insights.monthCategoryCount, label: "Categories")
+                ProfileCalendarMetric(value: insights.monthCityCount, label: "Cities")
             }
 
             Text(monthActivitySummary)
@@ -1611,7 +1611,7 @@ private struct ProfileCalendarLegend: View {
     @Environment(\.astirBrandMode) private var brandMode
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            item(state: .visit, title: CheckInCopy.pluralNoun)
+            item(state: .visit, title: CheckInCopy.pluralTitle)
         }
         .font(AstirTypography.caption)
         .foregroundStyle(brandMode.secondaryText)

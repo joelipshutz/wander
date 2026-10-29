@@ -927,11 +927,11 @@ final class OnboardingStateTests: XCTestCase {
 
     func testCalendarPermissionPolicyUsesNeutralRequestAndSettingsRecovery() {
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .notDetermined), .request)
-        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "continue")
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "Continue")
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .denied), .openSettings)
-        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "open settings")
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "Open settings")
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .fullAccess), .sync)
-        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "sync now")
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "Sync now")
     }
 
     func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {

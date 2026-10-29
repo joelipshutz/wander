@@ -651,10 +651,10 @@ final class WanderStore: ObservableObject {
     )
 
     let smartFilters: [SmartFilter] = [
-        SmartFilter(id: "hikes-la", title: "hikes in LA", query: "hikes in LA"),
-        SmartFilter(id: "coffee-work", title: "coffee to work from", query: "coffee work friendly"),
-        SmartFilter(id: "patio-bars", title: "patio bars", query: "bars patio"),
-        SmartFilter(id: "friends-liked", title: "friends liked", query: "friends been")
+        SmartFilter(id: "hikes-la", title: "Hikes in LA", query: "hikes in LA"),
+        SmartFilter(id: "coffee-work", title: "Coffee to work from", query: "coffee work friendly"),
+        SmartFilter(id: "patio-bars", title: "Patio bars", query: "bars patio"),
+        SmartFilter(id: "friends-liked", title: "Friends liked", query: "friends been")
     ]
 
     init(
@@ -13479,7 +13479,7 @@ final class WanderStore: ObservableObject {
             items.append(
                 DiscoverEvidenceItem(
                     kind: .opinion,
-                    displayValue: "favorite",
+                    displayValue: "Favorite",
                     sourceOwnerID: visiblePlace.owner.id
                 )
             )
@@ -13541,10 +13541,10 @@ final class WanderStore: ObservableObject {
         if let relationship = filters.relationship {
             let title: String
             switch relationship {
-            case .owner: title = "mine"
-            case .mutual: title = "friend"
-            case .follower: title = "following"
-            case .nonFollower: title = "other person"
+            case .owner: title = "Mine"
+            case .mutual: title = "Friend"
+            case .follower: title = "Following"
+            case .nonFollower: title = "Other person"
             }
             items.append(
                 DiscoverEvidenceItem(

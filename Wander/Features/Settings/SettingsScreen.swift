@@ -29,14 +29,14 @@ struct SettingsScreen: View {
     }
 
     private var header: some View {
-        Text("settings")
+        Text("Settings")
             .font(AstirTypography.screenTitle)
             .lineLimit(1)
     }
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("account")
+            SettingsSectionTitle("Account")
 
             switch auth.state {
             case .signedIn(let session), .offline(let session, _):
@@ -167,7 +167,7 @@ struct SettingsScreen: View {
 
     private var visibilitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("privacy")
+            SettingsSectionTitle("Privacy")
 
             privateProfileToggle
 
@@ -250,7 +250,7 @@ struct SettingsScreen: View {
 
     private var blockedSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("blocked users")
+            SettingsSectionTitle("Blocked users")
             let blocked = store.blockedProfiles()
             if blocked.isEmpty {
                 Text("No one blocked.")
@@ -302,8 +302,8 @@ struct SettingsScreen: View {
             ) {
                 activeDetail = .trust
             }
-            SettingsRow(title: "Contacts", subtitle: "managed in iOS Settings", systemImage: "person.crop.rectangle.stack")
-            SettingsRow(title: "Notifications", subtitle: pushNotifications.statusTitle.lowercased(), systemImage: "bell") {
+            SettingsRow(title: "Contacts", subtitle: "Managed in iOS Settings", systemImage: "person.crop.rectangle.stack")
+            SettingsRow(title: "Notifications", subtitle: pushNotifications.statusTitle, systemImage: "bell") {
                 auth.requireSignIn(for: .manageNotifications) {
                     activeDetail = .notifications
                 }
@@ -423,7 +423,7 @@ struct NotificationSettingsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("notifications")
+                        Text("Notifications")
                             .font(AstirTypography.screenTitle)
                             .accessibilityAddTraits(.isHeader)
                         Text("Choose the account activity Astir can send to this phone.")
@@ -435,7 +435,7 @@ struct NotificationSettingsSheet: View {
                     statusBlock
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                        SettingsSectionTitle("push types")
+                        SettingsSectionTitle("Push types")
                         notificationToggle(
                             title: "Follows and friends",
                             systemImage: "person.2",
@@ -602,20 +602,20 @@ struct NotificationSettingsSheet: View {
 
     private var actionButtonTitle: String {
         if isChangingEnabledState || pushNotifications.isRequestingAuthorization || pushNotifications.isRegisteringToken {
-            return notificationsEnabled ? "disabling" : "allowing"
+            return notificationsEnabled ? "Disabling" : "Allowing"
         }
         if notificationsEnabled {
-            return "disable notifications"
+            return "Disable notifications"
         }
         switch pushNotifications.authorizationStatus {
         case .notDetermined:
-            return "continue"
+            return "Continue"
         case .denied:
-            return "open settings"
+            return "Open settings"
         case .authorized, .provisional, .ephemeral:
-            return "allow notifications"
+            return "Allow notifications"
         @unknown default:
-            return "continue"
+            return "Continue"
         }
     }
 
@@ -866,12 +866,12 @@ struct NotificationSettingsSheet: View {
 
 struct SettingsTrustSurface {
     static let rowTitle = "Privacy and trust"
-    static let rowSubtitle = "who sees places, location, sources"
+    static let rowSubtitle = "Who sees places, location, sources"
     static let rowAccessibilityID = "settings.privacyTrust.row"
     static let sheetAccessibilityID = "settings.privacyTrust.sheet"
     static let factAccessibilityPrefix = "settings.privacyTrust.fact."
-    static let sheetTitle = "privacy and trust"
-    static let sheetIntro = "quick answers for what Astir shares, syncs, and keeps private."
+    static let sheetTitle = "Privacy and trust"
+    static let sheetIntro = "Quick answers for what Astir shares, syncs, and keeps private."
 
     static let facts: [TrustFact] = [
         TrustFact(
@@ -914,7 +914,7 @@ struct SettingsTrustSurface {
 }
 
 struct SettingsDefaultPlacePrivacySurface {
-    static let toggleTitle = "stealth mode for new saves"
+    static let toggleTitle = "Stealth mode for new saves"
 
     static func helperCopy(for visibility: PlaceVisibility, isLockedByPrivateProfile: Bool = false) -> String {
         if isLockedByPrivateProfile {

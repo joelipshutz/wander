@@ -30,7 +30,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
 
         let picker = app.otherElements["map-list-picker.sheet"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["add to lists"].exists)
+        XCTAssertTrue(app.staticTexts["Add to lists"].exists)
         XCTAssertTrue(app.buttons["map-list-picker.new-list"].exists)
         capture("REC-414 Discover shared list picker")
 
@@ -86,7 +86,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
         collapsedListButton.tap()
 
         XCTAssertTrue(app.otherElements["map-list-picker.sheet"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["add to lists"].exists)
+        XCTAssertTrue(app.staticTexts["Add to lists"].exists)
         XCTAssertTrue(app.buttons["map-list-picker.new-list"].exists)
         XCTAssertEqual(
             app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Only yours")).count,
@@ -120,7 +120,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
 
         fullListButton.tap()
         XCTAssertTrue(app.otherElements["map-list-picker.sheet"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["add to lists"].exists)
+        XCTAssertTrue(app.staticTexts["Add to lists"].exists)
     }
 
     func testPerformanceFixtureCoversListsLifecycleWithoutStaleProjections() {
@@ -140,7 +140,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["28 places"].exists)
 
         app.buttons["Add places to list"].tap()
-        XCTAssertTrue(app.staticTexts["add places"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Add places"].waitForExistence(timeout: 5))
 
         let addSuggestion = app.buttons.matching(
             NSPredicate(
@@ -289,7 +289,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
             "The measured first swipe should move list-detail content."
         )
 
-        let suggestionsHeader = app.staticTexts["suggested places"]
+        let suggestionsHeader = app.staticTexts["Suggested places"]
         reveal(suggestionsHeader, in: app)
         XCTAssertTrue(suggestionsHeader.waitForExistence(timeout: 8))
 

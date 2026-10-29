@@ -423,7 +423,7 @@ enum ProfileInsightsPresenter {
             mapPoints: mapPoints,
             placeSummaries: summaries(
                 values: mapPlaces.map { ($0.category, $0.place.id) },
-                title: { WanderPlaceCategory.broadCategory(for: $0) },
+                title: { AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: $0)) },
                 total: mapPlaces.count
             ),
             citySummaries: citySummaries(

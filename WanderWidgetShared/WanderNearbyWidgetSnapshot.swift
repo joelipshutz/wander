@@ -29,11 +29,11 @@ struct WanderNearbyWidgetFreshness: Equatable, Sendable {
         let wholeMinutes = Int(age / 60)
         switch wholeMinutes {
         case 0:
-            return "updated <1 min ago"
+            return "Updated <1 min ago"
         case 1:
-            return "updated 1 min ago"
+            return "Updated 1 min ago"
         default:
-            return "updated \(wholeMinutes) mins ago"
+            return "Updated \(wholeMinutes) mins ago"
         }
     }
 }
@@ -149,7 +149,7 @@ struct WanderNearbyPlaceSnapshot: Codable, Equatable, Identifiable, Sendable {
               freshness.showsExactDistance,
               let distance = WanderNearbyWidgetDistanceFormatter.string(meters: distanceMeters)
         else {
-            return "near you"
+            return "Near you"
         }
         return "\(distance) away"
     }

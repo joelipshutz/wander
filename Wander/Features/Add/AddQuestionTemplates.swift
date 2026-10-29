@@ -55,7 +55,7 @@ enum AddQuestionTemplates {
         let tags = AddQuestionBlock(
             key: "\(keyPrefix)_tags",
             title: "Tags",
-            tag: "optional",
+            tag: "Optional",
             kind: .multiTag,
             valueType: "multi_tag",
             options: suggestions.unifiedTagOptions,
@@ -67,7 +67,7 @@ enum AddQuestionTemplates {
             AddQuestionBlock(
                 key: $0.id,
                 title: $0.prompt,
-                tag: "optional",
+                tag: "Optional",
                 kind: $0.allowsMultipleSelection ? .multiTag : .singleChoice,
                 valueType: $0.valueType,
                 options: $0.answerOptions,

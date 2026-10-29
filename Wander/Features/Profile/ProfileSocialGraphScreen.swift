@@ -132,7 +132,7 @@ struct ProfileSocialGraphScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .astirScreen()
-            .navigationTitle(isOwnerGraph ? "friends" : "connections")
+            .navigationTitle(isOwnerGraph ? "Friends" : "Connections")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

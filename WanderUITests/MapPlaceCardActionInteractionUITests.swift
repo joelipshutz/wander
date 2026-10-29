@@ -316,7 +316,7 @@ final class FeedPostcardInteractionUITests: XCTestCase {
 
         sharedMapButton.tap()
         XCTAssertTrue(app.navigationBars["Shared map"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.staticTexts["where you agree"].exists)
+        XCTAssertTrue(app.staticTexts["Where you agree"].exists)
         capture("rec-335-in-common-shared-map-release")
 
         let sharedPlace = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "in-common.map-place.")).firstMatch

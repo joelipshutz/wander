@@ -5,7 +5,7 @@ final class OnboardingWelcomeTests: XCTestCase {
     func testStaticOpeningIncludesFinalPhraseAndCompleteAccessibleCopy() throws {
         let content = try XCTUnwrap(OnboardingWelcomeConfiguration.resolved(environment: [:]).ticker)
         XCTAssertTrue(OnboardingTickerFrame.at(elapsed: content.staticElapsed, content: content).showsFinalLockup)
-        for phrase in ["Connect with your", "community", "people", "places", "loved ones", "a local experiment"] {
+        for phrase in ["Connect with your", "community", "people", "places", "loved ones", "A local experiment"] {
             XCTAssertTrue(content.staticAccessibilityLabel.contains(phrase))
         }
     }
@@ -63,7 +63,7 @@ final class OnboardingWelcomeTests: XCTestCase {
         XCTAssertEqual(ticker.stableText, "Connect with your")
         XCTAssertEqual(ticker.words, ["community", "people", "places", "loved ones"])
         XCTAssertEqual(ticker.description, "Keep track of everywhere you’ve been. Keep up with the people you love.")
-        XCTAssertEqual(ticker.finalLockup, "a local experiment")
+        XCTAssertEqual(ticker.finalLockup, "A local experiment")
         XCTAssertTrue(configuration.descriptionIsDelayed)
         XCTAssertEqual(configuration.steps, [.opening, .places, .people])
         XCTAssertEqual(configuration.next(after: .opening), .places)
@@ -82,7 +82,7 @@ final class OnboardingWelcomeTests: XCTestCase {
         ])
         XCTAssertEqual(configuration.ticker?.description, "An alternative supporting line.")
         XCTAssertEqual(configuration.ticker?.words, ["community", "people", "places", "loved ones"])
-        XCTAssertEqual(configuration.ticker?.finalLockup, "a local experiment")
+        XCTAssertEqual(configuration.ticker?.finalLockup, "A local experiment")
         XCTAssertFalse(configuration.descriptionIsDelayed)
     }
 

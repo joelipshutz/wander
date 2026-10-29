@@ -577,7 +577,7 @@ struct YourMapPrototypeScreen: View {
 
     private var categoryMixCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Label("category mix", systemImage: "chart.bar.fill")
+            Label("Category mix", systemImage: "chart.bar.fill")
                 .font(AstirTypography.label)
             ForEach(insights.categoryBreakdown.prefix(5)) { item in
                 YourMapPrototypeBarRow(item: item)
@@ -593,7 +593,7 @@ struct YourMapPrototypeScreen: View {
 
     private var repeatRateCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Label("repeat rate", systemImage: "arrow.triangle.2.circlepath")
+            Label("Repeat rate", systemImage: "arrow.triangle.2.circlepath")
                 .font(AstirTypography.label)
             Text("\(repeatRatePercentage)%")
                 .font(AstirTypography.screenTitle.monospacedDigit())
@@ -620,7 +620,7 @@ struct YourMapPrototypeScreen: View {
 
     private var monthlyRhythmCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Label("month by month", systemImage: "calendar")
+            Label("Month by month", systemImage: "calendar")
                 .font(AstirTypography.cardTitle)
 
             LazyVGrid(
@@ -659,7 +659,7 @@ struct YourMapPrototypeScreen: View {
 
     private var returnMagnetsCard: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Label("return magnets", systemImage: "arrow.triangle.2.circlepath")
+            Label("Return magnets", systemImage: "arrow.triangle.2.circlepath")
                 .font(AstirTypography.cardTitle)
 
             if insights.returnMagnets.isEmpty {
@@ -1278,8 +1278,8 @@ struct YourMapGeographyCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: WanderTheme.spacing4) {
-                column("cities", items: cities, identifier: "city")
-                column("countries", items: countries, identifier: "country")
+                column("Cities", items: cities, identifier: "city")
+                column("Countries", items: countries, identifier: "country")
             }
             .overlay {
                 Rectangle()

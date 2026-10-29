@@ -952,7 +952,7 @@ struct LiveScreen: View {
                     .accessibilityIdentifier("live.filter.people")
                     .accessibilityValue(draftAudience.title)
                     Picker("Activity", selection: $draftSelection.activityType) {
-                        ForEach(LiveActivityFilter.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(LiveActivityFilter.allCases) { Text(AppCopy.capitalizingInitial($0.rawValue)).tag($0) }
                     }.accessibilityIdentifier("live.filter.activity")
                     Picker("When", selection: $draftSelection.time) {
                         ForEach(LiveTimeFilter.allCases) { Text($0.title).tag($0) }
@@ -1019,7 +1019,7 @@ struct LiveScreen: View {
         Section("Categories") {
             let categories = WanderPlaceCategory.allowedCategories
             ForEach(categories, id: \.self) { category in
-                Toggle(WanderPlaceCategory.broadCategory(for: category),
+                Toggle(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)),
                        isOn: Binding(get: { draftSelection.categoryIDs.contains(category) }, set: { selected in
                     if selected { draftSelection.categoryIDs.insert(category) }
                     else { draftSelection.categoryIDs.remove(category) }

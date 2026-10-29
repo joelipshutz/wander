@@ -8,7 +8,7 @@ final class InviteFrameworkTests: XCTestCase {
         let list = InviteSurface.listCollaborator(listName: "LA date nights")
 
         XCTAssertEqual(visit.sheetSubtitle, "Who joined you at Gjelina?")
-        XCTAssertEqual(feed.entryTitle, "invite people to Astir")
+        XCTAssertEqual(feed.entryTitle, "Invite people to Astir")
         XCTAssertEqual(list.sheetSubtitle, "Invite people to help build LA date nights.")
         XCTAssertEqual(visit.entrySubtitle, "Invite them to Astir, then connect after they join.")
         XCTAssertTrue(list.inviteMessage.contains("add you as a collaborator on LA date nights"))
@@ -37,7 +37,7 @@ final class InviteFrameworkTests: XCTestCase {
 
         let sections = InviteContactSection.sections(for: [frequent, alphabetical])
 
-        XCTAssertEqual(sections.map(\.title), ["frequently contacted", "A"])
+        XCTAssertEqual(sections.map(\.title), ["Frequently contacted", "A"])
         XCTAssertEqual(sections.flatMap(\.contacts).map(\.id), ["frequent", "alphabetical"])
     }
 
@@ -214,7 +214,7 @@ final class InviteFrameworkTests: XCTestCase {
 
         let search = try XCTUnwrap(source.range(of: "TextField(\"Search friends\""))
         let invite = try XCTUnwrap(source.range(of: "InviteEntryPointButton(surface: .sharedVisit"))
-        let friends = try XCTUnwrap(source.range(of: "Section(\"friends\")"))
+        let friends = try XCTUnwrap(source.range(of: "Section(\"Friends\")"))
 
         XCTAssertLessThan(search.lowerBound, invite.lowerBound)
         XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
@@ -301,7 +301,7 @@ final class InviteFrameworkTests: XCTestCase {
         let content = try XCTUnwrap(source.components(separatedBy: "private struct FriendCollaboratorSearchContent: View").last)
         let search = try XCTUnwrap(content.range(of: "TextField(\"Search friends\""))
         let invite = try XCTUnwrap(content.range(of: "InviteEntryPointButton(surface: .listCollaborator"))
-        let friends = try XCTUnwrap(content.range(of: "Text(\"friends\")"))
+        let friends = try XCTUnwrap(content.range(of: "Text(\"Friends\")"))
 
         XCTAssertLessThan(search.lowerBound, invite.lowerBound)
         XCTAssertLessThan(invite.lowerBound, friends.lowerBound)

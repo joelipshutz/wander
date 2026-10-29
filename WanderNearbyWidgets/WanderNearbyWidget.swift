@@ -704,13 +704,13 @@ private struct WanderNearbyWidgetView: View {
     private var headerSubtitle: String {
         switch entry.availability {
         case .ready:
-            "tap a place to check-in"
+            "Tap a place to check-in"
         case .locationAuthorizationRequired:
-            "location access needed"
+            "Location access needed"
         case .locationTemporarilyUnavailable:
-            "showing the latest nearby places"
+            "Showing the latest nearby places"
         case .noPlaces:
-            "no nearby places found yet"
+            "No nearby places found yet"
         }
     }
 

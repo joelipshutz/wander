@@ -99,37 +99,37 @@ struct SaveSyncFeedback: Identifiable, Equatable {
 
         switch syncState {
         case .synced:
-            title = "saved to your map"
+            title = "Saved to your map"
             message = "Synced and ready."
             systemImage = "checkmark"
             usesWarningHaptic = false
             dismissDelayNanoseconds = 2_000_000_000
         case .failed:
-            title = "sync failed"
+            title = "Sync failed"
             message = "Saved on this phone. We'll retry automatically."
             systemImage = "exclamationmark.triangle"
             usesWarningHaptic = true
             dismissDelayNanoseconds = 5_000_000_000
         case .pendingCreate, .pendingUpdate, .pendingDelete:
-            title = "saved on this phone"
+            title = "Saved on this phone"
             message = "Sync is queued."
             systemImage = "arrow.triangle.2.circlepath"
             usesWarningHaptic = false
             dismissDelayNanoseconds = 3_500_000_000
         case .localOnly:
-            title = "saved on this phone"
+            title = "Saved on this phone"
             message = canSignIn ? "Sign in to back it up." : "Kept on this phone."
             systemImage = "checkmark"
             usesWarningHaptic = false
             dismissDelayNanoseconds = canSignIn ? 5_000_000_000 : 2_500_000_000
         case .serverDenied:
-            title = "needs review"
+            title = "Needs review"
             message = "Saved on this phone until it can sync."
             systemImage = "exclamationmark.triangle"
             usesWarningHaptic = true
             dismissDelayNanoseconds = 5_000_000_000
         case .tombstoned:
-            title = "removed"
+            title = "Removed"
             message = "This saved place was removed."
             systemImage = "trash"
             usesWarningHaptic = false
@@ -270,8 +270,8 @@ extension PlaceVisibility {
 extension PlaceStatus {
     var displayTitle: String {
         switch self {
-        case .been: CheckInCopy.noun
-        case .wannaGo: "wanna go"
+        case .been: CheckInCopy.title
+        case .wannaGo: "Wanna go"
         }
     }
 }
@@ -279,10 +279,10 @@ extension PlaceStatus {
 extension ViewerRelationship {
     var displayTitle: String {
         switch self {
-        case .owner: "you"
-        case .mutual: "friend"
-        case .follower: "following"
-        case .nonFollower: "not following"
+        case .owner: "You"
+        case .mutual: "Friend"
+        case .follower: "Following"
+        case .nonFollower: "Not following"
         }
     }
 }

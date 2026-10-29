@@ -1125,7 +1125,7 @@ struct ProfilePrivacyTrustScreen: View {
                               ? "arrow.triangle.2.circlepath"
                               : "calendar.badge.plus")
                         Text(isConnectingCalendar
-                             ? "working"
+                             ? "Working"
                              : CalendarPermissionPolicy.primaryTitle(
                                  for: calendarReservations.authorizationStatus
                              ))

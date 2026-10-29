@@ -152,7 +152,7 @@ final class LiveExperienceUITests: XCTestCase {
                       "The combined drawer element must retain its loaded count for VoiceOver.")
         let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
-        XCTAssertTrue(app.buttons["invite people to Astir"].waitForExistence(timeout: 8)
+        XCTAssertTrue(app.buttons["Invite people to Astir"].waitForExistence(timeout: 8)
                       || app.staticTexts["Activity"].exists)
         capture("feed-expanded")
         let feed = app.scrollViews["feed.places.scroll"]

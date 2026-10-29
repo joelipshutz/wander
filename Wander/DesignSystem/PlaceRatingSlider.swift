@@ -41,21 +41,21 @@ struct PlaceRatingReaction: Equatable {
     }
 
     var accessibilityValue: String {
-        "\(PlaceRating.display(score)) out of 5, \(label)"
+        "\(PlaceRating.display(score)) out of 5, \(label.lowercased())"
     }
 
     static func resolve(_ score: Double) -> PlaceRatingReaction {
         let normalized = PlaceRating.normalized(score) ?? PlaceRating.defaultScore
         let label = switch normalized {
-        case 1: "oof"
-        case 1.5: "rough"
-        case 2: "meh"
-        case 2.5: "ehhh"
-        case 3: "mid"
-        case 3.5: "okayyy"
-        case 4: "yeah"
-        case 4.5: "oh baby"
-        default: "wow"
+        case 1: "Oof"
+        case 1.5: "Rough"
+        case 2: "Meh"
+        case 2.5: "Ehhh"
+        case 3: "Mid"
+        case 3.5: "Okayyy"
+        case 4: "Yeah"
+        case 4.5: "Oh baby"
+        default: "Wow"
         }
         return PlaceRatingReaction(score: normalized, label: label)
     }
@@ -159,7 +159,7 @@ struct PlaceRatingSlider: View {
         VStack(alignment: .leading, spacing: isCompact ? WanderTheme.spacing1 : WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing1) {
                 HStack(spacing: WanderTheme.spacing1) {
-                    Text("rating")
+                    Text("Rating")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.secondaryText)
 

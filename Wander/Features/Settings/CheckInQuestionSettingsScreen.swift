@@ -49,7 +49,7 @@ struct CheckInQuestionSettingsScreen: View {
                             scopes: scopes.filter { $0.categoryID == category }
                         )
                     } label: {
-                        Text(WanderPlaceCategory.broadCategory(for: category))
+                        Text(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)))
                             .font(AstirTypography.body)
                             .frame(minHeight: WanderTheme.tapMinimum)
                     }
@@ -65,7 +65,7 @@ struct CheckInQuestionSettingsScreen: View {
                 ForEach(categoryIDs, id: \.self) { category in
                     let matches = matchingScopes.filter { $0.categoryID == category }
                     if !matches.isEmpty {
-                        Section(WanderPlaceCategory.broadCategory(for: category)) {
+                        Section(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category))) {
                             ForEach(matches) { scope in
                                 scopeButton(scope)
                             }
@@ -100,7 +100,7 @@ struct CheckInQuestionSettingsScreen: View {
             isSearchFocused = false
             selectedScope = scope
         } label: {
-            Text(scope.title)
+            Text(WanderPlaceCategory.displayLabel(scope.title))
                 .font(AstirTypography.body)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
         }
@@ -174,7 +174,7 @@ private struct CheckInQuestionTypeSettingsScreen: View {
                     isSearchFocused = false
                     selectedScope = scope
                 } label: {
-                    Text(scope.title)
+                    Text(WanderPlaceCategory.displayLabel(scope.title))
                         .font(AstirTypography.body)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
                 }
@@ -186,7 +186,7 @@ private struct CheckInQuestionTypeSettingsScreen: View {
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
         .tint(brandMode.accentText)
-        .navigationTitle(categoryTitle)
+        .navigationTitle(AppCopy.capitalizingInitial(categoryTitle))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .scrollDismissesKeyboard(.interactively)
@@ -206,7 +206,7 @@ private struct CheckInQuestionSettingsScopeEditor: View {
         CheckInQuestionCustomizationSheet(
             ownerUserID: ownerUserID,
             subtypeKey: scope.id,
-            subtypeTitle: scope.title,
+            subtypeTitle: WanderPlaceCategory.displayLabel(scope.title),
             defaultQuestions: scope.defaultQuestions,
             configuration: preferenceStore.configuration(
                 ownerUserID: ownerUserID, subtypeKey: scope.id, defaultQuestionIDs: scope.defaultQuestions.map(\.id)

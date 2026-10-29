@@ -60,7 +60,7 @@ struct ProfileEditScreen: View {
                         Divider().overlay(brandMode.border)
                         ProfileEditFieldRow(
                             title: "Username",
-                            prompt: "username",
+                            prompt: "Username",
                             text: $handle,
                             capitalization: .never,
                             disablesAutocorrection: true
@@ -88,7 +88,7 @@ struct ProfileEditScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .astirScreen()
-            .navigationTitle("edit profile")
+            .navigationTitle("Edit profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

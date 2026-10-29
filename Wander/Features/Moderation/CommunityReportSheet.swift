@@ -27,7 +27,7 @@ struct CommunityReportSheet: View {
             }
             .foregroundStyle(brandMode.primaryText)
             .background(brandMode.background.ignoresSafeArea())
-            .navigationTitle(receipt == nil ? "report \(subject.kind.displayName)" : "report sent")
+            .navigationTitle(receipt == nil ? "Report \(subject.kind.displayName)" : "Report sent")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

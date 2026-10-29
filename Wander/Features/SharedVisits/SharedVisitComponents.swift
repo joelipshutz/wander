@@ -28,7 +28,7 @@ struct SharedVisitInviteSection: View {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.pinSocial.color)
-                    Text("friends")
+                    Text("Friends")
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.primaryText)
 
@@ -162,7 +162,7 @@ struct SharedVisitFriendPicker: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-                Section("friends") {
+                Section("Friends") {
                     if friends.isEmpty {
                         Text("No mutual friends available.")
                             .font(AstirTypography.bodySmall)
@@ -201,7 +201,7 @@ struct SharedVisitFriendPicker: View {
             .scrollContentBackground(.hidden)
             .background(brandMode.background)
             .foregroundStyle(brandMode.primaryText)
-            .navigationTitle("add friends")
+            .navigationTitle("Add friends")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -247,9 +247,9 @@ enum SharedVisitCompanionPresentation {
             companion.userID == currentUserID ? "You" : companion.displayName
         }
         guard !names.isEmpty else { return "" }
-        if names.count == 1 { return "with \(names[0])" }
-        if names.count == 2 { return "with \(names[0]) and \(names[1])" }
-        return "with \(names[0]), \(names[1]) +\(names.count - 2)"
+        if names.count == 1 { return "With \(names[0])" }
+        if names.count == 2 { return "With \(names[0]) and \(names[1])" }
+        return "With \(names[0]), \(names[1]) +\(names.count - 2)"
     }
 }
 
@@ -415,7 +415,7 @@ struct ProfileSharedVisitInboxRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("check-in invitations")
+                    Text("Check-in invitations")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(subtitle)
@@ -859,7 +859,7 @@ private struct SharedVisitInboxInvitationCard: View {
     }
 
     private var placeContext: String {
-        [invitation.locality, WanderPlaceCategory.broadCategory(for: invitation.primaryCategory)]
+        [invitation.locality, AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: invitation.primaryCategory))]
             .compactMap { value in
                 guard let value, !value.isEmpty else { return nil }
                 return value

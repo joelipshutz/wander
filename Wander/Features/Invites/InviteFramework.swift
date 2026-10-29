@@ -19,11 +19,11 @@ enum InviteSurface: Equatable {
     var entryTitle: String {
         switch self {
         case .sharedVisit:
-            "invite someone from contacts"
+            "Invite someone from contacts"
         case .feedPeople:
-            "invite people to Astir"
+            "Invite people to Astir"
         case .listCollaborator:
-            "invite a collaborator"
+            "Invite a collaborator"
         }
     }
 
@@ -60,11 +60,11 @@ enum InviteSurface: Equatable {
     var sheetTitle: String {
         switch self {
         case .sharedVisit:
-            "add people"
+            "Add people"
         case .feedPeople:
-            "invite people"
+            "Invite people"
         case .listCollaborator:
-            "add collaborators"
+            "Add collaborators"
         }
     }
 
@@ -112,11 +112,11 @@ enum InviteSurface: Equatable {
     var completionTitle: String {
         switch self {
         case .sharedVisit:
-            "invite sent"
+            "Invite sent"
         case .feedPeople:
-            "invite sent"
+            "Invite sent"
         case .listCollaborator:
-            "collaborator invite sent"
+            "Collaborator invite sent"
         }
     }
 }
@@ -267,7 +267,7 @@ struct InviteContactSection: Identifiable, Equatable {
                 .filter(\.isFrequentlyContacted)
                 .sorted(by: sortContacts)
             if !frequent.isEmpty {
-                result.append(InviteContactSection(id: "frequent", title: "frequently contacted", contacts: frequent))
+                result.append(InviteContactSection(id: "frequent", title: "Frequently contacted", contacts: frequent))
             }
         }
 

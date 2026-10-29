@@ -528,7 +528,7 @@ private struct WanderActivityCalendarWidgetView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text("your calendar")
+                Text("Your calendar")
                     .font(.headline.weight(.black))
                     .fontDesign(.rounded)
                     .foregroundStyle(WanderWidgetPalette.textInk)
@@ -554,7 +554,7 @@ private struct WanderActivityCalendarWidgetView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            WanderCalendarLegendItem(state: .been, title: "been")
+            WanderCalendarLegendItem(state: .been, title: "Been")
 
             Spacer(minLength: 2)
 

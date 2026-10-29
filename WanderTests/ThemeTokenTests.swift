@@ -117,15 +117,15 @@ final class ThemeTokenTests: XCTestCase {
 final class PlaceRatingReactionTests: XCTestCase {
     func testReactionLabelsCoverEveryHalfPointWithoutChangingWholeNumberCopy() {
         let expected: [(Double, String)] = [
-            (1, "oof"),
-            (1.5, "rough"),
-            (2, "meh"),
-            (2.5, "ehhh"),
-            (3, "mid"),
-            (3.5, "okayyy"),
-            (4, "yeah"),
-            (4.5, "oh baby"),
-            (5, "wow")
+            (1, "Oof"),
+            (1.5, "Rough"),
+            (2, "Meh"),
+            (2.5, "Ehhh"),
+            (3, "Mid"),
+            (3.5, "Okayyy"),
+            (4, "Yeah"),
+            (4.5, "Oh baby"),
+            (5, "Wow")
         ]
 
         XCTAssertEqual(
@@ -135,9 +135,9 @@ final class PlaceRatingReactionTests: XCTestCase {
     }
 
     func testReactionResolutionNormalizesAndClampsScores() {
-        XCTAssertEqual(PlaceRatingReaction.resolve(0.5), PlaceRatingReaction(score: 1, label: "oof"))
-        XCTAssertEqual(PlaceRatingReaction.resolve(4.74), PlaceRatingReaction(score: 4.5, label: "oh baby"))
-        XCTAssertEqual(PlaceRatingReaction.resolve(5.5), PlaceRatingReaction(score: 5, label: "wow"))
+        XCTAssertEqual(PlaceRatingReaction.resolve(0.5), PlaceRatingReaction(score: 1, label: "Oof"))
+        XCTAssertEqual(PlaceRatingReaction.resolve(4.74), PlaceRatingReaction(score: 4.5, label: "Oh baby"))
+        XCTAssertEqual(PlaceRatingReaction.resolve(5.5), PlaceRatingReaction(score: 5, label: "Wow"))
     }
 
     func testReactionAccessibilityValueIncludesScoreAndCopy() {

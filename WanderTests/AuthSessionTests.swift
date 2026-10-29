@@ -1951,7 +1951,7 @@ final class AuthSessionTests: XCTestCase {
     }
 
     func testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch() {
-        XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "stealth mode for new saves")
+        XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "Stealth mode for new saves")
 
         let notPrivateCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .followers)
         XCTAssertTrue(notPrivateCopy.contains("new places"))

@@ -9383,7 +9383,7 @@ private struct MapSearchSuggestion: Identifiable {
         return MapSearchSuggestion(
             id: "mapkit_\(candidate.id)",
             title: candidate.name,
-            subtitle: candidate.previewSubtitle(trailingParts: ["new to your map"]),
+            subtitle: candidate.previewSubtitle(trailingParts: ["New to your map"]),
             category: candidate.category,
             source: .mapKit(candidate)
         )
@@ -9547,7 +9547,7 @@ private struct SearchBar: View {
         PersonMentionField(
             text: $draftQuery, mentions: $personMentions,
             focus: isFocused,
-            placeholder: "search your map or people...", accessibilityLabel: "Search your map or people",
+            placeholder: "Search your map or people...", accessibilityLabel: "Search your map or people",
             accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true, isVisible: isVisible,
             onSubmit: {
                 let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText
@@ -9774,7 +9774,7 @@ private struct MapTypeaheadList: View {
                     ProgressView()
                         .controlSize(.small)
                         .tint(WanderTheme.terracotta.color)
-                    Text(suggestions.isEmpty ? "looking nearby..." : "checking nearby...")
+                    Text(suggestions.isEmpty ? "Looking nearby..." : "Checking nearby...")
                         .font(AstirTypography.caption)
                         .foregroundStyle(appearance.secondaryText)
                     Spacer()
@@ -10200,7 +10200,7 @@ private struct MapMoreFiltersPopover: View {
 
                             ForEach(visibleCategories, id: \.self) { category in
                                 MapMoreOptionChip(
-                                    title: WanderPlaceCategory.broadCategory(for: category),
+                                    title: AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)),
                                     emoji: WanderPlaceCategory.broadEmoji(for: category),
                                     isSelected: selection.categories.contains(category)
                                 ) {
@@ -13417,7 +13417,7 @@ private struct MapCheckInDateSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("when")
+            Text("When")
                 .font(AstirTypography.label)
                 .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -13495,7 +13495,7 @@ private struct MapCheckInDateSection: View {
                     .background(CheckInDateRenderedFrameProbe {
                         presentation.finishPresentationMeasurement()
                     })
-                    .accessibilityValue(presentation.renderedLatency.map { String($0) } ?? "pending")
+                    .accessibilityValue(presentation.renderedLatency.map { String($0) } ?? "Pending")
                     #endif
                 }
             }
@@ -14338,7 +14338,7 @@ struct MapPlaceSaveEditor: View {
     private var singleScreenContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             if sourceContext.requiresStatusConfirmation {
-                MapSavePickerBlock(title: "what do you want to do?") {
+                MapSavePickerBlock(title: "What do you want to do?") {
                     HStack(spacing: 0) {
                         checkInStatusChoice
                         wannaGoStatusChoice
@@ -14656,7 +14656,7 @@ struct MapPlaceSaveEditor: View {
 
     private var droppedPinNameSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("name this dropped pin")
+            Text("Name this dropped pin")
                 .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
 
@@ -14685,7 +14685,7 @@ struct MapPlaceSaveEditor: View {
 
     private var plannedDateSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("when do you wanna go?")
+            Text("When do you wanna go?")
                 .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
 
@@ -14707,7 +14707,7 @@ struct MapPlaceSaveEditor: View {
 
                         if let plannedDate {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("planned for")
+                                Text("Planned for")
                                     .font(AstirTypography.metadata)
                                     .foregroundStyle(astirBrandMode.secondaryText)
                                 Text(WannaGoDate.displayString(for: plannedDate))
@@ -14824,7 +14824,7 @@ struct MapPlaceSaveEditor: View {
 
     private var visibilitySection: some View {
         PlaceVisibilityStealthToggle(
-            title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
+            title: store.isPrivateProfile ? "Stealth mode locked on" : "Stealth mode",
             visibility: selectedVisibilityForStealthToggle,
             helperCopy: { visibility in
                 store.isPrivateProfile
@@ -14856,7 +14856,7 @@ struct MapPlaceSaveEditor: View {
                         .font(AstirTypography.control)
                         .foregroundStyle(astirBrandMode.primaryText)
 
-                    Text("tags")
+                    Text("Tags")
                         .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.secondaryText)
                         .lineLimit(1)
@@ -15002,11 +15002,11 @@ struct MapPlaceSaveEditor: View {
     private var placeTypeSection: some View {
         let display = WanderPlaceCategory.display(for: selectedAssignmentForSave)
         let categoryValue = selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.fallbackPlace
-            ? "choose category"
+            ? "Choose category"
             : display.category
 
         return VStack(alignment: .leading, spacing: 0) {
-            Text("place type")
+            Text("Place type")
                 .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -15033,7 +15033,7 @@ struct MapPlaceSaveEditor: View {
                     } label: {
                         PlaceTypeRow(
                             title: "Food type",
-                            value: selectedCuisine ?? "optional",
+                            value: selectedCuisine ?? "Optional",
                             isPlaceholderValue: selectedCuisine == nil
                         )
                     }
@@ -16152,7 +16152,7 @@ private struct MapSaveVisitPhotoSection: View {
                     Image(systemName: "photo.badge.plus")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.pinSocial.color)
-                    Text("photos")
+                    Text("Photos")
                         .font(AstirTypography.control)
                         .foregroundStyle(WanderTheme.textInk.color)
 
@@ -16374,7 +16374,7 @@ private struct MapSaveChoiceButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -16531,7 +16531,7 @@ struct PlaceTypePickerSheet: View {
     }
 
     private var selectedCategoryTitle: String {
-        WanderPlaceCategory.broadCategory(for: selectedPrimaryCategory)
+        AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: selectedPrimaryCategory))
     }
 
     private var subcategoryFilterTitles: [String] {
@@ -16648,7 +16648,7 @@ struct PlaceTypePickerSheet: View {
 
     private var categoryPickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            CategoryPickerHeader(title: "choose category", subtitle: "\(WanderPlaceCategory.editableCategories.count) primary categories")
+            CategoryPickerHeader(title: "Choose category", subtitle: "\(WanderPlaceCategory.editableCategories.count) primary categories")
 
             CategoryPickerSearchField(placeholder: "Search primary categories", text: $query)
 
@@ -16678,7 +16678,7 @@ struct PlaceTypePickerSheet: View {
     private var subcategoryPickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             CategoryPickerHeader(
-                title: "explore types",
+                title: "Explore types",
                 subtitle: "Pick the closest match. You can change it anytime."
             )
 
@@ -16729,7 +16729,7 @@ struct PlaceTypePickerSheet: View {
     private var cuisinePickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             CategoryPickerHeader(
-                title: "explore food types",
+                title: "Explore food types",
                 subtitle: "We’ll start with our best guess. Change it only if we missed."
             )
 
@@ -16986,7 +16986,7 @@ private struct RestaurantCuisineSuggestionCard: View {
                         .font(AstirTypography.metadata)
                         .foregroundStyle(WanderTheme.terracotta.color)
 
-                    Text(cuisine)
+                    Text(WanderPlaceCategory.displayLabel(cuisine))
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
 
@@ -17026,7 +17026,7 @@ private struct RestaurantCuisineRecentsStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("recent")
+            Text("Recent")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -17060,7 +17060,7 @@ private struct RestaurantCuisineCompactChoice: View {
                     cuisine: cuisine,
                     size: 15
                 )
-                Text(cuisine)
+                Text(WanderPlaceCategory.displayLabel(cuisine))
                     .font(AstirTypography.label)
                     .lineLimit(1)
             }
@@ -17086,7 +17086,7 @@ private struct RestaurantCuisineRegionFilters: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("filter")
+            Text("Filter")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -17156,7 +17156,7 @@ private struct RestaurantCuisineAtlasTile: View {
                     }
                 }
 
-                Text(cuisine)
+                Text(WanderPlaceCategory.displayLabel(cuisine))
                     .font(AstirTypography.cardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(1)
@@ -17243,7 +17243,7 @@ private struct SubcategoryAtlasFilters: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("filter")
+            Text("Filter")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -17314,7 +17314,7 @@ private struct PlaceTypeAtlasTile: View {
                     }
                 }
 
-                Text(subcategory)
+                Text(WanderPlaceCategory.displayLabel(subcategory))
                     .font(AstirTypography.cardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
@@ -17419,14 +17419,14 @@ struct PrimaryCategoryPickerTile: View {
                     }
                 }
 
-                Text(WanderPlaceCategory.broadCategory(for: category))
+                Text(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)))
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.72)
                     .frame(height: 44, alignment: .topLeading)
 
-                Text(CategoryPickerVisuals.tileDetail(for: category))
+                Text(AppCopy.capitalizingInitial(CategoryPickerVisuals.tileDetail(for: category)))
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
@@ -17447,7 +17447,7 @@ struct PrimaryCategoryPickerTile: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(WanderPlaceCategory.broadCategory(for: category)), \(optionCountLabel)")
+        .accessibilityLabel("\(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category))), \(optionCountLabel)")
     }
 }
 
@@ -17506,7 +17506,7 @@ struct SubcategoryGroupSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(group.title)
+            Text(AppCopy.capitalizingInitial(group.title))
                 .font(AstirTypography.cardTitle)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -17751,7 +17751,7 @@ private struct MapSaveQuestionOptions: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                Text(option.prefix(1).uppercased() + option.dropFirst())
+                Text(AppCopy.capitalizingInitial(option))
                     .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.center)
@@ -17765,7 +17765,7 @@ private struct MapSaveQuestionOptions: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                Text(option)
+                Text(block.key.hasPrefix(PlaceCheckInQuestionCatalog.keyPrefix) ? AppCopy.capitalizingInitial(option) : option)
                     .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.leading)
@@ -17783,9 +17783,10 @@ private struct MapSaveQuestionOptions: View {
 
     private func accessibilityLabel(for option: String, isSelected: Bool) -> String {
         if block.kind == .multiTag {
-            return "\(isSelected ? "Remove" : "Add") \(option)"
+            let title = block.key.hasPrefix(PlaceCheckInQuestionCatalog.keyPrefix) ? AppCopy.capitalizingInitial(option) : option
+            return "\(isSelected ? "Remove" : "Add") \(title)"
         }
-        let title = option.prefix(1).uppercased() + option.dropFirst()
+        let title = AppCopy.capitalizingInitial(option)
         return isSelected ? "\(title), selected" : title
     }
 
@@ -17891,7 +17892,7 @@ private struct MapSaveUnifiedTagsSection: View {
     @FocusState private var isCustomTagFocused: Bool
 
     var body: some View {
-        MapSaveQuestionBlock(title: block.title, tag: "optional") {
+        MapSaveQuestionBlock(title: block.title, tag: "Optional") {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 ScrollView(.vertical) {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -18260,7 +18261,7 @@ struct PlaceSheet: View {
             PlaceActivitySection(saves: saves, currentUserID: currentUserID)
 
             if !placeFacts.isEmpty {
-                factSection(title: "place", facts: placeFacts)
+                factSection(title: "Place", facts: placeFacts)
             }
         }
         .padding(.bottom, WanderTheme.spacing1)
@@ -18381,7 +18382,7 @@ struct PlaceSheet: View {
 
     private var whyItFitsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            sectionTitle("why it fits")
+            sectionTitle("Why it fits")
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 ForEach(presentation.whyItFits, id: \.self) { reason in
                     HStack(alignment: .top, spacing: WanderTheme.spacing2) {
@@ -18442,7 +18443,7 @@ struct PlaceSheet: View {
 
     private var selectedNoteLine: String? {
         guard let selectedNote else { return nil }
-        let ownerLabel = place.noteOwnerID == currentUserID ? "your note" : "\(place.noteOwnerName ?? "their") note"
+        let ownerLabel = place.noteOwnerID == currentUserID ? "Your note" : "\(place.noteOwnerName ?? "Their") note"
         return "\(ownerLabel): \"\(selectedNote)\""
     }
 
@@ -18823,7 +18824,7 @@ struct PlaceActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("check-in history")
+            Text("Check-in history")
                 .font(AstirTypography.sectionTitle)
                 .textCase(.uppercase)
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textMuted.color)
@@ -20111,10 +20112,10 @@ private struct SocialProofRow: View {
 
     private var proofText: String {
         guard let first = savers.first else { return "On \(AppBrand.displayName)" }
-        let name = first.id == currentUserID ? "you" : first.displayName
+        let name = first.id == currentUserID ? "You" : first.displayName
         guard savers.count > 1 else {
             return first.id == currentUserID
-                ? "you have this on your map"
+                ? "You have this on your map"
                 : "\(name) has this on their map"
         }
         return "\(name) +\(savers.count - 1) others have this on their maps"
@@ -20249,7 +20250,7 @@ private struct StatusBadge: View {
             Rectangle()
                 .fill(astirBrandMode.accent)
                 .frame(width: 2, height: 18)
-            Text(status == .been ? CheckInCopy.noun : "wanna")
+            Text(status == .been ? CheckInCopy.title : "Wanna")
                 .font(AstirTypography.metadata)
                 .textCase(.uppercase)
                 .foregroundStyle(astirBrandMode.accentText)

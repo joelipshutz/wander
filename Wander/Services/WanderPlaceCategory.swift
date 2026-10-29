@@ -132,7 +132,7 @@ struct PlaceCategoryDisplay: Equatable {
                   !value.isEmpty else { return nil }
             let key = WanderPlaceCategory.normalizedCategoryText(value)
             guard !key.isEmpty, seen.insert(key).inserted else { return nil }
-            return value
+            return WanderPlaceCategory.displayLabel(value)
         }
     }
 }
@@ -1325,11 +1325,27 @@ enum WanderPlaceCategory {
         return PlaceCategoryDisplay(
             rawCategory: assignment.rawProviderType ?? assignment.legacyCategory,
             primaryCategory: primary,
-            category: broadCategory(for: primary),
-            subcategory: primary == fallbackPlace ? nil : subcategory,
-            sourceLabel: label
+            category: AppCopy.capitalizingInitial(broadCategory(for: primary)),
+            subcategory: primary == fallbackPlace ? nil : subcategory.map(displayLabel),
+            sourceLabel: AppCopy.capitalizingInitial(label)
         )
     }
+
+    /// Built-in taxonomy labels get display casing; custom category text stays verbatim.
+    static func displayLabel(_ value: String) -> String {
+        guard let known = builtInDisplayLabels[normalizedCategoryText(value)] else { return value }
+        return AppCopy.capitalizingInitial(known)
+    }
+
+    private static let builtInDisplayLabels: [String: String] = {
+        var labels: [String: String] = [:]
+        for entry in taxonomy {
+            for label in [entry.group, entry.detail] + entry.subcategories {
+                labels[normalizedCategoryText(label)] = label
+            }
+        }
+        return labels
+    }()
 
     static func display(for category: String, sourceLabel: String = "suggested") -> PlaceCategoryDisplay {
         display(for: assignment(forRawCategory: category), sourceLabel: sourceLabel)

@@ -28,7 +28,7 @@ final class SaveSyncFeedbackTests: XCTestCase {
     func testSyncedSaveUsesSuccessPresentation() {
         let feedback = SaveSyncFeedback(syncState: .synced, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "saved to your map")
+        XCTAssertEqual(feedback.title, "Saved to your map")
         XCTAssertEqual(feedback.systemImage, "checkmark")
         XCTAssertFalse(feedback.usesWarningHaptic)
         XCTAssertEqual(feedback.mapMessage(successMessage: "Added to your map."), "Added to your map.")
@@ -37,7 +37,7 @@ final class SaveSyncFeedbackTests: XCTestCase {
     func testFailedSaveClearlySaysRemoteSyncFailed() {
         let feedback = SaveSyncFeedback(syncState: .failed, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "sync failed")
+        XCTAssertEqual(feedback.title, "Sync failed")
         XCTAssertEqual(feedback.message, "Saved on this phone. We'll retry automatically.")
         XCTAssertEqual(feedback.systemImage, "exclamationmark.triangle")
         XCTAssertTrue(feedback.usesWarningHaptic)
@@ -51,7 +51,7 @@ final class SaveSyncFeedbackTests: XCTestCase {
     func testQueuedSaveDistinguishesLocalPersistenceFromRemoteSync() {
         let feedback = SaveSyncFeedback(syncState: .pendingCreate, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "saved on this phone")
+        XCTAssertEqual(feedback.title, "Saved on this phone")
         XCTAssertEqual(feedback.message, "Sync is queued.")
         XCTAssertFalse(feedback.usesWarningHaptic)
         XCTAssertEqual(feedback.mapMessage(successMessage: "Visit saved."), "Saved on this phone. Sync is queued.")
@@ -60,7 +60,7 @@ final class SaveSyncFeedbackTests: XCTestCase {
     func testSignedOutLocalSaveOffersSignInWithoutClaimingSync() {
         let feedback = SaveSyncFeedback(syncState: .localOnly, canSignIn: true)
 
-        XCTAssertEqual(feedback.title, "saved on this phone")
+        XCTAssertEqual(feedback.title, "Saved on this phone")
         XCTAssertEqual(feedback.message, "Sign in to back it up.")
         XCTAssertTrue(feedback.canSignIn)
         XCTAssertFalse(feedback.usesWarningHaptic)

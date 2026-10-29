@@ -443,7 +443,7 @@ struct ActivitySharePreviewScreen: View {
             runDestination {
                 guard await preparedShareContent() != nil else { return }
                 trackShareCompleted(destination: "copy_link", outcome: "copied")
-                showConfirmation("link copied")
+                showConfirmation("Link copied")
             }
         case .messages:
             startMessagesPresentation()
@@ -694,10 +694,10 @@ struct ActivitySharePreviewScreen: View {
         switch outcome {
         case .shared:
             trackShareCompleted(destination: "tiktok", outcome: "shared")
-            showConfirmation("shared to TikTok")
+            showConfirmation("Shared to TikTok")
         case .savedAsDraft:
             trackShareCompleted(destination: "tiktok", outcome: "draft")
-            showConfirmation("saved as a TikTok draft")
+            showConfirmation("Saved as a TikTok draft")
         case .cancelled:
             trackShareCompleted(destination: "tiktok", outcome: "cancelled")
             showConfirmation("TikTok share canceled")
@@ -730,7 +730,7 @@ struct ActivitySharePreviewScreen: View {
         do {
             _ = try await ActivitySharePhotoWriter.save(renderedImage)
             trackShareCompleted(destination: "save_photo", outcome: "saved")
-            showConfirmation("saved to photos")
+            showConfirmation("Saved to photos")
         } catch {
             preparationError = .artwork
         }

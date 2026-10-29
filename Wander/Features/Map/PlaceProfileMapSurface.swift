@@ -3242,7 +3242,7 @@ private struct PlacePhotoGalleryViewer: View {
             Rectangle()
                 .fill(brandMode.accent)
                 .frame(width: 2, height: 18)
-            Text(status == .been ? CheckInCopy.noun : "wanna go")
+            Text(status == .been ? CheckInCopy.title : "Wanna go")
                 .font(AstirTypography.metadata)
                 .textCase(.uppercase)
         }
@@ -3913,7 +3913,7 @@ private struct PlaceProfileSaveCard: View {
                                     : .system(size: 13, weight: .black)
                             )
                             .foregroundStyle(accent)
-                        Text("rating")
+                        Text("Rating")
                             .font(
                                 visualStyle == .astir
                                     ? AstirTypography.metadata
@@ -3995,7 +3995,7 @@ private struct PlaceProfileSaveCard: View {
 
     private var noteSubtitle: String {
         if owner.id == currentUserID {
-            return "@you · \(userPlace.visibility.displayTitle.lowercased())"
+            return "@you · \(userPlace.visibility.displayTitle)"
         }
         return "@\(owner.handle)"
     }
@@ -4004,7 +4004,7 @@ private struct PlaceProfileSaveCard: View {
         var facts: [PlaceFact] = []
         facts.append(PlaceFact(title: userPlace.status.displayTitle, systemImage: "mappin.circle.fill"))
         if userPlace.visibility.showsTileLockIndicator {
-            facts.append(PlaceFact(title: "stealth", systemImage: "lock.fill"))
+            facts.append(PlaceFact(title: "Stealth", systemImage: "lock.fill"))
         }
         facts.append(contentsOf: summary.attributes.flatMap(PlaceProfileCopy.attributeFacts(for:)))
         return facts
@@ -4022,7 +4022,7 @@ private struct PlaceProfileStatusPill: View {
     @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
-        Text(status == .been ? CheckInCopy.noun : "wanna")
+        Text(status == .been ? CheckInCopy.title : "Wanna")
             .font(
                 visualStyle == .astir
                     ? AstirTypography.metadata

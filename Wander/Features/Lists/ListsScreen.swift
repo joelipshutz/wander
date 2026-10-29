@@ -674,7 +674,7 @@ struct ListsScreen: View {
                 .foregroundStyle(astirBrandMode.accentText)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("coming next")
+                Text("Coming next")
                     .font(AstirTypography.label)
                     .foregroundStyle(astirBrandMode.primaryText)
                 Text("Saved places will get an add-to-list action from map surfaces.")
@@ -1438,7 +1438,7 @@ private struct ListDetailScreen: View {
         let visiblePlaces = visiblePlaces(in: renderedList)
 
         LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("places")
+            Text("Places")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
 
@@ -1741,7 +1741,7 @@ private struct ListSuggestionsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("suggested places")
+                Text("Suggested places")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Spacer()
@@ -1817,7 +1817,7 @@ private struct ListAddPlacesScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("add places")
+                    Text("Add places")
                         .font(AstirTypography.screenTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(list.name)
@@ -1910,7 +1910,7 @@ private struct ListAddPlacesScreen: View {
         let suggestions = store.availableListSuggestions(suggestionBatch.suggestions, for: list)
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("suggested for this list")
+            Text("Suggested for this list")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
 
@@ -1961,7 +1961,7 @@ private struct ListAddPlacesScreen: View {
     @ViewBuilder
     private var searchContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("results")
+            Text("Results")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
 
@@ -2166,7 +2166,7 @@ private struct ListAddPlacesUnavailableScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("add places")
+            Text("Add places")
                 .font(AstirTypography.screenTitle)
                 .foregroundStyle(brandMode.primaryText)
             Text("This list is not connected to local list data yet.")
@@ -2853,7 +2853,7 @@ private struct PlaceListInviteSheet: View {
                     }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("build this list together")
+                    Text("Build this list together")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(prompt.resolution.listName ?? "Shared list")
@@ -2959,7 +2959,7 @@ private struct CollaboratorInviteSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("collaborators")
+                        Text("Collaborators")
                             .font(AstirTypography.sheetTitle)
                             .foregroundStyle(brandMode.primaryText)
                         Text(list.name)
@@ -3029,7 +3029,7 @@ private struct CollaboratorInviteSheet: View {
 
     private var inviteByLinkSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("invite by link")
+            Text("Invite by link")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -3127,7 +3127,7 @@ private struct FriendCollaboratorSearchSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("invite collaborator")
+                    Text("Invite collaborator")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text("Search friends and add the people who can view this list with you.")
@@ -3232,7 +3232,7 @@ private struct FriendCollaboratorSearchContent: View {
             }
 
             LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("friends")
+                Text("Friends")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
 
@@ -3416,7 +3416,7 @@ private struct ExistingCollaboratorsSummary: View {
 private struct PrivateProfileCollaborationUnavailable: View {
     @Environment(\.astirBrandMode) private var brandMode
     var showsContainer = true
-    var title = "new collaboration is off"
+    var title = "New collaboration is off"
     var message = "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
 
     var body: some View {
@@ -4479,7 +4479,7 @@ private struct ListEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text(isEditing ? "edit list" : "new list")
+                        Text(isEditing ? "Edit list" : "New list")
                             .font(AstirTypography.sheetTitle)
                             .foregroundStyle(brandMode.primaryText)
                         Text(isEditing ? "Keep the name, collaborators, and privacy current." : "Name the plan, invite collaborators, then choose privacy.")
@@ -4488,7 +4488,7 @@ private struct ListEditorSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    fieldBlock(title: "title") {
+                    fieldBlock(title: "Title") {
                         TextField("LA laptop mornings", text: $title)
                             .font(AstirTypography.body)
                             .foregroundStyle(brandMode.primaryText)
@@ -4499,8 +4499,8 @@ private struct ListEditorSheet: View {
                     .walkthroughTarget(.listEditorTitle)
                     .id(ListEditorWalkthroughAnchor.title)
 
-                    fieldBlock(title: "description") {
-                        TextField("quiet tables, outlets, places worth returning to", text: $description, axis: .vertical)
+                    fieldBlock(title: "Description") {
+                        TextField("Quiet tables, outlets, places worth returning to", text: $description, axis: .vertical)
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.primaryText)
                             .tint(brandMode.accent)
@@ -4762,7 +4762,7 @@ private struct ListEditorSheet: View {
     private var stealthToggle: some View {
         Toggle(isOn: listStealthBinding) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("stealth mode")
+                Text("Stealth mode")
                     .font(AstirTypography.cardTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Text(stealthHelperCopy)
@@ -4783,7 +4783,7 @@ private struct ListEditorSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("collaborators")
+                    Text("Collaborators")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(collaboratorsHelperCopy)
@@ -4816,7 +4816,7 @@ private struct ListEditorSheet: View {
             if store.isPrivateProfile && !canEditCollaborators && stagedCollaborators.isEmpty {
                 PrivateProfileCollaborationUnavailable(
                     showsContainer: false,
-                    title: "existing lists stay",
+                    title: "Existing lists stay",
                     message: "Collaborators already on existing lists are not removed."
                 )
             } else if stagedCollaborators.isEmpty {
@@ -4845,7 +4845,7 @@ private struct ListEditorSheet: View {
                             Text("@\(collaborator.handle)")
                                 .font(AstirTypography.label)
                                 .foregroundStyle(brandMode.primaryText)
-                            Text(isEditing ? "can view" : "draft invite")
+                            Text(isEditing ? "Can view" : "Draft invite")
                                 .font(AstirTypography.caption)
                                 .foregroundStyle(brandMode.secondaryText)
                             Spacer()
@@ -5136,7 +5136,7 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
 
     var collaboratorSummary: String {
-        guard !collaborators.isEmpty else { return "solo list" }
+        guard !collaborators.isEmpty else { return "Solo list" }
 
         if collaborators.count == 1 {
             return "\(collaborators[0].name)"

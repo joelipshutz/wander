@@ -360,7 +360,7 @@ private struct CGInvitationEnvelopeArtwork: View {
                 }.stroke(brand.accentText.opacity(0.22), lineWidth: 1.2)
                 VStack(spacing: 3) {
                     Text("\(recipientName.uppercased()),").font(AstirTypography.metadata).tracking(2)
-                    Text("this one’s for us").font(AstirTypography.sectionTitle)
+                    Text("This one’s for us").font(AstirTypography.sectionTitle)
                 }
                 .foregroundStyle(brand.primaryText)
                 .position(x: geometry.size.width / 2, y: geometry.size.height * 0.2)

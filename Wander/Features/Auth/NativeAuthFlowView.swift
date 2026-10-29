@@ -305,7 +305,7 @@ struct NativeAuthFlowView: View {
             Rectangle()
                 .fill(WanderTheme.borderHairline.color)
                 .frame(height: 1)
-            Text("or")
+            Text("Or")
                 .font(AstirTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
             Rectangle()

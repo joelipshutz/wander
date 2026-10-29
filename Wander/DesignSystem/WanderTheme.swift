@@ -517,7 +517,7 @@ struct PlaceVisibilityStealthToggle: View {
     var helperCopy: (PlaceVisibility) -> String
 
     init(
-        title: String = "stealth mode",
+        title: String = "Stealth mode",
         visibility: Binding<PlaceVisibility>,
         showsContainer: Bool = true,
         helperCopy: @escaping (PlaceVisibility) -> String = { $0.stealthModeHelperCopy }

@@ -76,7 +76,7 @@ struct OnboardingWelcomeConfiguration: Equatable {
             ticker: OnboardingTickerContent(
                 words: ["community", "people", "places", "loved ones"],
                 description: "Keep track of everywhere you’ve been. Keep up with the people you love.",
-                finalLockup: "a local experiment"
+                finalLockup: "A local experiment"
             ),
             descriptionIsDelayed: true
         )

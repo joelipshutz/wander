@@ -23,7 +23,7 @@ import XCTest
         XCTAssertFalse(app.descendants(matching: .any)["feed.surfaceSwitch"].exists)
         XCTAssertLessThan(bell.frame.midY, search.frame.midY)
         XCTAssertEqual(add.frame.midY, search.frame.midY, accuracy: 4)
-        let invite = app.buttons["invite people to Astir"]
+        let invite = app.buttons["Invite people to Astir"]
         XCTAssertTrue(invite.exists)
         XCTAssertGreaterThan(invite.frame.minY, search.frame.maxY)
         let people = app.staticTexts["People worth following"]

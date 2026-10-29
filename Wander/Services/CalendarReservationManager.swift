@@ -137,11 +137,11 @@ enum CalendarPermissionPolicy {
     static func primaryTitle(for status: EKAuthorizationStatus) -> String {
         switch action(for: status) {
         case .request:
-            "continue"
+            "Continue"
         case .sync:
-            "sync now"
+            "Sync now"
         case .openSettings:
-            "open settings"
+            "Open settings"
         }
     }
 }

@@ -92,7 +92,7 @@ struct DiscoverScreen: View {
     ]
 
     private var tickerSuggestions: [String] {
-        suggestedSearches.map(\.query)
+        suggestedSearches.map { AppCopy.capitalizingInitial($0.query) }
     }
 
     private var profileResults: [ProfileShell] {
@@ -247,12 +247,11 @@ struct DiscoverScreen: View {
             let category = placeResults.filters.categories
                 .map(WanderPlaceCategory.broadCategory)
                 .sorted()
-                .first?
-                .lowercased() ?? "place"
+                .first?.lowercased() ?? "place"
             return "\(owner.capitalized)'s \(category) favorites"
         }
         let trimmed = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "places" : trimmed
+        return trimmed.isEmpty ? "Places" : trimmed
     }
 
     var body: some View {
@@ -1162,7 +1161,7 @@ struct DiscoverScreen: View {
                 .foregroundStyle(brandMode.secondaryText)
 
             if filters.chips.isEmpty {
-                Text("places matching your words")
+                Text("Places matching your words")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
             } else {
@@ -1259,7 +1258,7 @@ struct DiscoverScreen: View {
                                     .font(.system(size: 20))
                                     .accessibilityHidden(true)
 
-                                Text(suggestion.query)
+                                Text(AppCopy.capitalizingInitial(suggestion.query))
                                     .font(AstirTypography.bodySmall)
                                     .foregroundStyle(brandMode.primaryText)
                                     .multilineTextAlignment(.leading)
@@ -1591,7 +1590,7 @@ struct DiscoverScreen: View {
         case .loaded(let recommendations) where recommendations.isEmpty:
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 SectionTitle("People worth following")
-                EmptyPanel(title: "No suggestions yet", action: "search a name or @handle above")
+                EmptyPanel(title: "No suggestions yet", action: "Search a name or @handle above")
             }
         case .loaded(let recommendations):
             PeopleRecommendationShelf(
@@ -1612,7 +1611,7 @@ struct DiscoverScreen: View {
             SectionTitle("Member results")
 
             if results.isEmpty {
-                EmptyPanel(title: "No members found", action: "try a handle or full first name")
+                EmptyPanel(title: "No members found", action: "Try a handle or full first name")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: WanderTheme.spacing3) {
@@ -1645,7 +1644,7 @@ struct DiscoverScreen: View {
             }
 
             if friends.isEmpty {
-                EmptyPanel(title: "No one followed yet", action: "search or follow someone above")
+                EmptyPanel(title: "No one followed yet", action: "Search or follow someone above")
             } else {
                 ForEach(friends) { profile in
                     FriendListRow(

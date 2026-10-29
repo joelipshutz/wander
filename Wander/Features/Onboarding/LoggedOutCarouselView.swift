@@ -391,7 +391,7 @@ struct OnboardingTickerView: View {
             let frame = OnboardingTickerFrame.at(elapsed: readableElapsed, content: content)
             let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex].uppercased() : ""
             let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0].uppercased() : nil } ?? currentWord
-            let finalText = OnboardingWelcomeCopy.finalRows(content.finalLockup ?? "a local experiment").joined(separator: "\n")
+            let finalText = OnboardingWelcomeCopy.finalRows(content.finalLockup ?? "A local experiment").joined(separator: "\n")
             let entering = elapsed < OnboardingSlideMotion.seconds && !staticReading && (isPlaying || elapsed > 0)
             let from = entering ? "" : (frame.showsFinalLockup ? finalText : currentWord)
             let to = entering ? currentWord : (frame.isFinalTransition || frame.showsFinalLockup ? finalText : nextWord)

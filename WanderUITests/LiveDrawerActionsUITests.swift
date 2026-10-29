@@ -61,7 +61,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         let app = launch(extraArguments: ["-WanderHomeMetroUITest", "new-york"])
         XCTAssertFalse(app.buttons["live.utility.events"].exists)
         waitHittable(app.buttons["live.utility.invite"])
-        XCTAssertEqual(app.buttons["live.utility.invite"].label, "invite people to Astir")
+        XCTAssertEqual(app.buttons["live.utility.invite"].label, "Invite people to Astir")
         openAndCloseInvite(in: app)
         waitForDrawer("half expanded", in: app)
         XCTAssertFalse(app.buttons["live.utility.events"].exists)
@@ -120,7 +120,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         let handle = drawer(in: app)
         XCTAssertTrue(handle.exists, file: file, line: line)
         XCTAssertEqual(events.label, "Upcoming events", file: file, line: line)
-        XCTAssertEqual(invite.label, "invite people to Astir", file: file, line: line)
+        XCTAssertEqual(invite.label, "Invite people to Astir", file: file, line: line)
         for button in [events, invite] {
             // Allow subpixel rounding when XCTest converts frames to screen coordinates.
             XCTAssertGreaterThanOrEqual(button.frame.width, 44 - 0.01, file: file, line: line)
@@ -141,7 +141,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
     private func openAndCloseInvite(in app: XCUIApplication) {
         waitHittable(app.buttons["live.utility.invite"])
         app.buttons["live.utility.invite"].tap()
-        XCTAssertTrue(app.staticTexts["invite people"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Invite people"].waitForExistence(timeout: 30))
         let close = app.buttons["invite.close"]
         waitHittable(close)
         // The local FakeContactProvider is already authorized. Do not request access or select contacts.

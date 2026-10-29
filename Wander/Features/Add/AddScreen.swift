@@ -632,10 +632,10 @@ struct AddScreen: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isShowingHereNowResults ? "I'm here now" : "add a place")
+                Text(isShowingHereNowResults ? "I'm here now" : "Add a place")
                     .font(AstirTypography.sheetTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text(isShowingHereNowResults ? "choose the place you're at" : step.subtitle)
+                Text(isShowingHereNowResults ? "Choose the place you're at" : step.subtitle)
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -1840,9 +1840,9 @@ private enum AddStep {
 
     var subtitle: String {
         switch self {
-        case .source: "find it nearby, search, or import"
+        case .source: "Find it nearby, search, or import"
         case .confirm: "Pick the right place, then save it."
-        case .draft: "we could not find enough place info yet."
+        case .draft: "We could not find enough place info yet."
         }
     }
 
@@ -2033,7 +2033,7 @@ private struct CandidateRow: View {
         }
         .accessibilityIdentifier("add.candidate.\(candidate.id)")
         .accessibilityLabel(candidate.name)
-        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityRespondsToUserInteraction(isInteractive)
     }
 

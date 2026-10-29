@@ -812,7 +812,7 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let inviteEntry = app.buttons["invite people to Astir"]
+        let inviteEntry = app.buttons["Invite people to Astir"]
         XCTAssertTrue(inviteEntry.waitForExistence(timeout: 8))
         inviteEntry.tap()
 
@@ -848,7 +848,7 @@ final class OnboardingUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(deny.exists)
         deny.tap()
-        XCTAssertTrue(app.staticTexts["contacts are off"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Contacts are off"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Share an invite link"].exists)
     }
 
@@ -1790,7 +1790,7 @@ final class OnboardingUITests: XCTestCase {
         checkInAgain.tap()
         let slider = app.descendants(matching: .any)["place-rating-slider"]
         XCTAssertTrue(slider.waitForExistence(timeout: 4))
-        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertFalse(app.staticTexts["What do you want to do?"].exists)
     }
 
     func testFirstMapCheckInUsesAttachedEditorAndRestoresItsDraft() {
@@ -1817,7 +1817,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
-        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertFalse(app.staticTexts["What do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
         let note = app.textViews["save.note"]
@@ -1877,7 +1877,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Add to Wanna"].exists)
         XCTAssertTrue(app.buttons["Add a Wanna go date"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
-        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertFalse(app.staticTexts["What do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
         let note = app.textViews["save.note"]
@@ -2236,7 +2236,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(attachedTray.buttons["Update Wanna"].exists)
         XCTAssertFalse(attachedTray.buttons["Remove from Wanna"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
-        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertFalse(app.staticTexts["What do you want to do?"].exists)
 
         let note = app.textViews["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
@@ -2278,7 +2278,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Elysian Picnic Steps"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
-        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertFalse(app.staticTexts["What do you want to do?"].exists)
         let conversionNote = app.textViews["save.note"]
         XCTAssertTrue(conversionNote.waitForExistence(timeout: 3))
         XCTAssertEqual(conversionNote.value as? String, "Current Wanna draft")
@@ -2487,7 +2487,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(addButton.isHittable)
         addButton.tap()
 
-        XCTAssertTrue(app.staticTexts["add a place"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.staticTexts["Add a place"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 2))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

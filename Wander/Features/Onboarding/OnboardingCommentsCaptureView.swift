@@ -23,7 +23,7 @@ struct OnboardingCommentsCaptureView: View {
                     visiblePlace: nil,
                     openProfile: { _ in }, openPlace: { _ in }, openList: { _ in }
                 )
-                .navigationTitle("comments")
+                .navigationTitle("Comments")
                 .navigationBarTitleDisplayMode(.inline)
             }
         }

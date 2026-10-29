@@ -11,7 +11,7 @@ final class CheckInCopyTests: XCTestCase {
         XCTAssertEqual(CheckInCopy.pastTense, "checked in")
         XCTAssertEqual(CheckInCopy.count(1), "1 check-in")
         XCTAssertEqual(CheckInCopy.count(2), "2 check-ins")
-        XCTAssertEqual(PlaceStatus.been.displayTitle, "check-in")
+        XCTAssertEqual(PlaceStatus.been.displayTitle, "Check-in")
     }
 
     func testBeenRemainsThePersistenceValue() {

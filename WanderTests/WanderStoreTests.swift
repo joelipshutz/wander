@@ -7841,7 +7841,7 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertFalse(results.places.isEmpty)
         XCTAssertTrue(results.places.allSatisfy { $0.place.category == WanderPlaceCategory.outdoorsNature })
-        XCTAssertEqual(store.lastDiscoverFilters.chips.map(\.title), ["Outdoors & Nature", "following", "LA"])
+        XCTAssertEqual(store.lastDiscoverFilters.chips.map(\.title), ["Outdoors & Nature", "Following", "LA"])
         XCTAssertTrue(results.profiles.isEmpty)
     }
 
@@ -7875,7 +7875,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(evidence.items.map(\.kind), [.owner, .opinion, .rating, .category])
         XCTAssertTrue(evidence.items.allSatisfy { $0.sourceOwnerID == "user_ryan" })
         XCTAssertTrue(evidence.summary.contains("Ryan's save"))
-        XCTAssertTrue(evidence.summary.contains("favorite"))
+        XCTAssertTrue(evidence.summary.contains("Favorite"))
         XCTAssertTrue(evidence.summary.contains("4/5"))
     }
 

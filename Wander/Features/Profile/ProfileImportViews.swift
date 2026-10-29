@@ -1355,13 +1355,13 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
                 HStack(spacing: WanderTheme.spacing3) {
                     if receipt.addedCount > 0 {
-                        completionMetric(receipt.addedCount, "added", WanderTheme.stateSuccess.color)
+                        completionMetric(receipt.addedCount, "Added", WanderTheme.stateSuccess.color)
                     }
                     if receipt.existingCount > 0 {
-                        completionMetric(receipt.existingCount, "already saved", WanderTheme.stateInfo.color)
+                        completionMetric(receipt.existingCount, "Already saved", WanderTheme.stateInfo.color)
                     }
                     if receipt.needsReviewCount > 0 {
-                        completionMetric(receipt.needsReviewCount, "still needs help", WanderTheme.stateWarning.color)
+                        completionMetric(receipt.needsReviewCount, "Still needs help", WanderTheme.stateWarning.color)
                     }
                 }
 
@@ -2477,10 +2477,10 @@ struct PlaceImportInboxScreen: View {
                 }
             } else {
                 HStack(spacing: WanderTheme.spacing4) {
-                    importMetric(unresolvedCount, "to review", brandMode.accent)
-                    importMetric(summary.duplicateCount, "duplicates", WanderTheme.stateInfo.color)
+                    importMetric(unresolvedCount, "To review", brandMode.accent)
+                    importMetric(summary.duplicateCount, "Duplicates", WanderTheme.stateInfo.color)
                     if sourceRetryCount > 0 {
-                        importMetric(sourceRetryCount, "scan retry", WanderTheme.stateWarning.color)
+                        importMetric(sourceRetryCount, "Scan retry", WanderTheme.stateWarning.color)
                     }
                 }
             }
@@ -3016,13 +3016,13 @@ private struct PlaceImportReceiptSheet: View {
 
             HStack(spacing: WanderTheme.spacing2) {
                 if receipt.addedCount > 0 {
-                    receiptMetric(receipt.addedCount, "added", WanderTheme.stateSuccess.color)
+                    receiptMetric(receipt.addedCount, "Added", WanderTheme.stateSuccess.color)
                 }
                 if receipt.existingCount > 0 {
-                    receiptMetric(receipt.existingCount, "already saved", WanderTheme.stateInfo.color)
+                    receiptMetric(receipt.existingCount, "Already saved", WanderTheme.stateInfo.color)
                 }
                 if receipt.needsReviewCount > 0 {
-                    receiptMetric(receipt.needsReviewCount, "needs review", WanderTheme.stateWarning.color)
+                    receiptMetric(receipt.needsReviewCount, "Needs review", WanderTheme.stateWarning.color)
                 }
             }
 
@@ -3138,7 +3138,7 @@ private extension PlaceImportReceiptOutcome {
 private extension PlaceImportReceiptEntry {
     var receiptDetail: String {
         let outcomeCopy = switch outcome {
-        case .added: status == .been ? CheckInCopy.noun : "Wanna"
+        case .added: status == .been ? CheckInCopy.title : "Wanna"
         case .existing: "Already in your places"
         case .needsReview: "Needs a place match"
         case .failed: "Could not save"

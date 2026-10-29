@@ -583,7 +583,11 @@ final class CheckInQuestionUITests: XCTestCase {
             openCustomize(in: app)
             let eye = app.buttons["save.questions.stealth.place_detail_dietary_options"]
             reveal(eye, in: app)
-            eye.tap()
+            eye.press(forDuration: 0.2)
+            let toggled = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", expected), object: eye
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [toggled], timeout: 5), .completed)
             XCTAssertEqual(eye.value as? String, expected)
             XCTAssertTrue(app.buttons["save.questions.done"].exists, "No separate Stealth page")
             capture("REC-485 inline privacy eyes")

@@ -393,7 +393,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["View snapshot list"].exists)
         capture("REC-413 Snapshot saved toast")
         toast.tap()
-        XCTAssertTrue(app.staticTexts["edit list"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Edit list"].waitForExistence(timeout: 5))
         let title = app.textFields.firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.tap()

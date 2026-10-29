@@ -14,7 +14,7 @@ struct LiveDrawerActions: View {
                 action("Upcoming events", symbol: "calendar", identifier: "live.utility.events", perform: onEvents)
             }
             Spacer(minLength: 0)
-            action("invite people to Astir", symbol: "person.badge.plus", identifier: "live.utility.invite", perform: onInvite)
+            action("Invite people to Astir", symbol: "person.badge.plus", identifier: "live.utility.invite", perform: onInvite)
                 .walkthroughTarget(.feedInvite)
         }
         .foregroundStyle(brand.primaryText)

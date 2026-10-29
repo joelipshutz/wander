@@ -1332,7 +1332,7 @@ final class NavigationContractTests: XCTestCase {
         }
         XCTAssertTrue(releaseSurface.contains("store.placesInCommon(with: profileID)"))
         XCTAssertTrue(releaseSurface.contains("InCommonReleaseHero("))
-        XCTAssertTrue(releaseSurface.contains("TextField(\"search \\(navigationTitle.lowercased())\""))
+        XCTAssertTrue(releaseSurface.contains("TextField(\"Search \\(navigationTitle.lowercased())\""))
         XCTAssertTrue(releaseSurface.contains("Label(\"Open your shared map\", systemImage: \"map.fill\")"))
         XCTAssertTrue(releaseSurface.contains("InCommonReleaseMapScreen("))
         XCTAssertTrue(releaseSurface.contains("ProfilePlaceCollectionMap("))
@@ -1472,7 +1472,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressSession"))
         XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressPolicy.shouldOpen("))
         XCTAssertFalse(placeProfile.contains("cardPressStartedAt"))
-        XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
+        XCTAssertTrue(mapScreen.contains("Text(\"Check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
         XCTAssertTrue(activityCard.contains("AstirTypography.sectionTitle"))
@@ -2032,7 +2032,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("private var compactSheetContent: some View"))
         XCTAssertTrue(addScreen.contains("private var compactSourceContent: some View"))
         XCTAssertTrue(addScreen.contains("isShowingHereNowResults ? \"I'm here now\""))
-        XCTAssertTrue(addScreen.contains("\"choose the place you're at\""))
+        XCTAssertTrue(addScreen.contains("\"Choose the place you're at\""))
         XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
@@ -2455,7 +2455,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains("checkInQuestionsSection"))
         XCTAssertFalse(optionalDetails.contains("plannedDateSection"))
         XCTAssertTrue(optionalDetails.contains("if isShowingOptionalDetails"))
-        XCTAssertTrue(optionalDetails.contains("\"tags\""))
+        XCTAssertTrue(optionalDetails.contains("\"Tags\""))
         XCTAssertFalse(optionalDetails.contains("fit, tags & privacy"))
         XCTAssertFalse(optionalDetails.contains("date, note"))
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
@@ -2465,7 +2465,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains(".walkthroughEmphasis(.saveMoreOptions)"))
         XCTAssertFalse(optionalDetails.contains("Circle()\n                                .stroke(WanderTheme.categorySun.color"))
         XCTAssertEqual(
-            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
+            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"What do you want to do?\")").count - 1,
             1
         )
         XCTAssertTrue(mapScreen.contains("private var singleScreenContent: some View"))
@@ -2554,7 +2554,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/CheckInQuestionPanel.swift")
         )
         let questionHeader = try sourceSection(questionPanel, after: "private var header: some View", before: "private var currentConfiguration:")
-        XCTAssertTrue(questionHeader.contains("Text(\"useful details\")"))
+        XCTAssertTrue(questionHeader.contains("Text(\"Useful details\")"))
         XCTAssertTrue(questionHeader.contains(".font(AstirTypography.label)"))
         XCTAssertTrue(questionHeader.contains("customizeButton"))
         XCTAssertTrue(questionHeader.contains("HStack(alignment: .firstTextBaseline"))
@@ -2572,7 +2572,7 @@ final class NavigationContractTests: XCTestCase {
         let sharedVisitComponents = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/SharedVisits/SharedVisitComponents.swift")
         )
-        XCTAssertTrue(sharedVisitComponents.contains("Text(\"friends\")"))
+        XCTAssertTrue(sharedVisitComponents.contains("Text(\"Friends\")"))
         XCTAssertTrue(sharedVisitComponents.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(sharedVisitComponents.contains("They will get their own editable copy of this visit."))
     }
@@ -3064,7 +3064,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".scrollPosition(id: $profileScrollPosition, anchor: .top)"))
         XCTAssertFalse(source.contains("style: StrokeStyle("))
         XCTAssertFalse(source.contains("dash: [0.1, max(3, size * 0.14)]"))
-        XCTAssertTrue(source.contains("item(state: .visit, title: CheckInCopy.pluralNoun)"))
+        XCTAssertTrue(source.contains("item(state: .visit, title: CheckInCopy.pluralTitle)"))
         XCTAssertFalse(source.contains("item(state: .wanna, title: \"wanna\")"))
         XCTAssertTrue(source.contains(".offset(y: -6)"))
         XCTAssertFalse(source.contains("visitCount > 1"), "Calendar cells should keep state visuals stable and move counts into day detail")
@@ -3097,8 +3097,8 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(source.contains("if collection?.calendarDay != nil {\n                        calendarDayFilterControls"))
         XCTAssertTrue(calendarControls.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
-        XCTAssertTrue(calendarControls.contains("title: \"type\""))
-        XCTAssertTrue(calendarControls.contains("title: \"tags\""))
+        XCTAssertTrue(calendarControls.contains("title: \"Type\""))
+        XCTAssertTrue(calendarControls.contains("title: \"Tags\""))
         XCTAssertTrue(calendarControls.contains("allTitle: \"All types\""))
         XCTAssertTrue(calendarControls.contains("allTitle: \"All tags\""))
         XCTAssertTrue(calendarControls.contains("Menu {"))
@@ -3806,7 +3806,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertEqual(
             SharedVisitCompanionPresentation.text(companions: [ryan], currentUserID: ryan.userID),
-            "with You"
+            "With You"
         )
         XCTAssertEqual(
             SharedVisitCompanionPresentation.text(companions: [], currentUserID: ryan.userID),
@@ -3814,7 +3814,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertEqual(
             SharedVisitCompanionPresentation.text(companions: [joe, ryan], currentUserID: ryan.userID),
-            "with You and Joe Lipshutz"
+            "With You and Joe Lipshutz"
         )
         XCTAssertEqual(
             SharedVisitCompanionPresentation.ordered([joe, ryan], currentUserID: ryan.userID).first?.avatarURL,
@@ -5116,7 +5116,7 @@ final class NavigationContractTests: XCTestCase {
             before: "private var cuisinePickerContent: some View {"
         )
 
-        XCTAssertTrue(picker.contains("title: \"explore types\""))
+        XCTAssertTrue(picker.contains("title: \"Explore types\""))
         XCTAssertTrue(picker.contains("selectedCategoryPills"))
         XCTAssertTrue(picker.contains("CategoryPickerSearchField"))
         XCTAssertTrue(picker.contains("SubcategoryAtlasFilters"))

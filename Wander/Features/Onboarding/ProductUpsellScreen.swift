@@ -209,7 +209,7 @@ struct OnboardingNotificationExamples: View {
                         HStack {
                             Text("ASTIR").font(AstirTypography.metadata).tracking(0.8)
                             Spacer()
-                            Text("now").font(AstirTypography.caption)
+                            Text("Now").font(AstirTypography.caption)
                         }
                         .foregroundStyle(brandMode.secondaryText)
                         Text(example.title).font(AstirTypography.control)

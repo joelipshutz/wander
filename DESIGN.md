@@ -18,6 +18,21 @@ This is the project-level design source of truth for Astir (formerly rec.me and 
 - Original rendered mocks: `docs/source/wander-mocks-pages/`
 - Onboarding research: `research/screensdesign/2026-05-30-social-map-onboarding/report.md`
 
+## App Copy Capitalization (REC-662)
+
+Use natural sentence case: capitalize the beginning of sentences, titles,
+section headings, and standalone controls or labels. Keep ordinary words inside
+sentences lowercase; retain proper nouns, acronyms, and intentional brand casing.
+For example: “Add a place”, “Privacy and trust”, and “Your map is still here”.
+Do not apply every-word capitalization to body copy or headings.
+
+Author complete sentences in their intended case. For app-owned dynamic labels,
+`AppCopy.capitalizingInitial` changes only the initial character. Preserve user
+and provider content, persisted answers, search terms, identifiers, URLs, and
+units. Composed phrases such as “3 places” and “Alex checked in” retain natural
+casing even when their pieces are separate text views.
+See `docs/reviews/rec-662-copy-capitalization.md` for coverage and flags.
+
 ## Provisional Astir Visual Override (REC-383 / REC-397)
 
 Joe approved Astir as the public product name and direction 55, the warm family

@@ -102,7 +102,7 @@ extension DiscoverFilters {
         }
 
         if opinion == .favorite {
-            chips.append(DiscoverFilterChip(id: "opinion_favorite", title: "favorites"))
+            chips.append(DiscoverFilterChip(id: "opinion_favorite", title: "Favorites"))
         }
 
         chips.append(contentsOf: tags.sorted().map { tag in
@@ -734,7 +734,7 @@ enum DiscoverLatestActivityPresentation {
         let elapsed = max(0, now.timeIntervalSince(savedAt))
 
         if elapsed < 60 {
-            return "just now"
+            return "Just now"
         }
         if elapsed < 60 * 60 {
             return "\(Int(elapsed / 60))m ago"
@@ -1215,9 +1215,9 @@ enum DiscoverPlaceScope: String, CaseIterable, Identifiable, Equatable {
 
     var title: String {
         switch self {
-        case .myPlaces: "mine"
-        case .friendsPlaces: "friends"
-        case .everyone: "everyone"
+        case .myPlaces: "Mine"
+        case .friendsPlaces: "Friends"
+        case .everyone: "Everyone"
         }
     }
 
@@ -1344,10 +1344,10 @@ struct DeterministicFilterParser: LLMFilterParser {
 private extension ViewerRelationship {
     var discoverChipTitle: String {
         switch self {
-        case .owner: "mine"
-        case .mutual: "friends"
-        case .follower: "following"
-        case .nonFollower: "other people"
+        case .owner: "Mine"
+        case .mutual: "Friends"
+        case .follower: "Following"
+        case .nonFollower: "Other people"
         }
     }
 }

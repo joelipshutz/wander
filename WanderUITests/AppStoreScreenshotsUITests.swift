@@ -67,7 +67,7 @@ final class AppStoreScreenshotsUITests: XCTestCase {
             "-WanderOpenAdd",
         ])
 
-        XCTAssertTrue(app.staticTexts["add a place"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.staticTexts["Add a place"].waitForExistence(timeout: 6))
         XCTAssertTrue(
             app.buttons["Add Sparrow Bakery"]
                 .waitForExistence(timeout: 6)
@@ -94,7 +94,7 @@ final class AppStoreScreenshotsUITests: XCTestCase {
         let addPlace = app.buttons["map.headerAdd"]
         XCTAssertTrue(addPlace.waitForExistence(timeout: 10))
         addPlace.tap()
-        let title = app.staticTexts["add a place"]
+        let title = app.staticTexts["Add a place"]
         let seeMore = app.buttons["See more"]
         let importTitle = app.staticTexts["Import"].firstMatch
         XCTAssertTrue(seeMore.waitForExistence(timeout: 10))

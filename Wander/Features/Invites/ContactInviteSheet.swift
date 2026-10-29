@@ -269,7 +269,7 @@ struct ContactInviteSheet: View {
                     return
                 }
                 completeDelivery(
-                    headline: selection.count == 1 ? "invite shared" : "invites shared",
+                    headline: selection.count == 1 ? "Invite shared" : "Invites shared",
                     detail: "The TestFlight link was handed off successfully.",
                     deliveryMode: "share_sheet",
                     sentCount: selection.count
@@ -638,7 +638,7 @@ struct ContactInviteSheet: View {
                         .lineLimit(1)
 
                     if contact.relationship.isOnRecme {
-                        Text("on Astir")
+                        Text("On Astir")
                             .font(AstirTypography.metadata)
                             .foregroundStyle(brandMode.accentText)
                             .scaleEffect(0.82)
@@ -688,7 +688,7 @@ struct ContactInviteSheet: View {
             }
 
             VStack(spacing: WanderTheme.spacing2) {
-                Text("find your people")
+                Text("Find your people")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Text(surface.permissionMessage)
@@ -764,7 +764,7 @@ struct ContactInviteSheet: View {
                 .foregroundStyle(brandMode.accentText)
 
             VStack(spacing: WanderTheme.spacing2) {
-                Text("contacts are off")
+                Text("Contacts are off")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Text("Turn on Contacts in Settings to browse your address book, or share an Astir link instead.")
@@ -825,7 +825,7 @@ struct ContactInviteSheet: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 34, weight: .black))
                 .foregroundStyle(brandMode.secondaryText.opacity(0.72))
-            Text("no contacts found")
+            Text("No contacts found")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
             Text("Try another name, number, or username.")
@@ -841,7 +841,7 @@ struct ContactInviteSheet: View {
             Spacer()
             ProgressView()
                 .tint(brandMode.accent)
-            Text("loading contacts")
+            Text("Loading contacts")
                 .font(AstirTypography.cardTitle)
                 .foregroundStyle(brandMode.primaryText)
             Spacer()
@@ -855,7 +855,7 @@ struct ContactInviteSheet: View {
             Image(systemName: "arrow.clockwise.circle.fill")
                 .font(.system(size: 42, weight: .black))
                 .foregroundStyle(brandMode.accentText)
-            Text("contacts couldn’t load")
+            Text("Contacts couldn’t load")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
             Button("Try again") {
@@ -1020,7 +1020,7 @@ struct ContactInviteSheet: View {
             let sentCount = messageDeliveryPlan?.sentCount ?? 0
             guard sentCount > 0 else { return }
             completeDelivery(
-                headline: sentCount == 1 ? "invite sent" : "invites sent",
+                headline: sentCount == 1 ? "Invite sent" : "Invites sent",
                 detail: sentCount == 1
                     ? "The TestFlight link was sent in Messages."
                     : "The TestFlight link was sent to \(sentCount) people in Messages.",

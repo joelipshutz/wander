@@ -56,7 +56,7 @@ final class ListPlaceSearchUITests: XCTestCase {
         // nearby provider route as quick search, preserving provider order.
         search.tap()
         search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 7))
-        XCTAssertTrue(app.staticTexts["suggested for this list"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Suggested for this list"].waitForExistence(timeout: 5))
         search.typeText("34.0522, -118.2437")
         XCTAssertTrue(addResult.waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["Add Clover & Pine to list"].exists)
