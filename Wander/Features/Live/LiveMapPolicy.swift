@@ -164,6 +164,16 @@ enum LiveNavigationPolicy {
 struct LiveExperienceLaunchPolicy {
     private var choices: [String: Bool] = [:]
     func value(for userID: String) -> Bool? { choices[userID] }
+
+    func isAwaitingResolution(
+        for userID: String,
+        flag: ResolvedFeatureFlagValue?,
+        canRefresh: Bool,
+        isolatedSimulatorReview: Bool
+    ) -> Bool {
+        canRefresh && choices[userID] == nil && flag == nil && !isolatedSimulatorReview
+    }
+
     mutating func resolve(for userID: String, flag: ResolvedFeatureFlagValue?, isolatedSimulatorReview: Bool) {
         guard choices[userID] == nil, flag != nil || isolatedSimulatorReview else { return }
         choices[userID] = LiveNavigationPolicy.isEnabled(flag, isolatedSimulatorReview: isolatedSimulatorReview)
