@@ -259,4 +259,63 @@ begin
 end;
 $pin_states$;
 
+-- REC-666: a Featured seed may be the only in-window row. Its saved alias must
+-- still suppress green when code/name country spelling and legacy provider IDs
+-- differ. Assertions use fictional reserved data, never tester records.
+do $country_aliases$
+declare
+  viewer text := 'user_codex_pin_state_viewer';
+  followee text := 'user_codex_pin_state_country_followee';
+  result jsonb; state jsonb; country_value text;
+  seed uuid := '666b0000-0000-0000-0000-000000000002';
+begin
+  if exists(select 1 from public.places where id::text like '666b0000-%')
+    or exists(select 1 from public.profiles where id=followee)
+  then raise exception 'country alias fixture identity collision'; end if;
+  insert into public.profiles(id,handle,display_name) values(followee,'codex_pin_country_followee','Country Followee');
+  insert into public.follows(follower_user_id,followed_user_id,source) values(viewer,followee,'username');
+  insert into public.places(id,canonical_name,category,address,locality,region,country,
+    latitude,longitude,source_provider,source_provider_place_id) values
+    ('666b0000-0000-0000-0000-000000000001','Country Cafe','coffee','10 Example Street','Sampleton','CA','US',
+      0,1,'mapkit','mapkit_country-cafe_0_1'),
+    (seed,'Country Cafe','coffee','10 Example St','Sampleton','CA','United States',
+      0,1,'mapkit','mapkit_country_cafe_0_1');
+  insert into public.user_places(id,user_id,place_id,status,visibility,source_type) values
+    ('666b1000-0000-0000-0000-000000000001',viewer,'666b0000-0000-0000-0000-000000000001','been','self','manual'),
+    ('666b1000-0000-0000-0000-000000000002',followee,'666b0000-0000-0000-0000-000000000001','wanna_go','followers','manual');
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',viewer,'role','authenticated')::text,true);
+  foreach country_value in array array['United States','US','USA','U.S.'] loop
+    update public.places set country=country_value where id=seed;
+    set local role authenticated;
+    result:=public.live_map_pin_states(array[seed]);
+    reset role;
+    state:=result->'states'->0;
+    if jsonb_array_length(state->'saves')<>2
+      or not exists(select 1 from jsonb_array_elements(state->'saves') facet
+        where facet->>'owner_id'=viewer and facet->'has_been'='true'::jsonb)
+      or not exists(select 1 from jsonb_array_elements(state->'saves') facet
+        where facet->>'owner_id'=followee and facet->'has_wanna'='true'::jsonb)
+    then raise exception 'country alias failed to retain own/social saved state for Featured-only seed'; end if;
+  end loop;
+  foreach country_value in array array['Canada','CA','Unknown country','',null] loop
+    update public.places set country=country_value where id=seed;
+    set local role authenticated;
+    result:=public.live_map_pin_states(array[seed]);
+    reset role;
+    if result->'states'->0->'saves'<>'[]'::jsonb
+    then raise exception 'conflicting/unknown country merged different places'; end if;
+  end loop;
+  update public.places set country='United States', canonical_name='Different Cafe' where id=seed;
+  set local role authenticated;
+  result:=public.live_map_pin_states(array[seed]);
+  reset role;
+  if result->'states'->0->'saves'<>'[]'::jsonb then raise exception 'co-located different venue merged'; end if;
+  update public.places set canonical_name='Country Cafe', address='12 Example Street' where id=seed;
+  set local role authenticated;
+  result:=public.live_map_pin_states(array[seed]);
+  reset role;
+  if result->'states'->0->'saves'<>'[]'::jsonb then raise exception 'same-name different branch merged'; end if;
+end;
+$country_aliases$;
+
 rollback;

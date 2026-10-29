@@ -5,6 +5,40 @@ import XCTest
 final class LiveTotemUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testCountryAliasHasOneSavedMarkerThroughSelectionAndZoom() {
+        let app = launch()
+        collapseDrawer(app)
+        let pin = app.buttons["live.pin.totem_tacos"]
+        wait(pin)
+        settle(pin)
+        func assertOneSavedMarker() {
+            let matches = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.totem_tacos"))
+            XCTAssertEqual(matches.count, 1, "One venue must never render both a pin and a dense dot.")
+            XCTAssertTrue(pin.label.contains("You, Wanna"))
+            XCTAssertFalse(pin.label.contains("Featured"))
+        }
+        assertOneSavedMarker()
+        pin.tap()
+        wait(app.buttons["live.placePreview.close"])
+        settle(pin)
+        assertOneSavedMarker()
+        capture("REC666-one-saved-marker-selected")
+        app.buttons["live.placePreview.close"].tap()
+        wait(pin)
+        settle(pin)
+        let map = app.descendants(matching: .any).matching(identifier: "live.map").firstMatch
+        map.pinch(withScale: 0.6, velocity: -1)
+        wait(pin)
+        settle(pin)
+        assertOneSavedMarker()
+        capture("REC666-one-saved-marker-dense")
+        map.pinch(withScale: 1.8, velocity: 1)
+        wait(pin)
+        settle(pin)
+        assertOneSavedMarker()
+        capture("REC666-one-saved-marker-expanded")
+    }
+
     func testTotemStatesFiltersAndPlaceNavigation() {
         let app = launch()
         capturePinStates(app)

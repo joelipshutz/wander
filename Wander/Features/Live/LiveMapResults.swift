@@ -201,7 +201,11 @@ struct LivePlaceIdentity: Hashable {
                 "drive": "dr", "highway": "hwy", "lane": "ln", "parkway": "pkwy", "place": "pl",
                 "road": "rd", "street": "st", "terrace": "ter"]
             street = text(place.address).split(separator: " ").map { suffixes[String($0)] ?? String($0) }.joined(separator: " ")
-            locality = text(place.locality); region = text(place.region); country = text(place.country)
+            locality = text(place.locality); region = text(place.region)
+            // MapKit and older imports can describe one country as US/USA or
+            // United States. Compare canonical names before joining address
+            // aliases, or one venue can survive as both a saved pin and a dot.
+            country = text(CountryCanonicalizer.canonicalName(place.country))
             let valid = place.latitude.isFinite && place.longitude.isFinite
                 && CLLocationCoordinate2DIsValid(.init(latitude: place.latitude, longitude: place.longitude))
             latitude = valid ? (place.latitude == 0 ? 0 : place.latitude) : nil
