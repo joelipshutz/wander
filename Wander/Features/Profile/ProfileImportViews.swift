@@ -719,12 +719,12 @@ struct PlaceImportAdaptiveReviewScreen: View {
             HStack(spacing: WanderTheme.spacing2) {
                 importCompleteMetric(
                     matchedItems.count,
-                    "Matched",
+                    "matched",
                     WanderTheme.stateSuccess.color
                 )
                 importCompleteMetric(
                     needsReviewItems.count,
-                    "Need a look",
+                    "need a look",
                     WanderTheme.stateWarning.color
                 )
             }

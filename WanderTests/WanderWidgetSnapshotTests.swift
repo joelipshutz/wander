@@ -98,7 +98,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
                 generatedAt: generatedAt,
                 now: generatedAt.addingTimeInterval(59)
             ).minuteAgeLabel,
-            "updated <1 min ago"
+            "Updated <1 min ago"
         )
         XCTAssertEqual(
             WanderNearbyWidgetFreshness(

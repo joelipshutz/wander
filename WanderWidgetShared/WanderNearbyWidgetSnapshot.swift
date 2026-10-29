@@ -29,7 +29,7 @@ struct WanderNearbyWidgetFreshness: Equatable, Sendable {
         let wholeMinutes = Int(age / 60)
         switch wholeMinutes {
         case 0:
-            return "updated <1 min ago"
+            return "Updated <1 min ago"
         case 1:
             return "Updated 1 min ago"
         default:

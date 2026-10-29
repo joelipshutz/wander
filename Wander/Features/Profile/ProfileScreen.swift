@@ -686,7 +686,7 @@ struct ProfileScreen: View {
                 Text("\(store.currentUserVisiblePlaces.count)")
                     .font(AstirTypography.screenTitle)
                     .foregroundStyle(brandMode.accentText)
-                Text("Saved places this month.")
+                Text("saved places this month.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                 Spacer()

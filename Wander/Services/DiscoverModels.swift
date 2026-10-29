@@ -19,12 +19,12 @@ enum DiscoverUnsupportedConcept: String, Codable, CaseIterable, Equatable, Hasha
 
     var displayTitle: String {
         switch self {
-        case .distance: "Distance"
-        case .hours: "Hours"
-        case .nearMe: "Near me"
-        case .openNow: "Open now"
-        case .price: "Price"
-        case .recency: "Recency"
+        case .distance: "distance"
+        case .hours: "hours"
+        case .nearMe: "near me"
+        case .openNow: "open now"
+        case .price: "price"
+        case .recency: "recency"
         }
     }
 }
