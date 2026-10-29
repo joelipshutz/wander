@@ -746,7 +746,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     func testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement() {
         let app = launchLive()
-        app.buttons["Filters"].tap()
+        openFilters(in: app)
         let form = filterForm(in: app)
         captureState("filters-initial-before-controls", in: app)
         selectMenu(app.buttons["live.filter.people"], option: "Only Friends", form: form, app: app, selected: {
@@ -845,7 +845,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         capture("combined-filter-authorized-unfiltered-tail")
         dragDrawer(.down, to: "half expanded", count: 1, in: app)
 
-        app.buttons["Filters"].tap()
+        openFilters(in: app)
         let cancelledForm = filterForm(in: app)
         resetFilters(in: app)
         selectMenu(app.buttons["live.filter.people"], option: "Everyone", form: cancelledForm, direction: .up, app: app, selected: {
@@ -856,7 +856,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         assertCombinedResult(in: app)
         capture("combined-filter-cancel-preserves-result")
 
-        app.buttons["Filters"].tap()
+        openFilters(in: app)
         let retainedForm = filterForm(in: app)
         captureState("filters-retained-before-assertions", in: app)
         XCTAssertEqual(app.buttons["live.filter.people"].value as? String, "Only Friends")
@@ -1170,6 +1170,25 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         add(diagnostic)
         capture("native-pan-after")
         XCTAssertEqual(result, .completed)
+    }
+
+    private func openFilters(in app: XCUIApplication) {
+        let button = app.buttons["Filters"]
+        var previousFrame = CGRect.null
+        var stableSince = ProcessInfo.processInfo.systemUptime
+        wait(NSPredicate { _, _ in
+            guard button.exists, button.isEnabled, button.isHittable else { return false }
+            let frame = button.frame
+            guard self.finite(frame), app.frame.contains(frame) else { return false }
+            if frame != previousFrame {
+                previousFrame = frame
+                stableSince = ProcessInfo.processInfo.systemUptime
+                return false
+            }
+            return ProcessInfo.processInfo.systemUptime - stableSince >= 0.5
+        }, timeout: 10)
+        button.press(forDuration: 0.1)
+        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForExistence(timeout: 5))
     }
 
     private func filterForm(in app: XCUIApplication) -> XCUIElement {
