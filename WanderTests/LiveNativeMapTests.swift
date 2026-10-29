@@ -224,6 +224,74 @@ final class LiveNativeMapTests: XCTestCase {
         coordinator.detach(from: map)
     }
 
+    func testRotatedPitchedPreviewCameraSnapshotRestoresPinGeometryAndScale() throws {
+        let map = SafeAreaMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 714))
+        let proxy = LiveNativeMapProxy()
+        let collapsedMargins = EdgeInsets(top: 110, leading: 8, bottom: 88, trailing: 8)
+        let previewMargins = EdgeInsets(top: 110, leading: 8, bottom: 460, trailing: 8)
+        let initialCamera = MapCamera(centerCoordinate: region.center, distance: 2_400,
+                                      heading: 281, pitch: 35)
+        let parent = makeParent(proxy: proxy, positionRevision: 1,
+            commandPosition: .camera(initialCamera), contentInsets: collapsedMargins)
+        let coordinator = parent.makeCoordinator()
+        coordinator.attach(to: map)
+        defer { coordinator.detach(from: map) }
+        coordinator.update(parent: parent, map: map, animated: false)
+        map.layoutIfNeeded()
+
+        // Capture the actual native pose before the preview changes its insets.
+        // A bounding region cannot preserve this rotated, pitched projection.
+        let snapshot = try XCTUnwrap(proxy.camera)
+        XCTAssertEqual(snapshot.heading, 281, accuracy: 0.001)
+        XCTAssertEqual(snapshot.pitch, 35, accuracy: 0.001)
+        let coordinates = try [CGPoint(x: 260, y: 570), CGPoint(x: 175, y: 460)].map {
+            try XCTUnwrap(proxy.coordinate(for: $0))
+        }
+        let originalPoints = try coordinates.map { try XCTUnwrap(proxy.point(for: $0)) }
+        let originalSeparation = hypot(originalPoints[0].x - originalPoints[1].x,
+                                       originalPoints[0].y - originalPoints[1].y)
+        XCTAssertGreaterThan(originalSeparation, 100)
+
+        // Opening a tall preview changes margins before revealing its pin.
+        coordinator.update(parent: makeParent(proxy: proxy, positionRevision: 1,
+            commandPosition: .camera(initialCamera), contentInsets: previewMargins), map: map, animated: false)
+        map.layoutIfNeeded()
+        let pinPoint = try XCTUnwrap(proxy.point(for: coordinates[0]))
+        let previewCamera = try XCTUnwrap(proxy.camera)
+        let exposed = try XCTUnwrap(LiveMapSearchLayout(size: map.bounds.size,
+            controlsHeight: 102, drawerHeight: 460).visibleRect)
+        let offset = LiveMapViewportPolicy.revealOffset(pin: pinPoint, exposedRect: exposed)
+        XCTAssertGreaterThan(offset.height, 0, "The fixture must exercise a real preview reveal")
+        let revealedCenter = try XCTUnwrap(proxy.cameraCenter(after: offset, from: previewCamera))
+        let revealedCamera = MapCamera(centerCoordinate: revealedCenter, distance: previewCamera.distance,
+                                       heading: previewCamera.heading, pitch: previewCamera.pitch)
+        coordinator.update(parent: makeParent(proxy: proxy, positionRevision: 2,
+            commandPosition: .camera(revealedCamera), contentInsets: previewMargins), map: map, animated: false)
+        map.layoutIfNeeded()
+        let revealedPoint = try XCTUnwrap(proxy.point(for: coordinates[0]))
+        XCTAssertGreaterThan(hypot(revealedPoint.x - originalPoints[0].x,
+                                   revealedPoint.y - originalPoints[0].y), 24)
+
+        // Closing must restore the camera snapshot with the collapsed margins,
+        // rather than fit the geographic bounding rectangle of the rotated map.
+        coordinator.update(parent: makeParent(proxy: proxy, positionRevision: 3,
+            commandPosition: .camera(snapshot), contentInsets: collapsedMargins), map: map, animated: false)
+        map.layoutIfNeeded()
+        let restored = try XCTUnwrap(proxy.camera)
+        XCTAssertEqual(restored.centerCoordinate.latitude, snapshot.centerCoordinate.latitude, accuracy: 0.000001)
+        XCTAssertEqual(restored.centerCoordinate.longitude, snapshot.centerCoordinate.longitude, accuracy: 0.000001)
+        XCTAssertEqual(restored.distance, snapshot.distance, accuracy: 0.1)
+        XCTAssertEqual(restored.heading, snapshot.heading, accuracy: 0.001)
+        XCTAssertEqual(restored.pitch, snapshot.pitch, accuracy: 0.001)
+        let restoredPoints = try coordinates.map { try XCTUnwrap(proxy.point(for: $0)) }
+        for (actual, original) in zip(restoredPoints, originalPoints) {
+            XCTAssertEqual(actual.x, original.x, accuracy: 0.5)
+            XCTAssertEqual(actual.y, original.y, accuracy: 0.5)
+        }
+        XCTAssertEqual(hypot(restoredPoints[0].x - restoredPoints[1].x,
+                             restoredPoints[0].y - restoredPoints[1].y), originalSeparation, accuracy: 0.5)
+    }
+
     func testGrayscaleSitsBelowColoredAreaAndRadiusAfterToggle() throws {
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         let proxy = LiveNativeMapProxy()
@@ -373,6 +441,112 @@ final class LiveNativeMapTests: XCTestCase {
             XCTAssertEqual(hosts.count, 1, "Density changes replace the marker, never add another.")
             XCTAssertEqual(hosts.first?.rootView.compact, compact)
         }
+    }
+
+    func testHostedPinRetainsColorPixelsAcrossDensityChangesAndReuse() async throws {
+        let original = try fixturePin()
+        let state = LiveTotemState(rails: [
+            MapPinOutline(ownership: .currentUser, status: .been),
+            MapPinOutline(ownership: .social, status: .wannaGo)
+        ], hasListMembership: false, hasSavedStatus: true, isFeatured: false)
+        let pin = LivePlacePin(id: original.id, place: original.place, activities: [], totemState: state)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }.first)
+        let previousWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        controller.view.backgroundColor = .white
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            previousWindow?.makeKey()
+        }
+        let view = LiveNativePinView(annotation: nil, reuseIdentifier: LiveNativePinView.reuseIdentifier)
+        controller.view.addSubview(view)
+        view.center = CGPoint(x: window.bounds.midX, y: window.bounds.midY)
+
+        // Exercise the actual retained hosting view, including its removal and
+        // reuse. ImageRenderer alone cannot catch a hosted Canvas losing color.
+        let stages = [("full", false, false), ("dense", true, false),
+                      ("full-again", false, false), ("reused-dense", true, true),
+                      ("reused-full", false, false)]
+        let clock = ContinuousClock()
+        for (name, compact, reuse) in stages {
+            if reuse {
+                view.removeFromSuperview()
+                view.prepareForReuse()
+            }
+            let started = clock.now
+            view.configure(pin: pin, selected: false, viewed: reuse, compact: compact, brand: .editorialLight)
+            if reuse { controller.view.addSubview(view) }
+            window.layoutIfNeeded()
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+            // Attempt samples during the former 180ms fade, then after it.
+            // Rendering can delay a sample; recorded elapsed times define the
+            // observed coverage. A density swap must keep colors opaque.
+            let sampleTimes = name == "full" ? [400] : [30, 60, 90, 120, 150, 180, 240, 400]
+            var observations: [String] = []
+            for milliseconds in sampleTimes {
+                try await clock.sleep(until: started.advanced(by: .milliseconds(milliseconds)))
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 3
+                format.preferredRange = .standard
+                var rendered = false
+                let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in
+                    rendered = view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+                }
+                let elapsed = started.duration(to: clock.now)
+                let sample = "\(name) at \(elapsed) (target \(milliseconds)ms)"
+                XCTAssertTrue(rendered, sample)
+                XCTAssertEqual(view.bounds.size, CGSize(width: 44, height: 44), sample)
+                XCTAssertEqual(view.accessibilityIdentifier, "live.pin.\(pin.id)", sample)
+                XCTAssertEqual(view.accessibilityLabel, pin.accessibilityLabel, sample)
+                let counts = try semanticPixelCounts(image)
+                observations.append("\(sample); coral=\(counts[0xF05A3C, default: 0]); blue=\(counts[0x69B8D7, default: 0])")
+                for color: UInt32 in [0xF05A3C, 0x69B8D7] {
+                    XCTAssertGreaterThan(counts[color, default: 0], 12,
+                        "\(sample) lost semantic color \(String(color, radix: 16))")
+                }
+                if !rendered || counts.values.contains(where: { $0 <= 12 }) {
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = "hosted-pin-\(name)-\(milliseconds)ms"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+            }
+            let timing = XCTAttachment(string: observations.joined(separator: "\n"))
+            timing.name = "hosted-pin-\(name)-transition-pixels"
+            timing.lifetime = .keepAlways
+            add(timing)
+        }
+    }
+
+    private func semanticPixelCounts(_ image: UIImage) throws -> [UInt32: Int] {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width, height = cgImage.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        var counts: [UInt32: Int] = [0xF05A3C: 0, 0x69B8D7: 0]
+        for color in Array(counts.keys) {
+            let red = Int((color >> 16) & 0xFF), green = Int((color >> 8) & 0xFF), blue = Int(color & 0xFF)
+            for index in stride(from: 0, to: bytes.count, by: 4) where bytes[index + 3] >= 250 {
+                if abs(Int(bytes[index]) - red) <= 5,
+                   abs(Int(bytes[index + 1]) - green) <= 5,
+                   abs(Int(bytes[index + 2]) - blue) <= 5 {
+                    counts[color, default: 0] += 1
+                }
+            }
+        }
+        return counts
     }
 
     func testCameraCallbackUsesCenterDistanceAndActualUserProvenance() async throws {
