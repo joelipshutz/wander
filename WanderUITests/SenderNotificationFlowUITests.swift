@@ -290,7 +290,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
             if mode != "direct" { press(addPlaces) }
             let addition: XCUIElement
             if mode == "search" {
-                let search = app.textFields["Search places"]
+                let search = app.textFields["lists.placeSearch"]
                 XCTAssertTrue(search.waitForExistence(timeout: 5))
                 search.tap(); search.typeText("Sparrow")
                 addition = app.buttons["Add Sparrow Bakery to list"]
