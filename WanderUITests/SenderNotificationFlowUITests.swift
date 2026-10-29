@@ -340,10 +340,10 @@ final class SenderNotificationFlowUITests: XCTestCase {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
     }
     private func expandNativeSaveEditor(_ app: XCUIApplication) -> Bool {
-        // One unchanged 5s helper deadline covers readiness, native input and
-        // viewport response. Consolidate geometry without extending that clock.
+        // Allow readiness and viewport response their own bounded waits; XCTest
+        // native gesture dispatch includes runner synchronization overhead.
         let helperStartedAt = ProcessInfo.processInfo.systemUptime
-        let deadline = helperStartedAt + 5
+        var deadline = helperStartedAt + 5
         let editor = app.scrollViews["save.editorScroll"]
         let grabber = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier == %@ OR label == %@", "Sheet Grabber", "Sheet Grabber")
@@ -392,9 +392,10 @@ final class SenderNotificationFlowUITests: XCTestCase {
         origin.withOffset(CGVector(dx: contact.x, dy: contact.y))
             .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)),
                    withVelocity: .fast, thenHoldForDuration: 0)
-        // Use only the remainder of the same entry deadline after native input.
-        // The later Silent activation retains its separate original 5s clock.
+        // Start the response budget after native gesture dispatch completes.
+        // Geometry must still prove the viewport expanded before scrolling.
         let responseStartedAt = ProcessInfo.processInfo.systemUptime
+        deadline = responseStartedAt + 5
         var responseReads = 0
         var lastReadFinishedAt: TimeInterval?
         func observeExpansion() -> Bool {

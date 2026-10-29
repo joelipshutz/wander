@@ -123,6 +123,16 @@ final class LiveMapPolicyTests: XCTestCase {
         isSessionValidated: Bool = true,
         capture: Bool = false
     ) async throws {
+        // UI tests persist demo mode across launches. This fixture exercises the
+        // real cold-start flag path, then restores the simulator's prior mode.
+        let hadDemoSession = SimulatorTestSessionPolicy.isActive(arguments: [])
+        _ = SimulatorTestSessionPolicy.isActive(arguments: [SimulatorTestSessionPolicy.liveAuthArgument])
+        defer {
+            if hadDemoSession {
+                _ = SimulatorTestSessionPolicy.isActive(arguments: [SimulatorTestSessionPolicy.authenticatedFixtureArgument])
+            }
+        }
+        XCTAssertEqual(WanderRootView.resolvedFixtureMode(), .empty)
         let flags = SuspendedLiveFlagRepository(value: remoteValue)
         let session = AuthSession(userID: "cold_start_test", displayName: nil, handle: nil)
         let authState: AuthState = isSessionValidated ? .signedIn(session) : .offline(session, message: "Offline")
