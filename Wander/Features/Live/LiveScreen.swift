@@ -71,6 +71,7 @@ struct LiveScreen: View {
     @State private var drawingError: String?
     @State private var filtersPresented = false
     @State private var draftSelection = LiveBrowseSelection()
+    @State private var expandedFilterCategories: Set<String> = []
     @State private var draftAudience: FeedAudience = .everyone
     @State private var draftClearsArea = false
     @State private var selectedPlaceID: String?
@@ -1055,16 +1056,70 @@ struct LiveScreen: View {
         Section("Categories") {
             let categories = WanderPlaceCategory.allowedCategories
             ForEach(categories, id: \.self) { category in
-                Toggle(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)),
-                       isOn: Binding(get: { draftSelection.categoryIDs.contains(category) }, set: { selected in
-                    if selected { draftSelection.categoryIDs.insert(category) }
-                    else { draftSelection.categoryIDs.remove(category) }
-                })).accessibilityIdentifier("live.filter.category.\(category)")
+                HStack(spacing: 0) {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                            if !expandedFilterCategories.insert(category).inserted {
+                                expandedFilterCategories.remove(category)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: expandedFilterCategories.contains(category) ? "chevron.down" : "chevron.right")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(brand.secondaryText)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Options for \(WanderPlaceCategory.broadCategory(for: category))")
+                    .accessibilityValue(expandedFilterCategories.contains(category) ? "Expanded" : "Collapsed")
+                    .accessibilityIdentifier("live.filter.categoryDisclosure.\(category)")
+
+                    Toggle(isOn: Binding(get: { draftSelection.categoryIDs.contains(category) }, set: {
+                        draftSelection.setCategory(category, selected: $0)
+                    })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)))
+                            let count = draftSelection.categoryOptions[category, default: []].count
+                            if count > 0 {
+                                Text("\(count) selected").font(.caption).foregroundStyle(brand.secondaryText)
+                            }
+                        }
+                    }.accessibilityIdentifier("live.filter.category.\(category)")
+                }
+                if expandedFilterCategories.contains(category) {
+                    ForEach(MapMoreFilterPolicy.options(for: category), id: \.self) { option in
+                        categoryOptionRow(option, category: category)
+                    }
+                }
             }
-            if !draftSelection.categoryIDs.isEmpty {
-                Button("Clear category selection") { draftSelection.categoryIDs = [] }
+            if draftSelection.hasCategorySelection {
+                Button("Clear category selection") { draftSelection.clearCategories() }
+                    .accessibilityIdentifier("live.filter.clearCategories")
             }
         }
+    }
+
+    private func categoryOptionRow(_ option: String, category: String) -> some View {
+        let selected = draftSelection.isCategoryOptionSelected(option, in: category)
+        return Button {
+            draftSelection.toggleCategoryOption(option, in: category)
+        } label: {
+            HStack(spacing: 12) {
+                Text(AppCopy.capitalizingInitial(option))
+                    .foregroundStyle(brand.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selected ? brand.accentText : brand.secondaryText)
+            }
+            .padding(.leading, 44)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityIdentifier("live.filter.categoryOption.\(category).\(WanderPlaceCategory.normalizedCategoryText(option))")
     }
 
     private var personFilterSection: some View {
@@ -1084,6 +1139,7 @@ struct LiveScreen: View {
 
     private func openFilters(nearby: Bool = false) {
         draftSelection = selection
+        expandedFilterCategories.formUnion(selection.categoryOptions.keys)
         if draftSelection.cityID == nil { draftSelection.cityID = HomeMetro.find(homeMetroID)?.id }
         if nearby {
             draftSelection.scope = .nearby
@@ -1223,7 +1279,9 @@ struct LiveScreen: View {
             span: .init(latitudeDelta: viewport.maxLatitude - viewport.minLatitude,
                         longitudeDelta: viewport.maxLongitude - viewport.minLongitude))
         let refined = candidates.filter { request.query.includesFeatured($0) }
-        var refinements = MapMoreFilterSelection(); refinements.categories = Set(request.query.categoryIDs)
+        // The committed query already applies both primary and child choices.
+        // A second primary-only pass would discard child matches in other categories.
+        let refinements = MapMoreFilterSelection()
         return MapFeaturedSelection.places(from: refined, currentUserID: request.userID,
             followedOwnerIDs: Set(store.following(of: request.userID).map(\.id)),
             in: region, refinements: refinements,

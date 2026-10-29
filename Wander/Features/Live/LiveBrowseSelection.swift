@@ -25,10 +25,45 @@ struct LiveBrowseSelection: Codable, Equatable {
     var activityType: LiveActivityFilter = .all
     var time: LiveTimeFilter = .all
     var categoryIDs: Set<String> = []
+    // Optional storage keeps previously saved browse state decodable.
+    private var storedCategoryOptions: [String: Set<String>]?
+    var categoryOptions: [String: Set<String>] { storedCategoryOptions ?? [:] }
     var personIDs: Set<String> = []
     private(set) var committedAt: Date
 
     init(now: Date = .now) { committedAt = now }
+
+    var hasCategorySelection: Bool { !categoryIDs.isEmpty || !categoryOptions.isEmpty }
+
+    mutating func setCategory(_ category: String, selected: Bool) {
+        if selected {
+            categoryIDs.insert(category)
+            storedCategoryOptions?.removeValue(forKey: category)
+            if storedCategoryOptions?.isEmpty == true { storedCategoryOptions = nil }
+        } else {
+            categoryIDs.remove(category)
+        }
+    }
+
+    mutating func toggleCategoryOption(_ option: String, in category: String) {
+        let option = WanderPlaceCategory.normalizedCategoryText(option)
+        guard !option.isEmpty else { return }
+        categoryIDs.remove(category)
+        var selections = categoryOptions
+        var options = selections[category, default: []]
+        if !options.insert(option).inserted { options.remove(option) }
+        selections[category] = options.isEmpty ? nil : options
+        storedCategoryOptions = selections.isEmpty ? nil : selections
+    }
+
+    func isCategoryOptionSelected(_ option: String, in category: String) -> Bool {
+        categoryOptions[category, default: []].contains(WanderPlaceCategory.normalizedCategoryText(option))
+    }
+
+    mutating func clearCategories() {
+        categoryIDs = []
+        storedCategoryOptions = nil
+    }
 
     var city: HomeMetro? { HomeMetro.find(cityID) }
     var center: LiveFeedQuery.Vertex? {
@@ -60,7 +95,7 @@ struct LiveBrowseSelection: Codable, Equatable {
         return LiveFeedQuery(occurredAfter: occurredAfter, occurredBefore: occurredBefore,
             activityType: type, polygon: area?.vertices.map { .init(latitude: $0.latitude, longitude: $0.longitude) },
             center: scope == .nearby ? center : nil, radiusMeters: scope == .nearby ? radius.rawValue : nil,
-            categoryIDs: categoryIDs, personIDs: personIDs)
+            categoryIDs: categoryIDs, categoryOptions: categoryOptions, personIDs: personIDs)
     }
 
     /// The visible map replaces earlier geographic bounds; all other filters
@@ -75,13 +110,15 @@ struct LiveBrowseSelection: Codable, Equatable {
         var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose a city") : (nearbyCenterName ?? "Map center"))" : "Featured", time.title]
         if activityType != .all { terms.append(activityType.rawValue) }
         if !categoryIDs.isEmpty { terms.append("\(categoryIDs.count) \(categoryIDs.count == 1 ? "category" : "categories")") }
+        let optionCount = categoryOptions.values.reduce(0) { $0 + $1.count }
+        if optionCount > 0 { terms.append("\(optionCount) \(optionCount == 1 ? "category option" : "category options")") }
         if !personIDs.isEmpty { terms.append("\(personIDs.count) \(personIDs.count == 1 ? "person" : "people")") }
         return terms.joined(separator: " · ")
     }
 
     var activeFilterCount: Int {
         (scope == .nearby ? 1 : 0) + (activityType == .all ? 0 : 1) + (time == .all ? 0 : 1)
-            + (categoryIDs.isEmpty ? 0 : 1) + (personIDs.isEmpty ? 0 : 1)
+            + (hasCategorySelection ? 1 : 0) + (personIDs.isEmpty ? 0 : 1)
     }
 
     /// Derive choices before local refinements so a selection cannot remove its
