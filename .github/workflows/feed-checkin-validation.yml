@@ -93,7 +93,10 @@ jobs:
   native:
     if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
-    timeout-minutes: 75
+    # Large + compact + isolated Replay finished at the old 75-minute ceiling,
+    # leaving no time for artifact upload and runner cleanup. Test deadlines
+    # remain unchanged; this budget covers the entire multi-simulator job.
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:

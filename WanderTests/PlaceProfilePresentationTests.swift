@@ -1090,19 +1090,27 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 .environmentObject(backend)
                 .environment(\.scenePhase, .active)
         )
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 184, height: 88))
+        let scene = try await activePhotoTestScene()
+        let originalWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 184, height: 88)
+        defer {
+            window.isHidden = true
+            originalWindow?.makeKeyAndVisible()
+        }
         window.rootViewController = host
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
 
-        await fulfillment(of: [checkInPhotoLoaded], timeout: 2.0)
+        // Functional completion, not a rendering performance budget: allow the
+        // hosted simulator to schedule both image-decode/fallback tasks.
+        await fulfillment(of: [checkInPhotoLoaded], timeout: 5.0)
 
         XCTAssertEqual(repository.metadataRequestCount, 1)
         XCTAssertEqual(repository.visibleUserPhotoRequestCount, 1)
         XCTAssertEqual(repository.requestedImageProviders, ["google_places", "visit_photo"])
-        window.isHidden = true
     }
 
     func testLegacyBeenActivityUsesVisitedDateThenSavedDateInsteadOfLastEdit() {
@@ -1265,15 +1273,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             .environmentObject(backend)
         )
         // Attach the fixture to the active scene so SwiftUI starts its image task.
-        var activeScene: UIWindowScene?
-        for _ in 0..<100 {
-            activeScene = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first { $0.activationState == .foregroundActive }
-            if activeScene != nil { break }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        let scene = try XCTUnwrap(activeScene)
+        let scene = try await activePhotoTestScene()
         let originalWindow = scene.keyWindow
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 320, height: 240)
@@ -1286,7 +1286,20 @@ final class PlaceProfilePresentationTests: XCTestCase {
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
 
-        await fulfillment(of: [failureReported], timeout: 1.0)
+        await fulfillment(of: [failureReported], timeout: 5.0)
+    }
+
+    @MainActor
+    private func activePhotoTestScene() async throws -> UIWindowScene {
+        for _ in 0..<100 {
+            if let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }) {
+                return scene
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        return try XCTUnwrap(nil as UIWindowScene?, "Photo fixture requires a foreground scene")
     }
 
     @MainActor
