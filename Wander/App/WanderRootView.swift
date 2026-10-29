@@ -508,6 +508,7 @@ struct WanderRootView: View {
     var body: some View {
         stateObservedRoot
             .environment(\.liveExperienceEnabled, unifiedLiveEnabled)
+            .onChange(of: liveFlagValue, initial: true) { _, _ in resolveLiveExperienceForLaunch() }
             .environment(\.liveMessageSession, liveMessageSession)
             .onChange(of: "\(store.currentUser.id)|\(unifiedLiveEnabled)", initial: true) { _, _ in
                 liveMessageSession.configure(userID: store.currentUser.id,
@@ -683,7 +684,6 @@ struct WanderRootView: View {
             if enabled { selectedTab = LiveNavigationPolicy.tab(for: selectedTab) }
             configureWalkthroughsForCurrentUser()
         }
-        .onChange(of: liveFlagValue, initial: true) { _, _ in resolveLiveExperienceForLaunch() }
         .onChange(of: store.currentUser.id) { _, _ in
             liveMigrationOffer = nil; liveMigrationGuide = nil; liveMigrationContacts = nil
             liveMigrationDeviceGuide = nil; liveMigrationAfterHandoff = nil
@@ -862,7 +862,11 @@ struct WanderRootView: View {
 
     private var presentedRoot: some View {
         WanderRootTabContent {
-            tabRoot
+            if isWaitingForLiveNavigation {
+                OnboardingLaunchView()
+            } else {
+                tabRoot
+            }
         }
         .sheet(isPresented: $isPresentingImportHub) {
             NavigationStack {
@@ -1469,6 +1473,17 @@ struct WanderRootView: View {
         let userID = auth.state.session?.userID ?? store.currentUser.id
         return liveExperienceLaunch.value(for: userID)
             ?? LiveNavigationPolicy.isEnabled(liveFlagValue, isolatedSimulatorReview: isIsolatedLiveReview)
+    }
+    private var isWaitingForLiveNavigation: Bool {
+        // Pending is not an Off decision. Keep the launch artwork until the
+        // current account's first flag resolution, without blocking the outer
+        // lifecycle task that fetches it or sessions that can only work offline.
+        liveExperienceLaunch.isAwaitingResolution(
+            for: auth.state.session?.userID ?? store.currentUser.id,
+            flag: liveFlagValue,
+            canRefresh: featureFlagLoadUserID != nil,
+            isolatedSimulatorReview: isIsolatedLiveReview
+        )
     }
     private var liveFlagValue: ResolvedFeatureFlagValue? {
         backend.resolvedFeatureFlag(.unifiedLiveV1, for: auth.state.session?.userID ?? store.currentUser.id)
